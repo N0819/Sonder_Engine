@@ -1,0 +1,25 @@
+[project]
+name = "fiction-engine"
+version = "0.1.0"
+description = "Local multi-agent interactive-fiction engine"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi",
+  "httpx",
+  "numpy",
+  "pydantic",
+  "requests",
+  "sqlite-vec",
+  "uvicorn[standard]",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "pytest-asyncio",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
