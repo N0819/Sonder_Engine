@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fiction Engine</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/lorebooks.css">
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div id="tabs">
+      <button data-tab="chats" class="on">Stories</button>
+      <button data-tab="chars">Characters</button>
+      <button data-tab="personas">Personas</button>
+      <button data-tab="lore">Lore</button>
+    </div>
+    <div id="sidelist"></div>
+    <div id="sideactions"></div>
+  </aside>
+
+  <main id="main">
+    <header id="top">
+      <button id="b-menu" title="Toggle sidebar">☰</button>
+      <span id="chatname">No story selected</span>
+      <span id="framebar"></span>
+      <label
+        class="tgl"
+        title="Shows a detailed technical log of every internal stage as a turn runs, including raw model output. Off by default for a cleaner view — the story plays out exactly the same either way."
+      >
+        <input type="checkbox" id="streamtgl">
+        show technical detail
+      </label>
+      <span class="spacer"></span>
+      <button id="b-world" title="World state">🌍</button>
+      <button id="b-cast" title="Cast, persona & lorebooks">👥</button>
+      <button id="b-attire" title="Attire">👕</button>
+      <button id="b-dlg" title="Dialogue config">💬</button>
+      <button id="b-api" title="API connections">⚙ API</button>
+      <button id="b-prompts" title="Prompts">📝</button>
+      <button
+        id="b-nsfw"
+        class="nsfw-btn"
+        title="Toggle uncensored adult content"
+      >NSFW: OFF</button>
+    </header>
+
+    <div id="msgs">
+      <div class="dim" style="margin:auto">
+        Select or create a story to begin.
+      </div>
+    </div>
+
+    <div id="turnstatus" class="hidden">
+      <span class="spinner"></span>
+      <span id="turnstatus-phase">Working…</span>
+      <span id="turnstatus-elapsed" class="dim"></span>
+    </div>
+
+    <div id="live" class="hidden"></div>
+
+    <div id="composer">
+      <textarea
+        id="input"
+        placeholder="Act, speak, or leave empty to establish the scene… (Ctrl+Enter to send)"
+      ></textarea>
+      <button id="send">Send ➤</button>
+      <button id="stop" class="hidden">■ Stop</button>
+    </div>
+  </main>
+
+  <aside id="drawer" class="hidden"></aside>
+</div>
+
+<div id="modal" class="hidden">
+  <div id="modalbox">
+    <div id="modalhead">
+      <span id="modaltitle"></span>
+      <button id="modalx">✕</button>
+    </div>
+    <div id="modalbody"></div>
+  </div>
+</div>
+
+<div id="activity" class="hidden">
+  <div id="activity-head">
+    <span class="spinner"></span>
+    <span id="activity-title">Background work</span>
+    <span class="spacer"></span>
+    <span id="activity-count" class="badge">0</span>
+  </div>
+  <div id="activity-list"></div>
+</div>
+
+<div id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<script src="/static/js/utils.js"></script>
+<script src="/static/js/components.js"></script>
+<script src="/static/js/editors.js"></script>
+<script src="/static/js/lorebooks.js"></script>
+<script src="/static/js/chat.js"></script>
+<script src="/static/js/settings.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>

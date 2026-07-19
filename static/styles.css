@@ -1,0 +1,307 @@
+:root{--bg:#0b0e14;--bg2:#121722;--bg3:#1a2130;--bg4:#222b3d;--fg:#e5e9f2;
+--dim:#929db2;--acc:#79a9ff;--acc2:#9c7cff;--warn:#e8b34b;--err:#f07178;
+--ok:#79c99e;--bd:#283247;--shadow:0 18px 48px rgba(0,0,0,.42);
+--soft-shadow:0 7px 20px rgba(0,0,0,.22)}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 system-ui,sans-serif;
+background:radial-gradient(circle at 72% -10%,rgba(82,105,175,.15),transparent 34%),
+radial-gradient(circle at 10% 95%,rgba(108,73,166,.11),transparent 30%),var(--bg);
+color:var(--fg);height:100vh;height:100dvh;overflow:hidden;position:relative}
+
+/* ---- Scene mood ---- */
+/* A subtle ambient tint driven purely client-side by a keyword read of
+   the latest (or, while scrolling, most-visible) turn's prose -- see
+   applySceneMood/observeSceneMood in chat.js -- no backend signal
+   required. Applied via a dedicated fixed overlay rather than swapping
+   body's own background: CSS transitions cannot smoothly interpolate
+   between two different gradient() values (only solid colors, positions,
+   and a handful of other value types animate) -- attempting to
+   transition the gradient background directly, as this used to, was a
+   silent no-op, so every mood change (including on every scroll-driven
+   re-evaluation) snapped instantly instead of fading, reading as an
+   irritating flash rather than "the room's light changed a little". A
+   solid-color overlay's background-color genuinely animates. */
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;
+background-color:var(--mood-tint,transparent);transition:background-color 1.8s ease}
+body[data-mood="tense"]{--acc:#d97a7a;--acc2:#e0954f;--mood-tint:rgba(150,60,60,.13)}
+body[data-mood="warm"]{--acc:#e0b465;--acc2:#d98f5a;--mood-tint:rgba(180,140,70,.12)}
+body[data-mood="somber"]{--acc:#8b96ab;--acc2:#8f8aa0;--mood-tint:rgba(70,80,100,.12)}
+body[data-mood="triumphant"]{--acc:#c9d97a;--acc2:#e0c15a;--mood-tint:rgba(170,150,60,.13)}
+#app{display:flex;height:100vh;height:100dvh;position:relative;z-index:0}
+button{background:linear-gradient(180deg,var(--bg4),var(--bg3));color:var(--fg);
+border:1px solid var(--bd);border-radius:6px;padding:4px 9px;cursor:pointer;
+min-height:30px;box-shadow:0 1px 0 rgba(255,255,255,.025) inset;
+transition:border-color .15s ease,background-color .15s ease,box-shadow .15s ease,opacity .15s ease,transform .1s ease}
+button:hover:not(:disabled){border-color:var(--acc);background:linear-gradient(180deg,#29354a,#20293a)}
+button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{opacity:.5;cursor:default}
+/* Routed through --acc/--acc2 (the same custom properties the scene-mood
+   system already swaps per body[data-mood]) rather than a fixed blue --
+   previously mood changed the tab underline and little else, since every
+   other prominent surface (primary buttons, the active sidebar item, the
+   modal header) was hardcoded. */
+button.primary{border-color:var(--acc);
+background:linear-gradient(180deg,var(--acc),color-mix(in srgb,var(--acc) 70%,#0b0e14));color:#fff}
+button.primary:hover:not(:disabled){background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 80%,#fff),var(--acc))}
+button.danger{border-color:#74414b;color:#ffadb2}
+/* A filled destructive-confirm button (confirmModal's danger option) --
+   .danger alone is just an outline/text tint meant for a button sitting
+   among others (a delete icon in a list row); stacking it onto .primary
+   without this would fight .primary's blue fill with .danger's red
+   border+text instead of reading as one intentional "this is the
+   dangerous action" button. */
+button.danger.primary{border-color:#a34a52;
+background:linear-gradient(180deg,#c0525c,#963f47);color:#fff}
+button.danger.primary:hover:not(:disabled){background:linear-gradient(180deg,#d15c66,#a34a52)}
+button.ghost{border-color:transparent;background:transparent;box-shadow:none}
+input,select,textarea{background:var(--bg2);color:var(--fg);border:1px solid var(--bd);
+border-radius:6px;padding:5px 7px;font:inherit;
+transition:border-color .15s ease,box-shadow .15s ease}
+textarea{resize:vertical;line-height:1.5}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:none;
+border-color:var(--acc);box-shadow:0 0 0 3px rgba(110,168,254,.14)}
+.dim{color:var(--dim)}.err{color:var(--err)}.small{font-size:12px}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.hidden{display:none!important}.spacer{flex:1}
+#side{width:286px;background:rgba(18,23,34,.94);backdrop-filter:blur(16px);
+border-right:1px solid var(--bd);display:flex;flex-direction:column;
+box-shadow:10px 0 28px rgba(0,0,0,.12)}
+#tabs{display:flex;padding:6px 5px 0;gap:2px}
+#tabs button{flex:1;border-radius:7px 7px 0 0;border:none;
+border-bottom:2px solid transparent;padding:8px 2px;font-size:12px}
+#tabs button.on{border-bottom-color:var(--acc);color:var(--acc)}
+#sidelist{flex:1;overflow:auto;padding:9px}
+.item{padding:7px 9px;border-radius:6px;cursor:pointer;display:flex;
+justify-content:space-between;gap:6px;align-items:center;min-height:42px;
+margin-bottom:3px;border:1px solid transparent}
+.item:hover{border-color:var(--bd);background:rgba(34,43,61,.78)}
+.item.on{background:linear-gradient(90deg,color-mix(in srgb,var(--acc) 32%,transparent),rgba(34,43,61,.8));
+outline:none;border-color:color-mix(in srgb,var(--acc) 55%,var(--bd))}
+#sideactions{padding:10px;border-top:1px solid var(--bd);display:flex;
+gap:6px;flex-wrap:wrap;background:rgba(11,14,20,.32)}
+#main{flex:1;display:flex;flex-direction:column;min-width:0}
+#top{display:flex;gap:6px;align-items:center;padding:8px 12px;
+border-bottom:1px solid var(--bd);background:rgba(18,23,34,.9);
+backdrop-filter:blur(14px);box-shadow:0 8px 28px rgba(0,0,0,.12);z-index:3;
+min-height:50px}
+#chatname{font-weight:600;margin-right:6px;max-width:280px;overflow:hidden;
+text-overflow:ellipsis;white-space:nowrap}
+#framebar{display:flex;gap:4px;margin-right:8px;flex-wrap:wrap}
+.frame-pill{padding:3px 10px;border:1px solid var(--bd);border-radius:999px;
+font-size:12px;background:transparent;color:var(--fg);opacity:.7}
+.frame-pill:hover{opacity:1}
+.frame-pill.on{opacity:1;background:color-mix(in srgb, var(--acc) 22%, transparent);
+border-color:color-mix(in srgb, var(--acc) 55%, var(--bd))}
+#msgs{flex:1;overflow:auto;padding:14px 18px;display:flex;
+flex-direction:column;gap:12px;scroll-behavior:smooth}
+.turn{max-width:720px;margin:0 auto;width:100%;animation:fade-slide .2s ease both}
+.pin{background:linear-gradient(110deg,rgba(60,91,141,.17),rgba(31,40,57,.78));
+border:1px solid var(--bd);border-radius:8px;padding:8px 12px;
+white-space:pre-wrap;color:#bcd3ff;box-shadow:var(--soft-shadow);
+font-size:13px;opacity:.92}
+/* The actual fiction, previously rendered at the same size/weight/font
+   as UI chrome (14.5px system-ui in a pre-wrap div) -- a serif reading
+   face, a real paragraph measure, and more line-height are the highest-
+   impact, lowest-risk change available: nothing else in the app matters
+   if the prose itself doesn't look considered. */
+.prose{padding:8px 2px 10px;white-space:pre-wrap;
+font-family:Charter,"Iowan Old Style","Palatino Linotype",Georgia,serif;
+font-size:17px;line-height:1.7;max-width:65ch}
+.turn.stale .prose{opacity:.55}
+.tbtns{display:flex;gap:4px;justify-content:flex-end;margin-top:2px;
+opacity:.3;transition:opacity .15s ease}
+.turn:hover .tbtns,.turn:focus-within .tbtns{opacity:1}
+.tbtns button{padding:1px 7px;font-size:12px;opacity:.75}
+/* Opacity-on-hover has no touch equivalent -- without this, the turn's
+   controls would be unreachable on any device without a mouse. */
+@media(hover:none){.tbtns{opacity:.75}}
+#live{max-height:220px;overflow:auto;background:var(--bg2);
+border-top:1px solid var(--bd);padding:6px 12px;font-size:12px}
+#live .lk{color:var(--acc);font-weight:600}
+#live pre{white-space:pre-wrap;margin:2px 0 8px;color:var(--dim)}
+#turnstatus{display:flex;align-items:center;gap:9px;padding:9px 14px;
+border-top:1px solid var(--bd);background:rgba(18,23,34,.85);font-size:13px;
+color:var(--fg)}
+#turnstatus-elapsed{margin-left:auto}
+#composer{display:flex;gap:8px;padding:10px 12px;
+border-top:1px solid var(--bd);background:rgba(18,23,34,.94);
+backdrop-filter:blur(14px);box-shadow:0 -10px 30px rgba(0,0,0,.13)}
+#input{flex:1;min-height:56px;max-height:220px;border-color:#34415a;
+background:#0f141e;resize:none}
+#drawer{width:min(480px,42vw);border-left:1px solid var(--bd);
+background:rgba(18,23,34,.97);overflow:auto;padding:10px;
+box-shadow:-14px 0 36px rgba(0,0,0,.2)}
+.step{border:1px solid var(--bd);border-radius:8px;padding:8px;margin:8px 0}
+.step.stale{opacity:.6}
+.step h4{margin:0 0 6px;font-size:13px}
+.step pre{white-space:pre-wrap;font-size:11px;max-height:220px;
+overflow:auto;background:var(--bg);padding:6px;border-radius:6px}
+#modal{position:fixed;inset:0;background:rgba(3,5,9,.68);
+backdrop-filter:blur(7px);display:flex;align-items:center;
+justify-content:center;z-index:50;animation:fade-in .14s ease}
+#modalbox{background:var(--bg2);border:1px solid #34415a;border-radius:14px;
+width:min(900px,94vw);max-height:90vh;display:flex;flex-direction:column;
+box-shadow:var(--shadow);animation:modal-in .16s ease;overflow:hidden}
+#modalbox.wide{width:min(1240px,97vw)}
+#modalhead{display:flex;justify-content:space-between;align-items:center;
+padding:10px 14px;border-bottom:1px solid var(--bd);font-weight:600;
+min-height:49px;background:linear-gradient(90deg,color-mix(in srgb,var(--acc) 16%,transparent),transparent 55%),var(--bg2)}
+#modalbody{padding:15px 17px 20px;overflow:auto}
+.card{border:1px solid #2d384e;border-radius:8px;padding:8px;margin:8px 0;
+background:rgba(19,25,37,.74);box-shadow:0 1px 0 rgba(255,255,255,.018) inset}
+.card:hover{border-color:#39475f}
+.badge{font-size:11px;background:#1d2635;border:1px solid #354158;
+border-radius:10px;padding:0 7px;color:var(--dim);display:inline-flex;
+align-items:center;min-height:20px}
+.badge.ok{border-color:#365e50;color:#9fe2bc}
+.badge.warn{border-color:#67582f;color:#f1ce75}
+.badge.err{border-color:#71414c;color:#ffadb5}
+.chip{display:inline-flex;align-items:center;padding:2px 8px;margin:2px 3px 2px 0;
+border:1px solid #34425a;border-radius:999px;background:#1a2433;
+color:#b7c5dc;font-size:11px}
+table.grid{width:100%;border-collapse:collapse}
+table.grid td{padding:3px 4px;vertical-align:middle}
+details{margin:6px 0;border:1px solid var(--bd);border-radius:8px;padding:6px 10px}
+details summary{cursor:pointer;color:var(--dim);font-weight:600}
+details[open] summary{margin-bottom:6px;color:var(--fg)}
+label.tgl{display:flex;gap:4px;align-items:center;font-size:12px;color:var(--dim)}
+.ff{margin:4px 0}
+.ff>label{display:block;color:var(--dim);font-size:12px;margin-bottom:2px}
+.dd-panel{position:absolute;background:var(--bg3);border:1px solid var(--acc);
+max-height:240px;overflow:auto;z-index:1000;display:none;width:100%;
+border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.dd-opt{padding:5px 10px;cursor:pointer;display:flex;gap:8px;align-items:center}
+.dd-opt:hover{background:var(--bg)}
+.filedrop{border:2px dashed var(--bd);border-radius:10px;padding:24px;
+text-align:center;cursor:pointer;color:var(--dim)}
+.filedrop:hover{border-color:var(--acc);color:var(--fg)}
+.nsfw-btn{padding:4px 9px;border:1px solid var(--bd);border-radius:6px;
+background:var(--bg3);color:var(--dim);cursor:pointer;font-size:12px;
+font-weight:600;transition:all .2s;min-height:auto}
+.nsfw-btn.on{background:#c0392b;color:#fff;border-color:#e74c3c}
+.nsfw-btn:hover{opacity:.85}
+.empty-state{padding:34px 18px;text-align:center;color:var(--dim);
+border:1px dashed var(--bd);border-radius:10px}
+.section-title{display:flex;align-items:center;gap:8px;margin:15px 0 7px;
+color:#cbd5e6;font-weight:650}
+.toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:9px;
+margin:9px 0;border:1px solid var(--bd);border-radius:10px;background:rgba(11,14,20,.36)}
+.toolbar input[type="search"]{flex:1;min-width:220px}
+.loading-block{display:flex;align-items:center;justify-content:center;gap:9px;
+padding:30px;color:var(--dim)}
+.spinner{width:15px;height:15px;display:inline-block;flex:0 0 auto;
+border:2px solid rgba(255,255,255,.2);border-top-color:var(--acc);
+border-radius:50%;animation:spin .8s linear infinite}
+#activity{position:fixed;right:16px;bottom:17px;z-index:110;
+width:min(350px,calc(100vw - 30px));border:1px solid #3b4b68;
+border-radius:12px;background:rgba(18,23,34,.96);box-shadow:var(--shadow);
+backdrop-filter:blur(14px);overflow:hidden;animation:activity-in .18s ease}
+#activity-head{display:flex;gap:9px;align-items:center;padding:10px 12px;
+border-bottom:1px solid var(--bd);color:#cfe0ff;font-weight:650}
+#activity-list{max-height:180px;overflow:auto;padding:5px}
+.activity-row{display:flex;align-items:center;gap:8px;padding:7px 8px;
+border-radius:7px;color:#b9c4d7;font-size:12px}
+.activity-row:hover{background:var(--bg3)}
+#toasts{position:fixed;top:62px;right:16px;z-index:120;display:flex;
+width:min(390px,calc(100vw - 30px));flex-direction:column;gap:7px;pointer-events:none}
+.toast{display:flex;align-items:flex-start;gap:9px;padding:10px 12px;
+border:1px solid #35435c;border-radius:10px;background:rgba(20,27,40,.97);
+box-shadow:var(--soft-shadow);animation:toast-in .2s ease;pointer-events:auto}
+.toast.ok{border-color:#39644f}
+.toast.err{border-color:#75404b}
+.toast.warn{border-color:#6a5930}
+.toast-body{min-width:0;flex:1;white-space:pre-wrap;overflow-wrap:anywhere}
+.memory-layout{display:grid;grid-template-columns:minmax(250px,320px) minmax(0,1fr);
+gap:13px;min-height:520px}
+.memory-sidebar{min-width:0}.memory-main{min-width:0}
+.memory-summary{position:sticky;top:0;padding:12px;border:1px solid #35435b;
+border-radius:11px;background:linear-gradient(145deg,rgba(74,113,183,.13),rgba(21,27,40,.84))}
+.memory-summary-text{max-height:230px;overflow:auto;white-space:pre-wrap;
+color:#cbd5e5;line-height:1.55}
+.memory-preview{max-height:370px;overflow:auto;padding:10px;
+border:1px solid #34425a;border-radius:9px;background:#0d121b}
+.memory-preview pre{margin:0;white-space:pre-wrap;
+font:12px/1.48 ui-monospace,SFMono-Regular,Consolas,monospace;color:#acb9cf}
+.memory-list{display:flex;flex-direction:column;gap:8px}
+.memory-turn-group{margin:12px 0 4px;display:flex;align-items:center;gap:8px;
+color:#99a9c2;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em}
+.memory-turn-group::after{content:"";height:1px;flex:1;background:var(--bd)}
+.memory-card{margin:0;overflow:hidden}
+.memory-card.archived{opacity:.64;border-style:dashed}
+.memory-card>summary{display:grid;grid-template-columns:auto auto minmax(100px,1fr) auto;
+align-items:center;gap:7px;margin:0!important;list-style:none;color:var(--fg)!important}
+.memory-card>summary::-webkit-details-marker{display:none}
+.memory-card>summary::before{content:"›";color:var(--dim);font-size:19px;
+transform-origin:center;transition:transform .12s ease}
+.memory-card[open]>summary::before{transform:rotate(90deg)}
+.memory-gist-line{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.memory-score{color:#9bb8ed;font:11px ui-monospace,SFMono-Regular,Consolas,monospace}
+.memory-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 10px;margin-top:10px}
+.memory-fields .full{grid-column:1/-1}
+.memory-fields label{display:block;margin-bottom:3px;color:var(--dim);font-size:11px}
+.memory-fields input,.memory-fields select,.memory-fields textarea{width:100%}
+.memory-details{min-height:92px}
+.retrieval-reason{display:inline-flex;margin:2px 3px 2px 0;padding:2px 7px;
+border:1px solid #4d4568;border-radius:999px;color:#c2b2e9;font-size:11px}
+.memory-add{padding:10px;margin:8px 0;border:1px dashed #40506b;
+border-radius:10px;background:rgba(25,32,46,.42)}
+#b-menu{display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fade-in{from{opacity:0}to{opacity:1}}
+@keyframes fade-slide{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@keyframes modal-in{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes activity-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes toast-in{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:translateX(0)}}
+@media(max-width:900px){
+  #side{width:230px}
+  #drawer{position:fixed;right:0;top:0;bottom:0;width:min(520px,92vw);z-index:20}
+  .memory-layout{grid-template-columns:1fr}
+  .memory-summary{position:static}
+  /* Sidebar 230px + header content ~520px overflows with nowhere to go
+     between here and 680px (body has overflow:hidden), clipping the
+     right-hand icon buttons entirely -- move the header's own scroll
+     out of the narrower breakpoint below so that dead zone closes. */
+  #top{overflow-x:auto}
+  #top button{flex:0 0 auto}
+}
+@media(max-width:680px){
+  #side{position:fixed;left:0;top:0;bottom:0;z-index:25;width:min(290px,86vw);transform:translateX(-100%)}
+  #side.open{transform:translateX(0)}
+  /* A translucent backdrop behind the open sidebar, tappable to close --
+     without it the only way to close on a touch screen was the "any
+     click inside #sidelist" handler, easy to miss with no visual cue at
+     all that the panel is modal. */
+  #side.open::after{content:"";position:fixed;inset:0 0 0 min(290px,86vw);
+    background:rgba(0,0,0,.4);z-index:-1}
+  #b-menu{display:inline-flex}
+  #chatname{max-width:120px}
+  /* Visual hint that the button row scrolls -- without it there's no
+     touch-device affordance (no visible scrollbar) suggesting the rest
+     of the header's buttons exist offscreen to the right. */
+  #top{mask-image:linear-gradient(to right,#000 calc(100% - 24px),transparent);
+    -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 24px),transparent)}
+  /* "show technical detail" reads fine on a wide header but consumes the
+     whole first screenful on a phone before any icon button is reachable
+     -- keep the checkbox (still directly usable) but hide its label. */
+  #top label.tgl{gap:0}
+  #top label.tgl > :not(input){display:none}
+  #modalbox,#modalbox.wide{width:98vw;max-height:96vh}
+  .memory-fields{grid-template-columns:1fr}
+  .memory-fields .full{grid-column:auto}
+  /* iOS auto-zooms the viewport on focusing any input under 16px, which
+     combined with body{overflow:hidden} leaves the page stuck zoomed in. */
+  input,select,textarea{font-size:16px}
+  /* The API settings modal's provider rows and per-role sampler grids
+     (settings.js) set fixed pixel widths (95-150px) inline on each
+     input/select -- .row already wraps them, but fixed widths turn that
+     wrap into ragged narrow columns instead of each field taking a
+     sensible share of the viewport. !important is the correct tool here
+     specifically because it's overriding an inline style, not another
+     stylesheet rule. */
+  .card.row input,.card.row select{width:auto!important;flex:1 1 100px;min-width:0}
+}
+@media(max-height:480px){
+  /* Short/landscape viewports: the technical-detail pane and composer
+     between them otherwise eat most of the transcript's height. */
+  #live{max-height:120px}
+}
