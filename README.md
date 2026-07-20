@@ -58,3 +58,7 @@ archive/                inactive historical files retained for reference
 ## Dependency notes
 
 `sqlite-vec` is used when available for vector search. Providers can point to OpenAI-compatible endpoints, Anthropic, Ollama, KoboldCpp, and configured remote services. API keys and provider settings are stored in the local database, so do not commit a populated `engine.db`.
+
+## License
+
+Released under the [MIT License](LICENSE).
