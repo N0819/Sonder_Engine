@@ -344,7 +344,7 @@ def _headers(prov):
         h["Authorization"] = "Bearer " + prov["api_key"]
     if prov["kind"] == "openrouter":
         h["HTTP-Referer"] = "http://localhost:8008"
-        h["X-Title"] = "Fiction Engine"
+        h["X-Title"] = "Sonder Engine"
     return h
 
 def _strip_extended(body):

@@ -1,6 +1,6 @@
 # Editing Guide for Coding Agents
 
-This file is the operational map for changing Fiction Engine safely. It is written for both human contributors and AI coding agents.
+This file is the operational map for changing Sonder Engine safely. It is written for both human contributors and AI coding agents.
 
 ## First-pass orientation
 

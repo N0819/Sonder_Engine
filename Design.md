@@ -1,6 +1,6 @@
-# Fiction Engine Design
+# Sonder Engine Design
 
-## Multi-Agent Fiction Engine — Current Architecture and Product Philosophy
+## Multi-Agent Sonder Engine — Current Architecture and Product Philosophy
 
 **Document status:** Living architecture specification
 **Revision date:** July 19, 2026
@@ -8,7 +8,7 @@
 
 ## Product thesis
 
-The Fiction Engine produces interactive fiction by maintaining a persistent world, routing information through explicit epistemic boundaries, and allowing independently modeled characters to act from their own perceptions, memories, relationships, knowledge, and beliefs.
+The Sonder Engine produces interactive fiction by maintaining a persistent world, routing information through explicit epistemic boundaries, and allowing independently modeled characters to act from their own perceptions, memories, relationships, knowledge, and beliefs.
 
 Story is not generated from a single omniscient conversation context. It emerges from a pipeline that separately determines:
 

@@ -38,7 +38,7 @@ The default SQLite database is `engine.db`; override with `ENGINE_DB` before imp
 
 ## Architecture
 
-Fiction Engine is a local multi-agent interactive-fiction system. Its defining goal: produce coherent interactive fiction without granting fictional minds (character agents) access to information they did not legitimately perceive, learn, remember, or infer. Objective truth, perception, memory, inference, belief, and narration are treated as distinct information layers that must not collapse into one context.
+Sonder Engine is a local multi-agent interactive-fiction system. Its defining goal: produce coherent interactive fiction without granting fictional minds (character agents) access to information they did not legitimately perceive, learn, remember, or infer. Objective truth, perception, memory, inference, belief, and narration are treated as distinct information layers that must not collapse into one context.
 
 A turn runs through a `PipelineContext` (`pipeline_context.py`) and is executed by `agents/runtime.py`. Every stage's output is saved as a `steps`/`variants` row pair (one active variant per step), which is what makes reroll, rerun-from-stage, and manual editing possible.
 
