@@ -1,6 +1,6 @@
 # Changelog
 
-## alpha3 — Background NPCs & reliability audit
+## alpha1.3 — Background NPCs & reliability audit
 
 ### Added
 - **Background NPCs that feel like real people, cheaply.** Unregistered background
