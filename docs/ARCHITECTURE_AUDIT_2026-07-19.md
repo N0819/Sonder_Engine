@@ -1,4 +1,4 @@
-# Fiction Engine Architecture Audit
+# Sonder Engine Architecture Audit
 
 **Date:** July 19, 2026  
 **Scope:** Turn orchestration, epistemic boundaries, persistence, concurrency, memory, spatial state, canon authority, API startup, documentation, and tests.

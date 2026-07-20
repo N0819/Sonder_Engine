@@ -79,7 +79,7 @@ def _startup_engine():
     if not guest.host_account_exists():
         print(
             "\n"
-            "Fiction Engine: no host account yet. Open "
+            "Sonder Engine: no host account yet. Open "
             f"http://127.0.0.1:{port}/login to create your username and "
             "password (first run only).\n",
             flush=True,
@@ -87,7 +87,7 @@ def _startup_engine():
     else:
         print(
             "\n"
-            "Fiction Engine: host account configured. Sign in at "
+            "Sonder Engine: host account configured. Sign in at "
             f"http://127.0.0.1:{port}/login . If the password was lost, "
             "restart once with FICTION_ENGINE_RESET_HOST=1 to wipe the "
             "account and set it up again.\n",
@@ -101,7 +101,7 @@ async def lifespan(_app):
     yield
 
 
-app = FastAPI(title="Fiction Engine", version="1.0", lifespan=lifespan)
+app = FastAPI(title="Sonder Engine", version="1.0", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

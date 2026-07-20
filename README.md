@@ -1,6 +1,6 @@
-# Fiction Engine
+# Sonder Engine
 
-Fiction Engine is a local multi-agent interactive-fiction system built around explicit information boundaries. The Director resolves objective causality, Perception creates observer-specific views, character agents act from private context, the Narrator renders the player-facing slice, and deterministic commit code decides what becomes persistent state.
+Sonder Engine is a local multi-agent interactive-fiction system built around explicit information boundaries. The Director resolves objective causality, Perception creates observer-specific views, character agents act from private context, the Narrator renders the player-facing slice, and deterministic commit code decides what becomes persistent state.
 
 ## Start here
 

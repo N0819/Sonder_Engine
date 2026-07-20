@@ -1,6 +1,6 @@
 # Research and Prior Art
 
-This document sources the research the Fiction Engine draws on. It has two
+This document sources the research the Sonder Engine draws on. It has two
 parts:
 
 1. **Explicitly referenced** — work the code or docs name directly (with the
