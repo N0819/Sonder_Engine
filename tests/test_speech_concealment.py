@@ -201,3 +201,128 @@ def test_perception_outcome_does_not_inject_concealed_dialogue(temp_db, monkeypa
             f"concealed dialogue_log entry leaked into perceiver {pid}'s view "
             "via the deterministic npc_dlog backstop"
         )
+
+
+# --- norm_sequence concealment normalization (interpret -> perception_act path) ---
+# These cover the SECOND leak found during the Meridian demo run: norm_sequence
+# rebuilt speech elements WITHOUT visibility/conceal_from, so a line the director
+# marked concealed was re-emitted overt and leaked at the onset perception pass;
+# and weaker models mark a concealed ACTION but leave the co-declared SPEECH overt.
+
+from agents.common import norm_sequence
+
+
+def _run(seq):
+    out = {"sequence": [dict(e) for e in seq]}
+    norm_sequence(out)
+    return out["sequence"]
+
+
+def _speech(seq):
+    return next(e for e in seq if e["type"] == "speech")
+
+
+def test_explicit_concealed_speech_survives_normalization():
+    seq = _run([
+        {"type": "speech", "text": "secret", "volume": "whisper",
+         "visibility": "concealed", "conceal_from": ["k", "v"]},
+    ])
+    sp = _speech(seq)
+    assert sp["visibility"] == "concealed"
+    assert sp["conceal_from"] == ["k", "v"]
+
+
+def test_concealed_action_propagates_to_undermarked_speech():
+    seq = _run([
+        {"type": "action", "attempt": "open private channel", "visibility": "concealed",
+         "conceal_from": ["k", "v"], "targets": ["a"]},
+        {"type": "speech", "text": "secret", "volume": "whisper"},
+    ])
+    sp = _speech(seq)
+    assert sp["visibility"] == "concealed"
+    assert sp["conceal_from"] == ["k", "v"]
+
+
+def test_backstop_subtracts_addressee_from_conceal_from():
+    # addressee 'a' is both the action target and mistakenly in conceal_from;
+    # the intended listener must not be made deaf.
+    seq = _run([
+        {"type": "action", "attempt": "aside", "visibility": "concealed",
+         "conceal_from": ["k", "v", "a"], "targets": ["a"]},
+        {"type": "speech", "text": "secret", "volume": "normal"},
+    ])
+    sp = _speech(seq)
+    assert sp["visibility"] == "concealed"
+    assert "a" not in sp["conceal_from"]
+    assert sp["conceal_from"] == ["k", "v"]
+
+
+def test_explicit_loud_speech_stays_public_despite_concealed_action():
+    # loud decoy line alongside a concealed act must NOT be over-concealed.
+    seq = _run([
+        {"type": "action", "attempt": "palm the vial", "visibility": "concealed",
+         "conceal_from": ["k"], "targets": []},
+        {"type": "speech", "text": "nothing to see here", "volume": "loud"},
+    ])
+    sp = _speech(seq)
+    assert sp["visibility"] == "overt"
+    assert sp["conceal_from"] == []
+
+
+def test_explicitly_overt_speech_stays_public():
+    seq = _run([
+        {"type": "action", "attempt": "hide vial", "visibility": "concealed",
+         "conceal_from": ["k"], "targets": []},
+        {"type": "speech", "text": "open statement", "volume": "normal", "visibility": "overt"},
+    ])
+    assert _speech(seq)["visibility"] == "overt"
+
+
+def test_no_concealed_action_leaves_speech_overt():
+    seq = _run([{"type": "speech", "text": "hello", "volume": "normal"}])
+    assert _speech(seq)["visibility"] == "overt"
+
+
+def test_union_of_multiple_concealed_actions():
+    # declaration order is not preserved by norm_sequence, so the backstop must
+    # union conceal_from across ALL concealed actions, not just an adjacent one.
+    seq = _run([
+        {"type": "action", "attempt": "act1", "visibility": "concealed", "conceal_from": ["k"], "targets": []},
+        {"type": "speech", "text": "secret", "volume": "mutter"},
+        {"type": "action", "attempt": "act2", "visibility": "concealed", "conceal_from": ["v"], "targets": []},
+    ])
+    sp = _speech(seq)
+    assert sp["visibility"] == "concealed"
+    assert set(sp["conceal_from"]) == {"k", "v"}
+
+
+def test_no_internal_raw_keys_leak_into_output():
+    seq = _run([
+        {"type": "speech", "text": "hi", "volume": "whisper",
+         "visibility": "concealed", "conceal_from": ["k"]},
+    ])
+    for e in seq:
+        assert "_raw_vis" not in e and "_raw_vol" not in e
+
+
+# --- Cross-LLM robustness: SpeechVolume enum coercion ---
+# background_react (and any speech-bearing step) used to hard-crash when a
+# weaker model emitted an out-of-enum volume like "quiet"/"low"/"softly";
+# these now coerce via normalize_speech_volume instead of ValidationError.
+
+from schemas import validate_llm_output_strict as _vlos, SpeechElement, DialogueLogEntry
+
+
+def test_speech_element_coerces_unknown_volume():
+    assert SpeechElement(text="hi", volume="quiet").volume.value == "mutter"
+    assert SpeechElement(text="hi", volume="bellowing").volume.value == "normal"
+    assert DialogueLogEntry(speaker="x", exact_quote="q", volume="softly").volume.value == "mutter"
+
+
+def test_director_interpret_out_of_enum_volume_does_not_crash():
+    report = _vlos("director_interpret", {
+        "kind": "dialogue", "sequence": [], "speech": "hello",
+        "speech_volume": "hushed", "flow": {},
+    })
+    assert report.valid, report.errors
+    assert report.output["speech_volume"] in ("whisper", "mutter", "normal", "loud", "shout")

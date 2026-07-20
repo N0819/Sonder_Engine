@@ -460,11 +460,25 @@ def norm_sequence(out):
         if t == "speech":
             txt = e.get("text") or e.get("speech")
             if txt:
+                # Carry the speech element's OWN concealment through
+                # normalization. Dropping it here (as we used to) meant a
+                # line the director explicitly marked visibility:'concealed'
+                # was re-emitted as overt, so perception_act's onset delivery
+                # -- which reads visibility/conceal_from straight off these
+                # normalized speech elements -- leaked the private words to
+                # every in-range perceiver, including whoever it was
+                # concealed from. See tests/test_speech_concealment.py.
                 clean.append({
                     "type": "speech",
                     "text": str(txt),
                     "volume": normalize_speech_volume(e.get("volume")),
                     "tone": e.get("tone", ""),
+                    "visibility": "concealed" if e.get("visibility") == "concealed" else "overt",
+                    "conceal_from": e.get("conceal_from") or [],
+                    # raw (pre-normalization) signals, consumed by the
+                    # concealment backstop below and stripped before return.
+                    "_raw_vis": e.get("visibility"),
+                    "_raw_vol": e.get("volume"),
                 })
         else:
             att = e.get("attempt")
@@ -501,6 +515,41 @@ def norm_sequence(out):
                     "intended_effects": intended_effects,
                     "asserted_effects": asserted_effects,
                 })
+    # Deterministic concealment backstop (leak-safe). A hushed or unmarked
+    # line co-declared with a concealed action is almost always the private
+    # communication itself; weak models routinely mark the ACTION concealed
+    # (e.g. "open a private channel", "whisper an aside") but leave the SPEECH
+    # overt, which would leak the words to everyone in range. So: for every
+    # speech element that is not EXPLICITLY public, propagate the union of all
+    # concealed actions' conceal_from onto it. "Explicitly public" = the model
+    # set an explicit overt visibility, or an explicit loud/shout volume. We
+    # never override a speech the model already marked concealed, and we
+    # subtract the concealing actions' own targets so the intended addressee
+    # is never made deaf. Over-concealment only costs marginal eavesdroppers
+    # (the addressee still hears); a leak is irreversible.
+    concealed_from_union, conceal_targets = [], []
+    for e in clean:
+        if e["type"] == "action" and e.get("visibility") == "concealed":
+            for cf in e.get("conceal_from") or []:
+                if cf not in concealed_from_union:
+                    concealed_from_union.append(cf)
+            for tg in e.get("targets") or []:
+                if tg not in conceal_targets:
+                    conceal_targets.append(tg)
+    propagate = [cf for cf in concealed_from_union if cf not in conceal_targets]
+    if propagate:
+        for e in clean:
+            if e["type"] != "speech" or e.get("visibility") == "concealed":
+                continue
+            explicitly_public = (e.get("_raw_vis") == "overt") or (e.get("_raw_vol") in ("loud", "shout"))
+            if explicitly_public:
+                continue
+            e["visibility"] = "concealed"
+            e["conceal_from"] = list(propagate)
+    for e in clean:
+        e.pop("_raw_vis", None)
+        e.pop("_raw_vol", None)
+
     out["sequence"] = clean
     sp = [e for e in clean if e["type"] == "speech"]
     ac = [e for e in clean if e["type"] == "action"]
