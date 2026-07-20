@@ -18,7 +18,7 @@ from prompts import get_prompt
 from character_schema import character_name, new_uid
 from frames import is_recognized_in_frame
 from scene import set_char_state, set_char_status
-from spatial import merge_scene_with_diff
+from spatial import merge_scene_with_diff, spatial_rel, hear_level
 from theory_of_mind import apply_mind_model_updates
 from paradox import check_and_apply_paradox
 from spatial_frames import detect_and_reconcile as detect_and_reconcile_spatial
@@ -419,6 +419,75 @@ def _background_name_mentioned(name, text):
         re.search(rf"\b{re.escape(w)}\b", text_cf) for w in significant
     )
 
+def _character_address_of(dr_output, presence_name, roster, scene=None,
+                          station_room=None):
+    """Return the last hearable dialogue_log entry in which a roster speaker
+    (a registered character or the player) aimed a line at this background
+    presence, or None -- so a character speaking directly TO an extra can
+    trigger that extra's reaction, which resolved_event-prose salience alone
+    misses (a character's line rarely names its target in the prose).
+
+    Fail-closed on concealment (metadata that rides every entry -- denying on
+    it leaks nothing): a line marked visibility=concealed, or concealed FROM
+    this presence, never triggers -- the same rule perception.py applies to
+    the hear-level backstop. Audibility is enforced only when provable: with a
+    known station_room and a resolvable speaker room, the line must be fully
+    hearable (a fragment cannot be coherently replied to). When room data is
+    absent (best-effort, unlike the always-present concealment flags) the
+    address is allowed through on the same co-presence assumption
+    background_react already makes about resolved_event -- the check
+    self-tightens as sketch coverage grows.
+    """
+    found = None
+    for d in (dr_output.get("dialogue_log") or []):
+        speaker = str(d.get("speaker") or "").strip()
+        if not speaker or speaker.casefold() not in roster:
+            continue
+        target = str(d.get("intended_target") or "").strip()
+        if not target or not _background_name_mentioned(presence_name, target):
+            continue
+        if str(d.get("visibility") or "").casefold() == "concealed":
+            continue
+        if any(_background_name_mentioned(presence_name, str(c))
+               for c in (d.get("conceal_from") or [])):
+            continue
+        if station_room and scene:
+            sp_room = _room_of(scene, speaker)
+            if sp_room:
+                rel = spatial_rel(scene, sp_room, station_room)
+                if hear_level(rel, d.get("volume") or "normal") != "full":
+                    continue
+        found = d  # last hearable address wins
+    return found
+
+
+def _valid_pending_reply(record, turn_idx):
+    """The presence's owed reply if it has not yet expired, else None."""
+    pr = record.get("pending_reply")
+    if not isinstance(pr, dict):
+        return None
+    if turn_idx > (pr.get("expires_turn") if pr.get("expires_turn") is not None else -1):
+        return None
+    return pr
+
+
+def _background_fired_reactions(br):
+    """Normalize a background_react result into a list of fired reaction dicts
+    ({name, dialogue_log_entry, action}) -- tolerating both the ensemble
+    (`reactions` list) shape and the legacy single-entry shape."""
+    if not isinstance(br, dict):
+        return []
+    reactions = br.get("reactions")
+    if reactions:
+        return [r for r in reactions
+                if isinstance(r, dict) and r.get("dialogue_log_entry")]
+    if br.get("fired") and br.get("dialogue_log_entry"):
+        return [{"name": br.get("name"),
+                 "dialogue_log_entry": br["dialogue_log_entry"],
+                 "action": br.get("action", "")}]
+    return []
+
+
 def track_background_presences(ctx, nonce):
     """Deterministic, LLM-free tracking of named entities the director
     keeps writing into resolved_event/dialogue_log who are NOT a
@@ -427,38 +496,79 @@ def track_background_presences(ctx, nonce):
     across many turns despite her having no character sheet, no
     character_step call, and no memory. This never invents a candidate
     from free prose (no NER over resolved_event) -- only from the same
-    structured fields commit already trusts: dialogue_log speakers and
-    state_diff.entities with kind person/npc. Once a name is a tracked
-    candidate, later resolved_event mentions of that exact name are
-    counted (case-insensitive substring) so passing-mention frequency
-    can also cross the promotion threshold, without ever discovering a
-    new name that way. Purely additive bookkeeping for the UI to surface
-    promotion suggestions from -- writes nothing into `characters` or
-    `chat_chars` itself.
+    structured fields commit already trusts: dialogue_log speakers,
+    state_diff.entities with kind person/npc, director_establish's
+    top-level entities on the opening turn, and the deterministic
+    background_react backstop's own authored line. Once a name is a
+    tracked candidate, later resolved_event mentions of that exact name
+    are counted (case-insensitive substring) so passing-mention
+    frequency can also cross the promotion threshold, without ever
+    discovering a new name that way. For structured person/npc defs it
+    also harvests a small `sketch` ({role_hint, station_room}) from the
+    director's own description/position -- self-knowledge the background
+    reactor can be voiced with, never perceived-world state. Purely
+    additive bookkeeping for the UI to surface promotion suggestions
+    from -- writes nothing into `characters` or `chat_chars` itself.
     """
     chat = ctx.chat
     cid = chat.id
     res = ctx.director_resolve or ctx.director_establish or {}
+    is_opening = not ctx.director_resolve  # res fell back to director_establish
     turn_idx = ctx.turn.idx
 
     roster = {n.casefold() for n in _known_name_roster(chat, ctx.cast)}
     roster |= {(e.get("name") or "").casefold() for e in (ctx.extra_players or [])}
 
     candidates = set()
+    dialogue_speakers = set()  # names that spoke a dialogue_log line this beat
+    sketches = {}              # name -> {role_hint, station_room} from structured defs
+
     for d in (res.get("dialogue_log") or []):
         speaker = str(d.get("speaker") or "").strip()
         if speaker and speaker.casefold() not in roster:
             candidates.add(speaker)
+            dialogue_speakers.add(speaker.casefold())
 
+    # Structured person/npc entity defs: state_diff.entities on a normal
+    # turn, plus director_establish's TOP-LEVEL entities/positions on the
+    # opening turn (DirectorEstablish carries them at top level, not inside
+    # a state_diff -- so a location-implied presence established at idx 0
+    # was previously never tracked until the director happened to restate
+    # them). Same no-NER rule: only these already-trusted structured fields.
     diff = res.get("state_diff") or {}
-    for entity_def in (diff.get("entities") or {}).values():
-        if not isinstance(entity_def, dict):
-            continue
-        if entity_def.get("kind") not in ("person", "npc"):
-            continue
-        name = str(entity_def.get("name") or "").strip()
-        if name and name.casefold() not in roster:
+    entity_sources = [((diff.get("entities") or {}), (diff.get("positions") or {}))]
+    if is_opening:
+        entity_sources.append(((res.get("entities") or {}), (res.get("positions") or {})))
+    for entities, positions in entity_sources:
+        for entity_def in entities.values():
+            if not isinstance(entity_def, dict):
+                continue
+            if entity_def.get("kind") not in ("person", "npc"):
+                continue
+            name = str(entity_def.get("name") or "").strip()
+            if not name or name.casefold() in roster:
+                continue
             candidates.add(name)
+            sk = sketches.setdefault(name, {})
+            desc = str(entity_def.get("description") or "").strip()
+            if desc:
+                sk["role_hint"] = desc[:160]
+            room = positions.get(name)
+            if room:
+                sk["station_room"] = str(room)
+
+    # The deterministic backstop (background_react) authored one or more lines
+    # this beat for the gate-picked presence(s): persist each as a real
+    # dialogue turn so the same figure accrues toward promotion and reads as
+    # continuous, rather than being invisible to bookkeeping (it is otherwise
+    # merged only for rendering, in agents/perception.py). Each speaker was
+    # force-set to its gate-picked name in background_react.
+    br = ctx.get("background_react") or {}
+    for _r in _background_fired_reactions(br):
+        br_name = str((_r.get("dialogue_log_entry") or {}).get("speaker") or "").strip()
+        if br_name and br_name.casefold() not in roster:
+            candidates.add(br_name)
+            dialogue_speakers.add(br_name.casefold())
 
     presences = wget(cid, "background_presences", {})
     for name in candidates:
@@ -467,12 +577,14 @@ def track_background_presences(ctx, nonce):
             "dialogue_turns": [], "mention_turns": [],
         })
         record["last_turn"] = turn_idx
-        if any(
-            str(d.get("speaker") or "").casefold() == name.casefold()
-            for d in (res.get("dialogue_log") or [])
-        ):
+        if name.casefold() in dialogue_speakers:
             if turn_idx not in record["dialogue_turns"]:
                 record["dialogue_turns"].append(turn_idx)
+        sk = sketches.get(name)
+        if sk:
+            # Director restated this presence's own description/position ->
+            # objective self-knowledge wins; overwrite the prior sketch.
+            record.setdefault("sketch", {}).update(sk)
 
     resolved_event = str(res.get("resolved_event") or "")
     for name, record in presences.items():
@@ -483,15 +595,56 @@ def track_background_presences(ctx, nonce):
             if turn_idx not in record["mention_turns"]:
                 record["mention_turns"].append(turn_idx)
 
+    # Owed-reply bookkeeping: a registered character (or the player) addressed
+    # this presence this beat, but the single-winner gate spent the beat on
+    # someone else -- persist a one-beat-grace debt so they can answer next
+    # turn (the "if not during the turn, next turn" case). Discharged when the
+    # presence is picked (answered, or its silence WAS the answer) and swept
+    # when stale, so a reply never surfaces turns later.
+    selected_names = {str(n).casefold() for n in ((ctx.get("background_react") or {}).get("selected") or [])}
+    if not selected_names:  # legacy single-entry shape
+        _sel = str((ctx.get("background_react") or {}).get("name") or "").strip().casefold()
+        if _sel:
+            selected_names = {_sel}
+    sc = wget(cid, "scene", {}) or {}
+    for name, record in presences.items():
+        pr = record.get("pending_reply")
+        if isinstance(pr, dict) and turn_idx > (pr.get("expires_turn")
+                                                if pr.get("expires_turn") is not None else -1):
+            record.pop("pending_reply", None)
+        if name.casefold() in selected_names:
+            record.pop("pending_reply", None)  # the moment was theirs; discharged
+            continue
+        entry = _character_address_of(
+            res, name, roster, sc, (record.get("sketch") or {}).get("station_room"))
+        if entry:
+            record["pending_reply"] = {
+                "from": entry.get("speaker"), "quote": entry.get("exact_quote", ""),
+                "tone": entry.get("tone", ""), "turn": turn_idx,
+                "expires_turn": turn_idx + 2,
+            }
+
     wset(cid, "background_presences", presences)
     return {"tracked": len(presences)}
 
 def pick_background_reactor(ctx, dr_output):
-    """Deterministic gate for the background_react stage: pick at most one
-    named, unregistered background presence to give an independent
+    """Single-winner convenience wrapper over pick_background_reactors: the
+    top-ranked qualifying background presence, or None. Preserves the original
+    gate contract for the common (max_reactors == 1) case and all callers/tests
+    that expect one name.
+    """
+    picks = pick_background_reactors(ctx, dr_output, cap=1)
+    return picks[0] if picks else None
+
+
+def pick_background_reactors(ctx, dr_output, cap=1):
+    """Deterministic gate for the background_react stage: pick up to `cap`
+    named, unregistered background presences to give an independent
     reaction this beat, when this beat has salience for them but the
     director's own resolved_event/dialogue_log authorship (see prompts.py's
-    DIALOGUE LOG background-entity license) gave them nothing anyway.
+    DIALOGUE LOG background-entity license) gave them nothing anyway. Each
+    returned presence qualifies INDEPENDENTLY (addressed / character-addressed
+    / owed / mentioned / has history) -- the list is never padded to `cap`.
 
     This mirrors infer_vehicle_zones' role in spatial_frames.py: a prompt
     clause exists and is sometimes followed, but live play showed it fails
@@ -502,8 +655,9 @@ def pick_background_reactor(ctx, dr_output):
     alone -- the same lesson this codebase has already learned for zone
     tagging and speech concealment.
 
-    Returns None when no candidate qualifies (the common case -- most
-    turns have no salient, un-voiced background presence at all).
+    Returns [] when no candidate qualifies (the common case -- most turns
+    have no salient, un-voiced background presence at all). cap defaults to 1,
+    reproducing the historical single-winner behavior exactly.
     """
     chat = ctx.chat
     cid = chat.id
@@ -522,6 +676,8 @@ def pick_background_reactor(ctx, dr_output):
 
     resolved_event = str(dr_output.get("resolved_event") or "")
     player_input = str(ctx.get("input") or "")
+    turn_idx = ctx.turn.idx
+    sc = wget(cid, "scene", {}) or {}
     presences = wget(cid, "background_presences", {})
 
     candidates = []
@@ -530,18 +686,25 @@ def pick_background_reactor(ctx, dr_output):
         if cf in roster or cf in voiced_this_beat:
             continue
         addressed = _background_name_mentioned(name, player_input)
+        # A registered character (or the player) who spoke directly TO this
+        # presence this beat -- read-only here; the owed-reply debt is written
+        # at commit (track_background_presences), never in this pre-commit gate.
+        station_room = (record.get("sketch") or {}).get("station_room")
+        char_addr = _character_address_of(dr_output, name, roster, sc, station_room)
+        owed = _valid_pending_reply(record, turn_idx)
         mentioned = _background_name_mentioned(name, resolved_event)
         dialogue_turns = record.get("dialogue_turns") or []
-        if not (addressed or mentioned or dialogue_turns):
+        if not (addressed or char_addr or owed or mentioned or dialogue_turns):
             continue
-        priority = (bool(addressed), bool(mentioned), len(dialogue_turns),
+        priority = (bool(addressed), bool(char_addr), bool(owed),
+                    bool(mentioned), len(dialogue_turns),
                     record.get("last_turn") or -1)
         candidates.append((priority, name))
 
     if not candidates:
-        return None
+        return []
     candidates.sort(reverse=True)
-    return candidates[0][1]
+    return [name for _, name in candidates[:max(0, int(cap))]]
 
 def promotable_background_presences(chat_id):
     presences = wget(chat_id, "background_presences", {})
@@ -942,7 +1105,15 @@ def prepare_memory_commit(ctx, *, scene=None):
     turn = ctx.turn
     cid = chat.id
     res = ctx.director_resolve or ctx.director_establish or {}
-    dlog = res.get("dialogue_log") or []
+    # Build a fresh list -- never mutate res["dialogue_log"], since the
+    # director_resolve step/variant was already persisted before
+    # background_react ran (see agents/perception.py's merge comment). The
+    # deterministic backstop line is merged only for rendering there; fold
+    # it into the persisted event record here too, so hearers mint dialogue
+    # memories of it and it reaches _promotion_evidence.
+    dlog = list(res.get("dialogue_log") or [])
+    for _r in _background_fired_reactions(ctx.get("background_react")):
+        dlog.append({**_r["dialogue_log_entry"], "source": "background_react"})
     views = (
         (ctx.perception_outcome or {}).get("views")
         or (ctx.perception_establish or {}).get("views")

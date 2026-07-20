@@ -138,7 +138,11 @@ def test_background_react_stage_skips_llm_call_when_no_candidate(temp_db, monkey
     monkeypatch.setattr(background, "_agent_json", fail_if_called)
 
     result = background.background_react(ctx, nonce=0)
-    assert result == {"fired": False, "name": None, "dialogue_log_entry": None, "action": ""}
+    assert result["fired"] is False
+    assert result["name"] is None
+    assert result["dialogue_log_entry"] is None
+    assert result["reactions"] == []
+    assert result["selected"] == []
 
 
 def test_background_react_stage_returns_fired_entry_when_gate_passes(temp_db, monkeypatch):
@@ -166,6 +170,55 @@ def test_background_react_stage_returns_fired_entry_when_gate_passes(temp_db, mo
     assert result["dialogue_log_entry"]["speaker"] == "Reya"
     assert result["dialogue_log_entry"]["exact_quote"] == '"That is not good."'
     assert result["action"] == "grips the console."
+
+
+def test_payload_carries_role_hint_from_sketch(temp_db, monkeypatch):
+    import agents.background as background
+
+    ctx = _make_ctx(temp_db, background_presences={
+        "Doran": {"first_turn": 0, "last_turn": 4, "dialogue_turns": [1, 2],
+                  "mention_turns": [],
+                  "sketch": {"role_hint": "grizzled one-eyed barkeep",
+                             "station_room": "taproom"}},
+    })
+    ctx.director_resolve = {"resolved_event": "A tankard slams down.", "dialogue_log": []}
+
+    captured = {}
+
+    def capture(role, name, system, payload, **kw):
+        captured["payload"] = payload
+        return {"reacts": True, "dialogue_log_entry": {
+            "speaker": "x", "exact_quote": '"Aye."', "volume": "normal",
+            "intended_target": None, "tone": "gruff",
+            "visibility": "overt", "conceal_from": []}, "action": ""}
+
+    monkeypatch.setattr(background, "_agent_json", capture)
+
+    background.background_react(ctx, nonce=0)
+    assert captured["payload"]["entity"]["role_hint"] == "grizzled one-eyed barkeep"
+    assert captured["payload"]["entity"]["station_room"] == "taproom"
+
+
+def test_payload_role_hint_empty_when_no_sketch(temp_db, monkeypatch):
+    import agents.background as background
+
+    ctx = _make_ctx(temp_db, background_presences={
+        "Reya": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [1], "mention_turns": []},
+    })
+    ctx.director_resolve = {"resolved_event": "The alarm blares.", "dialogue_log": []}
+
+    captured = {}
+
+    def capture(role, name, system, payload, **kw):
+        captured["payload"] = payload
+        return {"reacts": False, "dialogue_log_entry": None, "action": ""}
+
+    monkeypatch.setattr(background, "_agent_json", capture)
+
+    background.background_react(ctx, nonce=0)
+    # No sketch on the record -> empty strings, never a KeyError.
+    assert captured["payload"]["entity"]["role_hint"] == ""
+    assert captured["payload"]["entity"]["station_room"] == ""
 
 
 def test_background_react_stage_handles_reacts_false(temp_db, monkeypatch):

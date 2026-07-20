@@ -392,6 +392,18 @@ def reaction_config(chat_id):
     config.update(stored)
     return config
 
+def background_config(chat_id):
+    """Config for the background_react stage. `max_reactors` bounds how many
+    unregistered presences may voice a single beat (default 1 -- the historical
+    single-winner behavior; raise to stage ensemble beats). Hard-capped at 3 in
+    background_react: past that, a crowd is better represented as one chorus
+    presence than as several individually-voiced extras.
+    """
+    config = {"max_reactors": 1}
+    stored = wget(chat_id, "background_config", None) or {}
+    config.update(stored)
+    return config
+
 def fiction_model(chat_id):
     return wget(chat_id, "fiction_model", None) or {
         "genre": {"primary": "unspecified"},
