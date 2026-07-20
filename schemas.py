@@ -1,10 +1,47 @@
 # schemas.py
 """Pydantic schemas for all pipeline and world-state structures."""
 
-from pydantic import BaseModel, Field, ValidationError
+import json
+
+from pydantic import BaseModel, Field, ValidationError, validator
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Any, Union
+
+
+def _coerce_str_list(value):
+    """Normalize a value into a list[str], tolerating the shapes smaller /
+    cheaper LLMs emit where the schema wants plain strings: a bare string,
+    a single object, a list of objects, or nested lists. We preserve the
+    text (pulling a sensible field out of objects) instead of hard-rejecting
+    the entire step -- a dropped alternative is far cheaper than a crashed
+    character turn. See tests/test_tom_normalization.py."""
+    if value is None:
+        return []
+    if isinstance(value, (str, dict)):
+        value = [value]
+    elif not isinstance(value, (list, tuple)):
+        value = [value]
+
+    out = []
+    for item in value:
+        if isinstance(item, str):
+            out.append(item)
+        elif isinstance(item, dict):
+            picked = next(
+                (
+                    str(item[key])
+                    for key in ("claim", "text", "label", "description", "hypothesis", "value")
+                    if item.get(key)
+                ),
+                None,
+            )
+            out.append(picked if picked is not None else json.dumps(item, ensure_ascii=False, sort_keys=True))
+        elif isinstance(item, (list, tuple)):
+            out.append("; ".join(str(part) for part in item))
+        else:
+            out.append(str(item))
+    return out
 
 # ---- Pydantic v1/v2 Compatibility ----
 
@@ -213,6 +250,10 @@ class SpeechElement(BaseModel):
     type: str = "speech"
     text: str
     volume: SpeechVolume = SpeechVolume.normal
+
+    _norm_volume = validator("volume", pre=True, allow_reuse=True)(
+        lambda cls, v: normalize_speech_volume(v)
+    )
     tone: str = ""
     visibility: ActionVisibility = ActionVisibility.overt
     conceal_from: list[str] = Field(default_factory=list)
@@ -301,6 +342,10 @@ class OtherPlayerInterpret(BaseModel):
     action: Optional[dict] = None
     notes: str = ""
 
+    _norm_volume = validator("speech_volume", pre=True, allow_reuse=True)(
+        lambda cls, v: normalize_speech_volume(v)
+    )
+
 class DirectorInterpret(BaseModel):
     kind: str = "mixed"
     sequence: list[dict] = Field(default_factory=list)
@@ -313,6 +358,10 @@ class DirectorInterpret(BaseModel):
     location_query: Optional[str] = None
     flow: FlowPlan = Field(default_factory=FlowPlan)
     notes: str = ""
+
+    _norm_volume = validator("speech_volume", pre=True, allow_reuse=True)(
+        lambda cls, v: normalize_speech_volume(v)
+    )
     # Additive multiplayer support: interpretations for any additional
     # human players declaring in this same beat, keyed by persona_id (as a
     # string, since JSON object keys are always strings). Empty for every
@@ -616,6 +665,10 @@ class DialogueLogEntry(BaseModel):
     speaker: str
     exact_quote: str
     volume: SpeechVolume = SpeechVolume.normal
+
+    _norm_volume = validator("volume", pre=True, allow_reuse=True)(
+        lambda cls, v: normalize_speech_volume(v)
+    )
     intended_target: Optional[str] = None
     tone: str = ""
     visibility: ActionVisibility = ActionVisibility.overt
@@ -672,6 +725,10 @@ class MindHypothesis(BaseModel):
     evidence: list[EvidenceRef] = Field(default_factory=list)
     alternatives: list[str] = Field(default_factory=list)
 
+    _coerce_alternatives = validator("alternatives", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_str_list(v)
+    )
+
 class RelationshipUpdate(BaseModel):
     target_entity: str
     trust_delta: float = Field(default=0.0, ge=-0.2, le=0.2)
@@ -690,6 +747,10 @@ class CharacterOutput(BaseModel):
     observations_used: list[EvidenceRef] = Field(default_factory=list)
     appraisal: dict = Field(default_factory=dict)
     considered_responses: list[str] = Field(default_factory=list)
+
+    _coerce_considered = validator("considered_responses", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_str_list(v)
+    )
     sequence: list[dict] = Field(default_factory=list)
     speech: Optional[str] = None
     action: Optional[dict] = None

@@ -9,7 +9,7 @@
 | `agents/__init__.py` | 81 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 177 |  | `agents.common`, `commit`, `db`, `prompts`, `schemas` |
 | `agents/character.py` | 158 | Private character decision agent. | `agents.common`, `character_schema`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/common.py` | 1121 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/common.py` | 1170 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/director.py` | 842 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 400 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `scene`, `spatial` |
 | `agents/mapping.py` | 178 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
@@ -34,7 +34,7 @@
 | `prompts.py` | 1103 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1014 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 498 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
-| `schemas.py` | 1421 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `schemas.py` | 1482 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 537 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | — |
 | `spatial_frames.py` | 659 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `theory_of_mind.py` | 286 |  | — |
@@ -60,13 +60,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 435 | 89 lines |
-| `_check_narrator_fidelity()` | 993 | 65 lines |
+| `norm_sequence()` | 435 | 138 lines |
+| `_check_narrator_fidelity()` | 1042 | 65 lines |
 | `_assert_plan_materialized()` | 77 | 55 lines |
 | `_extract_authority_claims()` | 290 | 44 lines |
-| `_inject_visible_actor()` | 757 | 41 lines |
-| `canonicalize_positions()` | 652 | 35 lines |
-| `_narration_person_counts()` | 938 | 35 lines |
+| `_inject_visible_actor()` | 806 | 41 lines |
+| `canonicalize_positions()` | 701 | 35 lines |
+| `_narration_person_counts()` | 987 | 35 lines |
 | `_requires_reaction_phase()` | 217 | 34 lines |
 
 ### `agents/director.py`
@@ -324,14 +324,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 978 | 150 lines |
-| `semantic_output_errors()` | 1292 | 76 lines |
-| `validate_llm_output_strict()` | 1369 | 53 lines |
-| `_coerce_considered_responses()` | 829 | 32 lines |
-| `validate_llm_output()` | 1129 | 29 lines |
-| `_coerce_conditions()` | 892 | 27 lines |
-| `_hoist_misplaced_entity_siblings()` | 934 | 21 lines |
-| `_flatten_view_value()` | 956 | 21 lines |
+| `preprocess_llm_output()` | 1039 | 150 lines |
+| `semantic_output_errors()` | 1353 | 76 lines |
+| `validate_llm_output_strict()` | 1430 | 53 lines |
+| `_coerce_str_list()` | 12 | 33 lines |
+| `_coerce_considered_responses()` | 890 | 32 lines |
+| `validate_llm_output()` | 1190 | 29 lines |
+| `_coerce_conditions()` | 953 | 27 lines |
+| `_hoist_misplaced_entity_siblings()` | 995 | 21 lines |
 
 ### `spatial.py`
 
