@@ -111,9 +111,12 @@ def _png_text_chunks(png_bytes):
             key, _, rest = data.partition(b"\x00")
             if rest:
                 try:
-                    chunks[key.decode("latin-1")] = (
-                        zlib.decompress(rest[1:]).decode("utf-8", "replace")
-                    )
+                    # Bound the inflate: a ~50KB crafted zTXt chunk can expand
+                    # to gigabytes (decompression bomb) and OOM the process.
+                    # Card imports are, by design, untrusted community files.
+                    _MAX = 10 * 1024 * 1024  # 10 MB is far beyond any real card
+                    raw = zlib.decompressobj().decompress(rest[1:], _MAX)
+                    chunks[key.decode("latin-1")] = raw.decode("utf-8", "replace")
                 except Exception:
                     pass
         elif ctype == b"IEND":

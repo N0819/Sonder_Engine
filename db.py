@@ -837,6 +837,9 @@ MIGRATIONS = [
         # table, so the drop/rename is safe. All columns copied here have
         # existed since these tables were introduced (this same MIGRATIONS
         # list), so an older db reaching v14 already has every one of them.
+        # Drop any leftover scratch table so re-running this migration after a
+        # crash mid-copy doesn't collide with a half-populated *_new table.
+        "DROP TABLE IF EXISTS world_entities_new",
         "CREATE TABLE world_entities_new("
         "entity_id TEXT NOT NULL,"
         "chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,"

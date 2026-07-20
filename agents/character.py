@@ -37,6 +37,7 @@ from .common import (
     _normalize_character_output,
     assign_event_ids,
     cap_mind_model_updates,
+    character_room,
     norm_sequence,
 )
 
@@ -59,7 +60,7 @@ def character_step(ctx, cid, nonce):
         active_state=active,
     )
 
-    char_room = room_of(sc, character_name(sh))
+    char_room = character_room(sc, sh)
     known_tags, excl_titles = _char_known_tags(sh)
     knowledge = knowledge_for_character(_books(ctx), char_room, known_tags, excl_titles)
     stored_state = json.loads(row["cstate"] or "{}")

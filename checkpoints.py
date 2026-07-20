@@ -1,8 +1,10 @@
 import json, time, re, hashlib
-from db import active_frame_id, q, qi, wget, wset
+from db import active_frame_id, q, qi, transaction, wget, wset
 from memory import (
     dump_chat_memories, restore_chat_memories,
+    prepare_chat_memory_restore, apply_chat_memory_restore,
     dump_memory_summaries, restore_memory_summaries,
+    prepare_memory_summary_restore, apply_memory_summary_restore,
     dump_lorebook, restore_lorebook, chat_lorebook_ids,
     dump_lorebook_links, restore_lorebook_links,
 )
@@ -21,6 +23,25 @@ def snapshot_state(chat_id):
         {"char_id": r["char_id"], "frame_id": r["frame_id"],
          "status": r["status"], "state": json.loads(r["state"] or "{}")}
         for r in q("SELECT * FROM chat_char_frames WHERE chat_id=?", (chat_id,))
+    ]
+    # frames rows and persona stations are durably mutated by spatial
+    # split/merge commits (spatial_frames.perform_split/perform_merge:
+    # new frame rows, chat_personas.frame_id restationing, frames.
+    # merged_turn_idx) -- without them in the snapshot, rerolling such a
+    # turn leaves stranded personas and permanently-merged frames.
+    frames = [
+        {"id": r["id"], "label": r["label"], "ordinal": r["ordinal"],
+         "kind": r["kind"], "travelers": r["travelers"],
+         "nonexistent_cast": r["nonexistent_cast"], "created": r["created"],
+         "parent_frame_id": r["parent_frame_id"],
+         "split_turn_idx": r["split_turn_idx"],
+         "merged_turn_idx": r["merged_turn_idx"]}
+        for r in q("SELECT * FROM frames WHERE chat_id=? ORDER BY id", (chat_id,))
+    ]
+    chat_personas = [
+        {"persona_id": r["persona_id"], "status": r["status"],
+         "frame_id": r["frame_id"]}
+        for r in q("SELECT * FROM chat_personas WHERE chat_id=?", (chat_id,))
     ]
     canon = chat["lorebook_id"] if chat else None
     book_ids = []
@@ -91,6 +112,7 @@ def snapshot_state(chat_id):
 
     return {
         "world": world, "chars": chars, "char_frames": char_frames,
+        "frames": frames, "chat_personas": chat_personas,
         "memories": dump_chat_memories(chat_id),
         "memory_summaries": dump_memory_summaries(chat_id),
         "lore": lore, "lorebooks": books,
@@ -180,90 +202,162 @@ def restore_checkpoint(chat_id, idx):
     finally:
         active_frame_id.reset(token)
 
+def _restore_frames(chat_id, snap_frames):
+    """Put the frames table back to snapshot state.
+
+    Deliberately NOT delete-and-reinsert: frames.id is referenced with
+    ON DELETE SET NULL by turns/memories/chat_personas and ON DELETE
+    CASCADE by chat_char_frames (PRAGMA foreign_keys=ON), so deleting a
+    surviving frame row -- even to reinsert it with the same id inside
+    the same transaction -- would irreversibly null out the frame
+    assignment of every PRE-checkpoint turn in that era. Instead:
+    update rows that exist in both, reinsert snapshot rows that are
+    missing under their original ids, and delete only frames that did
+    not exist at snapshot time (e.g. a spatial split created by the
+    very commit being rerolled -- exactly the rows whose FK fallout is
+    the desired cleanup)."""
+    existing = {row["id"] for row in q("SELECT id FROM frames WHERE chat_id=?", (chat_id,))}
+    snap_ids = set()
+    # Ascending id order inserts parents before children (frame ids are
+    # allocated monotonically and parent_frame_id is set at creation),
+    # keeping the immediate FK check satisfied.
+    for f in sorted(snap_frames or [], key=lambda f: f["id"]):
+        snap_ids.add(f["id"])
+        vals = (f.get("label", ""), f.get("ordinal", 0), f.get("kind", "other"),
+                f.get("travelers", "[]"), f.get("nonexistent_cast", "[]"),
+                f.get("created") or time.time(), f.get("parent_frame_id"),
+                f.get("split_turn_idx"), f.get("merged_turn_idx"))
+        if f["id"] in existing:
+            qi("""UPDATE frames SET label=?,ordinal=?,kind=?,travelers=?,
+                nonexistent_cast=?,created=?,parent_frame_id=?,
+                split_turn_idx=?,merged_turn_idx=? WHERE id=? AND chat_id=?""",
+               vals + (f["id"], chat_id))
+        else:
+            qi("""INSERT INTO frames(id,chat_id,label,ordinal,kind,travelers,
+                nonexistent_cast,created,parent_frame_id,split_turn_idx,merged_turn_idx)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+               (f["id"], chat_id) + vals)
+    # Children before parents, for the same FK reason.
+    for fid in sorted(existing - snap_ids, reverse=True):
+        qi("DELETE FROM frames WHERE id=? AND chat_id=?", (fid, chat_id))
+
+def _restore_chat_personas(chat_id, personas):
+    # Delete-and-reinsert with same-chat ids, mirroring the
+    # chat_char_frames restore just above it in the restore body.
+    qi("DELETE FROM chat_personas WHERE chat_id=?", (chat_id,))
+    for p in personas or []:
+        if not q("SELECT id FROM personas WHERE id=?", (p["persona_id"],), one=True):
+            # Persona deleted from the library since the snapshot; a
+            # verbatim reinsert would fail FK enforcement and abort the
+            # whole restore.
+            continue
+        qi("INSERT INTO chat_personas(chat_id,persona_id,status,frame_id) VALUES(?,?,?,?)",
+           (chat_id, p["persona_id"], p.get("status", "active"), p.get("frame_id")))
+
 def _restore_checkpoint_body(chat_id, r):
     b = json.loads(r["blob"])
-    qi("DELETE FROM world WHERE chat_id=?", (chat_id,))
-    for k, v in (b.get("world") or {}).items():
-        wset(chat_id, k, v)
-    for cidk, st in (b.get("chars") or {}).items():
-        if isinstance(st, dict) and "status" in st and "state" in st:
-            qi("UPDATE chat_chars SET state=?,status=? WHERE chat_id=? AND char_id=?",
-               (json.dumps(st["state"]), st["status"], chat_id, int(cidk)))
-        else:
-            qi("UPDATE chat_chars SET state=? WHERE chat_id=? AND char_id=?",
-               (json.dumps(st), chat_id, int(cidk)))
-    qi("DELETE FROM chat_char_frames WHERE chat_id=?", (chat_id,))
-    for cf in b.get("char_frames") or []:
-        qi("""INSERT INTO chat_char_frames(chat_id,char_id,frame_id,status,state)
-            VALUES(?,?,?,?,?)""",
-           (chat_id, cf["char_id"], cf["frame_id"], cf.get("status", "active"),
-            json.dumps(cf.get("state") or {})))
-    if "memories" in b:
-        restore_chat_memories(chat_id, b.get("memories") or [])
-    if "memory_summaries" in b:
-        restore_memory_summaries(chat_id, b.get("memory_summaries") or [])
-    if "lorebooks" in b:
-        _restore_books(chat_id, b.get("lorebooks") or [], b.get("lorebook_links") or [])
+    # Any embedding work (only needed for legacy blobs that predate
+    # vectors traveling inside the dump) happens here, BEFORE the write
+    # transaction opens: a remote provider call must never hold SQLite's
+    # write lock, and a provider failure must leave the chat untouched.
+    mem_plan = (prepare_chat_memory_restore(chat_id, b.get("memories") or [])
+                if "memories" in b else None)
+    summary_plan = (prepare_memory_summary_restore(b.get("memory_summaries") or [])
+                    if "memory_summaries" in b else None)
+    # One transaction for the whole restore: previously ~15 autocommit
+    # statements meant a crash mid-way left world state restored but
+    # memories/entities half-gone. Now any failure rolls the entire
+    # restore back and the chat stays exactly as it was.
+    with transaction():
+        qi("DELETE FROM world WHERE chat_id=?", (chat_id,))
+        for k, v in (b.get("world") or {}).items():
+            wset(chat_id, k, v)
+        for cidk, st in (b.get("chars") or {}).items():
+            if isinstance(st, dict) and "status" in st and "state" in st:
+                qi("UPDATE chat_chars SET state=?,status=? WHERE chat_id=? AND char_id=?",
+                   (json.dumps(st["state"]), st["status"], chat_id, int(cidk)))
+            else:
+                qi("UPDATE chat_chars SET state=? WHERE chat_id=? AND char_id=?",
+                   (json.dumps(st), chat_id, int(cidk)))
+        # Frames must be restored before chat_char_frames/chat_personas
+        # (whose rows FK-reference frame ids) and before memories (whose
+        # frame_id stamps must land on existing frames).
+        if "frames" in b:
+            _restore_frames(chat_id, b.get("frames") or [])
+        qi("DELETE FROM chat_char_frames WHERE chat_id=?", (chat_id,))
+        for cf in b.get("char_frames") or []:
+            qi("""INSERT INTO chat_char_frames(chat_id,char_id,frame_id,status,state)
+                VALUES(?,?,?,?,?)""",
+               (chat_id, cf["char_id"], cf["frame_id"], cf.get("status", "active"),
+                json.dumps(cf.get("state") or {})))
+        if "chat_personas" in b:
+            _restore_chat_personas(chat_id, b.get("chat_personas") or [])
+        if mem_plan is not None:
+            apply_chat_memory_restore(chat_id, mem_plan)
+        if summary_plan is not None:
+            apply_memory_summary_restore(chat_id, summary_plan)
+        if "lorebooks" in b:
+            _restore_books(chat_id, b.get("lorebooks") or [], b.get("lorebook_links") or [])
 
-    # Restore world entities
-    qi("DELETE FROM world_entities WHERE chat_id=?", (chat_id,))
-    for ent in b.get("world_entities") or []:
-        qi("""INSERT INTO world_entities(entity_id,chat_id,kind,subtype,name,payload,
-            created_turn_id,retired_turn_id) VALUES(?,?,?,?,?,?,?,?)""",
-           (ent["entity_id"], chat_id, ent["kind"], ent.get("subtype", ""),
-            ent.get("name", ""), ent.get("payload", "{}"),
-            ent.get("created_turn_id"), ent.get("retired_turn_id")))
+        # Restore world entities
+        qi("DELETE FROM world_entities WHERE chat_id=?", (chat_id,))
+        for ent in b.get("world_entities") or []:
+            qi("""INSERT INTO world_entities(entity_id,chat_id,kind,subtype,name,payload,
+                created_turn_id,retired_turn_id) VALUES(?,?,?,?,?,?,?,?)""",
+               (ent["entity_id"], chat_id, ent["kind"], ent.get("subtype", ""),
+                ent.get("name", ""), ent.get("payload", "{}"),
+                ent.get("created_turn_id"), ent.get("retired_turn_id")))
 
-    qi("DELETE FROM world_placements WHERE chat_id=?", (chat_id,))
-    for pl in b.get("world_placements") or []:
-        qi("""INSERT INTO world_placements(chat_id,subject_id,relation,container_id,detail)
-            VALUES(?,?,?,?,?)""",
-           (chat_id, pl["subject_id"], pl["relation"], pl["container_id"], pl.get("detail", "{}")))
+        qi("DELETE FROM world_placements WHERE chat_id=?", (chat_id,))
+        for pl in b.get("world_placements") or []:
+            qi("""INSERT INTO world_placements(chat_id,subject_id,relation,container_id,detail)
+                VALUES(?,?,?,?,?)""",
+               (chat_id, pl["subject_id"], pl["relation"], pl["container_id"], pl.get("detail", "{}")))
 
-    qi("DELETE FROM world_conditions WHERE chat_id=?", (chat_id,))
-    for cond in b.get("world_conditions") or []:
-        qi("""INSERT INTO world_conditions(condition_id,chat_id,subject_id,kind,
-            started_at,expires_at,next_tick,payload,active) VALUES(?,?,?,?,?,?,?,?,?)""",
-           (cond["condition_id"], chat_id, cond["subject_id"], cond["kind"],
-            cond["started_at"], cond.get("expires_at"), cond.get("next_tick"),
-            cond.get("payload", "{}"), cond.get("active", 1)))
+        qi("DELETE FROM world_conditions WHERE chat_id=?", (chat_id,))
+        for cond in b.get("world_conditions") or []:
+            qi("""INSERT INTO world_conditions(condition_id,chat_id,subject_id,kind,
+                started_at,expires_at,next_tick,payload,active) VALUES(?,?,?,?,?,?,?,?,?)""",
+               (cond["condition_id"], chat_id, cond["subject_id"], cond["kind"],
+                cond["started_at"], cond.get("expires_at"), cond.get("next_tick"),
+                cond.get("payload", "{}"), cond.get("active", 1)))
 
-    qi("DELETE FROM scheduled_events WHERE chat_id=?", (chat_id,))
-    for ev in b.get("scheduled_events") or []:
-        qi("""INSERT INTO scheduled_events(event_id,chat_id,due_at,kind,location_id,
-            payload,seed,status) VALUES(?,?,?,?,?,?,?,?)""",
-           (ev["event_id"], chat_id, ev["due_at"], ev["kind"],
-            ev.get("location_id"), ev.get("payload", "{}"),
-            ev.get("seed", ""), ev.get("status", "pending")))
+        qi("DELETE FROM scheduled_events WHERE chat_id=?", (chat_id,))
+        for ev in b.get("scheduled_events") or []:
+            qi("""INSERT INTO scheduled_events(event_id,chat_id,due_at,kind,location_id,
+                payload,seed,status) VALUES(?,?,?,?,?,?,?,?)""",
+               (ev["event_id"], chat_id, ev["due_at"], ev["kind"],
+                ev.get("location_id"), ev.get("payload", "{}"),
+                ev.get("seed", ""), ev.get("status", "pending")))
 
-    qi("DELETE FROM fiction_worlds WHERE chat_id=?", (chat_id,))
-    for fw in b.get("fiction_worlds") or []:
-        qi("""INSERT INTO fiction_worlds(world_id,chat_id,parent_world_id,name,kind,payload)
-            VALUES(?,?,?,?,?,?)""",
-           (fw["world_id"], chat_id, fw.get("parent_world_id"),
-            fw["name"], fw.get("kind", "world"), fw.get("payload", "{}")))
+        qi("DELETE FROM fiction_worlds WHERE chat_id=?", (chat_id,))
+        for fw in b.get("fiction_worlds") or []:
+            qi("""INSERT INTO fiction_worlds(world_id,chat_id,parent_world_id,name,kind,payload)
+                VALUES(?,?,?,?,?,?)""",
+               (fw["world_id"], chat_id, fw.get("parent_world_id"),
+                fw["name"], fw.get("kind", "world"), fw.get("payload", "{}")))
 
-    qi("DELETE FROM fiction_locations WHERE chat_id=?", (chat_id,))
-    for fl in b.get("fiction_locations") or []:
-        qi("""INSERT INTO fiction_locations(location_id,chat_id,world_id,
-            parent_location_id,kind,name,payload) VALUES(?,?,?,?,?,?,?)""",
-           (fl["location_id"], chat_id, fl["world_id"],
-            fl.get("parent_location_id"), fl.get("kind", "location"),
-            fl["name"], fl.get("payload", "{}")))
+        qi("DELETE FROM fiction_locations WHERE chat_id=?", (chat_id,))
+        for fl in b.get("fiction_locations") or []:
+            qi("""INSERT INTO fiction_locations(location_id,chat_id,world_id,
+                parent_location_id,kind,name,payload) VALUES(?,?,?,?,?,?,?)""",
+               (fl["location_id"], chat_id, fl["world_id"],
+                fl.get("parent_location_id"), fl.get("kind", "location"),
+                fl["name"], fl.get("payload", "{}")))
 
-    current_book_ids = set(chat_lorebook_ids(chat_id, enabled_only=False))
-    cache = wget(chat_id, "lore_cache", []) or []
-    cache = [entry for entry in cache
-             if isinstance(entry, dict) and entry.get("book_id") in current_book_ids]
-    seen = set()
-    deduplicated = []
-    for entry in cache:
-        key = entry.get("entry_uid") or _lore_cache_fingerprint(entry)
-        if key in seen:
-            continue
-        seen.add(key)
-        deduplicated.append(entry)
-    wset(chat_id, "lore_cache", deduplicated[:24])
+        current_book_ids = set(chat_lorebook_ids(chat_id, enabled_only=False))
+        cache = wget(chat_id, "lore_cache", []) or []
+        cache = [entry for entry in cache
+                 if isinstance(entry, dict) and entry.get("book_id") in current_book_ids]
+        seen = set()
+        deduplicated = []
+        for entry in cache:
+            key = entry.get("entry_uid") or _lore_cache_fingerprint(entry)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduplicated.append(entry)
+        wset(chat_id, "lore_cache", deduplicated[:24])
 def _lore_cache_fingerprint(entry):
     keys = re.sub(r"\s+", " ", str(entry.get("keys") or "").strip().casefold())
     content = re.sub(r"\s+", " ", str(entry.get("content") or "").strip().casefold())

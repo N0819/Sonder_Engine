@@ -21,7 +21,7 @@ from .common import (
 )
 
 def _resolve_narration_person(chat_id, raw_input, player_name, player_pronouns,
-                              key="narration_person"):
+                              key="narration_person", pending=None):
     """Which grammatical person renders the player character this turn.
     Detection is per-turn (a player can switch style mid-campaign), but a
     turn with no clear signal -- pure dialogue with no narrative frame, e.g.
@@ -35,7 +35,20 @@ def _resolve_narration_person(chat_id, raw_input, player_name, player_pronouns,
     from silently switching the whole campaign's narration voice, which is
     exactly the flakiness heuristic person-detection is prone to. `key` lets
     additional human players each keep their own established convention.
+
+    `pending`: when a dict is supplied, the newly established/overridden
+    person is RECORDED there ({key: person}) instead of written durably --
+    the narrator stages stash it on their returned step content so that
+    commit.py (the sole persistence boundary) applies the wset at commit
+    time; model-era output stays provisional until then. Without `pending`
+    the write happens immediately (direct/legacy callers).
     """
+    def _record(value):
+        if pending is None:
+            wset(chat_id, key, value)
+        else:
+            pending[key] = value
+
     counts = _narration_person_counts(raw_input, player_name, player_pronouns)
     best = max(counts, key=counts.get)
     top = counts[best]
@@ -47,11 +60,11 @@ def _resolve_narration_person(chat_id, raw_input, player_name, player_pronouns,
         return stored or "second"
     if stored is None or detected == stored:
         if detected != stored:
-            wset(chat_id, key, detected)
+            _record(detected)
         return detected
     # Established, and this turn disagrees: only override on a decisive lead.
     if top - runner >= 2:
-        wset(chat_id, key, detected)
+        _record(detected)
         return detected
     return stored
 
@@ -126,8 +139,14 @@ def narrator(ctx, nonce):
 
     player_name = pers.get("identity", {}).get("name") or "Player" if isinstance(pers, dict) else "Player"
     player_pronouns = pers.get("identity", {}).get("pronouns", {}) if isinstance(pers, dict) else {}
+    # Durable persistence of a newly detected person is deferred to commit
+    # (commit.py's commit_narration_person) via this pending sink -- the
+    # narrator stage itself must not write world state before the commit
+    # boundary validates the turn.
+    pending_person_writes = {}
     narration_person = _resolve_narration_person(
-        chat["id"], ctx.input or "", player_name, player_pronouns)
+        chat["id"], ctx.input or "", player_name, player_pronouns,
+        pending=pending_person_writes)
 
     payload = {
         "player_view": view,
@@ -167,6 +186,8 @@ def narrator(ctx, nonce):
         # vanishing silently.
         out["fidelity_warnings"] = fidelity_warnings
 
+    if pending_person_writes:
+        out["narration_person_writes"] = pending_person_writes
     out["prose"] = _strip_player_echo(out.get("prose", ""), p_lines)
     return out
 
@@ -217,9 +238,13 @@ def narrator_extra(ctx, nonce):
             "raw_input": extra.get("input") or "",
         }
 
+        # Deferred to commit exactly like narrator() above -- each pending
+        # write rides this persona's own returned entry.
+        pending_person_writes = {}
         narration_person = _resolve_narration_person(
             chat["id"], extra.get("input") or "", extra.get("name"),
-            extra.get("pronouns") or {}, key=f"narration_person:extra:{pid}")
+            extra.get("pronouns") or {}, key=f"narration_person:extra:{pid}",
+            pending=pending_person_writes)
 
         payload = {
             "player_view": view,
@@ -248,15 +273,19 @@ def narrator_extra(ctx, nonce):
         if fidelity_warnings:
             out["fidelity_warnings"] = fidelity_warnings
 
+        if pending_person_writes:
+            out["narration_person_writes"] = pending_person_writes
         out["prose"] = _strip_player_echo(out.get("prose", ""), p_lines)
         return pid_key, out, warnings, fidelity_warnings
 
     # Each extra player's narration only reads data already computed before
     # this step runs (director_interpret/perception_outcome) and never reads
     # another extra player's own output -- genuinely independent work, same
-    # as the mapping+perception_act pairing elsewhere in the pipeline. wget/
-    # wset calls inside render_one write to distinct per-persona keys
-    # (narration_person:extra:<pid>), so concurrent execution is safe;
+    # as the mapping+perception_act pairing elsewhere in the pipeline. Each
+    # render_one only READS its own distinct per-persona world key
+    # (narration_person:extra:<pid>); the corresponding write is recorded on
+    # that persona's returned entry and applied at commit, so concurrent
+    # execution is safe;
     # ctx.warnings mutation is deferred to the main thread below rather than
     # done inside each worker, avoiding any concurrent-list-mutation risk.
     #

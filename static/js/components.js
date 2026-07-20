@@ -92,6 +92,7 @@ function closeAllModals() {
 // caller's own close-and-reopen.
 function _confirmOverlay(buildBody, onKeydown) {
   const backdrop = el("div", {
+    class: "confirm-overlay",
     style: "position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.5);"
       + "display:flex;align-items:center;justify-content:center;animation:fade-in .12s ease",
   });
@@ -222,9 +223,22 @@ function backgroundTask(label, work, opts = {}) {
 }
 
 async function buttonTask(btn, label, work) {
-  const old = btn.textContent; btn.disabled = true; btn.textContent = label;
+  // Null-safe: a caller that reads event.currentTarget after an await hands
+  // us null (currentTarget is reset when dispatch ends). Never let that crash
+  // BEFORE the work runs -- the action should still fire and errors still toast.
+  const old = btn ? btn.textContent : null;
+  if (btn) { btn.disabled = true; btn.textContent = label; }
   try { return await work() }
-  finally { if (btn.isConnected) { btn.disabled = false; btn.textContent = old } }
+  catch (e) {
+    // Surface the failure -- without this, a rejected work() (e.g. a 409
+    // from a delete/reroll) becomes a silent unhandled rejection and the
+    // button just quietly reverts, reading to the user as "nothing happened."
+    // Mark it handled so the global unhandledrejection net doesn't re-toast.
+    if (e && typeof e === "object") e.__handled = true;
+    toast(e?.message || String(e), "err", 8000);
+    throw e;
+  }
+  finally { if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = old } }
 }
 
 function loadingBlock(label = "Loading…") {
@@ -409,7 +423,13 @@ function modelCombobox(providers, cp, cm, onChange) {
   }
   minput.onfocus = async () => { if (psel.value && !S.models[psel.value]) await load(+psel.value); showDD() };
   minput.oninput = () => { showDD(); emitChange() };
-  document.addEventListener("click", e => { if (!mwrap.contains(e.target)) dd.style.display = "none" });
+  const onDocClick = e => {
+    // Self-remove once this combobox's DOM is detached (modal closed/rebuilt),
+    // so we don't accumulate a document listener per instantiation.
+    if (!mwrap.isConnected) { document.removeEventListener("click", onDocClick); return; }
+    if (!mwrap.contains(e.target)) dd.style.display = "none";
+  };
+  document.addEventListener("click", onDocClick);
   psel.onchange = () => { minput.value = ""; if (psel.value) load(+psel.value); emitChange() };
   if (cp) load(+cp);
   return { psel, mwrap, minput, read: () => ({ provider: psel.value ? +psel.value : null, model: minput.value || null }) };

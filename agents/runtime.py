@@ -327,6 +327,7 @@ def resume_key_for_turn(turn_id, chat_id):
             interpretation,
             active_cast(chat_id, turn["frame_id"]),
             chat_id=chat_id,
+            frame_id=turn["frame_id"],
         )
 
     rows = q(
@@ -361,7 +362,7 @@ def resume_key_for_turn(turn_id, chat_id):
 
     return None
 
-def build_plan(interp, cast_rows, chat_id=None):
+def build_plan(interp, cast_rows, chat_id=None, frame_id=None):
     if not isinstance(interp, dict):
         interp = {}
         
@@ -386,16 +387,25 @@ def build_plan(interp, cast_rows, chat_id=None):
 
     # Add reaction loop if contested
     flags = _dict(fl.get("resolution_flags"))
-    if flags.get("contested") and reactors:
+    contested = bool(flags.get("contested") and reactors)
+    if contested:
         plan.append(("reaction_loop", "Characters · physical reactions"))
 
     if reactors:
         if autonomy > 0:
             plan.append(("interaction_loop", "Characters · interaction loop"))
-        else:
+        elif not contested:
             names = {row["id"]: character_name(json.loads(row["sheet"])) for row in cast_rows}
             for char_id in reactors:
                 plan.append((f"character:{char_id}", f"Character · {names[char_id]}"))
+        # Contested at autonomy == 0: reaction_loop above already gives every
+        # reactor its single character_step declaration for this beat, and
+        # director_resolve consumes those via ctx.reaction_loop. Appending the
+        # parallel character:<id> steps as well ran every reactor's
+        # character_step TWICE (the interaction_loop path dedups via
+        # already_reacted; the parallel path had no equivalent), and the
+        # second, full-turn declaration was then silently dropped from
+        # dialogue_log while perception_outcome still injected its actions.
 
     plan += [
         ("director_resolve", "Director · resolve"),
@@ -407,7 +417,7 @@ def build_plan(interp, cast_rows, chat_id=None):
         ("perception_outcome", "Perception · pass 2 — the outcome"),
         ("narrator", "Narrator · render"),
     ]
-    if chat_id is not None and _chat_has_extra_players(chat_id):
+    if chat_id is not None and _chat_has_extra_players(chat_id, frame_id):
         plan.append(("narrator_extra", "Narrator · render (other players)"))
     plan.append(("commit", "Mapping & memory · commit-up"))
     return plan
@@ -437,10 +447,15 @@ def _mapping_must_precede_perception(ctx):
     )
 
 
-def _chat_has_extra_players(chat_id):
+def _chat_has_extra_players(chat_id, frame_id=None):
+    # Same-frame filter as _load_extra_players: a co-player stationed in a
+    # DIFFERENT frame is not in this scene, so their presence must not add
+    # a spurious narrator_extra step to this frame's plan (the step would
+    # then render for zero perceivers).
     return bool(q(
-        "SELECT 1 FROM chat_personas WHERE chat_id=? AND status='active' LIMIT 1",
-        (chat_id,), one=True,
+        "SELECT 1 FROM chat_personas WHERE chat_id=? AND status='active' "
+        "AND frame_id IS ? LIMIT 1",
+        (chat_id, frame_id), one=True,
     ))
 
 def establishment_plan():
@@ -494,11 +509,27 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             c = active_content(turn_id, s["key"])
             if c is not None:
                 ctx[s["key"]] = c
-        if only_key == "commit" and has_existing_steps:
-            restore_checkpoint(chat_id, turn_row["idx"])
         s = q("SELECT * FROM steps WHERE turn_id=? AND key=?", (turn_id, only_key), one=True)
         if not s:
             raise RuntimeError(f"step '{only_key}' not found on this turn")
+        # Same stale-upstream refusal the from_key paths make: a reroll of
+        # this single step would otherwise silently consume hydrated content
+        # from an earlier step that is still flagged stale (left over from an
+        # interrupted/superseded run), then save a fresh-looking variant on
+        # top of it. Checked before the commit-checkpoint restore below so a
+        # refused reroll has no side effects at all.
+        stale_upstream = q(
+            "SELECT key FROM steps WHERE turn_id=? AND ord<? AND stale=1 "
+            "ORDER BY ord LIMIT 1",
+            (turn_id, s["ord"]), one=True,
+        )
+        if stale_upstream:
+            raise StaleStepError(
+                f"step '{stale_upstream['key']}' is stale and must be resumed "
+                f"or rerun before rerolling '{only_key}'"
+            )
+        if only_key == "commit" and has_existing_steps:
+            restore_checkpoint(chat_id, turn_row["idx"])
         # Marked stale BEFORE computing (not after) so a crash/abort mid-step
         # leaves accurate breadcrumbs instead of the pre-existing downstream
         # content silently continuing to look fresh.
@@ -591,23 +622,39 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
         }
         return
 
-    if from_key in (None, "director_interpret"):
-        yield from _step_stream(bus, turn_id, "director_interpret",
-            "Director · interpret & flow plan", 0, ctx,
-            variant_count(turn_id, "director_interpret"))
-        start_key = None
-    else:
+    start_key = None
+    if from_key not in (None, "director_interpret"):
         if step_is_stale(turn_id, "director_interpret"):
             raise StaleStepError(
                 "step 'director_interpret' is stale and must be resumed "
                 "or rerun before continuing from a later stage"
             )
         interp = active_content(turn_id, "director_interpret")
-        ctx["director_interpret"] = interp if isinstance(interp, dict) else {}
-        start_key = from_key
+        if isinstance(interp, dict):
+            ctx["director_interpret"] = interp
+            start_key = from_key
+        # A MISSING (absent, or no active variant) director_interpret means
+        # there is nothing valid to build the plan or any later stage on --
+        # restart from director_interpret (mirroring resume_key_for_turn)
+        # instead of substituting {} and failing the materialization assert
+        # only after everything, commit included, has already run.
 
-    plan = build_plan(ctx["director_interpret"], cast_rows, chat_id=chat_id)
+    if start_key is None:
+        yield from _step_stream(bus, turn_id, "director_interpret",
+            "Director · interpret & flow plan", 0, ctx,
+            variant_count(turn_id, "director_interpret"))
+
+    plan = build_plan(ctx["director_interpret"], cast_rows, chat_id=chat_id,
+                      frame_id=turn_row["frame_id"])
     keys = [k for k, _ in plan]
+    if start_key is not None and start_key not in keys:
+        # Refuse before deleting orphans or marking anything stale -- an
+        # unknown from_key must surface as an error the caller resolves,
+        # exactly like the establishment branch, not silently degrade into
+        # a full recompute of the whole turn.
+        raise RuntimeError(
+            f"step '{from_key}' is not in this turn's plan"
+        )
     for s in q("SELECT * FROM steps WHERE turn_id=?", (turn_id,)):
         if s["key"] in keys:
             continue

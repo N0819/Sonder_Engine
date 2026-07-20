@@ -207,9 +207,11 @@ function wizardState() {
 }
 
 async function wizardFromScratch() {
-  const name = await promptModal("Story name?") || "";
-  const scenario = await promptModal("Scenario?") || "";
-  const chat = await api("POST", "/api/chats", { name, scenario });
+  const name = await promptModal("Story name?");
+  if (name == null) return;               // Cancel/Escape -> abort, don't create a chat
+  const scenario = await promptModal("Scenario?");
+  if (scenario == null) return;
+  const chat = await api("POST", "/api/chats", { name: name || "", scenario: scenario || "" });
   await boot();
   await openChat(chat.id);
 }
@@ -630,7 +632,14 @@ $("#send").onclick = () => {
   runStream(
     `/api/chats/${S.chatId}/turns`,
     { input: text, frame_id: S.currentFrameId }
-  );
+  ).then(ok => {
+    // The turn never started (e.g. immediate POST failure) -- give the
+    // player their typed input back instead of silently eating it.
+    if (ok === false && !input.value.trim()) {
+      input.value = text;
+      resizeComposer();
+    }
+  });
 };
 
 $("#stop").onclick = () => {
@@ -656,6 +665,10 @@ document.addEventListener("keydown", event => {
   if (
     event.key === "Escape"
     && !$("#modal").classList.contains("hidden")
+    // A confirm/prompt overlay handles its own Escape (to cancel just the
+    // confirm); without this guard we'd ALSO closeModal() the dialog beneath
+    // it, discarding unsaved form state.
+    && !document.querySelector(".confirm-overlay")
   ) {
     closeModal();
   }
@@ -670,4 +683,14 @@ document.addEventListener("keydown", event => {
   }
 });
 
-boot();
+// Global safety net: many onclick handlers `await api(...)` without a local
+// catch, so a rejection would otherwise fail silently ("nothing happens").
+// Surface it. buttonTask marks errors it already toasted (__handled) so this
+// doesn't double up.
+window.addEventListener("unhandledrejection", event => {
+  const reason = event.reason;
+  if (reason && reason.__handled) return;
+  toast(reason?.message || String(reason || "Something went wrong"), "err", 8000);
+});
+
+boot().catch(e => toast("Could not load the app: " + (e?.message || e), "err", 0));

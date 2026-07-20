@@ -107,7 +107,8 @@ def sync_anchored_books(cid, sc):
         if not room:
             continue
         target = q(
-            "SELECT id FROM lorebooks WHERE chat_id=? AND scope_location_id=?",
+            "SELECT id FROM lorebooks WHERE chat_id=? AND scope_location_id=? "
+            "ORDER BY id LIMIT 1",
             (cid, room), one=True,
         )
         if not target or target["id"] == book["parent_id"]:
@@ -1346,6 +1347,40 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
         committed.extend(_consolidate_committed_memories(ctx))
     return {"committed": committed}
 
+# ---- Narration-person commit ----
+
+_NARRATION_PERSONS = ("first", "second", "third")
+
+def commit_narration_person(ctx, nonce):
+    """Apply the narration-person detections the narrator stages recorded on
+    their returned step content (`narration_person_writes`) but deliberately
+    did not persist themselves -- commit.py is the sole persistence boundary,
+    and the narrator previously did a durable wset mid-pipeline, before the
+    turn was validated/committed (so an aborted or rolled-back turn had
+    already flipped the campaign's narration voice). Deterministically
+    validated: only `narration_person*` keys with a known person value are
+    written, since step content is inspectable and manually editable.
+    """
+    cid = ctx.chat.id
+    applied = 0
+    sources = []
+    if isinstance(ctx.narrator, dict):
+        sources.append(ctx.narrator)
+    extra = ctx.get("narrator_extra") or {}
+    if isinstance(extra, dict):
+        sources.extend(v for v in extra.values() if isinstance(v, dict))
+    with transaction():
+        for out in sources:
+            writes = out.get("narration_person_writes")
+            if not isinstance(writes, dict):
+                continue
+            for key, value in writes.items():
+                if (isinstance(key, str) and key.startswith("narration_person")
+                        and value in _NARRATION_PERSONS):
+                    wset(cid, key, value)
+                    applied += 1
+    return {"applied": applied}
+
 # ---- Top-level atomic commit ----
 
 def commit_all(ctx, nonce):
@@ -1424,6 +1459,10 @@ def _commit_all_locked(ctx, nonce):
             _commit_domain(
                 ctx, results, "background_presences",
                 lambda: track_background_presences(ctx, nonce),
+            )
+            _commit_domain(
+                ctx, results, "narration_person",
+                lambda: commit_narration_person(ctx, nonce),
             )
             _commit_domain(
                 ctx, results, "pending",

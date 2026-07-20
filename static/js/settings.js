@@ -855,11 +855,18 @@ function renderFirstRunProviderSetup(b) {
       const { provider, model } = combo.read();
       if (!provider || !model) { toast("Pick a model first.", "warn"); return; }
       useBtn.disabled = true;
-      await api("PUT", "/api/agent_models", { default: { provider, model } });
-      await boot();
-      closeModal();
-      renderChat();
-      toast("Provider connected — you're ready to write.", "ok");
+      try {
+        await api("PUT", "/api/agent_models", { default: { provider, model } });
+        await boot();
+        closeModal();
+        renderChat();
+        toast("Provider connected — you're ready to write.", "ok");
+      } catch (e) {
+        // Never leave the first-run button permanently disabled with no feedback.
+        toast(e?.message || String(e), "err", 8000);
+      } finally {
+        useBtn.disabled = false;
+      }
     };
     modelBox.append(
       el("div", { class: "small dim", style: "margin-bottom:4px" },

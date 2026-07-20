@@ -514,7 +514,15 @@ def chat_complete(
             if not _should_retry(error, attempt, retry_config):
                 raise error
 
-            time.sleep(retry_config.delay_for(attempt))
+            # Sleep in short slices so an abort during backoff is observed
+            # promptly instead of stalling for the full (up to ~30s) delay.
+            deadline = retry_config.delay_for(attempt)
+            slept = 0.0
+            while slept < deadline:
+                _check_cancel()
+                step = min(0.5, deadline - slept)
+                time.sleep(step)
+                slept += step
 
     if last_error:
         raise last_error

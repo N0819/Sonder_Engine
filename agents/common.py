@@ -799,6 +799,11 @@ def _inject_visible_actor(
 def _normalise_views(raw_views, perceivers):
     if not isinstance(raw_views, dict):
         raw_views = {}
+    # Casefolded map of the literal perceiver ids themselves ("player",
+    # "extra:<id>", numeric ids) onto their canonical spelling -- a model
+    # returning "Player" or "Extra:12" must fold onto the exact key every
+    # consumer reads (views.get("player") etc.) instead of being dropped.
+    id_by_fold = {str(p["id"]).casefold(): str(p["id"]) for p in perceivers}
     name_to_id = {}
     for p in perceivers:
         name_to_id[p["name"]] = str(p["id"])
@@ -806,9 +811,12 @@ def _normalise_views(raw_views, perceivers):
     clean = {}
     for k, v in raw_views.items():
         sk = str(k).strip()
-        if sk.lower() == "player" and not any(str(p["id"]) == "player" for p in perceivers):
+        if sk.lower() == "player" and "player" not in id_by_fold:
             continue
-        if not sk.isdigit():
+        canonical_id = id_by_fold.get(sk.casefold())
+        if canonical_id is not None:
+            sk = canonical_id
+        elif not sk.isdigit():
             sk = name_to_id.get(sk) or name_to_id.get(sk.lower()) or sk
         if isinstance(v, str):
             v = v.strip()

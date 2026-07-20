@@ -47,6 +47,7 @@ from .common import (
     _resolve_player_room,
     assign_event_ids,
     canonicalize_positions,
+    character_room,
     lore_for,
     norm_sequence,
     normalize_character_refs,
@@ -246,7 +247,7 @@ def director_interpret(ctx, nonce):
     if not fl["reactors"]:
         for c in ctx.cast:
             sh = json.loads(c["sheet"])
-            c_room = room_of(sc, character_name(sh))
+            c_room = character_room(sc, sh)
             rel = spatial_rel(sc, p_room, c_room)
             barrier = rel.get("barrier")
             if rel.get("same_room") or barrier in ("open", "open_door",
@@ -485,56 +486,73 @@ def director_resolve(ctx, nonce):
 
     all_declarations = reaction_declarations + loop_declarations
 
-    if all_declarations:
-        for declaration in all_declarations:
-            char_id = declaration.get("char_id")
-            name = declaration.get("name")
-            sequence = declaration.get("sequence") or []
+    # Which character ids the reaction/interaction loops already speak for.
+    # Any cast member with a character_results entry NOT covered here (a
+    # parallel character:<id> step, including ones hydrated from an older
+    # persisted plan shape) is merged below rather than silently dropped --
+    # previously the mere presence of loop declarations made this function
+    # ignore ctx.character_results entirely, so those characters' speech
+    # never reached dialogue_log even though perception_outcome still
+    # injected their actions.
+    covered_ids = set()
+    for declaration in all_declarations:
+        try:
+            covered_ids.add(int(declaration.get("char_id")))
+        except (TypeError, ValueError):
+            continue
+
+    for declaration in all_declarations:
+        char_id = declaration.get("char_id")
+        name = declaration.get("name")
+        sequence = declaration.get("sequence") or []
+        decls.append({
+            "char_id": char_id, "name": name, "sequence": sequence,
+            "is_reaction": declaration.get("is_reaction", False),
+            "speech": next((e.get("text") for e in sequence
+                            if e.get("type") == "speech"), None),
+            "action": next((e for e in sequence
+                            if e.get("type") == "action"), None),
+        })
+        speeches = [{"text": e["text"], "volume": e.get("volume", "normal"),
+                     "tone": e.get("tone", ""),
+                     "visibility": e.get("visibility", "overt"),
+                     "conceal_from": e.get("conceal_from") or []}
+                    for e in sequence if e.get("type") == "speech" and e.get("text")]
+        if speeches:
+            char_speech.setdefault(name, []).extend(speeches)
+        for event in sequence:
+            if event.get("type") == "action" and event.get("attempt"):
+                char_actions.setdefault(name, event)
+
+    for c in ctx.cast:
+        if int(c["id"]) in covered_ids:
+            continue
+        dk = ctx.character_results.get(c["id"])
+        sh = json.loads(c["sheet"])
+        cname = character_name(sh)
+        if dk:
             decls.append({
-                "char_id": char_id, "name": name, "sequence": sequence,
-                "is_reaction": declaration.get("is_reaction", False),
-                "speech": next((e.get("text") for e in sequence
-                                if e.get("type") == "speech"), None),
-                "action": next((e for e in sequence
-                                if e.get("type") == "action"), None),
+                "char_id": c["id"],
+                "name": dk.get("name") or cname,
+                "sequence": dk.get("sequence") or [],
+                "speech": dk.get("speech"), "action": dk.get("action"),
             })
-            speeches = [{"text": e["text"], "volume": e.get("volume", "normal"),
-                         "tone": e.get("tone", ""),
-                         "visibility": e.get("visibility", "overt"),
-                         "conceal_from": e.get("conceal_from") or []}
-                        for e in sequence if e.get("type") == "speech" and e.get("text")]
+            speeches = []
+            for e in (dk.get("sequence") or []):
+                if e.get("type") == "speech" and e.get("text"):
+                    speeches.append({"text": e["text"],
+                                     "volume": e.get("volume", "normal"),
+                                     "tone": e.get("tone", ""),
+                                     "visibility": e.get("visibility", "overt"),
+                                     "conceal_from": e.get("conceal_from") or []})
+            if not speeches and dk.get("speech"):
+                speeches.append({"text": dk["speech"], "volume": "normal", "tone": "",
+                                  "visibility": "overt", "conceal_from": []})
             if speeches:
-                char_speech.setdefault(name, []).extend(speeches)
-            for event in sequence:
-                if event.get("type") == "action" and event.get("attempt"):
-                    char_actions.setdefault(name, event)
-    else:
-        for c in ctx.cast:
-            dk = ctx.character_results.get(c["id"])
-            sh = json.loads(c["sheet"])
-            cname = character_name(sh)
-            if dk:
-                decls.append({
-                    "name": dk.get("name") or cname,
-                    "sequence": dk.get("sequence") or [],
-                    "speech": dk.get("speech"), "action": dk.get("action"),
-                })
-                speeches = []
-                for e in (dk.get("sequence") or []):
-                    if e.get("type") == "speech" and e.get("text"):
-                        speeches.append({"text": e["text"],
-                                         "volume": e.get("volume", "normal"),
-                                         "tone": e.get("tone", ""),
-                                         "visibility": e.get("visibility", "overt"),
-                                         "conceal_from": e.get("conceal_from") or []})
-                if not speeches and dk.get("speech"):
-                    speeches.append({"text": dk["speech"], "volume": "normal", "tone": "",
-                                      "visibility": "overt", "conceal_from": []})
-                if speeches:
-                    char_speech[cname] = speeches
-                dk_act = dk.get("action") or {}
-                if dk_act.get("attempt"):
-                    char_actions[cname] = dk_act
+                char_speech.setdefault(cname, []).extend(speeches)
+            dk_act = dk.get("action") or {}
+            if dk_act.get("attempt"):
+                char_actions.setdefault(cname, dk_act)
 
     sc = get_scene(chat["id"], chat)
     raw_intents = wget(chat["id"], "standing_intentions", []) or []

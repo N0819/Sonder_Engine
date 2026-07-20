@@ -14,6 +14,7 @@ from .common import (
     _asks_player,
     _character_by_id,
     _character_display_name,
+    character_room,
     _dict,
     _dict_list,
     _list,
@@ -27,7 +28,10 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
     actor_row = _character_by_id(ctx, actor_id)
     actor_sheet = json.loads(actor_row["sheet"])
     actor_name = character_name(actor_sheet)
-    actor_room = room_of(scene, actor_name)
+    # uid/alias-tolerant: a position keyed by identity.uid rather than the
+    # display name must still resolve, else spatial_rel returns "unknown" and
+    # same-room characters silently perceive nothing of each other.
+    actor_room = character_room(scene, actor_sheet)
     views = {}
     perceived_by = set()
     for row in ctx.cast:
@@ -36,7 +40,7 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
             continue
         observer_sheet = json.loads(row["sheet"])
         observer_name = character_name(observer_sheet)
-        observer_room = room_of(scene, observer_name)
+        observer_room = character_room(scene, observer_sheet)
         relation = spatial_rel(scene, actor_room, observer_room)
         additions = []
         for event in actor_result.get("sequence") or []:

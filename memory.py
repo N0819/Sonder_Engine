@@ -1,5 +1,6 @@
 """Memory system with hierarchical lorebook support and expanded categories."""
 
+import base64
 import json, re, time, math
 import numpy as np
 from collections import defaultdict
@@ -61,6 +62,32 @@ except ImportError:
 
 def _blob(v): return np.asarray(v, dtype=np.float32).tobytes()
 def _vec(b):  return np.frombuffer(b, dtype=np.float32) if b else None
+
+def _blob_to_b64(b):
+    """Raw embedding BLOB -> JSON-safe base64 string (None if absent).
+
+    Snapshot/export dumps are stored as JSON, so raw bytes must be
+    encoded. The round trip through base64 is byte-identical, which is
+    what lets checkpoint restore put embeddings back verbatim instead
+    of re-embedding (and risking a silent crc32-fallback downgrade)."""
+    if not b:
+        return None
+    return base64.b64encode(bytes(b)).decode("ascii")
+
+def _b64_to_blob(s):
+    """Inverse of _blob_to_b64; returns None on anything malformed so
+    callers fall back to re-embedding rather than storing garbage."""
+    if not s or not isinstance(s, str):
+        return None
+    try:
+        raw = base64.b64decode(s, validate=True)
+    except Exception:
+        return None
+    # Stored vectors are float32 arrays; anything that can't be one is
+    # not a usable embedding.
+    if not raw or len(raw) % 4 != 0:
+        return None
+    return raw
 def _storage_json(value):
     if value is None or isinstance(value, str):
         return value
@@ -130,17 +157,6 @@ def would_create_book_cycle(book_id, parent_id):
         )
         current = row["parent_id"] if row else None
 
-    return False
-    current = parent_id
-    visited = set()
-    while current is not None:
-        if current == book_id:
-            return True
-        if current in visited:
-            return True
-        visited.add(current)
-        row = q("SELECT parent_id FROM lorebooks WHERE id=?", (current,), one=True)
-        current = row["parent_id"] if row else None
     return False
 
 def move_lorebook(book_id, parent_id, position=None):
@@ -1118,12 +1134,24 @@ def get_memory_summary(chat_id, char_id, scope="autobiographical"):
             "summary": row["summary"], "key_phrases": _json_list(row["key_phrases"]),
             "unresolved_threads": _json_list(row["unresolved_threads"]), "updated": row["updated"]}
 
+def _summary_retrieval_text(summary, key_phrases, unresolved_threads):
+    return "\n".join([summary or "", ", ".join(key_phrases or []),
+                      "\n".join(unresolved_threads or [])])
+
 def save_memory_summary(chat_id, char_id, summary, *, scope="autobiographical", start_turn_idx=0,
-                        end_turn_idx=0, key_phrases=None, unresolved_threads=None):
+                        end_turn_idx=0, key_phrases=None, unresolved_threads=None,
+                        embedding=None, embedding_model=None, embedding_dim=None):
     key_phrases = key_phrases or []
     unresolved_threads = unresolved_threads or []
-    retrieval_text = "\n".join([summary or "", ", ".join(key_phrases), "\n".join(unresolved_threads)])
-    embedded = embed_texts_meta([retrieval_text])
+    # Checkpoint/export restore passes the previously stored vector back
+    # in verbatim (raw bytes) so a restore never re-embeds -- every
+    # normal caller omits it and embeds exactly as before.
+    if embedding is None or not embedding_model:
+        retrieval_text = _summary_retrieval_text(summary, key_phrases, unresolved_threads)
+        embedded = embed_texts_meta([retrieval_text])
+        embedding = _blob(embedded.vectors[0])
+        embedding_model = embedded.model_key
+        embedding_dim = embedded.dimensions
     qi("""INSERT INTO memory_summaries(chat_id,char_id,scope,start_turn_idx,end_turn_idx,summary,
         key_phrases,unresolved_threads,embedding,embedding_model,embedding_dim,updated)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(chat_id,char_id,scope) DO UPDATE SET
@@ -1134,7 +1162,7 @@ def save_memory_summary(chat_id, char_id, summary, *, scope="autobiographical", 
         updated=excluded.updated""",
        (chat_id, char_id, scope, start_turn_idx, end_turn_idx, summary or "",
         json.dumps(key_phrases, ensure_ascii=False), json.dumps(unresolved_threads, ensure_ascii=False),
-        _blob(embedded.vectors[0]), embedded.model_key, embedded.dimensions, time.time()))
+        embedding, embedding_model, embedding_dim, time.time()))
 
 def build_character_memory_context(chat_id, char_id, current_turn_idx, current_view, active_state, *,
                                    recent_turns=4, recall_limit=8):
@@ -1226,9 +1254,21 @@ def consolidate_character_memory(chat_id, char_id, *, through_turn_idx=None, arc
                         unresolved_threads=result.get("unresolved_threads") or [])
     if archive_old:
         cutoff = max(start_turn, end_turn - 12)
-        qi("""UPDATE memories SET archived=1 WHERE chat_id=? AND char_id=? AND turn_idx<?
-            AND salience<0.72 AND category NOT IN ('promise','relationship','intention')""",
-           (chat_id, char_id, cutoff))
+        # Archive ONLY memories that were part of THIS (frame-visible)
+        # consolidation set. turn_idx is global play order, so the old
+        # blanket UPDATE also archived another era's memories that were
+        # correctly excluded from this summary (is_memory_visible filtered
+        # them out of `memories`) and never folded into any summary.
+        archivable = [
+            m["id"] for m in memories
+            if m.get("id") is not None
+            and (m.get("turn_idx") or 0) < cutoff
+            and float(m.get("salience") or 0) < 0.72
+            and m.get("category") not in ("promise", "relationship", "intention")
+        ]
+        if archivable:
+            marks = ",".join("?" for _ in archivable)
+            qi(f"UPDATE memories SET archived=1 WHERE id IN ({marks})", tuple(archivable))
     return {**get_memory_summary(chat_id, char_id), "stable_facts": result.get("stable_facts") or [], "memory_count": len(memories)}
 
 def maybe_consolidate_character_memory(chat_id, char_id, current_turn_idx, *, frame_id=_UNSET):
@@ -1275,21 +1315,42 @@ def dump_chat_memories(chat_id):
          "key_phrases": _json_list(r["key_phrases"]), "entities": _json_list(r["entities"]),
          "location": r["location"], "emotional_context": r["emotional_context"],
          "valence": r["valence"], "arousal": r["arousal"], "confidence": r["confidence"],
-         "archived": bool(r["archived"]), "event_key": r["event_key"]}
+         "archived": bool(r["archived"]), "event_key": r["event_key"],
+         # Stored vectors travel with the dump so restore can put them
+         # back byte-identically instead of re-embedding the entire
+         # memory bank on every checkpoint restore (expensive, and a
+         # provider hiccup during it silently downgrades every vector
+         # to the crc32 fallback, which then scores 0.0 forever).
+         "embedding": _blob_to_b64(r["embedding"]),
+         "cue_embedding": _blob_to_b64(r["cue_embedding"]),
+         "embedding_model": r["embedding_model"],
+         "embedding_dim": r["embedding_dim"]}
         for r in rows
     ]
 
-def restore_chat_memories(chat_id, mems):
-    for r in q("SELECT id FROM memories WHERE chat_id=?", (chat_id,)):
-        _delete_memory_fts(r["id"])
-    qi("DELETE FROM memories WHERE chat_id=?", (chat_id,))
-    prepared = []
-    sources = []
+@dataclass
+class _StoredEmbeddingMeta:
+    """Stands in for providers.EmbeddingBatch when the vectors came out
+    of a dump instead of a live embedding call -- _upsert_memory only
+    reads model_key/dimensions off it."""
+    model_key: str
+    dimensions: int
+
+def prepare_chat_memory_restore(chat_id, mems):
+    """Build a write-free restore plan for restore_chat_memories.
+
+    All normalization and any embedding calls happen here, BEFORE any
+    row is touched, so apply_chat_memory_restore is pure writes and can
+    run inside an outer transaction (checkpoint restore) without a
+    remote provider call ever holding SQLite's write lock. Dumps that
+    carry their stored vectors (see dump_chat_memories) are restored
+    verbatim; only legacy dumps without them are re-embedded."""
+    entries = []
+    legacy_items = []
     for m in mems or []:
         if not m.get("content"):
             continue
-        sources.append(m)
-        prepared.append({
+        item = {
             "chat_id": chat_id, "char_id": m.get("char_id"), "turn_id": m.get("turn_id"),
             "turn_idx": m.get("turn_idx"), "kind": m.get("kind", "episodic"),
             # Preserved verbatim, never re-stamped with whatever frame
@@ -1305,12 +1366,59 @@ def restore_chat_memories(chat_id, mems):
             "emotional_context": m.get("emotional_context", ""),
             "valence": m.get("valence", 0.0), "arousal": m.get("arousal", 0.0),
             "confidence": m.get("confidence", 1.0), "event_key": m.get("event_key", ""),
-        })
-    ids = add_memories_batch(prepared)
+        }
+        full_blob = _b64_to_blob(m.get("embedding"))
+        cue_blob = _b64_to_blob(m.get("cue_embedding"))
+        model = m.get("embedding_model") or ""
+        if full_blob is not None and cue_blob is not None and model:
+            full_vec = _vec(full_blob)
+            cue_vec = _vec(cue_blob)
+            dim = m.get("embedding_dim") or len(full_vec)
+            entries.append({
+                "mode": "direct", "source": m, "data": prepare_memory(**item),
+                "full_vec": full_vec, "cue_vec": cue_vec,
+                "meta": _StoredEmbeddingMeta(model, int(dim)),
+            })
+        else:
+            entries.append({"mode": "legacy", "source": m})
+            legacy_items.append(item)
+    legacy_batch = prepare_memories_batch(legacy_items) if legacy_items else None
+    return {"entries": entries, "legacy_batch": legacy_batch}
+
+def apply_chat_memory_restore(chat_id, plan):
+    """Write phase of restore_chat_memories: delete-and-reinsert the
+    chat's memory bank from a plan built by prepare_chat_memory_restore.
+    One transaction, no provider calls; FTS rows are maintained through
+    the exact same _upsert_memory path the normal add path uses."""
+    entries = plan.get("entries") or []
+    legacy_batch = plan.get("legacy_batch")
+    legacy_prepared = (legacy_batch or {}).get("prepared") or []
+    legacy_embedded = (legacy_batch or {}).get("embedded")
+    legacy_count = sum(1 for e in entries if e["mode"] == "legacy")
+    if legacy_count and (legacy_embedded is None
+                         or len(legacy_embedded.vectors) != legacy_count * 2
+                         or len(legacy_prepared) != legacy_count):
+        raise ValueError("Invalid prepared memory embedding batch")
     with transaction():
-        for mid, source in zip(ids, sources):
-            if source.get("archived"):
+        for r in q("SELECT id FROM memories WHERE chat_id=?", (chat_id,)):
+            _delete_memory_fts(r["id"])
+        qi("DELETE FROM memories WHERE chat_id=?", (chat_id,))
+        li = 0
+        for entry in entries:
+            if entry["mode"] == "direct":
+                mid = _upsert_memory(entry["data"], entry["full_vec"],
+                                     entry["cue_vec"], entry["meta"])
+            else:
+                mid = _upsert_memory(legacy_prepared[li],
+                                     legacy_embedded.vectors[li * 2],
+                                     legacy_embedded.vectors[li * 2 + 1],
+                                     legacy_embedded)
+                li += 1
+            if entry["source"].get("archived"):
                 qi("UPDATE memories SET archived=1 WHERE id=?", (mid,))
+
+def restore_chat_memories(chat_id, mems):
+    apply_chat_memory_restore(chat_id, prepare_chat_memory_restore(chat_id, mems))
 
 def dump_character_memories(chat_id, char_id):
     """Same shape as dump_chat_memories, but scoped to one character --
@@ -1366,19 +1474,49 @@ def dump_memory_summaries(chat_id):
         {"char_id": r["char_id"], "scope": r["scope"], "start_turn_idx": r["start_turn_idx"],
          "end_turn_idx": r["end_turn_idx"], "summary": r["summary"],
          "key_phrases": _json_list(r["key_phrases"]), "unresolved_threads": _json_list(r["unresolved_threads"]),
-         "updated": r["updated"]}
+         "updated": r["updated"],
+         # Same rationale as dump_chat_memories: carry the stored vector
+         # so restore is verbatim instead of a provider round trip.
+         "embedding": _blob_to_b64(r["embedding"]),
+         "embedding_model": r["embedding_model"],
+         "embedding_dim": r["embedding_dim"]}
         for r in q("SELECT * FROM memory_summaries WHERE chat_id=? ORDER BY char_id, scope", (chat_id,))
     ]
 
-def restore_memory_summaries(chat_id, summaries):
-    qi("DELETE FROM memory_summaries WHERE chat_id=?", (chat_id,))
+def prepare_memory_summary_restore(summaries):
+    """Embedding phase of restore_memory_summaries: resolves each
+    summary's vector (verbatim from the dump when present, one embed
+    call per legacy item otherwise) with zero writes, so the apply
+    phase never makes a provider call while holding the write lock."""
+    prepared = []
     for item in summaries or []:
-        save_memory_summary(chat_id, item["char_id"], item.get("summary", ""),
-                            scope=item.get("scope", "autobiographical"),
-                            start_turn_idx=item.get("start_turn_idx", 0),
-                            end_turn_idx=item.get("end_turn_idx", 0),
-                            key_phrases=item.get("key_phrases") or [],
-                            unresolved_threads=item.get("unresolved_threads") or [])
+        emb = _b64_to_blob(item.get("embedding"))
+        model = item.get("embedding_model") or ""
+        dim = item.get("embedding_dim")
+        if emb is None or not model:
+            embedded = embed_texts_meta([_summary_retrieval_text(
+                item.get("summary"), item.get("key_phrases") or [],
+                item.get("unresolved_threads") or [])])
+            emb = _blob(embedded.vectors[0])
+            model = embedded.model_key
+            dim = embedded.dimensions
+        prepared.append((item, emb, model, dim))
+    return prepared
+
+def apply_memory_summary_restore(chat_id, prepared):
+    with transaction():
+        qi("DELETE FROM memory_summaries WHERE chat_id=?", (chat_id,))
+        for item, emb, model, dim in prepared:
+            save_memory_summary(chat_id, item["char_id"], item.get("summary", ""),
+                                scope=item.get("scope", "autobiographical"),
+                                start_turn_idx=item.get("start_turn_idx", 0),
+                                end_turn_idx=item.get("end_turn_idx", 0),
+                                key_phrases=item.get("key_phrases") or [],
+                                unresolved_threads=item.get("unresolved_threads") or [],
+                                embedding=emb, embedding_model=model, embedding_dim=dim)
+
+def restore_memory_summaries(chat_id, summaries):
+    apply_memory_summary_restore(chat_id, prepare_memory_summary_restore(summaries))
 
 def dump_lorebook(lb_id):
     return [
@@ -1391,6 +1529,9 @@ def dump_lorebook(lb_id):
             "importance": r["importance"], "aliases": r["aliases"],
             "scope": r["scope"], "relations": r["relations"],
             "source_notes": r["source_notes"],
+            # Stored vector travels with the dump so restore/import can
+            # reuse it verbatim instead of re-embedding every entry.
+            "embedding": _blob_to_b64(r["embedding"]),
         }
         for r in q("SELECT * FROM lore_entries WHERE lorebook_id=? ORDER BY id", (lb_id,))
     ]
@@ -1457,6 +1598,29 @@ def restore_lorebook(lb_id, entries):
     incoming = [entry for entry in (entries or []) if isinstance(entry, dict) and entry.get("content")]
     incoming_uids = set()
 
+    # Resolve every entry's embedding up front, before any row is
+    # touched: entries dumped by dump_lorebook carry their stored vector
+    # (reused verbatim -- the snapshot's vector matches the snapshot's
+    # keys/content by construction), and only legacy dumps without one
+    # are re-embedded, in a single batch so no per-entry provider call
+    # ever runs between writes.
+    entry_vecs = {}
+    legacy_entries = []
+    for entry in incoming:
+        raw = entry.get("embedding")
+        if isinstance(raw, str):
+            raw = _b64_to_blob(raw)
+        elif not isinstance(raw, (bytes, bytearray, memoryview)):
+            raw = None
+        vec = _vec(bytes(raw)) if raw and len(raw) % 4 == 0 else None
+        if vec is None:
+            legacy_entries.append(entry)
+        entry_vecs[id(entry)] = vec
+    if legacy_entries:
+        texts = [(e.get("keys") or "") + " " + (e.get("content") or "") for e in legacy_entries]
+        for e, vec in zip(legacy_entries, embed_texts(texts)):
+            entry_vecs[id(e)] = vec
+
     for entry in incoming:
         uid = entry.get("entry_uid") or legacy_entry_uid(entry)
         existing = q("SELECT id FROM lore_entries WHERE lorebook_id=? AND entry_uid=?", (lb_id, uid), one=True)
@@ -1471,7 +1635,8 @@ def restore_lorebook(lb_id, entries):
                         aliases=entry.get("aliases", []),
                         scope=entry.get("scope", {}),
                         relations=entry.get("relations", {}),
-                        source_notes=entry.get("source_notes", ""))
+                        source_notes=entry.get("source_notes", ""),
+                        embedding=entry_vecs.get(id(entry)))
             qi("UPDATE lore_entries SET canon_locked=?, turn_added=? WHERE id=?",
                (int(bool(entry.get("locked", 0))), entry.get("turn_added"), existing["id"]))
             continue
@@ -1492,7 +1657,8 @@ def restore_lorebook(lb_id, entries):
                  aliases=entry.get("aliases", []),
                  scope=entry.get("scope", {}),
                  relations=entry.get("relations", {}),
-                 source_notes=entry.get("source_notes", ""))
+                 source_notes=entry.get("source_notes", ""),
+                 embedding=entry_vecs.get(id(entry)))
 
     for row in q("SELECT id,entry_uid FROM lore_entries WHERE lorebook_id=?", (lb_id,)):
         if row["entry_uid"] not in incoming_uids:
@@ -1594,7 +1760,13 @@ def duplicate_lorebook_tree_for_chat(root_id, chat_id, include_links=True):
                      aliases=_json_list(e["aliases"]),
                      scope=json.loads(e["scope"] or "{}"),
                      relations=json.loads(e["relations"] or "{}"),
-                     source_notes=e["source_notes"])
+                     source_notes=e["source_notes"],
+                     # The clone's keys/content are identical to the
+                     # source row's, so its stored vector is reused
+                     # verbatim instead of re-embedding every entry
+                     # (falls back to embedding only if the source row
+                     # never had a vector).
+                     embedding=_vec(e["embedding"]))
     
     # Pass 2: Remap parent IDs
     for old_id, new_id in old_to_new.items():

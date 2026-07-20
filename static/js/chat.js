@@ -194,9 +194,13 @@ function renderChat() {
         el("button", {
           title: "Delete",
           onclick: async event => {
+            // Capture the button NOW: event.currentTarget is reset to null
+            // once click dispatch ends, and this handler suspends across
+            // `await confirmModal`, so reading it afterward would be null.
+            const btn = event.currentTarget;
             if (!await confirmModal("Delete last turn?", { danger: true, confirmLabel: "Delete" })) return;
             await buttonTask(
-              event.currentTarget,
+              btn,
               "…",
               async () => {
                 await api("DELETE", "/api/turns/" + t.id);
@@ -381,16 +385,18 @@ function handleEvt(ev) {
 }
 
 async function runStream(url, body) {
-  if (S.busy) return;
+  if (S.busy) return false;
   S.busy = true;
   $("#send").disabled = true;
   $("#stop").classList.remove("hidden");
   liveReset();
   turnStatusStart();
 
+  let ok = true;
   try {
     await streamPost(url, body, handleEvt);
   } catch (e) {
+    ok = false;
     toast("Pipeline failed: " + e.message, "err", 9000);
   } finally {
     S.busy = false;
@@ -406,6 +412,7 @@ async function runStream(url, body) {
       }
     }
   }
+  return ok;
 }
 
 // Rerolling/resuming/rerunning-from-a-stage all restore world/memory/lore
@@ -558,9 +565,12 @@ async function openPipeline(tid) {
               "Continue from the first incomplete or stale "
               + "step without regenerating valid earlier outputs",
             onclick: async event => {
+              // Capture before the await: event.currentTarget is null once
+              // click dispatch ends (same bug as the turn Delete button).
+              const btn = event.currentTarget;
               if (!await confirmCheckpointRestore()) return;
               await buttonTask(
-                event.currentTarget,
+                btn,
                 "Resuming…",
                 async () => {
                   await runStream(
@@ -1555,10 +1565,9 @@ async function previewMemoryContext() {
         style: "margin-bottom:9px"
       },
         el("button", {
-          onclick: () => {
-            if (S.memoryCharacter)
-              memModal(S.memoryCharacter);
-          }
+          // Pop back to the browser modal already on the stack instead of
+          // pushing a fresh one (which grew the stack on every round trip).
+          onclick: () => closeModal()
         }, "← Back to browser"),
         el("span", { class: "spacer" }),
         el("span", { class: "small dim" },

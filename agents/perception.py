@@ -439,6 +439,38 @@ def perception_outcome(ctx, nonce):
                                   "conceal_from": a.get("conceal_from") or []})
 
     appearances = {p_name: p_appearance}
+
+    # Additional human players: each gets a real perceiver entry at their
+    # OWN tracked position (room_of, same lookup used for NPCs and the
+    # primary player) -- not hardcoded to the primary player's room. Only
+    # fall back to the primary player's room when the extra player has no
+    # tracked position yet (e.g. they were only just attached and have
+    # never been placed anywhere). They're a genuine dialogue/action source
+    # for everyone else's view too, exactly like an NPC -- not a silent
+    # observer.
+    #
+    # Every extra player is appended to `sources` HERE, before any
+    # perceiver's spatial_to_sources / visual_channel_to_sources maps are
+    # computed below -- previously the primary player's perceiver was built
+    # first (so it had no channel to any co-player at all), and each extra
+    # player's perceiver was built as its own source-append happened (so
+    # extra A had no channel to extra B, only vice versa).
+    other_players = interp.get("other_players") or {}
+    extra_entries = []
+    for extra in ctx.extra_players:
+        pid_key = str(extra["persona_id"])
+        e_name = extra["name"]
+        e_room = room_of(sc, e_name) or p_room
+        sources.append({"name": e_name, "room": e_room})
+        appearances[e_name] = appearance_of(
+            e_name, extra.get("appearance") or f"{e_name}, a person of unremarkable appearance.", sc)
+        entry = other_players.get(pid_key) or {}
+        for e in (entry.get("sequence") or []):
+            if e.get("type") == "action" and e.get("attempt") and e.get("visibility") == "concealed":
+                concealed.append({"actor": e_name, "attempt": e.get("attempt"),
+                                  "conceal_from": e.get("conceal_from") or []})
+        extra_entries.append((extra, pid_key, e_name, e_room))
+
     p_rdata = (sc.get("rooms") or {}).get(p_room) if p_room else None
     perceivers = [{
         "id": "player", "name": p_name, "room": p_room,
@@ -451,23 +483,7 @@ def perception_outcome(ctx, nonce):
         "visual_channel_to_sources": {s["name"]: has_visual(spatial_rel(sc, s["room"], p_room)) for s in sources},
     }]
 
-    # Additional human players: each gets a real perceiver entry at their
-    # OWN tracked position (room_of, same lookup used for NPCs and the
-    # primary player) -- not hardcoded to the primary player's room. Only
-    # fall back to the primary player's room when the extra player has no
-    # tracked position yet (e.g. they were only just attached and have
-    # never been placed anywhere). They're a genuine dialogue/action source
-    # for everyone else's view too, exactly like an NPC -- not a silent
-    # observer.
-    other_players = interp.get("other_players") or {}
-    for extra in ctx.extra_players:
-        pid = extra["persona_id"]
-        pid_key = str(pid)
-        e_name = extra["name"]
-        e_room = room_of(sc, e_name) or p_room
-        sources.append({"name": e_name, "room": e_room})
-        appearances[e_name] = appearance_of(
-            e_name, extra.get("appearance") or f"{e_name}, a person of unremarkable appearance.", sc)
+    for extra, pid_key, e_name, e_room in extra_entries:
         e_rdata = (sc.get("rooms") or {}).get(e_room) if e_room else None
         perceivers.append({
             "id": f"extra:{pid_key}", "name": e_name, "room": e_room,
@@ -479,11 +495,6 @@ def perception_outcome(ctx, nonce):
             "spatial_to_sources": {s["name"]: spatial_rel(sc, s["room"], e_room) for s in sources},
             "visual_channel_to_sources": {s["name"]: has_visual(spatial_rel(sc, s["room"], e_room)) for s in sources},
         })
-        entry = other_players.get(pid_key) or {}
-        for e in (entry.get("sequence") or []):
-            if e.get("type") == "action" and e.get("attempt") and e.get("visibility") == "concealed":
-                concealed.append({"actor": e_name, "attempt": e.get("attempt"),
-                                  "conceal_from": e.get("conceal_from") or []})
 
     for c in ctx.cast:
         sh, act, _ = sheet_state(c)

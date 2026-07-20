@@ -119,6 +119,9 @@ function loreBookMatches(book, filter) {
 }
 
 function loreVisibleIds(books, filter) {
+  // Filter values are stored raw (untrimmed) while typing; trim only here,
+  // where the filter is actually applied.
+  filter = (filter || "").trim();
   if (!filter) {
     return new Set(books.map(book => book.id));
   }
@@ -873,13 +876,15 @@ function renderWorkspaceTree(state, container) {
   const tree = el("div", { class: "lore-tree" });
   container.append(tree);
 
+  // Rebuild only the tree list on filter input so the filter input itself
+  // stays in the DOM and keeps focus while typing. Store the RAW value and
+  // trim only when applying the filter, so mid-word trailing spaces survive.
   filterInput.oninput = () => {
-    loreUI.filter = filterInput.value.trim();
-    renderWorkspaceTree(state, container);
+    loreUI.filter = filterInput.value;
+    renderTreeList();
   };
 
   const byParent = loreBooksByParent(state.books);
-  const visible = loreVisibleIds(state.books, loreUI.filter);
   const byId = new Map(
     state.books.map(book => [book.id, book])
   );
@@ -891,6 +896,9 @@ function renderWorkspaceTree(state, container) {
     );
   });
 
+  let treeFilter = "";
+  let visible = new Set();
+
   function renderNode(book) {
     if (!visible.has(book.id)) {
       return null;
@@ -901,7 +909,7 @@ function renderWorkspaceTree(state, container) {
 
     const expanded = (
       loreUI.expanded.has(book.id)
-      || Boolean(loreUI.filter)
+      || Boolean(treeFilter)
     );
 
     const row = el(
@@ -1076,16 +1084,25 @@ function renderWorkspaceTree(state, container) {
     return node;
   }
 
-  for (const root of roots) {
-    const node = renderNode(root);
-    if (node) {
-      tree.append(node);
+  function renderTreeList() {
+    tree.innerHTML = "";
+
+    treeFilter = (loreUI.filter || "").trim();
+    visible = loreVisibleIds(state.books, treeFilter);
+
+    for (const root of roots) {
+      const node = renderNode(root);
+      if (node) {
+        tree.append(node);
+      }
+    }
+
+    if (!tree.children.length) {
+      tree.append(emptyState("No matching lorebooks."));
     }
   }
 
-  if (!tree.children.length) {
-    tree.append(emptyState("No matching lorebooks."));
-  }
+  renderTreeList();
 
   const rootDrop = el(
     "div",

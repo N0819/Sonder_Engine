@@ -871,6 +871,8 @@ def put_provider(pid: int, body: dict = Body(...)):
     # An empty/omitted api_key means "leave it as-is", not "clear it" --
     # the frontend never has the real value to re-submit unchanged now that
     # it's no longer sent back, so a blank field must not wipe a working key.
+    if not q("SELECT 1 FROM providers WHERE id=?", (pid,), one=True):
+        raise HTTPException(404, "Provider not found")
     new_key = body.get("api_key") or None
     if new_key:
         qi("UPDATE providers SET name=?,kind=?,base_url=?,api_key=? WHERE id=?",
@@ -1302,7 +1304,10 @@ def chat_new(body: dict = Body(...)):
 
 @app.put("/api/chats/{cid}")
 def chat_edit(cid: int, body: dict = Body(...)):
-    cur = dict(q("SELECT * FROM chats WHERE id=?", (cid,), one=True))
+    row = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    if not row:
+        raise HTTPException(404, "Chat not found")
+    cur = dict(row)
     for k in ("name", "persona_id", "scenario"):
         if k in body: cur[k] = body[k]
     qi("UPDATE chats SET name=?,persona_id=?,scenario=? WHERE id=?",
@@ -1311,6 +1316,8 @@ def chat_edit(cid: int, body: dict = Body(...)):
 
 @app.post("/api/chats/{cid}/lorebooks")
 def attach_lore(cid: int, body: dict = Body(...)):
+    if not q("SELECT 1 FROM chats WHERE id=?", (cid,), one=True):
+        raise HTTPException(404, "Chat not found")
     src = body.get("lorebook_id")
     if not src: raise HTTPException(400, "lorebook_id required")
     row = q("SELECT * FROM lorebooks WHERE id=?", (src,), one=True)
@@ -1368,6 +1375,9 @@ def detach_lore(cid: int):
 
 @app.delete("/api/chats/{cid}")
 def chat_del(cid: int):
+    # A still-running pipeline would keep writing into rows we're deleting
+    # (and re-create orphan world rows for the dead chat id).
+    _require_chat_idle(cid)
     for t in q("SELECT id FROM turns WHERE chat_id=?", (cid,)):
         for s in q("SELECT id FROM steps WHERE turn_id=?", (t["id"],)):
             qi("DELETE FROM variants WHERE step_id=?", (s["id"],))
@@ -1479,7 +1489,11 @@ def chat_get(cid: int):
 
 @app.post("/api/chats/{cid}/characters")
 def chat_add_char(cid: int, body: dict = Body(...)):
-    ch = body["char_id"]
+    ch = body.get("char_id")
+    if ch is None:
+        raise HTTPException(400, "char_id required")
+    if not q("SELECT 1 FROM characters WHERE id=?", (ch,), one=True):
+        raise HTTPException(404, "Character not found")
     ex = q("SELECT * FROM chat_chars WHERE chat_id=? AND char_id=?", (cid, ch), one=True)
     if ex:
         qi("UPDATE chat_chars SET status='active' WHERE chat_id=? AND char_id=?", (cid, ch))
@@ -1762,7 +1776,9 @@ def join_with_code(body: dict = Body(...)):
 
 @app.get("/api/guest/state")
 def guest_state(request: Request):
-    grant = request.state.guest_grant
+    grant = getattr(request.state, "guest_grant", None)
+    if not grant:  # e.g. a signed-in HOST hitting /guest -- no guest grant set
+        raise HTTPException(403, "Guest session required")
     cid, pid = grant["chat_id"], grant["persona_id"]
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
     if not chat:
@@ -1794,11 +1810,19 @@ def guest_state(request: Request):
 
 @app.post("/api/guest/input")
 def guest_input(request: Request, body: dict = Body(...)):
-    grant = request.state.guest_grant
+    grant = getattr(request.state, "guest_grant", None)
+    if not grant:
+        raise HTTPException(403, "Guest session required")
     cid, pid = grant["chat_id"], grant["persona_id"]
     idx = body.get("idx")
     if idx is None:
         raise HTTPException(400, "Missing idx")
+    try:
+        idx = int(idx)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "idx must be an integer")
+    if idx < 0:
+        raise HTTPException(400, "idx must be non-negative")
     existing_turn = q("SELECT id FROM turns WHERE chat_id=? AND idx=?", (cid, idx), one=True)
     if existing_turn:
         already_run = q(
@@ -1861,9 +1885,16 @@ def world_get(cid: int):
 
 @app.put("/api/chats/{cid}/world")
 def world_put(cid: int, body: dict = Body(...)):
-    qi("DELETE FROM world WHERE chat_id=?", (cid,))
-    for k, v in body.items():
-        wset(cid, k, v)
+    if not q("SELECT 1 FROM chats WHERE id=?", (cid,), one=True):
+        raise HTTPException(404, "Chat not found")
+    # A running pipeline reads/writes world keys throughout the turn; wiping
+    # and rewriting them mid-turn would corrupt it. And DELETE+loop must be
+    # atomic so a crash can't leave the un-rewritten keys permanently lost.
+    _require_chat_idle(cid)
+    with transaction():
+        qi("DELETE FROM world WHERE chat_id=?", (cid,))
+        for k, v in body.items():
+            wset(cid, k, v)
     return {"ok": True}
 
 @app.get("/api/chats/{cid}/attire")
@@ -1888,24 +1919,30 @@ def dlg_get(cid: int):
 
 @app.put("/api/chats/{cid}/dialogue_config")
 def dlg_put(cid: int, body: dict = Body(...)):
-    autonomy = max(0, min(100, int(body.get("autonomy", 50))))
+    try:
+        autonomy = max(0, min(100, int(body.get("autonomy", 50))))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "autonomy must be an integer")
     derived = interaction_limits(autonomy)
 
-    config = {
-        "style": body.get("style", "natural"),
-        "min_lines": max(0, int(body.get("min_lines", 0))),
-        "max_lines": max(0, int(body.get("max_lines", 4))),
-        "variance": max(0.0, min(1.0, float(body.get("variance", 0.6)))),
-        "autonomy": autonomy,
-        "allow_npc_initiative": bool(body.get("allow_npc_initiative", True)),
-        "allow_npc_to_npc_dialogue": bool(body.get("allow_npc_to_npc_dialogue", True)),
-        "stop_on_player_address": bool(body.get("stop_on_player_address", True)),
-        "stop_on_question_to_player": bool(body.get("stop_on_question_to_player", True)),
-        "silence_ends_exchange": bool(body.get("silence_ends_exchange", True)),
-    }
+    try:
+        config = {
+            "style": body.get("style", "natural"),
+            "min_lines": max(0, int(body.get("min_lines", 0))),
+            "max_lines": max(0, int(body.get("max_lines", 4))),
+            "variance": max(0.0, min(1.0, float(body.get("variance", 0.6)))),
+            "autonomy": autonomy,
+            "allow_npc_initiative": bool(body.get("allow_npc_initiative", True)),
+            "allow_npc_to_npc_dialogue": bool(body.get("allow_npc_to_npc_dialogue", True)),
+            "stop_on_player_address": bool(body.get("stop_on_player_address", True)),
+            "stop_on_question_to_player": bool(body.get("stop_on_question_to_player", True)),
+            "silence_ends_exchange": bool(body.get("silence_ends_exchange", True)),
+        }
 
-    for key, default in derived.items():
-        config[key] = max(0, int(body.get(key, default)))
+        for key, default in derived.items():
+            config[key] = max(0, int(body.get(key, default)))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "dialogue config numeric fields must be numbers")
 
     config["max_lines"] = max(config["min_lines"], config["max_lines"])
 
@@ -2479,11 +2516,15 @@ def mem_consolidate(cid: int, ch: int, body: dict = Body(default={})):
 
 @app.post("/api/chats/{cid}/characters/{ch}/memories")
 def mem_add(cid: int, ch: int, body: dict = Body(...)):
+    try:
+        salience = float(body.get("salience", 0.5))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "salience must be a number")
     mid = add_memory(
         cid, ch, body.get("turn_id"),
         body.get("kind", "episodic"),
         body.get("provenance", "told"),
-        float(body.get("salience", 0.5)),
+        salience,
         body.get("content", ""),
         category=body.get("category"),
         gist=body.get("gist"),
@@ -2574,265 +2615,269 @@ def turn_branch(tid: int):
     )
     blob = json.loads(nxt["blob"]) if nxt else snapshot_state(cid)
 
-    ncid = qi(
-        "INSERT INTO chats(name,persona_id,scenario,created) VALUES(?,?,?,?)",
-        (f"{src['name']} ⎇{idx}", src["persona_id"], src["scenario"], time.time())
-    )
-
-    # Clone every declared frame (chat-wide declarations, not turn-scoped
-    # like turns/steps below -- a frame created after the branch point
-    # still needs to exist in the branch if any copied turn/memory
-    # references it) with a fresh id, so copied turns/memories can point
-    # at THIS chat's own frame rows instead of dangling on the source
-    # chat's.
-    frame_idmap = {}
-    for f in q("SELECT * FROM frames WHERE chat_id=?", (cid,)):
-        nfid = qi(
-            "INSERT INTO frames(chat_id,label,ordinal,kind,travelers,nonexistent_cast,created,"
-            "split_turn_idx,merged_turn_idx) VALUES(?,?,?,?,?,?,?,?,?)",
-            (ncid, f["label"], f["ordinal"], f["kind"], f["travelers"], f["nonexistent_cast"], f["created"],
-             f["split_turn_idx"], f["merged_turn_idx"]),
+    # Mirror chat_import: every insert from the new chats row through the
+    # final checkpoint commits atomically, so a mid-branch failure cannot
+    # leave a visible half-built chat behind.
+    with transaction():
+        ncid = qtx(
+            "INSERT INTO chats(name,persona_id,scenario,created) VALUES(?,?,?,?)",
+            (f"{src['name']} ⎇{idx}", src["persona_id"], src["scenario"], time.time())
         )
-        frame_idmap[f["id"]] = nfid
-    # parent_frame_id is self-referential -- deferred to a second pass,
-    # same reasoning as chat_import's identical remap.
-    for f in q("SELECT id, parent_frame_id FROM frames WHERE chat_id=?", (cid,)):
-        if f["parent_frame_id"] is not None and f["parent_frame_id"] in frame_idmap:
-            qi(
-                "UPDATE frames SET parent_frame_id=? WHERE id=?",
-                (frame_idmap[f["parent_frame_id"]], frame_idmap[f["id"]]),
+
+        # Clone every declared frame (chat-wide declarations, not turn-scoped
+        # like turns/steps below -- a frame created after the branch point
+        # still needs to exist in the branch if any copied turn/memory
+        # references it) with a fresh id, so copied turns/memories can point
+        # at THIS chat's own frame rows instead of dangling on the source
+        # chat's.
+        frame_idmap = {}
+        for f in q("SELECT * FROM frames WHERE chat_id=?", (cid,)):
+            nfid = qtx(
+                "INSERT INTO frames(chat_id,label,ordinal,kind,travelers,nonexistent_cast,created,"
+                "split_turn_idx,merged_turn_idx) VALUES(?,?,?,?,?,?,?,?,?)",
+                (ncid, f["label"], f["ordinal"], f["kind"], f["travelers"], f["nonexistent_cast"], f["created"],
+                 f["split_turn_idx"], f["merged_turn_idx"]),
             )
-
-    # Copy chat characters
-    for cc in q("SELECT * FROM chat_chars WHERE chat_id=?", (cid,)):
-        qi(
-            "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
-            (ncid, cc["char_id"], cc["status"], cc["state"])
-        )
-
-    # Copy per-frame character overrides (state/status divergence between
-    # frames), remapping each row's frame_id to this branch's own frame.
-    for ccf in q("SELECT * FROM chat_char_frames WHERE chat_id=?", (cid,)):
-        nfid = frame_idmap.get(ccf["frame_id"])
-        if nfid is None:
-            continue
-        qi(
-            "INSERT INTO chat_char_frames(chat_id,char_id,frame_id,status,state) "
-            "VALUES(?,?,?,?,?)",
-            (ncid, ccf["char_id"], nfid, ccf["status"], ccf["state"])
-        )
-
-    # Copy turns, steps, and variants
-    idmap = {}
-    for t in q("SELECT * FROM turns WHERE chat_id=? AND idx<=? ORDER BY idx", (cid, idx)):
-        nt = qi(
-            "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
-            (ncid, t["idx"], t["player_input"], t["created"], frame_idmap.get(t["frame_id"]))
-        )
-        idmap[t["id"]] = nt
-
-        for s in q("SELECT * FROM steps WHERE turn_id=? ORDER BY ord", (t["id"],)):
-            ns = qi(
-                "INSERT INTO steps(turn_id,key,label,ord,stale) VALUES(?,?,?,?,?)",
-                (nt, s["key"], s["label"], s["ord"], s["stale"])
-            )
-            for v in q("SELECT * FROM variants WHERE step_id=? ORDER BY id", (s["id"],)):
-                qi(
-                    "INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,?)",
-                    (ns, v["content"], v["created"], v["active"])
+            frame_idmap[f["id"]] = nfid
+        # parent_frame_id is self-referential -- deferred to a second pass,
+        # same reasoning as chat_import's identical remap.
+        for f in q("SELECT id, parent_frame_id FROM frames WHERE chat_id=?", (cid,)):
+            if f["parent_frame_id"] is not None and f["parent_frame_id"] in frame_idmap:
+                qtx(
+                    "UPDATE frames SET parent_frame_id=? WHERE id=?",
+                    (frame_idmap[f["parent_frame_id"]], frame_idmap[f["id"]]),
                 )
 
-        for e in q("SELECT * FROM events WHERE turn_id=?", (t["id"],)):
-            qi(
-                "INSERT INTO events(chat_id,turn_id,content) VALUES(?,?,?)",
-                (ncid, nt, e["content"])
+        # Copy chat characters
+        for cc in q("SELECT * FROM chat_chars WHERE chat_id=?", (cid,)):
+            qtx(
+                "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+                (ncid, cc["char_id"], cc["status"], cc["state"])
             )
 
-    # Restore character states from the snapshot
-    for cidk, st in (blob.get("chars") or {}).items():
-        if isinstance(st, dict) and "status" in st and "state" in st:
-            qi(
-                "UPDATE chat_chars SET state=?,status=? WHERE chat_id=? AND char_id=?",
-                (json.dumps(st["state"]), st["status"], ncid, int(cidk))
-            )
-        else:
-            qi(
-                "UPDATE chat_chars SET state=? WHERE chat_id=? AND char_id=?",
-                (json.dumps(st), ncid, int(cidk))
-            )
-
-    # Snapshot char_frames reflects the branch point exactly (unlike the
-    # raw copy above, which mirrors the source chat's CURRENT overlay
-    # rows) -- replace with the snapshot's version, remapped to this
-    # branch's frame ids.
-    qi("DELETE FROM chat_char_frames WHERE chat_id=?", (ncid,))
-    for cf in blob.get("char_frames") or []:
-        nfid = frame_idmap.get(cf.get("frame_id"))
-        if nfid is None:
-            continue
-        qi(
-            "INSERT INTO chat_char_frames(chat_id,char_id,frame_id,status,state) "
-            "VALUES(?,?,?,?,?)",
-            (ncid, cf["char_id"], nfid, cf.get("status", "active"),
-             json.dumps(cf.get("state") or {}))
-        )
-
-    # Restore memories and summaries
-    mems = []
-    for m in (blob.get("memories") or []):
-        m = dict(m)
-        m["turn_id"] = idmap.get(m.get("turn_id"))
-        m["frame_id"] = frame_idmap.get(m.get("frame_id"))
-        mems.append(m)
-
-    restore_chat_memories(ncid, mems)
-    restore_memory_summaries(ncid, blob.get("memory_summaries") or [])
-
-    # --- Lorebook Tree Cloning ---
-    bookmap = {}
-    new_canon = None
-    snap_books = blob.get("lorebooks")
-
-    # Fallback for older checkpoints without the lorebooks array
-    if snap_books is None and blob.get("lore") and blob["lore"].get("entries") is not None:
-        lo = blob["lore"]
-        snap_books = [{
-            "lorebook_id": lo.get("lorebook_id"),
-            "canon": True,
-            "name": f"{src['name']} ⎇{idx} — canon",
-            "entries": lo.get("entries")
-        }]
-
-    # Pass 1: Create all books without parent references, clone entries safely
-    for b in snap_books or []:
-        old_id = b.get("lorebook_id")
-        nb = qi(
-            "INSERT INTO lorebooks("
-            "name,chat_id,origin_id,book_type,summary,"
-            "parent_id,scope_world_id,scope_location_id,"
-            "inheritance_mode,sort_order,resource_uid"
-            ") VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                b.get("name") or "canon",
-                ncid,
-                b.get("origin_id") or old_id,
-                b.get("book_type") or "general",
-                b.get("summary") or "",
-                None,  # Parent ID deferred to Pass 2
-                b.get("scope_world_id"),
-                b.get("scope_location_id"),
-                b.get("inheritance_mode") or "inherit",
-                int(b.get("sort_order") or 0),
-                new_uid("book")
-            )
-        )
-
-        if old_id:
-            bookmap[int(old_id)] = nb
-
-        # _clone_snapshot_entries generates fresh entry_uids to avoid
-        # UNIQUE constraint crashes
-        _clone_snapshot_entries(nb, b.get("entries") or [])
-
-        if b.get("canon"):
-            new_canon = nb
-            qi("UPDATE chats SET lorebook_id=? WHERE id=?", (nb, ncid))
-        else:
-            qi(
-                "INSERT INTO chat_lorebooks(chat_id,lorebook_id,origin_id,enabled) "
-                "VALUES(?,?,?,?)",
-                (ncid, nb, b.get("origin_id") or old_id,
-                 1 if b.get("enabled", 1) else 0)
+        # Copy per-frame character overrides (state/status divergence between
+        # frames), remapping each row's frame_id to this branch's own frame.
+        for ccf in q("SELECT * FROM chat_char_frames WHERE chat_id=?", (cid,)):
+            nfid = frame_idmap.get(ccf["frame_id"])
+            if nfid is None:
+                continue
+            qtx(
+                "INSERT INTO chat_char_frames(chat_id,char_id,frame_id,status,state) "
+                "VALUES(?,?,?,?,?)",
+                (ncid, ccf["char_id"], nfid, ccf["status"], ccf["state"])
             )
 
-    # Pass 2: Remap parent IDs to preserve hierarchy
-    for b in snap_books or []:
-        old_parent = b.get("parent_id")
-        new_book = bookmap.get(b.get("lorebook_id"))
-        new_parent = bookmap.get(old_parent)
+        # Copy turns, steps, and variants
+        idmap = {}
+        for t in q("SELECT * FROM turns WHERE chat_id=? AND idx<=? ORDER BY idx", (cid, idx)):
+            nt = qtx(
+                "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
+                (ncid, t["idx"], t["player_input"], t["created"], frame_idmap.get(t["frame_id"]))
+            )
+            idmap[t["id"]] = nt
 
-        if new_book is not None:
-            qi(
-                "UPDATE lorebooks SET parent_id=? WHERE id=?",
-                (new_parent, new_book)
+            for s in q("SELECT * FROM steps WHERE turn_id=? ORDER BY ord", (t["id"],)):
+                ns = qtx(
+                    "INSERT INTO steps(turn_id,key,label,ord,stale) VALUES(?,?,?,?,?)",
+                    (nt, s["key"], s["label"], s["ord"], s["stale"])
+                )
+                for v in q("SELECT * FROM variants WHERE step_id=? ORDER BY id", (s["id"],)):
+                    qtx(
+                        "INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,?)",
+                        (ns, v["content"], v["created"], v["active"])
+                    )
+
+            for e in q("SELECT * FROM events WHERE turn_id=?", (t["id"],)):
+                qtx(
+                    "INSERT INTO events(chat_id,turn_id,content) VALUES(?,?,?)",
+                    (ncid, nt, e["content"])
+                )
+
+        # Restore character states from the snapshot
+        for cidk, st in (blob.get("chars") or {}).items():
+            if isinstance(st, dict) and "status" in st and "state" in st:
+                qtx(
+                    "UPDATE chat_chars SET state=?,status=? WHERE chat_id=? AND char_id=?",
+                    (json.dumps(st["state"]), st["status"], ncid, int(cidk))
+                )
+            else:
+                qtx(
+                    "UPDATE chat_chars SET state=? WHERE chat_id=? AND char_id=?",
+                    (json.dumps(st), ncid, int(cidk))
+                )
+
+        # Snapshot char_frames reflects the branch point exactly (unlike the
+        # raw copy above, which mirrors the source chat's CURRENT overlay
+        # rows) -- replace with the snapshot's version, remapped to this
+        # branch's frame ids.
+        qtx("DELETE FROM chat_char_frames WHERE chat_id=?", (ncid,))
+        for cf in blob.get("char_frames") or []:
+            nfid = frame_idmap.get(cf.get("frame_id"))
+            if nfid is None:
+                continue
+            qtx(
+                "INSERT INTO chat_char_frames(chat_id,char_id,frame_id,status,state) "
+                "VALUES(?,?,?,?,?)",
+                (ncid, cf["char_id"], nfid, cf.get("status", "active"),
+                 json.dumps(cf.get("state") or {}))
             )
 
-    # Restore lorebook links only if both endpoints exist in the branch
-    branch_links = []
-    for link in blob.get("lorebook_links") or []:
-        s = link.get("source_book_id")
-        t = link.get("target_book_id")
-        if s in bookmap and t in bookmap:
-            branch_links.append(link)
+        # Restore memories and summaries
+        mems = []
+        for m in (blob.get("memories") or []):
+            m = dict(m)
+            m["turn_id"] = idmap.get(m.get("turn_id"))
+            m["frame_id"] = frame_idmap.get(m.get("frame_id"))
+            mems.append(m)
 
-    restore_lorebook_links(ncid, bookmap, branch_links)
+        restore_chat_memories(ncid, mems)
+        restore_memory_summaries(ncid, blob.get("memory_summaries") or [])
 
-    # Build world ID remap ONCE from the source snapshot.
-    # All checkpoints for the branched chat must use the same new IDs.
-    world_id_remap = _build_world_id_remap(blob)
+        # --- Lorebook Tree Cloning ---
+        bookmap = {}
+        new_canon = None
+        snap_books = blob.get("lorebooks")
 
-    # Restore world state (deep-copy so blob stays untouched for checkpoints)
-    world = json.loads(json.dumps(blob.get("world") or {}))
-    # Retired-concept cleanup: current_frame_id/frame_bundle:* were written
-    # by the old whole-chat frame-swap mechanism (replaced by frame-scoped
-    # storage keys -- see db.py's active_frame_id). Harmless no-ops unless
-    # a chat has stale rows from before that refactor.
-    world.pop("current_frame_id", None)
-    for key in [k for k in world if k.startswith("frame_bundle:")]:
-        world.pop(key, None)
-    # Frame-scoped keys (e.g. "scene<sep>fr5") embed the SOURCE chat's
-    # frame id -- remap it to the branch's own corresponding frame (built
-    # above), or drop the row if that frame somehow wasn't cloned, rather
-    # than leave a key pointing at a frame id that means nothing here.
-    remapped_world = {}
-    for key, val in world.items():
-        base, key_frame_id = parse_scoped_world_key(key)
-        if key_frame_id is None:
-            remapped_world[key] = val
-            continue
-        new_frame_id = frame_idmap.get(key_frame_id)
-        if new_frame_id is not None:
-            remapped_world[f"{base}{_FRAME_KEY_SEP}{new_frame_id}"] = val
-    world = remapped_world
-    _remap_active_books(world, bookmap)
-    if world_id_remap:
-        for k, v in list(world.items()):
-            if isinstance(v, str):
-                try:
-                    parsed = json.loads(v)
-                    if isinstance(parsed, (dict, list)):
-                        world[k] = json.dumps(
-                            _deep_remap_ids(parsed, world_id_remap)
-                        )
-                except (json.JSONDecodeError, TypeError):
-                    world[k] = world_id_remap.get(v, v)
-            elif isinstance(v, (dict, list)):
-                world[k] = _deep_remap_ids(v, world_id_remap)
-    for k, v in world.items():
-        wset(ncid, k, v)
+        # Fallback for older checkpoints without the lorebooks array
+        if snap_books is None and blob.get("lore") and blob["lore"].get("entries") is not None:
+            lo = blob["lore"]
+            snap_books = [{
+                "lorebook_id": lo.get("lorebook_id"),
+                "canon": True,
+                "name": f"{src['name']} ⎇{idx} — canon",
+                "entries": lo.get("entries")
+            }]
 
-    # Copy checkpoints safely (using deep copies to prevent mutation issues)
-    for cp in q("SELECT * FROM checkpoints WHERE chat_id=? AND turn_idx<=?", (cid, idx)):
-        cp_blob = json.loads(cp["blob"])
+        # Pass 1: Create all books without parent references, clone entries safely
+        for b in snap_books or []:
+            old_id = b.get("lorebook_id")
+            nb = qtx(
+                "INSERT INTO lorebooks("
+                "name,chat_id,origin_id,book_type,summary,"
+                "parent_id,scope_world_id,scope_location_id,"
+                "inheritance_mode,sort_order,resource_uid"
+                ") VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    b.get("name") or "canon",
+                    ncid,
+                    b.get("origin_id") or old_id,
+                    b.get("book_type") or "general",
+                    b.get("summary") or "",
+                    None,  # Parent ID deferred to Pass 2
+                    b.get("scope_world_id"),
+                    b.get("scope_location_id"),
+                    b.get("inheritance_mode") or "inherit",
+                    int(b.get("sort_order") or 0),
+                    new_uid("book")
+                )
+            )
+
+            if old_id:
+                bookmap[int(old_id)] = nb
+
+            # _clone_snapshot_entries generates fresh entry_uids to avoid
+            # UNIQUE constraint crashes
+            _clone_snapshot_entries(nb, b.get("entries") or [])
+
+            if b.get("canon"):
+                new_canon = nb
+                qtx("UPDATE chats SET lorebook_id=? WHERE id=?", (nb, ncid))
+            else:
+                qtx(
+                    "INSERT INTO chat_lorebooks(chat_id,lorebook_id,origin_id,enabled) "
+                    "VALUES(?,?,?,?)",
+                    (ncid, nb, b.get("origin_id") or old_id,
+                     1 if b.get("enabled", 1) else 0)
+                )
+
+        # Pass 2: Remap parent IDs to preserve hierarchy
+        for b in snap_books or []:
+            old_parent = b.get("parent_id")
+            new_book = bookmap.get(b.get("lorebook_id"))
+            new_parent = bookmap.get(old_parent)
+
+            if new_book is not None:
+                qtx(
+                    "UPDATE lorebooks SET parent_id=? WHERE id=?",
+                    (new_parent, new_book)
+                )
+
+        # Restore lorebook links only if both endpoints exist in the branch
+        branch_links = []
+        for link in blob.get("lorebook_links") or []:
+            s = link.get("source_book_id")
+            t = link.get("target_book_id")
+            if s in bookmap and t in bookmap:
+                branch_links.append(link)
+
+        restore_lorebook_links(ncid, bookmap, branch_links)
+
+        # Build world ID remap ONCE from the source snapshot.
+        # All checkpoints for the branched chat must use the same new IDs.
+        world_id_remap = _build_world_id_remap(blob)
+
+        # Restore world state (deep-copy so blob stays untouched for checkpoints)
+        world = json.loads(json.dumps(blob.get("world") or {}))
+        # Retired-concept cleanup: current_frame_id/frame_bundle:* were written
+        # by the old whole-chat frame-swap mechanism (replaced by frame-scoped
+        # storage keys -- see db.py's active_frame_id). Harmless no-ops unless
+        # a chat has stale rows from before that refactor.
+        world.pop("current_frame_id", None)
+        for key in [k for k in world if k.startswith("frame_bundle:")]:
+            world.pop(key, None)
+        # Frame-scoped keys (e.g. "scene<sep>fr5") embed the SOURCE chat's
+        # frame id -- remap it to the branch's own corresponding frame (built
+        # above), or drop the row if that frame somehow wasn't cloned, rather
+        # than leave a key pointing at a frame id that means nothing here.
+        remapped_world = {}
+        for key, val in world.items():
+            base, key_frame_id = parse_scoped_world_key(key)
+            if key_frame_id is None:
+                remapped_world[key] = val
+                continue
+            new_frame_id = frame_idmap.get(key_frame_id)
+            if new_frame_id is not None:
+                remapped_world[f"{base}{_FRAME_KEY_SEP}{new_frame_id}"] = val
+        world = remapped_world
+        _remap_active_books(world, bookmap)
+        if world_id_remap:
+            for k, v in list(world.items()):
+                if isinstance(v, str):
+                    try:
+                        parsed = json.loads(v)
+                        if isinstance(parsed, (dict, list)):
+                            world[k] = json.dumps(
+                                _deep_remap_ids(parsed, world_id_remap)
+                            )
+                    except (json.JSONDecodeError, TypeError):
+                        world[k] = world_id_remap.get(v, v)
+                elif isinstance(v, (dict, list)):
+                    world[k] = _deep_remap_ids(v, world_id_remap)
+        for k, v in world.items():
+            wset(ncid, k, v)
+
+        # Copy checkpoints safely (using deep copies to prevent mutation issues)
+        for cp in q("SELECT * FROM checkpoints WHERE chat_id=? AND turn_idx<=?", (cid, idx)):
+            cp_blob = json.loads(cp["blob"])
+            b = _remap_cp_blob(
+                cp_blob, idmap, bookmap, new_canon,
+                world_id_remap=world_id_remap, frame_idmap=frame_idmap,
+            )
+            qtx(
+                "INSERT INTO checkpoints(chat_id,turn_idx,blob,created) VALUES(?,?,?,?)",
+                (ncid, cp["turn_idx"], json.dumps(b), time.time())
+            )
+
+        # Final checkpoint snapshot for the newly branched chat
+        final_blob = json.loads(json.dumps(blob))
         b = _remap_cp_blob(
-            cp_blob, idmap, bookmap, new_canon,
+            final_blob, idmap, bookmap, new_canon,
             world_id_remap=world_id_remap, frame_idmap=frame_idmap,
         )
-        qi(
+        qtx(
             "INSERT INTO checkpoints(chat_id,turn_idx,blob,created) VALUES(?,?,?,?)",
-            (ncid, cp["turn_idx"], json.dumps(b), time.time())
+            (ncid, idx + 1, json.dumps(b), time.time())
         )
-
-    # Final checkpoint snapshot for the newly branched chat
-    final_blob = json.loads(json.dumps(blob))
-    b = _remap_cp_blob(
-        final_blob, idmap, bookmap, new_canon,
-        world_id_remap=world_id_remap, frame_idmap=frame_idmap,
-    )
-    qi(
-        "INSERT INTO checkpoints(chat_id,turn_idx,blob,created) VALUES(?,?,?,?)",
-        (ncid, idx + 1, json.dumps(b), time.time())
-    )
 
     return dict(q("SELECT * FROM chats WHERE id=?", (ncid,), one=True))
     
@@ -2841,6 +2886,9 @@ def edit_input(tid: int, body: dict = Body(...)):
     turn = q("SELECT * FROM turns WHERE id=?", (tid,), one=True)
     if not turn:
         raise HTTPException(404, "Turn not found")
+    # Don't flip steps stale / rewrite input while a pipeline is building
+    # those very steps for this turn.
+    _require_chat_idle(turn["chat_id"])
     qi("UPDATE turns SET player_input=? WHERE id=?", (_player_input(body), tid))
     lt = _latest_turn(turn["chat_id"])
     latest = lt and lt["id"] == tid
@@ -2886,6 +2934,8 @@ def pipeline_get(tid: int):
         vs = [dict(r) for r in q("SELECT id,content,active,created FROM variants WHERE step_id=? ORDER BY id", (s["id"],))]
         steps.append({"id": s["id"], "key": s["key"], "label": s["label"], "ord": s["ord"], "stale": bool(s["stale"]), "variants": vs})
     turn = q("SELECT * FROM turns WHERE id=?", (tid,), one=True)
+    if not turn:
+        raise HTTPException(404, "Turn not found")
     frame_latest = _latest_turn_in_frame(turn["chat_id"], turn["frame_id"])
     is_frame_latest = bool(frame_latest and frame_latest["id"] == tid)
     # editable mirrors _require_latest's actual gate: frame-latest AND no
@@ -3056,9 +3106,15 @@ def turn_del(tid: int):
     _require_latest(turn)
     _require_chat_idle(turn["chat_id"])
 
-    restore_checkpoint(turn["chat_id"], turn["idx"])
-
     with transaction():
+        # The checkpoint restore must live in the SAME transaction as the
+        # deletes: restoring first and deleting after (as two separate
+        # commits) meant a failed delete left the chat rewound to the
+        # turn's start while the turn/steps still existed. The restore
+        # runs before the deletes so it can still read the checkpoint row
+        # for this idx, which the deletes below remove.
+        restore_checkpoint(turn["chat_id"], turn["idx"])
+
         for step in q(
             "SELECT id FROM steps WHERE turn_id=?",
             (tid,),
