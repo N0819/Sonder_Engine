@@ -1,6 +1,7 @@
-"""Regression tests for guest_access.py: the host-secret bootstrap, join
-code lifecycle (single-use, expiry, rate limiting), and guest token
-verification underlying the "invite a friend" remote-join feature."""
+"""Regression tests for guest_access.py: the join code lifecycle
+(single-use, expiry, rate limiting) and guest token verification
+underlying the "invite a friend" remote-join feature. Host account and
+session functions are covered in test_host_secret_hashing.py."""
 
 from __future__ import annotations
 
@@ -32,30 +33,6 @@ def _make_chat_and_persona(db):
         ("Test", "", time.time()),
     )
     return chat_id, persona_id
-
-
-class TestHostSecret:
-    def test_mints_a_secret_on_first_call(self, temp_db):
-        secret = ga.ensure_host_secret()
-        assert secret
-        assert len(secret) >= 32
-
-    def test_plaintext_is_only_returned_when_freshly_minted(self, temp_db):
-        first = ga.ensure_host_secret()
-        second = ga.ensure_host_secret()
-        assert first
-        assert second is None
-        assert ga.verify_host_secret(first) is True
-
-    def test_verify_accepts_the_real_secret(self, temp_db):
-        secret = ga.ensure_host_secret()
-        assert ga.verify_host_secret(secret) is True
-
-    def test_verify_rejects_wrong_or_missing_secret(self, temp_db):
-        ga.ensure_host_secret()
-        assert ga.verify_host_secret("wrong-guess") is False
-        assert ga.verify_host_secret("") is False
-        assert ga.verify_host_secret(None) is False
 
 
 class TestJoinCodeLifecycle:
