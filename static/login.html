@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fiction Engine — Sign In</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- Shares the host app's actual stylesheet, same rationale as guest.html:
+     the sign-in screen should look like the app it guards. Only the
+     centered-card layout is defined locally below. -->
+<link rel="stylesheet" href="/static/styles.css">
+<style>
+  body { display: flex; flex-direction: column; }
+  header {
+    padding: 14px 18px; border-bottom: 1px solid var(--bd);
+    display: flex; align-items: center; gap: 10px; min-height: 50px;
+    background: rgba(18,23,34,.9); backdrop-filter: blur(14px);
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 650; }
+  header .sub { color: var(--dim); font-size: 13px; }
+  #auth-screen {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 24px; gap: 14px;
+  }
+  #auth-screen .card { width: min(360px, 100%); display: flex; flex-direction: column; gap: 12px; }
+  #auth-screen h2 { margin: 0; font-size: 18px; }
+  .err { color: var(--err); font-size: 13px; min-height: 18px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Fiction Engine</h1>
+  <span class="sub" id="head-sub">Host access</span>
+</header>
+
+<div id="auth-screen">
+  <div class="card" id="setup-form" style="display:none">
+    <h2>Create your host account</h2>
+    <input id="setup-username" placeholder="Username" autocomplete="username">
+    <input id="setup-password" type="password" placeholder="Password" autocomplete="new-password">
+    <input id="setup-confirm" type="password" placeholder="Confirm password" autocomplete="new-password">
+    <button id="setup-btn" class="primary">Create account</button>
+    <div class="err" id="setup-err"></div>
+  </div>
+
+  <div class="card" id="login-form" style="display:none">
+    <h2>Sign in</h2>
+    <input id="login-username" placeholder="Username" autocomplete="username">
+    <input id="login-password" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="login-btn" class="primary">Sign in</button>
+    <div class="err" id="login-err"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const setupForm = document.getElementById("setup-form");
+const loginForm = document.getElementById("login-form");
+const setupErr = document.getElementById("setup-err");
+const loginErr = document.getElementById("login-err");
+const setupBtn = document.getElementById("setup-btn");
+const loginBtn = document.getElementById("login-btn");
+
+async function post(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (res.ok) return true;
+  let detail = `HTTP ${res.status}`;
+  try {
+    const data = await res.json();
+    if (data.detail) detail = data.detail;
+  } catch (e) { /* keep the status fallback */ }
+  throw new Error(detail);
+}
+
+async function doSetup() {
+  const username = document.getElementById("setup-username").value.trim();
+  const password = document.getElementById("setup-password").value;
+  const confirm = document.getElementById("setup-confirm").value;
+  setupErr.textContent = "";
+  if (!username || !password) {
+    setupErr.textContent = "Username and password are required.";
+    return;
+  }
+  if (password !== confirm) {
+    setupErr.textContent = "Passwords do not match.";
+    return;
+  }
+  setupBtn.disabled = true;
+  try {
+    await post("/api/auth/setup", { username, password });
+    window.location.replace("/");
+  } catch (e) {
+    setupErr.textContent = e.message;
+  } finally {
+    setupBtn.disabled = false;
+  }
+}
+
+async function doLogin() {
+  const username = document.getElementById("login-username").value.trim();
+  const password = document.getElementById("login-password").value;
+  loginErr.textContent = "";
+  if (!username || !password) {
+    loginErr.textContent = "Username and password are required.";
+    return;
+  }
+  loginBtn.disabled = true;
+  try {
+    await post("/api/auth/login", { username, password });
+    window.location.replace("/");
+  } catch (e) {
+    loginErr.textContent = e.message;
+  } finally {
+    loginBtn.disabled = false;
+  }
+}
+
+setupBtn.onclick = doSetup;
+loginBtn.onclick = doLogin;
+setupForm.addEventListener("keydown", e => { if (e.key === "Enter") doSetup() });
+loginForm.addEventListener("keydown", e => { if (e.key === "Enter") doLogin() });
+
+(async function init() {
+  try {
+    const res = await fetch("/api/auth/status");
+    const status = await res.json();
+    if (status.authenticated) {
+      window.location.replace("/");
+      return;
+    }
+    if (status.setup_required) {
+      setupForm.style.display = "flex";
+      document.getElementById("head-sub").textContent = "First-run setup";
+      document.getElementById("setup-username").focus();
+    } else {
+      loginForm.style.display = "flex";
+      document.getElementById("login-username").focus();
+    }
+  } catch (e) {
+    loginForm.style.display = "flex";
+    loginErr.textContent = "Could not reach the server.";
+  }
+})();
+</script>
+</body>
+</html>

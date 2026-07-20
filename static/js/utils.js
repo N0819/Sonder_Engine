@@ -49,6 +49,14 @@ async function api(method, url, body) {
     );
   }
   if (!response.ok) {
+    if (response.status === 401) {
+      // No valid host session (never had one, or it expired): send the
+      // whole tab to the sign-in page. 403 deliberately does NOT
+      // redirect -- that's a valid-but-guest-scoped session, a
+      // different meaning.
+      window.location.href = "/login";
+      throw new Error("Unauthorized");
+    }
     let message = await response.text();
     try {
       const parsed = JSON.parse(message);

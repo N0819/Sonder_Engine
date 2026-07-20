@@ -46,8 +46,24 @@ $$("#tabs button").forEach(button => {
 });
 
 $("#b-menu").onclick = () => {
-  $("#side").classList.toggle("open");
+  // Narrow viewports use the slide-in drawer (.open); desktop fully
+  // collapses the sidebar to give the story more room, remembering the
+  // choice across reloads.
+  if (window.innerWidth <= 680) {
+    $("#side").classList.toggle("open");
+  } else {
+    const collapsed = $("#side").classList.toggle("collapsed");
+    try { localStorage.setItem("sideCollapsed", collapsed ? "1" : "0"); }
+    catch (e) {}
+  }
 };
+
+// Restore the persisted desktop collapse state on load.
+try {
+  if (localStorage.getItem("sideCollapsed") === "1") {
+    $("#side").classList.add("collapsed");
+  }
+} catch (e) {}
 
 $("#sidelist").addEventListener("click", () => {
   if (window.innerWidth <= 680) {

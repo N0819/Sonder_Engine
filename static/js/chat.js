@@ -932,17 +932,24 @@ function memModal(p) {
     const listBox = el("div", { class: "memory-list" },
       loadingBlock("Loading memories…"));
 
-    sidebar.append(summaryBox,
-      el("div", { class: "section-title" }, "Memory tools"),
-      el("div", { class: "card" },
-        el("div", { class: "row" },
-          consolidateButton, contextButton),
-        el("div", {
-          class: "small dim",
-          style: "margin-top:8px"
-        }, "Consolidation updates the character's subjective "
-          + "long-term summary. Context preview shows what the "
-          + "agent receives.")));
+    // Consolidate controls on top, autobiography summary directly beneath —
+    // both wrapped in one sticky block so they stay scroll-locked in view
+    // while the memory list in the main column scrolls. (Previously the
+    // summary alone was sticky and, sitting first, painted over the
+    // consolidate card as it scrolled up beneath it.)
+    const consolidateCard = el("div", { class: "card memory-consolidate" },
+      el("div", { class: "section-title", style: "margin-top:0" },
+        "Memory tools"),
+      el("div", { class: "row" },
+        consolidateButton, contextButton),
+      el("div", {
+        class: "small dim",
+        style: "margin-top:8px"
+      }, "Consolidation updates the character's subjective "
+        + "long-term summary. Context preview shows what the "
+        + "agent receives."));
+    sidebar.append(el("div", { class: "memory-sidebar-sticky" },
+      consolidateCard, summaryBox));
 
     main.append(toolbar, resultLabel, listBox);
     layout.append(sidebar, main);
@@ -1129,17 +1136,19 @@ function renderMemorySummary() {
     (s.key_phrases || []).length
       ? el("div", { style: "margin-top:9px" },
           el("div", { class: "small dim" }, "Retrieval cues"),
-          ...(s.key_phrases || []).map(p =>
-            el("span", { class: "chip" }, p)))
+          el("div", { class: "mem-scroll" },
+            ...(s.key_phrases || []).map(p =>
+              el("span", { class: "chip" }, p))))
       : null,
     (s.unresolved_threads || []).length
       ? el("div", { style: "margin-top:9px" },
           el("div", { class: "small dim" }, "Unresolved threads"),
-          ...(s.unresolved_threads || []).map(t =>
-            el("div", {
-              class: "small",
-              style: "margin-top:4px"
-            }, "• " + t)))
+          el("div", { class: "mem-scroll" },
+            ...(s.unresolved_threads || []).map(t =>
+              el("div", {
+                class: "small",
+                style: "margin-top:4px"
+              }, "• " + t))))
       : null,
     el("div", {
       class: "small dim",

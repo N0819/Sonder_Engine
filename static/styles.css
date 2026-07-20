@@ -80,6 +80,10 @@ outline:none;border-color:color-mix(in srgb,var(--acc) 55%,var(--bd))}
 #sideactions{padding:10px;border-top:1px solid var(--bd);display:flex;
 gap:6px;flex-wrap:wrap;background:rgba(11,14,20,.32)}
 #main{flex:1;display:flex;flex-direction:column;min-width:0}
+/* Desktop-only collapse of the left sidebar (stories/characters/personas/
+   lore). Scoped to >680px so it never fights the mobile drawer below, which
+   uses position:fixed + the .open class instead. */
+@media(min-width:681px){#side.collapsed{display:none}}
 #top{display:flex;gap:6px;align-items:center;padding:8px 12px;
 border-bottom:1px solid var(--bd);background:rgba(18,23,34,.9);
 backdrop-filter:blur(14px);box-shadow:0 8px 28px rgba(0,0,0,.12);z-index:3;
@@ -214,10 +218,13 @@ box-shadow:var(--soft-shadow);animation:toast-in .2s ease;pointer-events:auto}
 .memory-layout{display:grid;grid-template-columns:minmax(250px,320px) minmax(0,1fr);
 gap:13px;min-height:520px}
 .memory-sidebar{min-width:0}.memory-main{min-width:0}
-.memory-summary{position:sticky;top:0;padding:12px;border:1px solid #35435b;
+.memory-sidebar-sticky{position:sticky;top:0;display:flex;flex-direction:column;gap:10px}
+.memory-consolidate{margin:0}
+.memory-summary{margin:0;padding:12px;border:1px solid #35435b;
 border-radius:11px;background:linear-gradient(145deg,rgba(74,113,183,.13),rgba(21,27,40,.84))}
 .memory-summary-text{max-height:230px;overflow:auto;white-space:pre-wrap;
 color:#cbd5e5;line-height:1.55}
+.mem-scroll{max-height:120px;overflow-y:auto;margin-top:4px;padding-right:4px}
 .memory-preview{max-height:370px;overflow:auto;padding:10px;
 border:1px solid #34425a;border-radius:9px;background:#0d121b}
 .memory-preview pre{margin:0;white-space:pre-wrap;
@@ -245,7 +252,7 @@ transform-origin:center;transition:transform .12s ease}
 border:1px solid #4d4568;border-radius:999px;color:#c2b2e9;font-size:11px}
 .memory-add{padding:10px;margin:8px 0;border:1px dashed #40506b;
 border-radius:10px;background:rgba(25,32,46,.42)}
-#b-menu{display:none}
+#b-menu{display:inline-flex;align-items:center;justify-content:center}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fade-in{from{opacity:0}to{opacity:1}}
 @keyframes fade-slide{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
@@ -256,7 +263,7 @@ border-radius:10px;background:rgba(25,32,46,.42)}
   #side{width:230px}
   #drawer{position:fixed;right:0;top:0;bottom:0;width:min(520px,92vw);z-index:20}
   .memory-layout{grid-template-columns:1fr}
-  .memory-summary{position:static}
+  .memory-sidebar-sticky{position:static}
   /* Sidebar 230px + header content ~520px overflows with nowhere to go
      between here and 680px (body has overflow:hidden), clipping the
      right-hand icon buttons entirely -- move the header's own scroll
