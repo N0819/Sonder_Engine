@@ -10,6 +10,7 @@ Read these in order when orienting yourself:
 2. [`docs/PIPELINE.md`](docs/PIPELINE.md) — exact opening-turn and normal-turn execution flow.
 3. [`docs/CODE_MAP.md`](docs/CODE_MAP.md) — generated modules, routes, large functions, tables, and frontend sections.
 4. [`Design.md`](Design.md) — product philosophy, current architecture, known weaknesses, and roadmap.
+5. [`docs/RESEARCH.md`](docs/RESEARCH.md) — sourced bibliography of the research the engine draws on.
 
 ## Run locally
 
@@ -51,6 +52,7 @@ static/                 browser UI
 tests/                  invariant and regression tests
 docs/                   practical architecture documentation
 tools/                  maintenance scripts
+archive/                inactive historical files retained for reference
 ```
 
 ## Dependency notes
