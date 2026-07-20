@@ -163,6 +163,90 @@ def test_not_promotable_below_threshold(temp_db):
     assert waiter["promotable"] is False
 
 
+def test_state_diff_person_harvests_sketch(temp_db):
+    chat_id = _make_chat(temp_db)
+    ctx = _ctx(chat_id, 1, [], {
+        "state_diff": {
+            "entities": {"g1": {"kind": "person", "name": "Mira",
+                                "description": "harried young serving girl"}},
+            "positions": {"Mira": "taproom"},
+        },
+    })
+    track_background_presences(ctx, nonce=0)
+
+    rec = temp_db.wget(chat_id, "background_presences", {})["Mira"]
+    assert rec["sketch"]["role_hint"] == "harried young serving girl"
+    assert rec["sketch"]["station_room"] == "taproom"
+
+
+def test_sketch_not_clobbered_by_descriptionless_restatement(temp_db):
+    chat_id = _make_chat(temp_db)
+    temp_db.wset(chat_id, "background_presences", {
+        "Mira": {"first_turn": 1, "last_turn": 1, "dialogue_turns": [],
+                 "mention_turns": [],
+                 "sketch": {"role_hint": "harried young serving girl",
+                            "station_room": "taproom"}},
+    })
+    ctx = _ctx(chat_id, 2, [], {
+        "state_diff": {"entities": {"g1": {"kind": "person", "name": "Mira"}}},
+    })
+    track_background_presences(ctx, nonce=0)
+
+    rec = temp_db.wget(chat_id, "background_presences", {})["Mira"]
+    assert rec["sketch"]["role_hint"] == "harried young serving girl"  # preserved
+
+
+def test_sketch_overwritten_by_new_director_description(temp_db):
+    chat_id = _make_chat(temp_db)
+    temp_db.wset(chat_id, "background_presences", {
+        "Mira": {"first_turn": 1, "last_turn": 1, "dialogue_turns": [],
+                 "mention_turns": [],
+                 "sketch": {"role_hint": "serving girl", "station_room": "taproom"}},
+    })
+    ctx = _ctx(chat_id, 2, [], {
+        "state_diff": {"entities": {"g1": {"kind": "person", "name": "Mira",
+                                           "description": "the innkeeper's daughter"}}},
+    })
+    track_background_presences(ctx, nonce=0)
+
+    rec = temp_db.wget(chat_id, "background_presences", {})["Mira"]
+    assert rec["sketch"]["role_hint"] == "the innkeeper's daughter"  # director truth wins
+    assert rec["sketch"]["station_room"] == "taproom"  # untouched field preserved
+
+
+def test_establish_entities_register_location_implied_presence(temp_db):
+    # A person the tavern implies, established at the opening turn (idx 0),
+    # where DirectorEstablish carries entities/positions at TOP level (not in
+    # a state_diff) -- must be tracked as a present-but-not-yet-salient
+    # presence, with a sketch, and must not be promotable off the bat.
+    chat_id = _make_chat(temp_db)
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Test", persona_id=None, lorebook_id=None,
+                      scenario="", created=time.time()),
+        turn=TurnData(id=1, chat_id=chat_id, idx=0, player_input="",
+                      created=time.time()),
+        cast=[], input="", director_resolve=None,
+        director_establish={
+            "entities": {"barkeep": {"kind": "person", "name": "Doran",
+                                     "description": "grizzled one-eyed barkeep"}},
+            "positions": {"Doran": "taproom"},
+        },
+    )
+    track_background_presences(ctx, nonce=0)
+
+    presences = temp_db.wget(chat_id, "background_presences", {})
+    assert "Doran" in presences
+    rec = presences["Doran"]
+    assert rec["first_turn"] == 0
+    assert rec["dialogue_turns"] == []
+    assert rec["mention_turns"] == []
+    assert "barkeep" in rec["sketch"]["role_hint"]
+    assert rec["sketch"]["station_room"] == "taproom"
+
+    result = promotable_background_presences(chat_id)
+    assert next(r for r in result if r["name"] == "Doran")["promotable"] is False
+
+
 def test_promotable_after_mention_threshold(temp_db):
     chat_id = _make_chat(temp_db)
     temp_db.wset(chat_id, "background_presences", {

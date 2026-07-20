@@ -376,12 +376,17 @@ def perception_outcome(ctx, nonce):
     # step from what perception/narrator actually rendered, and a rerun
     # from this step onward would silently lose the background reaction.
     br = ctx.get("background_react") or {}
-    br_entry = br.get("dialogue_log_entry") if br.get("fired") else None
-    br_action = br.get("action") if br.get("fired") else ""
+    _fired = br.get("reactions")
+    if _fired is None:  # legacy single-entry shape
+        _fired = ([{"name": br.get("name"), "dialogue_log_entry": br["dialogue_log_entry"],
+                    "action": br.get("action", "")}]
+                  if br.get("fired") and br.get("dialogue_log_entry") else [])
+    else:
+        _fired = [r for r in _fired if isinstance(r, dict) and r.get("dialogue_log_entry")]
+    br_entries = [r["dialogue_log_entry"] for r in _fired]
 
     raw_dlog = list(res.get("dialogue_log") or [])
-    if br_entry:
-        raw_dlog.append(br_entry)
+    raw_dlog.extend(br_entries)
     enriched_dlog = []
     for d in raw_dlog:
         speaker = d.get("speaker", "?")
@@ -408,8 +413,8 @@ def perception_outcome(ctx, nonce):
                 and d.get("visibility") != "concealed"]
 
     sources = [{"name": p_name, "room": p_room}]
-    if br_entry:
-        sources.append({"name": br_entry.get("speaker"), "room": cast_room(sc, br_entry.get("speaker"), ctx.cast)})
+    for _e in br_entries:
+        sources.append({"name": _e.get("speaker"), "room": cast_room(sc, _e.get("speaker"), ctx.cast)})
     concealed = []
     for a in (interp.get("actions") or
               ([interp["action"]] if interp.get("action") else [])):
@@ -499,8 +504,9 @@ def perception_outcome(ctx, nonce):
         })
 
     resolved_event_text = res.get("resolved_event", "")
-    if br_action:
-        resolved_event_text = f"{resolved_event_text} {br.get('name')}: {br_action}".strip()
+    _br_actions = [f"{r.get('name')}: {r['action']}" for r in _fired if r.get("action")]
+    if _br_actions:
+        resolved_event_text = (resolved_event_text + " " + "; ".join(_br_actions)).strip()
 
     payload = {
         "resolved_event": resolved_event_text,
