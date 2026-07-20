@@ -51,6 +51,7 @@ static/                 browser UI
 tests/                  invariant and regression tests
 docs/                   practical architecture documentation
 tools/                  maintenance scripts
+archive/                inactive historical files retained for reference
 ```
 
 ## Dependency notes

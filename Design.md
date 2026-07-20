@@ -1007,7 +1007,7 @@ The following capabilities are present end to end in the supplied implementation
 - Pipeline completion invariant.
 - Multiple attached player personas per chat with independent per-turn input collection.
 - Parallel narrator/narrator_extra rendering so every connected player, not only the primary player, receives a player-facing render each turn.
-- Remote guest joining via host secret bootstrap, single-use join codes, and scoped guest tokens, gated by deny-by-default API access control.
+- Remote guest joining via host username/password login sessions, single-use join codes, and scoped guest tokens, gated by deny-by-default API access control.
 
 ### Character simulation
 
@@ -1295,7 +1295,6 @@ Schema v14 partitions world entities and conditions by `(chat_id, id)`, and runt
 
 `guest_access.py` and `app.py`'s `access_control` middleware closed the two largest holes: there is no wildcard CORS (the app is same-origin only), every `/api/*` request now requires a valid host or guest credential (deny-by-default), and provider API keys are never re-transmitted to the frontend. Remaining risks include:
 
-- The host secret is bootstrapped through a URL query parameter and printed to the server console rather than delivered through a dedicated out-of-band channel.
 - A guest credential is scoped to two endpoints, but an authenticated host request still has unrestricted access to every management API — there is no per-operation authorization for destructive actions.
 - No request-size limits.
 - Imported archives are not validated before being trusted.
@@ -1425,13 +1424,12 @@ Suggested simulation levels:
 
 ### Priority 10 — deployment security
 
-Credential removal from bootstrap responses, authentication (host secret plus guest join codes and tokens), and CORS restriction have shipped (`guest_access.py`, `app.py`'s `access_control`). Remaining:
+Credential removal from bootstrap responses, authentication (host username/password login plus guest join codes and tokens), and CORS restriction have shipped (`guest_access.py`, `app.py`'s `access_control`). Remaining:
 
 - Add request-size limits.
 - Validate imported archives.
 - Add authorization for destructive operations — today an authenticated host request can reach every management API without further checks.
 - Document local-only and network deployment modes.
-- Deliver the host secret through a channel other than a URL query parameter logged to the console.
 
 ## Required invariant test suite
 

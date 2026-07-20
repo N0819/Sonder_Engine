@@ -285,6 +285,19 @@ CREATE TABLE IF NOT EXISTS guest_grants(
 CREATE INDEX IF NOT EXISTS idx_guest_grants_chat
     ON guest_grants(chat_id);
 
+-- Host login sessions for the username+password host account. Only the
+-- SHA-256 hash of each session token is stored (same rationale as
+-- guest_grants: a readable engine.db must never yield a working
+-- credential). Rows past `expires` are simply ignored on lookup.
+CREATE TABLE IF NOT EXISTS host_sessions(
+    id INTEGER PRIMARY KEY,
+    token_hash TEXT NOT NULL,
+    created REAL NOT NULL,
+    expires REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_host_sessions_token
+    ON host_sessions(token_hash);
+
 -- A frame is a contiguous run of turns declared to occur at one diegetic
 -- era, distinct from play order (turns.idx). NULL frame_id (on turns and
 -- memories) means "the present" -- the chat's original, implicit era --

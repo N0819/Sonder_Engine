@@ -1,7 +1,7 @@
 import contextvars, json, queue, time, threading, os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Body, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, RedirectResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 import guest_access as guest
@@ -72,28 +72,25 @@ from scene import persona_of, get_scene
 def _startup_engine():
     db.init()
     port = os.environ.get("FICTION_ENGINE_PORT", "8008")
-    # The plaintext secret only exists at mint time (it is stored hashed),
-    # so the authorize URL can be printed once -- when first minted, or when
-    # explicitly re-minted via FICTION_ENGINE_RESET_HOST for a host who lost
-    # the link or cleared cookies.
+    # FICTION_ENGINE_RESET_HOST is the forgot-password escape hatch: wipe
+    # the account (and every session) so /login shows first-run setup again.
     if os.environ.get("FICTION_ENGINE_RESET_HOST"):
-        secret = guest.reset_host_secret()
-    else:
-        secret = guest.ensure_host_secret()
-    if secret:
+        guest.reset_host_account()
+    if not guest.host_account_exists():
         print(
             "\n"
-            "Fiction Engine: open this URL once per browser to authorize it "
-            "as the host (bookmark it -- you only need this the first time):\n"
-            f"  http://127.0.0.1:{port}/?host={secret}\n",
+            "Fiction Engine: no host account yet. Open "
+            f"http://127.0.0.1:{port}/login to create your username and "
+            "password (first run only).\n",
             flush=True,
         )
     else:
         print(
             "\n"
-            "Fiction Engine: host already authorized on this machine. If you "
-            "cleared cookies or lost the link, restart once with "
-            "FICTION_ENGINE_RESET_HOST=1 to mint a new authorize URL.\n",
+            "Fiction Engine: host account configured. Sign in at "
+            f"http://127.0.0.1:{port}/login . If the password was lost, "
+            "restart once with FICTION_ENGINE_RESET_HOST=1 to wipe the "
+            "account and set it up again.\n",
             flush=True,
         )
 
@@ -110,16 +107,20 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ---- Host/guest access control ----
 # See guest_access.py's module docstring for the full security rationale.
-# Every /api/* request must carry either a valid host cookie (bootstrapped
-# once via the URL printed at startup) or a valid guest cookie (issued by
-# redeeming a join code); anything else is rejected. This closes the
-# "any webpage you visit can blindly POST to 127.0.0.1:8008" hole, not
-# just the guest-classification one -- SameSite=Strict on the host cookie
-# is what actually stops a forged cross-site request, not any inspection
-# of where the request appears to come from.
+# Every /api/* request must carry either a valid host session cookie
+# (issued by /api/auth/setup or /api/auth/login) or a valid guest cookie
+# (issued by redeeming a join code); anything else is rejected. This
+# closes the "any webpage you visit can blindly POST to 127.0.0.1:8008"
+# hole, not just the guest-classification one -- SameSite=Strict on the
+# host cookie is what actually stops a forged cross-site request, not any
+# inspection of where the request appears to come from.
 HOST_COOKIE = "fe_host"
 GUEST_COOKIE = "fe_guest"
-PUBLIC_API_PATHS = {"/api/join"}
+HOST_COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # matches guest.HOST_SESSION_TTL
+PUBLIC_API_PATHS = {
+    "/api/join", "/api/auth/status", "/api/auth/setup",
+    "/api/auth/login", "/api/auth/logout",
+}
 GUEST_ALLOWED_API_PATHS = {"/api/guest/state", "/api/guest/input"}
 
 @app.get("/guest")
@@ -131,15 +132,65 @@ def guest_page():
     return FileResponse("static/guest.html")
 
 @app.get("/")
-def index(request: Request, host: str | None = None):
-    if host and guest.verify_host_secret(host):
-        response = RedirectResponse(url="/")
-        response.set_cookie(
-            HOST_COOKIE, host, httponly=True, samesite="strict",
-            max_age=60 * 60 * 24 * 365,
-        )
-        return response
+def index():
     return FileResponse("static/index.html")
+
+@app.get("/login")
+def login_page():
+    # Standalone page like /guest: handles both first-run account setup
+    # and sign-in, then redirects into the SPA once a session cookie is set.
+    return FileResponse("static/login.html")
+
+def _set_host_cookie(response: JSONResponse, token: str) -> JSONResponse:
+    response.set_cookie(
+        HOST_COOKIE, token, httponly=True, samesite="strict",
+        max_age=HOST_COOKIE_MAX_AGE,
+    )
+    return response
+
+@app.get("/api/auth/status")
+def auth_status(request: Request):
+    return {
+        "setup_required": not guest.host_account_exists(),
+        "authenticated": guest.verify_host_session(
+            request.cookies.get(HOST_COOKIE)
+        ),
+    }
+
+@app.post("/api/auth/setup")
+def auth_setup(username: str = Body(""), password: str = Body("")):
+    if guest.host_account_exists():
+        return JSONResponse({"detail": "Account already exists"}, status_code=409)
+    if not username.strip():
+        return JSONResponse({"detail": "Username is required"}, status_code=400)
+    if not password:
+        return JSONResponse({"detail": "Password is required"}, status_code=400)
+    token = guest.create_host_account(username, password)
+    if token is None:
+        return JSONResponse({"detail": "Account already exists"}, status_code=409)
+    return _set_host_cookie(JSONResponse({"ok": True}), token)
+
+@app.post("/api/auth/login")
+def auth_login(username: str = Body(""), password: str = Body("")):
+    if guest.login_rate_limited():
+        return JSONResponse(
+            {"detail": "Too many attempts, wait a minute"}, status_code=429
+        )
+    # Generic failure detail: don't reveal whether the username or the
+    # password was the wrong half.
+    if not guest.verify_host_login(username, password):
+        return JSONResponse(
+            {"detail": "Invalid username or password"}, status_code=401
+        )
+    token = guest.create_host_session()
+    return _set_host_cookie(JSONResponse({"ok": True}), token)
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request):
+    guest.destroy_host_session(request.cookies.get(HOST_COOKIE))
+    response = JSONResponse({"ok": True})
+    response.delete_cookie(HOST_COOKIE)
+    return response
 
 @app.middleware("http")
 async def access_control(request: Request, call_next):
@@ -149,7 +200,7 @@ async def access_control(request: Request, call_next):
     if path in PUBLIC_API_PATHS:
         return await call_next(request)
 
-    if guest.verify_host_secret(request.cookies.get(HOST_COOKIE)):
+    if guest.verify_host_session(request.cookies.get(HOST_COOKIE)):
         request.state.actor = "host"
         return await call_next(request)
 
