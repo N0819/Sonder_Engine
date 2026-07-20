@@ -7,5 +7,6 @@
 - [`CODE_MAP.md`](CODE_MAP.md): generated structural index.
 - [`ARCHITECTURE_AUDIT_2026-07-19.md`](ARCHITECTURE_AUDIT_2026-07-19.md): system audit, applied corrections, premise gaps, and prioritized roadmap.
 - [`../Design.md`](../Design.md): full product philosophy, current architecture, weaknesses, and roadmap.
+- [`../Research.md`](../Research.md): sourcing of ideas and concepts used.
 
 `CODE_MAP.md` is generated. The other documents are curated and should explain intent rather than mirror every function.
