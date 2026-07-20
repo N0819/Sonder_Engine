@@ -1,8 +1,8 @@
 """Regression tests for the host/guest access-control middleware in
 app.py: every /api/* request must carry a valid host or guest cookie
-(except the public /api/join), and a guest cookie must only unlock the
-narrow guest-scoped endpoint allowlist -- everything else 403s even with
-a valid guest session."""
+(except the public /api/join and /api/auth/* endpoints), and a guest
+cookie must only unlock the narrow guest-scoped endpoint allowlist --
+everything else 403s even with a valid guest session."""
 
 from __future__ import annotations
 
@@ -19,17 +19,21 @@ import guest_access as guest
 @pytest.fixture
 def client(temp_db):
     guest._join_attempts.clear()
+    guest._login_attempts.clear()
     with TestClient(app_module.app) as c:
         yield c
     guest._join_attempts.clear()
+    guest._login_attempts.clear()
 
 
 def _host_client(client):
-    # TestClient startup may already have minted the one-time bootstrap
-    # secret. Reset explicitly so this helper owns the plaintext it uses.
-    secret = guest.reset_host_secret()
-    r = client.get(f"/?host={secret}")
-    assert r.status_code in (200, 307, 302)
+    # Start from a clean slate so this helper owns the account it creates;
+    # the setup response sets the fe_host session cookie on the client.
+    guest.reset_host_account()
+    r = client.post(
+        "/api/auth/setup", json={"username": "host", "password": "pw12345"}
+    )
+    assert r.status_code == 200
     return client
 
 
@@ -66,12 +70,18 @@ class TestUnauthenticatedRequests:
 
 
 class TestHostAccess:
-    def test_wrong_host_secret_does_not_authenticate(self, client):
-        r = client.get("/?host=not-the-real-secret")
+    def test_wrong_login_does_not_authenticate(self, client):
+        guest.reset_host_account()
+        guest.create_host_account("host", "pw12345")
+        r = client.post(
+            "/api/auth/login",
+            json={"username": "host", "password": "not-the-real-password"},
+        )
+        assert r.status_code == 401
         assert "fe_host" not in r.cookies
         assert client.get("/api/bootstrap").status_code == 401
 
-    def test_correct_host_secret_grants_full_api_access(self, client, temp_db):
+    def test_correct_login_grants_full_api_access(self, client, temp_db):
         _host_client(client)
         assert client.get("/api/bootstrap").status_code == 200
 

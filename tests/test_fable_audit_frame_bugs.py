@@ -56,11 +56,13 @@ def client(temp_db):
 
 
 def _host_client(client):
-    # TestClient startup may already have minted the one-time bootstrap
-    # secret. Reset explicitly so this helper owns the plaintext it uses.
-    secret = guest.reset_host_secret()
-    r = client.get(f"/?host={secret}")
-    assert r.status_code in (200, 307, 302)
+    # Start from a clean slate so this helper owns the account it creates;
+    # the setup response sets the fe_host session cookie on the client.
+    guest.reset_host_account()
+    r = client.post(
+        "/api/auth/setup", json={"username": "host", "password": "pw12345"}
+    )
+    assert r.status_code == 200
     return client
 
 
