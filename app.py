@@ -458,6 +458,25 @@ def _remap_fixed_points_frames(world, frame_idmap):
         remapped.append(nfp)
     world["fixed_points"] = remapped
 
+def _remap_scheduled_event_frames(rows, frame_idmap):
+    """scheduled_events payloads carry an integer frame_id (which frame's
+    simulation clock the event is due against -- see commit.py's
+    commit_transit_sweep). Like fixed_points above, the generic world-id
+    remap only touches STRING ids, so a cloned/imported chat's pending
+    events would otherwise stay scoped to the SOURCE chat's frame ids and
+    never fire. Remap in place (None/present stays present; an uncloned
+    frame collapses to present rather than dangling)."""
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        try:
+            payload = json.loads(row.get("payload") or "{}")
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(payload, dict) and payload.get("frame_id") is not None:
+            payload["frame_id"] = frame_idmap.get(payload.get("frame_id"))
+            row["payload"] = json.dumps(payload, ensure_ascii=False)
+
 def _build_world_id_remap(blob):
     """Generate fresh IDs for all world entities/conditions/events/worlds/locations
     in a checkpoint blob. Returns a mapping of old_id -> new_id."""
@@ -2602,6 +2621,7 @@ def chat_import(body: dict = Body(...)):
         for ent in world_tables["world_entities"]:
             ent["created_turn_id"] = turn_id_map.get(ent.get("created_turn_id"))
             ent["retired_turn_id"] = turn_id_map.get(ent.get("retired_turn_id"))
+        _remap_scheduled_event_frames(world_tables["scheduled_events"], frame_idmap)
         insert_world_tables(new_chat_id, world_tables)
 
         # Multiplayer roster + pre-submitted co-player inputs + lore link
@@ -3123,6 +3143,7 @@ def turn_branch(tid: int):
         for ent in world_tables["world_entities"]:
             ent["created_turn_id"] = idmap.get(ent.get("created_turn_id"))
             ent["retired_turn_id"] = idmap.get(ent.get("retired_turn_id"))
+        _remap_scheduled_event_frames(world_tables["scheduled_events"], frame_idmap)
         insert_world_tables(ncid, world_tables)
 
         # Clone the multiplayer roster + any pre-submitted co-player inputs

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 
 from character_schema import (
     character_abilities,
@@ -13,7 +14,7 @@ from character_schema import (
     persona_name,
     persona_public_history,
 )
-from db import wget
+from db import get_setting, wget
 from memory import lorebook_manifest
 from paradox import paradox_visible_to
 from prompts import get_prompt
@@ -31,8 +32,9 @@ from scene import (
     sheet_state,
     simulation_clock,
 )
+from providers import Aborted
 from schemas import validate_llm_output
-from spatial import room_of, spatial_rel
+from spatial import _merge_room, room_of, spatial_rel
 
 from .common import (
     _agent_json,
@@ -48,6 +50,7 @@ from .common import (
     assign_event_ids,
     canonicalize_positions,
     character_room,
+    character_scene_keys,
     lore_for,
     norm_sequence,
     normalize_character_refs,
@@ -181,6 +184,10 @@ def director_interpret(ctx, nonce):
         "world_books": world_books,
         "standing_intentions": raw_intents[:12],
         "pending": wget(chat["id"], "pending", []),
+        # Mechanical notices from the previous commit's transit sweep (e.g.
+        # a timed arrival that completed) -- facts the engine already made
+        # true, for the director to acknowledge rather than re-invent.
+        "engine_notices": wget(chat["id"], "engine_notices", []),
         "player_raw_input": ctx.input,
         # Idle attached players (connected, but declared nothing this beat)
         # are deliberately excluded here -- there's nothing to interpret
@@ -383,28 +390,75 @@ def director_interpret(ctx, nonce):
 
     return out
 
-# Deterministic, WARN-ONLY backstop for the director_resolve prompt's own
-# CONDITIONS instruction (see prompts.py), which live play showed can go
-# unheeded for a physically consequential state -- a character held at
-# gunpoint narrated in resolved_event/dialogue_log but never written to
-# state_diff.conditions. This intentionally never synthesizes a condition:
-# a wrongly invented restraint tag lingering on a character sheet is worse
-# than a stale missing one, so it only ever appends to ctx.warnings. Keep
-# the keyword list small and specific so it does not fire on ordinary
-# descriptive prose.
+# ---------------------------------------------------------------------------
+# Resolve reconciliation: one general seam catching the recurring failure
+# class where director_resolve's resolved_event PROSE asserts a persistent,
+# physically consequential change (doors sealed, a passage collapsed, an
+# object destroyed, someone restrained) that its structured state_diff
+# OMITS -- so commit applies stale objective truth and perception, which
+# renders from structured truth rather than prose, contradicts the story
+# on the very next turn (live instance: an elevator narrated as sealed and
+# descending while the room diff was a blank placeholder, leaving the
+# doors objectively "held open" onto the smoke-filled corridor).
+#
+# Shape of the mechanism, deliberately NOT keyword/verb recognition of
+# world events (an unwinnable enumeration treadmill). Three tiers, all
+# DETECTION deterministic on the common path (no per-beat LLM call):
+#   Tier 0 (deterministic, every beat, zero cost):
+#     - blank all-empty placeholder diff entries are pure noise
+#       masquerading as a handled change; strip and flag them in code;
+#     - the legacy restraint/duress scan (folded in; used to be warn-only
+#       and one-off);
+#     - PLAYER-CLAIM COVERAGE: every asserted scope='effect' authority
+#       claim with a resolvable subject must be encoded somewhere in the
+#       diff -- structure minted by director_interpret in a DIFFERENT
+#       call, so a resolve-side encoding drop is caught with no same-call
+#       self-consistency bias. Null-subject claims degrade to a metadata
+#       note, never a warning. The claim_dispositions contract (asserted
+#       claims are never rejected/failed) is cross-checked too.
+#   Tier 1 (near-zero cost, same call): director_resolve's own
+#     changes_asserted manifest -- persistent changes its prose asserts,
+#     beyond the player's claims -- checked against the diff with
+#     CATEGORY-AWARE evidence classes (an 'adjacency' change needs an
+#     adjacency-affecting entry, not merely the subject's name somewhere:
+#     the partial-encoding trap that let the elevator through) and
+#     ALIAS-AWARE subjects (name/uid/alias via character_scene_keys and
+#     entity aliases).
+#   Tier 2 (LLM, omission path only): bounded self-repair BY THE DIRECTOR
+#     ITSELF (never an external critic writing state): one re-invocation
+#     with the specific detected omissions called out, returning a
+#     correction delta merged ADDITIVELY over the original diff and
+#     re-checked deterministically. Disposition authority is tiered:
+#     player-claim omissions are NON-REJECTABLE (honored only when
+#     post-merge evidence actually exists) and always warn while
+#     unencoded; structural signals warn if unrepaired; manifest
+#     (emergent) omissions may be rejected by the owner. Anything still
+#     unencoded falls back to ctx.warnings -- this engine never
+#     fabricates objective state from a heuristic, because a wrongly
+#     invented fact lingering is worse than a stale missing one.
+# The standalone resolve_reconcile deep audit is retained behind the
+# default-off 'resolve_deep_audit' setting ('1'/'always' = every physical
+# beat; 'tripwire' = only when the silent-false-negative tripwire fires:
+# successful dice or asserted effect-claims alongside an EMPTY manifest
+# and an empty physical diff).
+# ---------------------------------------------------------------------------
+
+# Keep the keyword list small and specific so it does not fire on ordinary
+# descriptive prose. This is a legacy high-precision detector for one known
+# failure (a character held at gunpoint narrated but never written to
+# state_diff.conditions); the general omission audit above it is what covers
+# the open-ended class.
 _RESTRAINT_KEYWORDS = (
     "held at", "pinned", "rifle to", "gunpoint", "restrained", "hostage",
     "grappled",
 )
 
-def _scan_for_untracked_restraint(resolved_event, dialogue_log, conditions,
-                                   tracked_names):
-    """Return warning strings for named, tracked characters whose mention
-    co-occurs with a restraint/duress keyword in resolved_event or a
-    dialogue_log exact_quote, but who have no matching state_diff.conditions
-    entry (matched by subject_id, casefolded). Factored out of
-    director_resolve so it can be exercised directly in isolation.
-    """
+def _untracked_restraint_subjects(resolved_event, dialogue_log, conditions,
+                                  tracked_names):
+    """Named, tracked characters whose mention co-occurs with a restraint/
+    duress keyword in resolved_event or a dialogue_log exact_quote, but who
+    have no matching state_diff.conditions entry (matched by subject_id,
+    casefolded). Sorted for deterministic output."""
     text_units = [str(resolved_event or "")]
     for entry in (dialogue_log or []):
         if isinstance(entry, dict):
@@ -412,11 +466,13 @@ def _scan_for_untracked_restraint(resolved_event, dialogue_log, conditions,
             if quote:
                 text_units.append(str(quote))
 
-    tracked_condition_subjects = {
-        str(c.get("subject_id") or "").casefold()
-        for c in (conditions or {}).values()
-        if isinstance(c, dict)
-    }
+    tracked_condition_subjects = set()
+    for cond_value in (conditions or {}).values():
+        cond_list = cond_value if isinstance(cond_value, list) else [cond_value]
+        for c in cond_list:
+            if isinstance(c, dict):
+                tracked_condition_subjects.add(
+                    str(c.get("subject_id") or "").casefold())
 
     flagged_names = set()
     for text in text_units:
@@ -427,16 +483,715 @@ def _scan_for_untracked_restraint(resolved_event, dialogue_log, conditions,
             if name and name.casefold() in lower:
                 flagged_names.add(name)
 
-    warnings = []
-    for name in sorted(flagged_names):
-        if name.casefold() not in tracked_condition_subjects:
-            warnings.append(
-                f"Possible untracked physical restraint/duress detected for "
-                f"{name!r} (restraint/duress keyword found alongside their "
-                "name in resolved_event or dialogue) but no matching "
-                "state_diff.conditions entry was recorded this beat."
+    return [name for name in sorted(flagged_names)
+            if name.casefold() not in tracked_condition_subjects]
+
+def _scan_for_untracked_restraint(resolved_event, dialogue_log, conditions,
+                                   tracked_names):
+    """Return warning strings for the subjects _untracked_restraint_subjects
+    flags. Kept as a stable, directly-testable entry point; director_resolve
+    now routes these through the reconciliation seam (which may repair the
+    diff first) and emits this exact text only for what remains unencoded.
+    """
+    return [
+        f"Possible untracked physical restraint/duress detected for "
+        f"{name!r} (restraint/duress keyword found alongside their "
+        "name in resolved_event or dialogue) but no matching "
+        "state_diff.conditions entry was recorded this beat."
+        for name in _untracked_restraint_subjects(
+            resolved_event, dialogue_log, conditions, tracked_names)
+    ]
+
+def _normalize_diff_shape(sd):
+    """Coerce a state_diff (from the main resolve output or a repair delta)
+    to the canonical container shapes every downstream reader assumes.
+    Safety net for the LLM returning a string/list where an object belongs."""
+    if not isinstance(sd, dict):
+        sd = {}
+    for k in ("positions", "rooms", "entities", "overlays", "attire",
+              "conditions"):
+        if not isinstance(sd.get(k), dict):
+            sd[k] = {}
+    for k in ("cast_changes", "world_facts", "introductions",
+              "remove_entities", "remove_rooms", "remove_adjacent",
+              "inventory_ops", "claim_dispositions"):
+        if not isinstance(sd.get(k), list):
+            sd[k] = []
+    sd.setdefault("time", None)
+    return sd
+
+def _is_blank_placeholder(entry):
+    """True when a diff entry encodes nothing at all -- every field an empty
+    string/list/dict or zero (e.g. {"name":"","desc":"","adjacent":[],
+    "notes":""}, observed live as an elevator room's entire 'change'). Such
+    an entry commits as if the change were handled while changing nothing:
+    pure noise, and a cheap deterministic divergence signal."""
+    if not isinstance(entry, dict):
+        return False
+    for value in entry.values():
+        if isinstance(value, (dict, list)):
+            if value:
+                return False
+        elif isinstance(value, bool):
+            if value:
+                return False
+        elif isinstance(value, (int, float)):
+            if value:
+                return False
+        elif str(value or "").strip():
+            return False
+    return True
+
+def _strip_blank_diff_placeholders(sd):
+    """Remove empty-placeholder entries from the diff's keyed containers and
+    return one structural divergence signal per stripped key. Runs on both
+    the original diff and any repair delta (a repair may not reintroduce
+    noise). conditions values are lists of condition dicts; a key whose list
+    is empty or all-blank is the same noise in that shape."""
+    signals = []
+
+    def flag(category, subject, field):
+        signals.append({
+            "category": category, "subject": str(subject),
+            "change": (f"state_diff.{field}[{subject!r}] was an empty "
+                       "placeholder encoding no change at all"),
+            "evidence": "", "source": "structural",
+        })
+
+    for field, category in (("rooms", "rooms"), ("entities", "entities"),
+                            ("attire", "attire")):
+        table = sd.get(field)
+        if not isinstance(table, dict):
+            continue
+        for key in [k for k, v in table.items() if _is_blank_placeholder(v)]:
+            table.pop(key)
+            flag(category, key, field)
+
+    conditions = sd.get("conditions")
+    if isinstance(conditions, dict):
+        for key in list(conditions.keys()):
+            value = conditions[key]
+            entries = value if isinstance(value, list) else [value]
+            if all(_is_blank_placeholder(e) or e is None for e in entries):
+                conditions.pop(key)
+                flag("conditions", key, "conditions")
+
+    positions = sd.get("positions")
+    if isinstance(positions, dict):
+        for key in [k for k, v in positions.items()
+                    if not str(v or "").strip()]:
+            positions.pop(key)
+            flag("positions", key, "positions")
+
+    return signals
+
+def _diff_is_substantive(sd):
+    """True when the diff asserts any physical change at all (post-strip)."""
+    for key in ("rooms", "entities", "conditions", "attire", "overlays",
+                "positions", "remove_entities", "remove_rooms",
+                "remove_adjacent", "inventory_ops", "cast_changes"):
+        if sd.get(key):
+            return True
+    return False
+
+def _beat_has_physical_activity(interp, char_actions, dice):
+    """Deterministic gate input: did anyone attempt a physical act this
+    beat? Structural only (sequence element types, movement, dice) -- no
+    prose keyword matching."""
+    mv = interp.get("movement")
+    if isinstance(mv, dict) and mv.get("to_room"):
+        return True
+    if dice or char_actions:
+        return True
+    sequences = [interp.get("sequence") or []]
+    for entry in (interp.get("other_players") or {}).values():
+        if isinstance(entry, dict):
+            sequences.append(entry.get("sequence") or [])
+    for seq in sequences:
+        for e in seq:
+            if isinstance(e, dict) and e.get("type") == "action" \
+                    and e.get("attempt"):
+                return True
+    return False
+
+def _reconcile_scene_slice(sc, cast, p_room, sd):
+    """Compact prior-scene payload for the audit/repair calls: occupied and
+    diff-touched rooms plus immediate neighbors (same trimming rationale as
+    _contextual_rooms everywhere else), full positions/entities."""
+    extra = [p_room] + list((sd.get("rooms") or {}).keys())
+    return {
+        "rooms": _contextual_rooms(sc, cast, *extra),
+        "positions": sc.get("positions") or {},
+        "entities": sc.get("entities") or {},
+    }
+
+def _merge_repair_into_diff(sd, patch):
+    """Additively merge the Director's correction delta into the original
+    state_diff. Conservative contract: a repair may ADD or refine encodings
+    but can never silently delete what the original diff already asserted.
+    Rooms merge edge-aware (spatial._merge_room, upsert by 'to'); the other
+    keyed containers upsert per key, except positions which are add-only --
+    the original diff's positions include the deterministically validated
+    player move (passable-route check) and must stand. List categories
+    union with dedup; time fills only if the original had none."""
+    for room_id, incoming in (patch.get("rooms") or {}).items():
+        if not isinstance(incoming, dict):
+            continue
+        existing = sd["rooms"].get(room_id)
+        sd["rooms"][room_id] = (
+            _merge_room(existing, incoming)
+            if isinstance(existing, dict) else incoming
+        )
+    for field in ("entities", "attire", "overlays"):
+        for key, incoming in (patch.get(field) or {}).items():
+            sd[field][key] = incoming
+    for key, incoming in (patch.get("conditions") or {}).items():
+        incoming_list = incoming if isinstance(incoming, list) else [incoming]
+        incoming_list = [c for c in incoming_list if isinstance(c, dict)]
+        existing = sd["conditions"].get(key)
+        if isinstance(existing, list):
+            existing.extend(c for c in incoming_list if c not in existing)
+        else:
+            sd["conditions"][key] = incoming_list
+    for key, room in (patch.get("positions") or {}).items():
+        sd["positions"].setdefault(key, room)
+    for field in ("remove_entities", "remove_rooms", "remove_adjacent",
+                  "inventory_ops", "cast_changes", "world_facts",
+                  "introductions"):
+        for item in (patch.get(field) or []):
+            if item not in sd[field]:
+                sd[field].append(item)
+    if sd.get("time") is None and patch.get("time") is not None:
+        sd["time"] = patch["time"]
+    return sd
+
+def _norm_subject(value):
+    return re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
+
+def _subject_match_forms(subject, cast, sc):
+    """Every identity form an omission subject may legitimately appear under
+    in the diff: the subject itself, plus -- when it names a registered cast
+    member -- all of that character's scene keys (name/uid/aliases via
+    character_scene_keys), plus -- when it names a known scene entity -- that
+    entity's id, name, and aliases. Closes the aliasing hole where a repair
+    encodes under 'tenth_doctor' what the manifest called 'The Doctor'."""
+    subject = str(subject or "").strip()
+    forms = {subject} if subject else set()
+    subject_cf = subject.casefold()
+    if not subject_cf:
+        return []
+    for row in cast or []:
+        try:
+            keys = character_scene_keys(json.loads(row["sheet"]))
+        except Exception:
+            continue
+        if subject_cf in {k.casefold() for k in keys}:
+            forms.update(keys)
+    for eid, ent in ((sc or {}).get("entities") or {}).items():
+        if not isinstance(ent, dict):
+            continue
+        names = {str(eid)} | {str(ent.get("name") or "")} \
+            | {str(a) for a in (ent.get("aliases") or [])}
+        names = {n for n in names if n.strip()}
+        if subject_cf in {n.casefold() for n in names}:
+            forms.update(names)
+    return [f for f in forms if f.strip()]
+
+def _make_subject_hit(subject, forms=None):
+    """A predicate testing whether a diff value references the subject under
+    any of its identity forms (normalized, substring-tolerant so 'elevator'
+    matches 'elevator_interior' -- but only for forms long enough not to
+    false-match short generic fragments like 'hall' in 'smokehallway')."""
+    targets = {_norm_subject(f) for f in ([subject] + list(forms or []))}
+    targets = {t for t in targets if t}
+
+    def hits(value):
+        norm = _norm_subject(value)
+        if not norm:
+            return False
+        for target in targets:
+            if norm == target:
+                return True
+            shorter, longer = sorted((norm, target), key=len)
+            if len(shorter) >= 5 and shorter in longer:
+                return True
+        return False
+
+    return hits if targets else (lambda value: False)
+
+def _omission_subject_encoded(sd, subject, forms=None):
+    """Deterministic containment check: does ANY diff field reference this
+    subject (under any identity form)? Intentionally shallow -- it verifies
+    the diff addressed the subject at all, not that the encoding is
+    semantically right; the Director owns the semantics. Category-agnostic
+    fallback; _evidence_present is the category-aware form."""
+    hits = _make_subject_hit(subject, forms)
+
+    for field in ("rooms", "entities", "attire", "positions"):
+        for key, value in (sd.get(field) or {}).items():
+            if hits(key):
+                return True
+            if isinstance(value, dict) and hits(value.get("name")):
+                return True
+    for cond_value in (sd.get("conditions") or {}).values():
+        cond_list = cond_value if isinstance(cond_value, list) else [cond_value]
+        for c in cond_list:
+            if isinstance(c, dict) and (hits(c.get("subject_id"))
+                                        or hits(c.get("condition_id"))):
+                return True
+    for item in (sd.get("remove_entities") or []) + (sd.get("remove_rooms") or []):
+        if hits(item):
+            return True
+    for edge in (sd.get("remove_adjacent") or []):
+        if isinstance(edge, dict) and (hits(edge.get("room"))
+                                       or hits(edge.get("to"))):
+            return True
+    for chg in (sd.get("cast_changes") or []):
+        if isinstance(chg, dict) and hits(chg.get("who")):
+            return True
+    for op in (sd.get("inventory_ops") or []):
+        if isinstance(op, dict) and (hits(op.get("object_id"))
+                                     or hits(op.get("from_id"))
+                                     or hits(op.get("to_id"))):
+            return True
+    return False
+
+# Category synonyms a model may plausibly write in a manifest entry, folded
+# onto the canonical evidence-class names.
+_OMISSION_CATEGORY_ALIASES = {
+    "room": "rooms", "location": "rooms",
+    "adjacent": "adjacency", "door": "adjacency", "passage": "adjacency",
+    "barrier": "adjacency",
+    "position": "positions", "movement": "positions",
+    "entity": "entities", "object": "entities",
+    "condition": "conditions", "status_effect": "conditions",
+    "clothing": "attire", "outfit": "attire",
+    "item": "inventory", "inventory_ops": "inventory",
+    "cast": "cast_changes", "arrival": "cast_changes",
+    "departure": "cast_changes",
+    "vehicle": "transit", "portal": "transit", "link": "transit",
+}
+
+def _normalize_omission_category(category):
+    cat = str(category or "").strip().casefold()
+    return _OMISSION_CATEGORY_ALIASES.get(cat, cat) or "other"
+
+def _entity_state_has_transit(entity_def):
+    state = entity_def.get("state") if isinstance(entity_def, dict) else None
+    return isinstance(state, dict) and ("transit" in state or "link" in state)
+
+def _evidence_present(sd, omission, forms=None):
+    """CATEGORY-AWARE evidence check: is the omission's subject touched in
+    the RIGHT dimension of the diff, not merely mentioned somewhere? This is
+    what closes the partial-encoding trap -- a room whose desc was updated
+    but whose narrated adjacency change was dropped passes bare containment
+    yet fails the 'adjacency' evidence class. Unknown/other categories fall
+    back to the shallow containment check."""
+    category = _normalize_omission_category(omission.get("category"))
+    subject = omission.get("subject")
+    hits = _make_subject_hit(subject, forms)
+
+    def room_hit_with_adjacency():
+        for key, rd in (sd.get("rooms") or {}).items():
+            if (hits(key) or (isinstance(rd, dict) and hits(rd.get("name")))) \
+                    and isinstance(rd, dict) and rd.get("adjacent"):
+                return True
+        return False
+
+    def removal_edge_hit():
+        for edge in (sd.get("remove_adjacent") or []):
+            if isinstance(edge, dict) and (hits(edge.get("room"))
+                                           or hits(edge.get("to"))):
+                return True
+        return False
+
+    def entity_transit_hit():
+        for eid, ed in (sd.get("entities") or {}).items():
+            named = hits(eid) or (isinstance(ed, dict) and (
+                hits(ed.get("name"))
+                or any(hits(a) for a in (ed.get("aliases") or []))))
+            if named and _entity_state_has_transit(ed):
+                return True
+        return False
+
+    if category == "time":
+        return sd.get("time") is not None
+    if category in ("adjacency", "transit"):
+        if room_hit_with_adjacency() or removal_edge_hit() \
+                or entity_transit_hit():
+            return True
+        if category == "transit":
+            # An arrival encodes as the entity's own position change.
+            return any(hits(k) for k in (sd.get("positions") or {}))
+        return False
+    if category == "rooms":
+        for key, rd in (sd.get("rooms") or {}).items():
+            if hits(key) or (isinstance(rd, dict) and hits(rd.get("name"))):
+                return True
+        return any(hits(r) for r in (sd.get("remove_rooms") or []))
+    if category == "positions":
+        if any(hits(k) for k in (sd.get("positions") or {})):
+            return True
+        return any(isinstance(c, dict) and hits(c.get("who"))
+                   for c in (sd.get("cast_changes") or []))
+    if category == "entities":
+        for eid, ed in (sd.get("entities") or {}).items():
+            if hits(eid) or (isinstance(ed, dict) and (
+                    hits(ed.get("name"))
+                    or any(hits(a) for a in (ed.get("aliases") or [])))):
+                return True
+        return any(hits(e) for e in (sd.get("remove_entities") or []))
+    if category == "conditions":
+        # Any conditions entry for the subject counts, INCLUDING an ending
+        # one (active:0 / expires_at set) -- 'the fire burns out' is encoded
+        # by expiry, not by neglect.
+        for key, cond_value in (sd.get("conditions") or {}).items():
+            cond_list = cond_value if isinstance(cond_value, list) else [cond_value]
+            if hits(key):
+                return True
+            for c in cond_list:
+                if isinstance(c, dict) and (hits(c.get("subject_id"))
+                                            or hits(c.get("condition_id"))):
+                    return True
+        return False
+    if category == "attire":
+        return any(hits(k) for k in (sd.get("attire") or {}))
+    if category == "inventory":
+        return any(
+            isinstance(op, dict) and (hits(op.get("object_id"))
+                                      or hits(op.get("from_id"))
+                                      or hits(op.get("to_id")))
+            for op in (sd.get("inventory_ops") or [])
+        )
+    if category == "cast_changes":
+        if any(isinstance(c, dict) and hits(c.get("who"))
+               for c in (sd.get("cast_changes") or [])):
+            return True
+        return any(hits(k) for k in (sd.get("positions") or {}))
+    return _omission_subject_encoded(sd, subject, forms)
+
+# At most one deep audit + one self-repair per director_resolve execution.
+# A rerun of the stage naturally re-runs the seam once -- there is no
+# cross-turn or cross-variant accumulation to double-charge.
+_RECONCILE_MAX_MANIFEST_ITEMS = 8
+_RECONCILE_MAX_AUDIT_OMISSIONS = 6
+_RECONCILE_MIN_CONFIDENCE = 0.4
+
+def _deep_audit_mode():
+    """The default-off standalone resolve_reconcile audit: 'off' (default),
+    'always' (every physical beat -- the pre-manifest behavior, kept as a
+    belt-and-suspenders option), or 'tripwire' (only when the silent-false-
+    negative tripwire fires)."""
+    value = str(get_setting("resolve_deep_audit") or "").strip().casefold()
+    if value in ("1", "always", "on", "true"):
+        return "always"
+    if value == "tripwire":
+        return "tripwire"
+    return "off"
+
+def _manifest_items(out):
+    """director_resolve's own changes_asserted manifest, normalized to the
+    seam's omission shape (source 'manifest')."""
+    items = []
+    raw = out.get("changes_asserted")
+    for item in (raw if isinstance(raw, list) else []):
+        if not isinstance(item, dict):
+            continue
+        change = str(item.get("change") or "").strip()
+        if not change:
+            continue
+        items.append({
+            "category": _normalize_omission_category(item.get("category")),
+            "subject": str(item.get("subject") or "").strip(),
+            "change": change, "evidence": "", "source": "manifest",
+        })
+    return items[:_RECONCILE_MAX_MANIFEST_ITEMS]
+
+def _player_claim_findings(out, sd, interp, cast, sc):
+    """Tier 0 player-authority coverage: every asserted scope='effect'
+    authority claim with a resolvable subject must be encoded SOMEWHERE in
+    the diff (shallow containment -- the claim's free-text predicate cannot
+    be mapped to one category deterministically). Returns (omissions,
+    notes, contract_warnings): null-subject claims become metadata notes
+    only; an asserted claim the resolve marked rejected/failed is a player-
+    authority contract violation surfaced as a deterministic warning."""
+    omissions, notes, contract_warnings = [], [], []
+    claims = _dict_list(_dict(interp.get("flow")).get("authority_claims"))
+    if not claims:
+        return omissions, notes, contract_warnings
+
+    statuses = {}
+    for d in _dict_list(out.get("claim_dispositions")) + \
+            _dict_list(sd.get("claim_dispositions")):
+        cid = str(d.get("claim_id") or "")
+        if cid:
+            statuses[cid] = str(d.get("status") or "").strip().casefold()
+
+    for claim in claims:
+        if str(claim.get("scope") or "") != "effect":
+            continue  # contestable intents are the director's to resolve
+        status = statuses.get(str(claim.get("claim_id") or ""), "")
+        if status in ("rejected", "failed"):
+            contract_warnings.append(
+                "PLAYER AUTHORITY: asserted claim "
+                f"{claim.get('claim_id')!r} ({claim.get('predicate')!r} on "
+                f"{claim.get('subject_id')!r}) was marked {status!r} -- "
+                "asserted effects occur as declared and may not be rejected."
             )
-    return warnings
+        subject = str(claim.get("subject_id") or "").strip()
+        if not subject:
+            notes.append({
+                "claim_id": claim.get("claim_id"),
+                "predicate": claim.get("predicate"),
+                "note": "no resolvable subject; coverage not checkable",
+            })
+            continue
+        forms = _subject_match_forms(subject, cast, sc)
+        if not _omission_subject_encoded(sd, subject, forms):
+            omissions.append({
+                "category": "other", "subject": subject,
+                "change": (f"player-asserted completed effect "
+                           f"{str(claim.get('predicate') or '')!r} on "
+                           f"{subject}"),
+                "evidence": str(claim.get("source_text") or ""),
+                "source": "player_claim", "_forms": forms,
+            })
+    return omissions, notes, contract_warnings
+
+def _deep_audit_omissions(ctx, out, sd, scene_slice, dlog_compact,
+                          tracked_names, recon):
+    """The retained standalone audit call (default off; see
+    _deep_audit_mode). Emits omissions with source 'audit'."""
+    try:
+        audit = _agent_json(
+            "director", "resolve_reconcile",
+            get_prompt("resolve_reconcile"),
+            {
+                "resolved_event": out.get("resolved_event", ""),
+                "dialogue_log": dlog_compact,
+                "state_diff": sd,
+                "prior_scene": scene_slice,
+                "cast_names": tracked_names,
+            },
+            temperature=0.0, max_tokens=8000,
+        )
+    except Aborted:
+        raise
+    except Exception as exc:
+        ctx.add_warning(f"Resolve reconciliation audit failed: {exc}")
+        return []
+    audit_omissions = []
+    raw_omissions = audit.get("omissions")
+    for om in (raw_omissions if isinstance(raw_omissions, list) else []):
+        if not isinstance(om, dict) or not str(om.get("change") or "").strip():
+            continue
+        try:
+            confidence = float(om.get("confidence", 0.5))
+        except (TypeError, ValueError):
+            confidence = 0.5
+        entry = {
+            "category": _normalize_omission_category(om.get("category")),
+            "subject": str(om.get("subject") or ""),
+            "change": str(om.get("change") or ""),
+            "evidence": str(om.get("evidence") or ""),
+            "confidence": confidence,
+            "source": "audit",
+        }
+        if confidence < _RECONCILE_MIN_CONFIDENCE:
+            # Low-confidence critic guesses are recorded for inspection but
+            # never drive a repair or a warning -- the conservative floor.
+            recon.setdefault("low_confidence", []).append(entry)
+            continue
+        audit_omissions.append(entry)
+    return audit_omissions[:_RECONCILE_MAX_AUDIT_OMISSIONS]
+
+def _public_omission(omission):
+    return {k: v for k, v in omission.items() if not k.startswith("_")}
+
+def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
+                          tracked_names):
+    """The resolve-reconciliation seam (see the block comment above).
+    Mutates out['state_diff'] in place (strip + merged repair delta only),
+    records inspection metadata on out['reconciliation'], and appends to
+    ctx.warnings for anything that remains unencoded. resolved_event and
+    dialogue_log are never modified -- the prose is the account being
+    reconciled against, not the thing under repair."""
+    sd = _normalize_diff_shape(out.get("state_diff"))
+    out["state_diff"] = sd
+    resolved_event = out.get("resolved_event", "")
+    dialogue_log = out.get("dialogue_log") or []
+
+    # ---- Tier 0: deterministic floor -------------------------------------
+    signals = _strip_blank_diff_placeholders(sd)
+    for name in _untracked_restraint_subjects(
+            resolved_event, dialogue_log, sd.get("conditions") or {},
+            tracked_names):
+        signals.append({
+            "category": "conditions", "subject": name,
+            "change": (f"{name} is under physical restraint/duress in the "
+                       "prose but has no state_diff.conditions entry"),
+            "evidence": "", "source": "restraint_scan",
+        })
+
+    claim_omissions, claim_notes, contract_warnings = _player_claim_findings(
+        out, sd, interp, ctx.cast, sc)
+    for warning in contract_warnings:
+        ctx.add_warning(warning)
+
+    # ---- Tier 1: the same-call manifest, checked deterministically -------
+    manifest = _manifest_items(out)
+    manifest_omissions = []
+    for item in manifest:
+        forms = _subject_match_forms(item["subject"], ctx.cast, sc)
+        if not _evidence_present(sd, item, forms):
+            manifest_omissions.append({**item, "_forms": forms})
+
+    recon = {
+        "signals": [dict(s) for s in signals],
+        "manifest": [dict(m) for m in manifest],
+        "claim_notes": claim_notes,
+        "audited": False, "tripwire": False,
+        "omissions": [], "repaired": False,
+        "dispositions": [], "unresolved": [],
+    }
+    out["reconciliation"] = recon
+
+    # Silent-false-negative tripwire: the beat provably did something
+    # physical (successful dice, asserted effect-claims) yet the manifest
+    # AND every physical diff category are empty. Metadata always; a deep
+    # audit only when the operator opted in.
+    claims = _dict_list(_dict(interp.get("flow")).get("authority_claims"))
+    provably_physical = any(
+        str(d.get("outcome") or "") == "success" for d in (dice or [])
+    ) or any(str(c.get("scope") or "") == "effect" for c in claims)
+    if provably_physical and not manifest and not _diff_is_substantive(sd):
+        recon["tripwire"] = True
+
+    deep_mode = _deep_audit_mode()
+    run_deep = (
+        deep_mode == "always"
+        and (bool(signals) or _diff_is_substantive(sd)
+             or _beat_has_physical_activity(interp, char_actions, dice))
+    ) or (deep_mode == "tripwire" and recon["tripwire"])
+
+    scene_slice = None
+    dlog_compact = [
+        {"speaker": d.get("speaker"), "exact_quote": d.get("exact_quote")}
+        for d in dialogue_log[:20] if isinstance(d, dict)
+    ]
+    audit_omissions = []
+    if run_deep:
+        recon["audited"] = True
+        scene_slice = _reconcile_scene_slice(
+            sc, ctx.cast, ctx.get("_player_room"), sd)
+        audit_omissions = _deep_audit_omissions(
+            ctx, out, sd, scene_slice, dlog_compact, tracked_names, recon)
+
+    omissions = signals + claim_omissions + manifest_omissions + audit_omissions
+    recon["omissions"] = [_public_omission(o) for o in omissions]
+    if not omissions:
+        return
+
+    # ---- Tier 2: bounded self-repair (the only common-path LLM spend,
+    # and only on a real detected gap). One shot. -------------------------
+    if scene_slice is None:
+        scene_slice = _reconcile_scene_slice(
+            sc, ctx.cast, ctx.get("_player_room"), sd)
+    dispositions = []
+    try:
+        repair = _agent_json(
+            "director", "resolve_repair",
+            get_prompt("resolve_repair"),
+            {
+                "resolved_event": resolved_event,
+                "dialogue_log": dlog_compact,
+                "previous_state_diff": sd,
+                "detected_omissions": [
+                    {k: o.get(k) for k in ("category", "subject", "change",
+                                           "evidence", "source")}
+                    for o in omissions
+                ],
+                "non_rejectable_subjects": sorted({
+                    o["subject"] for o in omissions
+                    if o.get("source") == "player_claim" and o.get("subject")
+                }),
+                "prior_scene": scene_slice,
+                "cast_names": tracked_names,
+            },
+            temperature=0.0,
+        )
+    except Aborted:
+        raise
+    except Exception as exc:
+        ctx.add_warning(f"Resolve reconciliation repair failed: {exc}")
+        repair = None
+
+    if isinstance(repair, dict):
+        patch = _normalize_diff_shape(repair.get("state_diff"))
+        # A repair may not reintroduce the very noise this seam strips.
+        _strip_blank_diff_placeholders(patch)
+        patch["positions"] = canonicalize_positions(
+            patch.get("positions") or {}, ctx.cast)
+        _merge_repair_into_diff(sd, patch)
+        dispositions = [d for d in (repair.get("dispositions") or [])
+                        if isinstance(d, dict)]
+        recon["repaired"] = True
+        recon["dispositions"] = dispositions
+
+    disp_by_subject = {
+        _norm_subject(d.get("subject")): str(d.get("status") or "").casefold()
+        for d in dispositions
+    }
+
+    for om in omissions:
+        source = om.get("source")
+        if source == "restraint_scan":
+            continue  # re-checked precisely below, with the legacy wording
+        forms = om.get("_forms") or _subject_match_forms(
+            om.get("subject"), ctx.cast, sc)
+        if source == "player_claim":
+            encoded = _omission_subject_encoded(sd, om.get("subject"), forms)
+        else:
+            encoded = _evidence_present(sd, om, forms)
+        if encoded:
+            continue
+        status = disp_by_subject.get(_norm_subject(om.get("subject")), "")
+        if source == "player_claim":
+            # NON-REJECTABLE: the player authority contract makes the effect
+            # true; a disposition cannot argue it away -- only actual
+            # post-merge evidence silences this warning.
+            recon["unresolved"].append(
+                {**_public_omission(om), "disposition": status or "none"})
+            ctx.add_warning(
+                "PLAYER AUTHORITY: "
+                f"{om.get('change')} is not encoded in state_diff even "
+                "after self-repair; objective state contradicts the "
+                "player's asserted effect."
+            )
+            continue
+        if source in ("manifest", "audit") and status in ("rejected",
+                                                          "already_encoded"):
+            # The owner overruled an emergent detection; conservatism says
+            # believe the rejection rather than warn on a model-vs-model
+            # disagreement.
+            recon["unresolved"].append(
+                {**_public_omission(om), "disposition": status})
+            continue
+        recon["unresolved"].append(
+            {**_public_omission(om), "disposition": status or "none"})
+        ctx.add_warning(
+            "Resolve reconciliation: prose asserts "
+            f"{om.get('change')!r} (subject {om.get('subject')!r}) but "
+            "state_diff still does not encode it after self-repair; "
+            "objective state may be stale."
+        )
+
+    # Restraint detector re-run against the FINAL merged diff: silent when
+    # the repair encoded the condition, the exact legacy warning otherwise.
+    for restraint_warning in _scan_for_untracked_restraint(
+            resolved_event, dialogue_log, sd.get("conditions") or {},
+            tracked_names):
+        ctx.add_warning(restraint_warning)
 
 def director_resolve(ctx, nonce):
     chat = ctx.chat
@@ -608,6 +1363,9 @@ def director_resolve(ctx, nonce):
         "dialogue_mode": bool(flow.get("dialogue_mode", False)),
         "relevant_lore": lore_for(ctx),
         "standing_intentions": raw_intents[:12],
+        # See director_interpret: already-completed mechanical transitions
+        # (timed arrivals) the prose should acknowledge, not re-resolve.
+        "engine_notices": wget(chat["id"], "engine_notices", []),
         "interaction_rounds": loop.get("rounds") or [],
         "reaction_rounds": (ctx.reaction_loop or {}).get("rounds") or [],
         "variant_seed": nonce,
@@ -627,25 +1385,12 @@ def director_resolve(ctx, nonce):
     out, warnings = validate_llm_output("director_resolve", out)
     ctx.warnings.extend(warnings)
 
-    sd = out.get("state_diff") or {}
-    # Safety check: LLM sometimes returns a string instead of an object
-    if not isinstance(sd, dict):
-        sd = {}
-        out["state_diff"] = sd
-        
-    for k in ("positions", "rooms", "entities", "overlays", "attire", "conditions"):
-        if not isinstance(sd.get(k), dict):
-            sd[k] = {}
+    # Safety net: LLM sometimes returns a string/list where an object belongs.
+    sd = _normalize_diff_shape(out.get("state_diff"))
     # Same canonicalization as director_establish: fold any uid/normalized-name
     # position key for a cast member onto the registered name before it reaches
     # perception's mid-turn merge or the commit boundary.
     sd["positions"] = canonicalize_positions(sd["positions"], ctx.cast)
-    for k in ("cast_changes", "world_facts", "introductions",
-              "remove_entities", "remove_rooms", "remove_adjacent",
-              "inventory_ops", "claim_dispositions"):
-        if not isinstance(sd.get(k), list):
-            sd[k] = []
-    sd.setdefault("time", None)
     out["state_diff"] = sd
     out["dice"] = dice if isinstance(dice, list) else []
 
@@ -678,14 +1423,34 @@ def director_resolve(ctx, nonce):
         known_rooms = dict(sc.get("rooms") or {})
         known_rooms.update(sd["rooms"])
         prev_room = room_of(sc, p_name)
-        blocked = False
+        blocked = contested = False
         if prev_room and mv["to_room"] != prev_room:
             rel = spatial_rel({"rooms": known_rooms}, prev_room, mv["to_room"])
             blocked = rel.get("barrier") in ("wall", "separated", "unknown")
+            # known_rooms already carries this beat's diff, so a door the
+            # resolve opened this beat reads open_door here. Still-closed
+            # means the move is CONTESTED: crossing requires an action
+            # whose outcome the resolve owns.
+            contested = rel.get("barrier") == "closed_door"
         if blocked:
             ctx.warnings.append(
                 f"Blocked movement: no passable route from '{prev_room}' to "
                 f"'{mv['to_room']}' (barrier={rel.get('barrier')}); position unchanged."
+            )
+            # The resolve LLM may itself have asserted the impossible move;
+            # a blocked route must strip it, not just warn.
+            if sd["positions"].get(p_name) == mv["to_room"]:
+                sd["positions"].pop(p_name)
+        elif contested and sd["positions"].get(p_name) != mv["to_room"]:
+            # Don't force interpret's declared intent through a door that is
+            # still closed after this beat's diff -- observed live as the
+            # narration describing a bump against a sealed door while the
+            # committed position walked through it. The resolve diff owns
+            # contested outcomes; without its assertion, no move.
+            ctx.warnings.append(
+                f"Contested movement: barrier closed_door from '{prev_room}' "
+                f"to '{mv['to_room']}' not opened this beat and the resolve "
+                "diff did not assert the move; position unchanged."
             )
         else:
             sd["positions"][p_name] = mv["to_room"]
@@ -833,10 +1598,12 @@ def director_resolve(ctx, nonce):
     tracked_names = [
         character_name(json.loads(c["sheet"])) for c in ctx.cast
     ] + [p_name]
-    for restraint_warning in _scan_for_untracked_restraint(
-        out.get("resolved_event", ""), out["dialogue_log"],
-        sd.get("conditions") or {}, tracked_names,
-    ):
-        ctx.add_warning(restraint_warning)
+
+    # One general prose-vs-diff reconciliation pass (subsumes the old
+    # warn-only restraint backstop): deterministic placeholder floor,
+    # gated omission audit, bounded Director self-repair, warnings for
+    # whatever remains unencoded. See the seam's block comment above.
+    _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
+                          tracked_names)
 
     return out

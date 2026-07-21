@@ -414,6 +414,212 @@ def _merge_room(existing: dict, incoming: dict) -> dict:
 
     return merged_room
 
+# ---------------------------------------------------------------------------
+# Moving rooms / transit: derived dock edges.
+#
+# The interior<->exterior doorway of a parent_entity-linked room (an elevator
+# car, a ship cabin, a carried container) is NOT a static fact: it is derived
+# from where the entity currently IS (its exterior position) and its transit
+# state (docked/sealed/in transit, hatch open/closed). Storing it as an
+# ordinary adjacency edge -- which the establish/mapping prompts historically
+# forced at creation -- meant nothing ever updated the edge when the entity
+# moved or sealed, leaving a stale portal to the departure room (live
+# instance: an elevator narrated as sealed and descending whose room kept an
+# open_door edge onto the smoke-filled hallway it left). These functions
+# recompute that doorway deterministically from the entity's own structured
+# state, joining the infer_vehicle_zones/infer_companion_carry family of
+# mechanical follow-throughs: the model authors WHAT the entity is doing
+# (state.transit / state.link, its position); code derives the adjacency.
+#
+# Pure function of the scene, idempotent, run from merge_scene_with_diff so
+# every consumer (commit preparation, mid-turn perception merges) sees the
+# same derived edges without any reader changes.
+# ---------------------------------------------------------------------------
+
+# Phases during which an entity's interior has NO doorway to the outside
+# world (beyond an optional route_room -- the shaft/ocean/sky it moves
+# through). "arriving" keeps the hatch shut against the destination until
+# the director docks it.
+_TRANSIT_CLOSED_PHASES = {"sealed", "in_transit"}
+
+def _transit_state(entity) -> Optional[dict]:
+    """entity.state.transit if present and well-formed:
+    {phase: docked|sealed|in_transit|arriving, hatch: open|closed|locked,
+     destination_room?, eta_seconds?, route_room?}."""
+    if not isinstance(entity, dict):
+        return None
+    state = entity.get("state")
+    transit = state.get("transit") if isinstance(state, dict) else None
+    return transit if isinstance(transit, dict) else None
+
+def _link_state(entity) -> Optional[dict]:
+    """entity.state.link if present and well-formed: a traversable link
+    (portal, gate, wormhole) {rooms: [a, b], phase: open|closed} that, when
+    open, derives an edge between two arbitrary rooms."""
+    if not isinstance(entity, dict):
+        return None
+    state = entity.get("state")
+    link = state.get("link") if isinstance(state, dict) else None
+    if not isinstance(link, dict):
+        return None
+    rooms = link.get("rooms")
+    if not isinstance(rooms, list) or len(rooms) != 2:
+        return None
+    return link
+
+def _entity_exterior_room(scene: dict, eid: str, entity: dict) -> Optional[str]:
+    """The room the entity itself currently occupies -- tolerating positions
+    keyed by entity id, display name, or an alias (the same read tolerance
+    merge_scene_with_diff's remove_entities path already applies)."""
+    positions = scene.get("positions") or {}
+    candidates = [eid]
+    if isinstance(entity, dict):
+        candidates.append(entity.get("name"))
+        candidates.extend(entity.get("aliases") or [])
+    for cand in candidates:
+        cand = str(cand or "").strip()
+        if cand and cand in positions:
+            return positions[cand]
+    return None
+
+def apply_transit_dock_edges(scene: dict) -> bool:
+    """Rewrite every parent_entity room's exterior adjacency to match
+    f(entity position, entity.state.transit), and every state.link entity's
+    derived portal edge to match its phase. Returns True when anything
+    changed. Idempotent; mutates `scene` in place.
+
+    Per entity with interior rooms:
+    - docked (or no transit state) + hatch open  -> edge to the entity's
+      exterior room, barrier open_door (an existing edge to that room keeps
+      its authored barrier/distance when no hatch state overrides it);
+    - docked + hatch closed/locked -> same edge, barrier closed_door;
+    - sealed / in_transit -> exterior edges severed (a closed_door edge to
+      transit.route_room only, when one is set -- the shaft/ocean/sky);
+    - arriving -> closed_door edge to transit.destination_room.
+
+    Which interior room carries the doorway is remembered via a `dock_exit`
+    marker stamped on any interior room seen with an exterior edge (rooms
+    carry arbitrary extra keys through merges untouched -- the zone-field
+    precedent), so sealing and later re-docking restores the door to the
+    same room. An entity's sole interior room is always the dock room.
+
+    Only the canonical FORWARD edge (interior -> exterior) is kept; stale
+    reverse edges from plain world rooms into the interior are stripped.
+    Rooms that are themselves another entity's interior are never stripped
+    -- a nested mover (a car on a ferry's vehicle deck) manages its own
+    dock edge through its own entity's rewrite, which is what makes the
+    model compose for nesting.
+    """
+    rooms = scene.get("rooms") or {}
+    entities = scene.get("entities") or {}
+    changed = False
+
+    interiors: dict[str, list] = {}
+    for rid, room in rooms.items():
+        if isinstance(room, dict) and room.get("parent_entity"):
+            interiors.setdefault(room["parent_entity"], []).append(rid)
+
+    for eid, ent in entities.items():
+        if not isinstance(ent, dict):
+            continue
+
+        # --- traversable links (portals): derived edge between two rooms ---
+        link = _link_state(ent)
+        if link:
+            a, b = (str(link["rooms"][0] or ""), str(link["rooms"][1] or ""))
+            is_open = str(link.get("phase") or "open").casefold() == "open"
+            for room in rooms.values():
+                if not isinstance(room, dict):
+                    continue
+                adjacency = room.get("adjacent") or []
+                kept = [e for e in adjacency
+                        if not (isinstance(e, dict) and e.get("via_link") == eid)]
+                if len(kept) != len(adjacency):
+                    room["adjacent"] = kept
+                    changed = True
+            if is_open and a in rooms and b in rooms and a != b:
+                rooms[a].setdefault("adjacent", []).append({
+                    "to": b, "barrier": "open_door",
+                    "distance": str(link.get("distance") or "near"),
+                    "via_link": eid,
+                })
+                changed = True
+
+        interior_ids = interiors.get(eid)
+        if not interior_ids:
+            continue
+        same = set(interior_ids)
+        transit = _transit_state(ent)
+        exterior = _entity_exterior_room(scene, eid, ent)
+
+        hatch = str((transit or {}).get("hatch") or "open").casefold()
+        phase = str((transit or {}).get("phase") or "docked").casefold()
+        # (target, barrier); barrier None = preserve whatever was authored.
+        if transit is None:
+            target, barrier = exterior, None
+        elif phase in _TRANSIT_CLOSED_PHASES:
+            target = str(transit.get("route_room") or "") or None
+            barrier = "closed_door"
+        elif phase == "arriving":
+            target = str(transit.get("destination_room") or "") or exterior
+            barrier = "closed_door"
+        else:  # docked, or an unrecognized phase read conservatively as docked
+            target = exterior
+            barrier = "closed_door" if hatch in ("closed", "locked") else "open_door"
+
+        # No authoritative exterior at all (entity has no recorded position)
+        # outside an explicitly closed phase: there is nothing to derive the
+        # doorway FROM, and severing on missing data would cut off a cabin
+        # whose authored edge is the only truth available. Leave it alone --
+        # only an explicit sealed/in_transit state severs without a target.
+        if target is None and phase not in _TRANSIT_CLOSED_PHASES:
+            continue
+
+        for rid in interior_ids:
+            room = rooms[rid]
+            adjacency = [e for e in (room.get("adjacent") or [])
+                         if isinstance(e, dict)]
+            interior_edges = [e for e in adjacency if e.get("to") in same]
+            exterior_edges = [e for e in adjacency if e.get("to") not in same]
+            if exterior_edges and not room.get("dock_exit"):
+                room["dock_exit"] = True
+                changed = True
+            is_dock = bool(exterior_edges) or bool(room.get("dock_exit")) \
+                or len(interior_ids) == 1
+            new_adjacency = list(interior_edges)
+            if is_dock and target:
+                prev = next((e for e in exterior_edges if e.get("to") == target),
+                            exterior_edges[0] if exterior_edges else None)
+                if barrier is None:
+                    resolved_barrier = normalize_barrier(
+                        (prev or {}).get("barrier") or "open_door")
+                else:
+                    resolved_barrier = barrier
+                new_adjacency.append({
+                    "to": target, "barrier": resolved_barrier,
+                    "distance": (prev or {}).get("distance") or "near",
+                })
+            if new_adjacency != adjacency:
+                room["adjacent"] = new_adjacency
+                changed = True
+
+        # Strip stale reverse edges from plain world rooms into this
+        # entity's interiors (the canonical edge is forward-only; spatial_rel
+        # and visible_adjacent_rooms both resolve either direction). Another
+        # entity's interior room is exempt -- see docstring (nesting).
+        for orid, oroom in rooms.items():
+            if orid in same or not isinstance(oroom, dict) \
+                    or oroom.get("parent_entity"):
+                continue
+            adjacency = oroom.get("adjacent") or []
+            kept = [e for e in adjacency
+                    if not (isinstance(e, dict) and e.get("to") in same)]
+            if len(kept) != len(adjacency):
+                oroom["adjacent"] = kept
+                changed = True
+
+    return changed
+
 def merge_scene_with_diff(
     scene: dict,
     diff: dict | None,
@@ -487,6 +693,13 @@ def merge_scene_with_diff(
         if room_id in occupied_rooms:
             continue
         merged["rooms"].pop(room_id, None)
+
+    # Derived dock/portal edges are a function of the merged scene, not an
+    # authored fact -- recompute them here so every consumer of a merge
+    # (commit preparation, perception's mid-turn merges) sees the same
+    # correct doorways. Runs before barrier normalization, which then
+    # canonicalizes whatever the rewrite emitted.
+    apply_transit_dock_edges(merged)
 
     normalize_scene_barriers(merged)
     return merged

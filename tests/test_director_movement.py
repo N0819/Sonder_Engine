@@ -41,10 +41,13 @@ def _make_ctx(temp_db, to_room):
                     "name": "Keeper's Room",
                     "adjacent": [
                         {"to": "lamp_room", "barrier": "open", "distance": "near"},
+                        {"to": "vault", "barrier": "closed_door",
+                         "distance": "near"},
                     ],
                 },
                 "lamp_room": {"name": "Lamp Room", "adjacent": []},
                 "cliff_path": {"name": "Cliff Path", "adjacent": []},
+                "vault": {"name": "Vault", "adjacent": []},
             },
             "positions": {"The Stranger": "keeper_room", "Mara": "lamp_room"},
             "entities": {},
@@ -101,6 +104,83 @@ def test_movement_into_adjacent_room_is_applied(temp_db, monkeypatch):
 
     assert out["state_diff"]["positions"]["The Stranger"] == "lamp_room"
     assert not ctx.warnings
+
+def test_blocked_movement_strips_llm_asserted_position(temp_db, monkeypatch):
+    """A blocked route must strip a position the resolve LLM itself wrongly
+    asserted, not just warn while the impossible move commits anyway."""
+    import agents.director as director
+
+    ctx = _make_ctx(temp_db, "cliff_path")
+    monkeypatch.setattr(
+        director, "_agent_json",
+        lambda *a, **k: {"state_diff": {
+            "positions": {"The Stranger": "cliff_path"}}},
+    )
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert "The Stranger" not in out["state_diff"]["positions"]
+    assert any("Blocked movement" in w for w in ctx.warnings)
+
+def test_movement_through_closed_door_is_contested_not_forced(
+    temp_db, monkeypatch,
+):
+    """closed_door means crossing requires an action whose outcome the
+    resolve owns. When the door stays closed this beat and the resolve diff
+    does not assert the move, interpret's declared intent must not be
+    force-committed through it (observed live: narration described bumping
+    into a sealed door while the committed position walked through)."""
+    import agents.director as director
+
+    ctx = _make_ctx(temp_db, "vault")
+    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert "The Stranger" not in out["state_diff"]["positions"]
+    assert any("Contested movement" in w for w in ctx.warnings)
+
+def test_movement_through_closed_door_honors_resolve_assertion(
+    temp_db, monkeypatch,
+):
+    """When the resolve diff itself asserts the move (the causality owner
+    decided the door was opened and crossed), the backstop lets it stand."""
+    import agents.director as director
+
+    ctx = _make_ctx(temp_db, "vault")
+    monkeypatch.setattr(
+        director, "_agent_json",
+        lambda *a, **k: {"state_diff": {"positions": {"The Stranger": "vault"}}},
+    )
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert out["state_diff"]["positions"]["The Stranger"] == "vault"
+
+def test_movement_through_door_opened_this_beat_is_applied(
+    temp_db, monkeypatch,
+):
+    """A door the resolve diff opens THIS beat reads open_door in the route
+    check (known_rooms carries the diff), so the ordinary 'I open the door
+    and walk through' flow is not contested."""
+    import agents.director as director
+
+    ctx = _make_ctx(temp_db, "vault")
+    monkeypatch.setattr(
+        director, "_agent_json",
+        lambda *a, **k: {"state_diff": {"rooms": {"keeper_room": {
+            "name": "Keeper's Room",
+            "adjacent": [
+                {"to": "lamp_room", "barrier": "open", "distance": "near"},
+                {"to": "vault", "barrier": "open_door", "distance": "near"},
+            ],
+        }}}},
+    )
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert out["state_diff"]["positions"]["The Stranger"] == "vault"
+    assert not [w for w in ctx.warnings if "movement" in w.casefold()]
 
 def test_resolve_player_room_prefers_canonical_position_over_declared_movement():
     """A declared `movement.to_room` is only a request for director_resolve

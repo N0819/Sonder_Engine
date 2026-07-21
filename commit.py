@@ -18,7 +18,8 @@ from prompts import get_prompt
 from character_schema import character_name, new_uid
 from frames import is_recognized_in_frame
 from scene import set_char_state, set_char_status
-from spatial import merge_scene_with_diff, spatial_rel, hear_level
+from spatial import (apply_transit_dock_edges, merge_scene_with_diff,
+                     spatial_rel, hear_level)
 from theory_of_mind import apply_mind_model_updates
 from paradox import check_and_apply_paradox
 from spatial_frames import detect_and_reconcile as detect_and_reconcile_spatial
@@ -118,6 +119,52 @@ def sync_anchored_books(cid, sc):
         except ValueError:
             pass
 
+def _guard_occupied_mover_removal(prev_scene, diff):
+    """Deterministic refusal: removing an entity whose parent_entity-linked
+    interior rooms still hold occupants, without the same beat repositioning
+    every occupant (state_diff.positions, to a room OUTSIDE the doomed
+    interior) or recording their departure (cast_changes), would leave
+    people positioned inside rooms of a container that no longer exists.
+    Raising here fails commit preparation, so the whole turn rolls back per
+    the existing atomicity contract -- the same conservatism as
+    merge_scene_with_diff's occupied-room removal refusal, made loud
+    because losing PEOPLE is worse than losing a room."""
+    removals = [str(e) for e in (diff.get("remove_entities") or []) if e]
+    if not removals:
+        return
+    rooms = prev_scene.get("rooms") or {}
+    positions = prev_scene.get("positions") or {}
+    diff_positions = {
+        str(k).casefold(): v for k, v in (diff.get("positions") or {}).items()
+    }
+    departed = {
+        str(c.get("who") or "").casefold()
+        for c in (diff.get("cast_changes") or []) if isinstance(c, dict)
+    }
+    for eid in removals:
+        interior = {rid for rid, r in rooms.items()
+                    if isinstance(r, dict) and r.get("parent_entity") == eid}
+        if not interior:
+            continue
+        stranded = []
+        for name, room in positions.items():
+            if room not in interior or str(name) == eid:
+                continue
+            cf = str(name).casefold()
+            new_room = diff_positions.get(cf)
+            if new_room is not None and new_room not in interior:
+                continue
+            if cf in departed:
+                continue
+            stranded.append(name)
+        if stranded:
+            raise RuntimeError(
+                f"remove_entities would strand occupant(s) {stranded!r} "
+                f"inside removed entity {eid!r}'s interior room(s); "
+                "reposition them via state_diff.positions or record their "
+                "departure in cast_changes in the same beat"
+            )
+
 def prepare_scene_commit(ctx):
     """Build the exact post-turn scene without mutating durable state.
 
@@ -131,6 +178,7 @@ def prepare_scene_commit(ctx):
     res = ctx.director_resolve or ctx.director_establish or {}
     diff = res.get("state_diff") or {}
     prev_scene = wget(cid, "scene", {}) or {}
+    _guard_occupied_mover_removal(prev_scene, diff)
     sc = merge_scene_with_diff(prev_scene, diff)
 
     staged = (
@@ -152,6 +200,49 @@ def prepare_scene_commit(ctx):
                     "notes": entry["content"][:500],
                 }
                 break
+
+    # Mapping's scene_patch is advisory -- the Director is expected to fold
+    # it into state_diff -- but models reliably echo room CREATIONS while
+    # dropping remove_rooms cleanup (observed live: mapping proposed
+    # remove_rooms for a duplicate room on two consecutive turns and the
+    # resolve diff carried neither, so the stray room persisted forever).
+    # Room removal is map curation, not causality, so the mapping agent's
+    # removals apply deterministically here -- conservatively: never a room
+    # this turn's diff (re)asserts, never an occupied room, never an entity
+    # interior, never a room any transit state still targets.
+    mapping_patch = ((ctx.mapping_stage or {}).get("scene_patch")
+                     or (ctx.mapping_quick or {}).get("scene_patch") or {})
+    proposed_removals = [str(r) for r in (mapping_patch.get("remove_rooms")
+                                          or []) if r]
+    if proposed_removals:
+        rooms = sc.get("rooms") or {}
+        protected = set((diff.get("rooms") or {}).keys())
+        protected.update(str(v) for v in (sc.get("positions") or {}).values())
+        if target_room:
+            protected.add(str(target_room))
+        for ent in (sc.get("entities") or {}).values():
+            if not isinstance(ent, dict):
+                continue
+            protected.update(str(r) for r in (ent.get("interior_rooms") or []))
+            state = ent.get("state")
+            transit = state.get("transit") if isinstance(state, dict) else None
+            if isinstance(transit, dict):
+                protected.add(str(transit.get("destination_room") or ""))
+                protected.add(str(transit.get("route_room") or ""))
+        removed = set()
+        for rid in proposed_removals:
+            room = rooms.get(rid)
+            if rid in protected or not isinstance(room, dict) \
+                    or room.get("parent_entity"):
+                continue
+            rooms.pop(rid)
+            removed.add(rid)
+        for room in rooms.values():
+            if removed and isinstance(room, dict) and room.get("adjacent"):
+                room["adjacent"] = [
+                    e for e in room["adjacent"]
+                    if not (isinstance(e, dict) and e.get("to") in removed)
+                ]
 
     for k, v in (diff.get("overlays") or {}).items():
         cur = sc.setdefault("overlays", {}).setdefault(k, [])
@@ -222,6 +313,137 @@ def commit_scene(ctx, nonce, *, prepared=None):
         wset(ctx.chat.id, "scene", sc)
         sync_anchored_books(ctx.chat.id, sc)
     return sc
+
+# ---- Transit sweep: timed arrivals, condition expiry, engine notices ----
+
+def commit_transit_sweep(ctx, nonce, *, prepared=None):
+    """Deterministic mechanical follow-through for moving rooms, run FIRST
+    among commit_all's domains -- it mutates the PREPARED scene, and
+    commit_scene (which runs after it) is what persists those effects.
+
+    1. Fire due scheduled 'transit_arrival' events for THIS frame. The
+       frame id rides in each event's payload: scheduled_events has no
+       frame column and simulation clocks are frame-scoped, so an event
+       minted in one frame must never fire against another frame's clock.
+       Firing = set the entity's position to the destination, phase to
+       docked, and stage a mechanical notice (world key 'engine_notices',
+       overwritten every sweep so notices self-expire after one beat) that
+       the next director turn acknowledges rather than re-invents.
+    2. Schedule new arrivals for any entity whose transit state carries
+       eta_seconds + destination_room and has no pending event yet, with a
+       deterministic event id so a rerun cannot double-schedule.
+    3. Deactivate expired world_conditions (expires_at <= this frame's
+       clock) -- reviving the dormant expires_at column so 'the fire burns
+       out' is encodable as expiry rather than neglect. world_conditions is
+       chat-scoped (no frame column); the committing frame's clock is used,
+       matching how started_at is written.
+
+    All writes run inside the caller's transaction (nested transaction() is
+    a savepoint), and checkpoint restore snapshots scheduled_events whole,
+    so a rerolled turn reproduces the exact pending/fired state.
+    """
+    cid = ctx.chat.id
+    frame_id = ctx.turn.frame_id
+    prepared = prepared or prepare_scene_commit(ctx)
+    sc = prepared["scene"]
+    clock = prepared.get("clock") or wget(cid, "simulation_clock", {}) or {}
+    elapsed = float(clock.get("elapsed_seconds") or 0.0)
+
+    notices = []
+    fired = scheduled = 0
+    entities = sc.get("entities") or {}
+    positions = sc.setdefault("positions", {})
+
+    with transaction():
+        pending_entity_ids = set()
+        for row in q(
+            "SELECT * FROM scheduled_events WHERE chat_id=? AND "
+            "status='pending' AND kind='transit_arrival' ORDER BY due_at",
+            (cid,),
+        ):
+            try:
+                payload = json.loads(row["payload"] or "{}")
+            except Exception:
+                payload = {}
+            eid = str(payload.get("entity_id") or "")
+            if payload.get("frame_id") != frame_id or row["due_at"] > elapsed:
+                pending_entity_ids.add(eid)
+                continue
+            ent = entities.get(eid)
+            state = ent.get("state") if isinstance(ent, dict) else None
+            transit = state.get("transit") if isinstance(state, dict) else None
+            if not isinstance(transit, dict) \
+                    or str(transit.get("phase") or "").casefold() == "docked":
+                # Entity gone, or the director already docked it by hand --
+                # the event is moot, not fireable.
+                qtx("UPDATE scheduled_events SET status='cancelled' "
+                    "WHERE event_id=?", (row["event_id"],))
+                continue
+            destination = str(payload.get("destination_room")
+                              or transit.get("destination_room") or "")
+            if destination:
+                positions[eid] = destination
+            transit["phase"] = "docked"
+            transit.pop("eta_seconds", None)
+            transit.pop("destination_room", None)
+            qtx("UPDATE scheduled_events SET status='fired' WHERE event_id=?",
+                (row["event_id"],))
+            fired += 1
+            label = (ent.get("name") if isinstance(ent, dict) else "") or eid
+            notices.append(
+                f"{label} has arrived at "
+                f"{destination or 'its destination'} and is docked there."
+            )
+
+        for eid, ent in entities.items():
+            if not isinstance(ent, dict):
+                continue
+            state = ent.get("state")
+            transit = state.get("transit") if isinstance(state, dict) else None
+            if not isinstance(transit, dict):
+                continue
+            try:
+                eta = float(transit.get("eta_seconds"))
+            except (TypeError, ValueError):
+                continue
+            destination = str(transit.get("destination_room") or "")
+            if eta <= 0 or not destination or str(eid) in pending_entity_ids:
+                continue
+            event_id = _stable_event_key(
+                "transit_arrival", cid, frame_id, eid, ctx.turn.id)
+            qtx(
+                "INSERT OR REPLACE INTO scheduled_events"
+                "(event_id,chat_id,due_at,kind,location_id,payload,seed,status)"
+                " VALUES(?,?,?,?,?,?,?,?)",
+                (event_id, cid, elapsed + eta, "transit_arrival",
+                 positions.get(eid),
+                 json.dumps({"entity_id": eid,
+                             "destination_room": destination,
+                             "frame_id": frame_id}, ensure_ascii=False),
+                 f"transit:{cid}:{ctx.turn.idx}", "pending"),
+            )
+            scheduled += 1
+
+        if fired:
+            # An arrival changed the inputs the dock-edge rewrite derives
+            # doorways from; recompute before commit_scene persists.
+            apply_transit_dock_edges(sc)
+
+        expired_row = q(
+            "SELECT COUNT(*) AS n FROM world_conditions WHERE chat_id=? AND "
+            "active=1 AND expires_at IS NOT NULL AND expires_at<=?",
+            (cid, elapsed), one=True,
+        )
+        expired = int(expired_row["n"] or 0) if expired_row else 0
+        if expired:
+            qtx("UPDATE world_conditions SET active=0 WHERE chat_id=? AND "
+                "active=1 AND expires_at IS NOT NULL AND expires_at<=?",
+                (cid, elapsed))
+
+        wset(cid, "engine_notices", notices)
+
+    return {"fired": fired, "scheduled": scheduled, "expired": expired,
+            "notices": notices}
 
 # ---- Cast changes ----
 
@@ -1423,6 +1645,13 @@ def _commit_all_locked(ctx, nonce):
 
     try:
         with transaction():
+            # Transit sweep first: it mutates the prepared scene (timed
+            # arrivals, engine notices) that the scene domain then persists.
+            _commit_domain(
+                ctx, results, "transit",
+                lambda: commit_transit_sweep(
+                    ctx, nonce, prepared=prepared["scene"]),
+            )
             _commit_domain(
                 ctx, results, "scene",
                 lambda: commit_scene(ctx, nonce, prepared=prepared["scene"]),

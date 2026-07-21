@@ -714,15 +714,51 @@ class StateDiff(BaseModel):
     time: Optional[dict] = None
     claim_dispositions: list[dict] = Field(default_factory=list)
 
+class AssertedChange(BaseModel):
+    """One entry of director_resolve's own changes-asserted manifest: a
+    persistent physical change its resolved_event asserts as completed,
+    beyond the player's supplied authority_claims. Reconciled against the
+    state_diff deterministically (see agents/director.py's seam)."""
+    category: str = "other"   # rooms|adjacency|positions|entities|conditions|attire|inventory|cast_changes|time|transit|other
+    subject: str = ""         # room id / entity id / character name concerned
+    change: str = ""          # one short sentence stating the persistent change
+
 class DirectorResolve(BaseModel):
     resolved_event: str = ""
     summary: str = ""
     dialogue_order: list[str] = Field(default_factory=list)
     dialogue_log: list[DialogueLogEntry] = Field(default_factory=list)
     state_diff: StateDiff = Field(default_factory=StateDiff)
+    changes_asserted: list[AssertedChange] = Field(default_factory=list)
     dice: list[dict] = Field(default_factory=list)
     claim_dispositions: list[dict] = Field(default_factory=list)
     fiction_frame: dict[str, Any] = Field(default_factory=dict)
+
+# ---- Resolve reconciliation (agents/director.py's post-resolve seam) ----
+
+class ReconcileOmission(BaseModel):
+    """One persistent, physically consequential change asserted as completed
+    in resolved_event prose but not encoded anywhere in the state_diff."""
+    category: str = "other"   # rooms|adjacency|positions|entities|conditions|attire|inventory|cast_changes|time|other
+    subject: str = ""         # room id / entity id / character name concerned
+    change: str = ""          # one short sentence stating the persistent change
+    evidence: str = ""        # short verbatim quote from resolved_event
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+
+    _clamp_confidence = validator("confidence", pre=True, allow_reuse=True)(
+        lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.5)
+    )
+
+class ResolveReconcileOutput(BaseModel):
+    omissions: list[ReconcileOmission] = Field(default_factory=list)
+    notes: str = ""
+
+class ResolveRepairOutput(BaseModel):
+    """The Director's own correction delta: a state_diff containing ONLY the
+    entries needed to encode the detected omissions (merged additively over
+    the original diff by deterministic code -- never applied wholesale)."""
+    state_diff: StateDiff = Field(default_factory=StateDiff)
+    dispositions: list[dict] = Field(default_factory=list)
 
 class NarratorOutput(BaseModel):
     prose: str = ""
@@ -934,6 +970,8 @@ SCHEMA_MAP = {
     "director_interpret": DirectorInterpret,
     "director_establish": DirectorEstablish,
     "director_resolve": DirectorResolve,
+    "resolve_reconcile": ResolveReconcileOutput,
+    "resolve_repair": ResolveRepairOutput,
     "narrator": NarratorOutput,
     "character": CharacterOutput,
     "mapping_stage": MappingStageOutput,
@@ -1133,9 +1171,9 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
                 if flat
             ]
 
-    if step_key in ("director_resolve", "director_establish"):
+    if step_key in ("director_resolve", "director_establish", "resolve_repair"):
         target = result
-        if step_key == "director_resolve":
+        if step_key in ("director_resolve", "resolve_repair"):
             state_diff = result.get("state_diff")
             target = state_diff if isinstance(state_diff, dict) else None
             if target is not None:
@@ -1397,6 +1435,10 @@ OUTPUT_EXAMPLES = {
             "time": None,
             "claim_dispositions": [],
         },
+        "changes_asserted": [
+            {"category": "adjacency", "subject": "vault_door",
+             "change": "The vault door is sealed shut."},
+        ],
         "dice": [],
         "fiction_frame": {},
     },
@@ -1480,6 +1522,38 @@ OUTPUT_EXAMPLES = {
         ],
         "player_room": "tavern",
         "notes": "",
+    },
+    "resolve_reconcile": {
+        "omissions": [
+            {"category": "adjacency",
+             "subject": "vault_door",
+             "change": "The vault door is now sealed shut.",
+             "evidence": "the vault door grinds shut and seals",
+             "confidence": 0.9},
+        ],
+        "notes": "",
+    },
+    "resolve_repair": {
+        "state_diff": {
+            "positions": {},
+            "rooms": {},
+            "entities": {},
+            "remove_entities": [],
+            "remove_rooms": [],
+            "remove_adjacent": [],
+            "conditions": {},
+            "inventory_ops": [],
+            "overlays": {},
+            "attire": {},
+            "cast_changes": [],
+            "world_facts": [],
+            "introductions": [],
+            "time": None,
+            "claim_dispositions": [],
+        },
+        "dispositions": [
+            {"subject": "vault_door", "status": "encoded", "reason": ""},
+        ],
     },
 }
 
