@@ -8,7 +8,7 @@ from memory import (
     add_memories_batch, prepare_memories_batch, delete_turn_memories, search_lore, add_lore,
     update_lore, LORE_CATEGORIES, LOREBOOK_TYPES,
     chat_lorebook_ids, chat_lorebook_weights, lorebook_manifest, dump_chat_memories,
-    add_lorebook_link,
+    add_lorebook_link, lorebook_descendants,
     restore_chat_memories, dump_lorebook, restore_lorebook,
     knowledge_for_character, get_relationships,
     save_relationships, update_relationships_from_inference,
@@ -19,7 +19,7 @@ from prompts import get_prompt
 from character_schema import character_name, new_uid
 from frames import is_recognized_in_frame
 from scene import set_char_state, set_char_status
-from mechanics import mechanics_sweep, stable_event_key
+from mechanics import mechanics_sweep, news_latency_seconds, stable_event_key
 from spatial import (merge_scene_with_diff,
                      normalize_room_id, spatial_rel, hear_level)
 from theory_of_mind import apply_mind_model_updates
@@ -180,12 +180,18 @@ def _guard_occupied_mover_removal(prev_scene, diff, doomed=None):
     because losing PEOPLE is worse than losing a room.
 
     `doomed` ({label: room_id set}) generalizes the guard to BOOK scope
-    for single-book destruction: every room registered to the destroyed
-    book is doomed alongside the entity's own interiors, and a stranded
-    occupant in ANY of them fails the whole commit -> rollback."""
+    for destruction: every room registered to a destroyed book is doomed
+    alongside the entity's own interiors, and a stranded occupant in ANY
+    of them fails the whole commit -> rollback. Since Phase 3b the doomed
+    set may span a whole multi-book cascade; an occupant that is ITSELF
+    being removed this beat (a doomed vehicle inside a doomed region) is
+    not stranded -- it ceases to exist with its container, and its own
+    interior rooms carry their own doom entry below, so the people inside
+    IT are still guarded."""
     removals = [str(e) for e in (diff.get("remove_entities") or []) if e]
     if not removals and not doomed:
         return
+    removal_set = set(removals)
     rooms = prev_scene.get("rooms") or {}
     positions = prev_scene.get("positions") or {}
     diff_positions = {
@@ -209,6 +215,8 @@ def _guard_occupied_mover_removal(prev_scene, diff, doomed=None):
         for name, room in positions.items():
             if room not in interior or str(name) == eid:
                 continue
+            if str(name) in removal_set:
+                continue  # removed/destroyed itself this beat (see above)
             cf = str(name).casefold()
             new_room = diff_positions.get(cf)
             if new_room is not None and new_room not in interior:
@@ -224,23 +232,27 @@ def _guard_occupied_mover_removal(prev_scene, diff, doomed=None):
                 "departure in cast_changes in the same beat"
             )
 
-# ---- Single-book destruction (Phase 2, item 4) ----
+# ---- Destruction: single-book (Phase 2) + multi-book cascades (3b) ----
 #
 # The DIRECTOR resolves the causal destructive event by declaring it in
 # state_diff.destruction (the revived DestructionEffect shape) -- code
 # never originates a destruction, it only realizes a declared one
-# deterministically: the target's ONE anchored/scoped book and its
-# registered rooms are retired (retire-not-delete: the ruin's history
-# stays retrievable), the live rooms drop through the ordinary diff
-# machinery, a stranded occupant fails the whole commit (guard above),
-# and awareness propagates only through latency-gated `news_arrival`
-# scheduled events that the mechanics sweep fires against the minting
-# frame's clock. Scope is a single vehicle or building; multi-book
-# cascades are Phase 3.
+# deterministically. scale 'vehicle'/'building' dooms the target's ONE
+# anchored/scoped book; scale 'region' (Phase 3b) dooms a multi-book
+# CASCADE enumerated from the lorebook tree (_destruction_cascade below).
+# Either way the doomed books and their registered rooms are retired
+# (retire-not-delete: the ruin's history stays retrievable), the live
+# rooms/entities drop through the ordinary diff machinery, a stranded
+# occupant ANYWHERE in the doomed set fails the whole commit (guard
+# above), and awareness propagates only through latency-gated
+# `news_arrival` scheduled events that the mechanics sweep fires against
+# the minting frame's clock -- latency declared by the Director, or
+# derived from the audience's distance in the book graph (near regions
+# hear sooner; mechanics.news_latency_seconds).
 
 def _destruction_book(cid, target):
-    """The ONE live book destruction of `target` retires: its anchored
-    vehicle book, else the book scoped to it as a location."""
+    """The live ROOT book destruction of `target` starts from: its
+    anchored vehicle book, else the book scoped to it as a location."""
     row = q(
         "SELECT id, name FROM lorebooks WHERE chat_id=? AND "
         "anchor_entity_id=? AND retired_turn_id IS NULL ORDER BY id LIMIT 1",
@@ -256,13 +268,158 @@ def _destruction_book(cid, target):
     )
 
 
+def _chat_book_graph(cid):
+    """This chat's whole lorebook graph in one read: rows by id,
+    undirected edges (parent_id containment + currently_within presence),
+    and the directed currently_within list (cascade enumeration needs the
+    direction; the news-distance walk does not). Pure reads -- runs in
+    commit preparation."""
+    books = {
+        row["id"]: dict(row)
+        for row in q(
+            "SELECT id, name, parent_id, anchor_entity_id, "
+            "scope_location_id, retired_turn_id FROM lorebooks "
+            "WHERE chat_id=?", (cid,))
+    }
+    edges = {bid: set() for bid in books}
+    for bid, row in books.items():
+        pid = row["parent_id"]
+        if pid in edges:
+            edges[bid].add(pid)
+            edges[pid].add(bid)
+    within = []
+    for link in q(
+        "SELECT source_book_id AS s, target_book_id AS t "
+        "FROM lorebook_links WHERE relation_type='currently_within' "
+        "ORDER BY id",
+    ):
+        if link["s"] in edges and link["t"] in edges:
+            edges[link["s"]].add(link["t"])
+            edges[link["t"]].add(link["s"])
+            within.append((link["s"], link["t"]))
+    return books, edges, within
+
+
+def _book_distances(root_id, edges):
+    """BFS hop distances from the destruction root over the undirected
+    book graph -- the deterministic 'how far away is that audience'
+    measure derived news latency uses (Phase 3b)."""
+    if root_id not in edges:
+        return {}
+    distances = {root_id: 0}
+    frontier = [root_id]
+    while frontier:
+        nxt = []
+        for bid in frontier:
+            for neighbor in sorted(edges[bid]):
+                if neighbor not in distances:
+                    distances[neighbor] = distances[bid] + 1
+                    nxt.append(neighbor)
+        frontier = nxt
+    return distances
+
+
+def _audience_book_id(audience, books):
+    """Deterministically match a declared news audience to a lorebook --
+    by name, scope_location_id, or anchor_entity_id, exact or slugified;
+    lowest book id wins. None when nothing matches (the caller falls back
+    to the flat unreachable-latency default)."""
+    keys = {audience.casefold(), normalize_room_id(audience)} - {""}
+    if not keys:
+        return None
+    for bid in sorted(books):
+        row = books[bid]
+        candidates = set()
+        for value in (row.get("name"), row.get("scope_location_id"),
+                      row.get("anchor_entity_id")):
+            value = str(value or "").strip()
+            if value:
+                candidates.add(value.casefold())
+                candidates.add(normalize_room_id(value))
+        if keys & candidates:
+            return bid
+    return None
+
+
+def _destruction_cascade(cid, root_book_id, prev_scene, books, within):
+    """Phase 3b: enumerate the multi-book cascade a region destruction
+    dooms -- a deterministic function of (committed state, declared root),
+    never model output. Two edge kinds, mirroring monitoring_subtree:
+
+    - parent_id descendants of the root (canonical containment): every
+      child book falls with its region, rooms or no rooms;
+    - inbound currently_within members (live presence), to a fixpoint,
+      but only when the member's anchor entity is PHYSICALLY positioned
+      inside an already-doomed room -- the ferry docked in the burning
+      harbor goes down with it (and the van aboard the ferry with the
+      ferry), while a ship whose stale link says 'within' but whose
+      anchor is not actually in a doomed room is spared.
+
+    Returns {"book_ids": sorted live cascaded books, "anchors": their
+    anchor entity ids, "registered": live registry room_uids owned by any
+    cascaded book (the whole registries -- rooms live only in a sibling
+    frame's scene included, because the books are gone everywhere)}."""
+    prev_rooms = prev_scene.get("rooms") or {}
+    positions = {
+        str(k): str(v)
+        for k, v in (prev_scene.get("positions") or {}).items()
+    }
+    rooms_by_book = {}
+    for row in q(
+        "SELECT room_uid, owning_book_id FROM room_registry "
+        "WHERE chat_id=? AND retired_turn_id IS NULL ORDER BY room_uid",
+        (cid,),
+    ):
+        rooms_by_book.setdefault(row["owning_book_id"], []).append(
+            row["room_uid"])
+
+    def subtree(book_id):
+        return {b for b in lorebook_descendants(book_id) if b in books}
+
+    cascade = subtree(root_book_id)
+    while True:
+        anchors = {books[b]["anchor_entity_id"] for b in cascade
+                   if books[b]["anchor_entity_id"]}
+        doomed_live = {
+            rid for b in cascade for rid in rooms_by_book.get(b, ())
+            if rid in prev_rooms
+        } | {
+            str(rid) for rid, room in prev_rooms.items()
+            if isinstance(room, dict)
+            and room.get("parent_entity") in anchors
+        }
+        grew = False
+        for source, target_book in within:
+            if target_book not in cascade or source in cascade:
+                continue
+            anchor = books[source]["anchor_entity_id"]
+            if anchor and positions.get(str(anchor)) in doomed_live:
+                cascade |= subtree(source)
+                grew = True
+        if not grew:
+            break
+
+    return {
+        "book_ids": sorted(
+            b for b in cascade if books[b]["retired_turn_id"] is None),
+        "anchors": anchors,
+        "registered": sorted({
+            rid for b in cascade for rid in rooms_by_book.get(b, ())
+        }),
+    }
+
+
 def _prepare_destruction(cid, prev_scene, diff, add_warning=None):
     """Validate the Director's state_diff.destruction declaration and fold
     its mechanical consequences into the (already deep-copied) diff:
-    remove the target entity and every doomed room. Pure reads; returns
-    the plan commit_scene applies durably, or None. Ledger-not-cage does
-    NOT apply here -- an invalid declaration is dropped with a warning
-    rather than guessed at, because destruction is irreversible."""
+    remove every doomed entity and room. Pure reads; returns the plan
+    commit_scene applies durably, or None. Ledger-not-cage does NOT apply
+    here -- an invalid declaration is dropped with a warning rather than
+    guessed at, because destruction is irreversible.
+
+    scale 'vehicle'/'building' dooms the target's ONE book (Phase 2);
+    scale 'region' dooms the deterministic multi-book cascade enumerated
+    by _destruction_cascade above (Phase 3b)."""
     decl = diff.get("destruction")
     if not isinstance(decl, dict):
         return None
@@ -276,32 +433,58 @@ def _prepare_destruction(cid, prev_scene, diff, add_warning=None):
         warn("destruction declaration dropped: no target_id")
         return None
     scale = str(decl.get("scale") or "").strip().casefold()
-    if scale not in ("vehicle", "building"):
+    if scale not in ("vehicle", "building", "region"):
         warn(
             f"destruction of {target!r} dropped: scale {scale!r} is not a "
-            "single vehicle/building (larger scales are not supported yet)"
+            "single vehicle/building or a multi-book region"
         )
         return None
     kind = str(decl.get("kind") or "destroyed").strip() or "destroyed"
 
-    book = _destruction_book(cid, target)
-    registered = []
-    if book:
-        registered = [
-            r["room_uid"] for r in q(
-                "SELECT room_uid FROM room_registry WHERE chat_id=? AND "
-                "owning_book_id=? AND retired_turn_id IS NULL",
-                (cid, book["id"]),
-            )
-        ]
-
+    books, edges, within = _chat_book_graph(cid)
+    root = _destruction_book(cid, target)
     prev_rooms = prev_scene.get("rooms") or {}
-    entity_rooms = {rid for rid, r in prev_rooms.items()
-                    if isinstance(r, dict)
-                    and r.get("parent_entity") == target}
-    doomed_live = entity_rooms | {r for r in registered if r in prev_rooms}
-    # Retirement covers the book's whole registry, including rooms that
-    # live only in a sibling frame's scene -- the book is gone everywhere.
+
+    if scale == "region":
+        if not root:
+            warn(
+                f"destruction of region {target!r} dropped: no live "
+                "lorebook is anchored or scoped to it, so the cascade "
+                "cannot be enumerated"
+            )
+            return None
+        cascade = _destruction_cascade(
+            cid, root["id"], prev_scene, books, within)
+        book_ids = cascade["book_ids"]
+        doomed_entities = sorted(
+            {str(a) for a in cascade["anchors"]} | {target})
+        registered = cascade["registered"]
+        doomed_set = set(doomed_entities)
+        entity_rooms = {
+            rid for rid, r in prev_rooms.items()
+            if isinstance(r, dict)
+            and r.get("parent_entity") in doomed_set}
+    else:
+        book_ids = [root["id"]] if root else []
+        doomed_entities = [target]
+        registered = []
+        if root:
+            registered = [
+                r["room_uid"] for r in q(
+                    "SELECT room_uid FROM room_registry WHERE chat_id=? AND "
+                    "owning_book_id=? AND retired_turn_id IS NULL",
+                    (cid, root["id"]),
+                )
+            ]
+        entity_rooms = {rid for rid, r in prev_rooms.items()
+                        if isinstance(r, dict)
+                        and r.get("parent_entity") == target}
+
+    doomed_live = set(entity_rooms) \
+        | {r for r in registered if r in prev_rooms}
+    # Retirement covers the doomed books' whole registries, including
+    # rooms that live only in a sibling frame's scene -- the books are
+    # gone everywhere.
     retire_rooms = sorted(set(registered) | {
         rid for rid in entity_rooms
         if q("SELECT 1 FROM room_registry WHERE chat_id=? AND room_uid=?",
@@ -313,21 +496,46 @@ def _prepare_destruction(cid, prev_scene, diff, add_warning=None):
     ent = entities.get(target)
     if isinstance(ent, dict) and ent.get("name"):
         label = str(ent["name"])
-    elif book:
-        label = book["name"]
+    elif root:
+        label = root["name"]
 
     # Fold the mechanical consequences into the diff: the ordinary diff
     # machinery (merge_scene_with_diff) is what actually drops the live
-    # entity/rooms -- destruction adds no second removal path.
-    if target in entities:
-        removals = diff.setdefault("remove_entities", [])
-        if target not in removals:
-            removals.append(target)
+    # entities/rooms -- destruction adds no second removal path.
+    removals = diff.setdefault("remove_entities", [])
+    for eid in doomed_entities:
+        if eid in entities and eid not in removals:
+            removals.append(eid)
     room_removals = diff.setdefault("remove_rooms", [])
     for rid in sorted(doomed_live):
         if rid not in room_removals:
             room_removals.append(rid)
 
+    # Occupants who escape the doomed rooms by DEPARTING (cast_changes,
+    # the guard's second legal exit) rather than repositioning keep a
+    # stale positions entry that merge_scene_with_diff's occupied-room
+    # refusal would trip over, silently keeping a doomed room live in
+    # the scene while its registry row retires. Vacate them here (the
+    # guard has already proven every doomed-room occupant repositioned
+    # or departed); prepare_scene_commit pops these positions and the
+    # remaining doomed rooms right after the merge.
+    diff_positions = {
+        str(k).casefold(): str(v)
+        for k, v in (diff.get("positions") or {}).items()
+    }
+    departed = {
+        str(c.get("who") or "").casefold()
+        for c in (diff.get("cast_changes") or []) if isinstance(c, dict)
+    }
+    vacated = sorted(
+        str(name)
+        for name, room in (prev_scene.get("positions") or {}).items()
+        if str(room) in doomed_live
+        and str(name).casefold() in departed
+        and diff_positions.get(str(name).casefold()) is None
+    )
+
+    distances = _book_distances(root["id"], edges) if root else {}
     news = []
     for item in decl.get("news") or []:
         if not isinstance(item, dict):
@@ -336,9 +544,15 @@ def _prepare_destruction(cid, prev_scene, diff, add_warning=None):
         if not audience:
             continue
         try:
-            latency = max(0.0, float(item.get("latency_seconds") or 0.0))
-        except (TypeError, ValueError):
-            latency = 0.0
+            latency = max(0.0, float(item["latency_seconds"]))
+        except (KeyError, TypeError, ValueError):
+            # No declared latency: derive it from the audience's hop
+            # distance to the root in the book graph (Phase 3b) -- near
+            # regions hear sooner, distant later, unmatched a flat day.
+            audience_book = _audience_book_id(audience, books)
+            latency = news_latency_seconds(
+                distances.get(audience_book)
+                if audience_book is not None else None)
         summary = str(item.get("summary") or "").strip() \
             or f"{label} has been {kind}"
         news.append({"audience": audience, "latency_seconds": latency,
@@ -346,9 +560,11 @@ def _prepare_destruction(cid, prev_scene, diff, add_warning=None):
 
     return {
         "target": target, "scale": scale, "kind": kind, "label": label,
-        "book_id": book["id"] if book else None,
+        "book_ids": book_ids,
         "doomed_rooms": sorted(doomed_live),
+        "doomed_entities": list(doomed_entities),
         "retire_rooms": retire_rooms,
+        "vacated": vacated,
         "news": news,
     }
 
@@ -382,14 +598,18 @@ def _finalize_destruction_news(destruction, cid, frame_id, turn, elapsed):
 
 
 def _apply_destruction(cid, turn_id, destruction):
-    """Durable half, inside commit_scene's transaction: retire the book
-    and its registered rooms atomically with the scene write, mint the
-    news events, and stage engine notices (appended -- the transit sweep
-    already wrote this beat's list in the domain before this one)."""
-    if destruction.get("book_id"):
+    """Durable half, inside commit_scene's transaction: retire every
+    doomed book (one for vehicle/building scale, the whole cascade for
+    region scale) and their registered rooms atomically with the scene
+    write, mint the news events, and stage engine notices (appended --
+    the transit sweep already wrote this beat's list in the domain before
+    this one). All-or-nothing with the rest of the turn: any domain
+    failure rolls the entire outer transaction back."""
+    book_ids = destruction.get("book_ids") or []
+    for book_id in book_ids:
         qi("UPDATE lorebooks SET retired_turn_id=? "
            "WHERE id=? AND chat_id=? AND retired_turn_id IS NULL",
-           (turn_id, destruction["book_id"], cid))
+           (turn_id, book_id, cid))
     for rid in destruction.get("retire_rooms") or []:
         qi("UPDATE room_registry SET retired_turn_id=? "
            "WHERE chat_id=? AND room_uid=? AND retired_turn_id IS NULL",
@@ -407,7 +627,7 @@ def _apply_destruction(cid, turn_id, destruction):
     notices.append(
         f"{destruction['label']} has been {destruction['kind']}; "
         f"its records ({retired} registered room(s)"
-        + (", its lorebook" if destruction.get("book_id") else "")
+        + (f", {len(book_ids)} lorebook(s)" if book_ids else "")
         + ") are retired history now."
     )
     wset(cid, "engine_notices", notices)
@@ -638,9 +858,13 @@ def _prepare_room_registry(cid, canon_book_id, prev_scene, sc):
     location_slug = normalize_room_id(str(sc.get("location") or ""))
     location_book = None
     if location_slug:
+        # retired_turn_id filter: rooms minted after a region's
+        # destruction must not register under the dead book -- they fall
+        # back to chat canon (the ruin's registry is closed history).
         row = q(
             "SELECT id FROM lorebooks WHERE chat_id=? AND "
-            "scope_location_id=? ORDER BY id LIMIT 1",
+            "scope_location_id=? AND retired_turn_id IS NULL "
+            "ORDER BY id LIMIT 1",
             (cid, location_slug), one=True,
         )
         location_book = row["id"] if row else None
@@ -767,6 +991,17 @@ def prepare_scene_commit(ctx):
         doomed={destruction["target"]: destruction["doomed_rooms"]}
         if destruction else None)
     sc = merge_scene_with_diff(prev_scene, diff)
+    if destruction:
+        # Guard-approved departures (cast_changes) left stale positions
+        # that merge's occupied-room refusal honored; vacate them and
+        # drop the doomed rooms they kept alive (see the vacated note in
+        # _prepare_destruction). The guard has already proven every
+        # doomed-room occupant repositioned or departed, so this pop can
+        # never lose a person.
+        for name in destruction.get("vacated") or []:
+            (sc.get("positions") or {}).pop(name, None)
+        for rid in destruction.get("doomed_rooms") or []:
+            (sc.get("rooms") or {}).pop(rid, None)
 
     staged = (
         (ctx.mapping_stage or {}).get("staged_lore") or []

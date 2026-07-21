@@ -42,7 +42,11 @@ stages an engine notice carrying told/heard provenance for the next
 director turn to acknowledge -- destruction is objective the moment it
 commits; AWARENESS of it propagates only through this latency gate and
 then through the ordinary director/perception filters, never by code
-injecting knowledge directly into minds.
+injecting knowledge directly into minds. Since Phase 3b, a news entry
+that declares no latency gets one DERIVED from the audience's hop
+distance to the destroyed root in the lorebook containment/presence
+graph (news_latency_seconds below): near regions hear sooner, distant
+ones later, and an audience matching no book waits a flat day.
 
 Reproducibility contract (unchanged from the pieces this gathers): due
 times compare against the SIM clock only (never wall-clock), events are
@@ -67,6 +71,32 @@ def stable_event_key(*parts):
     raw = "\x1f".join(str(part or "") for part in parts)
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
     return f"event:{digest}"
+
+
+# News latency by distance (movement/space Phase 3b): when a destruction
+# declaration names a news audience WITHOUT an explicit latency_seconds,
+# the minting path (commit._prepare_destruction) derives one from the
+# audience's hop distance to the destroyed root in the lorebook
+# containment/presence graph (parent_id + currently_within edges,
+# undirected BFS). One hop = one hour of story time; an audience that
+# matches no book, or is unreachable from the root, waits a flat day. A
+# declared latency always wins -- the Director owns the causal narrative;
+# this is only the deterministic default that makes near regions hear
+# sooner and distant ones later.
+NEWS_HOP_LATENCY_SECONDS = 3600.0
+NEWS_UNREACHABLE_LATENCY_SECONDS = 86400.0
+
+
+def news_latency_seconds(distance_hops):
+    """Deterministic derived news latency: graph hops * one hour; None
+    (no matching book / unreachable) -> one day."""
+    if distance_hops is None:
+        return NEWS_UNREACHABLE_LATENCY_SECONDS
+    try:
+        hops = max(0.0, float(distance_hops))
+    except (TypeError, ValueError):
+        return NEWS_UNREACHABLE_LATENCY_SECONDS
+    return hops * NEWS_HOP_LATENCY_SECONDS
 
 
 def _payload_of(row):

@@ -33,7 +33,7 @@ python tools/project_check.py
 | Narration | `agents/narration.py` (`narrator`) | narrator prompt in `prompts.py`, output validation |
 | Persistence or rollback | `commit.py`, `checkpoints.py` | `db.py`, `memory.py`, restore tests |
 | Deterministic mechanics (timed arrivals, expiry, dock edges, zone/carry inference, news latency) | `mechanics.py` (`mechanics_sweep`) | `commit.py` (`commit_transit_sweep`), `spatial.py`, `spatial_frames.py`, `tests/test_mechanics_sweep.py` |
-| Room identity/dedup/retirement, single-book destruction | `commit.py` (room registry + destruction blocks) | `db.py` (`room_registry`), `checkpoints.py`, `app.py` remaps, registry/destruction tests |
+| Room identity/dedup/retirement, destruction (single-book + region cascades) | `commit.py` (room registry + destruction blocks) | `db.py` (`room_registry`), `checkpoints.py`, `app.py` remaps, registry/destruction tests |
 | Lore retrieval or hierarchy | `memory.py`, `agents/mapping.py` | `app.py`, lore tests |
 | Character/persona format | `character_schema.py` | `importers.py`, editor UI, schema tests |
 | Provider behavior | `providers.py` | `app.py` provider routes, `prompt_cache.py` |

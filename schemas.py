@@ -569,15 +569,18 @@ class ScheduledEvent(BaseModel):
 
 class DestructionEffect(BaseModel):
     """REVIVED (movement/space Phase 2, item 4) as the Director's
-    declaration shape for single-target destruction, carried in
-    StateDiff.destruction. The Director owns the causal event -- code
-    never originates a destruction; commit.py only realizes a declared
-    one deterministically: retire the target's ONE book + its registered
-    rooms, drop the live rooms via the ordinary diff machinery, and mint
-    latency-gated `news_arrival` scheduled events (one per `news` entry).
-    scale is limited to a single 'vehicle' or 'building' this phase --
-    multi-book cascades are Phase 3. effect_id/source_event_id are
-    optional in the declaration (commit derives stable ids itself)."""
+    declaration shape for destruction, carried in StateDiff.destruction.
+    The Director owns the causal event -- code never originates a
+    destruction; commit.py only realizes a declared one
+    deterministically: retire the doomed book(s) + their registered
+    rooms, drop the live rooms/entities via the ordinary diff machinery,
+    and mint latency-gated `news_arrival` scheduled events (one per
+    `news` entry). scale 'vehicle'/'building' dooms the target's ONE
+    book; scale 'region' (Phase 3b) dooms the multi-book cascade
+    enumerated deterministically from the lorebook tree (parent_id
+    descendants + currently_within members physically inside).
+    effect_id/source_event_id are optional in the declaration (commit
+    derives stable ids itself)."""
     effect_id: str = ""
     source_event_id: str = ""
     target_id: str
@@ -595,7 +598,10 @@ class DestructionEffect(BaseModel):
     # audience scope: {audience: str, latency_seconds: float, summary: str}
     # -> one news_arrival scheduled event due at clock + latency, delivered
     # with told/heard provenance through the normal director/perception
-    # path when it fires.
+    # path when it fires. latency_seconds may be omitted: the engine then
+    # derives it from the audience's distance to the destroyed root in
+    # the lorebook graph (near hears sooner -- Phase 3b,
+    # mechanics.news_latency_seconds).
     news: list[dict] = Field(default_factory=list)
 
 class Engagement(BaseModel):
@@ -747,10 +753,11 @@ class StateDiff(BaseModel):
     introductions: list[dict] = Field(default_factory=list)
     time: Optional[dict] = None
     claim_dispositions: list[dict] = Field(default_factory=list)
-    # Single-target destruction declaration (DestructionEffect shape --
-    # see its docstring). Declared here so model_dump() keeps it through
+    # Destruction declaration (DestructionEffect shape -- see its
+    # docstring). Declared here so model_dump() keeps it through
     # validation (the zone-field precedent above); commit.py validates it
-    # deterministically and refuses anything beyond one vehicle/building.
+    # deterministically: one vehicle/building, or a 'region' whose
+    # multi-book cascade commit.py enumerates from the lorebook tree.
     destruction: Optional[dict] = None
 
 class AssertedChange(BaseModel):
