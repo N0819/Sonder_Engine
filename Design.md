@@ -157,6 +157,10 @@ They do not determine:
 - What objectively happened.
 - What the player perceives.
 
+### Capture, do not gate
+
+Generativity is preserved, then tracked — the structure is a ledger, not a cage. The model invents freely; deterministic reconciliation ensures what it invents reaches structured state rather than evaporating. Two seams enforce this. The interpret-side seam checks the player's raw declaration against the interpreted output: a place, object, or event the player asserted that the interpretation dropped is captured, or the interpretation is repaired, before it enters causality. The resolve-side seam checks the resolved prose against the structured diff: a persistent physical change the narration asserts but the diff omits is caught by category-aware, alias-aware coverage and repaired by the Director itself, or surfaced as a warning. Neither seam fabricates state from a heuristic — a wrongly invented fact is worse than a stale missing one — and both rely on omission detection rather than an unwinnable enumeration of world-event vocabulary.
+
 ### Persistence is earned
 
 Not every agent should maintain a continuous internal history.
@@ -813,27 +817,11 @@ The local scene currently tracks:
 - Appearance overlays.
 - Attire.
 
-Rooms may belong to container entities, allowing:
+Rooms may belong to container entities, allowing vehicles, buildings, tents, cabins, elevators, and nested interiors.
 
-- Vehicles.
-- Buildings.
-- Tents.
-- Cabins.
-- Elevators.
-- Nested interiors.
+Movers are first-class. A container entity carries `state.transit` (phase: docked, sealed, in transit, arriving; hatch: open, closed, locked; optional destination, route, and eta). A container's interior-to-exterior doorway is DERIVED deterministically at commit from the entity's current position and transit state — never stored statically. A mover that seals severs its interior's exterior edge; one that arrives derives a new doorway onto its destination; occupants keep their interior positions and travel with the mover. Nesting composes: a rover inside a dropship resolves as a chain, so a mover loaded onto another mover carries its occupants at every level. Timed journeys schedule an arrival that the mechanics sweep completes on the frame's simulation clock.
 
-The database also contains foundations for:
-
-- Normalized world entities.
-- Placements.
-- Persistent conditions.
-- Scheduled events.
-- Fiction worlds.
-- Fiction locations.
-- Transit edges.
-- World events.
-
-These normalized systems are only partially integrated with the main commit path. The local scene dictionary remains the most operationally complete representation of immediate physical state.
+Physical-world authority is consolidated. The frame-scoped scene dictionary is the single runtime source of truth for live rooms, adjacency, positions, and entity state. A normalized `room_registry` is the cross-frame ledger of room identity, existence over time, and retirement — a deterministic projection of every scene write. `world_entities` is a derived projection of the same committed diff the scene is merged from. `world_placements`, `fiction_worlds`, `fiction_locations`, and `transit_edges` are decommissioned (retained only for import compatibility); their intended macro-geography and macro-transit roles are absorbed by the lorebook tree and scheduled-event latency. Every scene writer keeps the registry projection in sync, so no second representation can disagree.
 
 ## Narration
 
@@ -1045,6 +1033,11 @@ The following capabilities are present end to end in the supplied implementation
 - Fail-closed handling of unknown spatial relationships.
 - Scene diff merging.
 - Basic containment-cycle validation utilities.
+- Derived interior-to-exterior doorways for movers: transit phase and entity position determine a container's adjacency at commit.
+- Multi-level nested movers with occupant carry.
+- Timed transit arrivals completed by the mechanics sweep on the frame's simulation clock.
+- Deterministic reconciliation of resolved prose and player declarations against the structured diff.
+- Multi-book destructive cascades over the lorebook tree, with retire-not-delete and distance-latency knowledge propagation.
 
 ### Memory
 
@@ -1147,19 +1140,15 @@ The following systems have meaningful foundations but are not complete end to en
 
 Tables and schemas exist for:
 
-- World entities.
-- Placements.
+- World entities (a derived projection of the scene commit).
+- Room registry (the cross-frame ledger of room identity and retirement).
 - Conditions.
 - Scheduled events.
-- Fiction worlds.
-- Fiction locations.
-- Transit edges.
 - Engagements.
 - Aggregate entities.
 - Components.
-- Strategic placements.
 
-Not all corresponding mutations are consumed and persisted by the current commit path.
+Placements, fiction worlds, fiction locations, and transit edges are decommissioned (import-compatibility only); their roles are absorbed by the scene blob, the room registry, and the lorebook tree. The room registry, entity projection, conditions, and scheduled events are consumed and persisted by the commit path; the engagement, aggregate, and component tables remain foundational only.
 
 ### Off-screen simulation
 
@@ -1169,8 +1158,9 @@ Current support includes:
 - Standing intentions.
 - Mapping-generated off-screen events.
 - Seeded off-screen logs.
-- Scheduled-event storage.
-- World conditions.
+- A deterministic mechanics sweep run at commit on the frame's simulation clock: due scheduled events fire, timed transit arrivals complete, and conditions expire.
+- News propagation with distance-based latency: an objective event (such as a destruction) mints scheduled `news_arrival` events whose delay scales with tree and portal distance, so awareness reaches distant characters only when it legitimately would — delivered through director and perception filters, never by direct injection.
+- World conditions with expiry.
 
 Missing pieces include:
 
@@ -1178,17 +1168,14 @@ Missing pieces include:
 - Character-driven off-screen decisions.
 - Objective local off-screen resolution.
 - Private off-screen memory.
-- Communication delays.
-- Full trigger processing.
 - Tiered update depth.
 
 ### Lifecycle and reactivation
 
-Current support includes active and dormant status plus arrival and departure handling.
+Current support includes active and dormant status, arrival and departure handling, and retire-not-delete for rooms and lorebooks — destroyed or removed structure is retired with the turn that ended it, preserving its history rather than erasing it, so a ruined region remains retrievable.
 
 Missing pieces include:
 
-- Archive and retire states.
 - Automatic promotion and downgrading.
 - Gap-history generation.
 - Character integrity review.
@@ -1228,18 +1215,9 @@ The enforced invariant is:
 
 A forced late-failure regression test proves an earlier world write is absent after rollback. Additional domain-by-domain fault injection remains worthwhile.
 
-### Multiple physical sources of truth
+### Physical sources of truth are consolidated
 
-Immediate world state is represented across:
-
-- The scene dictionary.
-- World key-value state.
-- Normalized entity tables.
-- Lore.
-- Events.
-- Checkpoints.
-
-The authoritative source for each kind of fact must be documented and eventually enforced.
+Immediate world state was previously represented ambiguously across the scene dictionary, normalized entity tables, and vestigial location tables, with no documented authority. This is resolved. The frame-scoped scene dictionary is authoritative for live physical state; `room_registry` is the single cross-frame ledger of room identity and retirement; `world_entities` is a derived projection of the committed diff; `world_placements`, `fiction_worlds`, `fiction_locations`, and `transit_edges` are decommissioned. The authority model is documented in `CLAUDE.md`, `AGENTS.md`, and `docs/DATABASE.md`, and enforced by projecting the registry from every scene write. A characterization suite pins byte-identical spatial-reader and checkpoint/restore behavior across the consolidation.
 
 ### Persona accessor inconsistency
 
@@ -1271,15 +1249,13 @@ Validation failures produce warnings and may allow prepared raw output to contin
 
 Critical state-mutation stages need stronger repair, retry, or rejection policies.
 
-### Perception is not fully mechanically validated
+### Perception validation: name-class closed, semantic residual open
 
-Spatial delivery is partially deterministic, but model-generated views may still contain unsupported semantic leakage.
+Identity leakage is now closed deterministically. A per-observer scrub removes the canonical name of any source an observer has not legitimately identified from the model-rendered view — outside verbatim heard speech — the appearance-derived unknown-actor label is name-stripped, and ambient and location information is scoped by nesting depth so a deeply nested interior cannot perceive an ancestor location. What remains is the semantic residual: species, occupation, relationship, intent, or paraphrased identity a capable model could still imply. That class is not deterministically catchable and would need an auditing pass. Spatial delivery is deterministic; this is not yet a formal noninterference proof.
 
-### Migration behavior requires hardening
+### Migration behavior
 
-Migration indexing and historical upgrade paths require tests from every supported schema version.
-
-Fresh-database success does not prove upgrade safety.
+Recent migrations (v15, v16) follow the recreate-copy-swap pattern, are idempotent and crash-re-runnable, and were validated against a copy of a real production database — integrity check, row preservation, composite-key repartition — in addition to round-trip checkpoint, export, and import tests. The general principle still holds: fresh-database success does not prove upgrade safety, and every supported version's upgrade path should stay under test.
 
 ### Concurrency has mixed scopes
 
@@ -1287,9 +1263,9 @@ Fresh-turn execution is exclusive per frame, while recompute, branch, import/exp
 
 The remaining risk is not an unguarded same-frame pipeline; it is that some durable domains — lorebooks, world entities, placements, conditions, and scheduled events — are still chat-global rather than frame-partitioned. Concurrent frames can prepare against different snapshots and later merge into those shared domains without an explicit version check. Shared-domain writes need either optimistic revisions/conflict detection or a documented deterministic merge policy.
 
-### Entity identifiers are chat-scoped but not frame-scoped
+### Cross-frame versus frame-scoped state is a documented design
 
-Schema v14 partitions world entities and conditions by `(chat_id, id)`, and runtime queries include chat ID, eliminating the previous cross-story collision. Those rows remain shared by every temporal frame in a chat, which is a separate temporal-model limitation rather than an identity-key bug.
+Schema v14 through v16 partition world entities, conditions, and scheduled events by `(chat_id, id)`, and runtime queries include chat ID, eliminating cross-story collisions. Which state is frame-scoped versus cross-frame is now a deliberate, documented split rather than an accident. The scene blob is frame-scoped — temporal eras legitimately hold different live worlds, so a place destroyed in the present still exists in a past-era frame — while room identity, lorebooks, and scheduled events are cross-frame ledgers by design. The physical-truth consolidation deliberately kept the frame-scoped blob authoritative for live state precisely because making a cross-frame table authoritative would break era semantics.
 
 ### API security is local-development oriented
 
@@ -1302,6 +1278,8 @@ Schema v14 partitions world entities and conditions by `(chat_id, id)`, and runt
 The service is safer to expose over a tunnel than before, but it remains a single-owner trust model, not a multi-tenant one, and should not be exposed to untrusted networks without further hardening.
 
 ## Development roadmap
+
+The movement-and-space work advances several priorities below: data integrity (Priority 1) is largely delivered by the physical-truth consolidation and room registry; authority and mutation safety (Priority 4) by interpret-side declaration capture and single- and multi-book destruction; first-class movers (Priority 5) by the transit model; and world-model integration (Priority 8) by the consolidation. A full re-prioritization is deferred until that work merges.
 
 ### Priority 0 — health and project control
 
