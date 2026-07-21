@@ -114,6 +114,27 @@ function renderChatSidebar(list, actions) {
         el(
           "button",
           {
+            title: "Rename",
+            onclick: async event => {
+              event.stopPropagation();
+              const name = await promptModal("Rename story:", chat.name);
+              if (name == null) return;
+              const trimmed = name.trim();
+              if (!trimmed || trimmed === chat.name) return;
+              await api("PUT", `/api/chats/${chat.id}`, { name: trimmed });
+              if (S.chat && S.chatId === chat.id) {
+                S.chat.chat.name = trimmed;
+                const header = document.getElementById("chatname");
+                if (header) header.textContent = trimmed;
+              }
+              await boot();
+            }
+          },
+          "✎"
+        ),
+        el(
+          "button",
+          {
             title: "Export",
             onclick: event => {
               event.stopPropagation();
