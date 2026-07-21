@@ -2061,6 +2061,39 @@ def chat_export(cid: int):
         lb = q("SELECT * FROM lorebooks WHERE id=?", (canon,), one=True)
         if lb:
             export["lorebook"] = {"book": dict(lb), "entries": dump_lorebook(canon)}
+    # Portable resource bundle. chat_import remaps every char_id/persona_id
+    # through resources.{persona,characters} (old_id -> embedded sheet). Without
+    # it, a cross-install import raises "references character N but does not
+    # embed it" (and even a same-install import that DID resolve by raw id would
+    # drop every memory/summary for the unembedded characters, or silently
+    # attach the wrong character if ids happen to collide). Embedding the sheets
+    # here is what makes an exported story actually portable.
+    char_ids = []
+    for row in export["participants"] + export["char_frames"]:
+        cid_ = row.get("char_id")
+        if cid_ is not None and cid_ not in char_ids:
+            char_ids.append(cid_)
+    characters = []
+    for ch_id in char_ids:
+        c = q("SELECT * FROM characters WHERE id=?", (ch_id,), one=True)
+        if not c:
+            continue
+        characters.append({
+            "old_id": ch_id,
+            "resource_uid": c["resource_uid"],
+            "sheet": json.loads(c["sheet"]),
+            "source": json.loads(c["source"] or "{}"),
+        })
+    persona = None
+    if chat["persona_id"]:
+        p = q("SELECT * FROM personas WHERE id=?", (chat["persona_id"],), one=True)
+        if p:
+            persona = {
+                "resource_uid": p["resource_uid"],
+                "sheet": json.loads(p["sheet"]),
+                "source": json.loads(p["source"] or "{}"),
+            }
+    export["resources"] = {"persona": persona, "characters": characters}
     return export
     
 def _variant_content(value):
