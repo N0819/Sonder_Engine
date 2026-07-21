@@ -1,0 +1,5 @@
+# Large/generated demo artifacts — keep locally, don't commit
+*.chat.json
+*.html
+*.db
+*.db-*
