@@ -116,7 +116,7 @@ def test_v13_to_v14_migration_preserves_data_and_repartitions_pk():
         raw.commit()
         raw.close()
 
-        # Re-init runs only the v13 -> v14 migration.
+        # Re-init runs the v13 -> v14 migration (and any later ones).
         db.configure(path)
         db.init()
 
@@ -125,7 +125,7 @@ def test_v13_to_v14_migration_preserves_data_and_repartitions_pk():
         pk_e = [r[1] for r in raw.execute("PRAGMA table_info(world_entities)") if r[5]]
         pk_c = [r[1] for r in raw.execute("PRAGMA table_info(world_conditions)") if r[5]]
         raw.close()
-        assert ver == "14"
+        assert int(ver) == db.SCHEMA_VERSION
         assert pk_e == ["entity_id", "chat_id"]
         assert pk_c == ["condition_id", "chat_id"]
 

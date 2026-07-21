@@ -23,9 +23,10 @@ The engine uses SQLite. The schema is defined in `db.py`; access is intentionall
 
 ## Structured world tables
 
-- `fiction_worlds`, `fiction_locations`, `transit_edges`: world and location hierarchy.
 - `world_entities`, `world_placements`: persistent entities and containment/placement.
-- `world_events`, `world_conditions`, `scheduled_events`: objective event timeline, active conditions, and future events.
+- `world_events`, `world_conditions`, `scheduled_events`: objective event timeline, active conditions, and future events (`transit_arrival`, `news_arrival`).
+- `room_registry`: normalized room identity/dedup/retirement ledger, keyed `(chat_id, room_uid)` and scoped to an owning lorebook. Authoritative for room identity only — the frame-scoped scene JSON stays authoritative for live rooms/positions. Rooms and lorebooks are retired (`retired_turn_id`), never deleted, on removal/destruction.
+- `fiction_worlds`, `fiction_locations`, `transit_edges`: DEPRECATED dead macro schema (nothing in the runtime pipeline reads or writes them; kept only so old imports restore — removal is planned).
 
 The structured-world model is only partially integrated. Some physical truth still lives in JSON under the `world` table. Treat the scene dictionary and normalized tables as overlapping representations until the architecture is consolidated.
 

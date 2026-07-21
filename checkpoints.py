@@ -63,6 +63,7 @@ def snapshot_state(chat_id):
             "inheritance_mode": lbrow["inheritance_mode"] or "inherit",
             "sort_order": lbrow["sort_order"] or 0,
             "anchor_entity_id": lbrow["anchor_entity_id"],
+            "retired_turn_id": lbrow["retired_turn_id"],
             "canon": lid == canon,
             "enabled": att["enabled"] if att else 1,
             "entries": dump_lorebook(lid),
@@ -99,6 +100,14 @@ def snapshot_state(chat_id):
          "seed": r["seed"], "status": r["status"]}
         for r in q("SELECT * FROM scheduled_events WHERE chat_id=?", (chat_id,))
     ]
+    room_registry = [
+        {"room_uid": r["room_uid"], "owning_book_id": r["owning_book_id"],
+         "parent_entity": r["parent_entity"], "name": r["name"],
+         "aliases": r["aliases"], "payload": r["payload"],
+         "created_turn_id": r["created_turn_id"],
+         "retired_turn_id": r["retired_turn_id"]}
+        for r in q("SELECT * FROM room_registry WHERE chat_id=?", (chat_id,))
+    ]
     fiction_worlds = [
         {"world_id": r["world_id"], "parent_world_id": r["parent_world_id"],
          "name": r["name"], "kind": r["kind"], "payload": r["payload"]}
@@ -122,14 +131,18 @@ def snapshot_state(chat_id):
         "world_placements": world_placements,
         "world_conditions": world_conditions,
         "scheduled_events": scheduled,
+        "room_registry": room_registry,
         "fiction_worlds": fiction_worlds,
         "fiction_locations": fiction_locations,
     }
 
 def _restore_books(chat_id, books, links=None):
+    """Restore lorebook rows/entries from a snapshot. Returns the
+    {snapshot book id: current book id} map so the caller can remap other
+    snapshot data that embeds book ids (room_registry.owning_book_id)."""
     current_ids = set(chat_lorebook_ids(chat_id, enabled_only=False))
     if not current_ids:
-        return
+        return {}
     current = {
         row["id"]: row
         for row in q("SELECT * FROM lorebooks WHERE chat_id=?", (chat_id,))
@@ -156,7 +169,7 @@ def _restore_books(chat_id, books, links=None):
         if old_id:
             old_to_new[old_id] = target
         row = current[target]
-        qi("UPDATE lorebooks SET name=?,book_type=?,summary=?,parent_id=NULL,scope_world_id=?,scope_location_id=?,inheritance_mode=?,sort_order=?,anchor_entity_id=? WHERE id=?",
+        qi("UPDATE lorebooks SET name=?,book_type=?,summary=?,parent_id=NULL,scope_world_id=?,scope_location_id=?,inheritance_mode=?,sort_order=?,anchor_entity_id=?,retired_turn_id=? WHERE id=?",
            (snapshot.get("name") or row["name"],
             snapshot.get("book_type") or row["book_type"] or "general",
             snapshot.get("summary") if snapshot.get("summary") is not None else (row["summary"] or ""),
@@ -165,6 +178,7 @@ def _restore_books(chat_id, books, links=None):
             snapshot.get("inheritance_mode") or "inherit",
             snapshot.get("sort_order") or 0,
             snapshot.get("anchor_entity_id"),
+            snapshot.get("retired_turn_id"),
             target))
         
         current_entries = dump_lorebook(target)
@@ -210,6 +224,8 @@ def _restore_books(chat_id, books, links=None):
 
     if links:
         restore_lorebook_links(chat_id, old_to_new, links)
+
+    return old_to_new
 
 def restore_checkpoint(chat_id, idx):
     r = q("SELECT * FROM checkpoints WHERE chat_id=? AND turn_idx=?", (chat_id, idx), one=True)
@@ -332,6 +348,25 @@ def insert_world_tables(chat_id, b, delete_first=False):
             ev.get("seed", ""), ev.get("status", "pending")))
 
     if delete_first:
+        qi("DELETE FROM room_registry WHERE chat_id=?", (chat_id,))
+    for rr in b.get("room_registry") or []:
+        # owning_book_id must reference a live lorebooks row or the FK
+        # fails and aborts the whole restore; an unmappable book (deleted
+        # since the snapshot, or dropped by an import) degrades to NULL --
+        # the row keeps its identity and self-heals owner on next commit.
+        book_id = rr.get("owning_book_id")
+        if book_id is not None and not q(
+                "SELECT 1 FROM lorebooks WHERE id=?", (book_id,), one=True):
+            book_id = None
+        qi("""INSERT INTO room_registry(chat_id,room_uid,owning_book_id,
+            parent_entity,name,aliases,payload,created_turn_id,retired_turn_id)
+            VALUES(?,?,?,?,?,?,?,?,?)""",
+           (chat_id, rr["room_uid"], book_id, rr.get("parent_entity"),
+            rr.get("name", ""), rr.get("aliases", "[]"),
+            rr.get("payload", "{}"), rr.get("created_turn_id"),
+            rr.get("retired_turn_id")))
+
+    if delete_first:
         qi("DELETE FROM fiction_worlds WHERE chat_id=?", (chat_id,))
     for fw in b.get("fiction_worlds") or []:
         qi("""INSERT INTO fiction_worlds(world_id,chat_id,parent_world_id,name,kind,payload)
@@ -390,8 +425,22 @@ def _restore_checkpoint_body(chat_id, r):
             apply_chat_memory_restore(chat_id, mem_plan)
         if summary_plan is not None:
             apply_memory_summary_restore(chat_id, summary_plan)
+        book_map = {}
         if "lorebooks" in b:
-            _restore_books(chat_id, b.get("lorebooks") or [], b.get("lorebook_links") or [])
+            book_map = _restore_books(
+                chat_id, b.get("lorebooks") or [], b.get("lorebook_links") or [])
+
+        # room_registry rows embed book ids; a same-chat restore usually
+        # maps books onto their original ids, but _restore_books can match
+        # a snapshot book onto a differently-numbered current row (by
+        # origin/name) -- follow that map so ownership survives.
+        if book_map and b.get("room_registry"):
+            b = dict(b)
+            b["room_registry"] = [
+                {**rr, "owning_book_id": book_map.get(
+                    rr.get("owning_book_id"), rr.get("owning_book_id"))}
+                for rr in b["room_registry"]
+            ]
 
         insert_world_tables(chat_id, b, delete_first=True)
 

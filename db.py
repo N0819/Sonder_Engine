@@ -64,7 +64,7 @@ def parse_scoped_world_key(key):
     return key, None
 
 DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -118,7 +118,12 @@ CREATE TABLE IF NOT EXISTS lorebooks(
     scope_location_id TEXT,
     inheritance_mode TEXT NOT NULL DEFAULT 'inherit',
     sort_order INTEGER NOT NULL DEFAULT 0,
-    anchor_entity_id TEXT
+    anchor_entity_id TEXT,
+    -- Mirrors world_entities.retired_turn_id: a destroyed vehicle/building's
+    -- book is RETIRED (marked with the turn that destroyed it), never
+    -- deleted -- its lore stays retrievable history ("the ship that sank
+    -- here"). NULL = live. Written only by commit.py's destruction path.
+    retired_turn_id INTEGER REFERENCES turns(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_lorebooks_chat ON lorebooks(chat_id);
 CREATE INDEX IF NOT EXISTS idx_lorebooks_origin ON lorebooks(origin_id);
@@ -515,6 +520,38 @@ CREATE TABLE IF NOT EXISTS scheduled_events(
 );
 CREATE INDEX IF NOT EXISTS idx_scheduled_events_due ON scheduled_events(chat_id, status, due_at);
 
+-- Normalized room-identity registry (movement/space Phase 2). Authoritative
+-- for room IDENTITY, dedup, and retirement ONLY -- the frame-scoped scene
+-- JSON blob under `world` remains authoritative for LIVE rooms/positions
+-- until the Phase-3 consolidation. room_uid is the room's stable canonical
+-- key (the scene rooms-dict key, per-chat unique, matching the v14
+-- composite-key convention). owning_book_id scopes dedup (a vehicle's
+-- anchored book, else the location/canon book); parent_entity is the
+-- enclosing entity for interior rooms. retired_turn_id NULL = live; a
+-- removed/destroyed room keeps its row (retire-not-delete) so "the ship
+-- that sank here" stays retrievable identity, mirroring world_entities.
+CREATE TABLE IF NOT EXISTS room_registry(
+    chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    room_uid TEXT NOT NULL,
+    owning_book_id INTEGER REFERENCES lorebooks(id) ON DELETE SET NULL,
+    parent_entity TEXT,
+    name TEXT NOT NULL DEFAULT '',
+    aliases TEXT NOT NULL DEFAULT '[]',
+    payload TEXT NOT NULL DEFAULT '{}',
+    created_turn_id INTEGER REFERENCES turns(id) ON DELETE SET NULL,
+    retired_turn_id INTEGER REFERENCES turns(id) ON DELETE SET NULL,
+    PRIMARY KEY(chat_id, room_uid)
+);
+CREATE INDEX IF NOT EXISTS idx_room_registry_book
+    ON room_registry(owning_book_id) WHERE owning_book_id IS NOT NULL;
+
+-- DEPRECATED (movement/space Phase 2): fiction_worlds, fiction_locations,
+-- and transit_edges are a dead macro-geography schema -- nothing in the
+-- runtime pipeline reads or writes them. Their roles are absorbed by the
+-- unified model: macro geography = upper lorebook-tree books; macro
+-- transit = portal links (entity.state.link) + scheduled_events latency.
+-- The tables are kept (and still tolerated by import/checkpoint plumbing)
+-- so existing exports keep restoring; dropping them is Phase 3.
 CREATE TABLE IF NOT EXISTS fiction_worlds(
     world_id TEXT PRIMARY KEY,
     chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
@@ -873,6 +910,36 @@ MIGRATIONS = [
         "DROP TABLE world_conditions",
         "ALTER TABLE world_conditions_new RENAME TO world_conditions",
         "CREATE INDEX IF NOT EXISTS idx_world_conditions_due ON world_conditions(chat_id, active, next_tick)",
+    ],
+    # v14 -> v15
+    [
+        # Book retirement marker for single-book destruction (see the
+        # lorebooks table comment). The room_registry TABLE itself is
+        # created unconditionally by SCHEMA above (new tables never need
+        # the migration path -- only ALTER TABLE on pre-existing tables
+        # and data backfills do).
+        "ALTER TABLE lorebooks ADD COLUMN retired_turn_id INTEGER "
+        "REFERENCES turns(id) ON DELETE SET NULL",
+        # Migrate the Phase-1 DERIVED lore_entries room registry (category
+        # 'layout', entry_uid 'room:<book_id>:<room_key>') into the
+        # normalized room_registry table that supersedes it. Only identity
+        # (room key + owning book) is recoverable from the uid here;
+        # name/aliases/parent_entity are left at defaults and self-heal on
+        # the next commit, which rewrites every LIVE room's row from the
+        # scene. INSERT OR IGNORE: a same-key room registered under two
+        # books keeps the first row -- also rewritten next commit.
+        "INSERT OR IGNORE INTO room_registry"
+        "(chat_id, room_uid, owning_book_id, parent_entity, name, aliases, payload)"
+        " SELECT lb.chat_id,"
+        " substr(le.entry_uid, 6 + instr(substr(le.entry_uid, 6), ':')),"
+        " le.lorebook_id, NULL, '', '[]', '{}'"
+        " FROM lore_entries le JOIN lorebooks lb ON lb.id = le.lorebook_id"
+        " WHERE le.category='layout' AND le.entry_uid LIKE 'room:%'"
+        " AND lb.chat_id IS NOT NULL",
+        # The lore-entry encoding is superseded; the rows were derived
+        # bookkeeping (rewritten every commit), never authored lore.
+        "DELETE FROM lore_entries WHERE category='layout' "
+        "AND entry_uid LIKE 'room:%'",
     ],
 ]
 

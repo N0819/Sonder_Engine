@@ -1,5 +1,5 @@
-"""Regression tests for the derived room registry + commit-side structural
-dedup (movement/space Phase 1, item 4).
+"""Regression tests for the room registry + commit-side structural dedup
+(movement/space Phase 1 item 4; table encoding from Phase 2 item 1).
 
 Two live failure classes, one root -- commit had no memory of which rooms
 an owner already has:
@@ -7,10 +7,11 @@ an owner already has:
   silently merged one ship's deck into the other's;
 - the same owner's room re-minted under a fresh key ('deck_three' for an
   existing 'Deck 3') created a live duplicate room.
-The registry rows are DERIVED lore_entries (category 'layout', entry_uid
-'room:<book_id>:<room_key>'), rewritten each commit; scene JSON stays the
-sole authority. Ledger, not cage: collisions are rekeyed/redirected, never
-rejected.
+The registry is the normalized `room_registry` table (it supersedes
+Phase 1's derived lore_entries encoding), authoritative for room identity,
+dedup, and retirement only; the scene JSON stays the sole authority for
+live rooms. Removal RETIRES a row instead of deleting it. Ledger, not
+cage: collisions are rekeyed/redirected, never rejected.
 """
 
 import json
@@ -103,12 +104,16 @@ def test_two_ships_minting_deck_3_do_not_collide(temp_db):
 
     # Each ship's room registers under its OWN book scope.
     commit.commit_scene(ctx, nonce=0, prepared=prepared)
-    uid_a = f"room:{books['ship_a']}:deck_3"
-    uid_b = f"room:{books['ship_b']}:{new_key}"
-    assert temp_db.q("SELECT id FROM lore_entries WHERE entry_uid=?",
-                     (uid_a,), one=True)
-    assert temp_db.q("SELECT id FROM lore_entries WHERE entry_uid=?",
-                     (uid_b,), one=True)
+    row_a = temp_db.q(
+        "SELECT * FROM room_registry WHERE chat_id=? AND room_uid=?",
+        (ctx.chat.id, "deck_3"), one=True)
+    row_b = temp_db.q(
+        "SELECT * FROM room_registry WHERE chat_id=? AND room_uid=?",
+        (ctx.chat.id, new_key), one=True)
+    assert row_a and row_a["owning_book_id"] == books["ship_a"] \
+        and row_a["parent_entity"] == "ship_a"
+    assert row_b and row_b["owning_book_id"] == books["ship_b"] \
+        and row_b["parent_entity"] == "ship_b"
 
 
 def test_same_owner_same_name_remint_redirects_to_existing_room(temp_db):
@@ -187,20 +192,22 @@ def test_registry_rows_are_rewritten_not_duplicated(temp_db):
         prepared = commit.prepare_scene_commit(ctx)
         commit.commit_scene(ctx, nonce=0, prepared=prepared)
     rows = temp_db.q(
-        "SELECT entry_uid FROM lore_entries WHERE lorebook_id=?",
+        "SELECT room_uid FROM room_registry WHERE owning_book_id=?",
         (books["ship_a"],),
     )
-    assert [r["entry_uid"] for r in rows] == [f"room:{books['ship_a']}:deck_3"]
+    assert [r["room_uid"] for r in rows] == ["deck_3"]
 
 
-def test_stale_registry_rows_are_swept_when_the_room_is_gone(temp_db):
+def test_removed_room_is_retired_not_deleted(temp_db):
+    """Retire-not-delete (Phase 2 item 2): a removed room's registry row
+    survives with retired_turn_id set -- identity/history is kept -- and a
+    retired room's aliases no longer participate in dedup."""
     scene = _two_ship_scene()
     ctx, books, _ = _make_ctx(temp_db, scene, {}, with_books=("ship_a",))
     prepared = commit.prepare_scene_commit(ctx)
     commit.commit_scene(ctx, nonce=0, prepared=prepared)
 
     # The deck is gone next beat (and nobody occupies it).
-    scene2 = json.loads(json.dumps(scene))
     ctx.director_resolve = {
         "resolved_event": "gone", "dialogue_log": [],
         "state_diff": {"remove_rooms": ["deck_3"]},
@@ -208,8 +215,82 @@ def test_stale_registry_rows_are_swept_when_the_room_is_gone(temp_db):
     prepared = commit.prepare_scene_commit(ctx)
     commit.commit_scene(ctx, nonce=0, prepared=prepared)
 
-    rows = temp_db.q(
-        "SELECT entry_uid FROM lore_entries WHERE lorebook_id=?",
-        (books["ship_a"],),
+    row = temp_db.q(
+        "SELECT * FROM room_registry WHERE chat_id=? AND room_uid=?",
+        (ctx.chat.id, "deck_3"), one=True,
     )
-    assert rows == []
+    assert row is not None, "the row must survive removal"
+    assert row["retired_turn_id"] == ctx.turn.id
+    # A retired room no longer feeds the alias-dedup index.
+    assert commit._registry_alias_index(ctx.chat.id, books["ship_a"]) == {}
+
+
+def test_reminted_room_key_revives_its_retired_row(temp_db):
+    """Same chat, same key, minted live again: the registry records the
+    identity as live again (one row per room_uid, ever)."""
+    scene = _two_ship_scene()
+    ctx, books, _ = _make_ctx(temp_db, scene, {}, with_books=("ship_a",))
+    prepared = commit.prepare_scene_commit(ctx)
+    commit.commit_scene(ctx, nonce=0, prepared=prepared)
+
+    ctx.director_resolve = {
+        "resolved_event": "gone", "dialogue_log": [],
+        "state_diff": {"remove_rooms": ["deck_3"]},
+    }
+    commit.commit_scene(ctx, nonce=0,
+                        prepared=commit.prepare_scene_commit(ctx))
+    ctx.director_resolve = {
+        "resolved_event": "rebuilt", "dialogue_log": [],
+        "state_diff": {"rooms": {"deck_3": {
+            "name": "Deck 3", "parent_entity": "ship_a", "adjacent": []}}},
+    }
+    commit.commit_scene(ctx, nonce=0,
+                        prepared=commit.prepare_scene_commit(ctx))
+
+    rows = temp_db.q(
+        "SELECT * FROM room_registry WHERE chat_id=? AND room_uid=?",
+        (ctx.chat.id, "deck_3"),
+    )
+    assert len(rows) == 1
+    assert rows[0]["retired_turn_id"] is None
+
+
+def test_dedup_reads_the_registry_table(temp_db):
+    """Fail-without check for the table read, via accumulated aliases: a
+    room renamed in the scene keeps its OLD name only in room_registry, so
+    a re-mint under the old name can only be caught through the table.
+    Deleting the rows out from under dedup makes the redirect vanish --
+    proving dedup_minted_rooms consults room_registry, not any leftover
+    lore-entry index or the live scene alone."""
+    scene = _two_ship_scene()
+    scene["rooms"]["bridge"] = {"name": "Command Bridge",
+                                "parent_entity": "ship_a", "adjacent": []}
+    ctx, books, _ = _make_ctx(temp_db, scene, {}, with_books=("ship_a",))
+    commit.commit_scene(ctx, nonce=0,
+                        prepared=commit.prepare_scene_commit(ctx))
+
+    # The bridge is renamed; the registry keeps 'Command Bridge' as an
+    # accumulated alias while the live scene forgets it.
+    ctx.director_resolve = {
+        "resolved_event": "renamed", "dialogue_log": [],
+        "state_diff": {"rooms": {"bridge": {
+            "name": "Ruined Bridge", "parent_entity": "ship_a",
+            "adjacent": []}}},
+    }
+    commit.commit_scene(ctx, nonce=0,
+                        prepared=commit.prepare_scene_commit(ctx))
+
+    diff = {"rooms": {"command_bridge": {"name": "Command Bridge",
+                                         "parent_entity": "ship_a",
+                                         "adjacent": []}}}
+    # Sanity: with the registry intact the alias redirect fires...
+    renames = commit.dedup_minted_rooms(
+        ctx.chat.id, temp_db.wget(ctx.chat.id, "scene", {}),
+        json.loads(json.dumps(diff)))
+    assert renames == {"command_bridge": "bridge"}
+    # ...and with the table emptied it cannot.
+    temp_db.qi("DELETE FROM room_registry WHERE chat_id=?", (ctx.chat.id,))
+    renames = commit.dedup_minted_rooms(
+        ctx.chat.id, temp_db.wget(ctx.chat.id, "scene", {}),
+        json.loads(json.dumps(diff)))
+    assert renames == {}

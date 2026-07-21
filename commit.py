@@ -1,12 +1,12 @@
 """Atomic world-state commit with mutation validation."""
 
 import copy
-import json, time, random, re, hashlib, threading, weakref
+import json, re, threading, weakref
 from concurrent.futures import ThreadPoolExecutor
 from db import q, qi, qtx, transaction, wget, wset
 from memory import (
     add_memories_batch, prepare_memories_batch, delete_turn_memories, search_lore, add_lore,
-    update_lore, delete_lore, LORE_CATEGORIES, LOREBOOK_TYPES,
+    update_lore, LORE_CATEGORIES, LOREBOOK_TYPES,
     chat_lorebook_ids, chat_lorebook_weights, lorebook_manifest, dump_chat_memories,
     add_lorebook_link,
     restore_chat_memories, dump_lorebook, restore_lorebook,
@@ -19,7 +19,8 @@ from prompts import get_prompt
 from character_schema import character_name, new_uid
 from frames import is_recognized_in_frame
 from scene import set_char_state, set_char_status
-from spatial import (apply_transit_dock_edges, merge_scene_with_diff,
+from mechanics import mechanics_sweep, stable_event_key
+from spatial import (merge_scene_with_diff,
                      normalize_room_id, spatial_rel, hear_level)
 from theory_of_mind import apply_mind_model_updates
 from paradox import check_and_apply_paradox
@@ -38,10 +39,10 @@ def _keys_str(value):
         return ", ".join(str(v) for v in value if v is not None)
     return str(value or "")
 
-def _stable_event_key(*parts):
-    raw = "\x1f".join(str(part or "") for part in parts)
-    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
-    return f"event:{digest}"
+# Deterministic event/memory ids live in mechanics.py now (the sweep needs
+# them without importing commit); kept under the old private name for the
+# many call sites and tests that use it.
+_stable_event_key = stable_event_key
 
 def _clamp(value, lo=0.0, hi=1.0):
     try:
@@ -167,7 +168,7 @@ def sync_anchored_books(cid, sc):
             except ValueError:
                 pass
 
-def _guard_occupied_mover_removal(prev_scene, diff):
+def _guard_occupied_mover_removal(prev_scene, diff, doomed=None):
     """Deterministic refusal: removing an entity whose parent_entity-linked
     interior rooms still hold occupants, without the same beat repositioning
     every occupant (state_diff.positions, to a room OUTSIDE the doomed
@@ -176,9 +177,14 @@ def _guard_occupied_mover_removal(prev_scene, diff):
     Raising here fails commit preparation, so the whole turn rolls back per
     the existing atomicity contract -- the same conservatism as
     merge_scene_with_diff's occupied-room removal refusal, made loud
-    because losing PEOPLE is worse than losing a room."""
+    because losing PEOPLE is worse than losing a room.
+
+    `doomed` ({label: room_id set}) generalizes the guard to BOOK scope
+    for single-book destruction: every room registered to the destroyed
+    book is doomed alongside the entity's own interiors, and a stranded
+    occupant in ANY of them fails the whole commit -> rollback."""
     removals = [str(e) for e in (diff.get("remove_entities") or []) if e]
-    if not removals:
+    if not removals and not doomed:
         return
     rooms = prev_scene.get("rooms") or {}
     positions = prev_scene.get("positions") or {}
@@ -189,11 +195,16 @@ def _guard_occupied_mover_removal(prev_scene, diff):
         str(c.get("who") or "").casefold()
         for c in (diff.get("cast_changes") or []) if isinstance(c, dict)
     }
+    doom_map = {}
     for eid in removals:
         interior = {rid for rid, r in rooms.items()
                     if isinstance(r, dict) and r.get("parent_entity") == eid}
-        if not interior:
-            continue
+        if interior:
+            doom_map[eid] = interior
+    for label, extra in (doomed or {}).items():
+        doom_map[label] = doom_map.get(label, set()) | {
+            str(r) for r in extra if str(r) in rooms}
+    for eid, interior in doom_map.items():
         stranded = []
         for name, room in positions.items():
             if room not in interior or str(name) == eid:
@@ -207,13 +218,202 @@ def _guard_occupied_mover_removal(prev_scene, diff):
             stranded.append(name)
         if stranded:
             raise RuntimeError(
-                f"remove_entities would strand occupant(s) {stranded!r} "
-                f"inside removed entity {eid!r}'s interior room(s); "
+                f"removal/destruction would strand occupant(s) {stranded!r} "
+                f"inside removed {eid!r}'s doomed room(s); "
                 "reposition them via state_diff.positions or record their "
                 "departure in cast_changes in the same beat"
             )
 
-# ---- Room registry (derived) + commit-side structural dedup ----
+# ---- Single-book destruction (Phase 2, item 4) ----
+#
+# The DIRECTOR resolves the causal destructive event by declaring it in
+# state_diff.destruction (the revived DestructionEffect shape) -- code
+# never originates a destruction, it only realizes a declared one
+# deterministically: the target's ONE anchored/scoped book and its
+# registered rooms are retired (retire-not-delete: the ruin's history
+# stays retrievable), the live rooms drop through the ordinary diff
+# machinery, a stranded occupant fails the whole commit (guard above),
+# and awareness propagates only through latency-gated `news_arrival`
+# scheduled events that the mechanics sweep fires against the minting
+# frame's clock. Scope is a single vehicle or building; multi-book
+# cascades are Phase 3.
+
+def _destruction_book(cid, target):
+    """The ONE live book destruction of `target` retires: its anchored
+    vehicle book, else the book scoped to it as a location."""
+    row = q(
+        "SELECT id, name FROM lorebooks WHERE chat_id=? AND "
+        "anchor_entity_id=? AND retired_turn_id IS NULL ORDER BY id LIMIT 1",
+        (cid, target), one=True,
+    )
+    if row:
+        return row
+    return q(
+        "SELECT id, name FROM lorebooks WHERE chat_id=? AND "
+        "scope_location_id IN (?, ?) AND retired_turn_id IS NULL "
+        "ORDER BY id LIMIT 1",
+        (cid, target, normalize_room_id(target)), one=True,
+    )
+
+
+def _prepare_destruction(cid, prev_scene, diff, add_warning=None):
+    """Validate the Director's state_diff.destruction declaration and fold
+    its mechanical consequences into the (already deep-copied) diff:
+    remove the target entity and every doomed room. Pure reads; returns
+    the plan commit_scene applies durably, or None. Ledger-not-cage does
+    NOT apply here -- an invalid declaration is dropped with a warning
+    rather than guessed at, because destruction is irreversible."""
+    decl = diff.get("destruction")
+    if not isinstance(decl, dict):
+        return None
+
+    def warn(message):
+        if add_warning:
+            add_warning(message)
+
+    target = str(decl.get("target_id") or "").strip()
+    if not target:
+        warn("destruction declaration dropped: no target_id")
+        return None
+    scale = str(decl.get("scale") or "").strip().casefold()
+    if scale not in ("vehicle", "building"):
+        warn(
+            f"destruction of {target!r} dropped: scale {scale!r} is not a "
+            "single vehicle/building (larger scales are not supported yet)"
+        )
+        return None
+    kind = str(decl.get("kind") or "destroyed").strip() or "destroyed"
+
+    book = _destruction_book(cid, target)
+    registered = []
+    if book:
+        registered = [
+            r["room_uid"] for r in q(
+                "SELECT room_uid FROM room_registry WHERE chat_id=? AND "
+                "owning_book_id=? AND retired_turn_id IS NULL",
+                (cid, book["id"]),
+            )
+        ]
+
+    prev_rooms = prev_scene.get("rooms") or {}
+    entity_rooms = {rid for rid, r in prev_rooms.items()
+                    if isinstance(r, dict)
+                    and r.get("parent_entity") == target}
+    doomed_live = entity_rooms | {r for r in registered if r in prev_rooms}
+    # Retirement covers the book's whole registry, including rooms that
+    # live only in a sibling frame's scene -- the book is gone everywhere.
+    retire_rooms = sorted(set(registered) | {
+        rid for rid in entity_rooms
+        if q("SELECT 1 FROM room_registry WHERE chat_id=? AND room_uid=?",
+             (cid, rid), one=True)
+    })
+
+    entities = prev_scene.get("entities") or {}
+    label = target
+    ent = entities.get(target)
+    if isinstance(ent, dict) and ent.get("name"):
+        label = str(ent["name"])
+    elif book:
+        label = book["name"]
+
+    # Fold the mechanical consequences into the diff: the ordinary diff
+    # machinery (merge_scene_with_diff) is what actually drops the live
+    # entity/rooms -- destruction adds no second removal path.
+    if target in entities:
+        removals = diff.setdefault("remove_entities", [])
+        if target not in removals:
+            removals.append(target)
+    room_removals = diff.setdefault("remove_rooms", [])
+    for rid in sorted(doomed_live):
+        if rid not in room_removals:
+            room_removals.append(rid)
+
+    news = []
+    for item in decl.get("news") or []:
+        if not isinstance(item, dict):
+            continue
+        audience = str(item.get("audience") or "").strip()
+        if not audience:
+            continue
+        try:
+            latency = max(0.0, float(item.get("latency_seconds") or 0.0))
+        except (TypeError, ValueError):
+            latency = 0.0
+        summary = str(item.get("summary") or "").strip() \
+            or f"{label} has been {kind}"
+        news.append({"audience": audience, "latency_seconds": latency,
+                     "summary": summary})
+
+    return {
+        "target": target, "scale": scale, "kind": kind, "label": label,
+        "book_id": book["id"] if book else None,
+        "doomed_rooms": sorted(doomed_live),
+        "retire_rooms": retire_rooms,
+        "news": news,
+    }
+
+
+def _finalize_destruction_news(destruction, cid, frame_id, turn, elapsed):
+    """Mint the news_arrival scheduled-event rows: one per audience scope,
+    due_at = the minting frame's sim clock + declared latency, stable
+    event ids so a rerun cannot double-schedule. Same frame-gating payload
+    convention as transit_arrival (the sweep never fires one against
+    another frame's clock)."""
+    rows = []
+    for item in destruction["news"]:
+        event_id = _stable_event_key(
+            "news_arrival", cid, frame_id, destruction["target"], turn.id,
+            item["audience"])
+        rows.append({
+            "event_id": event_id, "chat_id": cid,
+            "due_at": elapsed + item["latency_seconds"],
+            "kind": "news_arrival", "location_id": None,
+            "payload": json.dumps({
+                "frame_id": frame_id,
+                "audience": item["audience"],
+                "summary": item["summary"],
+                "target_id": destruction["target"],
+                "destruction_kind": destruction["kind"],
+                "provenance": "told",
+            }, ensure_ascii=False),
+            "seed": f"news:{cid}:{turn.idx}", "status": "pending",
+        })
+    destruction["news_rows"] = rows
+
+
+def _apply_destruction(cid, turn_id, destruction):
+    """Durable half, inside commit_scene's transaction: retire the book
+    and its registered rooms atomically with the scene write, mint the
+    news events, and stage engine notices (appended -- the transit sweep
+    already wrote this beat's list in the domain before this one)."""
+    if destruction.get("book_id"):
+        qi("UPDATE lorebooks SET retired_turn_id=? "
+           "WHERE id=? AND chat_id=? AND retired_turn_id IS NULL",
+           (turn_id, destruction["book_id"], cid))
+    for rid in destruction.get("retire_rooms") or []:
+        qi("UPDATE room_registry SET retired_turn_id=? "
+           "WHERE chat_id=? AND room_uid=? AND retired_turn_id IS NULL",
+           (turn_id, cid, rid))
+    for row in destruction.get("news_rows") or []:
+        qi(
+            "INSERT OR REPLACE INTO scheduled_events"
+            "(event_id,chat_id,due_at,kind,location_id,payload,seed,status)"
+            " VALUES(?,?,?,?,?,?,?,?)",
+            (row["event_id"], row["chat_id"], row["due_at"], row["kind"],
+             row["location_id"], row["payload"], row["seed"], row["status"]),
+        )
+    notices = wget(cid, "engine_notices", []) or []
+    retired = len(destruction.get("retire_rooms") or [])
+    notices.append(
+        f"{destruction['label']} has been {destruction['kind']}; "
+        f"its records ({retired} registered room(s)"
+        + (", its lorebook" if destruction.get("book_id") else "")
+        + ") are retired history now."
+    )
+    wset(cid, "engine_notices", notices)
+
+
+# ---- Room registry (normalized) + commit-side structural dedup ----
 #
 # Two live failure classes share one root: nothing at commit time knew which
 # rooms an owner (a vehicle, the current location) ALREADY has. (1) Two
@@ -221,12 +421,17 @@ def _guard_occupied_mover_removal(prev_scene, diff):
 # silently merged one ship's deck into the other's. (2) The same owner's
 # room re-minted under a fresh key ("deck_three" for an existing "Deck 3")
 # created a live duplicate that only the advisory remove_rooms self-heal
-# might later clean up. The registry below records each room as a DERIVED
-# lore_entries row (category 'layout', entry_uid 'room:<book_id>:<room_key>')
-# under its owning vehicle/location book, rewritten at every commit -- the
-# scene JSON stays the sole authority for live rooms; the registry is a
-# ledger, never a cage: a colliding mint is REDIRECTED or REKEYED, never
-# rejected (invention is always allowed, duplication is not).
+# might later clean up. The registry is the normalized `room_registry`
+# table (Phase 2; it supersedes Phase 1's derived lore_entries encoding):
+# one row per room ever minted, keyed (chat_id, room_uid), scoped to its
+# owning vehicle/location book. It is authoritative for room IDENTITY,
+# dedup, and retirement ONLY -- the frame-scoped scene JSON stays the sole
+# authority for LIVE rooms/positions until the Phase-3 consolidation, and
+# both are written inside the same commit domain (commit_scene). Removal
+# RETIRES a row (retired_turn_id = the removing turn) instead of deleting
+# it, so a destroyed ship's decks remain retrievable history. Ledger,
+# never a cage: a colliding mint is REDIRECTED or REKEYED, never rejected
+# (invention is always allowed, duplication is not).
 
 def _anchored_book_ids(cid):
     return {
@@ -244,22 +449,27 @@ def _room_display_slug(room_id, room_def):
         name = str(room_def.get("name") or "")
     return normalize_room_id(name or str(room_id))
 
-def _registry_alias_index(book_id):
-    """{normalized name/alias: room_key} for every room registered under
-    one owning book -- read from the derived registry rows themselves."""
+def _registry_alias_index(cid, book_id):
+    """{normalized name/alias: room_uid} for every LIVE room registered
+    under one owning book -- read from the room_registry table. Retired
+    rows are excluded on purpose: dedup must never redirect a new mint
+    onto a destroyed room's identity (a rebuilt deck is a new room; the
+    ruin keeps its own retired row)."""
     index = {}
-    prefix = f"room:{book_id}:"
     for row in q(
-        "SELECT entry_uid, keys FROM lore_entries "
-        "WHERE lorebook_id=? AND category='layout' AND entry_uid LIKE ?",
-        (book_id, prefix + "%"),
+        "SELECT room_uid, name, aliases FROM room_registry "
+        "WHERE chat_id=? AND owning_book_id=? AND retired_turn_id IS NULL",
+        (cid, book_id),
     ):
-        room_key = row["entry_uid"][len(prefix):]
-        for alias in str(row["keys"] or "").split(","):
-            slug = normalize_room_id(alias)
+        try:
+            aliases = json.loads(row["aliases"] or "[]")
+        except Exception:
+            aliases = []
+        for alias in [row["name"], *aliases]:
+            slug = normalize_room_id(str(alias or ""))
             if slug:
-                index.setdefault(slug, room_key)
-        index.setdefault(normalize_room_id(room_key), room_key)
+                index.setdefault(slug, row["room_uid"])
+        index.setdefault(normalize_room_id(row["room_uid"]), row["room_uid"])
     return index
 
 def _apply_room_renames(diff, renames):
@@ -389,7 +599,7 @@ def dedup_minted_rooms(cid, prev_scene, diff, add_warning=None):
         if match is None and incoming_owner in anchor_books:
             book_id = anchor_books[incoming_owner]
             if book_id not in registry_cache:
-                registry_cache[book_id] = _registry_alias_index(book_id)
+                registry_cache[book_id] = _registry_alias_index(cid, book_id)
             registered = registry_cache[book_id].get(slug) \
                 or registry_cache[book_id].get(rid_slug)
             if registered and registered in prev_rooms:
@@ -407,16 +617,21 @@ def dedup_minted_rooms(cid, prev_scene, diff, add_warning=None):
         _apply_room_renames(diff, renames)
     return renames
 
-def _prepare_room_registry(cid, canon_book_id, sc):
-    """Build the derived registry rows for this commit -- pure reads plus a
-    batched embedding call, so it runs in preparation, before the write
-    lock. Each room registers under its owning book: parent_entity rooms
-    under the entity's anchored book; open-location rooms under the book
-    whose scope_location_id matches the location (falling back to chat
-    canon). Rows are DERIVED -- rewritten every commit, never a second
-    authority over the scene JSON."""
+def _prepare_room_registry(cid, canon_book_id, prev_scene, sc):
+    """Build this commit's room_registry mutations -- pure reads only, so
+    it runs in preparation, before the write lock. Each live room registers
+    under its owning book: parent_entity rooms under the entity's anchored
+    book; open-location rooms under the book whose scope_location_id
+    matches the location (falling back to chat canon).
+
+    Retire-not-delete: a room that was live in THIS frame's pre-turn scene
+    but is absent from the post-merge scene lost its live existence this
+    beat (diff remove_rooms, the mapping remove_rooms self-heal, or
+    destruction) -- its registry row is marked retired, never deleted.
+    Diffing prev vs post scene (rather than registry vs scene) is what
+    keeps this frame-safe: rooms living only in a SIBLING frame's scene
+    are simply never mentioned, so their rows are left untouched."""
     rooms = sc.get("rooms") or {}
-    entities = sc.get("entities") or {}
     anchor_books = _anchored_book_ids(cid)
     location_slug = normalize_room_id(str(sc.get("location") or ""))
     location_book = None
@@ -429,71 +644,80 @@ def _prepare_room_registry(cid, canon_book_id, sc):
         location_book = row["id"] if row else None
     default_book = location_book or canon_book_id
 
-    plan = {}
+    existing = {
+        row["room_uid"]: row
+        for row in q("SELECT * FROM room_registry WHERE chat_id=?", (cid,))
+    }
+
+    upserts = []
     for rid, rdef in rooms.items():
         if not isinstance(rdef, dict):
             continue
+        rid = str(rid)
         owner = rdef.get("parent_entity")
         book_id = anchor_books.get(owner) if owner else default_book
         if not book_id:
             continue
         name = str(rdef.get("name") or rid)
-        if owner:
-            ent = entities.get(owner)
-            owner_label = (ent.get("name") if isinstance(ent, dict) else "") \
-                or owner
-            place = f"aboard {owner_label}"
-        else:
-            place = f"at {sc.get('location') or 'this location'}"
-        keys = ", ".join(dict.fromkeys(
-            [name, str(rid).replace("_", " ")]))
-        content = f"Room registry: {name} (room id '{rid}') {place}."
-        plan.setdefault(book_id, {})[str(rid)] = {
-            "entry_uid": f"room:{book_id}:{rid}",
-            "keys": keys, "content": content,
-        }
+        row = existing.get(rid)
+        # Aliases ACCUMULATE across renames (old names kept, new appended):
+        # identity is the registry's whole job, so a room re-minted under a
+        # name it carried three beats ago must still dedup onto its row.
+        prior = []
+        if row is not None:
+            try:
+                prior = list(json.loads(row["aliases"] or "[]"))
+            except Exception:
+                prior = []
+        aliases = list(dict.fromkeys(
+            [*prior, name, rid.replace("_", " ")]))
+        if row is not None \
+                and row["owning_book_id"] == book_id \
+                and row["parent_entity"] == owner \
+                and row["name"] == name \
+                and row["aliases"] == json.dumps(aliases) \
+                and row["retired_turn_id"] is None:
+            continue  # already registered, identical, live
+        upserts.append({
+            "room_uid": rid, "owning_book_id": book_id,
+            "parent_entity": owner, "name": name, "aliases": aliases,
+        })
 
-    upserts, stale_ids = [], []
-    # Sweep every book that can hold registry rows, including one whose
-    # last registered room disappeared this beat (it has no plan entry at
-    # all -- exactly the case whose stale rows must still be removed).
-    registry_books = set(anchor_books.values()) | set(plan)
-    if default_book:
-        registry_books.add(default_book)
-    for book_id in sorted(registry_books):
-        entries = plan.get(book_id, {})
-        prefix = f"room:{book_id}:"
-        existing = {
-            row["entry_uid"]: row
-            for row in q(
-                "SELECT id, entry_uid, keys, content FROM lore_entries "
-                "WHERE lorebook_id=? AND category='layout' "
-                "AND entry_uid LIKE 'room:%'",
-                (book_id,),
-            )
-        }
-        for uid, row in existing.items():
-            # Stale: a registered room no longer live, or a row carried in
-            # under another book's uid prefix (chat import copies rows
-            # verbatim; the registry is derived, so rewrite it wholesale).
-            if not uid.startswith(prefix) or uid[len(prefix):] not in entries:
-                stale_ids.append(row["id"])
-        for entry in entries.values():
-            old = existing.get(entry["entry_uid"])
-            if old and old["keys"] == entry["keys"] \
-                    and old["content"] == entry["content"]:
-                continue
-            upserts.append({
-                "book_id": book_id,
-                "existing_id": old["id"] if old else None,
-                **entry,
-            })
-    if upserts:
-        vectors = embed_texts(
-            [f"{r['keys']} {r['content']}" for r in upserts])
-        for row, vector in zip(upserts, vectors):
-            row["embedding"] = vector
-    return {"upserts": upserts, "stale_ids": stale_ids}
+    prev_rooms = {str(r) for r in (prev_scene.get("rooms") or {})}
+    retire = sorted(
+        rid for rid in prev_rooms - {str(r) for r in rooms}
+        if rid in existing and existing[rid]["retired_turn_id"] is None
+    )
+    return {"upserts": upserts, "retire": retire}
+
+
+def _apply_room_registry(cid, turn_id, registry):
+    """Write the prepared registry mutations (inside commit_scene's
+    transaction). Upsert revives a retired row when the same key is
+    genuinely re-minted live -- same key in the same chat is the same
+    identity; the registry records that it exists again."""
+    for rid in registry.get("retire") or []:
+        qi(
+            "UPDATE room_registry SET retired_turn_id=? "
+            "WHERE chat_id=? AND room_uid=? AND retired_turn_id IS NULL",
+            (turn_id, cid, rid),
+        )
+    for row in registry.get("upserts") or []:
+        qi(
+            "INSERT INTO room_registry"
+            "(chat_id,room_uid,owning_book_id,parent_entity,name,aliases,"
+            "payload,created_turn_id,retired_turn_id) "
+            "VALUES(?,?,?,?,?,?,?,?,NULL) "
+            "ON CONFLICT(chat_id,room_uid) DO UPDATE SET "
+            "owning_book_id=excluded.owning_book_id,"
+            "parent_entity=excluded.parent_entity,"
+            "name=excluded.name,"
+            "aliases=excluded.aliases,"
+            "retired_turn_id=NULL",
+            (cid, row["room_uid"], row["owning_book_id"],
+             row["parent_entity"], row["name"], json.dumps(row["aliases"]),
+             "{}", turn_id),
+        )
 
 def prepare_scene_commit(ctx):
     """Build the exact post-turn scene without mutating durable state.
@@ -511,9 +735,14 @@ def prepare_scene_commit(ctx):
     # mutating the shared dict would desync it from what was saved.
     diff = copy.deepcopy(res.get("state_diff") or {})
     prev_scene = wget(cid, "scene", {}) or {}
+    destruction = _prepare_destruction(
+        cid, prev_scene, diff, add_warning=ctx.add_warning)
     room_renames = dedup_minted_rooms(
         cid, prev_scene, diff, add_warning=ctx.add_warning)
-    _guard_occupied_mover_removal(prev_scene, diff)
+    _guard_occupied_mover_removal(
+        prev_scene, diff,
+        doomed={destruction["target"]: destruction["doomed_rooms"]}
+        if destruction else None)
     sc = merge_scene_with_diff(prev_scene, diff)
 
     staged = (
@@ -637,9 +866,18 @@ def prepare_scene_commit(ctx):
         diff.get("cast_changes") or [],
     )
 
+    if destruction:
+        base_clock = clock or wget(
+            cid, "simulation_clock", {"elapsed_seconds": 0.0}) or {}
+        _finalize_destruction_news(
+            destruction, cid, ctx.turn.frame_id, ctx.turn,
+            float(base_clock.get("elapsed_seconds") or 0.0))
+
     return {
         "scene": sc, "clock": clock,
-        "room_registry": _prepare_room_registry(cid, chat.lorebook_id, sc),
+        "room_registry": _prepare_room_registry(
+            cid, chat.lorebook_id, prev_scene, sc),
+        "destruction": destruction,
     }
 
 
@@ -652,51 +890,30 @@ def commit_scene(ctx, nonce, *, prepared=None):
             wset(ctx.chat.id, "simulation_clock", prepared["clock"])
         wset(ctx.chat.id, "scene", sc)
         sync_anchored_books(ctx.chat.id, sc)
-        # Rewrite the derived room registry (see the dedup block comment):
-        # embeddings were prepared before the write lock; these rows are
-        # reconstructible bookkeeping, never a second authority.
-        for entry_id in registry.get("stale_ids") or []:
-            delete_lore(entry_id)
-        for row in registry.get("upserts") or []:
-            if row.get("existing_id"):
-                update_lore(
-                    row["existing_id"], row["keys"], row["content"],
-                    "layout", embedding=row.get("embedding"),
-                )
-            else:
-                add_lore(
-                    row["book_id"], row["keys"], row["content"],
-                    category="layout", entry_uid=row["entry_uid"],
-                    importance=0.2, embedding=row.get("embedding"),
-                )
+        # Dual-write the room registry beside the scene blob, inside the
+        # same commit domain (see the registry block comment): identity/
+        # retirement bookkeeping, never a second authority over live rooms.
+        _apply_room_registry(ctx.chat.id, ctx.turn.id, registry)
+        if prepared.get("destruction"):
+            _apply_destruction(
+                ctx.chat.id, ctx.turn.id, prepared["destruction"])
     return sc
 
-# ---- Transit sweep: timed arrivals, condition expiry, engine notices ----
+# ---- Mechanics sweep: timed arrivals, expiry, news, engine notices ----
 
 def commit_transit_sweep(ctx, nonce, *, prepared=None):
-    """Deterministic mechanical follow-through for moving rooms, run FIRST
-    among commit_all's domains -- it mutates the PREPARED scene, and
+    """Commit-domain wrapper around mechanics.mechanics_sweep, run FIRST
+    among commit_all's domains -- the sweep mutates the PREPARED scene, and
     commit_scene (which runs after it) is what persists those effects.
 
-    1. Fire due scheduled 'transit_arrival' events for THIS frame. The
-       frame id rides in each event's payload: scheduled_events has no
-       frame column and simulation clocks are frame-scoped, so an event
-       minted in one frame must never fire against another frame's clock.
-       Firing = set the entity's position to the destination, phase to
-       docked, and stage a mechanical notice (world key 'engine_notices',
-       overwritten every sweep so notices self-expire after one beat) that
-       the next director turn acknowledges rather than re-invents.
-    2. Schedule new arrivals for any entity whose transit state carries
-       eta_seconds + destination_room and has no pending event yet, with a
-       deterministic event id so a rerun cannot double-schedule.
-    3. Deactivate expired world_conditions (expires_at <= this frame's
-       clock) -- reviving the dormant expires_at column so 'the fire burns
-       out' is encodable as expiry rather than neglect. world_conditions is
-       chat-scoped (no frame column); the committing frame's clock is used,
-       matching how started_at is written.
-
-    All writes run inside the caller's transaction (nested transaction() is
-    a savepoint), and checkpoint restore snapshots scheduled_events whole,
+    The ordered passes themselves -- (a) fire due scheduled events for THIS
+    frame (transit arrivals + news arrivals), (b) schedule new arrivals,
+    (c) condition expiry, (d) dock-edge recompute, (e) vehicle-zone/
+    companion-carry inference -- live in mechanics.py (see its module
+    docstring for the contract). This wrapper only feeds it the database
+    rows and applies the event_ops it returns: all writes run inside the
+    caller's transaction (nested transaction() is a savepoint), and
+    checkpoint restore snapshots scheduled_events/world_conditions whole,
     so a rerolled turn reproduces the exact pending/fired state.
     """
     cid = ctx.chat.id
@@ -704,103 +921,64 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
     prepared = prepared or prepare_scene_commit(ctx)
     sc = prepared["scene"]
     clock = prepared.get("clock") or wget(cid, "simulation_clock", {}) or {}
-    elapsed = float(clock.get("elapsed_seconds") or 0.0)
-
-    notices = []
-    fired = scheduled = 0
-    entities = sc.get("entities") or {}
-    positions = sc.setdefault("positions", {})
+    res = ctx.director_resolve or ctx.director_establish or {}
+    diff = res.get("state_diff") or {}
+    cast_names = [character_name(json.loads(c["sheet"])) for c in ctx.cast]
 
     with transaction():
-        pending_entity_ids = set()
-        for row in q(
+        pending = [dict(r) for r in q(
             "SELECT * FROM scheduled_events WHERE chat_id=? AND "
-            "status='pending' AND kind='transit_arrival' ORDER BY due_at",
+            "status='pending' AND kind IN ('transit_arrival','news_arrival') "
+            "ORDER BY due_at",
             (cid,),
-        ):
-            try:
-                payload = json.loads(row["payload"] or "{}")
-            except Exception:
-                payload = {}
-            eid = str(payload.get("entity_id") or "")
-            if payload.get("frame_id") != frame_id or row["due_at"] > elapsed:
-                pending_entity_ids.add(eid)
-                continue
-            ent = entities.get(eid)
-            state = ent.get("state") if isinstance(ent, dict) else None
-            transit = state.get("transit") if isinstance(state, dict) else None
-            if not isinstance(transit, dict) \
-                    or str(transit.get("phase") or "").casefold() == "docked":
-                # Entity gone, or the director already docked it by hand --
-                # the event is moot, not fireable.
-                qtx("UPDATE scheduled_events SET status='cancelled' "
-                    "WHERE event_id=?", (row["event_id"],))
-                continue
-            destination = str(payload.get("destination_room")
-                              or transit.get("destination_room") or "")
-            if destination:
-                positions[eid] = destination
-            transit["phase"] = "docked"
-            transit.pop("eta_seconds", None)
-            transit.pop("destination_room", None)
-            qtx("UPDATE scheduled_events SET status='fired' WHERE event_id=?",
-                (row["event_id"],))
-            fired += 1
-            label = (ent.get("name") if isinstance(ent, dict) else "") or eid
-            notices.append(
-                f"{label} has arrived at "
-                f"{destination or 'its destination'} and is docked there."
-            )
+        )]
+        conditions = [dict(r) for r in q(
+            "SELECT condition_id, expires_at FROM world_conditions "
+            "WHERE chat_id=? AND active=1",
+            (cid,),
+        )]
+        prev_scene = wget(cid, "scene", {}) or {}
 
-        for eid, ent in entities.items():
-            if not isinstance(ent, dict):
-                continue
-            state = ent.get("state")
-            transit = state.get("transit") if isinstance(state, dict) else None
-            if not isinstance(transit, dict):
-                continue
-            try:
-                eta = float(transit.get("eta_seconds"))
-            except (TypeError, ValueError):
-                continue
-            destination = str(transit.get("destination_room") or "")
-            if eta <= 0 or not destination or str(eid) in pending_entity_ids:
-                continue
-            event_id = _stable_event_key(
-                "transit_arrival", cid, frame_id, eid, ctx.turn.id)
-            qtx(
-                "INSERT OR REPLACE INTO scheduled_events"
-                "(event_id,chat_id,due_at,kind,location_id,payload,seed,status)"
-                " VALUES(?,?,?,?,?,?,?,?)",
-                (event_id, cid, elapsed + eta, "transit_arrival",
-                 positions.get(eid),
-                 json.dumps({"entity_id": eid,
-                             "destination_room": destination,
-                             "frame_id": frame_id}, ensure_ascii=False),
-                 f"transit:{cid}:{ctx.turn.idx}", "pending"),
-            )
-            scheduled += 1
-
-        if fired:
-            # An arrival changed the inputs the dock-edge rewrite derives
-            # doorways from; recompute before commit_scene persists.
-            apply_transit_dock_edges(sc)
-
-        expired_row = q(
-            "SELECT COUNT(*) AS n FROM world_conditions WHERE chat_id=? AND "
-            "active=1 AND expires_at IS NOT NULL AND expires_at<=?",
-            (cid, elapsed), one=True,
+        _, event_ops, notices = mechanics_sweep(
+            sc, clock, frame_id, pending,
+            conditions=conditions, prev_scene=prev_scene, chat_id=cid,
+            turn_id=ctx.turn.id, turn_idx=ctx.turn.idx,
+            cast_names=cast_names,
+            cast_changes=diff.get("cast_changes") or [],
         )
-        expired = int(expired_row["n"] or 0) if expired_row else 0
-        if expired:
-            qtx("UPDATE world_conditions SET active=0 WHERE chat_id=? AND "
-                "active=1 AND expires_at IS NOT NULL AND expires_at<=?",
-                (cid, elapsed))
+
+        kind_by_id = {row["event_id"]: row["kind"] for row in pending}
+        fired = scheduled = expired = news_fired = 0
+        for op in event_ops:
+            if op[0] == "status":
+                _, event_id, status = op
+                qtx("UPDATE scheduled_events SET status=? WHERE event_id=?",
+                    (status, event_id))
+                if status == "fired":
+                    if kind_by_id.get(event_id) == "news_arrival":
+                        news_fired += 1
+                    else:
+                        fired += 1
+            elif op[0] == "schedule":
+                row = op[1]
+                qtx(
+                    "INSERT OR REPLACE INTO scheduled_events"
+                    "(event_id,chat_id,due_at,kind,location_id,payload,seed,"
+                    "status) VALUES(?,?,?,?,?,?,?,?)",
+                    (row["event_id"], row["chat_id"], row["due_at"],
+                     row["kind"], row["location_id"], row["payload"],
+                     row["seed"], row["status"]),
+                )
+                scheduled += 1
+            elif op[0] == "expire_condition":
+                qtx("UPDATE world_conditions SET active=0 "
+                    "WHERE chat_id=? AND condition_id=?", (cid, op[1]))
+                expired += 1
 
         wset(cid, "engine_notices", notices)
 
     return {"fired": fired, "scheduled": scheduled, "expired": expired,
-            "notices": notices}
+            "news_fired": news_fired, "notices": notices}
 
 # ---- Cast changes ----
 
@@ -875,10 +1053,21 @@ def commit_world_entities(ctx, nonce):
                 # shows it to the model this same turn, so entries route
                 # into it instead of canon without any extra plumbing.
                 if entity_def.get("kind") == "vehicle" and entity_def.get("interior_rooms"):
-                    has_book = c.execute(
-                        "SELECT 1 FROM lorebooks WHERE chat_id=? AND anchor_entity_id=?",
-                        (cid, entity_id),
-                    ).fetchone()
+                    # Canonical-anchor comparison, not raw id equality: a
+                    # re-coined alias id for an existing vehicle
+                    # ('tamsin_ferry_entity' vs 'ferry_tamsin') must find
+                    # that vehicle's existing book, not mint a second one.
+                    alias_map = _entity_alias_map(cid)
+                    canon = _canonical_anchor(entity_id, alias_map)
+                    has_book = any(
+                        _canonical_anchor(r["anchor_entity_id"], alias_map)
+                        == canon
+                        for r in c.execute(
+                            "SELECT anchor_entity_id FROM lorebooks "
+                            "WHERE chat_id=? AND anchor_entity_id IS NOT NULL",
+                            (cid,),
+                        ).fetchall()
+                    )
                     if not has_book:
                         c.execute(
                             "INSERT INTO lorebooks(name,chat_id,book_type,summary,parent_id,"
@@ -1305,6 +1494,71 @@ def promotable_background_presences(chat_id):
     out.sort(key=lambda r: (-r["promotable"], -(r["last_turn"] or 0)))
     return out
 
+# Filler tokens ignored when reducing an entity id / display name to its
+# canonical token key ("ferry_tamsin" vs "tamsin_ferry_entity" must meet).
+_GENERIC_ID_TOKENS = {"the", "a", "an", "entity", "obj", "object"}
+
+
+def _canonical_token_key(text):
+    tokens = [t for t in normalize_room_id(str(text or "")).split("_")
+              if t and t not in _GENERIC_ID_TOKENS]
+    return "_".join(sorted(tokens))
+
+
+def _entity_alias_map(cid):
+    """{normalized alias/name/id (slug AND sorted-token key): canonical
+    entity_id} for this chat's live entities, from world_entities plus the
+    current scene -- so a book proposal anchored to an ALIAS of a vehicle
+    ('tamsin_ferry_entity' for 'ferry_tamsin') resolves to the same
+    canonical entity as the book that already tracks it."""
+    amap = {}
+
+    def register(names, own_id):
+        keys = []
+        for value in names:
+            value = str(value or "").strip()
+            if not value:
+                continue
+            for key in (normalize_room_id(value),
+                        _canonical_token_key(value)):
+                if key and key not in keys:
+                    keys.append(key)
+        # Union semantics: if ANY of this entity's keys already resolves
+        # to an earlier entity, this row is (for dedup purposes) another
+        # spelling of THAT entity -- its own id inherits that canonical
+        # rather than becoming its own. Row order is the deterministic
+        # tiebreak (world_entities first, insertion order).
+        canonical = next((amap[k] for k in keys if k in amap), own_id)
+        for key in keys:
+            amap.setdefault(key, canonical)
+
+    for row in q(
+        "SELECT entity_id, name, payload FROM world_entities "
+        "WHERE chat_id=? AND retired_turn_id IS NULL",
+        (cid,),
+    ):
+        try:
+            payload = json.loads(row["payload"] or "{}")
+        except Exception:
+            payload = {}
+        register([row["entity_id"], row["name"],
+                  *(payload.get("aliases") or [])], row["entity_id"])
+    scene = wget(cid, "scene", {}) or {}
+    for eid, ent in (scene.get("entities") or {}).items():
+        if isinstance(ent, dict):
+            register([eid, ent.get("name"), *(ent.get("aliases") or [])],
+                     str(eid))
+    return amap
+
+
+def _canonical_anchor(anchor, alias_map):
+    if not anchor:
+        return None
+    return alias_map.get(normalize_room_id(anchor)) \
+        or alias_map.get(_canonical_token_key(anchor)) \
+        or anchor
+
+
 def _apply_mapping_book_ops(cid, lb, book_ops):
     """Deterministically validates and creates the child lorebooks
     mapping_commit proposed this turn (schemas.py's BookOp, prompts.py's
@@ -1325,6 +1579,7 @@ def _apply_mapping_book_ops(cid, lb, book_ops):
         for row in q("SELECT * FROM lorebooks WHERE chat_id=?", (cid,))
     }
     created = 0
+    alias_map = None  # built lazily -- most turns propose no books
     for op in book_ops:
         if not isinstance(op, dict) or op.get("op") != "create":
             continue
@@ -1341,11 +1596,22 @@ def _apply_mapping_book_ops(cid, lb, book_ops):
         book_type = op.get("book_type") if op.get("book_type") in LOREBOOK_TYPES else "general"
         anchor = str(op.get("anchor_entity_id") or "").strip() or None
         scope_loc = str(op.get("scope_location_id") or "").strip() or None
+        # Anchor-alias + normalized-name dedup: comparing raw anchor ids
+        # let two DIFFERENT entity-id aliases of ONE vehicle
+        # ('ferry_tamsin' vs 'tamsin_ferry_entity') mint two books for the
+        # same ship. Resolve both sides to a canonical entity first, and
+        # compare names by slug so punctuation/case drift can't fork a
+        # book either. One vehicle -> one book.
+        if alias_map is None:
+            alias_map = _entity_alias_map(cid)
+        canon_anchor = _canonical_anchor(anchor, alias_map)
+        name_slug = normalize_room_id(name)
 
         dup = next((
             row for row in existing.values()
-            if row["name"].casefold() == name.casefold()
-            or (anchor and row["anchor_entity_id"] == anchor)
+            if normalize_room_id(row["name"]) == name_slug
+            or (canon_anchor and _canonical_anchor(
+                row["anchor_entity_id"], alias_map) == canon_anchor)
             or (scope_loc and row["book_type"] == book_type and row["scope_location_id"] == scope_loc)
         ), None)
         if dup:
@@ -1368,13 +1634,16 @@ def _apply_mapping_book_ops(cid, lb, book_ops):
                 name, cid, book_type, str(op.get("summary") or "")[:500], parent_id,
                 inheritance_mode,
                 str(op.get("scope_world_id") or "").strip() or None,
-                scope_loc, anchor, new_uid("book"),
+                # Store the CANONICAL entity id (not the model's alias
+                # spelling) so sync_anchored_books and future dedup all
+                # agree on which entity this book tracks.
+                scope_loc, canon_anchor, new_uid("book"),
             ),
         )
         created += 1
         existing[new_id] = {
             "id": new_id, "name": name, "book_type": book_type,
-            "anchor_entity_id": anchor, "scope_location_id": scope_loc,
+            "anchor_entity_id": canon_anchor, "scope_location_id": scope_loc,
         }
         if op.get("temp_id"):
             temp_map[op["temp_id"]] = new_id

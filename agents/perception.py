@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 
 from character_schema import (
@@ -448,7 +449,20 @@ def perception_outcome(ctx, nonce):
     interp = ctx.get("director_interpret", {})
     reactors = set((interp.get("flow") or {}).get("reactors") or [])
 
-    diff = res.get("state_diff") or {}
+    # Room dedup runs BEFORE this stage's merge (Phase-2 re-scope of the
+    # Phase-1 one-beat skew): commit will deterministically rekey/redirect
+    # colliding minted room keys, and it is a pure function of the stored
+    # scene + registry + diff -- all unchanged between here and commit --
+    # so running it on a COPY of the diff yields the exact same renames.
+    # Without this, perception_outcome rendered the pre-dedup key for one
+    # beat while the committed world carried the canonical one. Local
+    # import: commit.py must stay ignorant of agent modules (facade rule),
+    # so the dependency points this way only (same precedent as commit's
+    # own _is_player).
+    from commit import dedup_minted_rooms
+
+    diff = copy.deepcopy(res.get("state_diff") or {})
+    dedup_minted_rooms(chat["id"], sc, diff)
     sc = merge_scene_with_diff(sc, diff)
 
     # Prefer re-resolving against the just-merged (post-resolution) scene

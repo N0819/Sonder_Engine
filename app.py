@@ -521,7 +521,8 @@ def _apply_world_id_remap(blob, remap):
         return obj
 
     for key in ("world_entities", "world_placements", "world_conditions",
-                "scheduled_events", "fiction_worlds", "fiction_locations"):
+                "scheduled_events", "room_registry",
+                "fiction_worlds", "fiction_locations"):
         if blob.get(key):
             blob[key] = deep_remap(blob[key])
 
@@ -582,6 +583,11 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
         old_parent_id = book.get("parent_id")
         book["lorebook_id"] = bookmap.get(old_id)
         book["parent_id"] = bookmap.get(old_parent_id)
+        # Book retirement is stamped with a turn-row FK -- remap it like
+        # world_entities.retired_turn_id below (null when the turn wasn't
+        # cloned) or a cross-install restore FK-fails and aborts.
+        if "retired_turn_id" in book:
+            book["retired_turn_id"] = turn_idmap.get(book.get("retired_turn_id"))
 
     remapped_links = []
     for link in blob.get("lorebook_links") or []:
@@ -664,9 +670,22 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
         if "retired_turn_id" in ent:
             ent["retired_turn_id"] = turn_idmap.get(ent.get("retired_turn_id"))
 
+    # room_registry rows embed turn FKs (same rule as world_entities) plus
+    # the owning book's INTEGER id, which the generic string remap below
+    # never touches -- remap it through bookmap (None when the book wasn't
+    # cloned; insert_world_tables also guards the FK).
+    for rr in blob.get("room_registry") or []:
+        if "created_turn_id" in rr:
+            rr["created_turn_id"] = turn_idmap.get(rr.get("created_turn_id"))
+        if "retired_turn_id" in rr:
+            rr["retired_turn_id"] = turn_idmap.get(rr.get("retired_turn_id"))
+        if "owning_book_id" in rr:
+            rr["owning_book_id"] = bookmap.get(rr.get("owning_book_id"))
+
     if world_id_remap:
         for key in ("world_entities", "world_placements", "world_conditions",
-                    "scheduled_events", "fiction_worlds", "fiction_locations"):
+                    "scheduled_events", "room_registry",
+                    "fiction_worlds", "fiction_locations"):
             if blob.get(key):
                 blob[key] = _deep_remap_ids(blob[key], world_id_remap)
         if isinstance(blob.get("world"), dict):
@@ -2176,7 +2195,8 @@ def chat_export(cid: int):
     # world_entities table while world.scene + fixed_points reference
     # entities, so the first post-import commit false-fires a paradox.
     for tbl in ("world_entities", "world_placements", "world_conditions",
-                "scheduled_events", "fiction_worlds", "fiction_locations"):
+                "scheduled_events", "room_registry",
+                "fiction_worlds", "fiction_locations"):
         export[tbl] = [dict(r) for r in q(f"SELECT * FROM {tbl} WHERE chat_id=?", (cid,))]
     # Multiplayer roster + frame stations, and any pre-submitted co-player
     # inputs, and the lore link graph -- all silently dropped before.
@@ -2489,8 +2509,9 @@ def chat_import(body: dict = Body(...)):
                 bk = b.get("book", {})
                 nb = qtx(
                     "INSERT INTO lorebooks("
-                    "name,chat_id,origin_id,book_type,summary,resource_uid,anchor_entity_id"
-                    ") VALUES(?,?,?,?,?,?,?)",
+                    "name,chat_id,origin_id,book_type,summary,resource_uid,"
+                    "anchor_entity_id,retired_turn_id"
+                    ") VALUES(?,?,?,?,?,?,?,?)",
                     (
                         bk.get("name") or "book",
                         new_chat_id,
@@ -2499,6 +2520,8 @@ def chat_import(body: dict = Body(...)):
                         bk.get("summary") or "",
                         bk.get("resource_uid") or new_uid("book"),
                         bk.get("anchor_entity_id"),
+                        # Turn-row FK: remap or null, never carry verbatim.
+                        turn_id_map.get(bk.get("retired_turn_id")),
                     ),
                 )
                 restore_lorebook(nb, b.get("entries") or [])
@@ -2616,11 +2639,20 @@ def chat_import(body: dict = Body(...)):
         world_tables = {
             k: [dict(r) for r in (data.get(k) or [])]
             for k in ("world_entities", "world_placements", "world_conditions",
-                      "scheduled_events", "fiction_worlds", "fiction_locations")
+                      "scheduled_events", "room_registry",
+                      "fiction_worlds", "fiction_locations")
         }
         for ent in world_tables["world_entities"]:
             ent["created_turn_id"] = turn_id_map.get(ent.get("created_turn_id"))
             ent["retired_turn_id"] = turn_id_map.get(ent.get("retired_turn_id"))
+        # room_registry: turn FKs through the turn idmap, the owning book's
+        # integer id through bookmap (None when the book wasn't imported --
+        # insert_world_tables also guards the FK); room_uid/parent_entity
+        # stay verbatim like every other entity id on import.
+        for rr in world_tables["room_registry"]:
+            rr["created_turn_id"] = turn_id_map.get(rr.get("created_turn_id"))
+            rr["retired_turn_id"] = turn_id_map.get(rr.get("retired_turn_id"))
+            rr["owning_book_id"] = bookmap.get(rr.get("owning_book_id"))
         _remap_scheduled_event_frames(world_tables["scheduled_events"], frame_idmap)
         insert_world_tables(new_chat_id, world_tables)
 
@@ -3024,8 +3056,9 @@ def turn_branch(tid: int):
                 "INSERT INTO lorebooks("
                 "name,chat_id,origin_id,book_type,summary,"
                 "parent_id,scope_world_id,scope_location_id,"
-                "inheritance_mode,sort_order,resource_uid,anchor_entity_id"
-                ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                "inheritance_mode,sort_order,resource_uid,anchor_entity_id,"
+                "retired_turn_id"
+                ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     b.get("name") or "canon",
                     ncid,
@@ -3041,6 +3074,9 @@ def turn_branch(tid: int):
                     # Vehicle-book anchor follows an entity -- remap it to the
                     # branch's own entity id so the book keeps tracking it.
                     (world_id_remap.get(_anchor, _anchor) if _anchor else _anchor),
+                    # Retirement stamp is a turn-row FK -- remap through the
+                    # branch's turn idmap or null it (uncloned turn).
+                    idmap.get(b.get("retired_turn_id")),
                 )
             )
 
@@ -3135,7 +3171,8 @@ def turn_branch(tid: int):
         world_tables = json.loads(json.dumps({
             k: (blob.get(k) or [])
             for k in ("world_entities", "world_placements", "world_conditions",
-                      "scheduled_events", "fiction_worlds", "fiction_locations")
+                      "scheduled_events", "room_registry",
+                      "fiction_worlds", "fiction_locations")
         }))
         if world_id_remap:
             for k in world_tables:
@@ -3143,6 +3180,13 @@ def turn_branch(tid: int):
         for ent in world_tables["world_entities"]:
             ent["created_turn_id"] = idmap.get(ent.get("created_turn_id"))
             ent["retired_turn_id"] = idmap.get(ent.get("retired_turn_id"))
+        # room_registry: turn FKs through the branch turn idmap; the owning
+        # book's integer id through bookmap (parent_entity already followed
+        # the entity remap via _deep_remap_ids above).
+        for rr in world_tables["room_registry"]:
+            rr["created_turn_id"] = idmap.get(rr.get("created_turn_id"))
+            rr["retired_turn_id"] = idmap.get(rr.get("retired_turn_id"))
+            rr["owning_book_id"] = bookmap.get(rr.get("owning_book_id"))
         _remap_scheduled_event_frames(world_tables["scheduled_events"], frame_idmap)
         insert_world_tables(ncid, world_tables)
 

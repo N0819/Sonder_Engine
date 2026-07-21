@@ -468,6 +468,14 @@ class ComponentState(BaseModel):
     state: dict[str, Any] = Field(default_factory=dict)
 
 # ---- World and Location Hierarchy ----
+#
+# DEPRECATED -- MARKED FOR REMOVAL (movement/space Phase 2, removed in
+# Phase 3): WorldDef, LocationDef, and TransitEdge belong to the dead
+# fiction_worlds/fiction_locations/transit_edges macro schema that nothing
+# in the runtime pipeline ever writes. Their roles are absorbed by the
+# unified model: macro geography = upper lorebook-tree books; macro
+# transit = portal links (entity.state.link) + scheduled_events latency.
+# Kept only so old imports/checkpoint blobs keep tolerating the shapes.
 
 class WorldDef(BaseModel):
     world_id: str
@@ -484,6 +492,7 @@ class WorldDef(BaseModel):
     state: dict[str, Any] = Field(default_factory=dict)
     provenance: dict[str, Any] = Field(default_factory=dict)
 
+# DEPRECATED -- see the WorldDef block comment above.
 class LocationDef(BaseModel):
     location_id: str
     world_id: str
@@ -508,6 +517,7 @@ class SpatialZone(BaseModel):
     neighbors: list[dict] = Field(default_factory=list)
     properties: dict[str, Any] = Field(default_factory=dict)
 
+# DEPRECATED -- see the WorldDef block comment above.
 class TransitEdge(BaseModel):
     edge_id: str
     from_world_id: str
@@ -558,8 +568,18 @@ class ScheduledEvent(BaseModel):
     status: str = "pending"
 
 class DestructionEffect(BaseModel):
-    effect_id: str
-    source_event_id: str
+    """REVIVED (movement/space Phase 2, item 4) as the Director's
+    declaration shape for single-target destruction, carried in
+    StateDiff.destruction. The Director owns the causal event -- code
+    never originates a destruction; commit.py only realizes a declared
+    one deterministically: retire the target's ONE book + its registered
+    rooms, drop the live rooms via the ordinary diff machinery, and mint
+    latency-gated `news_arrival` scheduled events (one per `news` entry).
+    scale is limited to a single 'vehicle' or 'building' this phase --
+    multi-book cascades are Phase 3. effect_id/source_event_id are
+    optional in the declaration (commit derives stable ids itself)."""
+    effect_id: str = ""
+    source_event_id: str = ""
     target_id: str
     scale: str
     kind: str
@@ -570,6 +590,13 @@ class DestructionEffect(BaseModel):
     persistent_conditions: list[str] = Field(default_factory=list)
     estimated_casualties: Optional[dict] = None
     uncertainty: dict[str, Any] = Field(default_factory=dict)
+    # Awareness propagation (info-barrier): destruction is objective the
+    # moment it commits; who LEARNS of it is latency-gated. One entry per
+    # audience scope: {audience: str, latency_seconds: float, summary: str}
+    # -> one news_arrival scheduled event due at clock + latency, delivered
+    # with told/heard provenance through the normal director/perception
+    # path when it fires.
+    news: list[dict] = Field(default_factory=list)
 
 class Engagement(BaseModel):
     engagement_id: str
@@ -720,6 +747,11 @@ class StateDiff(BaseModel):
     introductions: list[dict] = Field(default_factory=list)
     time: Optional[dict] = None
     claim_dispositions: list[dict] = Field(default_factory=list)
+    # Single-target destruction declaration (DestructionEffect shape --
+    # see its docstring). Declared here so model_dump() keeps it through
+    # validation (the zone-field precedent above); commit.py validates it
+    # deterministically and refuses anything beyond one vehicle/building.
+    destruction: Optional[dict] = None
 
 class AssertedChange(BaseModel):
     """One entry of director_resolve's own changes-asserted manifest: a
