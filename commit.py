@@ -1540,6 +1540,24 @@ def _background_fired_reactions(br):
     return []
 
 
+# Entity kinds that are clearly NOT agents. Everything else with a name is
+# treated as a potential background presence (see track_background_presences).
+# Deny-list rather than allow-list because the model's `kind` string is
+# freeform: a novel agent kind (monster, creature, robot, drone, spirit, ...)
+# must not fall through, whereas a mistracked object is harmless -- it never
+# qualifies to react. Ambiguous kinds ("machine", "device") are deliberately
+# NOT listed, so a sentient robot tagged that way is still tracked.
+_INERT_ENTITY_KINDS = frozenset({
+    "object", "item", "fixture", "furniture", "furnishing", "appliance",
+    "vehicle", "structure", "building", "terrain", "feature", "landmark",
+    "door", "gate", "barrier", "wall", "container", "tool", "weapon",
+    "armor", "clothing", "prop", "scenery", "decoration", "plant", "tree",
+    "food", "drink", "substance", "material", "resource", "location",
+    "room", "area", "zone", "region", "sign", "document", "book", "note",
+    "panel", "console", "terminal", "screen", "light", "effect", "hazard",
+    "trap", "corpse", "remains",
+})
+
 def track_background_presences(ctx, nonce):
     """Deterministic, LLM-free tracking of named entities the director
     keeps writing into resolved_event/dialogue_log who are NOT a
@@ -1549,7 +1567,8 @@ def track_background_presences(ctx, nonce):
     character_step call, and no memory. This never invents a candidate
     from free prose (no NER over resolved_event) -- only from the same
     structured fields commit already trusts: dialogue_log speakers,
-    state_diff.entities with kind person/npc, director_establish's
+    state_diff.entities with any non-inert kind (see _INERT_ENTITY_KINDS --
+    agents named by the model, whatever kind string it used), director_establish's
     top-level entities on the opening turn, and the deterministic
     background_react backstop's own authored line. Once a name is a
     tracked candidate, later resolved_event mentions of that exact name
@@ -1595,7 +1614,20 @@ def track_background_presences(ctx, nonce):
         for entity_def in entities.values():
             if not isinstance(entity_def, dict):
                 continue
-            if entity_def.get("kind") not in ("person", "npc"):
+            # Track any named entity that is not CLEARLY inert. `kind` is a
+            # freeform model string with no controlled vocabulary, so an
+            # allowlist ("person"/"npc") silently dropped every other agent
+            # the model names -- player-declared guards (kind:"actor"),
+            # monsters, creatures, robots, spirits, drones -- leaving them
+            # captured in the scene but tracked by neither the cast nor the
+            # background-presence system: declared, then inert. Enumerating
+            # agent kinds is an unwinnable treadmill; instead exclude the
+            # clearly non-agent kinds and default to inclusion. A rare
+            # mistracked object never reacts anyway (the pick_background_
+            # reactors gate requires it to be addressed/owed/voiced), which
+            # is far cheaper than an agent that can never act.
+            kind = str(entity_def.get("kind") or "").strip().casefold()
+            if not kind or kind in _INERT_ENTITY_KINDS:
                 continue
             name = str(entity_def.get("name") or "").strip()
             if not name or name.casefold() in roster:

@@ -1,5 +1,19 @@
 # Changelog
 
+## alpha2.0.1 — Background presence: track declared agents of any kind
+
+### Fixed
+- `track_background_presences` captured only entities whose `kind` was exactly
+  `person` or `npc`, silently dropping every player-declared agent the model tagged
+  otherwise — `actor` for "two security guards", plus monsters, creatures, robots,
+  spirits, drones. Those were declared into the scene yet tracked by neither the cast
+  nor the background-presence system: present but inert, with no path to a reaction or
+  promotion. Tracking now uses a deny-list of clearly-inert kinds (`_INERT_ENTITY_KINDS`)
+  and defaults to inclusion — ambiguous kinds like `machine` stay tracked so a sentient
+  robot cannot fall through, while objects, fixtures, vehicles, and locations remain
+  excluded. A rare mistracked object never reacts anyway: the `pick_background_reactor`
+  gate still requires it to be addressed, owed a reply, or voiced.
+
 ## alpha2.0 — Movement & space: a tracked physical world
 
 A major release that turns the physical world into a coherent, tracked simulation
