@@ -63,8 +63,11 @@ def test_malformed_character_mind_models_trigger_repair(monkeypatch):
     bad = {
         "sequence": [], "interaction": {},
         "mind_model_updates": [{
-            "about_entity": "player", "kind": "goal",
-            "claim": "wants the key", "confidence": 3.7,  # out of [0, 1]
+            # missing the required 'about_entity' -> a structural malformation
+            # that still triggers repair. (An out-of-[0,1] confidence is now
+            # deliberately CLAMPED rather than repaired -- see AUDIT #6 and
+            # tests/test_coerce_hardening.py -- so it no longer forces a repair.)
+            "kind": "goal", "claim": "wants the key", "confidence": 0.9,
         }],
     }
     good = dict(bad)

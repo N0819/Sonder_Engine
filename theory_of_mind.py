@@ -101,12 +101,14 @@ def cap_mind_model_updates(updates):
     result = []
     for raw in updates or []:
         update = dict(raw)
-        kind = str(update.get("kind") or "goal")
-        cap = _TOM_CONFIDENCE_CAPS.get(kind, 0.5)
-        try:
-            confidence = float(update.get("confidence", 0.5))
-        except Exception:
-            confidence = 0.5
+        # Route an off-enum kind ("suspicion", ...) through the same mapping
+        # apply_mind_model_updates uses, so a hypothesis is capped under the
+        # SAME kind it will later be merged/blended under -- previously it was
+        # capped at the 0.5 default on emission but treated as _DEFAULT_KIND
+        # thereafter, an inconsistent ceiling.
+        kind = _kind_or_default(update.get("kind"))
+        cap = _TOM_CONFIDENCE_CAPS[kind]
+        confidence = _clamp01(update.get("confidence", 0.5))
         update["confidence"] = max(0.0, min(cap, confidence))
         result.append(update)
     return result
