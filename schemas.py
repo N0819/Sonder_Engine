@@ -898,9 +898,39 @@ class MappingStageOutput(BaseModel):
     npc_suggestions: list[dict] = Field(default_factory=list)
     notes: str = ""
 
+# ---- Greeting interpretation (ingest-time, per docs/GREETING_IMPORT_DESIGN.md) ----
+
+class GreetingKnowledgeSeed(BaseModel):
+    content: str = ""
+    about_entity: str = "self"      # 'self' = the character
+    kind: str = "fact"              # fact|goal|relationship|recent_event
+    salience: float = Field(default=0.6, ge=0.0, le=1.0)
+    # true = the greeting states it openly on the page (player legitimately
+    # sees it); false = implied/secret -> routes to CHARACTER memory only.
+    revealed_in_prose: bool = False
+
+    _clamp_salience = validator("salience", pre=True, allow_reuse=True)(
+        lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.6)
+    )
+
+class GreetingInterpret(BaseModel):
+    location: str = ""
+    time: str = "now"
+    scene_description: str = ""
+    # freeform dicts (kept tolerant, consumed defensively by the launch merge)
+    rooms: dict = Field(default_factory=dict)
+    positions: dict = Field(default_factory=dict)
+    entities: dict = Field(default_factory=dict)
+    attire: dict = Field(default_factory=dict)
+    character_state: dict = Field(default_factory=dict)
+    knowledge_seeds: list[GreetingKnowledgeSeed] = Field(default_factory=list)
+    player_room: str = ""           # room id {{PLAYER}} occupies, if present
+    notes: str = ""
+
 # ---- Validation ----
 
 SCHEMA_MAP = {
+    "greeting_interpret": GreetingInterpret,
     "director_interpret": DirectorInterpret,
     "director_establish": DirectorEstablish,
     "director_resolve": DirectorResolve,
@@ -1432,6 +1462,24 @@ OUTPUT_EXAMPLES = {
             "tone": "gruff",
         },
         "action": "wipes down the counter",
+    },
+    "greeting_interpret": {
+        "location": "a dim tavern",
+        "time": "night",
+        "scene_description": "A low-ceilinged tavern, rain against the shutters.",
+        "rooms": {"tavern": {"name": "The Tavern", "desc": "Low-ceilinged, smoke-hazed.",
+                              "adjacent": []}},
+        "positions": {"Kara": "tavern", "{{PLAYER}}": "tavern"},
+        "entities": {},
+        "attire": {"Kara": {"summary": "a travel-worn cloak"}},
+        "character_state": {"mood": "wary", "goal": "size up the newcomer"},
+        "knowledge_seeds": [
+            {"content": "I have been waiting here for three nights for a courier.",
+             "about_entity": "self", "kind": "recent_event", "salience": 0.7,
+             "revealed_in_prose": False},
+        ],
+        "player_room": "tavern",
+        "notes": "",
     },
 }
 

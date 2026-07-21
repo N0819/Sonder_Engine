@@ -18,6 +18,7 @@ from pipeline_context import PipelineContext, ChatData, TurnData
 from checkpoints import ensure_checkpoint, restore_checkpoint, snapshot_state, refresh_checkpoint, insert_world_tables
 from frames import create_frame, get_frame, list_frames
 import paradox
+import greetings
 from agents import (
     run_pipeline, request_abort, begin_pipeline,
     active_content, ABORTS, PipelineBusyError,
@@ -1000,6 +1001,21 @@ def char_import(body: dict = Body(...)):
         raise HTTPException(502 if reinterpret else 400, f"Character import failed: {exc}") from exc
     _ensure_resource_uid("characters", cid, "char")
     return {"id": cid, "sheet": sheet}
+
+@app.post("/api/characters/{cid}/start")
+def character_start_story(cid: int, body: dict = Body(default={})):
+    """Start story now: seed a chat from this character's greeting with the
+    chosen persona (greeting shown verbatim, private knowledge routed to the
+    character). See greetings.start_story / docs/GREETING_IMPORT_DESIGN.md."""
+    persona_id = body.get("persona_id")
+    if persona_id is None:
+        raise HTTPException(400, "persona_id required")
+    try:
+        chat_id, turn_id = greetings.start_story(
+            cid, int(persona_id), int(body.get("greeting_index", 0)))
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"chat_id": chat_id, "turn_id": turn_id}
 
 @app.get("/api/characters/{cid}/export")
 def char_export(cid: int):
