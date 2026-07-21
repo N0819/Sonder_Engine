@@ -1234,6 +1234,115 @@ $("#b-api").onclick = () => {
   });
 };
 
+// ---- Software updates (host-only; git fast-forward from GitHub origin) ----
+$("#b-update").onclick = () => {
+  modal("Software updates", b => renderUpdateChecking(b));
+};
+
+function renderUpdateChecking(b) {
+  b.innerHTML = "";
+  b.append(el("div", { class: "row" },
+    el("span", { class: "spinner" }),
+    el("span", { class: "dim" }, "Checking GitHub for updates…")));
+  api("GET", "/api/updates/check")
+    .then(r => renderUpdateStatus(b, r))
+    .catch(e => renderUpdateError(b, e?.message || "Update check failed."));
+}
+
+function renderUpdateError(b, message, retry = renderUpdateChecking) {
+  b.innerHTML = "";
+  b.append(el("div", { class: "card", style: "border-color:var(--danger,#c0392b)" },
+    el("b", {}, "Couldn't check for updates"),
+    el("div", { class: "dim", style: "margin-top:6px;white-space:pre-wrap" }, message)));
+  b.append(el("div", { class: "row", style: "margin-top:10px" },
+    el("button", { onclick: () => retry(b) }, "Try again"),
+    el("button", { onclick: closeModal }, "Close")));
+}
+
+function renderUpdateStatus(b, r) {
+  // ok:false is an environment problem (not a git checkout, offline, no
+  // remote) -- surface the server's own explanation rather than a retry loop.
+  if (!r || !r.ok) return renderUpdateError(b, (r && r.error) || "Update check failed.");
+
+  b.innerHTML = "";
+  b.append(el("div", { class: "dim", style: "margin-bottom:10px" },
+    `Branch ${r.branch} · current ${r.current}`
+    + (r.ahead ? ` · ${r.ahead} local commit(s) ahead` : "")));
+
+  if (r.up_to_date) {
+    b.append(el("div", { class: "card" }, "✓ You're on the latest version."));
+    b.append(el("div", { class: "row", style: "margin-top:10px" },
+      el("button", { onclick: closeModal }, "Close")));
+    return;
+  }
+
+  b.append(el("div", {}, el("b", {}, `${r.behind} update(s) available`)));
+
+  // Changelog: prefer GitHub release notes for the incoming version tags;
+  // fall back to raw commit subjects when there are no tagged releases in
+  // range (or GitHub was unreachable -> r.releases is null).
+  if (r.releases && r.releases.length) {
+    const box = el("div", { class: "card", style: "margin-top:8px;max-height:320px;overflow:auto" },
+      el("b", { class: "dim" }, "Release notes"));
+    for (const rel of r.releases) {
+      box.append(el("div", { style: "margin-top:12px;font-weight:600" }, rel.name || rel.tag));
+      if (rel.body) {
+        box.append(el("div", { class: "dim", style: "margin-top:4px;white-space:pre-wrap" }, rel.body));
+      }
+    }
+    b.append(box);
+  } else if (r.commits && r.commits.length) {
+    b.append(el("div", { class: "card", style: "margin-top:8px;max-height:260px;overflow:auto" },
+      el("b", { class: "dim" }, "Changelog"),
+      ...r.commits.map(c => el("div", { style: "margin-top:6px" },
+        el("code", { class: "dim" }, c.hash), " ", c.subject))));
+  }
+
+  if (r.dirty) {
+    b.append(el("div", { class: "dim", style: "margin-top:10px;white-space:pre-wrap" },
+      "⚠ You have local uncommitted changes. The update only fast-forwards, "
+      + "so it will refuse to run if those edits would be overwritten."));
+  }
+
+  const installBtn = el("button", { class: "primary" }, "Install update");
+  installBtn.onclick = () => runUpdateInstall(b, installBtn);
+  b.append(el("div", { class: "row", style: "margin-top:12px" },
+    installBtn,
+    el("button", { onclick: closeModal }, "Later")));
+}
+
+function runUpdateInstall(b, btn) {
+  btn.disabled = true;
+  btn.textContent = "Installing…";
+  const status = el("div", { class: "row", style: "margin-top:10px" },
+    el("span", { class: "spinner" }), el("span", { class: "dim" }, "Applying update…"));
+  b.append(status);
+  api("POST", "/api/updates/install")
+    .then(r => {
+      status.remove();
+      if (!r || !r.ok) return renderUpdateError(b, (r && r.error) || "Install failed.");
+      if (!r.updated) { toast(r.message || "Already up to date.", "ok"); return renderUpdateChecking(b); }
+      renderUpdateDone(b, r);
+    })
+    .catch(e => { status.remove(); renderUpdateError(b, e?.message || "Install failed."); });
+}
+
+function renderUpdateDone(b, r) {
+  b.innerHTML = "";
+  b.append(el("div", { class: "card" },
+    el("b", {}, "✓ Update installed"),
+    el("div", { class: "dim", style: "margin-top:6px" },
+      r.message || `Updated to ${r.current}.`)));
+  b.append(el("div", { style: "margin-top:12px" },
+    el("b", {}, "Please restart the server"),
+    el("div", { class: "dim", style: "margin-top:6px;white-space:pre-wrap" },
+      "The new code is on disk, but the running process is still using the "
+      + "old version. Stop the server and start it again (e.g. re-run "
+      + "`make run`), then reload this page.")));
+  b.append(el("div", { class: "row", style: "margin-top:12px" },
+    el("button", { class: "primary", onclick: closeModal }, "Got it")));
+}
+
 // ---- Prompts ----
 $("#b-prompts").onclick = () => {
   const names = ["Default", ...Object.keys(S.boot.prompt_presets)];

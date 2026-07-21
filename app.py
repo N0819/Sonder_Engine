@@ -1,4 +1,5 @@
 import contextvars, json, queue, time, threading, os
+import updates
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Body, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
@@ -843,7 +844,18 @@ def get_nsfw():
 def set_nsfw(body: dict = Body(...)):
     set_setting("nsfw_enabled", "1" if body.get("enabled") else "0")
     return {"enabled": body.get("enabled", False)}
-    
+
+# ---- Self-update (host-only via the access-control middleware) ----
+# Sync defs so FastAPI runs the blocking git/network work in its threadpool
+# rather than on the event loop, matching every other route here.
+@app.get("/api/updates/check")
+def updates_check():
+    return updates.check_updates()
+
+@app.post("/api/updates/install")
+def updates_install():
+    return updates.install_updates()
+
 # ============================ LOREBOOK TREE & LINKS ============================
 from memory import (
     move_lorebook, reorder_lorebook,
