@@ -2372,6 +2372,23 @@ def _import_or_match_persona(resource):
         ),
     )
 
+def _import_book_uid(uid):
+    """resource_uid for a lorebook created by chat_import.
+
+    Unlike characters/personas -- shared resources that _import_or_match_*
+    dedupes onto the existing row when the uid is already known -- an
+    imported chat's lorebooks are per-chat copies (chat_id-scoped). Reusing
+    the archive's uid verbatim therefore hits uq_lorebooks_resource_uid
+    when the archive is imported into the SAME install that exported it,
+    aborting the whole import. Keep the uid when it is free (cross-install
+    portability); mint a fresh one when this install already owns it --
+    the import is a distinct book in a distinct chat.
+    """
+    if uid and not q("SELECT id FROM lorebooks WHERE resource_uid=?",
+                     (uid,), one=True):
+        return uid
+    return new_uid("book")
+
 @app.post("/api/chats/import")
 def chat_import(body: dict = Body(...)):
     archive = body.get("data")
@@ -2571,7 +2588,7 @@ def chat_import(body: dict = Body(...)):
                         bk.get("origin_id"),
                         bk.get("book_type") or "general",
                         bk.get("summary") or "",
-                        bk.get("resource_uid") or new_uid("book"),
+                        _import_book_uid(bk.get("resource_uid")),
                         bk.get("anchor_entity_id"),
                         # Turn-row FK: remap or null, never carry verbatim.
                         turn_id_map.get(bk.get("retired_turn_id")),
@@ -2606,7 +2623,7 @@ def chat_import(body: dict = Body(...)):
                     (lb_data.get("book", {}).get("name") or "Imported canon") + " (import)",
                     new_chat_id,
                     lb_data.get("book", {}).get("id"),
-                    lb_data.get("book", {}).get("resource_uid") or new_uid("book"),
+                    _import_book_uid(lb_data.get("book", {}).get("resource_uid")),
                 ),
             )
             restore_lorebook(new_canon, lb_data["entries"])

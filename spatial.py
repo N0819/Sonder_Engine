@@ -163,6 +163,62 @@ def spatial_rel(
         "distance": "far",
     }
 
+_PASSABLE_BARRIERS = {"open", "open_door"}
+
+def passable_route_exists(
+    scene: dict,
+    from_room: Optional[str],
+    to_room: Optional[str],
+) -> bool:
+    """True when to_room is reachable from from_room by walking only
+    through passable doorways (barrier open / open_door), across any
+    number of intermediate rooms.
+
+    spatial_rel answers the DIRECT-adjacency question; this answers the
+    traversal question the director_resolve movement backstop needs for a
+    legitimate multi-room walk ("cross the corridor into the far office").
+    Adjacency is treated as traversable in BOTH directions -- an open
+    doorway declared from either side can be walked through either way
+    (the nearby_rooms undirected-reachability precedent).
+
+    A route requiring a still-closed door, wall, or unknown barrier does
+    NOT count: only edges already passable this beat make a path. Callers
+    that want a door opened this beat to count must pass a scene that
+    already carries the beat's diff.
+    """
+    if not from_room or not to_room:
+        return False
+    if from_room == to_room:
+        return True
+
+    rooms = scene.get("rooms") or {}
+    neighbors: dict[str, set] = {}
+    for room_id, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict):
+                continue
+            target = edge.get("to")
+            if not target:
+                continue
+            if normalize_barrier(edge.get("barrier")) not in _PASSABLE_BARRIERS:
+                continue
+            neighbors.setdefault(room_id, set()).add(target)
+            neighbors.setdefault(target, set()).add(room_id)
+
+    seen = {from_room}
+    frontier = [from_room]
+    while frontier:
+        room_id = frontier.pop()
+        for nxt in neighbors.get(room_id, ()):
+            if nxt == to_room:
+                return True
+            if nxt not in seen:
+                seen.add(nxt)
+                frontier.append(nxt)
+    return False
+
 def hear_level(
     rel: dict,
     volume: str,

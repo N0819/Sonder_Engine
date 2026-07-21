@@ -34,7 +34,13 @@ from scene import (
 )
 from providers import Aborted
 from schemas import validate_llm_output
-from spatial import _merge_room, room_of, spatial_rel
+from spatial import (
+    _merge_room,
+    merge_scene_with_diff,
+    passable_route_exists,
+    room_of,
+    spatial_rel,
+)
 
 from .common import (
     _agent_json,
@@ -769,6 +775,140 @@ def _untracked_restraint_subjects(resolved_event, dialogue_log, conditions,
     return [name for name in sorted(flagged_names)
             if name.casefold() not in tracked_condition_subjects]
 
+# Destruction tripwire (movement/space Phase 3b follow-up). Observed live:
+# the resolved_event narrated a whole-town firestorm consuming a named
+# region ward by ward, yet state_diff.destruction was null and remove_rooms
+# empty -- so the Phase-3b cascade (which only realizes a DECLARED
+# destruction) never fired and the town stayed objectively intact against
+# the prose. Same design constraints as the restraint scan: deterministic,
+# HIGH-PRECISION, and WARN-ONLY -- this engine never fabricates objective
+# state from a heuristic, and a wrongly-invented razing (books retired,
+# rooms gone, news minted) would be far worse than a stale-missing one, so
+# this detector deliberately does NOT feed the Tier-2 self-repair path.
+#
+# Precision guard: a bare keyword scan ("the fire spread") or even
+# sentence-level co-occurrence ("the letter was destroyed in the hall"
+# flagging the hall) false-fires on ordinary flavor. Matching is keyed on
+# ACTUAL known place names (scene rooms, the scene location, interior-
+# bearing entities, live lorebook names) in destruction-shaped grammatical
+# positions only:
+#   subject-first:  "<name> ... was razed / burned down / in ruins"
+#   verb-object:    "razed/consumed/destroyed (the) <name>"
+#   of-phrase:      "ruins/ashes/nothing left of <name>"
+_DESTRUCTION_TERMINAL_CUES = (
+    r"(?:was |were |now )?(?:utterly |completely |entirely )?"
+    r"(?:destroyed|razed|levell?ed|flattened|obliterated|annihilated|"
+    r"incinerated|collapsed|burn(?:ed|t)\s+down|"
+    r"burn(?:ed|t)\s+to\s+the\s+ground|"
+    r"reduced\s+to\s+(?:ash|ashes|rubble|cinders)|"
+    r"wiped\s+out|in\s+ruins|no\s+longer\s+stands|no\s+more|"
+    r"consumed\s+by|engulfed\s+in\s+flames|swallowed\s+by|"
+    r"lost\s+to\s+the\s+(?:flames|fire|sea))"
+)
+_DESTRUCTION_VERB_OBJECT = (
+    r"(?:destroy(?:ed|s)|raz(?:ed|ing)|levell?(?:ed|ing)|consum(?:ed|ing)|"
+    r"obliterat(?:ed|ing)|annihilat(?:ed|ing)|flatten(?:ed|ing)|"
+    r"incinerat(?:ed|ing)|swallow(?:ed|ing)|engulf(?:ed|ing)|"
+    r"wip(?:ed|ing)\s+out|burn(?:ed|t|ing)\s+down)"
+)
+_DESTRUCTION_OF_PHRASE = (
+    r"(?:ruins?|ashes|remains|destruction|razing|loss|"
+    r"nothing\s+(?:\w+\s+){0,2}?(?:left|remains|remained))\s+(?:\w+\s+){0,2}?of"
+)
+
+def _destruction_name_pattern(name_cf):
+    """One compiled pattern per known place name covering the three
+    destruction-shaped positions above. Bounded word-gaps, not free
+    sentence co-occurrence."""
+    name = re.escape(name_cf)
+    return re.compile(
+        rf"\b{name}(?:'s)?\b[,\s]+(?:\S+\s+){{0,4}}?{_DESTRUCTION_TERMINAL_CUES}"
+        rf"|{_DESTRUCTION_VERB_OBJECT}\s+"
+        rf"(?:the\s+|all\s+of\s+|the\s+whole\s+|the\s+entire\s+|most\s+of\s+)?"
+        rf"{name}\b"
+        rf"|{_DESTRUCTION_OF_PHRASE}\s+(?:the\s+)?{name}\b"
+    )
+
+def _narrated_destruction_subjects(resolved_event, dialogue_log, sd, sc,
+                                   extra_names=()):
+    """Named, KNOWN places (scene rooms, the scene location, interior-
+    bearing entities, plus extra_names -- live lorebook names) that the
+    prose asserts destroyed while the diff encodes neither
+    state_diff.destruction nor a remove_rooms/remove_entities entry
+    covering them. Sorted labels for deterministic output.
+
+    Any declared destruction this beat suppresses the whole scan: scoping
+    what the cascade covers is commit's job, not a text heuristic's.
+    """
+    destruction = sd.get("destruction")
+    if isinstance(destruction, dict) and destruction.get("target_id"):
+        return []
+
+    candidates = {}
+
+    def _add(label, room_ids=(), entity_ids=()):
+        label = str(label or "").strip()
+        if len(label) < 3:
+            return
+        key = label.casefold()
+        cand = candidates.setdefault(key, {
+            "label": label, "room_ids": set(), "entity_ids": set(),
+            "pattern": _destruction_name_pattern(key),
+        })
+        # Prefer a display-cased label (room "name") over a lowercased
+        # id-derived one for the same key -- it names the warning.
+        if cand["label"].islower() and not label.islower():
+            cand["label"] = label
+        cand["room_ids"].update(room_ids)
+        cand["entity_ids"].update(entity_ids)
+
+    for rid, room in (sc.get("rooms") or {}).items():
+        if not isinstance(room, dict):
+            continue
+        _add(str(rid).replace("_", " "), room_ids={str(rid)})
+        _add(room.get("name"), room_ids={str(rid)})
+    location = str(sc.get("location") or "").strip()
+    if location:
+        _add(location)
+        _add(re.split(r"[,—]", location)[0])
+    for eid, ent in (sc.get("entities") or {}).items():
+        if not isinstance(ent, dict):
+            continue
+        kind = str(ent.get("kind") or "").casefold()
+        if not (ent.get("interior_rooms")
+                or kind in ("vehicle", "building", "structure")):
+            continue
+        _add(ent.get("name"), entity_ids={str(eid)})
+        _add(str(eid).replace("_", " "), entity_ids={str(eid)})
+        for alias in (ent.get("aliases") or []):
+            _add(alias, entity_ids={str(eid)})
+    for name in extra_names:
+        _add(name)
+
+    removed_rooms = {str(r) for r in (sd.get("remove_rooms") or [])}
+    removed_entities = {str(e).casefold()
+                        for e in (sd.get("remove_entities") or [])}
+
+    text_units = [str(resolved_event or "")]
+    for entry in (dialogue_log or []):
+        if isinstance(entry, dict) and entry.get("exact_quote"):
+            text_units.append(str(entry["exact_quote"]))
+
+    flagged = {}
+    for text in text_units:
+        lower = text.casefold()
+        for key, cand in candidates.items():
+            if key in flagged:
+                continue
+            if not cand["pattern"].search(lower):
+                continue
+            if cand["room_ids"] & removed_rooms:
+                continue
+            if {e.casefold() for e in cand["entity_ids"]} & removed_entities:
+                continue
+            flagged[key] = cand["label"]
+    return [flagged[key] for key in sorted(flagged)]
+
 def _scan_for_untracked_restraint(resolved_event, dialogue_log, conditions,
                                    tracked_names):
     """Return warning strings for the subjects _untracked_restraint_subjects
@@ -1329,10 +1469,38 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         if not _evidence_present(sd, item, forms):
             manifest_omissions.append({**item, "_forms": forms})
 
+    # Destruction tripwire (see _narrated_destruction_subjects): a named,
+    # KNOWN place narrated as destroyed while the diff declares no
+    # destruction and removes nothing. Deliberately warn-only and OUTSIDE
+    # the Tier-2 repair routing -- a self-repair must never be talked into
+    # fabricating a region cascade from a text heuristic.
+    book_names = []
+    try:
+        book_names = [
+            b.get("name") for b in lorebook_manifest(ctx.chat["id"])["books"]
+            if b.get("name")
+            and str(b.get("type") or "") in ("general", "world", "location",
+                                             "vehicle")
+        ]
+    except Exception:
+        pass  # candidate enrichment only; the scene-derived names still run
+    destruction_flags = _narrated_destruction_subjects(
+        resolved_event, dialogue_log, sd, sc, extra_names=book_names)
+    for place in destruction_flags:
+        ctx.add_warning(
+            f"Possible unencoded destruction: resolved_event narrates the "
+            f"destruction of {place!r} (a named, known place) but "
+            "state_diff.destruction is null and remove_rooms/remove_entities "
+            "do not cover it. The Phase-3b cascade only realizes a DECLARED "
+            "destruction, so objective state still has this place fully "
+            "intact while the prose claims otherwise."
+        )
+
     recon = {
         "signals": [dict(s) for s in signals],
         "manifest": [dict(m) for m in manifest],
         "claim_notes": claim_notes,
+        "destruction_scan": list(destruction_flags),
         "audited": False, "tripwire": False,
         "omissions": [], "repaired": False,
         "dispositions": [], "unresolved": [],
@@ -1760,18 +1928,44 @@ def director_resolve(ctx, nonce):
         # disconnected room. Only commit the move if a passable route
         # exists from the MOVER's current room (or that room is unknown,
         # in which case there is nothing to validate against).
-        known_rooms = dict(sc.get("rooms") or {})
-        known_rooms.update(sd["rooms"])
+        #
+        # Validate against this beat's WOULD-BE merged scene, built the
+        # same way commit builds it (merge_scene_with_diff deep-copies its
+        # inputs -- nothing persisted is mutated). That merge recomputes
+        # derived dock/portal edges, so a vehicle that docks THIS beat
+        # already exposes its interior->destination doorway here and an
+        # occupant can step out on the same beat it arrives -- previously
+        # the dock edge only appeared at commit, AFTER this check, so the
+        # same-beat deboard was wrongly blocked.
+        route_scene = merge_scene_with_diff(sc, sd)
+        known_rooms = route_scene["rooms"]
         prev_room = subject_prev_room
         blocked = contested = False
+        rel = None
         if prev_room and mv["to_room"] != prev_room:
-            rel = spatial_rel({"rooms": known_rooms}, prev_room, mv["to_room"])
-            blocked = rel.get("barrier") in ("wall", "separated", "unknown")
-            # known_rooms already carries this beat's diff, so a door the
-            # resolve opened this beat reads open_door here. Still-closed
-            # means the move is CONTESTED: crossing requires an action
-            # whose outcome the resolve owns.
-            contested = rel.get("barrier") == "closed_door"
+            rel = spatial_rel(route_scene, prev_room, mv["to_room"])
+            if rel.get("barrier") == "separated":
+                # Not directly adjacent. A multi-room walk whose every
+                # doorway is ALREADY passable (open/open_door) is a
+                # legitimate single-beat traversal, not a teleport --
+                # observed live: a valid three-hop walk through open doors
+                # was dropped while the narration described arriving. A
+                # route that would require passing a still-closed door
+                # does NOT count: the backstop cannot attribute the
+                # contest to one specific door on a multi-hop path, so
+                # such a move stays blocked until the door is opened (a
+                # door the resolve opens this beat is already open in
+                # route_scene and makes the route passable).
+                blocked = not passable_route_exists(
+                    route_scene, prev_room, mv["to_room"])
+            else:
+                # Directly adjacent: the single edge's barrier decides.
+                blocked = rel.get("barrier") in ("wall", "unknown")
+                # route_scene already carries this beat's diff, so a door
+                # the resolve opened this beat reads open_door here.
+                # Still-closed means the move is CONTESTED: crossing
+                # requires an action whose outcome the resolve owns.
+                contested = rel.get("barrier") == "closed_door"
         if blocked:
             ctx.warnings.append(
                 f"Blocked movement: no passable route from '{prev_room}' to "
