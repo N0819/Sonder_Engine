@@ -1,5 +1,72 @@
 # Changelog
 
+## alpha2.0 — Movement & space: a tracked physical world
+
+A major release that turns the physical world into a coherent, tracked simulation
+in text. Movers (vehicles, elevators, ships) are first-class; the world can be
+generated, moved, nested, and destroyed on the fly, yet stays internally consistent
+across a hundred turns — and no mind learns of a change except by legitimate means.
+Delivered as five reviewed phases plus fixes; schema v14 → v16. Validated live,
+including a two-level nested-mover journey (a rover driven into a dropship that then
+flies off, carrying its occupants at both levels).
+
+### Added
+- **Transit / moving rooms.** A container entity carries `state.transit` (docked,
+  sealed, in transit, arriving; hatch open/closed/locked; destination, route, eta).
+  Its interior-to-exterior doorway is DERIVED at commit from position + transit
+  state — sealing severs it, arriving opens a new one onto the destination —
+  retro-fixing the long-standing stale-vehicle-portal bug. Occupants travel with the
+  mover; nesting composes (a mover inside a mover carries at every level). Timed
+  journeys schedule an arrival completed by the mechanics sweep.
+- **Reconciliation seams (capture, do not gate).** Two deterministic seams ensure
+  what the model invents reaches structured state instead of evaporating: the
+  resolve-side seam catches a persistent physical change the prose asserts but the
+  diff omits (category-aware, alias-aware; repaired by the Director itself or
+  warned), and the interpret-side seam catches a player-declared place/object/event
+  the interpretation dropped — unblocking "I duck into the armory and grab a rifle."
+- **Normalized `room_registry`** — the cross-frame ledger of room identity and
+  retirement, a projection of every scene write; structural room dedup at creation
+  (two structurally-identical ships no longer collide).
+- **Mechanics sweep** — one deterministic, sim-clock-advanced pass at commit for
+  timed arrivals, condition expiry, and mechanical follow-through (off-screen
+  evolution without a wall-clock loop).
+- **Destruction** — single- and multi-book destructive cascades over the lorebook
+  tree, retire-not-delete (a ruined region stays retrievable), an occupant-stranding
+  guard that rolls back rather than losing people, and knowledge propagation by
+  distance: awareness of a catastrophe reaches distant characters only via
+  latency-gated `news_arrival`, never by direct injection.
+- **`movement.mover`** (self | vehicle) resolving driver conflation; a monitoring
+  subtree-walk; perception ambient-scope by nesting depth (a sealed nested interior
+  cannot perceive an ancestor location); `currently_within` links tracking live
+  vehicle position without mutating canonical lorebook lineage.
+
+### Fixed
+- Passable-route backstop over-blocked legitimate multi-hop moves and same-beat
+  vehicle deboards; now path-finds through open doorways and recomputes derived
+  edges before the check.
+- Same-install chat import aborted on a lorebook `resource_uid` collision (this also
+  broke re-importing the bundled demo); imported books now mint a fresh uid on
+  collision. The demo story imports cleanly again.
+- The mapping agent's `remove_rooms` self-heal was advisory-only and dropped, leaving
+  stray duplicate rooms; it now applies deterministically at commit (guarded).
+
+### Changed
+- **Physical-world authority is consolidated** (the two-representations debt is
+  resolved): the frame-scoped scene blob is the single runtime source of truth for
+  live state; `world_entities` is a derived projection; `world_placements`,
+  `fiction_worlds`/`fiction_locations`, and `transit_edges` are decommissioned. The
+  authority model is documented in `CLAUDE.md`, `AGENTS.md`, `docs/DATABASE.md`, and
+  `Design.md`, and pinned by a characterization suite (byte-identical spatial-reader
+  and checkpoint/restore behavior).
+
+### Known limitations
+- **Region-scale destruction is model-dependent.** The cascade machinery is correct
+  and unit-tested, and a stronger prompt plus a high-precision deterministic tripwire
+  raise the odds, but a weak model narrating a razing without emitting the structured
+  declaration can still leave a region intact-but-burning. Reliable detection of
+  freeform destruction prose needs a semantic audit pass (deferred, to avoid a
+  false-positive keyword treadmill).
+
 ## alpha1.4.3 — Perception identity firewall
 
 Perception is the stateless filter that decides what each observer legitimately
