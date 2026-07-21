@@ -4,6 +4,18 @@
 import json, zlib, asyncio, threading, time, re, os
 import numpy as np
 import httpx
+import requests.exceptions as _req_exc
+
+# Network-level exceptions that mean "transient, retry" regardless of which
+# HTTP client raised them. The sync pipeline path runs on `requests`, so its
+# ConnectionError/Timeout/ChunkedEncodingError (a mid-stream drop) must be
+# treated the same as httpx.NetworkError -- otherwise a single Wi-Fi hiccup
+# kills the whole turn instead of retrying (observed live: a ChunkedEncoding
+# drop and a RemoteDisconnected each aborted a turn).
+_RETRYABLE_NETWORK = (
+    httpx.TimeoutException, httpx.NetworkError,
+    _req_exc.ConnectionError, _req_exc.Timeout, _req_exc.ChunkedEncodingError,
+)
 import contextvars
 from typing import Optional, Callable, Any
 from dataclasses import dataclass
@@ -257,7 +269,7 @@ def _should_retry(error: Exception, attempt: int, config: RetryConfig) -> bool:
             return True
         if error.status_code in config.retryable_status:
             return True
-    if isinstance(error, (httpx.TimeoutException, httpx.NetworkError)):
+    if isinstance(error, _RETRYABLE_NETWORK):
         return True
     return False
 
@@ -382,7 +394,7 @@ def _classify_error(e: Exception) -> LLMError:
         msg = f"HTTP {status}: {e.response.text[:300]}"
         retryable = status in DEFAULT_RETRY.retryable_status
         return LLMError(msg, status, retryable)
-    if isinstance(e, (httpx.TimeoutException, httpx.NetworkError)):
+    if isinstance(e, _RETRYABLE_NETWORK):
         return LLMError(str(e), 0, True)
     return LLMError(str(e), 0, False)
 
@@ -414,6 +426,15 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
                 j = json.loads(line)
             except Exception:
                 continue
+            # Some OpenAI-compatible backends emit an {"error": {...}} chunk
+            # mid-stream (e.g. an overload 30s in). Ignoring it silently
+            # returned the truncated prefix as a completed response, which for
+            # a JSON step could pass validation and commit truncated. Surface
+            # it as a retryable failure instead.
+            if isinstance(j, dict) and j.get("error"):
+                err = j["error"]
+                msg = err.get("message") if isinstance(err, dict) else str(err)
+                raise LLMError(f"provider stream error: {msg}", 0, True)
             if j.get("usage"):
                 usage = j["usage"]
             d = (j.get("choices") or [{}])[0].get("delta", {}).get("content")
@@ -442,6 +463,12 @@ def _sse_anthropic(base, headers, body, sink):
                 j = json.loads(line)
             except Exception:
                 continue
+            # Anthropic's documented mid-stream error event (overloaded_error,
+            # etc.) -- surface as retryable rather than silently truncating.
+            if j.get("type") == "error":
+                err = j.get("error") or {}
+                msg = err.get("message") if isinstance(err, dict) else str(err)
+                raise LLMError(f"provider stream error: {msg or 'overloaded'}", 0, True)
             if j.get("type") == "content_block_delta":
                 d = j.get("delta", {}).get("text")
                 if d:

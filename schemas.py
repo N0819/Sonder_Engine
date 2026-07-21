@@ -43,6 +43,21 @@ def _coerce_str_list(value):
             out.append(str(item))
     return out
 
+
+def _clamp_float(value, lo, hi, default):
+    """Coerce to a float within [lo, hi], tolerating the out-of-range numbers
+    and non-numeric strings weaker models emit for bounded fields (a
+    prompt-compliant 'big betrayal' delta of 0.3, confidence '85', urgency
+    'high'). Clamping is obviously correct here and keeps the character step
+    from hard-crashing on an advisory number. See tests/test_tom_normalization.py."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    if f != f:  # NaN
+        return default
+    return max(lo, min(hi, f))
+
 # ---- Pydantic v1/v2 Compatibility ----
 
 if hasattr(BaseModel, "model_validate"):
@@ -259,9 +274,12 @@ class SpeechElement(BaseModel):
     conceal_from: list[str] = Field(default_factory=list)
 
 class DiceSpec(BaseModel):
-    actor: str
-    attempt: str
-    ability: str
+    # Advisory sub-field of the interpret flow; the Director re-judges
+    # difficulty during resolution, so a weak model dropping one key must
+    # not hard-crash the whole director_interpret step.
+    actor: str = ""
+    attempt: str = ""
+    ability: str = ""
     difficulty: str = "medium"
 
 class ResolutionCheck(BaseModel):
@@ -728,6 +746,9 @@ class MindHypothesis(BaseModel):
     _coerce_alternatives = validator("alternatives", pre=True, allow_reuse=True)(
         lambda cls, v: _coerce_str_list(v)
     )
+    _clamp_confidence = validator("confidence", pre=True, allow_reuse=True)(
+        lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.5)
+    )
 
 class RelationshipUpdate(BaseModel):
     target_entity: str
@@ -736,12 +757,21 @@ class RelationshipUpdate(BaseModel):
     fear_delta: float = Field(default=0.0, ge=-0.2, le=0.2)
     trigger_event_ids: list[str] = Field(default_factory=list)
 
+    _clamp_deltas = validator("trust_delta", "warmth_delta", "fear_delta",
+                              pre=True, allow_reuse=True)(
+        lambda cls, v: _clamp_float(v, -0.2, 0.2, 0.0)
+    )
+
 class InteractionControl(BaseModel):
     addresses: list[str] = Field(default_factory=list)
     expects_response: bool = False
     yields_floor: bool = True
     urgency: float = Field(default=0.0, ge=0.0, le=1.0)
     conversation_complete_for_me: bool = False
+
+    _clamp_urgency = validator("urgency", pre=True, allow_reuse=True)(
+        lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.0)
+    )
 
 class CharacterOutput(BaseModel):
     observations_used: list[EvidenceRef] = Field(default_factory=list)
@@ -760,6 +790,10 @@ class CharacterOutput(BaseModel):
     relationship_updates: list[RelationshipUpdate] = Field(default_factory=list)
     interaction: InteractionControl = Field(default_factory=InteractionControl)
     salience: float = Field(default=0.5, ge=0.0, le=1.0)
+
+    _clamp_salience = validator("salience", pre=True, allow_reuse=True)(
+        lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.5)
+    )
 
 # ---- Mapping ----
 
@@ -1117,14 +1151,34 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
         cleaned_dialogue = []
 
         for line in dialogue_log:
+            # A weak model may emit a bare "Speaker: quote" string instead of
+            # an object; dropping it (as we used to) silently erased the beat's
+            # dialogue, leaving DIALOGUE FIDELITY nothing to protect.
+            if isinstance(line, str):
+                text = line.strip()
+                if not text:
+                    continue
+                if ":" in text and len(text.split(":", 1)[0]) <= 60:
+                    spk, quote = text.split(":", 1)
+                    line = {"speaker": spk.strip(), "exact_quote": quote.strip().strip('"\'')}
+                else:
+                    line = {"speaker": "unknown", "exact_quote": text}
             if not isinstance(line, dict):
                 continue
 
             line = dict(line)
-            line["volume"] = normalize_speech_volume(
-                line.get("volume")
-            )
-            cleaned_dialogue.append(line)
+            # Alias common key variants a model reaches for onto the schema's
+            # required exact_quote / speaker (parallel to the volume path).
+            if not line.get("exact_quote"):
+                for alias in ("quote", "text", "line", "content", "utterance"):
+                    if line.get(alias):
+                        line["exact_quote"] = line[alias]
+                        break
+            if not line.get("speaker"):
+                line["speaker"] = line.get("name") or line.get("who") or "unknown"
+            line["volume"] = normalize_speech_volume(line.get("volume"))
+            if str(line.get("exact_quote") or "").strip():
+                cleaned_dialogue.append(line)
 
         result["dialogue_log"] = cleaned_dialogue
 
@@ -1184,6 +1238,25 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
         flow["fiction_frame"] = fiction_frame
 
         result["flow"] = flow
+
+        # Extra players get the same speech-volume normalization the primary
+        # player's sequence already gets (schemas.py above) -- otherwise a
+        # co-player's out-of-enum volume either hard-fails or survives raw and
+        # is read as inaudible by hear_level. Also tolerate other_players:null.
+        others = result.get("other_players")
+        if not isinstance(others, dict):
+            result["other_players"] = {}
+        else:
+            for pid, decl in list(others.items()):
+                if not isinstance(decl, dict):
+                    continue
+                if "speech_volume" in decl:
+                    decl["speech_volume"] = normalize_speech_volume(decl.get("speech_volume"))
+                seq = decl.get("sequence")
+                if isinstance(seq, list):
+                    for ev in seq:
+                        if isinstance(ev, dict) and ev.get("type") == "speech":
+                            ev["volume"] = normalize_speech_volume(ev.get("volume"))
 
     return result
 
@@ -1339,11 +1412,26 @@ OUTPUT_EXAMPLES = {
     "mapping_commit": {
         "validated": [],
         "lore_ops": [],
+        "book_ops": [],
         "shadow_profile": None,
         "offscreen_events": [],
         "standing_intentions": [],
         "coherence_notes": [],
         "validated_introductions": [],
+    },
+    # Without an example, output_example() returned {} and the repair prompt
+    # steered a compliant model to return {} -- which validates (all defaults),
+    # silently swallowing the reaction. This shows the real shape.
+    "background_react": {
+        "reacts": True,
+        "dialogue_log_entry": {
+            "speaker": "the barkeep",
+            "exact_quote": "Aye, coming right up.",
+            "volume": "normal",
+            "intended_target": "",
+            "tone": "gruff",
+        },
+        "action": "wipes down the counter",
     },
 }
 

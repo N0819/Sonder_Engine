@@ -16,6 +16,22 @@ PERSONA_VERSION = 2
 def new_uid(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex}"
 
+
+def _float_or(value: Any, default: float) -> float:
+    """Tolerant float coercion. Imported cards and weak-model generator/promotion
+    output routinely put non-numeric junk in numeric slots (`valence: null`,
+    `temperature: "warm"`, `trust: "high"`). A bare float() there raises
+    TypeError/ValueError, which 500s the import endpoint and then crashes
+    character_name()/accessors on EVERY subsequent turn once the sheet is in the
+    DB. Coerce instead of crashing on advisory numbers."""
+    if value is None:
+        return default
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    return default if f != f else f  # NaN -> default
+
 def default_character_data(name: str = "Unnamed") -> dict:
     return {
         "identity": {
@@ -146,11 +162,11 @@ def _legacy_mood(value: Any) -> dict:
     if isinstance(value, dict):
         if "label" in value:
             return {"label": str(value.get("label") or "neutral"),
-                    "valence": float(value.get("valence", 0.0)),
-                    "arousal": float(value.get("arousal", 0.0))}
+                    "valence": _float_or(value.get("valence"), 0.0),
+                    "arousal": _float_or(value.get("arousal"), 0.0)}
         return {"label": str(value.get("mood") or "neutral"),
-                "valence": float(value.get("valence", 0.0)),
-                "arousal": float(value.get("arousal", 0.0))}
+                "valence": _float_or(value.get("valence"), 0.0),
+                "arousal": _float_or(value.get("arousal"), 0.0)}
     return {"label": str(value or "neutral"), "valence": 0.0, "arousal": 0.0}
 
 def _legacy_traits(core: Any) -> list[dict]:
@@ -225,7 +241,15 @@ def _deep_defaults(defaults: Any, value: Any) -> Any:
 
 def _normalize_latent(value: Any) -> list[dict]:
     if isinstance(value, list):
-        return [copy.deepcopy(item) for item in value if isinstance(item, dict)]
+        out = []
+        for item in value:
+            if isinstance(item, dict):
+                out.append(copy.deepcopy(item))
+            elif item:
+                # every sibling field (senses/traits/values/abilities) tolerates
+                # bare strings; latent alone used to silently drop them.
+                out.append({"capability": str(item), "visible_when": "", "limits": ""})
+        return out
     if isinstance(value, dict):
         result = []
         for capability, details in value.items():
@@ -266,8 +290,14 @@ def _coerce_appearance(target_dict: dict) -> dict:
     features = embodiment.pop("distinct_features", None)
     if features and isinstance(features, list):
         extra_visual.append("Distinctive features: " + ", ".join(features))
-    if is_default and extra_visual:
-        visible["summary"] = ". ".join(extra_visual) + "."
+    if extra_visual:
+        # Fold popped embodiment details into the summary. Previously these were
+        # only kept when the summary was default; a custom summary discarded
+        # hair/clothing/etc. permanently on every normalize (i.e. every import).
+        if is_default:
+            visible["summary"] = ". ".join(extra_visual) + "."
+        else:
+            visible["summary"] = summary.rstrip(". ") + ". " + ". ".join(extra_visual) + "."
     visible.setdefault("build", "")
     visible.setdefault("face", "")
     visible.setdefault("hair", "")
@@ -315,7 +345,7 @@ def normalize_character_data(value: dict) -> dict:
         },
         "simulation": {
             "tier": str(value.get("tier") or "mid"),
-            "temperature": float(value.get("temperature", 0.8)),
+            "temperature": _float_or(value.get("temperature"), 0.8),
             "sampler": copy.deepcopy(value.get("sampler") or {}),
         },
         "embodiment": {
@@ -342,7 +372,7 @@ def normalize_character_data(value: dict) -> dict:
             "voice": _legacy_voice(value.get("voice")),
             "baseline_stances": {
                 "unknown_person": {
-                    "trust": float((stance.get("axes") or {}).get("trust_player", 0.0)),
+                    "trust": _float_or((stance.get("axes") or {}).get("trust_player"), 0.0),
                     "warmth": 0.0,
                     "threat_sensitivity": 0.0,
                 },
@@ -414,7 +444,7 @@ def character_tier(sheet: dict) -> str:
     return str(normalize_character_data(sheet).get("simulation", {}).get("tier", "mid"))
 
 def character_temperature(sheet: dict) -> float:
-    return float(normalize_character_data(sheet).get("simulation", {}).get("temperature", 0.8))
+    return _float_or(normalize_character_data(sheet).get("simulation", {}).get("temperature"), 0.8)
 
 def character_sampler(sheet: dict) -> dict:
     return copy.deepcopy(normalize_character_data(sheet).get("simulation", {}).get("sampler", {}))
@@ -460,8 +490,8 @@ def character_initial_active_state(sheet: dict) -> dict:
     goals = state.get("goals") or []
     return {
         "mood": mood.get("label") or "neutral",
-        "valence": float(mood.get("valence", 0.0)),
-        "arousal": float(mood.get("arousal", 0.0)),
+        "valence": _float_or(mood.get("valence"), 0.0),
+        "arousal": _float_or(mood.get("arousal"), 0.0),
         "goal": (str(goals[0].get("goal") or "")
                  if goals and isinstance(goals[0], dict) else ""),
         "active_concerns": state.get("active_concerns") or [],
@@ -474,9 +504,9 @@ def character_initial_stance(sheet: dict) -> dict:
     baseline = social.get("baseline_stances", {}).get("unknown_person", {})
     return {
         "axes": {
-            "trust_player": float(baseline.get("trust", 0.0)),
-            "warmth_player": float(baseline.get("warmth", 0.0)),
-            "threat_sensitivity": float(baseline.get("threat_sensitivity", 0.0)),
+            "trust_player": _float_or(baseline.get("trust"), 0.0),
+            "warmth_player": _float_or(baseline.get("warmth"), 0.0),
+            "threat_sensitivity": _float_or(baseline.get("threat_sensitivity"), 0.0),
         },
         "notes": "",
     }

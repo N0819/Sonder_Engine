@@ -3,7 +3,7 @@
 import json
 import re
 
-from providers import chat_complete, role_candidate_count
+from providers import chat_complete, role_candidate_count, LLMError, Aborted
 from schemas import (
     output_example,
     validate_llm_output_strict,
@@ -22,6 +22,42 @@ original request. Fix every validation error, not merely the first one.
 Do not explain your changes.
 """.strip()
 
+def _extract_balanced_object(text: str):
+    """Extract the first balanced {...} object from prose-wrapped output.
+    Some models habitually prefix "Here is the JSON:" or append commentary
+    after the closing fence, which defeats the fence-strip anchors and burns
+    every repair/candidate attempt on a fully-valid object buried in prose."""
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_str = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    value = json.loads(text[start:i + 1])
+                except json.JSONDecodeError:
+                    return None
+                return value if isinstance(value, dict) else None
+    return None
+
+
 def strict_json_parse(text: str) -> dict:
     raw = str(text or "").strip()
 
@@ -36,10 +72,12 @@ def strict_json_parse(text: str) -> dict:
     try:
         value = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise RuntimeError(
-            "LLM returned invalid JSON: "
-            f"{exc.msg} at position {exc.pos}"
-        ) from exc
+        value = _extract_balanced_object(raw)
+        if value is None:
+            raise RuntimeError(
+                "LLM returned invalid JSON: "
+                f"{exc.msg} at position {exc.pos}"
+            ) from exc
 
     if not isinstance(value, dict):
         raise RuntimeError(
@@ -60,16 +98,28 @@ def complete_validated_json(
     repair_attempts: int = 1,
 ) -> dict:
     user = json.dumps(payload, ensure_ascii=False)
+    provider_errored = False
+    last_provider_error = None
 
-    raw = chat_complete(
-        role,
-        system,
-        user,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        sampler=sampler,
-        candidate_offset=0,
-    )
+    try:
+        raw = chat_complete(
+            role,
+            system,
+            user,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            sampler=sampler,
+            candidate_offset=0,
+        )
+    except Aborted:
+        raise
+    except LLMError as exc:
+        # The primary provider itself failed (auth/model-not-found/5xx past
+        # retries). Don't die here -- fall through to the configured fallback
+        # candidates below, which previously only ran on VALIDATION failures.
+        raw = ""
+        provider_errored = True
+        last_provider_error = exc
 
     parse_error = None
 
@@ -95,7 +145,9 @@ def complete_validated_json(
     previous_raw = raw
     previous_parsed = parsed
 
-    for _ in range(max(0, repair_attempts)):
+    # Skip same-provider repair when the primary provider itself errored --
+    # repairing against a down provider just wastes attempts; go to fallbacks.
+    for _ in range(0 if provider_errored else max(0, repair_attempts)):
         repair_payload = {
             "original_request": payload,
             "previous_raw_output": previous_raw,
@@ -108,17 +160,23 @@ def complete_validated_json(
             ),
         }
 
-        previous_raw = chat_complete(
-            role,
-            _REPAIR_SYSTEM,
-            json.dumps(
-                repair_payload,
-                ensure_ascii=False,
-            ),
-            temperature=0.0,
-            max_tokens=max_tokens,
-            candidate_offset=0,
-        )
+        try:
+            previous_raw = chat_complete(
+                role,
+                _REPAIR_SYSTEM,
+                json.dumps(
+                    repair_payload,
+                    ensure_ascii=False,
+                ),
+                temperature=0.0,
+                max_tokens=max_tokens,
+                candidate_offset=0,
+            )
+        except Aborted:
+            raise
+        except LLMError as exc:
+            last_provider_error = exc
+            break  # provider now failing; move on to fallback candidates
 
         try:
             previous_parsed = strict_json_parse(
@@ -155,18 +213,24 @@ def complete_validated_json(
             ),
         }
 
-        fallback_raw = chat_complete(
-            role,
-            system + "\n\n" + _REPAIR_SYSTEM,
-            json.dumps(
-                fallback_payload,
-                ensure_ascii=False,
-            ),
-            temperature=0.0,
-            max_tokens=max_tokens,
-            sampler=sampler,
-            candidate_offset=candidate_offset,
-        )
+        try:
+            fallback_raw = chat_complete(
+                role,
+                system + "\n\n" + _REPAIR_SYSTEM,
+                json.dumps(
+                    fallback_payload,
+                    ensure_ascii=False,
+                ),
+                temperature=0.0,
+                max_tokens=max_tokens,
+                sampler=sampler,
+                candidate_offset=candidate_offset,
+            )
+        except Aborted:
+            raise
+        except LLMError as exc:
+            last_provider_error = exc
+            continue  # this fallback provider errored; try the next candidate
 
         try:
             fallback_parsed = strict_json_parse(
@@ -187,6 +251,12 @@ def complete_validated_json(
 
         report = fallback_report
 
+    if last_provider_error is not None:
+        raise RuntimeError(
+            f"{step_key}: all providers failed "
+            f"(last provider error: {last_provider_error}); "
+            f"validation: {'; '.join(report.errors[:6])}"
+        )
     raise RuntimeError(
         f"{step_key} failed JSON validation: "
         + "; ".join(report.errors[:12])
