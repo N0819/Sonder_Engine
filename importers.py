@@ -1,4 +1,4 @@
-import json, time, re, uuid, base64, struct, zlib, numpy as np
+import json, time, re, uuid, base64, struct, zlib, hashlib, numpy as np
 from contextlib import contextmanager
 from db import q, qi, transaction
 from memory import (
@@ -311,6 +311,23 @@ def heuristic_character_sheet(d):
     )
     sheet["knowledge"]["public_history"] = d.get("scenario") or ""
     sheet["opening"]["first_message"] = d.get("first_mes") or ""
+    # Capture first_mes + alternate_greetings as a swipeable greetings list
+    # (macros already normalized to {{PLAYER}} above). greeting_id is a stable
+    # hash so re-extraction and swipe references survive edits elsewhere.
+    raw_greetings = [d.get("first_mes")] + list(d.get("alternate_greetings") or [])
+    greetings = []
+    for g in raw_greetings:
+        text = str(g or "").strip()
+        if not text:
+            continue
+        greetings.append({
+            "greeting_id": "greet_" + hashlib.sha1(text.encode("utf-8")).hexdigest()[:16],
+            "prose": text,
+            "extraction": None,
+            "extractor_version": None,
+        })
+    if greetings:
+        sheet["opening"]["greetings"] = greetings
     return sheet
 
 REINT_CHAR_SYS = (
