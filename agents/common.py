@@ -133,6 +133,75 @@ def _assert_plan_materialized(turn_id, plan, ctx):
 def _character_by_id(ctx, char_id):
     return next(row for row in ctx.cast if int(row["id"]) == int(char_id))
 
+def _conceal_from_targets_observer(conceal_from, observer_id, observer_sheet):
+    """True if any conceal_from entry names this observer -- matched by
+    numeric id, string id, display name, uid, or alias. conceal_from is an
+    absolute exclusion list authored against whatever identity handle the
+    speaker knew, so a reader must resolve it against ALL of the observer's
+    handles (same tolerance character_room/canonicalize_positions apply)."""
+    if not conceal_from:
+        return False
+    id_forms = {str(observer_id).strip()}
+    try:
+        keys = {k.casefold() for k in character_scene_keys(observer_sheet)}
+    except Exception:
+        keys = set()
+    for entry in conceal_from:
+        if isinstance(entry, bool):
+            continue
+        if isinstance(entry, int):
+            if str(entry) in id_forms:
+                return True
+            continue
+        text = str(entry or "").strip()
+        if not text:
+            continue
+        if text in id_forms or text.casefold() in keys:
+            return True
+    return False
+
+def _concat_dedup(*value_lists):
+    """Union-concatenate list-of-dicts update fields, preserving order and
+    dropping exact duplicates (a re-emitted identical update across rounds)."""
+    out, seen = [], set()
+    for values in value_lists:
+        for item in _list(values):
+            try:
+                key = json.dumps(item, sort_keys=True, ensure_ascii=False)
+            except (TypeError, ValueError):
+                key = repr(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+    return out
+
+def _merge_character_results(existing, new):
+    """Combine a character's earlier-round result with a later one instead of
+    overwriting. A character who speaks in more than one micro-round would
+    otherwise lose its round-0 sequence/mind_model_updates/etc. at commit,
+    which reads ctx.character_results[id] as a single result. Latest scalar
+    state (active_state, interaction, salience) wins; the accumulating list
+    fields are unioned so no round's declared behavior or inference is lost."""
+    if not isinstance(existing, dict):
+        return new
+    if not isinstance(new, dict):
+        return existing
+    merged = dict(new)
+    merged["sequence"] = _list(existing.get("sequence")) + _list(new.get("sequence"))
+    for field in (
+        "mind_model_updates",
+        "relationship_updates",
+        "stance_updates",
+        "inference_updates",
+    ):
+        combined = _concat_dedup(existing.get(field), new.get(field))
+        if combined or field in existing or field in new:
+            merged[field] = combined
+    if not new.get("active_state") and existing.get("active_state"):
+        merged["active_state"] = existing.get("active_state")
+    return merged
+
 def _contextual_rooms(sc, cast, *extra_room_ids, hops=1):
     """The rooms dict to actually serialize into a stage's LLM payload:
     every occupied room (cast members' current rooms plus any extra room
@@ -181,7 +250,7 @@ def _sequence_has_content(result):
         if isinstance(event, dict)
     )
 
-def _asks_player(result, chat):
+def _asks_player(result, chat, cast=None):
     player_name = persona_name(persona_of(chat))
     interaction = _dict(result.get("interaction"))
     addresses = {
@@ -191,6 +260,21 @@ def _asks_player(result, chat):
     aliases = {"player", "the player", "you", player_name.casefold()}
     if addresses & aliases:
         return True
+    # The trailing-"?" fallback (a speech line ending in "?" is treated as a
+    # question awaiting the player) must fire ONLY when the speaker didn't
+    # aim the line at a specific cast member. An NPC asking ANOTHER NPC a
+    # question ("Reya, are you sure?") is not awaiting the player, and using
+    # "?" alone to end the loop there strands an NPC<->NPC exchange as if the
+    # player had been addressed. So: if `addresses` names a registered cast
+    # member (and not the player, handled above), never apply the fallback.
+    cast_names = set()
+    for row in (cast or []):
+        try:
+            cast_names.add(character_name(json.loads(row["sheet"])).casefold())
+        except Exception:
+            continue
+    if addresses & cast_names:
+        return False
     for event in _dict_list(result.get("sequence")):
         if event.get("type") != "speech":
             continue
@@ -914,9 +998,55 @@ _DANGLING_SPEECH_VERB_RE = re.compile(
     re.IGNORECASE,
 )
 
-def _strip_player_echo(prose, lines):
+def _protected_view_quotes(view, player_lines=None):
+    """Quoted spans in a perceiver's view that belong to a NON-player speaker
+    -- the exact lines DIALOGUE FIDELITY requires the narrator to keep
+    verbatim. Excludes the player's own declared lines (those are the ones
+    the echo strip is meant to remove). Fed to _strip_player_echo so it never
+    corrupts a legitimately-quoted NPC line while stripping a player echo."""
+    excluded = {
+        re.sub(r"\s+", " ", _quote_body(line).casefold())
+        for line in (player_lines or [])
+        if _quote_body(line)
+    }
+    quotes = []
+    for match in re.finditer(r'["“]([^"“”]{1,})["”]', str(view or "")):
+        body = _quote_body(match.group(1))
+        if not body:
+            continue
+        if re.sub(r"\s+", " ", body.casefold()) in excluded:
+            continue
+        quotes.append(body)
+    return quotes
+
+def _strip_player_echo(prose, lines, protect_quotes=None):
     if not prose:
         return prose
+    # DIALOGUE FIDELITY vs PLAYER ECHO: the echo strip removes the player's
+    # OWN declared lines from prose, but it must never reach inside a span the
+    # narrator legitimately quoted from a NON-player speaker (an NPC line the
+    # fidelity check just required verbatim). When a player line coincides
+    # with, or is a substring of, an NPC's quoted line, blind stripping would
+    # corrupt that protected quote. Mask the NPC-attributed quoted spans out
+    # of reach for the duration of the strip, then restore them intact.
+    masks = []
+    for quote in (protect_quotes or []):
+        body = _quote_body(quote)
+        if not body:
+            continue
+        forms = ['"%s"' % body, "“%s”" % body]
+        if len(body) >= 8:
+            forms.append(body)
+        for form in forms:
+            start = 0
+            while True:
+                pos = prose.find(form, start)
+                if pos == -1:
+                    break
+                token = "\x00%d\x00" % len(masks)
+                masks.append((token, form))
+                prose = prose[:pos] + token + prose[pos + len(form):]
+                start = pos + len(token)
     for speech in (lines or []):
         body = (speech or "").strip().strip('"' + "'" + "\u201c\u201d\u2018\u2019")
         if not body:
@@ -942,6 +1072,8 @@ def _strip_player_echo(prose, lines):
         # with narration_person (first/second/third), so match on the verb
         # rather than assuming "you".
         prose = _DANGLING_SPEECH_VERB_RE.sub(lambda m: f"{m.group(1)} it.", prose)
+    for token, form in masks:
+        prose = prose.replace(token, form)
     return re.sub(r"\s{2,}", " ", prose).strip()
 
 def _word_shingles(text, n=6):

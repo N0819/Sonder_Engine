@@ -16,6 +16,7 @@ from .common import (
     _already_established_phrases,
     _check_narrator_fidelity,
     _narration_person_counts,
+    _protected_view_quotes,
     _strip_player_echo,
     player_speech_lines,
 )
@@ -188,7 +189,10 @@ def narrator(ctx, nonce):
 
     if pending_person_writes:
         out["narration_person_writes"] = pending_person_writes
-    out["prose"] = _strip_player_echo(out.get("prose", ""), p_lines)
+    out["prose"] = _strip_player_echo(
+        out.get("prose", ""), p_lines,
+        protect_quotes=_protected_view_quotes(view, p_lines),
+    )
     return out
 
 def narrator_extra(ctx, nonce):
@@ -275,7 +279,10 @@ def narrator_extra(ctx, nonce):
 
         if pending_person_writes:
             out["narration_person_writes"] = pending_person_writes
-        out["prose"] = _strip_player_echo(out.get("prose", ""), p_lines)
+        out["prose"] = _strip_player_echo(
+            out.get("prose", ""), p_lines,
+            protect_quotes=_protected_view_quotes(view, p_lines),
+        )
         return pid_key, out, warnings, fidelity_warnings
 
     # Each extra player's narration only reads data already computed before

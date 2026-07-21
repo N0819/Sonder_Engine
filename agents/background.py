@@ -36,18 +36,90 @@ memory.
 
 from __future__ import annotations
 
+import re
+
 from db import wget
 from schemas import validate_llm_output
 from prompts import get_prompt
+from spatial import hear_level, spatial_rel
 
 from commit import (
     pick_background_reactors,
+    _background_name_mentioned,
     _character_address_of,
-    _valid_pending_reply,
     _known_name_roster,
+    _quote_body,
+    _room_of,
+    _valid_pending_reply,
 )
 
 from .common import _agent_json
+
+
+def _filtered_player_declaration(ctx):
+    """The player's beat as a background BYSTANDER may legitimately receive it:
+    overt sequence elements only -- never a concealed line, never the private
+    thought. background_react used to pass ctx.input raw, leaking whispered or
+    silently-sent content (and any private thought the player typed) straight
+    into an unregistered presence's payload; worse, a declaration that named
+    the presence WHILE concealing made the deterministic gate more likely to
+    pick them to react to words they never heard."""
+    interp = ctx.get("director_interpret") or {}
+    seq = [e for e in (interp.get("sequence") or []) if isinstance(e, dict)]
+    if seq:
+        parts = []
+        for e in seq:
+            if e.get("visibility") == "concealed":
+                continue
+            if e.get("type") == "speech" and e.get("text"):
+                parts.append('"%s"' % e["text"])
+            elif e.get("type") == "action" and e.get("attempt"):
+                parts.append(str(e["attempt"]))
+        return " ".join(parts).strip()
+    # No structured sequence to filter against; the raw input may contain the
+    # concealed words verbatim. Withhold it entirely whenever a private thought
+    # exists (the one signal available here that something was withheld);
+    # otherwise the declaration is public and safe to pass.
+    if interp.get("private_thought"):
+        return ""
+    return ctx.input or ""
+
+
+def _beat_for_presence(dr, sc, station_room, name):
+    """What the presence objectively perceives of the beat. Prefer the audible
+    dialogue at its station room over the raw resolved_event: resolved_event is
+    authored from the omniscient objective frame and can narrate content a
+    bystander in one room never sensed. Concealed lines (globally, or concealed
+    FROM this presence) are dropped, and any concealed quote body that bled into
+    the objective prose is redacted as a backstop."""
+    resolved = str(dr.get("resolved_event") or "")
+    audible = []
+    for d in (dr.get("dialogue_log") or []):
+        quote = str(d.get("exact_quote") or "").strip()
+        if not quote:
+            continue
+        concealed = (
+            str(d.get("visibility") or "").casefold() == "concealed"
+            or any(_background_name_mentioned(name, str(c))
+                   for c in (d.get("conceal_from") or []))
+        )
+        if concealed:
+            body = _quote_body(quote)
+            if body:
+                resolved = resolved.replace(body, "")
+            continue
+        speaker = str(d.get("speaker") or "").strip()
+        if station_room and sc:
+            sp_room = _room_of(sc, speaker)
+            if sp_room and hear_level(
+                spatial_rel(sc, sp_room, station_room),
+                d.get("volume") or "normal",
+            ) == "none":
+                continue
+        audible.append("%s: %s" % (speaker, quote) if speaker else quote)
+    if audible:
+        return " ".join(audible).strip()
+    return re.sub(r"\s{2,}", " ", resolved).strip()
 
 
 def _result(selected, reactions):
@@ -151,9 +223,10 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce):
             "station_room": sketch.get("station_room", ""),
         },
         "beat": {
-            "resolved_event": dr.get("resolved_event", ""),
+            "resolved_event": _beat_for_presence(
+                dr, sc, sketch.get("station_room"), name),
             "addressed_by": addressed_by,
-            "player_declaration": ctx.input or "",
+            "player_declaration": _filtered_player_declaration(ctx),
             "present_others": [p for p in present_others if p != name],
         },
         "variant_seed": nonce,

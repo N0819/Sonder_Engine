@@ -14,10 +14,12 @@ from .common import (
     _asks_player,
     _character_by_id,
     _character_display_name,
+    _conceal_from_targets_observer,
     character_room,
     _dict,
     _dict_list,
     _list,
+    _merge_character_results,
     _next_speaker_candidates,
     _requires_director_resolution,
     _sequence_has_content,
@@ -45,6 +47,25 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
         additions = []
         for event in actor_result.get("sequence") or []:
             if event.get("type") == "speech":
+                # A concealed line is an absolute exclusion, not a volume: it
+                # must never be delivered to an observer named in its
+                # conceal_from, regardless of physical earshot. The action
+                # branch below already skips concealed events; the speech
+                # branch used to check ONLY hear_level, so a concealed NPC
+                # line leaked verbatim to conceal-from parties (and thence
+                # into their next character step, outcome view, and durable
+                # memory). Legitimate recipients (anyone not concealed from)
+                # still hear it, subject to hear_level -- mirroring
+                # perception_act and the norm_sequence backstop.
+                if (
+                    event.get("visibility") == "concealed"
+                    and _conceal_from_targets_observer(
+                        event.get("conceal_from"),
+                        observer_id,
+                        observer_sheet,
+                    )
+                ):
+                    continue
                 level = hear_level(relation, event.get("volume", "normal"))
                 if level == "none":
                     continue
@@ -192,7 +213,14 @@ def interaction_loop(ctx, nonce):
         )
         calls += 1
         already_spoke.add(speaker_id)
-        ctx.character_results[speaker_id] = result
+        # Merge rather than overwrite: a character can speak in more than one
+        # micro-round, and commit/perception_outcome read
+        # ctx.character_results[id] as that character's SINGLE result. A blind
+        # reassignment dropped the earlier round's sequence/mind_model_updates
+        # entirely at commit.
+        ctx.character_results[speaker_id] = _merge_character_results(
+            ctx.character_results.get(speaker_id), result
+        )
 
         has_content = _sequence_has_content(result)
         if has_content:
@@ -244,7 +272,7 @@ def interaction_loop(ctx, nonce):
                 "stop_on_question_to_player",
                 True,
             )
-            and _asks_player(result, ctx.chat)
+            and _asks_player(result, ctx.chat, ctx.cast)
         ):
             stop_reason = (
                 "awaiting player response"
