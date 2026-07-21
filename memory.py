@@ -1111,9 +1111,15 @@ def recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=4, limit=12, 
     # recently happened. Reversed back to chronological order below since
     # every caller presents/reads this as an ordered narrative, not a
     # ranked list.
+    # Exclude turn_idx >= current_turn_idx. A character's onset-time context
+    # (perception/character decision for THIS turn) must never contain its own
+    # committed memory of how this very turn resolved -- otherwise a single-step
+    # reroll of a pre-commit stage on an already-committed turn would feed the
+    # outcome back into the onset declaration (audit #10). The current turn has
+    # not legitimately "happened" yet from the deciding mind's point of view.
     rows = q("""SELECT * FROM memories WHERE chat_id=? AND char_id=? AND archived=0
-        AND turn_idx IS NOT NULL AND turn_idx>=? ORDER BY turn_idx DESC, id DESC LIMIT ?""",
-        (chat_id, char_id, max(0, current_turn_idx - turns), limit))
+        AND turn_idx IS NOT NULL AND turn_idx>=? AND turn_idx<? ORDER BY turn_idx DESC, id DESC LIMIT ?""",
+        (chat_id, char_id, max(0, current_turn_idx - turns), current_turn_idx, limit))
     rows = list(reversed(rows))
     # Recent-by-play-order is not the same as recent-by-diegetic-order: the
     # turn immediately before a frame jump can be an entirely different

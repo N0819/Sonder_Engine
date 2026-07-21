@@ -467,6 +467,48 @@ def establishment_plan():
         ("commit", "Mapping & memory · commit-up"),
     ]
 
+def _rehydrate_loop_results(ctx, key, content):
+    """Rebuild the per-character result maps a loop step populated in the
+    uninterrupted run but that plain `ctx[key] = content` hydration does NOT
+    reconstruct on resume/reroll (audit #11).
+
+    `commit.py` and `agents/perception.py` read `ctx.character_results` /
+    `ctx.reaction_results` directly. When a resumed or reroll-commit turn only
+    loads the persisted interaction_loop/reaction_loop CONTENT into
+    `ctx.interaction_loop` / `ctx.reaction_loop`, those maps stay empty, so the
+    turn silently commits no character self-memories, mind_model_updates,
+    stance_updates, or active_state. Rebuild each loop's native map from its
+    persisted `character_results`/`reaction_results` dict, falling back to the
+    per-round `result` payloads, so resume reproduces the uninterrupted run.
+    """
+    if not isinstance(content, dict):
+        return
+    if key == "interaction_loop":
+        target, results_field, id_field = ctx.character_results, "character_results", "speaker_id"
+    elif key == "reaction_loop":
+        target, results_field, id_field = ctx.reaction_results, "reaction_results", "reactor_id"
+    else:
+        return
+    results = content.get(results_field)
+    if isinstance(results, dict):
+        for cid_str, result in results.items():
+            try:
+                cid = int(cid_str)
+            except (TypeError, ValueError):
+                continue
+            if isinstance(result, dict):
+                target.setdefault(cid, result)
+    for round_data in content.get("rounds") or []:
+        if not isinstance(round_data, dict):
+            continue
+        result = round_data.get("result")
+        try:
+            cid = int(round_data.get(id_field))
+        except (TypeError, ValueError):
+            continue
+        if isinstance(result, dict):
+            target.setdefault(cid, result)
+
 def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
     bus = Bus()
     chat_row = dict(q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True))
@@ -509,6 +551,7 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             c = active_content(turn_id, s["key"])
             if c is not None:
                 ctx[s["key"]] = c
+                _rehydrate_loop_results(ctx, s["key"], c)
         s = q("SELECT * FROM steps WHERE turn_id=? AND key=?", (turn_id, only_key), one=True)
         if not s:
             raise RuntimeError(f"step '{only_key}' not found on this turn")
@@ -529,6 +572,22 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
                 f"or rerun before rerolling '{only_key}'"
             )
         if only_key == "commit" and has_existing_steps:
+            restore_checkpoint(chat_id, turn_row["idx"])
+        elif (
+            only_key != "commit"
+            and has_existing_steps
+            and active_content(turn_id, "commit") is not None
+        ):
+            # Single-step reroll of a PRE-commit stage on a turn that already
+            # committed. The live world tables + this turn's own committed
+            # memories now reflect the OUTCOME, so re-running onset perception
+            # or a character decision against that state leaks outcome
+            # knowledge into the onset declaration (audit #10). Restore the
+            # pre-turn checkpoint first -- mirroring the from_key rerun path
+            # below -- so the rerolled onset stage sees only pre-turn state.
+            # Downstream steps (commit included) are marked stale just below,
+            # leaving the turn in an explicit needs-resume state rather than a
+            # half-committed one.
             restore_checkpoint(chat_id, turn_row["idx"])
         # Marked stale BEFORE computing (not after) so a crash/abort mid-step
         # leaves accurate breadcrumbs instead of the pre-existing downstream
@@ -681,6 +740,7 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
                     "rerun before continuing from a later stage"
                 )
             ctx[key] = c
+            _rehydrate_loop_results(ctx, key, c)
             i += 1
             continue
         if key.startswith("character:"):
