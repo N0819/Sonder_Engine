@@ -117,6 +117,38 @@ def test_entity_with_person_kind_is_tracked(temp_db):
     assert "The Bar" not in presences
 
 
+def test_declared_agents_of_any_kind_are_tracked(temp_db):
+    # Regression: a player-declared agent is captured with whatever `kind`
+    # the model chose ("actor" for "two security guards", but also monster,
+    # creature, robot, ...). An allow-list of person/npc silently dropped
+    # them, leaving them declared-into-the-scene yet inert (no path to a
+    # reaction or promotion). Any non-inert kind is now tracked; clearly
+    # inert kinds (object/fixture/vehicle/...) stay excluded, and an
+    # ambiguous "machine" is tracked (could be a sentient robot).
+    chat_id = _make_chat(temp_db)
+
+    ctx = _ctx(chat_id, 1, [], {
+        "state_diff": {"entities": {
+            "guard_1": {"kind": "actor", "name": "Security Guard Peterson"},
+            "beast_1": {"kind": "monster", "name": "The Grendel"},
+            "crit_1": {"kind": "creature", "name": "Skitter"},
+            "bot_1": {"kind": "robot", "name": "Unit 7"},
+            "ai_1": {"kind": "machine", "name": "The Warden"},
+            "panel": {"kind": "fixture", "name": "Control Panel"},
+            "shuttle": {"kind": "vehicle", "name": "The Kestrel"},
+            "crate": {"kind": "object", "name": "Supply Crate"},
+        }},
+    })
+    track_background_presences(ctx, nonce=0)
+
+    presences = temp_db.wget(chat_id, "background_presences", {})
+    for agent in ("Security Guard Peterson", "The Grendel", "Skitter",
+                  "Unit 7", "The Warden"):
+        assert agent in presences, agent
+    for inert in ("Control Panel", "The Kestrel", "Supply Crate"):
+        assert inert not in presences, inert
+
+
 def test_mentions_only_count_for_already_tracked_names(temp_db):
     chat_id = _make_chat(temp_db)
     temp_db.wset(chat_id, "background_presences", {
