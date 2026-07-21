@@ -15,7 +15,7 @@ from providers import (
     DEFAULT_BASES, ROLES, SAMPLER_KEYS, DEFAULT_SAMPLERS, Aborted,
 )
 from pipeline_context import PipelineContext, ChatData, TurnData
-from checkpoints import ensure_checkpoint, restore_checkpoint, snapshot_state, refresh_checkpoint
+from checkpoints import ensure_checkpoint, restore_checkpoint, snapshot_state, refresh_checkpoint, insert_world_tables
 from frames import create_frame, get_frame, list_frames
 import paradox
 from agents import (
@@ -434,6 +434,28 @@ def _remap_active_books(world, bookmap):
             world[key] = [bookmap[x] for x in ab if x in bookmap]
     return world
     
+def _remap_fixed_points_frames(world, frame_idmap):
+    """fixed_points live as a world-KV list of dicts, each carrying a
+    frame_id (which frame the anchor is scoped to). The generic world-id
+    remap only touches entity/world/location STRING ids, so the integer
+    frame_id would otherwise keep the source chat's value -- paradox
+    scoping would then check the wrong frame. Remap it through
+    frame_idmap (None/present stays present; an uncloned frame collapses
+    to present rather than dangling)."""
+    fps = world.get("fixed_points")
+    if not isinstance(fps, list):
+        return
+    remapped = []
+    for fp in fps:
+        if not isinstance(fp, dict):
+            remapped.append(fp)
+            continue
+        nfp = dict(fp)
+        if fp.get("frame_id") is not None:
+            nfp["frame_id"] = frame_idmap.get(fp.get("frame_id"))
+        remapped.append(nfp)
+    world["fixed_points"] = remapped
+
 def _build_world_id_remap(blob):
     """Generate fresh IDs for all world entities/conditions/events/worlds/locations
     in a checkpoint blob. Returns a mapping of old_id -> new_id."""
@@ -581,6 +603,45 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
                 ncf["char_id"] = char_idmap.get(ncf.get("char_id"), ncf.get("char_id"))
             remapped_char_frames.append(ncf)
         blob["char_frames"] = remapped_char_frames
+
+    # Frame rows and persona stations carry SOURCE-chat frame ids. Left
+    # unmapped, _restore_frames PK-collides (500 forever) or DELETEs the
+    # branch's own frames (cross-era collapse), and chat_personas re-attach
+    # to foreign frame rows. Remap through frame_idmap; drop rows whose
+    # frame wasn't cloned.
+    if blob.get("frames"):
+        remapped_frames = []
+        for fr in blob["frames"]:
+            nfid = frame_idmap.get(fr.get("id"))
+            if nfid is None:
+                continue
+            nfr = dict(fr)
+            nfr["id"] = nfid
+            nfr["parent_frame_id"] = frame_idmap.get(fr.get("parent_frame_id"))
+            remapped_frames.append(nfr)
+        blob["frames"] = remapped_frames
+
+    if blob.get("chat_personas"):
+        remapped_personas = []
+        for p in blob["chat_personas"]:
+            old_fid = p.get("frame_id")
+            if old_fid is not None and frame_idmap.get(old_fid) is None:
+                # Stationed in a frame that wasn't cloned -- dropping the
+                # row is safer than reattaching to a foreign frame id.
+                continue
+            np = dict(p)
+            np["frame_id"] = frame_idmap.get(old_fid) if old_fid is not None else None
+            remapped_personas.append(np)
+        blob["chat_personas"] = remapped_personas
+
+    # world_entities.created_turn_id/retired_turn_id are turn-row FKs, not
+    # strings -- remap them through the turn idmap (null when the turn
+    # wasn't cloned) or a cross-install restore FK-fails and aborts.
+    for ent in blob.get("world_entities") or []:
+        if "created_turn_id" in ent:
+            ent["created_turn_id"] = turn_idmap.get(ent.get("created_turn_id"))
+        if "retired_turn_id" in ent:
+            ent["retired_turn_id"] = turn_idmap.get(ent.get("retired_turn_id"))
 
     if world_id_remap:
         for key in ("world_entities", "world_placements", "world_conditions",
@@ -1318,6 +1379,9 @@ def chat_edit(cid: int, body: dict = Body(...)):
 def attach_lore(cid: int, body: dict = Body(...)):
     if not q("SELECT 1 FROM chats WHERE id=?", (cid,), one=True):
         raise HTTPException(404, "Chat not found")
+    # refresh_checkpoint mutates the latest turn's checkpoint -- must not
+    # race a running pipeline that's about to write that same turn.
+    _require_chat_idle(cid)
     src = body.get("lorebook_id")
     if not src: raise HTTPException(400, "lorebook_id required")
     row = q("SELECT * FROM lorebooks WHERE id=?", (src,), one=True)
@@ -1338,6 +1402,7 @@ def attach_lore(cid: int, body: dict = Body(...)):
 
 @app.delete("/api/chats/{cid}/lorebooks/{lid}")
 def detach_book(cid: int, lid: int):
+    _require_chat_idle(cid)
     qi("DELETE FROM chat_lorebooks WHERE chat_id=? AND lorebook_id=?", (cid, lid))
     lb = q("SELECT * FROM lorebooks WHERE id=?", (lid,), one=True)
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
@@ -1352,6 +1417,7 @@ def detach_book(cid: int, lid: int):
 
 @app.post("/api/chats/{cid}/lorebook")
 def bind_lore(cid: int, body: dict = Body(...)):
+    _require_chat_idle(cid)
     src = body["lorebook_id"]
     if not src:
         qi("UPDATE chats SET lorebook_id=NULL WHERE id=?", (cid,))
@@ -1367,6 +1433,7 @@ def bind_lore(cid: int, body: dict = Body(...)):
 
 @app.delete("/api/chats/{cid}/lorebook")
 def detach_lore(cid: int):
+    _require_chat_idle(cid)
     qi("UPDATE chats SET lorebook_id=NULL WHERE id=?", (cid,))
     last = _latest_turn(cid)
     if last:
@@ -1651,8 +1718,10 @@ def chat_persona_station(cid: int, pid: int, body: dict = Body(...)):
         raise HTTPException(404, "Persona not attached to this chat")
     frame_id = body.get("frame_id")
     frame_id = int(frame_id) if frame_id is not None else None
-    if frame_id is not None and get_frame(frame_id) is None:
-        raise HTTPException(404, f"Frame {frame_id} not found")
+    if frame_id is not None:
+        fr = get_frame(frame_id)
+        if fr is None or fr["chat_id"] != cid:
+            raise HTTPException(404, f"Frame {frame_id} not found")
     _require_chat_idle(cid)
 
     # A paradox only strands whoever's actually stationed in its own
@@ -2013,6 +2082,10 @@ def fixed_points_create(cid: int, body: dict = Body(...)):
         raise HTTPException(400, "Missing entity_id or label")
     frame_id = body.get("frame_id")
     frame_id = int(frame_id) if frame_id is not None else None
+    if frame_id is not None:
+        fr = get_frame(frame_id)
+        if fr is None or fr["chat_id"] != cid:
+            raise HTTPException(404, f"Frame {frame_id} not found")
     try:
         anchor_id = paradox.add_fixed_point(
             cid, entity_id=entity_id, frame_id=frame_id,
@@ -2051,6 +2124,17 @@ def chat_export(cid: int):
     export["checkpoints"] = [
         {"turn_idx": r["turn_idx"], "blob": r["blob"], "created": r["created"]}
         for r in q("SELECT * FROM checkpoints WHERE chat_id=? ORDER BY turn_idx", (cid,))]
+    # Live normalized world tables -- without these, an import has an empty
+    # world_entities table while world.scene + fixed_points reference
+    # entities, so the first post-import commit false-fires a paradox.
+    for tbl in ("world_entities", "world_placements", "world_conditions",
+                "scheduled_events", "fiction_worlds", "fiction_locations"):
+        export[tbl] = [dict(r) for r in q(f"SELECT * FROM {tbl} WHERE chat_id=?", (cid,))]
+    # Multiplayer roster + frame stations, and any pre-submitted co-player
+    # inputs, and the lore link graph -- all silently dropped before.
+    export["chat_personas"] = [dict(r) for r in q("SELECT * FROM chat_personas WHERE chat_id=?", (cid,))]
+    export["turn_player_inputs"] = [dict(r) for r in q("SELECT * FROM turn_player_inputs WHERE chat_id=?", (cid,))]
+    export["lorebook_links"] = dump_lorebook_links(chat_lorebook_ids(cid, enabled_only=False))
     canon = chat["lorebook_id"]
     for lid in chat_lorebook_ids(cid, enabled_only=False):
         lb = q("SELECT * FROM lorebooks WHERE id=?", (lid,), one=True)
@@ -2093,7 +2177,27 @@ def chat_export(cid: int):
                 "sheet": json.loads(p["sheet"]),
                 "source": json.loads(p["source"] or "{}"),
             }
-    export["resources"] = {"persona": persona, "characters": characters}
+    # Extra multiplayer personas (chat_personas beyond chats.persona_id)
+    # need their sheets embedded too, or a cross-install import can't
+    # resolve the roster's persona ids.
+    extra_personas = []
+    seen_pids = {chat["persona_id"]} if chat["persona_id"] else set()
+    for row in export["chat_personas"]:
+        pid = row.get("persona_id")
+        if pid is None or pid in seen_pids:
+            continue
+        seen_pids.add(pid)
+        p = q("SELECT * FROM personas WHERE id=?", (pid,), one=True)
+        if not p:
+            continue
+        extra_personas.append({
+            "old_id": pid,
+            "resource_uid": p["resource_uid"],
+            "sheet": json.loads(p["sheet"]),
+            "source": json.loads(p["source"] or "{}"),
+        })
+    export["resources"] = {"persona": persona, "characters": characters,
+                           "extra_personas": extra_personas}
     return export
     
 def _variant_content(value):
@@ -2174,6 +2278,18 @@ def chat_import(body: dict = Body(...)):
                 old_char_map[old_id] = new_id
 
         source_chat = data["chat"]
+
+        # Persona id remap for the multiplayer roster: the primary persona's
+        # source id (from the source chat row) maps to the resolved primary,
+        # and every embedded extra persona maps old_id -> found-or-created.
+        persona_idmap = {}
+        if source_chat.get("persona_id") and persona_id is not None:
+            persona_idmap[source_chat["persona_id"]] = persona_id
+        for resource in resources.get("extra_personas") or []:
+            old_pid = resource.get("old_id")
+            new_pid = _import_or_match_persona(resource)
+            if old_pid is not None and new_pid is not None:
+                persona_idmap[old_pid] = new_pid
 
         if persona_id is None:
             old_persona_id = source_chat.get("persona_id")
@@ -2318,8 +2434,8 @@ def chat_import(body: dict = Body(...)):
                 bk = b.get("book", {})
                 nb = qtx(
                     "INSERT INTO lorebooks("
-                    "name,chat_id,origin_id,book_type,summary,resource_uid"
-                    ") VALUES(?,?,?,?,?,?)",
+                    "name,chat_id,origin_id,book_type,summary,resource_uid,anchor_entity_id"
+                    ") VALUES(?,?,?,?,?,?,?)",
                     (
                         bk.get("name") or "book",
                         new_chat_id,
@@ -2327,6 +2443,7 @@ def chat_import(body: dict = Body(...)):
                         bk.get("book_type") or "general",
                         bk.get("summary") or "",
                         bk.get("resource_uid") or new_uid("book"),
+                        bk.get("anchor_entity_id"),
                     ),
                 )
                 restore_lorebook(nb, b.get("entries") or [])
@@ -2430,8 +2547,51 @@ def chat_import(body: dict = Body(...)):
                 remapped_world[f"{base}{_FRAME_KEY_SEP}{new_frame_id}"] = v
         world = remapped_world
         _remap_active_books(world, bookmap)
+        # fixed_points frame_ids point at source frames -- rescope them to
+        # the import's own frames (integer ids the string remaps never see).
+        _remap_fixed_points_frames(world, frame_idmap)
         for k, v in world.items():
             wset(new_chat_id, k, v)
+
+        # Populate the normalized world tables so world.scene/fixed_points
+        # resolve against real rows (no false paradox on the first commit).
+        # Import keeps the source entity ids verbatim (internally consistent
+        # with the un-remapped world KV + checkpoint blobs); only the
+        # created/retired turn FKs go through the turn idmap.
+        world_tables = {
+            k: [dict(r) for r in (data.get(k) or [])]
+            for k in ("world_entities", "world_placements", "world_conditions",
+                      "scheduled_events", "fiction_worlds", "fiction_locations")
+        }
+        for ent in world_tables["world_entities"]:
+            ent["created_turn_id"] = turn_id_map.get(ent.get("created_turn_id"))
+            ent["retired_turn_id"] = turn_id_map.get(ent.get("retired_turn_id"))
+        insert_world_tables(new_chat_id, world_tables)
+
+        # Multiplayer roster + pre-submitted co-player inputs + lore link
+        # graph -- remap persona_id through persona_idmap, frame_id through
+        # frame_idmap; drop rows whose persona wasn't resolvable.
+        for p in data.get("chat_personas") or []:
+            new_pid = persona_idmap.get(p.get("persona_id"))
+            if new_pid is None:
+                continue
+            qtx(
+                "INSERT OR IGNORE INTO chat_personas(chat_id,persona_id,status,frame_id) "
+                "VALUES(?,?,?,?)",
+                (new_chat_id, new_pid, p.get("status", "active"),
+                 frame_idmap.get(p.get("frame_id"))),
+            )
+        for tpi in data.get("turn_player_inputs") or []:
+            new_pid = persona_idmap.get(tpi.get("persona_id"))
+            if new_pid is None:
+                continue
+            qtx(
+                "INSERT OR IGNORE INTO turn_player_inputs(chat_id,turn_idx,persona_id,input,created) "
+                "VALUES(?,?,?,?,?)",
+                (new_chat_id, tpi.get("turn_idx"), new_pid,
+                 tpi.get("input", ""), tpi.get("created", time.time())),
+            )
+        restore_lorebook_links(new_chat_id, bookmap, data.get("lorebook_links") or [])
 
         for cp in data.get("checkpoints") or []:
             blob = cp["blob"] if isinstance(cp["blob"], str) else json.dumps(cp["blob"])
@@ -2598,22 +2758,35 @@ def mem_del(mid: int):
 def turn_new(cid: int, body: dict = Body(...)):
     frame_id = body.get("frame_id")
     frame_id = int(frame_id) if frame_id is not None else None
-    if frame_id is not None and get_frame(frame_id) is None:
-        raise HTTPException(404, f"Frame {frame_id} not found")
+    if frame_id is not None:
+        fr = get_frame(frame_id)
+        # Frame must exist AND belong to THIS chat -- a bare existence check
+        # would let a request operate on another chat's frame.
+        if fr is None or fr["chat_id"] != cid:
+            raise HTTPException(404, f"Frame {frame_id} not found")
     _require_frame_idle(cid, frame_id)
     _require_turn_resolved(cid, frame_id)
-    # idx allocation is chat-GLOBAL (play order across every frame), so
-    # two frames creating turns at nearly the same moment race on
-    # computing "current max + 1" -- wrapped in a transaction so the
-    # read-compute-insert is atomic against any other concurrent writer,
-    # not just against itself.
-    with transaction():
-        last = _latest_turn(cid)
-        idx = (last["idx"] + 1) if last else 0
-        tid = qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
-                 (cid, idx, _player_input(body), time.time(), frame_id))
-    ensure_checkpoint(cid, idx)
+    # Claim the pipeline slot (the atomic race-closing gate) BEFORE creating
+    # the turn row: a 409-losing request must not leave a stepless orphan
+    # turn that then blocks the frame. run_pipeline reuses this abort.
     abort = _begin_pipeline_or_409(cid, frame_id)
+    try:
+        # idx allocation is chat-GLOBAL (play order across every frame), so
+        # two frames creating turns at nearly the same moment race on
+        # computing "current max + 1" -- wrapped in a transaction so the
+        # read-compute-insert is atomic against any other concurrent writer,
+        # not just against itself.
+        with transaction():
+            last = _latest_turn(cid)
+            idx = (last["idx"] + 1) if last else 0
+            tid = qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
+                     (cid, idx, _player_input(body), time.time(), frame_id))
+        ensure_checkpoint(cid, idx)
+    except BaseException:
+        # Release the slot we grabbed if row/checkpoint creation failed, so
+        # a later request isn't wrongly rejected as "already running".
+        ABORTS.pop((cid, frame_id), None)
+        raise
     return _stream(run_pipeline(cid, tid, abort=abort, frame_id=frame_id))
 
 @app.post("/api/chats/{cid}/abort")
@@ -2766,6 +2939,12 @@ def turn_branch(tid: int):
         restore_chat_memories(ncid, mems)
         restore_memory_summaries(ncid, blob.get("memory_summaries") or [])
 
+        # Build world ID remap ONCE from the source snapshot, up front:
+        # the lorebook clone below needs it to remap vehicle-book
+        # anchor_entity_id, and every checkpoint for the branched chat must
+        # reuse the same new ids.
+        world_id_remap = _build_world_id_remap(blob)
+
         # --- Lorebook Tree Cloning ---
         bookmap = {}
         new_canon = None
@@ -2784,12 +2963,13 @@ def turn_branch(tid: int):
         # Pass 1: Create all books without parent references, clone entries safely
         for b in snap_books or []:
             old_id = b.get("lorebook_id")
+            _anchor = b.get("anchor_entity_id")
             nb = qtx(
                 "INSERT INTO lorebooks("
                 "name,chat_id,origin_id,book_type,summary,"
                 "parent_id,scope_world_id,scope_location_id,"
-                "inheritance_mode,sort_order,resource_uid"
-                ") VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                "inheritance_mode,sort_order,resource_uid,anchor_entity_id"
+                ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     b.get("name") or "canon",
                     ncid,
@@ -2801,7 +2981,10 @@ def turn_branch(tid: int):
                     b.get("scope_location_id"),
                     b.get("inheritance_mode") or "inherit",
                     int(b.get("sort_order") or 0),
-                    new_uid("book")
+                    new_uid("book"),
+                    # Vehicle-book anchor follows an entity -- remap it to the
+                    # branch's own entity id so the book keeps tracking it.
+                    (world_id_remap.get(_anchor, _anchor) if _anchor else _anchor),
                 )
             )
 
@@ -2845,10 +3028,6 @@ def turn_branch(tid: int):
 
         restore_lorebook_links(ncid, bookmap, branch_links)
 
-        # Build world ID remap ONCE from the source snapshot.
-        # All checkpoints for the branched chat must use the same new IDs.
-        world_id_remap = _build_world_id_remap(blob)
-
         # Restore world state (deep-copy so blob stays untouched for checkpoints)
         world = json.loads(json.dumps(blob.get("world") or {}))
         # Retired-concept cleanup: current_frame_id/frame_bundle:* were written
@@ -2886,8 +3065,46 @@ def turn_branch(tid: int):
                         world[k] = world_id_remap.get(v, v)
                 elif isinstance(v, (dict, list)):
                     world[k] = _deep_remap_ids(v, world_id_remap)
+        # fixed_points carry integer frame_ids the generic string remap
+        # above never touched -- rescope them to the branch's own frames.
+        _remap_fixed_points_frames(world, frame_idmap)
         for k, v in world.items():
             wset(ncid, k, v)
+
+        # Populate the normalized world tables from the branch-point blob,
+        # remapped to this branch's ids. Without this the tables stay empty
+        # while world.scene + fixed_points reference entities -- a false
+        # paradox fires on the first commit. created/retired turn FKs go
+        # through the turn idmap (None when the turn wasn't cloned).
+        world_tables = json.loads(json.dumps({
+            k: (blob.get(k) or [])
+            for k in ("world_entities", "world_placements", "world_conditions",
+                      "scheduled_events", "fiction_worlds", "fiction_locations")
+        }))
+        if world_id_remap:
+            for k in world_tables:
+                world_tables[k] = _deep_remap_ids(world_tables[k], world_id_remap)
+        for ent in world_tables["world_entities"]:
+            ent["created_turn_id"] = idmap.get(ent.get("created_turn_id"))
+            ent["retired_turn_id"] = idmap.get(ent.get("retired_turn_id"))
+        insert_world_tables(ncid, world_tables)
+
+        # Clone the multiplayer roster + any pre-submitted co-player inputs
+        # (frame_id remapped; persona ids are same-DB in a branch). Without
+        # these the branch loses every extra player's station and queued
+        # beats.
+        for p in q("SELECT * FROM chat_personas WHERE chat_id=?", (cid,)):
+            qtx(
+                "INSERT INTO chat_personas(chat_id,persona_id,status,frame_id) "
+                "VALUES(?,?,?,?)",
+                (ncid, p["persona_id"], p["status"], frame_idmap.get(p["frame_id"])),
+            )
+        for tpi in q("SELECT * FROM turn_player_inputs WHERE chat_id=? AND turn_idx<=?", (cid, idx)):
+            qtx(
+                "INSERT INTO turn_player_inputs(chat_id,turn_idx,persona_id,input,created) "
+                "VALUES(?,?,?,?,?)",
+                (ncid, tpi["turn_idx"], tpi["persona_id"], tpi["input"], tpi["created"]),
+            )
 
         # Copy checkpoints safely (using deep copies to prevent mutation issues)
         for cp in q("SELECT * FROM checkpoints WHERE chat_id=? AND turn_idx<=?", (cid, idx)):

@@ -62,6 +62,7 @@ def snapshot_state(chat_id):
             "scope_location_id": lbrow["scope_location_id"],
             "inheritance_mode": lbrow["inheritance_mode"] or "inherit",
             "sort_order": lbrow["sort_order"] or 0,
+            "anchor_entity_id": lbrow["anchor_entity_id"],
             "canon": lid == canon,
             "enabled": att["enabled"] if att else 1,
             "entries": dump_lorebook(lid),
@@ -155,7 +156,7 @@ def _restore_books(chat_id, books, links=None):
         if old_id:
             old_to_new[old_id] = target
         row = current[target]
-        qi("UPDATE lorebooks SET name=?,book_type=?,summary=?,parent_id=NULL,scope_world_id=?,scope_location_id=?,inheritance_mode=?,sort_order=? WHERE id=?",
+        qi("UPDATE lorebooks SET name=?,book_type=?,summary=?,parent_id=NULL,scope_world_id=?,scope_location_id=?,inheritance_mode=?,sort_order=?,anchor_entity_id=? WHERE id=?",
            (snapshot.get("name") or row["name"],
             snapshot.get("book_type") or row["book_type"] or "general",
             snapshot.get("summary") if snapshot.get("summary") is not None else (row["summary"] or ""),
@@ -163,6 +164,7 @@ def _restore_books(chat_id, books, links=None):
             snapshot.get("scope_location_id"),
             snapshot.get("inheritance_mode") or "inherit",
             snapshot.get("sort_order") or 0,
+            snapshot.get("anchor_entity_id"),
             target))
         
         current_entries = dump_lorebook(target)
@@ -176,7 +178,36 @@ def _restore_books(chat_id, books, links=None):
         parent = old_to_new.get(snapshot.get("parent_id"))
         if target is not None:
             qi("UPDATE lorebooks SET parent_id=? WHERE id=?", (parent, target))
-    
+
+    # The snapshot's canon book (if any) maps to this current id.
+    snapshot_canon_target = None
+    for snapshot in books or []:
+        if snapshot.get("canon"):
+            snapshot_canon_target = old_to_new.get(snapshot.get("lorebook_id"))
+            break
+
+    # Delete chat-OWNED books that no snapshot book maps onto: a book minted
+    # by a since-discarded timeline (rerolled/deleted turn) must not survive
+    # into canon, or the rerun would dedup against the stale book and its
+    # rolled-back entries. `current` already holds only this chat's own
+    # attached books (WHERE chat_id=?), so library/attached reusable books
+    # are never touched. FK cascade removes the entries + chat_lorebooks row.
+    matched = set(old_to_new.values())
+    if snapshot_canon_target is not None:
+        matched.add(snapshot_canon_target)
+    for lid in list(current.keys()):
+        if lid not in matched:
+            qi("DELETE FROM lorebooks WHERE id=? AND chat_id=?", (lid, chat_id))
+
+    # Restore the canon binding to the snapshot's -- and clear a canon bound
+    # AFTER the snapshot (the snapshot had no canon) so discarded-timeline
+    # canon can't linger on chats.lorebook_id.
+    chat_row = q("SELECT lorebook_id FROM chats WHERE id=?", (chat_id,), one=True)
+    if snapshot_canon_target is not None:
+        qi("UPDATE chats SET lorebook_id=? WHERE id=?", (snapshot_canon_target, chat_id))
+    elif chat_row and chat_row["lorebook_id"] is not None and chat_row["lorebook_id"] in current:
+        qi("UPDATE chats SET lorebook_id=NULL WHERE id=?", (chat_id,))
+
     if links:
         restore_lorebook_links(chat_id, old_to_new, links)
 
@@ -254,6 +285,69 @@ def _restore_chat_personas(chat_id, personas):
         qi("INSERT INTO chat_personas(chat_id,persona_id,status,frame_id) VALUES(?,?,?,?)",
            (chat_id, p["persona_id"], p.get("status", "active"), p.get("frame_id")))
 
+def insert_world_tables(chat_id, b, delete_first=False):
+    """Insert the six normalized world_* arrays from blob dict `b` into
+    chat_id's tables. Ids in `b` are assumed already remapped for the
+    target chat (checkpoint restore restores same-chat verbatim; branch/
+    import remap first). `delete_first` clears the chat's existing rows
+    (restore) -- branch/import build a fresh, empty chat and pass False.
+
+    This is the single source of truth for populating the normalized
+    world tables. Branch/import previously copied frames/turns/memories/
+    world-KV but NOT these tables, leaving world.scene + fixed_points
+    referencing entities that _entity_exists() couldn't find -> a false
+    paradox on the first commit."""
+    if delete_first:
+        qi("DELETE FROM world_entities WHERE chat_id=?", (chat_id,))
+    for ent in b.get("world_entities") or []:
+        qi("""INSERT INTO world_entities(entity_id,chat_id,kind,subtype,name,payload,
+            created_turn_id,retired_turn_id) VALUES(?,?,?,?,?,?,?,?)""",
+           (ent["entity_id"], chat_id, ent["kind"], ent.get("subtype", ""),
+            ent.get("name", ""), ent.get("payload", "{}"),
+            ent.get("created_turn_id"), ent.get("retired_turn_id")))
+
+    if delete_first:
+        qi("DELETE FROM world_placements WHERE chat_id=?", (chat_id,))
+    for pl in b.get("world_placements") or []:
+        qi("""INSERT INTO world_placements(chat_id,subject_id,relation,container_id,detail)
+            VALUES(?,?,?,?,?)""",
+           (chat_id, pl["subject_id"], pl["relation"], pl["container_id"], pl.get("detail", "{}")))
+
+    if delete_first:
+        qi("DELETE FROM world_conditions WHERE chat_id=?", (chat_id,))
+    for cond in b.get("world_conditions") or []:
+        qi("""INSERT INTO world_conditions(condition_id,chat_id,subject_id,kind,
+            started_at,expires_at,next_tick,payload,active) VALUES(?,?,?,?,?,?,?,?,?)""",
+           (cond["condition_id"], chat_id, cond["subject_id"], cond["kind"],
+            cond["started_at"], cond.get("expires_at"), cond.get("next_tick"),
+            cond.get("payload", "{}"), cond.get("active", 1)))
+
+    if delete_first:
+        qi("DELETE FROM scheduled_events WHERE chat_id=?", (chat_id,))
+    for ev in b.get("scheduled_events") or []:
+        qi("""INSERT INTO scheduled_events(event_id,chat_id,due_at,kind,location_id,
+            payload,seed,status) VALUES(?,?,?,?,?,?,?,?)""",
+           (ev["event_id"], chat_id, ev["due_at"], ev["kind"],
+            ev.get("location_id"), ev.get("payload", "{}"),
+            ev.get("seed", ""), ev.get("status", "pending")))
+
+    if delete_first:
+        qi("DELETE FROM fiction_worlds WHERE chat_id=?", (chat_id,))
+    for fw in b.get("fiction_worlds") or []:
+        qi("""INSERT INTO fiction_worlds(world_id,chat_id,parent_world_id,name,kind,payload)
+            VALUES(?,?,?,?,?,?)""",
+           (fw["world_id"], chat_id, fw.get("parent_world_id"),
+            fw["name"], fw.get("kind", "world"), fw.get("payload", "{}")))
+
+    if delete_first:
+        qi("DELETE FROM fiction_locations WHERE chat_id=?", (chat_id,))
+    for fl in b.get("fiction_locations") or []:
+        qi("""INSERT INTO fiction_locations(location_id,chat_id,world_id,
+            parent_location_id,kind,name,payload) VALUES(?,?,?,?,?,?,?)""",
+           (fl["location_id"], chat_id, fl["world_id"],
+            fl.get("parent_location_id"), fl.get("kind", "location"),
+            fl["name"], fl.get("payload", "{}")))
+
 def _restore_checkpoint_body(chat_id, r):
     b = json.loads(r["blob"])
     # Any embedding work (only needed for legacy blobs that predate
@@ -299,51 +393,7 @@ def _restore_checkpoint_body(chat_id, r):
         if "lorebooks" in b:
             _restore_books(chat_id, b.get("lorebooks") or [], b.get("lorebook_links") or [])
 
-        # Restore world entities
-        qi("DELETE FROM world_entities WHERE chat_id=?", (chat_id,))
-        for ent in b.get("world_entities") or []:
-            qi("""INSERT INTO world_entities(entity_id,chat_id,kind,subtype,name,payload,
-                created_turn_id,retired_turn_id) VALUES(?,?,?,?,?,?,?,?)""",
-               (ent["entity_id"], chat_id, ent["kind"], ent.get("subtype", ""),
-                ent.get("name", ""), ent.get("payload", "{}"),
-                ent.get("created_turn_id"), ent.get("retired_turn_id")))
-
-        qi("DELETE FROM world_placements WHERE chat_id=?", (chat_id,))
-        for pl in b.get("world_placements") or []:
-            qi("""INSERT INTO world_placements(chat_id,subject_id,relation,container_id,detail)
-                VALUES(?,?,?,?,?)""",
-               (chat_id, pl["subject_id"], pl["relation"], pl["container_id"], pl.get("detail", "{}")))
-
-        qi("DELETE FROM world_conditions WHERE chat_id=?", (chat_id,))
-        for cond in b.get("world_conditions") or []:
-            qi("""INSERT INTO world_conditions(condition_id,chat_id,subject_id,kind,
-                started_at,expires_at,next_tick,payload,active) VALUES(?,?,?,?,?,?,?,?,?)""",
-               (cond["condition_id"], chat_id, cond["subject_id"], cond["kind"],
-                cond["started_at"], cond.get("expires_at"), cond.get("next_tick"),
-                cond.get("payload", "{}"), cond.get("active", 1)))
-
-        qi("DELETE FROM scheduled_events WHERE chat_id=?", (chat_id,))
-        for ev in b.get("scheduled_events") or []:
-            qi("""INSERT INTO scheduled_events(event_id,chat_id,due_at,kind,location_id,
-                payload,seed,status) VALUES(?,?,?,?,?,?,?,?)""",
-               (ev["event_id"], chat_id, ev["due_at"], ev["kind"],
-                ev.get("location_id"), ev.get("payload", "{}"),
-                ev.get("seed", ""), ev.get("status", "pending")))
-
-        qi("DELETE FROM fiction_worlds WHERE chat_id=?", (chat_id,))
-        for fw in b.get("fiction_worlds") or []:
-            qi("""INSERT INTO fiction_worlds(world_id,chat_id,parent_world_id,name,kind,payload)
-                VALUES(?,?,?,?,?,?)""",
-               (fw["world_id"], chat_id, fw.get("parent_world_id"),
-                fw["name"], fw.get("kind", "world"), fw.get("payload", "{}")))
-
-        qi("DELETE FROM fiction_locations WHERE chat_id=?", (chat_id,))
-        for fl in b.get("fiction_locations") or []:
-            qi("""INSERT INTO fiction_locations(location_id,chat_id,world_id,
-                parent_location_id,kind,name,payload) VALUES(?,?,?,?,?,?,?)""",
-               (fl["location_id"], chat_id, fl["world_id"],
-                fl.get("parent_location_id"), fl.get("kind", "location"),
-                fl["name"], fl.get("payload", "{}")))
+        insert_world_tables(chat_id, b, delete_first=True)
 
         current_book_ids = set(chat_lorebook_ids(chat_id, enabled_only=False))
         cache = wget(chat_id, "lore_cache", []) or []
@@ -385,16 +435,33 @@ def ensure_checkpoint(chat_id, turn_idx):
     )
 
 def refresh_checkpoint(chat_id, turn_idx):
-    """Re-snapshot current state into the checkpoint at turn_idx.
+    """Patch ONLY the lorebook-related sections of the checkpoint at
+    turn_idx to reflect a lorebook attach/detach.
 
-    Called when lorebooks are attached/detached so the checkpoint
-    reflects the updated book set.
+    A checkpoint is a PRE-turn snapshot: it must keep the world/character/
+    memory/frame state as it was BEFORE that turn ran, so that a later
+    reroll/delete restores to a clean pre-turn baseline. The previous
+    implementation re-snapshotted the WHOLE chat POST-turn, which broke
+    "a checkpoint precedes durable mutation": rerolling that turn would
+    then re-apply its already-applied relationship deltas, keep discarded
+    known/lore/background bookkeeping, and re-diff the scene. Attach/detach
+    only changes the book set, so only the book sections are refreshed;
+    everything else in the existing blob is left untouched.
     """
-    blob = json.dumps(snapshot_state(chat_id))
+    row = q(
+        "SELECT blob FROM checkpoints WHERE chat_id=? AND turn_idx=?",
+        (chat_id, turn_idx),
+        one=True,
+    )
+    if not row:
+        # No pre-turn checkpoint captured yet -- fall back to a full
+        # snapshot (nothing to preserve).
+        return ensure_checkpoint(chat_id, turn_idx)
+    blob = json.loads(row["blob"])
+    fresh = snapshot_state(chat_id)
+    for key in ("lore", "lorebooks", "lorebook_links"):
+        blob[key] = fresh.get(key)
     qi(
-        "INSERT INTO checkpoints(chat_id, turn_idx, blob, created) "
-        "VALUES(?,?,?,?) "
-        "ON CONFLICT(chat_id, turn_idx) DO UPDATE SET "
-        "blob=excluded.blob, created=excluded.created",
-        (chat_id, turn_idx, blob, time.time()),
+        "UPDATE checkpoints SET blob=?, created=? WHERE chat_id=? AND turn_idx=?",
+        (json.dumps(blob), time.time(), chat_id, turn_idx),
     )
