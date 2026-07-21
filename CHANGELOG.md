@@ -1,5 +1,15 @@
 # Changelog
 
+## alpha1.4.1 — Chat import robustness
+
+### Fixed
+- **Story import no longer rejects enveloped archives.** `POST /api/chats/import`
+  now tolerates a bare `{"data": {...}}` wrapper around the archive (as produced
+  by the bundled `demo/` export and by the frontend re-wrapping the request
+  body), instead of only unwrapping when a `schema: "fiction-engine.chat"` marker
+  is present. Importing the demo story previously failed with "Chat archive has
+  no chat object".
+
 ## alpha1.4 — Cross-LLM hardening, 4-agent audit & greeting-seeded openings
 
 The theme of this release is **running well on small, cheap models**. A 30-turn

@@ -2278,6 +2278,13 @@ def chat_import(body: dict = Body(...)):
     else:
         data = archive
 
+    # Tolerate a bare {"data": {...}} envelope even without the schema marker:
+    # some exports (e.g. the bundled demo) wrap the archive one level deep, and
+    # the frontend also re-wraps the request body as {"data": fileContent}.
+    if "chat" not in data and isinstance(data.get("data"), dict) \
+            and "chat" in data["data"]:
+        data = data["data"]
+
     if "chat" not in data:
         raise HTTPException(400, "Chat archive has no chat object")
 

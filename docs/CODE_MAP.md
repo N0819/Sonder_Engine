@@ -17,7 +17,7 @@
 | `agents/perception.py` | 657 | Opening, action-onset, and outcome observer views. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 881 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 72 | Step and active-variant persistence helpers. | `db` |
-| `app.py` | 3403 | FastAPI application, resource CRUD, import/export, turn control, and streaming endpoints. | `agents`, `character_schema`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene` |
+| `app.py` | 3410 | FastAPI application, resource CRUD, import/export, turn control, and streaming endpoints. | `agents`, `character_schema`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene` |
 | `character_schema.py` | 574 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
 | `checkpoints.py` | 467 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `commit.py` | 1550 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `character_schema`, `db`, `frames`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `spatial`, `spatial_frames`, `theory_of_mind` |
@@ -142,8 +142,8 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `chat_import()` | 2271 | 358 lines |
-| `turn_branch()` | 2813 | 336 lines |
+| `chat_import()` | 2271 | 365 lines |
+| `turn_branch()` | 2820 | 336 lines |
 | `_remap_cp_blob()` | 532 | 135 lines |
 | `chat_export()` | 2121 | 97 lines |
 | `chat_get()` | 1478 | 94 lines |
@@ -409,21 +409,21 @@
 | DELETE | `/api/chats/{cid}` | `chat_del()` | `app.py:1460` |
 | GET | `/api/chats/{cid}` | `chat_get()` | `app.py:1478` |
 | PUT | `/api/chats/{cid}` | `chat_edit()` | `app.py:1383` |
-| POST | `/api/chats/{cid}/abort` | `chat_abort()` | `app.py:2809` |
+| POST | `/api/chats/{cid}/abort` | `chat_abort()` | `app.py:2816` |
 | GET | `/api/chats/{cid}/attire` | `attire_get()` | `app.py:1986` |
 | PUT | `/api/chats/{cid}/attire` | `attire_put()` | `app.py:1993` |
 | POST | `/api/chats/{cid}/characters` | `chat_add_char()` | `app.py:1574` |
 | DELETE | `/api/chats/{cid}/characters/{ch}` | `chat_del_char()` | `app.py:1922` |
-| GET | `/api/chats/{cid}/characters/{ch}/memories` | `mem_list()` | `app.py:2632` |
-| POST | `/api/chats/{cid}/characters/{ch}/memories` | `mem_add()` | `app.py:2727` |
-| POST | `/api/chats/{cid}/characters/{ch}/memories/consolidate` | `mem_consolidate()` | `app.py:2716` |
-| GET | `/api/chats/{cid}/characters/{ch}/memories/export` | `mem_export()` | `app.py:2671` |
-| POST | `/api/chats/{cid}/characters/{ch}/memories/import` | `mem_import()` | `app.py:2682` |
-| GET | `/api/chats/{cid}/characters/{ch}/memories/search` | `mem_search()` | `app.py:2653` |
-| GET | `/api/chats/{cid}/characters/{ch}/memory-context` | `memory_context_preview()` | `app.py:2692` |
+| GET | `/api/chats/{cid}/characters/{ch}/memories` | `mem_list()` | `app.py:2639` |
+| POST | `/api/chats/{cid}/characters/{ch}/memories` | `mem_add()` | `app.py:2734` |
+| POST | `/api/chats/{cid}/characters/{ch}/memories/consolidate` | `mem_consolidate()` | `app.py:2723` |
+| GET | `/api/chats/{cid}/characters/{ch}/memories/export` | `mem_export()` | `app.py:2678` |
+| POST | `/api/chats/{cid}/characters/{ch}/memories/import` | `mem_import()` | `app.py:2689` |
+| GET | `/api/chats/{cid}/characters/{ch}/memories/search` | `mem_search()` | `app.py:2660` |
+| GET | `/api/chats/{cid}/characters/{ch}/memory-context` | `memory_context_preview()` | `app.py:2699` |
 | GET | `/api/chats/{cid}/characters/{ch}/private_history` | `ph_get()` | `app.py:1931` |
 | PUT | `/api/chats/{cid}/characters/{ch}/private_history` | `ph_put()` | `app.py:1941` |
-| GET | `/api/chats/{cid}/characters/{ch}/relationships` | `relationships_get()` | `app.py:2705` |
+| GET | `/api/chats/{cid}/characters/{ch}/relationships` | `relationships_get()` | `app.py:2712` |
 | GET | `/api/chats/{cid}/dialogue_config` | `dlg_get()` | `app.py:2002` |
 | PUT | `/api/chats/{cid}/dialogue_config` | `dlg_put()` | `app.py:2006` |
 | GET | `/api/chats/{cid}/dramatic_irony` | `get_dramatic_irony_feed()` | `app.py:1619` |
@@ -452,7 +452,7 @@
 | GET | `/api/chats/{cid}/promotable` | `list_promotable_presences()` | `app.py:1615` |
 | POST | `/api/chats/{cid}/promotions/confirm` | `confirm_promotion()` | `app.py:1640` |
 | POST | `/api/chats/{cid}/promotions/draft` | `draft_promotion()` | `app.py:1627` |
-| POST | `/api/chats/{cid}/turns` | `turn_new()` | `app.py:2774` |
+| POST | `/api/chats/{cid}/turns` | `turn_new()` | `app.py:2781` |
 | POST | `/api/chats/{cid}/turns/{idx}/player_input` | `submit_extra_player_input()` | `app.py:1779` |
 | GET | `/api/chats/{cid}/world` | `world_get()` | `app.py:1968` |
 | PUT | `/api/chats/{cid}/world` | `world_put()` | `app.py:1972` |
@@ -478,8 +478,8 @@
 | POST | `/api/lorebooks/{lid}/move` | `lorebook_move()` | `app.py:787` |
 | POST | `/api/lorebooks/{lid}/reinterpret` | `lore_reinterpret_route()` | `app.py:1243` |
 | POST | `/api/lorebooks/{lid}/reorder` | `lorebook_reorder()` | `app.py:796` |
-| DELETE | `/api/memories/{mid}` | `mem_del()` | `app.py:2768` |
-| PUT | `/api/memories/{mid}` | `mem_edit()` | `app.py:2749` |
+| DELETE | `/api/memories/{mid}` | `mem_del()` | `app.py:2775` |
+| PUT | `/api/memories/{mid}` | `mem_edit()` | `app.py:2756` |
 | GET | `/api/nsfw` | `get_nsfw()` | `app.py:769` |
 | PUT | `/api/nsfw` | `set_nsfw()` | `app.py:773` |
 | POST | `/api/personas` | `persona_create()` | `app.py:1055` |
@@ -494,17 +494,17 @@
 | DELETE | `/api/providers/{pid}` | `del_provider()` | `app.py:948` |
 | PUT | `/api/providers/{pid}` | `put_provider()` | `app.py:932` |
 | GET | `/api/providers/{pid}/models` | `models()` | `app.py:953` |
-| POST | `/api/steps/{sid}/activate` | `step_activate()` | `app.py:3354` |
-| POST | `/api/steps/{sid}/edit` | `step_edit()` | `app.py:3344` |
-| POST | `/api/steps/{sid}/reroll` | `step_reroll()` | `app.py:3297` |
-| DELETE | `/api/turns/{tid}` | `turn_del()` | `app.py:3367` |
-| POST | `/api/turns/{tid}/branch` | `turn_branch()` | `app.py:2813` |
-| PUT | `/api/turns/{tid}/input` | `edit_input()` | `app.py:3151` |
-| GET | `/api/turns/{tid}/pipeline` | `pipeline_get()` | `app.py:3197` |
-| PUT | `/api/turns/{tid}/prose` | `edit_prose()` | `app.py:3166` |
-| POST | `/api/turns/{tid}/reroll` | `turn_reroll()` | `app.py:3228` |
-| POST | `/api/turns/{tid}/rerun` | `turn_rerun()` | `app.py:3238` |
-| POST | `/api/turns/{tid}/resume` | `turn_resume()` | `app.py:3265` |
+| POST | `/api/steps/{sid}/activate` | `step_activate()` | `app.py:3361` |
+| POST | `/api/steps/{sid}/edit` | `step_edit()` | `app.py:3351` |
+| POST | `/api/steps/{sid}/reroll` | `step_reroll()` | `app.py:3304` |
+| DELETE | `/api/turns/{tid}` | `turn_del()` | `app.py:3374` |
+| POST | `/api/turns/{tid}/branch` | `turn_branch()` | `app.py:2820` |
+| PUT | `/api/turns/{tid}/input` | `edit_input()` | `app.py:3158` |
+| GET | `/api/turns/{tid}/pipeline` | `pipeline_get()` | `app.py:3204` |
+| PUT | `/api/turns/{tid}/prose` | `edit_prose()` | `app.py:3173` |
+| POST | `/api/turns/{tid}/reroll` | `turn_reroll()` | `app.py:3235` |
+| POST | `/api/turns/{tid}/rerun` | `turn_rerun()` | `app.py:3245` |
+| POST | `/api/turns/{tid}/resume` | `turn_resume()` | `app.py:3272` |
 | GET | `/guest` | `guest_page()` | `app.py:128` |
 | GET | `/login` | `login_page()` | `app.py:140` |
 
