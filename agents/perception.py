@@ -42,10 +42,47 @@ from .common import (
     _normalise_views,
     _resolve_player_room,
     _room_notes_from_lore,
+    _scrub_unknown_identities,
+    _strip_identity_tokens,
     _unknown_actor_label,
     cast_room,
     character_room,
+    character_scene_keys,
 )
+
+def _identity_roster(p_name, p_appearance, cast):
+    """Every identity in play this beat, with the forms (name + uid/aliases)
+    and appearance the identity scrub needs: the player plus each cast
+    member. Callers extend it with extra players / background speakers."""
+    roster = [{"name": p_name, "appearance": p_appearance, "aliases": []}]
+    for c in cast:
+        sh, _, _ = sheet_state(c)
+        keys = character_scene_keys(sh)
+        roster.append({
+            "name": character_name(sh),
+            "appearance": character_appearance(sh),
+            "aliases": keys[1:],
+        })
+    return roster
+
+def _scrub_view_for(ctx, stage, view, perceiver_name, known, roster):
+    """Apply the deterministic identity floor to one perceiver's view:
+    every roster identity the perceiver does not recognize (and is not) is
+    scrubbed outside quoted spans. Surfaces a pipeline warning per leak --
+    the original bug was quiet, which is how it went unnoticed."""
+    recognized = set(known.get(perceiver_name) or [])
+    unknown = [s for s in roster
+               if s["name"] != perceiver_name and s["name"] not in recognized]
+    view, leaked = _scrub_unknown_identities(
+        view,
+        allowed_forms=[perceiver_name, *recognized],
+        unknown_sources=unknown,
+    )
+    if leaked:
+        ctx.warnings.append(
+            f"{stage}: scrubbed unearned identity {leaked} "
+            f"from the view of {perceiver_name}")
+    return view
 
 def perception_establish(ctx, nonce):
     chat = ctx.chat
@@ -149,9 +186,10 @@ def perception_establish(ctx, nonce):
     )
     raw_views = out.get("views") if isinstance(out, dict) else {}
     if not raw_views:
-        raw_views = _fallback_perception_views(perceivers, [])
+        raw_views = _fallback_perception_views(perceivers, [], known=known)
     clean_views = _normalise_views(raw_views, perceivers)
 
+    roster = _identity_roster(p_name, p_appearance, ctx.cast)
     for p in perceivers:
         pid = str(p["id"])
         view = clean_views.get(pid)
@@ -167,6 +205,8 @@ def perception_establish(ctx, nonce):
             if es.get("held_items"):
                 parts.append(f"You hold: {', '.join(es['held_items'])}.")
             view = " ".join(parts)
+        view = _scrub_view_for(
+            ctx, "perception_establish", view, p["name"], known, roster)
         clean_views[pid] = view or None
 
     return {"views": clean_views}
@@ -259,6 +299,20 @@ def perception_act(ctx, nonce):
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
         })
 
+    # Input-side hygiene (defense-in-depth under the output scrub below):
+    # when NO perceiver in this call recognizes the player, the model has
+    # no legitimate use for the canonical name at all -- handing it over
+    # anyway ("actor_name": "Hinami") is exactly the "objective state
+    # copied into a context with an instruction to ignore it" pattern the
+    # engine forbids for character agents, and is why even strong models
+    # wrote the name into stranger views.
+    p_appearance_safe = _strip_identity_tokens(p_appearance, [p_name])
+    if perceivers and not any(p.get("knows_identity") for p in perceivers):
+        neutral = _unknown_actor_label(p_name, p_appearance)
+        action_onset = {**action_onset, "actor": neutral,
+                        "actor_name": neutral,
+                        "actor_present_appearance": p_appearance_safe}
+
     payload = {
         "scene": {"location": sc.get("location"), "time": sc.get("time"),
                   "rooms": _contextual_rooms(sc, ctx.cast, p_room),
@@ -309,8 +363,12 @@ def perception_act(ctx, nonce):
         view = _ensure_environment(view, p, display, rel, vis, action_desc)
 
         if vis:
+            # For a stranger, the pasted appearance summary must itself be
+            # name-stripped -- persona summaries routinely lead with the
+            # canonical name, which made this deterministic injection a
+            # leak channel of its own.
             visible_description = (
-                p_appearance
+                p_appearance_safe
                 if not knows_identity
                 else display
             )
@@ -335,6 +393,23 @@ def perception_act(ctx, nonce):
                 view, display, e["attempt"], can_see,
                 event_id=e.get("event_id"), delivered=delivered,
             )
+        # Deterministic identity floor, LAST: the LLM's free prose was
+        # never checked against knows_identity, so a model that wrote the
+        # player's canonical name into a stranger's view walked straight
+        # past the gate above. Quoted speech survives verbatim (a name
+        # introduced aloud this beat is legitimate sensory signal;
+        # recognition itself only flips at commit).
+        if not knows_identity:
+            view, leaked = _scrub_unknown_identities(
+                view,
+                allowed_forms=[p["name"]],
+                unknown_sources=[{"name": p_name,
+                                  "appearance": p_appearance}],
+            )
+            if leaked:
+                ctx.warnings.append(
+                    f"perception_act: scrubbed unearned identity {leaked} "
+                    f"from the view of {p['name']}")
         clean_views[pid] = view or None
 
     return {"views": clean_views}
@@ -546,8 +621,24 @@ def perception_outcome(ctx, nonce):
     )
     raw_views = out.get("views") if isinstance(out, dict) else {}
     if not raw_views:
-        raw_views = _fallback_perception_views(perceivers, npc_dlog)
+        raw_views = _fallback_perception_views(perceivers, npc_dlog, known=known)
     clean_views = _normalise_views(raw_views, perceivers)
+
+    # Identity roster for the deterministic scrub below: every named
+    # source/appearance in play this beat, with the uid/alias forms a
+    # scene may also carry for cast members.
+    cast_aliases = {}
+    for c in ctx.cast:
+        sh = json.loads(c["sheet"])
+        cast_aliases[character_name(sh)] = character_scene_keys(sh)[1:]
+    ident_roster = [
+        {"name": nm, "appearance": ap, "aliases": cast_aliases.get(nm) or []}
+        for nm, ap in appearances.items()
+    ]
+    for s in sources:
+        if s.get("name") and all(r["name"] != s["name"] for r in ident_roster):
+            ident_roster.append(
+                {"name": s["name"], "appearance": None, "aliases": []})
 
     # Only the LAST overt sub-action of each actor's sequence represents
     # their terminal, currently-visible state. Earlier sub-actions (e.g.
@@ -614,8 +705,13 @@ def perception_outcome(ctx, nonce):
                 # below already renders that case as "You hear X says..."
                 # without a display name -- pasting a full visual appearance
                 # onto an unseen voice would hallucinate sight the perceiver
-                # doesn't have.
-                appearance_text = appearances.get(d_speaker)
+                # doesn't have. Name-stripped first: appearance summaries
+                # routinely lead with the canonical name this perceiver is
+                # not entitled to.
+                appearance_text = _strip_identity_tokens(
+                    appearances.get(d_speaker),
+                    [d_speaker, *(cast_aliases.get(d_speaker) or [])],
+                ) or None
                 if can_see and d_speaker not in described_this_pass:
                     if appearance_text:
                         view = _append_once(view, appearance_text, marker=appearance_text)
@@ -636,13 +732,21 @@ def perception_outcome(ctx, nonce):
             if act["actor"] in recognized_sources:
                 display = act["actor"]
             else:
-                appearance_text = appearances.get(act["actor"])
+                appearance_text = _strip_identity_tokens(
+                    appearances.get(act["actor"]),
+                    [act["actor"], *(cast_aliases.get(act["actor"]) or [])],
+                ) or None
                 if act["actor"] not in described_this_pass:
                     if appearance_text:
                         view = _append_once(view, appearance_text, marker=appearance_text)
                     described_this_pass.add(act["actor"])
                 display = _unknown_actor_label(act["actor"], appearance_text)
             view = _inject_action(view, display, act["attempt"], can_see)
+        # Deterministic identity floor, LAST (see perception_act): the
+        # model's free prose is scrubbed per-source against THIS
+        # perceiver's recognized set; quoted speech survives verbatim.
+        view = _scrub_view_for(
+            ctx, "perception_outcome", view, p["name"], known, ident_roster)
         clean_views[pid] = view or None
 
     loop = ctx.interaction_loop or {}

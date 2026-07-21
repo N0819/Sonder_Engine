@@ -684,7 +684,17 @@ def _append_once(view, text, marker=None):
         return view
     return f"{view} {text}".strip()
 
-def _unknown_actor_label(actor_name, appearance_text=None):
+def _identity_token_set(actor_name, aliases=None):
+    """Casefolded word tokens of an actor's name and aliases -- the tokens
+    that must never surface to an observer who does not recognize them."""
+    tokens = set()
+    for form in [actor_name] + list(aliases or []):
+        for tok in re.split(r"[^\w]+", str(form or "")):
+            if tok:
+                tokens.add(tok.casefold())
+    return tokens
+
+def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
     # Every unrecognized actor used to render as the exact same generic
     # "the unfamiliar person" -- two strangers in one scene (or the same
     # stranger across a perceiver's dialogue and action lines) were
@@ -693,14 +703,127 @@ def _unknown_actor_label(actor_name, appearance_text=None):
     # summary instead. This is deliberately a short label for repeat/
     # inline reference, not a substitute for the full appearance
     # description a caller surfaces separately on first mention.
+    #
+    # The label is what a NON-recognizing observer refers to the actor by,
+    # and appearance summaries routinely LEAD with the canonical name
+    # ("Hinami, a fox-eared young woman..."), so the actor's own name/alias
+    # tokens are dropped before the descriptor is built -- otherwise the
+    # label itself was a deterministic identity leak walking straight past
+    # the knows_identity gate it exists to serve.
     if appearance_text:
+        name_tokens = _identity_token_set(actor_name, aliases)
         cleaned = re.sub(
             r"^(a|an|the)\s+", "", appearance_text.strip(), flags=re.I,
         ).replace(",", "")
-        words = cleaned.split()[:5]
+        words = [w for w in cleaned.split()
+                 if re.sub(r"[^\w]", "", w).casefold() not in name_tokens]
+        # Dropping a leading name can expose the article that followed it
+        # ("Hinami, a fox-eared..." -> "a fox-eared..."); re-strip it.
+        while words and words[0].lower() in ("a", "an", "the"):
+            words = words[1:]
+        words = words[:5]
         if words:
             return "the " + " ".join(words).rstrip(".;:").lower()
     return "the unfamiliar person"
+
+def _strip_identity_tokens(text, forms):
+    """Remove an actor's name/alias forms from engine-supplied prose (an
+    appearance summary, an overlay) before it is surfaced to an observer
+    who does not recognize that actor. appearance_of()/persona summaries
+    routinely lead with the canonical name, so pasting them verbatim into
+    a stranger's view via _inject_visible_actor leaked identity entirely
+    deterministically, independent of anything the model wrote."""
+    out = str(text or "")
+    for form in forms or []:
+        form = str(form or "").strip()
+        if not form:
+            continue
+        out = re.sub(
+            r"(?<!\w)" + re.escape(form) + r"(?:['’]s)?(?!\w)",
+            "", out, flags=re.I,
+        )
+    out = re.sub(r"\s{2,}", " ", out)
+    out = re.sub(r"\s+([,;.!?])", r"\1", out)
+    out = re.sub(r"([,;])(\s*[,;])+", r"\1", out)
+    return out.strip().lstrip(",;: ").strip()
+
+# Single-token names that are also everyday English words ("Rose walks in"
+# vs "the rose garden"). For these, only the exact capitalized form is
+# scrubbed, so ordinary lowercase prose is never mangled.
+_COMMON_WORD_NAMES = frozenset({
+    "amber", "angel", "art", "ash", "autumn", "bear", "bill", "blue",
+    "brook", "buck", "chase", "clay", "colt", "daisy", "dawn", "dean",
+    "drew", "duke", "earl", "faith", "fern", "fox", "ginger", "glen",
+    "grace", "hazel", "heath", "holly", "hope", "hunter", "iris", "ivy",
+    "jack", "jade", "jasmine", "joy", "june", "king", "lane", "lily",
+    "major", "mark", "may", "melody", "misty", "olive", "pearl", "rain",
+    "raven", "red", "reed", "robin", "rose", "ruby", "rusty", "sandy",
+    "sky", "star", "storm", "summer", "sunny", "violet", "will", "wolf",
+    "wren",
+})
+
+# Mirrors _protected_view_quotes' quoted-span shape: a name inside a quote
+# is sensory signal the observer legitimately heard (an introduction, a
+# name called aloud) and must survive the identity scrub verbatim.
+_QUOTED_SPAN_RE = re.compile(r'(["“][^"“”]+["”])')
+
+def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources):
+    """Deterministic identity floor for perception view prose.
+
+    The knows_identity/_unknown_actor_label gate used to be enforced only
+    inside the deterministic injection helpers -- the perception LLM's own
+    free-text prose was never checked, so a model that wrote a stranger's
+    canonical name into a view walked straight past the gate (and no
+    prompt paragraph even defined knows_identity, so this was not limited
+    to weak models). This pass runs LAST on every view: each unknown
+    source's name/alias forms are replaced, outside quoted spans only,
+    with that source's unknown-actor descriptor.
+
+    unknown_sources: [{name, appearance, aliases}] the observer does NOT
+    recognize. allowed_forms: names the observer legitimately commands
+    (their own name/aliases plus their recognized set) -- any colliding
+    form is skipped rather than scrubbed.
+
+    Returns (scrubbed_view, leaked_names) so callers can surface a
+    warning; a silent leak was exactly how the original bug hid.
+    """
+    text = str(view or "")
+    if not text or not unknown_sources:
+        return view, []
+    allowed = {str(f or "").strip().casefold()
+               for f in (allowed_forms or []) if str(f or "").strip()}
+    segments = _QUOTED_SPAN_RE.split(text)
+    leaked = []
+    for src in unknown_sources:
+        name = str(src.get("name") or "").strip()
+        if not name or name.casefold() in allowed:
+            continue
+        label = _unknown_actor_label(
+            name, src.get("appearance"), aliases=src.get("aliases"))
+        fired = False
+        for form in [name] + [str(a or "").strip()
+                              for a in (src.get("aliases") or [])]:
+            if not form or form.casefold() in allowed:
+                continue
+            if len(form) < 3 and len(form.split()) == 1:
+                continue  # too short to match without false positives
+            if len(form.split()) == 1 and form.casefold() in _COMMON_WORD_NAMES:
+                # common-word guard: exact capitalized form only
+                pat = re.compile(
+                    r"(?<!\w)" + re.escape(form[:1].upper() + form[1:])
+                    + r"(?!\w)")
+            else:
+                pat = re.compile(
+                    r"(?<!\w)" + re.escape(form) + r"(?!\w)", re.IGNORECASE)
+            for i in range(0, len(segments), 2):  # even = outside quotes
+                if segments[i] and pat.search(segments[i]):
+                    segments[i] = pat.sub(label, segments[i])
+                    fired = True
+        if fired:
+            leaked.append(name)
+    if not leaked:
+        return view, []
+    return "".join(segments), leaked
 
 def _contains_quote(view, quote):
     body = _quote_body(quote)
@@ -972,7 +1095,7 @@ def _ensure_environment(view, perceiver, display, rel, vis, action_desc):
         parts.append(f"You can see {display} nearby.")
     return " ".join(parts)
 
-def _fallback_perception_views(perceivers, dlog, resolved_event=None):
+def _fallback_perception_views(perceivers, dlog, resolved_event=None, known=None):
     views = {}
     for p in perceivers:
         pid = str(p["id"])
@@ -987,7 +1110,15 @@ def _fallback_perception_views(perceivers, dlog, resolved_event=None):
         for d in dlog:
             spk_room = d.get("speaker_room")
             if spk_room and p_room and spk_room == p_room:
-                parts.append(f'{d["speaker"]} says: {d["exact_quote"]}')
+                speaker = d.get("speaker", "?")
+                # Same recognition gate as the main injection paths: a
+                # speaker this perceiver has never been introduced to must
+                # not be named by the no-LLM fallback either (the quote
+                # itself is legitimately heard and stays verbatim).
+                if known is not None and speaker != p.get("name") \
+                        and speaker not in (known.get(p.get("name")) or []):
+                    speaker = _unknown_actor_label(speaker)
+                parts.append(f'{speaker} says: {d["exact_quote"]}')
         views[pid] = " ".join(parts) if parts else None
     return views
 

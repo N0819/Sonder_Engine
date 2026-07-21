@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 
-from character_schema import character_name
+from character_schema import character_appearance, character_name
+from db import wget
 from scene import dialogue_config, get_scene, reaction_config
 from spatial import has_visual, hear_level, room_of, spatial_rel
 
@@ -15,6 +16,7 @@ from .common import (
     _character_by_id,
     _character_display_name,
     _conceal_from_targets_observer,
+    _unknown_actor_label,
     character_room,
     _dict,
     _dict_list,
@@ -30,10 +32,18 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
     actor_row = _character_by_id(ctx, actor_id)
     actor_sheet = json.loads(actor_row["sheet"])
     actor_name = character_name(actor_sheet)
+    actor_appearance = character_appearance(actor_sheet)
     # uid/alias-tolerant: a position keyed by identity.uid rather than the
     # display name must still resolve, else spatial_rel returns "unknown" and
     # same-room characters silently perceive nothing of each other.
     actor_room = character_room(scene, actor_sheet)
+    # Same recognition gate as perception.py's injection paths: this
+    # deterministic delivery used to attribute every micro-round line and
+    # action to the actor's CANONICAL name with no "known" check at all, so
+    # NPC-to-NPC rounds leaked identities between strangers -- and these
+    # additions flow verbatim into subsequent character steps and the
+    # outcome views. Quotes stay verbatim; only the attribution is gated.
+    known = wget(ctx.chat.id, "known", {})
     views = {}
     perceived_by = set()
     for row in ctx.cast:
@@ -42,6 +52,10 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
             continue
         observer_sheet = json.loads(row["sheet"])
         observer_name = character_name(observer_sheet)
+        if actor_name in (known.get(observer_name) or []):
+            display = actor_name
+        else:
+            display = _unknown_actor_label(actor_name, actor_appearance)
         observer_room = character_room(scene, observer_sheet)
         relation = spatial_rel(scene, actor_room, observer_room)
         additions = []
@@ -71,13 +85,13 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
                     continue
                 quote = str(event.get("text") or "")
                 if level == "full":
-                    additions.append(f'{actor_name} says: "{quote}"')
+                    additions.append(f'{display} says: "{quote}"')
                 else:
                     words = quote.split()
                     fragment = " ".join(
                         words[max(0, len(words) // 2):max(0, len(words) // 2) + 3])
                     additions.append(
-                        f'You hear a muffled fragment from {actor_name}: "...{fragment}..."')
+                        f'You hear a muffled fragment from {display}: "...{fragment}..."')
                 perceived_by.add(observer_id)
             elif event.get("type") == "action":
                 if event.get("visibility") == "concealed":
@@ -86,7 +100,7 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
                     continue
                 attempt = str(event.get("attempt") or "")
                 if attempt:
-                    additions.append(f"{actor_name} {attempt}.")
+                    additions.append(f"{display} {attempt}.")
                     perceived_by.add(observer_id)
         if additions:
             views[observer_id] = additions

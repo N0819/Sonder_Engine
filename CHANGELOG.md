@@ -1,5 +1,50 @@
 # Changelog
 
+## alpha1.4.3 — Perception identity firewall
+
+Perception is the stateless filter that decides what each observer legitimately
+perceives — but its `knows_identity` gate was enforced only inside the
+deterministic injection helpers, never against the perception model's own
+free-text view prose. A model naming a stranger ("You see Hinami…") walked
+straight past the gate, and the leaked name then fed the character agent
+verbatim and could be minted into durable memory — collapsing the objective /
+perception / memory layers the engine exists to keep apart. No prompt even
+defined `knows_identity`, so this was not limited to weak models.
+
+### Fixed
+- **Deterministic identity floor on every view.** A new post-pass
+  (`_scrub_unknown_identities`) runs last on every perceiver's view across all
+  three perception stages (`perception_establish`, `perception_act`,
+  `perception_outcome`): any source the observer does not recognize has its
+  name/alias forms replaced with a momentary descriptor — **outside quoted
+  spans only**, so a name introduced aloud this beat survives verbatim
+  (recognition still flips only at commit). Word-boundary, case-aware and
+  possessive-aware, with a common-word-name guard. Each scrub raises a pipeline
+  warning instead of failing silently.
+- **Three deterministic leak channels closed.** `_unknown_actor_label` and the
+  pasted appearance summaries are now name-token-stripped (persona summaries
+  routinely lead with the canonical name); `deterministic_micro_perception`
+  (NPC↔NPC delivery) gained the recognition gate it never had; and the no-LLM
+  `_fallback_perception_views` renderer now gates the speaker name too.
+- **Input-side hygiene.** When no perceiver in an action-onset call recognizes
+  the player, the perception model is handed a neutral descriptor instead of the
+  canonical name — it cannot leak what it was never given.
+
+### Added
+- **IDENTITY GATE in the perception prompt.** The first explicit definition of
+  `knows_identity`: when false, that entity's name must never appear in the
+  perceiver's view except inside a verbatim quote they legitimately heard.
+- Regression coverage (`tests/test_perception_identity_gate.py`, 9 assertions)
+  on the stranger-meeting fixture, including the no-false-positive guarantee
+  (a recognized observer's view passes through untouched) and the mid-beat
+  introduction edge case.
+
+### Known limitations
+- The floor closes **name-class** leaks deterministically; semantic identity
+  leaks (species/nature, occupation, relationship history, intent attribution,
+  paraphrased identity) still rely on the perception prompt and are not yet
+  deterministically enforced.
+
 ## alpha1.4.2 — Greeting swipe/quick-start & greeting-capture fix
 
 The greeting-seeded openings shipped in alpha1.4 were captured in the data model
