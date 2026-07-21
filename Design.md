@@ -3,7 +3,7 @@
 ## Multi-Agent Sonder Engine — Current Architecture and Product Philosophy
 
 **Document status:** Living architecture specification
-**Revision date:** July 19, 2026
+**Revision date:** July 21, 2026 (claims re-verified against the implementation on this date)
 **Purpose:** Define the engine’s philosophy, current behavior, invariants, implemented capabilities, known weaknesses, and development priorities.
 
 ## Product thesis
@@ -248,6 +248,7 @@ Every agent is defined by four questions:
 | Reaction Loop | Per-character action-onset views | Reactive attempts | Reaction success or objective outcome |
 | Interaction Loop | Delivered local views and prior observable micro-beats | Conversational continuation and speaker order | Physical resolution |
 | Director Resolve | Objective scene, player declaration, reactions, character declarations, mechanics, dice | Objective outcome and state diff | Character beliefs, memories, player-facing prose |
+| Background Reactor | Resolved event and a deterministically-gated unregistered presence's own authored sketch | That presence's single one-beat reactive line | Persistent psychology, memory, objective success, promotion |
 | Outcome Perception | Resolved event and observer channels | Per-observer experience of the outcome | Memory interpretation and narration |
 | Narrator | Player view, player declaration, private voice setting, recent prose | Prose expression | Hidden facts, new player conduct, objective resolution |
 | Mapping Commit | Resolved facts, narrator specifics, existing canon | Proposed durable lore operations | Retroactive replacement of the resolved event |
@@ -300,11 +301,12 @@ A normal turn follows this pipeline:
 2. Mapping performs either quick retrieval or full mapping.
 3. Perception Act filters the player’s action onset.
 4. Reaction Loop runs for contested physical actions when required.
-5. Interaction Loop runs for eligible character responses.
+5. Interaction Loop runs for eligible character responses; when reactors exist but NPC-to-NPC autonomy is disabled, the plan instead runs parallel per-character steps.
 6. Director Resolve collapses declarations into one objective outcome.
-7. Perception Outcome creates observer-specific result views.
-8. Narrator renders the player’s view.
-9. Commit updates persistent state.
+7. Background React gives at most a few deterministically-gated, unregistered background presences one stateless line each — self-skipping and LLM-free on the common case of nothing to react to.
+8. Perception Outcome creates observer-specific result views.
+9. Narrator renders the player’s view; a parallel Narrator Extra step renders the same objective turn for each additional connected player.
+10. Commit updates persistent state.
 
 The plan is dynamic. Not every turn requires the same cost.
 
@@ -621,7 +623,7 @@ What the player does may become observable and enter character memory. Private n
 
 A chat may have more than one attached human player. Additional personas attach through `chat_personas`; each connected player may submit input for a turn independently of the primary player's request, and an idle connected player who declared nothing this beat still receives a rendered update rather than silence. `agents/runtime.py` adds a parallel `narrator_extra` step whenever a chat has active extra players, giving each additional player their own perceiver and their own player-facing render of the same objective turn. The two-channel protagonist model above still applies per player; no player's private voice setting or shadow profile is shared with another player or with any NPC.
 
-Extra players may join locally or remotely. Remote joining (`guest_access.py`) is deny-by-default: the host authenticates once through a secret bootstrapped via a URL parameter (printed only to the server console, never returned by an API response) and then holds a long-lived, HttpOnly, `SameSite=Strict` cookie; a guest redeems a single-use, time-limited, rate-limited join code for an HttpOnly, `SameSite=Lax` token scoped to one chat and one persona. A middleware in `app.py` (`access_control`) rejects any `/api/*` request that carries neither a valid host nor guest credential, and a guest credential unlocks only the two endpoints a guest needs — everything else remains host-only. There is no wildcard CORS; the app is served same-origin, and provider credentials are never re-transmitted to the frontend.
+Extra players may join locally or remotely. Remote joining (`guest_access.py`) is deny-by-default: the host creates a one-time username/password account through a first-run setup page (the server console prints only the local `/login` URL, never a credential; passwords are salted-PBKDF2 hashed), and a successful sign-in issues a long-lived, HttpOnly, `SameSite=Strict` session cookie; a guest redeems a single-use, time-limited, rate-limited join code for an HttpOnly, `SameSite=Lax` token scoped to one chat and one persona. A middleware in `app.py` (`access_control`) rejects any `/api/*` request that carries neither a valid host nor guest credential, and a guest credential unlocks only the two endpoints a guest needs — everything else remains host-only. There is no wildcard CORS; the app is served same-origin, and provider credentials are never re-transmitted to the frontend.
 
 ## Memory architecture
 
@@ -801,7 +803,7 @@ After resolution, Mapping Commit may:
 
 Model-generated lore operations are still subject to deterministic database and lock checks.
 
-A vehicle-class (or any anchor-flagged) lorebook follows its anchor entity rather than staying pinned to wherever it started: after each commit, the book is deterministically reparented to whichever attached lorebook's location scope matches the entity's current room, so lore nested under it (crew logs, cabin entries) travels with the vehicle through ordinary parent-child lineage.
+A vehicle-class (or any anchor-flagged) lorebook follows its anchor entity rather than staying pinned to wherever it started: after each commit, a deterministic `currently_within` presence link is maintained from the book to whichever attached lorebook's location scope matches the entity's current room. This presence edge is deliberately distinct from parent-child containment — the authored hierarchy is never mutated — so lore nested under the book (crew logs, cabin entries) travels with the vehicle through the presence link plus retrieval-graph following, not by rewriting lineage.
 
 ## Dynamic scene and world model
 
@@ -885,17 +887,18 @@ Checkpoints currently capture broad shared state:
 
 - World key-value state.
 - Character state and lifecycle status.
+- Per-frame character overlays, frame definitions, and attached personas.
 - Memories.
 - Memory summaries.
 - Lorebooks.
 - Lore entries.
 - Lorebook links.
 - World entities.
-- Placements.
+- The room registry (cross-frame room identity and retirement).
 - Conditions.
 - Scheduled events.
-- Fiction worlds.
-- Fiction locations.
+
+The decommissioned import-compatibility tables (placements, fiction worlds, fiction locations) are still round-tripped for legacy blob restore, but they carry no live state.
 
 They support:
 
@@ -988,7 +991,7 @@ The following capabilities are present end to end in the supplied implementation
 - Physical reaction loop.
 - Character interaction loop.
 - Objective resolution.
-- Deterministically-gated background-presence reaction (a named, unregistered bystander may get one stateless, one-beat reaction when salient and otherwise unvoiced; no LLM call spent on the common case of nothing to react to).
+- Deterministically-gated background-presence reaction (a named, unregistered presence of any non-inert kind — bystander, guard, creature, drone — may get one stateless, one-beat reaction when salient and otherwise unvoiced; no LLM call spent on the common case of nothing to react to).
 - Outcome perception.
 - Player-facing narration.
 - Persistent commit stage.
@@ -1017,7 +1020,7 @@ The following capabilities are present end to end in the supplied implementation
 
 ### Background-presence tracking and promotion
 
-- Deterministic, LLM-free tracking of named entities the Director keeps writing into the resolved event or dialogue log without a character sheet, a character step, or memory of their own.
+- Deterministic, LLM-free tracking of named entities of any non-inert kind (a deny-list of clearly-inert kinds, not a `person`/`npc` allow-list) that the Director keeps writing into the resolved event or dialogue log without a character sheet, a character step, or memory of their own — so a player-declared guard (`kind:"actor"`), monster, robot, or drone is tracked rather than left declared-but-inert, while objects, fixtures, vehicles, and locations stay excluded.
 - Threshold-based promotion suggestions surfaced to the user; nothing is promoted automatically.
 - On request, an evidence-grounded draft character sheet and starter memories are generated from that entity's actual recorded turns, then reviewed and edited by the user before the character is attached to the cast.
 
@@ -1199,7 +1202,7 @@ Mapping Commit performs validation and conflict notes, but there is no complete 
 
 ### Prompt caching and structured metrics
 
-Utilities exist, but they are not fully integrated into provider execution and pipeline reporting.
+Anthropic prompt caching is live in the provider layer (`providers.py`), wired into both the streaming and non-streaming call paths, and its cached-token counts are recorded through the LLM-call log — so the capability is both integrated and metered. Two loose ends remain: the standalone `prompt_cache.py` helper is orphaned (superseded by the in-provider implementation and safe to remove), and per-turn / per-step cost and cache-hit reporting is not yet surfaced in the pipeline UI.
 
 ## Known architectural and implementation weaknesses
 
@@ -1279,7 +1282,7 @@ The service is safer to expose over a tunnel than before, but it remains a singl
 
 ## Development roadmap
 
-The movement-and-space work advances several priorities below: data integrity (Priority 1) is largely delivered by the physical-truth consolidation and room registry; authority and mutation safety (Priority 4) by interpret-side declaration capture and single- and multi-book destruction; first-class movers (Priority 5) by the transit model; and world-model integration (Priority 8) by the consolidation. A full re-prioritization is deferred until that work merges.
+The movement-and-space work advances several priorities below: data integrity (Priority 1) is largely delivered by the physical-truth consolidation and room registry; authority and mutation safety (Priority 4) by interpret-side declaration capture and single- and multi-book destruction; first-class movers (Priority 5) by the transit model; and world-model integration (Priority 8) by the consolidation. That work has shipped (alpha2.0, with a follow-up in alpha2.0.1); a full re-prioritization of the list below is still pending.
 
 ### Priority 0 — health and project control
 
@@ -1394,7 +1397,7 @@ Suggested simulation levels:
 - Record call duration and token usage.
 - Store provider, model, prompt preset, and sampler metadata on variants.
 - Store prompt-version hashes.
-- Integrate provider prompt caching.
+- Surface prompt-cache hit rates and token savings per turn/step (Anthropic prompt caching itself is already integrated in the provider layer).
 - Add call-budget reporting.
 - Add per-role cost estimates.
 - Convert the async pipeline to native async provider calls where useful.
