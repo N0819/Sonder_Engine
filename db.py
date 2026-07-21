@@ -1,4 +1,4 @@
-"""Database layer with schema v10: lorebook links, entry metadata, mobile lorebooks."""
+"""Database layer. Current schema version is SCHEMA_VERSION (see below); migrations run in order from any older version on open."""
 
 import contextvars, sqlite3, json, os, time, threading, uuid
 from contextlib import contextmanager
