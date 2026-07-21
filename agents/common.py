@@ -18,7 +18,13 @@ from memory import chat_lorebook_ids, chat_lorebook_weights
 from providers import chat_complete
 from scene import get_scene, persona_of
 from schemas import normalize_speech_volume
-from spatial import has_visual, nearby_rooms, room_of
+from spatial import (
+    ambient_scope,
+    has_visual,
+    nearby_rooms,
+    normalize_room_id,
+    room_of,
+)
 from theory_of_mind import _TOM_CONFIDENCE_CAPS, cap_mind_model_updates
 
 _REACTIVE_VERBS = {
@@ -372,15 +378,44 @@ def _normalize_effect(effect):
     return {"target_id": None, "kind": str(effect), "details": {}}
 
 def _extract_authority_claims(sequence, raw_input):
-    """Extract authority claims from the interpreted sequence."""
+    """Extract authority claims from the interpreted sequence.
+
+    raw_input is the player's own declaration and serves as the FALLBACK
+    text everywhere an element carries no raw_text/attempt of its own --
+    both for commitment classification and for the claim's source_text.
+    (It used to be accepted and ignored, so an element the model emitted
+    without raw_text produced empty-source claims classified against "".)
+    """
+    fallback_text = str(raw_input or "")
     claims = []
     for i, event in enumerate(sequence or []):
+        if event.get("type") == "event":
+            # Actor-less environmental assertion ("the lights go out",
+            # "a monster enters") -- a player world assertion under the
+            # authority contract: it becomes true, so it is minted as an
+            # asserted-effect claim the resolve seam's player-claim
+            # coverage check can then hold the diff to.
+            description = str(event.get("description") or "").strip()
+            if not description:
+                continue
+            claims.append({
+                "claim_id": f"claim:{i}:event",
+                "scope": "effect",
+                "subject_id": str(event.get("subject") or "") or None,
+                "predicate": description,
+                "value": None,
+                "commitment": "asserted",
+                "source_text": event.get("raw_text") or description
+                or fallback_text,
+            })
+            continue
         if event.get("type") != "action":
             continue
         commitment = event.get("commitment")
         if commitment is None:
             commitment = _classify_action_commitment(
-                event.get("raw_text") or event.get("attempt") or "")
+                event.get("raw_text") or event.get("attempt")
+                or fallback_text)
         event["commitment"] = commitment
         if commitment == "asserted":
             for effect_index, effect in enumerate(
@@ -396,7 +431,8 @@ def _extract_authority_claims(sequence, raw_input):
                     "predicate": eff.get("kind", ""),
                     "value": eff.get("details"),
                     "commitment": "asserted",
-                    "source_text": event.get("raw_text") or event.get("attempt") or "",
+                    "source_text": event.get("raw_text")
+                    or event.get("attempt") or fallback_text,
                 })
         else:
             for effect_index, effect in enumerate(
@@ -412,7 +448,8 @@ def _extract_authority_claims(sequence, raw_input):
                     "predicate": eff.get("kind", ""),
                     "value": eff.get("details"),
                     "commitment": "contestable",
-                    "source_text": event.get("raw_text") or event.get("attempt") or "",
+                    "source_text": event.get("raw_text")
+                    or event.get("attempt") or fallback_text,
                 })
     return claims
 
@@ -494,13 +531,60 @@ def lore_for(ctx):
     return [{k: e.get(k) for k in allowed if k in e}
             for e in entries if isinstance(e, dict)]
 
-def _room_notes_from_lore(room_id, ctx):
+def _ambient_blocked_slugs(sc, room_id):
+    """Item-5 coarse nesting filter: None when the observer's room is open
+    to the world (nothing to filter); otherwise the normalized ids/names of
+    every room OUTSIDE their ambient scope plus the scene's location label.
+    Staged lore keyed to any of those is ancestor-scoped information that
+    must not reach a sealed nested observer (the port must not leak into a
+    sealed elevator). Reads only scene containment (rooms/entities/derived
+    dock edges) -- NEVER lorebook links: currently_within is retrieval
+    bookkeeping, not perception authorization."""
+    scope, open_to_world = ambient_scope(sc, room_id)
+    if open_to_world:
+        return None
+    blocked = set()
+    for rid, room in (sc.get("rooms") or {}).items():
+        if rid in scope:
+            continue
+        slug = normalize_room_id(str(rid))
+        if slug:
+            blocked.add(slug)
+        if isinstance(room, dict) and room.get("name"):
+            slug = normalize_room_id(str(room["name"]))
+            if slug:
+                blocked.add(slug)
+    location_slug = normalize_room_id(str(sc.get("location") or ""))
+    if location_slug:
+        blocked.add(location_slug)
+    return blocked
+
+def _keys_reference_blocked(keys, blocked):
+    """True when any comma-separated key token names an out-of-scope room
+    or the outer location (normalized, substring-tolerant for slugs long
+    enough not to false-match)."""
+    for token in str(keys or "").split(","):
+        slug = normalize_room_id(token)
+        if not slug:
+            continue
+        if slug in blocked:
+            return True
+        for b in blocked:
+            if len(b) >= 5 and (b in slug or slug in b):
+                return True
+    return False
+
+def _room_notes_from_lore(room_id, ctx, scene=None):
     if not room_id:
         return ""
-    sc = get_scene(ctx.chat.id, ctx.chat)
+    sc = scene if scene is not None else get_scene(ctx.chat.id, ctx.chat)
     rdata = (sc.get("rooms") or {}).get(room_id)
     if rdata and rdata.get("notes"):
         return rdata["notes"]
+    # Coarse scope-by-nesting-depth: for a sealed nested observer, an entry
+    # whose keys ALSO name an ancestor-scope room/location carries ambient
+    # information they cannot perceive right now -- skip it.
+    blocked = _ambient_blocked_slugs(sc, room_id)
     staged = ((ctx.get("mapping_stage") or {}).get("staged_lore") or []) + \
              ((ctx.get("mapping_quick") or {}).get("staged_lore") or [])
     room_norm = room_id.lower().replace("_", " ")
@@ -508,11 +592,15 @@ def _room_notes_from_lore(room_id, ctx):
         keys = (entry.get("keys") or "").lower()
         content = entry.get("content") or ""
         if (room_norm in keys or room_id.lower() in keys) and content:
+            if blocked and _keys_reference_blocked(keys, blocked):
+                continue
             return content[:600]
     for entry in lore_for(ctx):
         keys = (entry.get("keys") or "").lower()
         content = entry.get("content") or ""
         if (room_norm in keys or room_id.lower() in keys) and content:
+            if blocked and _keys_reference_blocked(keys, blocked):
+                continue
             return content[:600]
     return ""
 
@@ -563,6 +651,32 @@ def norm_sequence(out):
                     # concealment backstop below and stripped before return.
                     "_raw_vis": e.get("visibility"),
                     "_raw_vol": e.get("volume"),
+                })
+        elif t in ("event", "environment", "environmental", "world"):
+            # Actor-less environmental event ("the lights go out", "a
+            # monster enters") declared by the player. These used to be
+            # silently DROPPED here (only speech/action survived), so a
+            # player world assertion never reached the resolve at all.
+            # First-class representation, canonical type "event".
+            description = (e.get("description") or e.get("text")
+                           or e.get("attempt"))
+            if description:
+                raw_asserted = e.get("asserted_effects") or []
+                asserted_effects = [
+                    _normalize_effect(eff)
+                    for eff in raw_asserted
+                    if _normalize_effect(eff) is not None
+                ]
+                clean.append({
+                    "type": "event",
+                    "description": str(description),
+                    "subject": str(e.get("subject") or ""),
+                    "raw_text": e.get("raw_text") or "",
+                    "visibility": "concealed"
+                    if e.get("visibility") == "concealed" else "overt",
+                    "conceal_from": e.get("conceal_from") or [],
+                    "commitment": e.get("commitment") or "asserted",
+                    "asserted_effects": asserted_effects,
                 })
         else:
             att = e.get("attempt")
@@ -635,8 +749,17 @@ def norm_sequence(out):
         e.pop("_raw_vol", None)
 
     out["sequence"] = clean
-    sp = [e for e in clean if e["type"] == "speech"]
-    ac = [e for e in clean if e["type"] == "action"]
+    return _sync_sequence_mirrors(out)
+
+def _sync_sequence_mirrors(out):
+    """Recompute the legacy scalar mirrors (speech/speech_volume/action/
+    actions) from out['sequence']. Factored out of norm_sequence so the
+    interpret-reconciliation seam can re-sync after additively appending
+    repaired elements WITHOUT re-running norm_sequence on the whole output
+    (which would re-append out['actions'] and duplicate every action)."""
+    clean = out.get("sequence") or []
+    sp = [e for e in clean if e.get("type") == "speech"]
+    ac = [e for e in clean if e.get("type") == "action"]
     out["speech"] = sp[0]["text"] if sp else None
     out["speech_volume"] = (
         sp[0]["volume"] if sp else out.get("speech_volume", "normal")

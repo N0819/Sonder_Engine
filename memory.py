@@ -36,6 +36,13 @@ LOREBOOK_LINK_TYPES = [
     "alternate_version",
     "same_setting",
     "portal",
+    # "is at right now": a mobile (anchored) book's live presence link to
+    # the book of wherever its anchor entity currently is, rewritten from
+    # scene positions at every commit (commit.sync_anchored_books).
+    # Distinct from parent_id, which is canonical "belongs to" and is
+    # never mutated by commit. Retrieval follows it so docked-location
+    # lore stays reachable; it is NEVER perception authorization.
+    "currently_within",
 ]
 
 KNOWLEDGE_TAGS = ["common", "scholarly", "esoteric"]
@@ -515,6 +522,85 @@ def lorebook_manifest(chat_id):
         "links": links,
         "roots": root_ids,
     }
+
+def monitoring_subtree(chat_id, book_id, scene=None, max_depth=6):
+    """Read-only "what's aboard/nested here right now" walk for one
+    location/vehicle book (movement/space Phase 1, item 5).
+
+    Two edge kinds, kept distinct on purpose:
+    - parent_id children = canonical containment ("belongs to": crew logs,
+      cabin books) -- reported under 'children';
+    - inbound 'currently_within' links = live presence ("is at right now":
+      a docked vehicle's book, rewritten from positions at every commit by
+      commit.sync_anchored_books) -- reported under 'present', recursively,
+      so a van aboard a ferry docked at the port nests three deep.
+
+    When a scene dict is supplied, each anchored book is joined against it:
+    'rooms' = the anchor entity's interior rooms (rooms whose parent_entity
+    is the anchor), 'occupants' = every positions entry currently inside
+    one of them.
+
+    Monitoring/reporting ONLY (UI, ops, tests): this walk reads the
+    lorebook graph and must never feed perception -- what an observer
+    aboard perceives is scoped by the spatial layer (spatial.ambient_scope
+    on scene containment), never by these links.
+    """
+    def _node(bid, depth, seen):
+        row = q(
+            "SELECT id, name, book_type, parent_id, anchor_entity_id "
+            "FROM lorebooks WHERE id=?",
+            (bid,), one=True,
+        )
+        if not row:
+            return None
+        node = {
+            "id": row["id"], "name": row["name"],
+            "book_type": row["book_type"],
+            "anchor_entity_id": row["anchor_entity_id"],
+            "rooms": [], "occupants": [],
+            "children": [], "present": [],
+        }
+        anchor = row["anchor_entity_id"]
+        if scene and anchor:
+            interior = sorted(
+                rid for rid, room in (scene.get("rooms") or {}).items()
+                if isinstance(room, dict)
+                and room.get("parent_entity") == anchor
+            )
+            node["rooms"] = interior
+            interior_set = set(interior)
+            node["occupants"] = sorted(
+                str(name)
+                for name, room in (scene.get("positions") or {}).items()
+                if room in interior_set and str(name) != anchor
+            )
+        if depth >= max_depth:
+            return node
+        for child in q(
+            "SELECT id FROM lorebooks WHERE parent_id=? AND chat_id IS ? "
+            "ORDER BY sort_order, id",
+            (bid, chat_id),
+        ):
+            if child["id"] in seen:
+                continue
+            sub = _node(child["id"], depth + 1, seen | {child["id"]})
+            if sub:
+                node["children"].append(sub)
+        for link in q(
+            "SELECT source_book_id FROM lorebook_links "
+            "WHERE target_book_id=? AND relation_type='currently_within' "
+            "ORDER BY sort_order, id",
+            (bid,),
+        ):
+            if link["source_book_id"] in seen:
+                continue
+            sub = _node(link["source_book_id"], depth + 1,
+                        seen | {link["source_book_id"]})
+            if sub:
+                node["present"].append(sub)
+        return node
+
+    return _node(book_id, 0, {book_id})
 
 # ---- Memory normalization and storage helpers ----
 

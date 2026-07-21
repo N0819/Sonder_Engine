@@ -75,6 +75,14 @@ def mapping_stage(ctx, nonce):
         },
         "present_characters": cast_scene_context(ctx.cast),
         "location_query": interp.get("location_query"),
+        # Captured player declarations forwarded for BOUNDED ADDITIVE
+        # elaboration (see the GENERATION REQUESTS prompt rule): the player
+        # owns the declared existence and stated specifics; mapping owns
+        # only what was left unstated, at the scale of the declaration.
+        "generation_requests": [
+            g for g in (fl.get("generation_requests") or [])
+            if isinstance(g, dict)
+        ],
         "lorebook_manifest": lorebook_manifest(chat["id"]),
         "currently_active_books": wget(chat["id"], "active_books", None),
         "candidate_lore": hits,
@@ -118,6 +126,10 @@ def mapping_quick(ctx, nonce):
         if mv["to_room"] not in (sc.get("rooms") or {}):
             return mapping_stage(ctx, nonce)
     if interp.get("location_query"):
+        return mapping_stage(ctx, nonce)
+    if (interp.get("flow") or {}).get("generation_requests"):
+        # A captured player declaration awaits elaboration -- cached recall
+        # cannot mint the declared content; escalate to the full stage.
         return mapping_stage(ctx, nonce)
     mr = ((interp.get("flow") or {}).get("mapping_request") or "").lower()
     if "new room" in mr or "generate room" in mr or "scene graph" in mr:

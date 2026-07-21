@@ -620,6 +620,80 @@ def apply_transit_dock_edges(scene: dict) -> bool:
 
     return changed
 
+# ---------------------------------------------------------------------------
+# Nesting-aware ambient scope (movement/space Phase 1, item 5).
+#
+# Read-only helpers over the SCENE's containment structure (rooms'
+# parent_entity + derived dock edges) -- deliberately NOT the lorebook
+# graph: a currently_within link is retrieval bookkeeping and must never
+# be read as perception authorization. These answer "whose ambience can
+# legitimately reach this observer right now?" so location-scoped
+# information does not leak into a sealed nested interior (the port must
+# not color the inside of a sealed elevator).
+# ---------------------------------------------------------------------------
+
+_AMBIENT_BARRIERS = {"open", "open_door"}
+
+def containment_chain(scene: dict, room_id: str) -> list:
+    """Rooms from room_id outward through entity containment: the room
+    itself, then -- for each enclosing parent_entity -- that entity's
+    exterior room, and so on. [{'room': rid, 'entity': enclosing_eid|None}]
+    ordered innermost-first. Cycle-safe."""
+    chain = []
+    seen = set()
+    rooms = scene.get("rooms") or {}
+    entities = scene.get("entities") or {}
+    current = room_id
+    while current and current not in seen:
+        seen.add(current)
+        room = rooms.get(current)
+        eid = room.get("parent_entity") if isinstance(room, dict) else None
+        chain.append({"room": current, "entity": eid})
+        if not eid:
+            break
+        current = _entity_exterior_room(scene, eid, entities.get(eid) or {})
+    return chain
+
+def ambient_scope(scene: dict, room_id: str):
+    """(rooms, open_to_world): the set of rooms whose ambient signal can
+    reach room_id -- its connected component through open/open_door
+    barriers (either edge direction) in the current derived graph -- and
+    whether that component reaches any room that is not an entity
+    interior. With dock edges applied, a sealed vehicle's interior scopes
+    to just itself (open_to_world False); docked with an open hatch it
+    scopes out to the exterior. An unknown room is treated as open (no
+    filtering on missing data)."""
+    rooms = scene.get("rooms") or {}
+    if not room_id or room_id not in rooms:
+        return ({room_id} if room_id else set()), True
+    graph: dict[str, set] = {}
+    for rid, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict):
+                continue
+            to = edge.get("to")
+            if to not in rooms:
+                continue
+            if normalize_barrier(edge.get("barrier")) in _AMBIENT_BARRIERS:
+                graph.setdefault(rid, set()).add(to)
+                graph.setdefault(to, set()).add(rid)
+    seen = {room_id}
+    queue = [room_id]
+    while queue:
+        current = queue.pop()
+        for nxt in graph.get(current, ()):
+            if nxt not in seen:
+                seen.add(nxt)
+                queue.append(nxt)
+    open_to_world = any(
+        not (isinstance(rooms.get(rid), dict)
+             and rooms[rid].get("parent_entity"))
+        for rid in seen
+    )
+    return seen, open_to_world
+
 def merge_scene_with_diff(
     scene: dict,
     diff: dict | None,

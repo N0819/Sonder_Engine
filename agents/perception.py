@@ -21,6 +21,7 @@ from scene import (
     sheet_state,
 )
 from spatial import (
+    ambient_scope,
     has_visual,
     hear_level,
     merge_scene_with_diff,
@@ -49,6 +50,27 @@ from .common import (
     character_room,
     character_scene_keys,
 )
+
+def _ambient_location_for(sc, room_id):
+    """Per-perceiver ambient/location scoping by nesting depth (item 5,
+    coarse): the outermost place whose ambience legitimately reaches this
+    room. Open to the world -> the scene's location as usual. Sealed
+    inside a nested interior (a vehicle mid-transit, a closed elevator)
+    -> only the enclosure itself; the outer location's name/ambience must
+    not color that perceiver's view. Derived from scene containment
+    (spatial.ambient_scope) only -- never from lorebook links."""
+    if not room_id:
+        return sc.get("location")
+    _, open_to_world = ambient_scope(sc, room_id)
+    if open_to_world:
+        return sc.get("location")
+    room = (sc.get("rooms") or {}).get(room_id) or {}
+    eid = room.get("parent_entity")
+    ent = (sc.get("entities") or {}).get(eid) if eid else None
+    label = ((ent or {}).get("name") if isinstance(ent, dict) else None) \
+        or eid or room.get("name") or room_id
+    return (f"inside {label} (sealed interior -- the outer location's "
+            "ambience does not reach here)")
 
 def _identity_roster(p_name, p_appearance, cast):
     """Every identity in play this beat, with the forms (name + uid/aliases)
@@ -123,7 +145,8 @@ def perception_establish(ctx, nonce):
     perceivers = [{
         "id": "player", "name": p_name, "room": p_room,
         "room_name": (p_rdata or {}).get("name") or p_room or "an unspecified area",
-        "room_notes": ((p_rdata or {}).get("notes") or _room_notes_from_lore(p_room, ctx)),
+        "room_notes": ((p_rdata or {}).get("notes") or _room_notes_from_lore(p_room, ctx, sc)),
+        "ambient_location": _ambient_location_for(sc, p_room),
         "visible_rooms": visible_adjacent_rooms(sc, p_room),
         "senses": senses_of(pers), "attention": "engaged",
         "knows_identity": True,
@@ -140,7 +163,8 @@ def perception_establish(ctx, nonce):
         perceivers.append({
             "id": c["id"], "name": character_name(sh), "room": r,
             "room_name": (rdata or {}).get("name") or r or "an unspecified area",
-            "room_notes": ((rdata or {}).get("notes") or _room_notes_from_lore(r, ctx)),
+            "room_notes": ((rdata or {}).get("notes") or _room_notes_from_lore(r, ctx, sc)),
+            "ambient_location": _ambient_location_for(sc, r),
             "visible_rooms": visible_adjacent_rooms(sc, r),
             "senses": senses_of(sh), "attention": act.get("goal") or "ambient",
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
@@ -290,7 +314,8 @@ def perception_act(ctx, nonce):
         perceivers.append({
             "id": c["id"], "name": character_name(sh), "room": r,
             "room_name": (rdata or {}).get("name") or r or "an unspecified area",
-            "room_notes": ((rdata or {}).get("notes") or _room_notes_from_lore(r, ctx)),
+            "room_notes": ((rdata or {}).get("notes") or _room_notes_from_lore(r, ctx, sc)),
+            "ambient_location": _ambient_location_for(sc, r),
             "visible_rooms": visible_adjacent_rooms(sc, r),
             "senses": senses_of(sh),
             "attention": act.get("goal") or "ambient",
@@ -550,7 +575,8 @@ def perception_outcome(ctx, nonce):
     perceivers = [{
         "id": "player", "name": p_name, "room": p_room,
         "room_name": (p_rdata or {}).get("name") or p_room or "an unspecified area",
-        "room_notes": ((p_rdata or {}).get("notes") or _room_notes_from_lore(p_room, ctx)),
+        "room_notes": ((p_rdata or {}).get("notes") or _room_notes_from_lore(p_room, ctx, sc)),
+        "ambient_location": _ambient_location_for(sc, p_room),
         "visible_rooms": visible_adjacent_rooms(sc, p_room),
         "senses": senses_of(pers), "attention": "engaged",
         "knows_identity": True,
@@ -563,7 +589,8 @@ def perception_outcome(ctx, nonce):
         perceivers.append({
             "id": f"extra:{pid_key}", "name": e_name, "room": e_room,
             "room_name": (e_rdata or {}).get("name") or e_room or "an unspecified area",
-            "room_notes": ((e_rdata or {}).get("notes") or _room_notes_from_lore(e_room, ctx)),
+            "room_notes": ((e_rdata or {}).get("notes") or _room_notes_from_lore(e_room, ctx, sc)),
+            "ambient_location": _ambient_location_for(sc, e_room),
             "visible_rooms": visible_adjacent_rooms(sc, e_room),
             "senses": senses_of(extra), "attention": "engaged",
             "knows_identity": True,
@@ -580,7 +607,8 @@ def perception_outcome(ctx, nonce):
         perceivers.append({
             "id": c["id"], "name": character_name(sh), "room": r,
             "room_name": (rdata or {}).get("name") or r or "an unspecified area",
-            "room_notes": ((rdata or {}).get("notes") or _room_notes_from_lore(r, ctx)),
+            "room_notes": ((rdata or {}).get("notes") or _room_notes_from_lore(r, ctx, sc)),
+            "ambient_location": _ambient_location_for(sc, r),
             "visible_rooms": visible_adjacent_rooms(sc, r),
             "senses": senses_of(sh),
             "attention": act.get("goal") or "ambient",

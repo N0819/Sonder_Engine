@@ -299,6 +299,13 @@ class ResolutionCheck(BaseModel):
 class MovementDecl(BaseModel):
     to_room: str
     why: str = ""
+    # WHO relocates. "self" (default) = the player's own body. An entity id
+    # = the declared move is of a VEHICLE/vessel/mount the player is
+    # driving or piloting: the ENTITY's exterior position changes and the
+    # player's body stays where it is (typically that entity's interior).
+    # Without this field "I drive the van onto the ferry" was structurally
+    # identical to "I walk onto the ferry" and moved the player's body.
+    mover: str = "self"
 
 # ---- Authority ----
 
@@ -760,6 +767,21 @@ class ResolveRepairOutput(BaseModel):
     state_diff: StateDiff = Field(default_factory=StateDiff)
     dispositions: list[dict] = Field(default_factory=list)
 
+class InterpretRepairOutput(BaseModel):
+    """The Director's own interpret-side correction delta (the structural
+    twin of ResolveRepairOutput, for the seam that runs right after
+    director_interpret): ONLY the additional sequence elements / movement /
+    generation_requests needed to capture the player declarations the
+    original interpretation dropped. Merged ADDITIVELY by deterministic
+    code -- existing sequence elements and a declared movement are never
+    replaced."""
+    sequence: list[dict] = Field(default_factory=list)
+    movement: Optional[MovementDecl] = None
+    mapping_request: str = ""
+    generation_requests: list[dict] = Field(default_factory=list)
+    dispositions: list[dict] = Field(default_factory=list)
+    notes: str = ""
+
 class NarratorOutput(BaseModel):
     prose: str = ""
     new_specifics: list[str] = Field(default_factory=list)
@@ -972,6 +994,7 @@ SCHEMA_MAP = {
     "director_resolve": DirectorResolve,
     "resolve_reconcile": ResolveReconcileOutput,
     "resolve_repair": ResolveRepairOutput,
+    "interpret_repair": InterpretRepairOutput,
     "narrator": NarratorOutput,
     "character": CharacterOutput,
     "mapping_stage": MappingStageOutput,
@@ -1554,6 +1577,25 @@ OUTPUT_EXAMPLES = {
         "dispositions": [
             {"subject": "vault_door", "status": "encoded", "reason": ""},
         ],
+    },
+    "interpret_repair": {
+        "sequence": [
+            {"type": "action", "raw_text": "duck into the armory",
+             "attempt": "duck into the armory", "commitment": "asserted",
+             "verb": "enter", "targets": [], "asserted_effects": []},
+        ],
+        "movement": {"to_room": "armory", "why": "player declared entering",
+                     "mover": "self"},
+        "mapping_request": "Player enters the armory — generate its layout.",
+        "generation_requests": [
+            {"kind": "player_declaration", "subject": "a rifle grabbed from "
+             "the armory rack", "constraints": [], "urgency": "now"},
+        ],
+        "dispositions": [
+            {"subject": "duck into the armory and grab a rifle",
+             "status": "captured", "reason": ""},
+        ],
+        "notes": "",
     },
 }
 

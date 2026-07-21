@@ -47,6 +47,7 @@ from .common import (
     _quote_body,
     _requires_reaction_phase,
     _resolve_player_room,
+    _sync_sequence_mirrors,
     assign_event_ids,
     canonicalize_positions,
     character_room,
@@ -278,6 +279,21 @@ def director_interpret(ctx, nonce):
     out.setdefault("private_thought", None)
     out.setdefault("movement", None)
     out.setdefault("location_query", None)
+    if isinstance(out.get("movement"), dict):
+        out["movement"].setdefault("mover", "self")
+
+    # Interpret reconciliation seam (the structural twin of the resolve
+    # seam below): deterministic omission detection of player declarations
+    # the interpretation dropped, one bounded self-repair, warn-only
+    # fallback. Runs BEFORE claims extraction / contested detection /
+    # mapping triggers so every downstream deterministic pass sees the
+    # repaired sequence.
+    _reconcile_interpretation(ctx, out, sc)
+
+    # Any generation request (model-authored, repaired, or synthesized by
+    # the seam) needs the full mapping stage to elaborate it.
+    if fl.get("generation_requests"):
+        fl["needs_mapping"] = True
 
     # Extract authority claims from the sequence
     fl["authority_claims"] = _extract_authority_claims(
@@ -389,6 +405,273 @@ def director_interpret(ctx, nonce):
     # player included) has moved.
 
     return out
+
+# ---------------------------------------------------------------------------
+# Interpret reconciliation: the structural TWIN of the resolve seam below,
+# run right after director_interpret's LLM call. Where the resolve seam
+# catches prose-vs-diff omissions, this one catches INPUT-vs-interpretation
+# omissions: a player-declared place/object/event present in the raw input
+# but absent from interpret's sequence/movement/mapping channels is a
+# dropped declaration -- under the PLAYER AUTHORITY CONTRACT it silently
+# never happened, before resolution even began.
+#
+# Detection is deliberately NOT keyword/verb enumeration of world content
+# (the same unwinnable treadmill the resolve seam rejects): it is pure
+# LEXICAL COVERAGE -- the raw input is split into declaration units
+# (quoted spans + narrative clauses) and each unit's significant tokens
+# are checked against every channel that actually carries a declaration
+# forward (sequence, movement, mapping_request, location_query,
+# generation_requests, private_thought). A unit most of whose tokens
+# appear nowhere is a drop, whatever its subject matter.
+#
+# Disposition mirrors the resolve seam's conservatism: one bounded
+# self-repair BY THE DIRECTOR ITSELF (additive only -- existing elements
+# and a declared movement are never replaced), deterministic re-check, and
+# for anything still uncovered a warn-only fallback that forwards the
+# player's VERBATIM clause to mapping as a generation_request (bounded
+# additive elaboration: the player owns existence + stated specifics, the
+# engine owns only the unstated) -- this engine never fabricates a
+# structured act from a heuristic.
+# ---------------------------------------------------------------------------
+
+_DECL_STOPWORDS = frozenset("""
+a an the and or but nor then i i'm i'll i've you you're he she it it's we
+they my your his her its our their me him them us who whom whose which
+what how why this that these those there here to of in on at by for with
+from as is are was were be been being am do does did done have has had
+having will would can could shall should may might must not no yes if so
+too also just very quite about around while when where over under out up
+down off into onto again once still now then before after behind toward
+towards through between against along away back get gets got go goes
+going gone come comes came take takes took make makes made turn turns
+turned start starts started begin begins began try tries tried trying
+attempt attempts keep keeps kept let lets say says said tell tells told
+ask asks asked look looks looked see sees saw put puts one two moment
+little bit around some any all both each other another same own than
+""".split())
+
+_QUOTED_UNIT_RE = re.compile(r'["“]([^"“”]{4,})["”]')
+_CLAUSE_SPLIT_RE = re.compile(
+    r"[.;!?\n]+|,\s+(?:and|then|but)\s+|\s+(?:and\s+then|then)\s+|\s+and\s+"
+)
+
+_RECONCILE_INTERPRET_MAX_UNITS = 4
+_INTERPRET_COVERAGE_MIN = 0.5
+
+def _decl_tokens(text):
+    """Significant tokens of one declaration unit: casefolded alphanumeric
+    words, length >= 3, stopwords removed. No domain keyword lists -- pure
+    lexical coverage is the anti-treadmill property this seam is built on."""
+    tokens = set()
+    for tok in re.findall(r"[a-z0-9']+", str(text or "").casefold()):
+        tok = tok.strip("'")
+        if len(tok) >= 3 and tok not in _DECL_STOPWORDS:
+            tokens.add(tok)
+    return tokens
+
+def _declaration_units(raw_input):
+    """Split raw player input into declaration units: quoted spans (each a
+    speech declaration) plus narrative clauses split on sentence boundaries
+    and coordination. Units with fewer than two significant tokens are
+    skipped -- too little signal to judge coverage without false positives
+    (the conservative floor)."""
+    text = str(raw_input or "")
+    units = [m.group(1).strip() for m in _QUOTED_UNIT_RE.finditer(text)]
+    narrative = _QUOTED_UNIT_RE.sub(" ", text)
+    for clause in _CLAUSE_SPLIT_RE.split(narrative):
+        clause = clause.strip(" ,")
+        if clause:
+            units.append(clause)
+    return [u for u in units if len(_decl_tokens(u)) >= 2]
+
+def _interpret_coverage_corpus(out):
+    """Token set of every channel that actually carries a declaration
+    forward into the turn. Deliberately NOT `notes` -- prose parked in
+    notes never enters causality, which is exactly the drop being
+    detected."""
+    flow = _dict(out.get("flow"))
+    pieces = []
+    for e in out.get("sequence") or []:
+        if not isinstance(e, dict):
+            continue
+        for field in ("text", "attempt", "raw_text", "description",
+                      "subject", "verb"):
+            pieces.append(e.get(field))
+        pieces.extend(str(t) for t in (e.get("targets") or []))
+        effects = _list(e.get("intended_effects")) + \
+            _list(e.get("asserted_effects"))
+        for eff in effects:
+            if isinstance(eff, dict):
+                pieces.append(eff.get("kind"))
+                pieces.append(eff.get("target_id"))
+                try:
+                    pieces.append(json.dumps(eff.get("details") or {},
+                                             ensure_ascii=False))
+                except (TypeError, ValueError):
+                    pass
+    mv = out.get("movement")
+    if isinstance(mv, dict):
+        pieces.append(str(mv.get("to_room") or "").replace("_", " "))
+        pieces.append(mv.get("why"))
+        pieces.append(str(mv.get("mover") or "").replace("_", " "))
+    pieces.append(out.get("private_thought"))
+    pieces.append(out.get("location_query"))
+    pieces.append(flow.get("mapping_request"))
+    for gr in _dict_list(flow.get("generation_requests")):
+        pieces.append(gr.get("kind"))
+        pieces.append(gr.get("subject"))
+        pieces.extend(str(c) for c in (gr.get("constraints") or []))
+        pieces.append(str(gr.get("location_id") or "").replace("_", " "))
+    tokens = set()
+    for piece in pieces:
+        tokens |= _decl_tokens(piece)
+    return tokens
+
+def _unit_covered(unit, corpus, prefixes):
+    """Coverage test for one declaration unit: at least half its
+    significant tokens appear in the corpus (exact, or by shared 4-char
+    prefix -- crude stemming so 'ducks'/'ducking' covers 'duck')."""
+    tokens = _decl_tokens(unit)
+    if not tokens:
+        return True
+    hits = sum(
+        1 for t in tokens
+        if t in corpus or (len(t) >= 4 and t[:4] in prefixes)
+    )
+    return hits / len(tokens) >= _INTERPRET_COVERAGE_MIN
+
+def _uncovered_declarations(raw_input, out):
+    """Deterministic omission detection: declaration units of the raw input
+    whose significant tokens are mostly absent from every channel of the
+    interpretation. Capped -- a fully off-the-rails interpretation is
+    better re-run than repaired unit by unit."""
+    corpus = _interpret_coverage_corpus(out)
+    prefixes = {c[:4] for c in corpus if len(c) >= 4}
+    uncovered = [
+        u for u in _declaration_units(raw_input)
+        if not _unit_covered(u, corpus, prefixes)
+    ]
+    return uncovered[:_RECONCILE_INTERPRET_MAX_UNITS]
+
+def _reconcile_interpretation(ctx, out, sc):
+    """The interpret-reconciliation seam (see the block comment above).
+    Mutates `out` in place: repaired sequence elements are appended (never
+    replacing what interpret already declared), a missing movement may be
+    filled (never overwritten), mapping_request/generation_requests are
+    extended. Records inspection metadata on out['interpret_reconciliation']
+    and appends to ctx.warnings for anything still uncovered."""
+    raw_input = str(ctx.get("input") or "")
+    fl = _dict(out.get("flow"))
+    recon = {"uncovered": [], "repaired": False, "dispositions": [],
+             "unresolved": []}
+    out["interpret_reconciliation"] = recon
+    if not raw_input.strip():
+        return
+
+    uncovered = _uncovered_declarations(raw_input, out)
+    if not uncovered:
+        return
+    recon["uncovered"] = list(uncovered)
+
+    # ---- One bounded self-repair by the interpretation's own owner ------
+    repair = None
+    try:
+        repair = _agent_json(
+            "director", "interpret_repair",
+            get_prompt("interpret_repair"),
+            {
+                "player_raw_input": raw_input,
+                "current_interpretation": {
+                    "sequence": out.get("sequence") or [],
+                    "movement": out.get("movement"),
+                    "mapping_request": fl.get("mapping_request") or "",
+                    "location_query": out.get("location_query"),
+                    "generation_requests":
+                        _dict_list(fl.get("generation_requests")),
+                },
+                "dropped_declarations": uncovered,
+                "existing_rooms": sorted((sc.get("rooms") or {}).keys()),
+            },
+            temperature=0.0, max_tokens=8000,
+        )
+    except Aborted:
+        raise
+    except Exception as exc:
+        ctx.add_warning(f"Interpret reconciliation repair failed: {exc}")
+
+    if not isinstance(fl.get("generation_requests"), list):
+        fl["generation_requests"] = []
+
+    if isinstance(repair, dict):
+        additions = {
+            "sequence": [e for e in (repair.get("sequence") or [])
+                         if isinstance(e, dict)],
+        }
+        norm_sequence(additions)
+        new_elems = assign_event_ids(
+            additions["sequence"], f"turn:{ctx.turn.id}:repair")
+        if new_elems:
+            out["sequence"] = list(out.get("sequence") or []) + new_elems
+            _sync_sequence_mirrors(out)
+            recon["repaired"] = True
+        rmv = repair.get("movement")
+        already_moving = isinstance(out.get("movement"), dict) \
+            and out["movement"].get("to_room")
+        if isinstance(rmv, dict) and rmv.get("to_room") and not already_moving:
+            out["movement"] = {
+                "to_room": str(rmv["to_room"]),
+                "why": str(rmv.get("why") or ""),
+                "mover": str(rmv.get("mover") or "self"),
+            }
+            recon["repaired"] = True
+        extra_request = str(repair.get("mapping_request") or "").strip()
+        if extra_request:
+            fl["mapping_request"] = (
+                (fl.get("mapping_request") or "") + " " + extra_request
+            ).strip()
+        for gr in _dict_list(repair.get("generation_requests")):
+            if gr not in fl["generation_requests"]:
+                fl["generation_requests"].append(gr)
+                recon["repaired"] = True
+        recon["dispositions"] = _dict_list(repair.get("dispositions"))
+
+    # The owner explicitly overruled the checker for these units -- believe
+    # the rejection rather than warn on a model-vs-checker disagreement
+    # (same conservatism as the resolve seam's manifest dispositions).
+    already_covered = {
+        _norm_subject(d.get("subject"))
+        for d in recon["dispositions"]
+        if str(d.get("status") or "").casefold() == "already_covered"
+    }
+
+    # ---- Deterministic re-check against the merged interpretation -------
+    corpus = _interpret_coverage_corpus(out)
+    prefixes = {c[:4] for c in corpus if len(c) >= 4}
+    for unit in uncovered:
+        if _norm_subject(unit) in already_covered:
+            continue
+        if _unit_covered(unit, corpus, prefixes):
+            continue
+        # Warn-only fallback: the minimal covering element is the player's
+        # VERBATIM clause forwarded to mapping for bounded additive
+        # elaboration -- never a fabricated structured act.
+        fl["generation_requests"].append({
+            "kind": "player_declaration",
+            "subject": unit[:240],
+            "constraints": [
+                "player-declared: existence and stated specifics are fixed",
+                "elaborate additively, scoped to the declaration only",
+            ],
+            "urgency": "now",
+        })
+        fl["needs_mapping"] = True
+        recon["unresolved"].append(unit)
+        ctx.add_warning(
+            "PLAYER AUTHORITY: declared "
+            f"{unit!r} was not captured by director_interpret even after "
+            "self-repair; forwarded verbatim to mapping as a generation "
+            "request (no structured act was fabricated)."
+        )
 
 # ---------------------------------------------------------------------------
 # Resolve reconciliation: one general seam catching the recurring failure
@@ -1193,6 +1476,44 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
             tracked_names):
         ctx.add_warning(restraint_warning)
 
+def _resolve_movement_mover(sc, sd, mv, p_name):
+    """Resolve movement.mover to the position subject the passable-route
+    backstop should validate and write.
+
+    Returns (subject_key, subject_room, mover_entity_id):
+    - mover 'self'/empty/the player's own name -> (p_name, None, None);
+      the caller resolves the player's room as before.
+    - an entity id/name/alias found in the scene (or this beat's diff) ->
+      (the positions key that entity is actually stored under, its current
+      exterior room, its canonical entity id). Driving a vehicle moves the
+      ENTITY's position; the player's body stays put.
+    - anything unresolvable -> (None, None, None); the caller falls back
+      to the player with a warning (the pre-mover behavior, safe default).
+    """
+    mover = str((mv or {}).get("mover") or "self").strip()
+    if not mover or mover.casefold() in ("self", "player") \
+            or mover.casefold() == str(p_name or "").casefold():
+        return p_name, None, None
+    entities = dict(sc.get("entities") or {})
+    for eid, ent in (sd.get("entities") or {}).items():
+        if isinstance(ent, dict):
+            entities[eid] = ent
+    positions = sc.get("positions") or {}
+    mover_cf = mover.casefold()
+    for eid, ent in entities.items():
+        if not isinstance(ent, dict):
+            continue
+        forms = [str(eid), str(ent.get("name") or "")] + \
+            [str(a) for a in (ent.get("aliases") or [])]
+        forms = [f for f in forms if f.strip()]
+        if mover_cf not in {f.casefold() for f in forms}:
+            continue
+        # Prefer the key the scene already stores this entity's position
+        # under (id, name, or alias); default to the canonical id.
+        key = next((f for f in forms if f in positions), str(eid))
+        return key, positions.get(key), str(eid)
+    return None, None, None
+
 def director_resolve(ctx, nonce):
     chat = ctx.chat
     interp = _dict(ctx.director_interpret)
@@ -1398,11 +1719,30 @@ def director_resolve(ctx, nonce):
              ((ctx.get("mapping_quick") or {}).get("staged_lore") or [])
     mv = interp.get("movement")
     target_room = mv.get("to_room") if isinstance(mv, dict) else None
+
+    # Who is actually relocating this beat (movement.mover): the player's
+    # own body, or a vehicle the player is driving/piloting. Resolved once
+    # here and used by both the staged-layout adjacency fallback and the
+    # passable-route backstop below -- without it, "I drive the van onto
+    # the ferry" was structurally identical to walking there and moved the
+    # player's body instead of the van.
+    move_subject = mover_room = mover_eid = None
+    if isinstance(mv, dict) and mv.get("to_room"):
+        move_subject, mover_room, mover_eid = _resolve_movement_mover(
+            sc, sd, mv, p_name)
+        if move_subject is None:
+            ctx.warnings.append(
+                f"movement.mover {mv.get('mover')!r} does not resolve to a "
+                "known entity; treating the move as the player's own."
+            )
+            move_subject, mover_room, mover_eid = p_name, None, None
+    subject_prev_room = mover_room if mover_eid else room_of(sc, p_name)
+
     for entry in staged:
         if entry.get("category") == "layout" and entry.get("content"):
             room_id = target_room or (entry.get("keys") or "").split(",")[0].strip().replace(" ", "_")
             if room_id and room_id not in sd["rooms"]:
-                prev_room = room_of(sc, p_name)
+                prev_room = subject_prev_room
                 adj = []
                 if prev_room:
                     adj.append({"to": prev_room, "barrier": "open", "distance": "near"})
@@ -1416,13 +1756,13 @@ def director_resolve(ctx, nonce):
         # director_interpret derives `movement` purely from the LLM's
         # reading of the player's declared intent, with no adjacency
         # check. Without a deterministic backstop here, a misparsed
-        # declaration can teleport the player through a wall or into a
+        # declaration can teleport the mover through a wall or into a
         # disconnected room. Only commit the move if a passable route
-        # exists (or the player's current room is unknown, in which case
-        # there is nothing to validate against).
+        # exists from the MOVER's current room (or that room is unknown,
+        # in which case there is nothing to validate against).
         known_rooms = dict(sc.get("rooms") or {})
         known_rooms.update(sd["rooms"])
-        prev_room = room_of(sc, p_name)
+        prev_room = subject_prev_room
         blocked = contested = False
         if prev_room and mv["to_room"] != prev_room:
             rel = spatial_rel({"rooms": known_rooms}, prev_room, mv["to_room"])
@@ -1439,9 +1779,9 @@ def director_resolve(ctx, nonce):
             )
             # The resolve LLM may itself have asserted the impossible move;
             # a blocked route must strip it, not just warn.
-            if sd["positions"].get(p_name) == mv["to_room"]:
-                sd["positions"].pop(p_name)
-        elif contested and sd["positions"].get(p_name) != mv["to_room"]:
+            if sd["positions"].get(move_subject) == mv["to_room"]:
+                sd["positions"].pop(move_subject)
+        elif contested and sd["positions"].get(move_subject) != mv["to_room"]:
             # Don't force interpret's declared intent through a door that is
             # still closed after this beat's diff -- observed live as the
             # narration describing a bump against a sealed door while the
@@ -1453,7 +1793,31 @@ def director_resolve(ctx, nonce):
                 "diff did not assert the move; position unchanged."
             )
         else:
-            sd["positions"][p_name] = mv["to_room"]
+            sd["positions"][move_subject] = mv["to_room"]
+
+        if mover_eid is not None:
+            # Driver-conflation guard: a vehicle move relocates the ENTITY;
+            # the player stays in its interior (carried implicitly -- the
+            # interior rooms travel with the vehicle by identity, and the
+            # dock edges recompute from the entity's new position at
+            # merge). A resolve diff that ALSO moved the player's body to
+            # the vehicle's destination while they sit inside it is the
+            # exact conflation this field exists to prevent -- strip it.
+            player_room_now = room_of(sc, p_name)
+            interior = {
+                rid for rid, room in known_rooms.items()
+                if isinstance(room, dict)
+                and room.get("parent_entity") == mover_eid
+            }
+            if sd["positions"].get(p_name) == mv["to_room"] \
+                    and player_room_now in interior:
+                sd["positions"].pop(p_name, None)
+                ctx.warnings.append(
+                    f"Vehicle movement (mover={mover_eid!r}): stripped a "
+                    f"resolve-asserted move of {p_name!r} to "
+                    f"'{mv['to_room']}' -- the player rides inside the "
+                    "vehicle's interior; only the vehicle's position moves."
+                )
 
     if not out.get("resolved_event"):
         parts = []

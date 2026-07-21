@@ -1,5 +1,6 @@
 """Atomic world-state commit with mutation validation."""
 
+import copy
 import json, time, random, re, hashlib, threading, weakref
 from concurrent.futures import ThreadPoolExecutor
 from db import q, qi, qtx, transaction, wget, wset
@@ -7,7 +8,7 @@ from memory import (
     add_memories_batch, prepare_memories_batch, delete_turn_memories, search_lore, add_lore,
     update_lore, delete_lore, LORE_CATEGORIES, LOREBOOK_TYPES,
     chat_lorebook_ids, chat_lorebook_weights, lorebook_manifest, dump_chat_memories,
-    move_lorebook,
+    add_lorebook_link,
     restore_chat_memories, dump_lorebook, restore_lorebook,
     knowledge_for_character, get_relationships,
     save_relationships, update_relationships_from_inference,
@@ -19,7 +20,7 @@ from character_schema import character_name, new_uid
 from frames import is_recognized_in_frame
 from scene import set_char_state, set_char_status
 from spatial import (apply_transit_dock_edges, merge_scene_with_diff,
-                     spatial_rel, hear_level)
+                     normalize_room_id, spatial_rel, hear_level)
 from theory_of_mind import apply_mind_model_updates
 from paradox import check_and_apply_paradox
 from spatial_frames import detect_and_reconcile as detect_and_reconcile_spatial
@@ -83,17 +84,42 @@ def _normalize_character_output(out):
 
 # ---- Scene commit with entity-aware merge ----
 
+def _anchor_current_room(sc, entity_id):
+    """The anchor entity's current exterior room, tolerating positions
+    keyed by entity id, display name, or alias (the same read tolerance
+    spatial._entity_exterior_room applies)."""
+    positions = sc.get("positions") or {}
+    if entity_id in positions:
+        return positions[entity_id]
+    ent = (sc.get("entities") or {}).get(entity_id)
+    if isinstance(ent, dict):
+        for cand in [ent.get("name"), *(ent.get("aliases") or [])]:
+            cand = str(cand or "").strip()
+            if cand and cand in positions:
+                return positions[cand]
+    return None
+
+
 def sync_anchored_books(cid, sc):
-    """A vehicle-class (or any anchor_entity_id-flagged) lorebook follows
-    its anchor entity's current room -- reparenting under whichever
-    attached lorebook's scope_location_id matches, so the vehicle's own
-    lore (and everything parented under it: crew logs, cabin books,
-    which travel automatically via ordinary parent_id lineage) follows
-    the vehicle instead of staying pinned to wherever it started.
-    mapping_stage's only job is proposing the entity's own movement,
-    already handled by the ordinary state_diff.positions path this runs
-    after -- this is the deterministic mechanical follow-through, not
-    something an LLM decides directly.
+    """A vehicle-class (or any anchor_entity_id-flagged) lorebook tracks
+    its anchor entity's current room via a 'currently_within' lorebook
+    link -- presence ("is at"), rewritten from scene positions at every
+    commit. parent_id is canonical containment ("belongs to") and is
+    NEVER mutated here: the old behavior reparented the book to follow
+    the vehicle, collapsing the two relations into one and destroying
+    the authored hierarchy every time the vehicle docked somewhere new.
+
+    The link targets the book of wherever the anchor currently is:
+    - the room is another anchored entity's interior (a van aboard a
+      ferry) -> that entity's own anchored book, giving the true nesting
+      chain the monitoring walk (memory.monitoring_subtree) reads;
+    - otherwise the location book whose scope_location_id matches the
+      room.
+    follow_for_retrieval stays on (default weight) so docked-location
+    lore remains reachable through the vehicle book via
+    resolve_lorebook_graph. The link is retrieval bookkeeping ONLY --
+    it must never be read as perception authorization; what an observer
+    aboard actually perceives stays with the epistemic/spatial layer.
     """
     anchored = q(
         "SELECT id, anchor_entity_id, parent_id FROM lorebooks "
@@ -102,22 +128,44 @@ def sync_anchored_books(cid, sc):
     )
     if not anchored:
         return
-    positions = sc.get("positions") or {}
+    book_by_anchor = {b["anchor_entity_id"]: b["id"] for b in anchored}
+    rooms = sc.get("rooms") or {}
     for book in anchored:
-        room = positions.get(book["anchor_entity_id"])
+        room = _anchor_current_room(sc, book["anchor_entity_id"])
         if not room:
+            # No recorded position -> nothing to derive from; leave the
+            # last known presence link standing (mirrors the old
+            # missing-position behavior).
             continue
-        target = q(
-            "SELECT id FROM lorebooks WHERE chat_id=? AND scope_location_id=? "
-            "ORDER BY id LIMIT 1",
-            (cid, room), one=True,
+        room_def = rooms.get(room)
+        parent_entity = room_def.get("parent_entity") \
+            if isinstance(room_def, dict) else None
+        target_id = None
+        if parent_entity and parent_entity != book["anchor_entity_id"]:
+            target_id = book_by_anchor.get(parent_entity)
+        if target_id is None:
+            target = q(
+                "SELECT id FROM lorebooks WHERE chat_id=? AND "
+                "scope_location_id=? ORDER BY id LIMIT 1",
+                (cid, room), one=True,
+            )
+            target_id = target["id"] if target else None
+        if target_id == book["id"]:
+            target_id = None
+        current = q(
+            "SELECT id, target_book_id FROM lorebook_links "
+            "WHERE source_book_id=? AND relation_type='currently_within'",
+            (book["id"],),
         )
-        if not target or target["id"] == book["parent_id"]:
-            continue
-        try:
-            move_lorebook(book["id"], target["id"])
-        except ValueError:
-            pass
+        for link in current:
+            if link["target_book_id"] != target_id:
+                qi("DELETE FROM lorebook_links WHERE id=?", (link["id"],))
+        if target_id is not None \
+                and not any(l["target_book_id"] == target_id for l in current):
+            try:
+                add_lorebook_link(book["id"], target_id, "currently_within")
+            except ValueError:
+                pass
 
 def _guard_occupied_mover_removal(prev_scene, diff):
     """Deterministic refusal: removing an entity whose parent_entity-linked
@@ -165,6 +213,288 @@ def _guard_occupied_mover_removal(prev_scene, diff):
                 "departure in cast_changes in the same beat"
             )
 
+# ---- Room registry (derived) + commit-side structural dedup ----
+#
+# Two live failure classes share one root: nothing at commit time knew which
+# rooms an owner (a vehicle, the current location) ALREADY has. (1) Two
+# structurally identical vehicles minting the same interior key ("deck_3")
+# silently merged one ship's deck into the other's. (2) The same owner's
+# room re-minted under a fresh key ("deck_three" for an existing "Deck 3")
+# created a live duplicate that only the advisory remove_rooms self-heal
+# might later clean up. The registry below records each room as a DERIVED
+# lore_entries row (category 'layout', entry_uid 'room:<book_id>:<room_key>')
+# under its owning vehicle/location book, rewritten at every commit -- the
+# scene JSON stays the sole authority for live rooms; the registry is a
+# ledger, never a cage: a colliding mint is REDIRECTED or REKEYED, never
+# rejected (invention is always allowed, duplication is not).
+
+def _anchored_book_ids(cid):
+    return {
+        row["anchor_entity_id"]: row["id"]
+        for row in q(
+            "SELECT id, anchor_entity_id FROM lorebooks "
+            "WHERE chat_id=? AND anchor_entity_id IS NOT NULL",
+            (cid,),
+        )
+    }
+
+def _room_display_slug(room_id, room_def):
+    name = ""
+    if isinstance(room_def, dict):
+        name = str(room_def.get("name") or "")
+    return normalize_room_id(name or str(room_id))
+
+def _registry_alias_index(book_id):
+    """{normalized name/alias: room_key} for every room registered under
+    one owning book -- read from the derived registry rows themselves."""
+    index = {}
+    prefix = f"room:{book_id}:"
+    for row in q(
+        "SELECT entry_uid, keys FROM lore_entries "
+        "WHERE lorebook_id=? AND category='layout' AND entry_uid LIKE ?",
+        (book_id, prefix + "%"),
+    ):
+        room_key = row["entry_uid"][len(prefix):]
+        for alias in str(row["keys"] or "").split(","):
+            slug = normalize_room_id(alias)
+            if slug:
+                index.setdefault(slug, room_key)
+        index.setdefault(normalize_room_id(room_key), room_key)
+    return index
+
+def _apply_room_renames(diff, renames):
+    """Rewrite every reference to a renamed/redirected room key inside the
+    diff: the rooms table itself, adjacency 'to' edges, positions, room
+    removals, entity interior_rooms, and transit destinations."""
+    rooms = diff.get("rooms")
+    if isinstance(rooms, dict):
+        for old, new in renames.items():
+            if old not in rooms:
+                continue
+            moved = rooms.pop(old)
+            existing = rooms.get(new)
+            if isinstance(existing, dict) and isinstance(moved, dict):
+                merged = dict(existing)
+                for key, value in moved.items():
+                    if value or key not in merged:
+                        merged[key] = value
+                rooms[new] = merged
+            else:
+                rooms[new] = moved
+        for room in rooms.values():
+            if not isinstance(room, dict):
+                continue
+            for edge in room.get("adjacent") or []:
+                if isinstance(edge, dict) and edge.get("to") in renames:
+                    edge["to"] = renames[edge["to"]]
+    positions = diff.get("positions")
+    if isinstance(positions, dict):
+        for name, room in list(positions.items()):
+            if room in renames:
+                positions[name] = renames[room]
+    if isinstance(diff.get("remove_rooms"), list):
+        diff["remove_rooms"] = [
+            renames.get(r, r) for r in diff["remove_rooms"]
+        ]
+    for edge in diff.get("remove_adjacent") or []:
+        if isinstance(edge, dict):
+            if edge.get("room") in renames:
+                edge["room"] = renames[edge["room"]]
+            if edge.get("to") in renames:
+                edge["to"] = renames[edge["to"]]
+    for ent in (diff.get("entities") or {}).values():
+        if not isinstance(ent, dict):
+            continue
+        if isinstance(ent.get("interior_rooms"), list):
+            ent["interior_rooms"] = [
+                renames.get(r, r) for r in ent["interior_rooms"]
+            ]
+        state = ent.get("state")
+        transit = state.get("transit") if isinstance(state, dict) else None
+        if isinstance(transit, dict):
+            for field in ("destination_room", "route_room"):
+                if transit.get(field) in renames:
+                    transit[field] = renames[transit[field]]
+
+def dedup_minted_rooms(cid, prev_scene, diff, add_warning=None):
+    """Structural dup prevention at creation time. For each room key the
+    diff mints, check the CURRENT CONTAINMENT SCOPE (rooms sharing the same
+    parent_entity owner -- None = the open location -- plus the owning
+    book's registry aliases) before accepting it:
+
+    - same key, DIFFERENT declared owner than the existing room (the
+      two-ship 'deck_3' class): the incoming room is a new room of ITS
+      owner colliding on a flat key -- REKEY it to an owner-scoped id;
+    - new key whose name/alias collides with an existing room of the SAME
+      scope (a re-mint of 'Deck 3' as 'deck_three'): REDIRECT the diff onto
+      the existing id instead of minting a duplicate.
+
+    Mutates `diff` in place (rewriting the room key and every reference:
+    positions, adjacency, interiors, transit) and returns {old: new}.
+    Never rejects a genuinely new room -- ledger, not cage. The advisory
+    remove_rooms self-heal in prepare_scene_commit stays as the backstop
+    for duplicates that predate this check.
+    """
+    rooms = diff.get("rooms")
+    if not isinstance(rooms, dict) or not rooms:
+        return {}
+    prev_rooms = prev_scene.get("rooms") or {}
+    anchor_books = _anchored_book_ids(cid)
+    registry_cache = {}
+    renames = {}
+    taken = set(prev_rooms) | set(rooms)
+
+    def unique_key(base):
+        candidate = base
+        suffix = 2
+        while candidate in taken:
+            candidate = f"{base}_{suffix}"
+            suffix += 1
+        taken.add(candidate)
+        return candidate
+
+    for rid in list(rooms.keys()):
+        rdef = rooms[rid]
+        if not isinstance(rdef, dict):
+            continue
+        incoming_owner = rdef.get("parent_entity")
+        existing = prev_rooms.get(rid)
+        if isinstance(existing, dict):
+            existing_owner = existing.get("parent_entity")
+            if incoming_owner and existing_owner \
+                    and incoming_owner != existing_owner:
+                new_id = unique_key(
+                    normalize_room_id(f"{incoming_owner}_{rid}"))
+                renames[rid] = new_id
+                if add_warning:
+                    add_warning(
+                        f"Room key collision: '{rid}' already belongs to "
+                        f"{existing_owner!r}; the new room declared for "
+                        f"{incoming_owner!r} was rekeyed to '{new_id}'."
+                    )
+            continue
+        # Brand-new key: name/alias dedup within the same containment scope.
+        slug = _room_display_slug(rid, rdef)
+        rid_slug = normalize_room_id(rid)
+        match = None
+        for prev_id, prev_def in prev_rooms.items():
+            if not isinstance(prev_def, dict):
+                continue
+            if prev_def.get("parent_entity") != incoming_owner:
+                continue
+            if _room_display_slug(prev_id, prev_def) == slug \
+                    or normalize_room_id(prev_id) in (slug, rid_slug):
+                match = prev_id
+                break
+        if match is None and incoming_owner in anchor_books:
+            book_id = anchor_books[incoming_owner]
+            if book_id not in registry_cache:
+                registry_cache[book_id] = _registry_alias_index(book_id)
+            registered = registry_cache[book_id].get(slug) \
+                or registry_cache[book_id].get(rid_slug)
+            if registered and registered in prev_rooms:
+                match = registered
+        if match and match != rid:
+            renames[rid] = match
+            if add_warning:
+                add_warning(
+                    f"Duplicate room mint: '{rid}' matches existing room "
+                    f"'{match}' in the same scope; redirected instead of "
+                    "minting a duplicate."
+                )
+
+    if renames:
+        _apply_room_renames(diff, renames)
+    return renames
+
+def _prepare_room_registry(cid, canon_book_id, sc):
+    """Build the derived registry rows for this commit -- pure reads plus a
+    batched embedding call, so it runs in preparation, before the write
+    lock. Each room registers under its owning book: parent_entity rooms
+    under the entity's anchored book; open-location rooms under the book
+    whose scope_location_id matches the location (falling back to chat
+    canon). Rows are DERIVED -- rewritten every commit, never a second
+    authority over the scene JSON."""
+    rooms = sc.get("rooms") or {}
+    entities = sc.get("entities") or {}
+    anchor_books = _anchored_book_ids(cid)
+    location_slug = normalize_room_id(str(sc.get("location") or ""))
+    location_book = None
+    if location_slug:
+        row = q(
+            "SELECT id FROM lorebooks WHERE chat_id=? AND "
+            "scope_location_id=? ORDER BY id LIMIT 1",
+            (cid, location_slug), one=True,
+        )
+        location_book = row["id"] if row else None
+    default_book = location_book or canon_book_id
+
+    plan = {}
+    for rid, rdef in rooms.items():
+        if not isinstance(rdef, dict):
+            continue
+        owner = rdef.get("parent_entity")
+        book_id = anchor_books.get(owner) if owner else default_book
+        if not book_id:
+            continue
+        name = str(rdef.get("name") or rid)
+        if owner:
+            ent = entities.get(owner)
+            owner_label = (ent.get("name") if isinstance(ent, dict) else "") \
+                or owner
+            place = f"aboard {owner_label}"
+        else:
+            place = f"at {sc.get('location') or 'this location'}"
+        keys = ", ".join(dict.fromkeys(
+            [name, str(rid).replace("_", " ")]))
+        content = f"Room registry: {name} (room id '{rid}') {place}."
+        plan.setdefault(book_id, {})[str(rid)] = {
+            "entry_uid": f"room:{book_id}:{rid}",
+            "keys": keys, "content": content,
+        }
+
+    upserts, stale_ids = [], []
+    # Sweep every book that can hold registry rows, including one whose
+    # last registered room disappeared this beat (it has no plan entry at
+    # all -- exactly the case whose stale rows must still be removed).
+    registry_books = set(anchor_books.values()) | set(plan)
+    if default_book:
+        registry_books.add(default_book)
+    for book_id in sorted(registry_books):
+        entries = plan.get(book_id, {})
+        prefix = f"room:{book_id}:"
+        existing = {
+            row["entry_uid"]: row
+            for row in q(
+                "SELECT id, entry_uid, keys, content FROM lore_entries "
+                "WHERE lorebook_id=? AND category='layout' "
+                "AND entry_uid LIKE 'room:%'",
+                (book_id,),
+            )
+        }
+        for uid, row in existing.items():
+            # Stale: a registered room no longer live, or a row carried in
+            # under another book's uid prefix (chat import copies rows
+            # verbatim; the registry is derived, so rewrite it wholesale).
+            if not uid.startswith(prefix) or uid[len(prefix):] not in entries:
+                stale_ids.append(row["id"])
+        for entry in entries.values():
+            old = existing.get(entry["entry_uid"])
+            if old and old["keys"] == entry["keys"] \
+                    and old["content"] == entry["content"]:
+                continue
+            upserts.append({
+                "book_id": book_id,
+                "existing_id": old["id"] if old else None,
+                **entry,
+            })
+    if upserts:
+        vectors = embed_texts(
+            [f"{r['keys']} {r['content']}" for r in upserts])
+        for row, vector in zip(upserts, vectors):
+            row["embedding"] = vector
+    return {"upserts": upserts, "stale_ids": stale_ids}
+
 def prepare_scene_commit(ctx):
     """Build the exact post-turn scene without mutating durable state.
 
@@ -176,8 +506,13 @@ def prepare_scene_commit(ctx):
     chat = ctx.chat
     cid = chat.id
     res = ctx.director_resolve or ctx.director_establish or {}
-    diff = res.get("state_diff") or {}
+    # Deep-copied before the dedup pass below rewrites room keys: the
+    # resolve step/variant holding this diff was already persisted, and
+    # mutating the shared dict would desync it from what was saved.
+    diff = copy.deepcopy(res.get("state_diff") or {})
     prev_scene = wget(cid, "scene", {}) or {}
+    room_renames = dedup_minted_rooms(
+        cid, prev_scene, diff, add_warning=ctx.add_warning)
     _guard_occupied_mover_removal(prev_scene, diff)
     sc = merge_scene_with_diff(prev_scene, diff)
 
@@ -189,6 +524,7 @@ def prepare_scene_commit(ctx):
     interp = ctx.director_interpret or {}
     mv = interp.get("movement")
     target_room = mv.get("to_room") if isinstance(mv, dict) else None
+    target_room = room_renames.get(target_room, target_room)
 
     if target_room and target_room not in sc.get("rooms", {}):
         for entry in staged:
@@ -301,17 +637,38 @@ def prepare_scene_commit(ctx):
         diff.get("cast_changes") or [],
     )
 
-    return {"scene": sc, "clock": clock}
+    return {
+        "scene": sc, "clock": clock,
+        "room_registry": _prepare_room_registry(cid, chat.lorebook_id, sc),
+    }
 
 
 def commit_scene(ctx, nonce, *, prepared=None):
     prepared = prepared or prepare_scene_commit(ctx)
     sc = prepared["scene"]
+    registry = prepared.get("room_registry") or {}
     with transaction():
         if prepared.get("clock") is not None:
             wset(ctx.chat.id, "simulation_clock", prepared["clock"])
         wset(ctx.chat.id, "scene", sc)
         sync_anchored_books(ctx.chat.id, sc)
+        # Rewrite the derived room registry (see the dedup block comment):
+        # embeddings were prepared before the write lock; these rows are
+        # reconstructible bookkeeping, never a second authority.
+        for entry_id in registry.get("stale_ids") or []:
+            delete_lore(entry_id)
+        for row in registry.get("upserts") or []:
+            if row.get("existing_id"):
+                update_lore(
+                    row["existing_id"], row["keys"], row["content"],
+                    "layout", embedding=row.get("embedding"),
+                )
+            else:
+                add_lore(
+                    row["book_id"], row["keys"], row["content"],
+                    category="layout", entry_uid=row["entry_uid"],
+                    importance=0.2, embedding=row.get("embedding"),
+                )
     return sc
 
 # ---- Transit sweep: timed arrivals, condition expiry, engine notices ----
