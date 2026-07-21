@@ -173,6 +173,46 @@ def _first_sentences(text, n=2):
     )
     return " ".join(parts[:n]).strip()
 
+# Canonical player token left in imported text. We deliberately do NOT
+# substitute in a persona/player name at import time -- imported cards are
+# authored against whoever will eventually play them, and inventing a persona
+# name here would fabricate identity the card never stated. A stable, readable
+# token is enough to stop a literal "{{user}}" from rendering to the player;
+# see docs/GREETING_IMPORT_DESIGN.md's PLAYER token.
+PLAYER_TOKEN = "{{PLAYER}}"
+
+# SillyTavern / chub / JanitorAI card macros. {{char}}/<BOT> resolve to the
+# character's own name; {{user}}/<USER> resolve to the neutral player token.
+# Case-insensitive, tolerating the whitespace SillyTavern allows ({{ char }}).
+_CHAR_MACRO_RE = re.compile(r"\{\{\s*char\s*\}\}|<BOT>", re.IGNORECASE)
+_USER_MACRO_RE = re.compile(r"\{\{\s*user\s*\}\}|<USER>", re.IGNORECASE)
+
+
+def _substitute_macros(text, char_name):
+    """Resolve {{char}}/<BOT> and {{user}}/<USER> in a single string. Without
+    this, a literal '{{user}}' or '{{char}}' from an imported card renders
+    verbatim to the player (audit finding #24)."""
+    if not isinstance(text, str) or not text:
+        return text
+    if char_name:
+        text = _CHAR_MACRO_RE.sub(str(char_name), text)
+    return _USER_MACRO_RE.sub(PLAYER_TOKEN, text)
+
+
+def _substitute_card_macros(obj, char_name):
+    """Deep-copy `obj`, substituting card macros in every string leaf. Card
+    text (description, first_mes, scenario, mes_example, lorebook content, ...)
+    can carry macros anywhere, so this walks the whole structure rather than
+    enumerating fields. The original payload stored as `source` is untouched --
+    only the derived sheet/lore content the player actually sees is rewritten."""
+    if isinstance(obj, str):
+        return _substitute_macros(obj, char_name)
+    if isinstance(obj, dict):
+        return {k: _substitute_card_macros(v, char_name) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_substitute_card_macros(v, char_name) for v in obj]
+    return obj
+
 def _native_payload(payload, expected_kind):
     if not isinstance(payload, dict):
         return None
@@ -238,6 +278,9 @@ def _reinterpret_payload(payload):
 
 def heuristic_character_sheet(d):
     name = d.get("name") or "Unnamed"
+    # Resolve {{char}}/{{user}} before any card text is copied into the sheet,
+    # so a literal "{{user}}" never survives into first_message/history.
+    d = _substitute_card_macros(d, name)
     desc = d.get("description") or ""
     personality = d.get("personality") or ""
 
@@ -405,7 +448,7 @@ def import_character(payload, reinterpret=False):
     book = card.get("character_book")
     if isinstance(book, dict) and book.get("entries"):
         import_lorebook(
-            book,
+            _substitute_card_macros(book, name),
             name=f"{name} — book",
             book_type="characters",
             summary=f"Companion lore for {name}.",
@@ -443,6 +486,7 @@ def import_persona(payload, reinterpret=False):
                 ) from exc
     else:
         name = card.get("name") or "Player"
+        card = _substitute_card_macros(card, name)
         desc = (
             card.get("description")
             or card.get("personality")
@@ -747,7 +791,14 @@ def import_lorebook(payload, name=None, reinterpret=False,
     src = payload.get("entries") if isinstance(payload, dict) else payload
     if isinstance(src, dict):
         src = list(src.values())
-    src = [e for e in (src or []) if isinstance(e, dict) and not e.get("disable")]
+    # Skip author-disabled entries. World Info exports mark them with
+    # `disable: true`; character-card-spec-v2 `character_book` entries use
+    # `enabled: false` (default true). Both must be excluded, or an entry the
+    # author switched OFF gets imported as active canon lore (audit #24).
+    src = [
+        e for e in (src or [])
+        if isinstance(e, dict) and not e.get("disable") and e.get("enabled", True) is not False
+    ]
 
     # A payload this project exported stamps every entry with the
     # entry_uid add_lore always assigns on creation -- no foreign World

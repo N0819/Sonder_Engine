@@ -150,8 +150,16 @@ def is_memory_visible(char_id, memory_frame_id, viewer_frame_id, memory_turn_idx
             # parent it split FROM -- only the shared history up to the
             # split is visible; the parent's post-split memories are the
             # other side's business, not yet this side's.
+            #
+            # Fail CLOSED on a missing turn_idx. A parent-side memory formed
+            # without a turn_id (e.g. one added outside the numbered-turn
+            # pipeline) has NULL turn_idx; treating that as pre-split
+            # (returning True) leaked the parent's post-split memories across
+            # an active, unmerged split -- exactly the incomparability this
+            # rule exists to enforce. With no positive proof the memory
+            # predates the split, it is not this side's to see.
             if memory_turn_idx is None:
-                return True  # no turn_idx recorded -- err toward the pre-split assumption
+                return False
             return memory_turn_idx <= (viewer_frame.get("split_turn_idx") or 0)
 
         memory_frame = get_frame(memory_frame_id)

@@ -88,9 +88,20 @@ def verify_host_login(username: str, password: str) -> bool:
     stored_hash = get_setting(HOST_PW_HASH_SETTING)
     if not stored_username or not stored_salt or not stored_hash:
         return False
-    username_ok = secrets.compare_digest(stored_username, username.strip())
+    # compare_digest raises TypeError on a str containing non-ASCII code
+    # points (it is ASCII-only for the str overload). A host who chose a
+    # username with any non-ASCII character (accents, non-Latin scripts,
+    # an emoji) would then 500 on every login attempt -- a permanently
+    # broken, unrecoverable account. Compare the UTF-8 byte encodings
+    # instead, which is well-defined for any string and equally
+    # constant-time. stored_hash / _hash_password are hex ASCII, but encode
+    # both sides uniformly for the same guarantee.
+    username_ok = secrets.compare_digest(
+        stored_username.encode("utf-8"), username.strip().encode("utf-8")
+    )
     password_ok = secrets.compare_digest(
-        stored_hash, _hash_password(password, stored_salt)
+        stored_hash.encode("utf-8"),
+        _hash_password(password, stored_salt).encode("utf-8"),
     )
     return username_ok and password_ok
 
@@ -203,11 +214,30 @@ def redeem_code(code: str) -> dict | None:
         return None
 
     token = secrets.token_urlsafe(32)
+    token_hash = _hash(token)
+    # Claim the grant ATOMICALLY. The SELECT above is only a fast pre-check;
+    # it is NOT the guard. Two requests racing the same live code both pass
+    # the SELECT (redeemed_at still NULL for both), and without an atomic
+    # claim both would issue a distinct token off one single-use code. The
+    # `redeemed_at IS NULL` predicate on the UPDATE is the real guard: SQLite
+    # serializes the two UPDATEs, so exactly one writer sees redeemed_at still
+    # NULL and wins; the loser's UPDATE matches zero rows and changes nothing.
+    # (qi returns lastrowid, not the affected-row count, so we confirm the
+    # win by reading back token_hash: after both UPDATEs settle the row holds
+    # exactly one winner's hash -- if it is ours, we redeemed it; if not,
+    # another request claimed this code first and we must reject.)
     qi(
         "UPDATE guest_grants SET redeemed_at=?, token_hash=?, token_expires=? "
-        "WHERE id=?",
-        (now, _hash(token), now + GUEST_TOKEN_TTL, grant["id"]),
+        "WHERE id=? AND redeemed_at IS NULL",
+        (now, token_hash, now + GUEST_TOKEN_TTL, grant["id"]),
     )
+    claimed = q(
+        "SELECT token_hash FROM guest_grants WHERE id=?",
+        (grant["id"],),
+        one=True,
+    )
+    if not claimed or claimed["token_hash"] != token_hash:
+        return None  # lost the race -- another request already claimed this code
     return {
         "token": token,
         "chat_id": grant["chat_id"],

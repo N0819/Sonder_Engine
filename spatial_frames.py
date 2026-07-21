@@ -551,11 +551,45 @@ def detect_merge(chat_id, frame_id):
     child_scene = wget_for_frame(chat_id, "scene", child_id, {}) or {}
     parent_zones = set(zone_groups(chat_id, parent_id, parent_scene))
     child_zones = set(zone_groups(chat_id, child_id, child_scene))
+    # Merge is one-way and unrecoverable: perform_merge sets merged_turn_idx,
+    # which restores permanent bidirectional memory visibility across the two
+    # parties. It must therefore fail CLOSED -- require POSITIVE evidence that
+    # the parties are genuinely back together before collapsing the split.
+    #
+    # Two valid signals: (a) both sides positively share a declared zone, or
+    # (b) a member of each side is standing in the SAME room (a reunion in an
+    # as-yet-unzoned room). The previously-present "both zone sets empty"
+    # branch is a bug: two EMPTY zone sets -- e.g. each party in its own
+    # newly-created, not-yet-zoned room light-years apart -- is the ABSENCE of
+    # evidence, not evidence of reunion, and merging on it leaked permanent
+    # bidirectional memory across an active split.
     if parent_zones & child_zones:
         return (parent_id, child_id)
-    if not parent_zones and not child_zones:
+    if _parties_share_a_room(chat_id, parent_id, parent_scene, child_id, child_scene):
         return (parent_id, child_id)
     return None
+
+
+def _parties_share_a_room(chat_id, parent_id, parent_scene, child_id, child_scene):
+    """True iff at least one member of the parent side and one member of the
+    child side are standing in the same room id. This is the only "no
+    declared zone yet" reunion signal safe to merge on -- unlike two empty
+    zone sets, a shared room id is positive proof of co-location, not merely
+    the absence of a zone tag. Rooms live in separate frame-scoped scenes, so
+    membership is resolved per side against that side's own positions."""
+    parent_positions = parent_scene.get("positions") or {}
+    child_positions = child_scene.get("positions") or {}
+    parent_rooms = {
+        parent_positions.get(name)
+        for name in _all_party_names(chat_id, parent_id)
+        if parent_positions.get(name)
+    }
+    if not parent_rooms:
+        return False
+    for name in _all_party_names(chat_id, child_id):
+        if child_positions.get(name) in parent_rooms:
+            return True
+    return False
 
 
 def perform_merge(chat_id, parent_frame_id, child_frame_id, turn_idx):

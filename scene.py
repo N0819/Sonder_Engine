@@ -492,7 +492,7 @@ def private_knowledge_for(chat, viewer_name, frame_id=None):
         if isinstance(e, dict) and e.get("content"):
             kb = [str(x).lower().strip() for x in (e.get("known_by") or [])]
             if vn in kb:
-                out.append({"about": pers.get("name"),
+                out.append({"about": persona_name(pers),
                             "content": e["content"],
                             "source": "something you privately know about them"})
     return out
