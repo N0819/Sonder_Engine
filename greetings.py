@@ -19,7 +19,7 @@ from character_schema import (
 )
 from llm_quality import complete_validated_json
 from prompts import get_prompt
-from memory import add_memory
+from memory import add_memory, duplicate_lorebook_for_chat
 from agents.runtime import _run_pipeline
 from agents.storage import active_content
 
@@ -77,16 +77,26 @@ def _override_narrator(tid: int, prose: str) -> None:
           (step["id"], json.dumps(content, ensure_ascii=False), time.time()))
 
 
-def start_story(char_id: int, persona_id: int, greeting_index: int = 0) -> tuple[int, int]:
+def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
+                lorebook_id: int | None = None) -> tuple[int, int]:
     """'Start story now': create a chat seeded from a character's greeting.
     The greeting is shown verbatim; its private knowledge routes to the
-    character. Returns (chat_id, turn_id)."""
+    character. An optional lorebook is attached before turn 0 runs, so the
+    opening establishment can already draw on that world's lore. Returns
+    (chat_id, turn_id)."""
     ch = db.q("SELECT * FROM characters WHERE id=?", (char_id,), one=True)
     per = db.q("SELECT * FROM personas WHERE id=?", (persona_id,), one=True)
     if not ch:
         raise ValueError(f"character {char_id} not found")
     if not per:
         raise ValueError(f"persona {persona_id} not found")
+    # Resolve the optional lorebook up front so a bad id aborts before any
+    # chat/cast rows are created, rather than half-building a story.
+    lb = None
+    if lorebook_id:
+        lb = db.q("SELECT * FROM lorebooks WHERE id=?", (int(lorebook_id),), one=True)
+        if not lb:
+            raise ValueError(f"lorebook {lorebook_id} not found")
     sheet = json.loads(ch["sheet"])
     psheet = json.loads(per["sheet"])
     p_name = persona_name(psheet)
@@ -117,6 +127,18 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0) -> tuple
     db.wset(cid, "simulation_clock", {"elapsed_seconds": 0.0,
                                       "display": sub(extraction.get("time") or "now"),
                                       "time_scale": "scene"})
+
+    # Attach the chosen lorebook before turn 0 runs. A global (template) book is
+    # duplicated into a per-chat copy the same way attach_lore does; a book that
+    # is already chat-scoped attaches directly.
+    if lb:
+        if lb["chat_id"] == cid:
+            new_lb, origin = lb["id"], lb["origin_id"]
+        else:
+            new_lb = duplicate_lorebook_for_chat(lb["id"], cid)
+            origin = lb["id"]
+        db.qi("INSERT INTO chat_lorebooks(chat_id,lorebook_id,origin_id,enabled) "
+              "VALUES(?,?,?,1)", (cid, new_lb, origin))
 
     # Route the character's private knowledge to character memory. Memories are
     # per-character and never enter the player's perception, so an

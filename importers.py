@@ -213,6 +213,28 @@ def _substitute_card_macros(obj, char_name):
         return [_substitute_card_macros(v, char_name) for v in obj]
     return obj
 
+def _card_greetings(card, name):
+    """first_mes + alternate_greetings -> the swipeable opening.greetings list,
+    macros resolved. Shared by every import path (heuristic AND AI-reinterpret)
+    and by recover_greetings, so alternate greetings are captured no matter how
+    the rest of the sheet was built. greeting_id is a stable content hash so a
+    re-capture of the same prose keeps the same id."""
+    if not isinstance(card, dict):
+        return []
+    raw = [card.get("first_mes")] + list(card.get("alternate_greetings") or [])
+    out = []
+    for g in raw:
+        text = _substitute_macros(str(g or ""), name).strip()
+        if not text:
+            continue
+        out.append({
+            "greeting_id": "greet_" + hashlib.sha1(text.encode("utf-8")).hexdigest()[:16],
+            "prose": text,
+            "extraction": None,
+            "extractor_version": None,
+        })
+    return out
+
 def _native_payload(payload, expected_kind):
     if not isinstance(payload, dict):
         return None
@@ -312,20 +334,9 @@ def heuristic_character_sheet(d):
     sheet["knowledge"]["public_history"] = d.get("scenario") or ""
     sheet["opening"]["first_message"] = d.get("first_mes") or ""
     # Capture first_mes + alternate_greetings as a swipeable greetings list
-    # (macros already normalized to {{PLAYER}} above). greeting_id is a stable
-    # hash so re-extraction and swipe references survive edits elsewhere.
-    raw_greetings = [d.get("first_mes")] + list(d.get("alternate_greetings") or [])
-    greetings = []
-    for g in raw_greetings:
-        text = str(g or "").strip()
-        if not text:
-            continue
-        greetings.append({
-            "greeting_id": "greet_" + hashlib.sha1(text.encode("utf-8")).hexdigest()[:16],
-            "prose": text,
-            "extraction": None,
-            "extractor_version": None,
-        })
+    # (macros already normalized to {{PLAYER}} above; _card_greetings is
+    # idempotent on already-substituted text).
+    greetings = _card_greetings(d, name)
     if greetings:
         sheet["opening"]["greetings"] = greetings
     return sheet
@@ -448,6 +459,19 @@ def import_character(payload, reinterpret=False):
         sheet = heuristic_character_sheet(card)
 
     name = character_name(sheet)
+    # Capture the author's greetings for the swipe/quick-start UI on EVERY
+    # import path. heuristic_character_sheet already fills this; the AI-
+    # reinterpret path does not (the model returns a fresh sheet with no
+    # greetings), so without this backfill alternate greetings were silently
+    # lost for reinterpreted imports. Greetings are verbatim authored prose and
+    # must survive regardless of how the rest of the sheet was built.
+    opening = sheet.setdefault("opening", {})
+    if not opening.get("greetings"):
+        greetings = _card_greetings(card, name)
+        if greetings:
+            opening["greetings"] = greetings
+            if not opening.get("first_message"):
+                opening["first_message"] = greetings[0]["prose"]
     cid = qi(
         "INSERT INTO characters(name,sheet,source,created) "
         "VALUES(?,?,?,?)",
@@ -472,6 +496,32 @@ def import_character(payload, reinterpret=False):
         )
 
     return cid, sheet
+
+def recover_greetings_from_source(char_id):
+    """Backfill opening.greetings for an already-imported character from its
+    stored source card (first_mes + alternate_greetings). Imports made via the
+    AI-reinterpret path (or before greeting capture existed) never stored the
+    alternate greetings; this recovers them losslessly without a re-import.
+    Returns the updated sheet, or None if there was nothing to recover."""
+    row = q("SELECT id,sheet,source FROM characters WHERE id=?", (char_id,), one=True)
+    if not row:
+        return None
+    sheet = json.loads(row["sheet"] or "{}")
+    opening = sheet.setdefault("opening", {})
+    if opening.get("greetings"):
+        return sheet  # already present -- nothing to do
+    src = json.loads(row["source"] or "{}")
+    original = src.get("original") if isinstance(src, dict) else None
+    card = _card_data(original) if isinstance(original, dict) else {}
+    greetings = _card_greetings(card, character_name(sheet))
+    if not greetings:
+        return None
+    opening["greetings"] = greetings
+    if not opening.get("first_message"):
+        opening["first_message"] = greetings[0]["prose"]
+    qi("UPDATE characters SET sheet=? WHERE id=?",
+       (json.dumps(sheet, ensure_ascii=False), char_id))
+    return sheet
 
 def import_persona(payload, reinterpret=False):
     native = _native_payload(payload, "persona")

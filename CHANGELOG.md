@@ -1,5 +1,41 @@
 # Changelog
 
+## alpha1.4.2 — Greeting swipe/quick-start & greeting-capture fix
+
+The greeting-seeded openings shipped in alpha1.4 were captured in the data model
+but never surfaced in the UI, and were silently dropped by one import path. This
+release wires them up end to end.
+
+### Fixed
+- **Greetings are captured on every import path.** `first_mes` +
+  `alternate_greetings` were only captured on the heuristic import path — the
+  **AI-reinterpret** path returned a fresh sheet with no greetings, so any card
+  imported with reinterpretation on lost its alternate greetings entirely. All
+  paths now capture them (shared `importers._card_greetings`).
+- **Editing a character no longer wipes its greetings.** The character editor
+  rebuilt `opening` as just `{first_message}` on save, discarding the greetings
+  list; it now round-trips them.
+
+### Added
+- **Greetings box on the character card.** Opening a saved character shows a
+  greetings editor at the top: swipe between greetings, add, remove, and edit
+  them inline (edits save with the character).
+- **⚡ Quick start with a greeting.** Pick a persona (and optionally attach a
+  lorebook) and launch a story seeded from the selected greeting — shown
+  verbatim as the opening scene, with the character's private knowledge routed
+  to memory. Backed by `POST /api/characters/{id}/start` (now takes an optional
+  `lorebook_id`, attached before turn 0 so the opening can draw on that lore).
+- **Recover greetings from the imported card.** `POST
+  /api/characters/{id}/recover_greetings` (and a "⟲ Recover from card" button)
+  backfill greetings from a character's stored source card, for imports made
+  before capture existed or via the reinterpret path.
+
+### Changed
+- Import dialog now recommends **AI reinterpretation for everything except
+  native sheets** — SillyTavern cards and World Info are built around free-text
+  prose that doesn't map cleanly onto Sonder's structured character model.
+  Greetings and any embedded lorebook are preserved verbatim either way.
+
 ## alpha1.4.1 — Chat import robustness
 
 ### Fixed

@@ -12,9 +12,147 @@ function defaultCharacterSheet() {
   };
 }
 
+// Editable, swipeable greetings for a saved character card. Greetings are
+// captured at import (first_mes + alternate_greetings, stored on
+// sheet.opening.greetings) and can be added/edited/removed here; the list is
+// read back into the main character Save. {{PLAYER}} is the neutral player
+// token, substituted with the real persona name when a story launches.
+// Returns { node, read } -- read() yields the current (edited) greetings list.
+function greetingCarousel(character, initial) {
+  const list = (initial || []).map(g => ({ ...g }));
+  let i = 0;
+
+  const counter = el("span", { class: "small dim" });
+  const ta = el("textarea", {
+    style: "width:100%;min-height:120px;margin-top:6px;font-size:13px",
+    placeholder: "Greeting prose — shown verbatim as the opening scene. "
+      + "Use {{PLAYER}} where the player's name should appear."
+  });
+  ta.oninput = () => {
+    if (list[i]) { list[i].prose = ta.value; list[i].extraction = null; }
+  };
+  const slot = el("div");
+  const render = () => {
+    slot.innerHTML = "";
+    if (!list.length) {
+      counter.textContent = "0 greetings";
+      slot.append(el("div", { class: "small dim", style: "margin-top:6px" },
+        "No greetings yet — add one, or recover them from the imported card."));
+      return;
+    }
+    i = Math.max(0, Math.min(i, list.length - 1));
+    counter.textContent = `Greeting ${i + 1} / ${list.length}`;
+    ta.value = list[i].prose || "";
+    slot.append(ta);
+  };
+
+  const prev = el("button", { title: "Previous greeting",
+    onclick: () => { i -= 1; render(); } }, "‹");
+  const next = el("button", { title: "Next greeting",
+    onclick: () => { i += 1; render(); } }, "›");
+  const add = el("button", { title: "Add a greeting",
+    onclick: () => {
+      list.push({
+        greeting_id: "greet_" + Math.random().toString(16).slice(2, 18),
+        prose: "", extraction: null, extractor_version: null
+      });
+      i = list.length - 1; render();
+    } }, "＋ Add");
+  const del = el("button", { title: "Remove this greeting",
+    onclick: () => { if (list.length) { list.splice(i, 1); render(); } } }, "🗑");
+  const recover = el("button", { title: "Recover greetings from the imported card",
+    onclick: async () => {
+      try {
+        const r = await api("POST", `/api/characters/${character.id}/recover_greetings`);
+        list.length = 0;
+        (r.greetings || []).forEach(g => list.push({ ...g }));
+        if (r.sheet) character.sheet = JSON.stringify(r.sheet);
+        i = 0; render();
+        toast(`Recovered ${list.length} greeting(s) from the card.`, "ok");
+      } catch (e) { toast("Recover failed: " + e.message, "err"); }
+    } }, "⟲ Recover from card");
+  const quick = el("button", { class: "primary",
+    onclick: () => {
+      if (!list.length) { toast("Add a greeting first.", "warn"); return; }
+      // Persist current greetings before launch -- start_story reads the DB.
+      const stored = JSON.parse(character.sheet);
+      const updated = { ...stored,
+        opening: { ...(stored.opening || {}),
+          greetings: list.map(g => ({ ...g })),
+          first_message: list[i] ? list[i].prose : (stored.opening || {}).first_message } };
+      const idx = i;
+      api("PUT", "/api/characters/" + character.id, { sheet: updated })
+        .then(() => { character.sheet = JSON.stringify(updated); quickStartModal(character, idx); })
+        .catch(e => toast("Could not save greetings: " + e.message, "err"));
+    } }, "⚡ Quick start with this greeting");
+
+  render();
+  return {
+    node: el("div", { style: "margin-bottom:4px" },
+      el("div", { class: "row", style: "align-items:center;gap:6px;flex-wrap:wrap" },
+        prev, counter, next, add, del, el("span", { class: "spacer" }), recover),
+      slot,
+      el("div", { class: "row", style: "margin-top:8px" }, quick)),
+    read: () => list.map(g => ({ ...g }))
+  };
+}
+
+// Persona picker -> POST /api/characters/{id}/start with the chosen greeting
+// index. The greeting becomes the opening scene (shown verbatim); the pipeline
+// runs underneath it. See greetings.start_story / docs/GREETING_IMPORT_DESIGN.md.
+function quickStartModal(character, greetingIndex) {
+  const personas = S.boot.personas || [];
+  if (!personas.length) {
+    toast("Create a persona first — quick start needs someone to play as.", "warn");
+    return;
+  }
+  const sel = el("select", { style: "width:100%;margin-top:6px" },
+    ...personas.map(p => el("option", { value: String(p.id) }, p.name)));
+  const books = S.boot.lorebooks || [];
+  const loreSel = el("select", { style: "width:100%;margin-top:6px" },
+    el("option", { value: "" }, "— none —"),
+    ...books.map(b => el("option", { value: String(b.id) },
+      b.name + (b.book_type && b.book_type !== "general" ? ` (${b.book_type})` : ""))));
+  modal("Quick start — " + character.name, b => {
+    b.append(
+      el("div", { class: "small dim" },
+        "Play as which persona? The greeting you selected becomes the opening "
+        + "scene, shown to you verbatim."),
+      sel,
+      el("label", { class: "small dim", style: "display:block;margin-top:10px" },
+        "Attach a lorebook (optional)"),
+      loreSel,
+      el("div", { class: "row", style: "margin-top:12px" },
+        el("button", {
+          class: "primary",
+          onclick: () => {
+            const persona_id = +sel.value;
+            const lorebook_id = loreSel.value ? +loreSel.value : null;
+            backgroundTask("Starting story",
+              () => api("POST", `/api/characters/${character.id}/start`,
+                { persona_id, greeting_index: greetingIndex, lorebook_id }),
+              {
+                onSuccess: async r => {
+                  closeAllModals();
+                  await boot();
+                  await openChat(r.chat_id);
+                },
+                successMessage: "Story started.",
+                errorPrefix: "Quick start failed"
+              });
+          }
+        }, "⚡ Start story")));
+  });
+}
+
 function charEditor(c) {
   const sheet = c ? JSON.parse(c.sheet) : defaultCharacterSheet();
   const f = {};
+  const greetings = Array.isArray(sheet.opening?.greetings)
+    ? sheet.opening.greetings : [];
+  // Editable greetings box (saved characters only -- it needs a real id to
+  // save/recover/quick-start against). gc.read() feeds back into Save below.
+  const gc = c ? greetingCarousel(c, greetings) : null;
 
   f.name = fText("Name", sheet.identity?.name);
   f.aliases = fStrList("Aliases", sheet.identity?.aliases);
@@ -68,6 +206,14 @@ function charEditor(c) {
   const ph = phEditor(sheet.knowledge?.private_history, true);
 
   modal(c ? "Edit character — " + sheet.identity?.name : "New character", b => {
+    if (gc) {
+      b.append(el("div", { class: "card" },
+        el("div", { style: "font-weight:600;margin-bottom:2px" }, "Greetings"),
+        el("div", { class: "small dim", style: "margin-bottom:8px" },
+          "Swipe, add, or remove greetings, and start a story from the one you "
+          + "pick — it becomes the opening scene. Edits save with the character."),
+        gc.node));
+    }
     b.append(
       el("details", { open: "" }, el("summary", {}, "Identity & Simulation"),
         f.name.node, f.aliases.node, f.pronouns.node, f.tier.node, f.temperature.node),
@@ -118,7 +264,14 @@ function charEditor(c) {
             competence: { abilities: f.abilities.read() },
             knowledge: { access_tags, excluded_titles: f.excluded_titles.read(), public_history: f.public_history.read(), private_history: ph.read() },
             initial_state: { mood: { label: f.mood.read(), valence: f.valence.read() || 0, arousal: f.arousal.read() || 0 }, goals: f.goals.read(), active_concerns: f.active_concerns.read() },
-            opening: { first_message: f.first_message.read() }
+            // Persist the (possibly edited) greetings alongside first_message.
+            // gc.read() is the live list from the greetings box; falling back to
+            // the stored list keeps them intact for the new-character form.
+            opening: {
+              ...(sheet.opening || {}),
+              first_message: f.first_message.read(),
+              greetings: gc ? gc.read() : (sheet.opening?.greetings || [])
+            }
           };
           try {
             if (c) await api("PUT", "/api/characters/" + c.id, { sheet: s });
@@ -281,7 +434,13 @@ function importModal(kind) {
         el("div", { class: "ff" }, el("label", {}, "Summary"), sumIn)) : null,
       el("label", { class: "tgl", style: "margin:11px 0" }, re, " AI reinterpretation"),
       el("div", { class: "small dim", style: "margin:-6px 0 11px 0" },
-        "Recommended for anything that isn't already a native sheet or a plain SillyTavern V2/V3 card — the ecosystem has too many export shapes to hand-parse them all."),
+        "Recommended for everything except native sheets this app exported. "
+        + "SillyTavern cards and World Info are built around free-text "
+        + "description/personality prose that doesn't map cleanly onto Sonder's "
+        + "structured character model, so reinterpretation rebuilds the card into "
+        + "a proper native sheet (separating what's visible from what's hidden, "
+        + "structured traits, and so on). Greetings and any embedded lorebook are "
+        + "preserved verbatim either way."),
       el("div", { class: "row", style: "margin-top:12px" },
         el("button", { class: "primary", onclick: () => {
           if (!fileContent) { toast("Choose a valid JSON file first.", "warn"); return }

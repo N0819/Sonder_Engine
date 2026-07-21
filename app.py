@@ -39,6 +39,7 @@ from importers import (
     import_character, import_persona, import_lorebook,
     generate_character, generate_persona, generate_lore_entries,
     reinterpret_lorebook, resolve_import_card, draft_promoted_character,
+    recover_greetings_from_source,
 )
 from commit import commit_all, promotable_background_presences, _known_name_roster
 from prompts import presets, active_preset, get_prompt, DEFAULT_PROMPTS, nsfw_enabled
@@ -1010,12 +1011,24 @@ def character_start_story(cid: int, body: dict = Body(default={})):
     persona_id = body.get("persona_id")
     if persona_id is None:
         raise HTTPException(400, "persona_id required")
+    lorebook_id = body.get("lorebook_id")
     try:
         chat_id, turn_id = greetings.start_story(
-            cid, int(persona_id), int(body.get("greeting_index", 0)))
+            cid, int(persona_id), int(body.get("greeting_index", 0)),
+            lorebook_id=int(lorebook_id) if lorebook_id else None)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     return {"chat_id": chat_id, "turn_id": turn_id}
+
+@app.post("/api/characters/{cid}/recover_greetings")
+def char_recover_greetings(cid: int):
+    """Backfill greetings from the character's stored source card, for imports
+    that predate greeting capture or came through the AI-reinterpret path."""
+    sheet = recover_greetings_from_source(cid)
+    if sheet is None:
+        raise HTTPException(404, "No greetings found in this character's imported card")
+    return {"sheet": sheet,
+            "greetings": (sheet.get("opening") or {}).get("greetings") or []}
 
 @app.get("/api/characters/{cid}/export")
 def char_export(cid: int):
