@@ -46,13 +46,16 @@ def _make_chat_and_char(temp_db):
 def test_newest_memories_survive_truncation_in_a_dense_window(temp_db):
     chat_id, char_id = _make_chat_and_char(temp_db)
 
-    # 15 memories, all within the last 4 turns (turns 8-11), exceeding the
-    # default limit of 12 -- the exact "memory-dense window" scenario.
+    # 15 memories across the last 4 completed turns (8-11), exceeding the
+    # default limit of 12 -- the exact "memory-dense window" scenario. We ask
+    # for the buffer at the ONSET of turn 12 (recent_memory_buffer excludes the
+    # current turn's own committed rows, so current must be past the window's
+    # newest completed turn -- exactly how normal onset flow calls it).
     for i in range(15):
         turn_idx = 8 + (i // 4)  # spreads across turns 8, 9, 10, 11
         _insert_memory(temp_db, chat_id, char_id, turn_idx, f"memory number {i}")
 
-    result = recent_memory_buffer(chat_id, char_id, current_turn_idx=11, turns=4, limit=12)
+    result = recent_memory_buffer(chat_id, char_id, current_turn_idx=12, turns=4, limit=12)
 
     contents = [m["content"] for m in result]
     assert len(contents) == 12
