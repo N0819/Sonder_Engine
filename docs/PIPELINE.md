@@ -129,7 +129,7 @@ Renders the player-facing prose. Fidelity checks and player-echo stripping are a
 `commit_all` first prepares the exact post-turn scene plus all lore and memory embeddings without holding SQLite's write lock. It then invokes every durable domain inside one outer transaction under a per-turn idempotency lock:
 
 1. scene and simulation clock
-2. world entities and placements
+2. world entities and conditions (a derived projection built from the same prepared post-dedup diff as the scene)
 3. cast status/state
 4. paradox checks
 5. spatial-frame reconciliation

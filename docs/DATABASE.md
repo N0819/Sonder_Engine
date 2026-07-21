@@ -23,12 +23,13 @@ The engine uses SQLite. The schema is defined in `db.py`; access is intentionall
 
 ## Structured world tables
 
-- `world_entities`, `world_placements`: persistent entities and containment/placement.
-- `world_events`, `world_conditions`, `scheduled_events`: objective event timeline, active conditions, and future events (`transit_arrival`, `news_arrival`).
-- `room_registry`: normalized room identity/dedup/retirement ledger, keyed `(chat_id, room_uid)` and scoped to an owning lorebook. Authoritative for room identity only — the frame-scoped scene JSON stays authoritative for live rooms/positions. Rooms and lorebooks are retired (`retired_turn_id`), never deleted, on removal/destruction.
+- `world_entities`: normalized projection of the scene's entities, derived at commit from the same post-dedup diff that builds the scene blob (`commit_world_entities(prepared=...)`). Read at runtime only for fixed-point existence checks (`paradox._entity_exists`) and book-anchor alias resolution (`commit._entity_alias_map`).
+- `world_placements`: DECOMMISSIONED (Phase 3a) — no runtime writer or reader; kept only so old snapshots/exports restore. Positions live solely in the frame-scoped `scene.positions`.
+- `world_events`, `world_conditions`, `scheduled_events`: objective event timeline, active conditions, and future events (`transit_arrival`, `news_arrival`). `scheduled_events` is keyed `(chat_id, event_id)` since v16 (same repartition v14 applied to entities/conditions).
+- `room_registry`: the sole cross-frame ledger of room identity/existence-over-time/retirement, keyed `(chat_id, room_uid)` and scoped to an owning lorebook. It is a deterministic projection of every scene write: `commit_scene` maintains it in the same commit domain, and the manual world editor (`world_put`) reconciles it through `commit.sync_room_registry_with_scene`. Rooms and lorebooks are retired (`retired_turn_id`), never deleted, on removal/destruction.
 - `fiction_worlds`, `fiction_locations`, `transit_edges`: DEPRECATED dead macro schema (nothing in the runtime pipeline reads or writes them; kept only so old imports restore — removal is planned).
 
-The structured-world model is only partially integrated. Some physical truth still lives in JSON under the `world` table. Treat the scene dictionary and normalized tables as overlapping representations until the architecture is consolidated.
+Authority model (Phase 3a): the frame-scoped `world.scene` blob is the single runtime source of truth for LIVE rooms/adjacency/positions/entity state — every spatial reader reads it and nothing else. The normalized tables are derived projections of scene commits and must never be treated as a second authority over live state; `room_registry` alone answers the cross-frame question "which rooms have ever existed here, and which are retired" (what multi-book destruction cascades mutate). A room retired in one frame's commit may legitimately still be live in a sibling (e.g. past-era) frame's blob; that frame's next commit re-registers it (upsert revives).
 
 ## Write helpers
 

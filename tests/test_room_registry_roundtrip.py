@@ -118,7 +118,9 @@ def test_migration_moves_phase1_lore_rows_into_room_registry(temp_db):
         "SELECT id FROM lore_entries WHERE entry_uid LIKE 'room:%'") == []
     version = temp_db.q(
         "SELECT value FROM schema_meta WHERE key='version'", one=True)
-    assert int(version["value"]) == 15
+    # The current version, not a literal: re-running init from v14 walks
+    # every later migration too (v16 scheduled_events repartition, ...).
+    assert int(version["value"]) == temp_db.SCHEMA_VERSION
 
 
 # ---- Checkpoint snapshot + restore ----

@@ -78,7 +78,7 @@ When several representations disagree, resolve the conflict deliberately rather 
 5. **Prompts** describe desired behavior but do not override deterministic validation.
 6. **`Design.md`** describes intended architecture; verify implementation before assuming it is current.
 
-The current architecture still has overlapping physical representations (`world.scene` and normalized world tables). Read the relevant commit and restore paths before changing either.
+Physical-world authority (Phase 3a consolidation): the frame-scoped `world.scene` blob is the sole runtime authority for live rooms/positions/entity state; `room_registry` is the sole cross-frame ledger of room identity/retirement; `world_entities` is a derived projection of the scene commit (built from the prepared post-dedup diff); `world_placements` is decommissioned. Every scene writer must keep the registry projection in sync (`commit_scene` does; `world_put` calls `commit.sync_room_registry_with_scene`). See `docs/DATABASE.md`.
 
 ## Safe change workflow
 

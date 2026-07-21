@@ -64,7 +64,7 @@ def parse_scoped_world_key(key):
     return key, None
 
 DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -484,6 +484,11 @@ CREATE TABLE IF NOT EXISTS world_entities(
 );
 CREATE INDEX IF NOT EXISTS idx_world_entities_chat_kind ON world_entities(chat_id, kind);
 
+-- DECOMMISSIONED (movement/space Phase 3a): no runtime writer or reader.
+-- Positions/containment live solely in the frame-scoped scene blob
+-- (scene.positions + rooms' parent_entity). Kept, like fiction_worlds
+-- below, only so old snapshots/exports keep restoring; the lone runtime
+-- statements touching it are legacy-row cleanups on entity removal.
 CREATE TABLE IF NOT EXISTS world_placements(
     chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
     subject_id TEXT NOT NULL,
@@ -509,21 +514,25 @@ CREATE TABLE IF NOT EXISTS world_conditions(
 CREATE INDEX IF NOT EXISTS idx_world_conditions_due ON world_conditions(chat_id, active, next_tick);
 
 CREATE TABLE IF NOT EXISTS scheduled_events(
-    event_id TEXT PRIMARY KEY,
+    event_id TEXT NOT NULL,
     chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
     due_at REAL NOT NULL,
     kind TEXT NOT NULL,
     location_id TEXT,
     payload TEXT NOT NULL,
     seed TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending'
+    status TEXT NOT NULL DEFAULT 'pending',
+    PRIMARY KEY(chat_id, event_id)
 );
 CREATE INDEX IF NOT EXISTS idx_scheduled_events_due ON scheduled_events(chat_id, status, due_at);
 
--- Normalized room-identity registry (movement/space Phase 2). Authoritative
--- for room IDENTITY, dedup, and retirement ONLY -- the frame-scoped scene
--- JSON blob under `world` remains authoritative for LIVE rooms/positions
--- until the Phase-3 consolidation. room_uid is the room's stable canonical
+-- Normalized room-identity registry (movement/space Phase 2; Phase 3a made
+-- it the SOLE cross-frame ledger of room identity/existence-over-time/
+-- retirement). The frame-scoped scene JSON blob under `world` is the sole
+-- authority for LIVE rooms/positions; this table is a deterministic
+-- projection of every scene write (commit_scene in the same commit domain;
+-- the manual world editor via commit.sync_room_registry_with_scene) and is
+-- what dedup and destruction read. room_uid is the room's stable canonical
 -- key (the scene rooms-dict key, per-chat unique, matching the v14
 -- composite-key convention). owning_book_id scopes dedup (a vehicle's
 -- anchored book, else the location/canon book); parent_entity is the
@@ -940,6 +949,38 @@ MIGRATIONS = [
         # bookkeeping (rewritten every commit), never authored lore.
         "DELETE FROM lore_entries WHERE category='layout' "
         "AND entry_uid LIKE 'room:%'",
+    ],
+    # v15 -> v16
+    [
+        # scheduled_events.event_id was a bare GLOBAL primary key -- the
+        # same defect v14 fixed for world_entities/world_conditions.
+        # Runtime-minted ids hash the chat id in (stable_event_key), so
+        # they never collide across chats organically, but export/import
+        # keeps event ids verbatim (deliberately, to stay consistent with
+        # the un-remapped world KV and checkpoint blobs) -- so importing a
+        # chat with PENDING events into the same install hit the global PK
+        # and aborted the whole import. Repartition on (chat_id, event_id),
+        # matching v14's recreate-copy-swap pattern; every runtime query
+        # already scopes by chat_id. Drop leftover scratch first so a crash
+        # mid-copy stays re-runnable.
+        "DROP TABLE IF EXISTS scheduled_events_new",
+        "CREATE TABLE scheduled_events_new("
+        "event_id TEXT NOT NULL,"
+        "chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,"
+        "due_at REAL NOT NULL,"
+        "kind TEXT NOT NULL,"
+        "location_id TEXT,"
+        "payload TEXT NOT NULL,"
+        "seed TEXT NOT NULL,"
+        "status TEXT NOT NULL DEFAULT 'pending',"
+        "PRIMARY KEY(chat_id, event_id))",
+        "INSERT INTO scheduled_events_new(event_id,chat_id,due_at,kind,"
+        "location_id,payload,seed,status) SELECT event_id,chat_id,due_at,"
+        "kind,location_id,payload,seed,status FROM scheduled_events",
+        "DROP TABLE scheduled_events",
+        "ALTER TABLE scheduled_events_new RENAME TO scheduled_events",
+        "CREATE INDEX IF NOT EXISTS idx_scheduled_events_due "
+        "ON scheduled_events(chat_id, status, due_at)",
     ],
 ]
 

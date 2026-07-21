@@ -424,10 +424,12 @@ def _apply_destruction(cid, turn_id, destruction):
 # might later clean up. The registry is the normalized `room_registry`
 # table (Phase 2; it supersedes Phase 1's derived lore_entries encoding):
 # one row per room ever minted, keyed (chat_id, room_uid), scoped to its
-# owning vehicle/location book. It is authoritative for room IDENTITY,
-# dedup, and retirement ONLY -- the frame-scoped scene JSON stays the sole
-# authority for LIVE rooms/positions until the Phase-3 consolidation, and
-# both are written inside the same commit domain (commit_scene). Removal
+# owning vehicle/location book. It is the sole cross-frame ledger of room
+# IDENTITY, dedup, and retirement (Phase 3a) -- the frame-scoped scene JSON
+# is the sole authority for LIVE rooms/positions, and the registry is a
+# deterministic projection of every scene write: commit_scene maintains it
+# in the same commit domain, and the manual world editor reconciles it via
+# sync_room_registry_with_scene below. Removal
 # RETIRES a row (retired_turn_id = the removing turn) instead of deleting
 # it, so a destroyed ship's decks remain retrievable history. Ledger,
 # never a cage: a colliding mint is REDIRECTED or REKEYED, never rejected
@@ -719,6 +721,27 @@ def _apply_room_registry(cid, turn_id, registry):
              "{}", turn_id),
         )
 
+def sync_room_registry_with_scene(cid, canon_book_id, prev_scene, scene):
+    """Reconcile the room_registry projection with a scene blob replaced
+    OUTSIDE commit_scene (the manual world editor in app.py's world_put --
+    the one scene writer that historically bypassed the registry, leaving
+    hand-added rooms unregistered until the next commit and hand-removed
+    rooms live in the registry forever). Same prepare/apply pair the commit
+    domain uses, so the projection semantics cannot fork.
+
+    Rooms that lost live existence are retired stamped with the chat's
+    latest turn (a manual edit has no turn of its own); with no turns yet
+    there is nothing meaningful to retire against and the retire pass is a
+    no-op, while registration still proceeds."""
+    registry = _prepare_room_registry(cid, canon_book_id, prev_scene, scene)
+    latest = q("SELECT id FROM turns WHERE chat_id=? ORDER BY idx DESC LIMIT 1",
+               (cid,), one=True)
+    if latest is None:
+        registry["retire"] = []
+    _apply_room_registry(cid, latest["id"] if latest else None, registry)
+    return registry
+
+
 def prepare_scene_commit(ctx):
     """Build the exact post-turn scene without mutating durable state.
 
@@ -875,6 +898,14 @@ def prepare_scene_commit(ctx):
 
     return {
         "scene": sc, "clock": clock,
+        # The post-dedup, post-destruction diff -- the SAME truth the merged
+        # scene was built from. commit_world_entities derives the normalized
+        # entity rows from this copy (never the raw step diff), so a room
+        # rekeyed by dedup_minted_rooms or an entity removed by a
+        # destruction declaration can't leave the world_entities projection
+        # disagreeing with the scene blob (Phase 3a: one source of truth,
+        # normalized tables are derived projections of it).
+        "diff": diff,
         "room_registry": _prepare_room_registry(
             cid, chat.lorebook_id, prev_scene, sc),
         "destruction": destruction,
@@ -952,8 +983,13 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
         for op in event_ops:
             if op[0] == "status":
                 _, event_id, status = op
-                qtx("UPDATE scheduled_events SET status=? WHERE event_id=?",
-                    (status, event_id))
+                # chat_id in the WHERE: event ids are per-chat since the
+                # (chat_id, event_id) repartition -- a same-install import
+                # keeps the source chat's ids verbatim, so an unscoped
+                # update would flip BOTH chats' rows.
+                qtx("UPDATE scheduled_events SET status=? "
+                    "WHERE chat_id=? AND event_id=?",
+                    (status, cid, event_id))
                 if status == "fired":
                     if kind_by_id.get(event_id) == "news_arrival":
                         news_fired += 1
@@ -1005,12 +1041,24 @@ def commit_cast_changes(ctx, nonce):
 
 # ---- World entity commit ----
 
-def commit_world_entities(ctx, nonce):
-    """Commit world entities, placements, conditions, and scheduled events."""
+def commit_world_entities(ctx, nonce, *, prepared=None):
+    """Commit world entities, conditions (and legacy placement cleanup).
+
+    The normalized world_entities rows are a DERIVED projection of the
+    scene commit: when the caller passes prepare_scene_commit's result
+    (commit_all always does), the entity definitions come from its
+    post-dedup/post-destruction diff -- the same truth the scene blob was
+    merged from -- so the projection cannot disagree with the blob about
+    rekeyed rooms or a destroyed entity. The raw step diff remains the
+    fallback for direct callers that never prepared a scene commit.
+    """
     chat = ctx.chat
     cid = chat.id
-    res = ctx.director_resolve or ctx.director_establish or {}
-    diff = res.get("state_diff") or {}
+    if prepared is not None and isinstance(prepared.get("diff"), dict):
+        diff = prepared["diff"]
+    else:
+        res = ctx.director_resolve or ctx.director_establish or {}
+        diff = res.get("state_diff") or {}
     turn_id = ctx.turn.id
 
     with transaction() as c:
@@ -2284,7 +2332,8 @@ def _commit_all_locked(ctx, nonce):
             )
             _commit_domain(
                 ctx, results, "entities",
-                lambda: commit_world_entities(ctx, nonce),
+                lambda: commit_world_entities(
+                    ctx, nonce, prepared=prepared["scene"]),
             )
             _commit_domain(
                 ctx, results, "cast",

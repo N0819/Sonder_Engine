@@ -61,7 +61,7 @@ Key ownership boundaries (see `AGENTS.md` for the full table):
 
 `agents/__init__.py` is a compatibility facade; role modules (`director.py`, `perception.py`, `character.py`, etc.) may import `agents/common.py` but never each other, and `runtime.py` is the only module aware of every built-in stage.
 
-The repo has two overlapping physical world representations — the JSON `world.scene` blob and normalized `world_*`/`fiction_*` tables — that are not yet reconciled. Check both the commit path and restore path before changing either (see `docs/DATABASE.md`).
+Physical-world authority (consolidated in movement/space Phase 3a): the frame-scoped `world.scene` JSON blob is the single runtime source of truth for live rooms/positions/entity state; `room_registry` is the single cross-frame ledger of room identity/retirement; the normalized `world_entities` table is a derived projection of the scene commit, and `world_placements`/`fiction_*` are decommissioned import-compatibility tables. Every scene writer must keep the registry projection in sync — check both the commit path and restore path before adding one (see `docs/DATABASE.md`).
 
 Frontend (`static/js/`) uses browser globals, not ES modules; script load order in `static/index.html` matters (`utils.js → components.js → editors.js → lorebooks.js → chat.js → settings.js → app.js`). Never rename a shared JS function without grepping every file.
 

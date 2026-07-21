@@ -41,7 +41,8 @@ from importers import (
     reinterpret_lorebook, resolve_import_card, draft_promoted_character,
     recover_greetings_from_source,
 )
-from commit import commit_all, promotable_background_presences, _known_name_roster
+from commit import (commit_all, promotable_background_presences,
+                    _known_name_roster, sync_room_registry_with_scene)
 from prompts import presets, active_preset, get_prompt, DEFAULT_PROMPTS, nsfw_enabled
 from memory import (
     add_lore, update_lore, delete_lore, LORE_CATEGORIES,
@@ -525,6 +526,7 @@ def _apply_world_id_remap(blob, remap):
                 "fiction_worlds", "fiction_locations"):
         if blob.get(key):
             blob[key] = deep_remap(blob[key])
+            _remap_row_json_fields(blob[key], remap)
 
     if isinstance(blob.get("world"), dict):
         new_world = {}
@@ -549,6 +551,34 @@ def _deep_remap_ids(obj, remap):
     if isinstance(obj, list):
         return [_deep_remap_ids(item, remap) for item in obj]
     return obj
+
+def _remap_row_json_fields(rows, remap):
+    """Remap ids INSIDE the JSON-string columns of normalized world-table
+    rows (payload/detail). _deep_remap_ids only rewrites exact string
+    matches, so an entity id embedded in such a string -- e.g. a pending
+    transit_arrival's payload.entity_id -- was never remapped: the branched
+    chat's event then referenced the SOURCE chat's entity id and could only
+    fire as a moot cancel. Parse, remap, and re-dump only when something
+    actually changed, so untouched payloads stay byte-identical."""
+    if not remap:
+        return rows
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        for field in ("payload", "detail"):
+            value = row.get(field)
+            if not isinstance(value, str) or not value:
+                continue
+            try:
+                parsed = json.loads(value)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(parsed, (dict, list)):
+                continue
+            remapped = _deep_remap_ids(parsed, remap)
+            if remapped != parsed:
+                row[field] = json.dumps(remapped, ensure_ascii=False)
+    return rows
 
 def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
                    char_idmap=None, world_id_remap=None, frame_idmap=None):
@@ -688,6 +718,7 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
                     "fiction_worlds", "fiction_locations"):
             if blob.get(key):
                 blob[key] = _deep_remap_ids(blob[key], world_id_remap)
+                _remap_row_json_fields(blob[key], world_id_remap)
         if isinstance(blob.get("world"), dict):
             for k, v in list(blob["world"].items()):
                 if isinstance(v, str):
@@ -2021,16 +2052,38 @@ def world_get(cid: int):
 
 @app.put("/api/chats/{cid}/world")
 def world_put(cid: int, body: dict = Body(...)):
-    if not q("SELECT 1 FROM chats WHERE id=?", (cid,), one=True):
+    chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    if not chat:
         raise HTTPException(404, "Chat not found")
     # A running pipeline reads/writes world keys throughout the turn; wiping
     # and rewriting them mid-turn would corrupt it. And DELETE+loop must be
     # atomic so a crash can't leave the un-rewritten keys permanently lost.
     _require_chat_idle(cid)
+    # Scene blobs (present + every frame-scoped copy) BEFORE the rewrite:
+    # the manual world editor is a scene writer like commit_scene, so the
+    # room_registry projection must be reconciled against what each blob
+    # held before vs. after -- it was the one write path that bypassed the
+    # registry (Phase 3a single-source-of-truth consolidation).
+    old_scenes = {
+        w["key"]: json.loads(w["value"])
+        for w in q("SELECT * FROM world WHERE chat_id=?", (cid,))
+        if parse_scoped_world_key(w["key"])[0] == "scene"
+    }
     with transaction():
         qi("DELETE FROM world WHERE chat_id=?", (cid,))
         for k, v in body.items():
             wset(cid, k, v)
+        scene_keys = {
+            k for k in list(old_scenes) + list(body)
+            if parse_scoped_world_key(k)[0] == "scene"
+        }
+        for key in sorted(scene_keys):
+            new_scene = body.get(key)
+            sync_room_registry_with_scene(
+                cid, chat["lorebook_id"],
+                old_scenes.get(key) if isinstance(old_scenes.get(key), dict)
+                else {},
+                new_scene if isinstance(new_scene, dict) else {})
     return {"ok": True}
 
 @app.get("/api/chats/{cid}/attire")
@@ -3177,6 +3230,7 @@ def turn_branch(tid: int):
         if world_id_remap:
             for k in world_tables:
                 world_tables[k] = _deep_remap_ids(world_tables[k], world_id_remap)
+                _remap_row_json_fields(world_tables[k], world_id_remap)
         for ent in world_tables["world_entities"]:
             ent["created_turn_id"] = idmap.get(ent.get("created_turn_id"))
             ent["retired_turn_id"] = idmap.get(ent.get("retired_turn_id"))
