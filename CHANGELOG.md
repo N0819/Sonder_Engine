@@ -1,5 +1,60 @@
 # Changelog
 
+## alpha2.1 — Egocentric space: bearings, field of view, and on-the-fly rooms
+
+Builds the second layer of the physical world: every mind now has an ORIENTATION.
+Objective space stays allocentric (compass bearings, named anchors); each observer's
+egocentric view — left/right, ahead/behind, who is in front vs. their blind spot — is
+DERIVED per observer at read time, never stored, preserving the engine's
+information-barrier: "left" is a fact about an observer, not the world. Delivered as
+three phases plus on-the-fly generation, a narration-craft pass, and a code-review
+sweep; validated live across two taverns on weak (deepseek-v4) models.
+
+### Added
+- **Compass bearings + facing → derived left/right (Phase 1).** Adjacency edges carry
+  an optional allocentric `dir` (n/ne/e/…/nw); each character carries a `facing`
+  derived deterministically at commit (`infer_facing`: you face the way you walked; a
+  disorienting jump clears it; turning to address someone faces them). `egocentric_frame`
+  classifies a room's exits into behind/ahead/left/right, with facing authoritative when
+  known — so the frame stays coherent when a character turns in place. Reciprocity is
+  reconciled at merge (A→B `n` ⟹ B→A `s`; a contradiction drops both, never guesses).
+  The narrator direction license now permits left/right for the matching bucket
+  (previously hard-forbidden).
+- **Within-room position (Phase 2).** Rooms carry optional `anchors` {id:{desc,dir}};
+  entities carry a `station` {at, near}. Proximity derives into within_reach / near /
+  across, plus a co-located entity's left/right. A whisper (`mutter`) now only fully
+  reaches someone within reach — a fragment to the merely-near, lost across a large
+  room. Station hygiene auto-heals on a room move.
+- **Per-observer field of view (Phase 3) — for characters and entities, not just the
+  player.** A rear-arc blind spot within a room: a co-located person behind you by the
+  way you face gives NO new visual detail (a silent approach is unseen) though sound
+  still carries; turning to face them lifts it deterministically. A room-layout helper
+  renders a full, convincing map on a deliberate "look around". Character agents receive
+  their own egocentric frame.
+- **On-the-fly spatially detailed rooms.** Entering unmapped space generates a room with
+  anchors, `size`, and correctly-VERTICAL stair/ladder/hatch edges — for interiors (a
+  letting room) and exteriors (a harbor street) alike.
+- **Narration craft (env-gated, off by default).** Sensory directionality (sound is
+  directional; smell is not — gradient/presence only); a restraint rule (positioning is
+  seasoning, not a per-beat inventory) with a deliberate-survey exception; a prose-craft
+  directive plus style exemplars; a deterministic spatial ground-truth scaffold and an
+  AI-tell craft screen with a bounded self-rewrite. A live model sweep found the tuned
+  prompt + exemplars — not a bigger model — is what yields good prose on one attempt.
+
+### Fixed
+- **Stale orientation on movement beats.** Orientation was computed only at commit (after
+  the narrator), so perception and the narrator's spatial frame used the prior beat's
+  heading on exactly the beats it mattered. `perception_outcome` now refreshes
+  orientation on the merged scene and the narrator derives its frame from it.
+- **Dropped map-detail.** Mapping reliably authored within-room anchors, but the commit
+  path discarded them (only the Director's causal diff built the scene). Now folded in
+  pre-merge, so anchors / size / edge-bearings survive normalization.
+- **`_room_notes_from_lore` crashed** when a lore entry's `keys` was a list.
+- Spatial-derivation hardenings from a code review: same-anchor pairs are no longer
+  mislabeled a rear blind spot; pass-through no longer guesses "ahead" when a facing is
+  known; case-tolerant orientation/station lookups; the craft screen ignores banned words
+  inside quoted dialogue; plus several lower-severity guards.
+
 ## alpha2.0.1 — Background presence: track declared agents of any kind
 
 ### Fixed

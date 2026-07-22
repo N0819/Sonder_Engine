@@ -13,6 +13,31 @@ from spatial import (
     normalize_room_id,
 )
 
+def test_merge_dedupes_duplicate_adjacency_in_untouched_room():
+    # Regression: a room the diff does NOT re-declare is carried through the
+    # merge verbatim, so a duplicate same-target edge (a neighbor that is both
+    # 'wall' and 'open_door' at once -- introduced once by rename remapping)
+    # otherwise persists frozen forever, feeding perception incoherent spatial
+    # cues. Every merge must now collapse it, keeping the last (open_door).
+    scene = {
+        "rooms": {
+            "station": {"name": "Station", "adjacent": [
+                {"to": "checkpoint", "barrier": "wall", "distance": "near"},
+                {"to": "checkpoint", "barrier": "open_door", "distance": "near"},
+            ]},
+            "checkpoint": {"name": "Checkpoint", "adjacent": [
+                {"to": "station", "barrier": "open_door", "distance": "near"},
+            ]},
+        },
+        "entities": {}, "positions": {},
+    }
+    merged = merge_scene_with_diff(scene, {})  # empty diff -> station untouched
+    edges = merged["rooms"]["station"]["adjacent"]
+    assert len(edges) == 1
+    assert edges[0]["to"] == "checkpoint"
+    assert edges[0]["barrier"] == "open_door"  # last wins, matching _merge_room
+
+
 def test_none_barrier_is_normalized_to_open():
     from spatial import spatial_rel, has_visual, hear_level
 

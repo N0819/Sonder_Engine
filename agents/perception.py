@@ -25,15 +25,35 @@ from scene import (
     senses_of,
     sheet_state,
 )
+import os
+
 from spatial import (
     ambient_scope,
+    egocentric_frame,
+    entity_arc,
+    entity_side,
     has_visual,
     hear_level,
     merge_scene_with_diff,
+    proximity_rel,
+    room_layout,
     room_of,
+    spatial_facts,
     spatial_rel,
     visible_adjacent_rooms,
 )
+
+
+def _perceiver_spatial_facts(scene, observer, sources):
+    """Env-gated (SPATIAL_SCAFFOLD=1) deterministic ground-truth spatial facts
+    for a perceiver -- the same scaffold given to the narrator, applied at the
+    perception stage so the VIEW itself is FOV-clean (a rear source rendered as
+    sound, not sight). Off by default -> {} (baseline behavior)."""
+    if not os.environ.get("SPATIAL_SCAFFOLD"):
+        return {}
+    names = [s.get("name") for s in sources if s.get("name")]
+    facts = spatial_facts(scene, observer, names)
+    return {"spatial_facts": facts} if facts else {}
 
 from .common import (
     _agent_json,
@@ -110,6 +130,60 @@ def _scrub_view_for(ctx, stage, view, perceiver_name, known, roster):
             f"{stage}: scrubbed unearned identity {leaked} "
             f"from the view of {perceiver_name}")
     return view
+
+def _behind_rooms(scene, observer):
+    """Room ids at the observer's back (the way they came), from their
+    egocentric frame. Approximate field of view: an observer does not receive
+    NEW VISUAL detail from a room behind them -- they get sound/other channels
+    and what they already remember, but not fresh sight (you don't watch the
+    room you just walked out of unless you turn). Empty when the observer has
+    no movement history, so nothing is gated. See the perception FOV clause."""
+    frame = egocentric_frame(scene, observer)
+    return [e.get("to") for e in frame.get("behind") or [] if e.get("to")]
+
+
+def _focus_target(scene, observer):
+    """The NAME of the source the observer is attending (their focus), when
+    focus rests on a co-located entity/character. Perception gives a focused
+    source full visual detail (faces, hands, text, small objects) while an
+    in-view but non-focused source is PERIPHERY -- presence, gross motion and
+    identity only, no foveal detail. None when focus is an edge (a direction,
+    not a source) or unset, in which case no periphery gating applies."""
+    f = ((scene.get("orientation") or {}).get(observer) or {}).get("focus") or {}
+    if f.get("kind") in ("entity", "target") and f.get("ref"):
+        return str(f["ref"])
+    return None
+
+
+def _proximity_to_sources(scene, observer, sources):
+    """Per CO-LOCATED source: {tier: within_reach|near|across, side:
+    left|right|None, arc: front|rear|None} -- the observer's within-room
+    distance, hand-side, and whether the source is in their facing FRONT or REAR
+    (blind-spot) arc (Phase 3 FOV). Cross-room sources are omitted. Empty when
+    nothing derivable, so absence reads exactly like the pre-Phase-2 payload."""
+    out = {}
+    for s in sources:
+        name = s.get("name")
+        if not name or name == observer:
+            continue
+        tier = proximity_rel(scene, observer, name)
+        if tier is None:
+            continue
+        out[name] = {"tier": tier, "side": entity_side(scene, observer, name),
+                     "arc": entity_arc(scene, observer, name)}
+    return out
+
+
+def _behind_sources(scene, observer, sources):
+    """CO-LOCATED source names in the observer's REAR arc -- the within-room
+    blind spot (Phase 3). Mirrors _behind_rooms for same-room people: a source
+    here gives the observer NO NEW VISUAL detail (a silent approach/gesture is
+    unseen), though sound still carries. Empty when facing/anchors give no
+    basis, so nothing is gated by default (FOV fails open)."""
+    return [s.get("name") for s in sources
+            if s.get("name") and s.get("name") != observer
+            and entity_arc(scene, observer, s.get("name")) == "rear"]
+
 
 def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map):
     """Resolve a subject's active physical_disguise into perception inputs.
@@ -225,6 +299,12 @@ def perception_establish(ctx, nonce):
         "entity_state": p_state,
         "spatial_to_sources": {s["name"]: spatial_rel(sc, s["room"], p_room) for s in sources},
         "visual_channel_to_sources": {s["name"]: has_visual(spatial_rel(sc, s["room"], p_room)) for s in sources},
+        "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
+        "behind_sources": _behind_sources(sc, p_name, sources),
+        "room_layout": room_layout(sc, p_name),
+        "behind_rooms": _behind_rooms(sc, p_name),
+        "focus_target": _focus_target(sc, p_name),
+        **_perceiver_spatial_facts(sc, p_name, sources),
     }]
 
     for c in ctx.cast:
@@ -243,6 +323,9 @@ def perception_establish(ctx, nonce):
             "entity_state": entity_states.get(character_name(sh)) or {},
             "spatial_to_sources": {s["name"]: spatial_rel(sc, s["room"], r) for s in c_sources},
             "visual_channel_to_sources": {s["name"]: has_visual(spatial_rel(sc, s["room"], r)) for s in c_sources},
+            "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), c_sources),
+            "behind_sources": _behind_sources(sc, character_name(sh), c_sources),
+            "room_layout": room_layout(sc, character_name(sh)),
         })
 
     declared = {
@@ -404,6 +487,8 @@ def perception_act(ctx, nonce):
             "spatial_to_actor": rel,
             "visual_channel_to_actor": has_visual(rel),
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
+            "behind_rooms": _behind_rooms(sc, character_name(sh)),
+            "focus_target": _focus_target(sc, character_name(sh)),
         })
 
     # Input-side hygiene (defense-in-depth under the output scrub below):
@@ -549,7 +634,27 @@ def perception_outcome(ctx, nonce):
 
     diff = copy.deepcopy(res.get("state_diff") or {})
     dedup_minted_rooms(chat["id"], sc, diff)
+    prev_scene = sc
     sc = merge_scene_with_diff(sc, diff)
+
+    # Refresh per-character orientation (came_from/focus/facing) on the merged
+    # scene. infer_* run at COMMIT, which is AFTER the narrator -- so without
+    # this, the FOV/egocentric derivations below AND the narrator's spatial
+    # frame would use LAST beat's facing/came_from on exactly the movement beats
+    # they exist for (a room just entered, rendered with the prior heading; the
+    # deterministic spatial_facts contradicting the correct view). Pure and
+    # deterministic given (prev_scene, sc) -- commit re-runs them to the same
+    # result. Stashed on ctx so the narrator derives its spatial_frame/
+    # spatial_facts from this same oriented scene, not the stale committed KV.
+    try:
+        from spatial_frames import infer_came_from, infer_focus, infer_facing
+        _o_names = [character_name(json.loads(c["sheet"])) for c in ctx.cast]
+        infer_came_from(chat["id"], ctx.turn.frame_id, prev_scene, sc, _o_names)
+        infer_focus(chat["id"], ctx.turn.frame_id, prev_scene, sc, res, _o_names)
+        infer_facing(chat["id"], ctx.turn.frame_id, prev_scene, sc, _o_names)
+    except Exception as _oe:  # orientation is best-effort here; commit is authoritative
+        ctx.warnings.append(f"perception_outcome: orientation refresh skipped ({_oe})")
+    ctx._extra["outcome_scene"] = sc
 
     # Prefer re-resolving against the just-merged (post-resolution) scene
     # over reusing ctx["_player_room"]: that value was cached during the
@@ -690,6 +795,12 @@ def perception_outcome(ctx, nonce):
         "knows_identity": True,
         "spatial_to_sources": {s["name"]: spatial_rel(sc, s["room"], p_room) for s in sources},
         "visual_channel_to_sources": {s["name"]: has_visual(spatial_rel(sc, s["room"], p_room)) for s in sources},
+        "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
+        "behind_sources": _behind_sources(sc, p_name, sources),
+        "room_layout": room_layout(sc, p_name),
+        "behind_rooms": _behind_rooms(sc, p_name),
+        "focus_target": _focus_target(sc, p_name),
+        **_perceiver_spatial_facts(sc, p_name, sources),
     }]
 
     for extra, pid_key, e_name, e_room in extra_entries:
@@ -704,6 +815,12 @@ def perception_outcome(ctx, nonce):
             "knows_identity": True,
             "spatial_to_sources": {s["name"]: spatial_rel(sc, s["room"], e_room) for s in sources},
             "visual_channel_to_sources": {s["name"]: has_visual(spatial_rel(sc, s["room"], e_room)) for s in sources},
+            "proximity_to_sources": _proximity_to_sources(sc, e_name, sources),
+            "behind_sources": _behind_sources(sc, e_name, sources),
+            "room_layout": room_layout(sc, e_name),
+            "behind_rooms": _behind_rooms(sc, e_name),
+            "focus_target": _focus_target(sc, e_name),
+            **_perceiver_spatial_facts(sc, e_name, sources),
         })
 
     for c in ctx.cast:
@@ -723,6 +840,11 @@ def perception_outcome(ctx, nonce):
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
             "spatial_to_sources": {s["name"]: spatial_rel(sc, s["room"], r) for s in sources},
             "visual_channel_to_sources": {s["name"]: has_visual(spatial_rel(sc, s["room"], r)) for s in sources},
+            "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), sources),
+            "behind_sources": _behind_sources(sc, character_name(sh), sources),
+            "room_layout": room_layout(sc, character_name(sh)),
+            "behind_rooms": _behind_rooms(sc, character_name(sh)),
+            "focus_target": _focus_target(sc, character_name(sh)),
         })
 
     resolved_event_text = res.get("resolved_event", "")

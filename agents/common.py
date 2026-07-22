@@ -604,14 +604,16 @@ def _room_notes_from_lore(room_id, ctx, scene=None):
              ((ctx.get("mapping_quick") or {}).get("staged_lore") or [])
     room_norm = room_id.lower().replace("_", " ")
     for entry in staged:
-        keys = (entry.get("keys") or "").lower()
+        _k = entry.get("keys")
+        keys = (" ".join(map(str, _k)) if isinstance(_k, list) else str(_k or "")).lower()
         content = entry.get("content") or ""
         if (room_norm in keys or room_id.lower() in keys) and content:
             if blocked and _keys_reference_blocked(keys, blocked):
                 continue
             return content[:600]
     for entry in lore_for(ctx):
-        keys = (entry.get("keys") or "").lower()
+        _k = entry.get("keys")
+        keys = (" ".join(map(str, _k)) if isinstance(_k, list) else str(_k or "")).lower()
         content = entry.get("content") or ""
         if (room_norm in keys or room_id.lower() in keys) and content:
             if blocked and _keys_reference_blocked(keys, blocked):

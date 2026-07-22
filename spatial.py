@@ -90,6 +90,174 @@ def normalize_scene_barriers(scene: dict) -> dict:
 
     return scene
 
+# ---------------------------------------------------------------------------
+# Compass bearings: allocentric orientation truth on adjacency edges.
+#
+# A bearing (n/ne/e/se/s/sw/w/nw) is the world's canonical, OBSERVER-FREE
+# direction of an exit. Egocentric left/right is never stored -- it is DERIVED
+# per observer from (their facing, the edge's bearing) at read time (see
+# relative_bearing + spatial_frames.infer_facing), exactly as per-observer
+# identity is derived from `known`. "Left" is a fact about an observer, not the
+# world; storing it would be the same category error as writing a perceiver's
+# knowledge into objective scene state. Vertical up/down stays on edge.vertical;
+# this is the horizontal compass only. Absence of a bearing degrades to exactly
+# the pre-bearing behavior -- no direction asserted, never a guess.
+# ---------------------------------------------------------------------------
+
+_BEARINGS = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
+_BEARING_DEG = {b: i * 45 for i, b in enumerate(_BEARINGS)}
+
+_BEARING_ALIASES = {
+    "n": "n", "north": "n",
+    "ne": "ne", "northeast": "ne",
+    "e": "e", "east": "e",
+    "se": "se", "southeast": "se",
+    "s": "s", "south": "s",
+    "sw": "sw", "southwest": "sw",
+    "w": "w", "west": "w",
+    "nw": "nw", "northwest": "nw",
+}
+
+# Observer-relative words are NOT authorable allocentric truth. A model that
+# emits one as a bearing gets it DROPPED (-> None), never coerced into a
+# compass point -- the engine derives left/right elsewhere and must not let a
+# model smuggle an egocentric claim into objective edge state. "up"/"down"
+# belong to edge.vertical, so they are rejected here too.
+_EGOCENTRIC_WORDS = {
+    "left", "right", "ahead", "forward", "forwards", "front", "infront",
+    "behind", "back", "backward", "backwards", "rear", "aside", "beside",
+    "sideways", "port", "starboard", "onward", "onwards", "up", "down",
+}
+
+_OPPOSITE_BEARING = {
+    "n": "s", "s": "n", "e": "w", "w": "e",
+    "ne": "sw", "sw": "ne", "nw": "se", "se": "nw",
+}
+
+# Egocentric sectors at 45-degree steps clockwise from straight ahead.
+_REL_SECTORS = ("ahead", "ahead_right", "right", "behind_right",
+                "behind", "behind_left", "left", "ahead_left")
+_LEFT_SECTORS = {"left", "ahead_left", "behind_left"}
+_RIGHT_SECTORS = {"right", "ahead_right", "behind_right"}
+
+
+def normalize_bearing(value) -> Optional[str]:
+    """A model-supplied edge bearing collapsed to the 8-way compass, or None
+    when it is absent, unrecognized, or an OBSERVER-RELATIVE word (left/right/
+    ahead/...) that is not allocentric truth."""
+    raw = str(value or "").strip().casefold()
+    if not raw:
+        return None
+    key = re.sub(r"[^a-z]", "", raw)
+    if key in _EGOCENTRIC_WORDS:
+        return None
+    return _BEARING_ALIASES.get(key)
+
+
+def opposite_bearing(bearing: Optional[str]) -> Optional[str]:
+    return _OPPOSITE_BEARING.get(bearing)
+
+
+def relative_bearing(facing: Optional[str], target: Optional[str]) -> Optional[str]:
+    """The egocentric sector an absolute `target` bearing falls in for an
+    observer whose absolute `facing` is given (one of _REL_SECTORS), or None if
+    either bearing is unknown. Pure -- the single point where allocentric
+    compass truth becomes observer-relative."""
+    if facing not in _BEARING_DEG or target not in _BEARING_DEG:
+        return None
+    idx = round(((_BEARING_DEG[target] - _BEARING_DEG[facing]) % 360) / 45) % 8
+    return _REL_SECTORS[idx]
+
+
+def lateral_of(facing: Optional[str], target: Optional[str]) -> Optional[str]:
+    """'left'/'right' when the target bearing is on that side of the observer,
+    else None -- a pure fore/aft bearing (ahead/behind) returns None because
+    the movement-derived ahead/behind buckets already own that axis. Used to
+    refine an otherwise-'aside' exit into a side."""
+    rel = relative_bearing(facing, target)
+    if rel in _LEFT_SECTORS:
+        return "left"
+    if rel in _RIGHT_SECTORS:
+        return "right"
+    return None
+
+
+def _find_edge(room: Optional[dict], to_id: str) -> Optional[dict]:
+    """The adjacency edge from `room` to `to_id`, or None."""
+    if not isinstance(room, dict):
+        return None
+    for edge in room.get("adjacent") or []:
+        if isinstance(edge, dict) and edge.get("to") == to_id:
+            return edge
+    return None
+
+
+def travel_bearing(scene: dict, from_room: str, to_room: str) -> Optional[str]:
+    """Absolute compass bearing of travel from from_room to to_room, taken from
+    the forward edge's `dir`, or the reciprocal of the back edge's `dir`. None
+    when no bearing is authored on that adjacency (heading unknown)."""
+    rooms = scene.get("rooms") or {}
+    fwd = _find_edge(rooms.get(from_room), to_room)
+    if fwd is not None:
+        b = normalize_bearing(fwd.get("dir"))
+        if b:
+            return b
+    back = _find_edge(rooms.get(to_room), from_room)
+    if back is not None:
+        b = normalize_bearing(back.get("dir"))
+        if b:
+            return opposite_bearing(b)
+    return None
+
+
+def normalize_scene_bearings(scene: dict) -> dict:
+    """Normalize every adjacency edge's OPTIONAL `dir` into the compass
+    vocabulary (dropping observer-relative or unrecognized values), then
+    reconcile reciprocals: A->B bearing d implies B->A opposite(d). Fill a
+    missing reciprocal; on a CONTRADICTION drop BOTH sides -- never guess which
+    was right. Global loop-consistency is deliberately NOT enforced: only
+    per-edge-pair reciprocity, the only consistency an observer standing in a
+    room can ever actually test through its doorways."""
+    if not isinstance(scene, dict):
+        return scene
+    rooms = scene.get("rooms") or {}
+
+    for room in rooms.values():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict) or "dir" not in edge:
+                continue
+            nb = normalize_bearing(edge.get("dir"))
+            if nb:
+                edge["dir"] = nb
+            else:
+                edge.pop("dir", None)
+
+    for a_id, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict):
+                continue
+            b_id = edge.get("to")
+            if not b_id or b_id == a_id or b_id not in rooms:
+                continue  # skip self-loops: back would be edge itself
+            back = _find_edge(rooms.get(b_id), a_id)
+            if back is None:
+                continue
+            fwd_dir, back_dir = edge.get("dir"), back.get("dir")
+            if fwd_dir and back_dir:
+                if opposite_bearing(fwd_dir) != back_dir:
+                    edge.pop("dir", None)
+                    back.pop("dir", None)
+            elif fwd_dir and not back_dir:
+                back["dir"] = opposite_bearing(fwd_dir)
+            elif back_dir and not fwd_dir:
+                edge["dir"] = opposite_bearing(back_dir)
+
+    return scene
+
 def room_of(scene: dict, name: str) -> Optional[str]:
     positions = scene.get("positions") or {}
     if name in positions:
@@ -223,12 +391,22 @@ def hear_level(
     rel: dict,
     volume: str,
     vouched: bool = False,
+    proximity: str | None = None,
 ) -> str:
     volume = str(volume or "normal").strip().casefold()
     barrier = normalize_barrier(rel.get("barrier"))
     distance = rel.get("distance")
 
     if rel.get("same_room"):
+        # A whisper (mutter) only fully reaches someone WITHIN REACH; it carries
+        # as a fragment to others merely near, and is lost across a large room.
+        # proximity None (unknown) preserves the pre-Phase-2 behavior: same room
+        # -> full. Only an explicit 'near'/'across' tier downgrades a whisper.
+        if volume == "mutter":
+            if proximity == "across":
+                return "none"
+            if proximity == "near":
+                return "fragment"
         return "full"
 
     if barrier == "unknown" or distance == "remote":
@@ -317,6 +495,371 @@ def nearby_rooms(
         frontier = next_frontier
 
     return {rid: rooms[rid] for rid in included if rid in rooms}
+
+def rooms_adjacent(scene, room_a, room_b):
+    """Undirected: is room_b a declared neighbor of room_a (edge from either
+    side)? Used to tell a real step (A->adjacent B) from a teleport/gap-cross."""
+    if not room_a or not room_b:
+        return False
+    rooms = scene.get("rooms") or {}
+    for a, b in ((room_a, room_b), (room_b, room_a)):
+        room = rooms.get(a) or {}
+        for edge in room.get("adjacent") or []:
+            if isinstance(edge, dict) and edge.get("to") == b:
+                return True
+    return False
+
+
+def egocentric_frame(scene, observer):
+    """Classify the observer's current room's exits into egocentric buckets
+    from their movement-derived orientation. Deterministic and authored-data
+    free (see spatial_frames.infer_came_from for how orientation is set).
+
+    Returns {behind, ahead, aside, left, right, unclassified, above, below} --
+    each a list of adjacency edges -- plus 'ahead_entity' (an entity id) when
+    focus is on an entity.
+
+    Two reference frames, facing taking precedence when available:
+      * FACING KNOWN + edge has a `dir` bearing: the edge is placed by
+        relative_bearing(facing, dir) -- ahead / behind / left / right (diagonal
+        sectors collapse to the lateral side). This is authoritative: it stays
+        coherent even when the observer TURNS in place (facing a doorway they
+        came through makes it 'ahead', not stale 'behind').
+      * Otherwise: the movement fallback -- the room the observer came from ->
+        BEHIND, the focused edge -> AHEAD, an edge with no usable facing/bearing
+        -> ASIDE (topological only; a side is NEVER guessed).
+    Vertical up/down always -> above/below first. With NO movement history AND
+    no facing (scene open, fresh teleport) every exit is UNCLASSIFIED and
+    callers must assert no egocentric direction.
+
+    Pass-through inference: with a came_from but no facing, entering a room with
+    a single non-vertical, non-behind, un-sided exit makes that exit AHEAD
+    ('onward') -- the corridor case that otherwise reads as an unplaceable
+    'aside'."""
+    rooms = scene.get("rooms") or {}
+    orientation = _ci_get(scene.get("orientation") or {}, observer) or {}
+    room = rooms.get(room_of(scene, observer)) or {}
+    edges = [e for e in (room.get("adjacent") or [])
+             if isinstance(e, dict) and e.get("to")]
+
+    came_from = orientation.get("came_from")
+    facing = orientation.get("facing")
+    focus = orientation.get("focus") or {}
+    focus_edge = focus.get("ref") if focus.get("kind") == "edge" else None
+    has_history = came_from is not None or facing is not None
+
+    b = {"behind": [], "ahead": [], "aside": [], "left": [], "right": [],
+         "unclassified": [], "above": [], "below": []}
+    for e in edges:
+        vert = str(e.get("vertical") or "").lower()
+        if vert == "up":
+            b["above"].append(e)
+            continue
+        if vert == "down":
+            b["below"].append(e)
+            continue
+        if not has_history:
+            b["unclassified"].append(e)
+            continue
+        rel = relative_bearing(facing, normalize_bearing(e.get("dir"))) \
+            if facing else None
+        if rel == "ahead":
+            b["ahead"].append(e)
+        elif rel == "behind":
+            b["behind"].append(e)
+        elif rel in _LEFT_SECTORS:
+            b["left"].append(e)
+        elif rel in _RIGHT_SECTORS:
+            b["right"].append(e)
+        elif focus_edge and e["to"] == focus_edge:
+            b["ahead"].append(e)
+        elif came_from is not None and e["to"] == came_from:
+            b["behind"].append(e)
+        else:
+            b["aside"].append(e)
+
+    # Pass-through: one behind + exactly one UN-SIDED lateral exit -> onward.
+    # Only WITHOUT a facing: with a facing known, an un-beared exit's direction
+    # is genuinely unknown (it stays 'aside'/topological) -- we do not guess it
+    # 'ahead'. Also suppressed once a bearing placed any exit left/right.
+    if facing is None and came_from is not None and not b["ahead"] \
+            and len(b["aside"]) == 1 and not b["left"] and not b["right"]:
+        b["ahead"] = b["aside"]
+        b["aside"] = []
+
+    if focus.get("kind") in ("entity", "target") and focus.get("ref"):
+        b["ahead_entity"] = focus["ref"]
+    return b
+
+
+def spatial_digest(scene, observer):
+    """Human-readable egocentric exits for the narrator: the observer's
+    egocentric_frame with each edge rendered as {room, barrier}, grouped by
+    bucket. The narrator binds egocentric direction words strictly to these
+    buckets (see the narrator prompt's SPATIAL FRAME license). A digest with
+    only 'unclassified' (or empty) means the observer has no movement history,
+    so the narrator must assert no direction -- topological phrasing only."""
+    rooms = scene.get("rooms") or {}
+    frame = egocentric_frame(scene, observer)
+
+    def ref(edge):
+        rid = edge.get("to")
+        return {"room": (rooms.get(rid) or {}).get("name") or rid,
+                "barrier": edge.get("barrier")}
+
+    out = {}
+    for bucket in ("behind", "ahead", "left", "right", "aside",
+                   "above", "below", "unclassified"):
+        refs = [ref(e) for e in frame.get(bucket) or []]
+        if refs:
+            out[bucket] = refs
+    if frame.get("ahead_entity"):
+        # ref is an entity id (look up its name) or already a character name.
+        ent = (scene.get("entities") or {}).get(frame["ahead_entity"]) or {}
+        out["ahead_entity"] = ent.get("name") or frame["ahead_entity"]
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Within-room position (Phase 2): named anchors + entity stations.
+#
+# Rooms may carry an OPTIONAL `anchors` map {anchor_id: {desc, dir?}} naming the
+# features prose already references (the bar, the hearth, a corner table); a
+# doorway is implicitly an anchor via its edge. Entities may carry an OPTIONAL
+# station in scene['stations'] {name: {at: anchor|None, near: [names]}}. From
+# these we DERIVE proximity (within_reach / near / across) and a co-located
+# entity's LEFT/RIGHT -- both read-only, never stored egocentric. Absent
+# stations/anchors, everything degrades to "same room, unspecified" (near) with
+# no side, i.e. exactly the pre-Phase-2 behavior.
+# ---------------------------------------------------------------------------
+
+def _station(scene: dict, name: str) -> dict:
+    """The station record for `name`, tolerating case/alias keys the way
+    room_of does. {} when none."""
+    stations = scene.get("stations") or {}
+    if name in stations and isinstance(stations[name], dict):
+        return stations[name]
+    ln = (name or "").lower().strip()
+    for k, v in stations.items():
+        if isinstance(v, dict) and str(k).lower().strip() == ln:
+            return v
+    return {}
+
+
+def _anchor_dir(scene: dict, room_id: str, anchor_id) -> Optional[str]:
+    """Compass bearing of an anchor within its room, or None."""
+    if not anchor_id:
+        return None
+    anchors = ((scene.get("rooms") or {}).get(room_id) or {}).get("anchors") or {}
+    a = anchors.get(anchor_id)
+    return normalize_bearing(a.get("dir")) if isinstance(a, dict) else None
+
+
+def proximity_rel(scene: dict, observer: str, target: str) -> Optional[str]:
+    """Within-room proximity tier between two entities: 'within_reach' | 'near'
+    | 'across', or None when they are not co-located. within_reach: same anchor,
+    or a mutual 'near' station link. across: distinct anchors in a room flagged
+    size 'large' (a great hall, a warehouse). Otherwise 'near' -- the safe
+    default for an ordinary same-room pair, including when no stations exist."""
+    o_room = room_of(scene, observer)
+    t_room = room_of(scene, target)
+    if not o_room or o_room != t_room:
+        return None
+    o_st, t_st = _station(scene, observer), _station(scene, target)
+    o_at, t_at = o_st.get("at"), t_st.get("at")
+    if (o_at and t_at and o_at == t_at) \
+            or target in (o_st.get("near") or []) \
+            or observer in (t_st.get("near") or []):
+        return "within_reach"
+    size = str(((scene.get("rooms") or {}).get(o_room) or {}).get("size") or "").lower()
+    if o_at and t_at and o_at != t_at and size == "large":
+        return "across"
+    return "near"
+
+
+def _ci_get(mapping, name):
+    """Case/whitespace-tolerant dict lookup, matching room_of's key tolerance,
+    so an orientation/station keyed 'Hinami' still resolves for a caller passing
+    'hinami'. Returns None on miss."""
+    if not isinstance(mapping, dict) or not name:
+        return None
+    if name in mapping:
+        return mapping[name]
+    ln = str(name).lower().strip()
+    for k, v in mapping.items():
+        if str(k).lower().strip() == ln:
+            return v
+    return None
+
+
+def _relative_sector(scene: dict, observer: str, target: str) -> Optional[str]:
+    """The egocentric sector (one of _REL_SECTORS) of a CO-LOCATED target
+    relative to the observer's facing, from the target's anchor bearing. None
+    without a facing and a beared target anchor -- never guessed. Also None when
+    observer and target share the SAME anchor: the observer stands AT it, so the
+    anchor's room bearing is not the target's direction from them (they are side
+    by side). Approximation: the target anchor's absolute room bearing is taken
+    as its direction from an observer near room centre."""
+    o_room = room_of(scene, observer)
+    if not o_room or o_room != room_of(scene, target):
+        return None
+    facing = (_ci_get(scene.get("orientation") or {}, observer) or {}).get("facing")
+    if not facing:
+        return None
+    o_at = _station(scene, observer).get("at")
+    t_at = _station(scene, target).get("at")
+    if o_at and t_at and o_at == t_at:
+        return None
+    return relative_bearing(facing, _anchor_dir(scene, o_room, t_at))
+
+
+def entity_side(scene: dict, observer: str, target: str) -> Optional[str]:
+    """'left'/'right' for a CO-LOCATED target relative to the observer's facing.
+    None without a facing and a beared anchor. Stays consistent when the
+    observer turns (facing flips the sides)."""
+    rel = _relative_sector(scene, observer, target)
+    if rel in _LEFT_SECTORS:
+        return "left"
+    if rel in _RIGHT_SECTORS:
+        return "right"
+    return None
+
+
+# Sectors that fall in an observer's rear arc -- the within-room blind spot.
+_REAR_SECTORS = {"behind", "behind_left", "behind_right"}
+
+
+def entity_arc(scene: dict, observer: str, target: str) -> Optional[str]:
+    """'front' or 'rear' for a CO-LOCATED target relative to the observer's
+    facing -- the within-room analogue of behind_rooms. A target in the REAR arc
+    (behind / behind-left / behind-right of where the observer faces) is in the
+    blind spot: the observer gets NO NEW VISUAL detail from them (a silent
+    approach or gesture is unseen) though sound still carries. Someone WITHIN
+    REACH is never a blind spot (they are at arm's length beside you) -> 'front'.
+    None when facing or the target's anchor bearing is unknown -- with no basis,
+    nothing is gated (the fail-open default for FOV)."""
+    if proximity_rel(scene, observer, target) == "within_reach":
+        return "front"
+    rel = _relative_sector(scene, observer, target)
+    if rel is None:
+        return None
+    return "rear" if rel in _REAR_SECTORS else "front"
+
+
+def _sector_label(sector: Optional[str]) -> Optional[str]:
+    """Collapse an 8-way sector to a coarse egocentric label for prose:
+    ahead / behind / left / right (diagonals fold to their lateral side)."""
+    if sector == "ahead":
+        return "ahead"
+    if sector == "behind":
+        return "behind"
+    if sector in _LEFT_SECTORS:
+        return "left"
+    if sector in _RIGHT_SECTORS:
+        return "right"
+    return None
+
+
+def room_layout(scene: dict, observer: str) -> dict:
+    """An egocentric map of the observer's CURRENT room, for a deliberate
+    look-around/survey: {anchors:[{desc, side}], exits:{bucket:[{room,barrier}]},
+    facing_known:bool}. Each anchor's `side` (ahead/behind/left/right, or None
+    when facing/bearing is unknown -> describe it topologically) comes from the
+    observer's facing vs the anchor's compass dir; exits reuse the egocentric
+    digest. This is the DATA a convincing 'you look around' renders from -- the
+    features, which way they lie, and where the ways out are."""
+    o_room = room_of(scene, observer)
+    room = (scene.get("rooms") or {}).get(o_room) or {}
+    facing = ((scene.get("orientation") or {}).get(observer) or {}).get("facing")
+    anchors = []
+    for aid, a in (room.get("anchors") or {}).items():
+        if not isinstance(a, dict):
+            continue
+        side = _sector_label(relative_bearing(facing, normalize_bearing(a.get("dir")))) \
+            if facing else None
+        anchors.append({"desc": a.get("desc") or aid, "side": side})
+    return {"anchors": anchors, "exits": spatial_digest(scene, observer),
+            "facing_known": bool(facing)}
+
+
+def anchor_bearing_of(scene: dict, name: str) -> Optional[str]:
+    """Compass bearing of the anchor the entity is currently stationed at,
+    within its room; None if it has no station anchor or that anchor has no
+    dir. Lets a character deterministically turn to FACE a co-located person by
+    that person's anchor direction (see spatial_frames.infer_facing)."""
+    room = room_of(scene, name)
+    if not room:
+        return None
+    return _anchor_dir(scene, room, _station(scene, name).get("at"))
+
+
+def normalize_scene_stations(scene: dict) -> dict:
+    """Station hygiene, run at merge. Drops a station whose entity has no
+    position; blanks an `at` naming an anchor absent from the entity's CURRENT
+    room (so a room change auto-clears a stale anchor); drops `near` entries not
+    co-located in the same room; then symmetrizes surviving `near` links. This
+    makes a room move self-heal a character's within-room position with no
+    separate commit inferer -- the old anchor and old near-links simply fail
+    their membership tests once the position changes."""
+    stations = scene.get("stations")
+    if not isinstance(stations, dict):
+        return scene
+    positions = scene.get("positions") or {}
+    rooms = scene.get("rooms") or {}
+
+    for name in list(stations.keys()):
+        st = stations.get(name)
+        my_room = _ci_get(positions, name)
+        if not isinstance(st, dict) or my_room is None:
+            stations.pop(name, None)   # tolerant: a case-variant of a positioned name survives
+            continue
+        anchors = (rooms.get(my_room) or {}).get("anchors") or {}
+        if st.get("at") and st["at"] not in anchors:
+            st["at"] = None
+        st["near"] = [n for n in (st.get("near") or [])
+                      if _ci_get(positions, n) is not None and _ci_get(positions, n) == my_room]
+
+    for name, st in list(stations.items()):
+        for other in list(st.get("near") or []):
+            o = stations.setdefault(other, {"at": None, "near": []})
+            if isinstance(o, dict) and name not in (o.setdefault("near", [])):
+                o["near"].append(name)
+    return scene
+
+
+def spatial_facts(scene: dict, observer: str, source_names) -> list:
+    """Deterministic, authoritative one-line spatial statements for a beat, from
+    the observer's frame -- GROUND TRUTH a weak narrator must not contradict
+    (it need NOT recite them; restraint still governs how much is said). Covers
+    exit directions and co-located people (proximity tier, side, rear blind
+    spot). Empty when nothing is derivable. This is scaffolding against weak
+    models flipping 'behind' to 'ahead' or swapping who is where."""
+    facts = []
+    digest = spatial_digest(scene, observer)
+    dir_word = {"behind": "behind you", "ahead": "ahead of you",
+                "left": "to your left", "right": "to your right",
+                "above": "above you", "below": "below you"}
+    for bucket, word in dir_word.items():
+        for ref in digest.get(bucket) or []:
+            facts.append(f"{ref['room']} lies {word}.")
+    tier_word = {"within_reach": "within arm's reach beside you",
+                 "near": "a few steps away", "across": "across the room"}
+    for name in source_names or []:
+        if name == observer:
+            continue
+        tier = proximity_rel(scene, observer, name)
+        if tier is None:
+            continue
+        clause = f"{name} is {tier_word.get(tier, 'nearby')}"
+        if entity_arc(scene, observer, name) == "rear":
+            clause += ", behind you and out of your sight (you hear, not see, them)"
+        else:
+            side = entity_side(scene, observer, name)
+            if side:
+                clause += f", on your {side}"
+        facts.append(clause + ".")
+    return facts
+
 
 def visible_adjacent_rooms(
     scene: dict,
@@ -469,6 +1012,29 @@ def _merge_room(existing: dict, incoming: dict) -> dict:
         merged_room[key] = value
 
     return merged_room
+
+def _dedupe_adjacent(edges):
+    """Collapse adjacency edges that target the same room, keeping the LAST
+    occurrence for each target (matching _merge_room's upsert-by-'to').
+
+    _merge_room already dedupes, but ONLY for a room present in the incoming
+    diff. A room the model doesn't re-declare this turn is carried through the
+    merge verbatim, so a duplicate 'to' edge introduced once -- e.g. when
+    rename-remapping rewrites two edges onto the same target -- otherwise
+    persists frozen across every subsequent turn. That leaves a room
+    simultaneously walled off from AND open-doored to the same neighbor
+    (barrier 'wall' and 'open_door' at once), which makes perception's spatial
+    cues incoherent. Deduping every room on every merge heals it. First-seen
+    'to' order is preserved; malformed edges (no 'to') pass through untouched."""
+    seen, order, extras = {}, [], []
+    for edge in edges or []:
+        if isinstance(edge, dict) and edge.get("to"):
+            if edge["to"] not in seen:
+                order.append(edge["to"])
+            seen[edge["to"]] = edge  # last wins, matching _merge_room
+        else:
+            extras.append(edge)
+    return [seen[t] for t in order] + extras
 
 # ---------------------------------------------------------------------------
 # Moving rooms / transit: derived dock edges.
@@ -771,6 +1337,7 @@ def merge_scene_with_diff(
     incoming_rooms = diff.get("rooms") or {}
     incoming_entities = diff.get("entities") or {}
     incoming_positions = diff.get("positions") or {}
+    incoming_stations = diff.get("stations") or {}
 
     if isinstance(incoming_rooms, dict):
         for room_id, incoming_room in incoming_rooms.items():
@@ -788,6 +1355,18 @@ def merge_scene_with_diff(
 
     if isinstance(incoming_positions, dict):
         merged["positions"].update(incoming_positions)
+
+    # Stations (within-room position) are a sibling of positions, merged per
+    # entity so a diff touching only `at` keeps the entity's `near` list, and
+    # vice versa. Hygiene (phantom-anchor blanking, non-colocated pruning,
+    # symmetrization) runs below via normalize_scene_stations.
+    if isinstance(incoming_stations, dict) and incoming_stations:
+        merged["stations"] = dict(merged.get("stations") or {})
+        for name, st in incoming_stations.items():
+            if isinstance(st, dict):
+                cur = dict(merged["stations"].get(name) or {})
+                cur.update(st)
+                merged["stations"][name] = cur
 
     for removal in diff.get("remove_adjacent") or []:
         if not isinstance(removal, dict):
@@ -831,7 +1410,23 @@ def merge_scene_with_diff(
     # canonicalizes whatever the rewrite emitted.
     apply_transit_dock_edges(merged)
 
+    # Collapse duplicate same-target adjacency edges across EVERY room, not
+    # just the ones re-declared this turn -- otherwise a duplicate frozen into
+    # an untouched room (a neighbor that is both walled and open-doored) leaks
+    # incoherent spatial cues into perception forever. See _dedupe_adjacent.
+    for room in merged["rooms"].values():
+        if isinstance(room, dict) and room.get("adjacent"):
+            room["adjacent"] = _dedupe_adjacent(room["adjacent"])
+
     normalize_scene_barriers(merged)
+    # Optional compass bearings on edges: canonicalize each `dir` and reconcile
+    # reciprocals so either room can derive a consistent left/right. Runs after
+    # dedupe (so only surviving edges are reconciled) and barrier normalization.
+    normalize_scene_bearings(merged)
+    # Within-room station hygiene: prune stale anchors/near-links (auto-heals a
+    # room move) and symmetrize proximity. Runs after positions are final.
+    if merged.get("stations"):
+        normalize_scene_stations(merged)
     return merged
 
 def normalize_room_id(name: str) -> str:

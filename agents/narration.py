@@ -8,7 +8,25 @@ from concurrent.futures import ThreadPoolExecutor
 
 from db import get_setting, q, wget, wset
 from prompts import get_prompt
-from scene import persona_of
+from scene import persona_of, get_scene
+import os
+import re
+
+from spatial import spatial_digest, spatial_facts, room_of
+
+
+def _spatial_facts_field(scene, observer):
+    """Env-gated (SPATIAL_SCAFFOLD=1) deterministic ground-truth spatial facts
+    for the narrator. Off by default -> {} (no payload change, baseline
+    behavior). On -> {'spatial_facts': [...]} the narrator is told not to
+    contradict. Sources are everyone co-located with the observer."""
+    if not os.environ.get("SPATIAL_SCAFFOLD"):
+        return {}
+    o_room = room_of(scene, observer)
+    positions = scene.get("positions") or {}
+    names = [n for n, r in positions.items() if r == o_room and n != observer]
+    facts = spatial_facts(scene, observer, names)
+    return {"spatial_facts": facts} if facts else {}
 from schemas import validate_llm_output
 
 from .common import (
@@ -82,6 +100,46 @@ def _resolve_narration_person(chat_id, raw_input, player_name, player_pronouns,
 _ENFORCEABLE_PREFIXES = (
     "Dialogue from view missing or altered",
 )
+
+# Deterministic craft screen: AI-tell phrases the PROSE CRAFT prompt bans. A
+# draft containing any triggers ONE rewrite naming them (reusing the correction
+# loop). Conservative -- only clear tells, to avoid false positives on ordinary
+# prose. Dialogue is exempt (quotes are fixed); we scan the whole draft but the
+# patterns don't match normal speech.
+_CRAFT_TELLS = [
+    (r"\bshift(?:s|ed|ing)?\s+(?:her|his|their|my|its)\s+weight\b", "shifts weight"),
+    (r"\beyes?\s+flick(?:s|ed|ing)?\b", "eyes flick"),
+    (r"\btake[sn]?\s+the\s+(?:\w+\s+){1,2}in\b(?!\s+(?:his|her|their|both|one|two)\s+hands?)",
+     "'take the room in' (filtering)"),
+    (r"\btak(?:e|es|ing)\s+in\s+the\s+\w+\b", "'take in the room' (filtering)"),
+    (r"\bI'?m\s+aware\s+of\b", "'I'm aware of' (filtering)"),
+    (r"\bwash(?:es|ed)?\s+over\s+(?:me|you|him|her|them|us)\b", "washes over (emotion)"),
+    (r"\bhang(?:s|ing|ed)?\s+in\s+the\s+air\b|\bhung\s+in\s+the\s+air\b", "hangs in the air"),
+    (r"\bmiddle\s+distance\b", "middle distance"),
+    (r"\bfull\s+height\b", "full height"),
+    (r"\bclose\s+air\b", "the close air"),
+    (r"\b(?:deliberate|deliberately|unhurried|unhurriedly|pointedly|casually)\b",
+     "adverb tell (deliberate/unhurried/pointedly/casually)"),
+    (r"\bslow\s+and\s+steady\b", "slow and steady"),
+    (r"\b(?:muted|soft|softly|dim|dimly|faint|faintly|diffused|warm|low)\s+"
+     r"(?:\w+\s+){0,2}(?:glow|glimmer|gleam|light|murmur|hum|clink|drone)\b",
+     "generic muted/dim + light/sound"),
+]
+
+
+def _craft_tells(prose: str) -> list:
+    """Banned AI tells present in a narrator draft (deduped, ordered). Quoted
+    dialogue is masked before scanning -- quotes are fixed (reproduced verbatim),
+    so a tell inside a spoken line is not the narrator's prose and could never be
+    rewritten away, which would burn a pointless retry every turn."""
+    if not prose:
+        return []
+    scan = re.sub(r'"[^"]*"', " ", prose)
+    found = []
+    for pat, label in _CRAFT_TELLS:
+        if re.search(pat, scan, re.I):
+            found.append(label)
+    return list(dict.fromkeys(found))
 
 def _generate_narration(payload, view, prev, p_lines, correction_notes=None):
     call_payload = dict(payload)
@@ -161,7 +219,16 @@ def narrator(ctx, nonce):
         "narration_person": narration_person,
         "player_name": player_name,
         "player_pronouns": player_pronouns,
+        # perception_outcome stashes this turn's post-move, orientation-refreshed
+        # scene; fall back to the committed KV on the opening turn (establish),
+        # where no movement has happened and orientation is fresh anyway. Using
+        # the committed scene here would describe the space with LAST beat's
+        # facing on movement beats (commit runs after this stage).
+        "spatial_frame": spatial_digest(
+            ctx.get("outcome_scene") or get_scene(chat["id"], chat), player_name),
         "recent_prose_for_rhythm": prev,
+        **_spatial_facts_field(
+            ctx.get("outcome_scene") or get_scene(chat["id"], chat), player_name),
         "already_established_phrases": _already_established_phrases(view, prev),
         "exemplars": json.loads(get_setting("exemplars") or "[]"),
         "variant_seed": nonce,
@@ -175,6 +242,29 @@ def narrator(ctx, nonce):
                       + " | ".join(enforceable))
         out, warnings, fidelity_warnings = _generate_narration(
             payload, view, prev, p_lines, correction_notes=correction)
+
+    # Craft screen: while the accepted draft carries banned AI tells, spend a
+    # rewrite naming them (bounded to 2). Keep a rewrite ONLY if it preserves
+    # dialogue fidelity AND strictly reduces the tell count -- prose quality
+    # never costs a dropped line, and we never accept a lateral swap that just
+    # trades one tell for another.
+    best_tells = _craft_tells(out.get("prose", ""))
+    _retry_cap = 0 if os.environ.get("NARRATOR_CRAFT_RETRY") == "0" else 2
+    craft_attempts = 0
+    while best_tells and craft_attempts < _retry_cap:
+        craft_attempts += 1
+        craft_note = ("Your previous draft for THIS turn used banned AI tells / weak "
+                      "phrasing -- rewrite the PROSE to remove every one, keeping all "
+                      "dialogue verbatim and every fact intact: " + "; ".join(best_tells))
+        r_out, r_warnings, r_fid = _generate_narration(
+            payload, view, prev, p_lines, correction_notes=craft_note)
+        r_enforceable = [w for w in r_fid if w.startswith(_ENFORCEABLE_PREFIXES)]
+        r_tells = _craft_tells(r_out.get("prose", ""))
+        if not r_enforceable and len(r_tells) < len(best_tells):
+            out, warnings, fidelity_warnings = r_out, r_warnings, r_fid
+            best_tells = r_tells
+        else:
+            break
 
     ctx.warnings.extend(warnings)
     if fidelity_warnings:
@@ -259,6 +349,9 @@ def narrator_extra(ctx, nonce):
             "narration_person": narration_person,
             "player_name": extra.get("name") or "Player",
             "player_pronouns": extra.get("pronouns") or {},
+            "spatial_frame": spatial_digest(
+                ctx.get("outcome_scene") or get_scene(chat["id"], chat),
+                extra.get("name") or ""),
             "recent_prose_for_rhythm": prev,
             "already_established_phrases": _already_established_phrases(view, prev),
             "exemplars": json.loads(get_setting("exemplars") or "[]"),
