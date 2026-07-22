@@ -235,12 +235,17 @@ def disguised_visible_appearance(true_appearance, disguise):
     terms = (disguise or {}).get("concealed_terms") or []
     if terms and true_appearance:
         scrubbed = true_appearance
+        matched = False
         for t in terms:
-            scrubbed = re.sub(rf"\b{re.escape(t)}\b", "", scrubbed, flags=re.IGNORECASE)
+            scrubbed, n = re.subn(rf"\b{re.escape(t)}\b", "", scrubbed, flags=re.IGNORECASE)
+            matched = matched or bool(n)
         # Collapse the punctuation/space debris a removal leaves behind.
         scrubbed = re.sub(r"\s*[;,]\s*(?=[;,])", "", scrubbed)
         scrubbed = re.sub(r"\s{2,}", " ", scrubbed).strip(" ;,")
-        if scrubbed:
+        # If no term actually matched the text (e.g. "tail" vs "tails"),
+        # scrubbed is the unmodified TRUE appearance -- returning it would
+        # leak the concealed form. Fail toward concealment instead.
+        if matched and scrubbed:
             return scrubbed
     return "a person whose appearance is unremarkable"
 
@@ -337,7 +342,14 @@ def director_context(chat_id, n=5, frame_id=_UNSET):
     )
     out = []
     for r in reversed(rows):
-        ev = json.loads(r["ev"]) if r["ev"] else {}
+        # Guarded like recent_events above -- one corrupt events row must
+        # not wedge every subsequent director_interpret/mapping stage.
+        try:
+            ev = json.loads(r["ev"]) if r["ev"] else {}
+        except (TypeError, ValueError):
+            ev = {}
+        if not isinstance(ev, dict):
+            ev = {}
         out.append({
             "turn": r["idx"],
             "player_input": r["player_input"],
@@ -359,13 +371,17 @@ def _ability_mod(actor, ability, ctx):
     actor_name = str(actor or "").lower().strip()
     ability_name = str(ability or "").lower().strip()
     persona = persona_of(ctx.chat)
-    player_aliases = {
-        str(persona.get("name", "")).lower().strip(),
-        "player", "the player", "you", "pc",
-    }
+    # persona_of returns the normalized native shape (identity.name /
+    # competence.abilities nested) -- flat persona.get("name"/"abilities")
+    # always returned ""/[] here (see _player_aliases below for the same
+    # trap), so the player's real name never matched and their ability
+    # pool was always empty. Also drop the empty string so a blank actor
+    # name can't false-match as the player.
+    alias = persona_name(persona).lower().strip()
+    player_aliases = {a for a in (alias, "player", "the player", "you", "pc") if a}
     pools = []
     if actor_name in player_aliases:
-        pools.append(persona.get("abilities", []))
+        pools.append(persona_abilities(persona))
     else:
         for row in ctx.cast:
             sheet = json.loads(row["sheet"])

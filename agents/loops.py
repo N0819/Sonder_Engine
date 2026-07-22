@@ -121,7 +121,7 @@ def interaction_loop(ctx, nonce):
     # earlier in cast-registration order (flow.reactors' own order reflects
     # that registration order, not who was addressed).
     addressed = normalize_character_refs(
-        _list(flow.get("addressed_to")),
+        _list(flow.get("addressed_to")) + _list(flow.get("addressed_to_refs")),
         ctx.cast,
     )
     if addressed:

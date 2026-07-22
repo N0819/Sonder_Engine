@@ -10,6 +10,8 @@ from character_schema import (
     character_abilities,
     character_appearance,
     character_name,
+    character_public_history,
+    persona_abilities,
     persona_appearance,
     persona_name,
     persona_public_history,
@@ -76,9 +78,9 @@ def director_establish(ctx, nonce):
         "scenario": chat.get("scenario"),
         "player": {
             "name": pers.get("name") or persona_name(pers),
-            "appearance": pers.get("appearance"),
+            "appearance": persona_appearance(pers),
             "senses": senses_of(pers),
-            "abilities": pers.get("abilities", []),
+            "abilities": persona_abilities(pers),
             "public_history": persona_public_history(pers),
         },
         "present_characters": cast,
@@ -184,7 +186,7 @@ def director_interpret(ctx, nonce):
             "appearance": appearance_of(
                 pers.get("name") or persona_name(pers),
                 pers.get("appearance") or persona_appearance(pers), sc),
-            "abilities": pers.get("abilities", []),
+            "abilities": persona_abilities(pers),
             "public_shadow_profile": raw_shadow[:1200],
         },
         "present_characters": cast_info,
@@ -1686,6 +1688,38 @@ def _resolve_movement_mover(sc, sd, mv, p_name):
         return key, positions.get(key), str(eid)
     return None, None, None
 
+def _audit_fact_adjudications(ctx, out, interp):
+    """Deterministic W2 backstop: every player-authored WORLD assertion --
+    the actor-less `event` claims _extract_authority_claims mints (an
+    offscreen death, 'two guards appear') -- must carry a
+    fact_adjudications verdict (confirmed|contested|false) from the
+    resolve, landing it on-page. The player's own on-page acts/effects are
+    covered by claim_dispositions and need no adjudication; claims that
+    only surface inside speech are prompt territory. Warn-only, matching
+    the house pattern for prompt-compliance audits."""
+    if not isinstance(out.get("fact_adjudications"), list):
+        out["fact_adjudications"] = []
+    adjudicated_ids = {
+        str(fa.get("claim_id"))
+        for fa in out["fact_adjudications"]
+        if isinstance(fa, dict) and fa.get("claim_id")
+    }
+    claims = _dict(interp.get("flow")).get("authority_claims") or []
+    for claim in claims:
+        if not isinstance(claim, dict):
+            continue
+        claim_id = str(claim.get("claim_id") or "")
+        if not claim_id.endswith(":event"):
+            continue
+        if claim_id in adjudicated_ids:
+            continue
+        ctx.add_warning(
+            f"Unadjudicated player-asserted fact {claim_id} "
+            f"({str(claim.get('predicate') or claim.get('source_text') or '')[:80]!r}): "
+            "director_resolve returned no fact_adjudications verdict "
+            "(confirmed|contested|false) landing it on-page."
+        )
+
 def director_resolve(ctx, nonce):
     chat = ctx.chat
     interp = _dict(ctx.director_interpret)
@@ -1804,8 +1838,24 @@ def director_resolve(ctx, nonce):
 
     sc = get_scene(chat["id"], chat)
     raw_intents = wget(chat["id"], "standing_intentions", []) or []
+    # Lazy import: commit.py owns the ledger's deterministic semantics
+    # (OBLIGATION_OVERDUE_AGE, the commit-side re-deferral reminder); the
+    # payload view is built there so the flag the prompt's hard rule keys
+    # on and the flag commit warns on can never disagree.
+    from commit import pending_obligation_view
     _mv_for_context = interp.get("movement")
     _mv_target = _mv_for_context.get("to_room") if isinstance(_mv_for_context, dict) else None
+
+    # W5's light authority appraisal hint: each present person's evident
+    # public role/standing (never private history), for the prompt's
+    # AUTHORITY APPRAISAL rule -- an order across a standing gap is
+    # contestable, not auto-executed.
+    social_standing = {
+        character_name(json.loads(c["sheet"])):
+            (character_public_history(json.loads(c["sheet"])) or "")[:240]
+        for c in ctx.cast
+    }
+    social_standing[p_name] = (persona_public_history(pers) or "")[:240]
 
     payload = {
         "scene": {
@@ -1833,7 +1883,7 @@ def director_resolve(ctx, nonce):
             "speech_volume": interp.get("speech_volume", "normal"),
             "action": interp.get("action"),
             "movement": interp.get("movement"),
-            "abilities": pers.get("abilities", []),
+            "abilities": persona_abilities(pers),
             "authority_claims": (interp.get("flow") or {}).get("authority_claims") or [],
         },
         "other_players_declarations": [
@@ -1856,6 +1906,8 @@ def director_resolve(ctx, nonce):
         "dialogue_mode": bool(flow.get("dialogue_mode", False)),
         "relevant_lore": lore_for(ctx),
         "standing_intentions": raw_intents[:12],
+        "pending_obligations": pending_obligation_view(chat["id"], turn["idx"]),
+        "social_standing": social_standing,
         # See director_interpret: already-completed mechanical transitions
         # (timed arrivals) the prose should acknowledge, not re-resolve.
         "engine_notices": wget(chat["id"], "engine_notices", []),
@@ -2160,6 +2212,10 @@ def director_resolve(ctx, nonce):
     tracked_names = [
         character_name(json.loads(c["sheet"])) for c in ctx.cast
     ] + [p_name]
+
+    # W2 backstop: warn on any player-authored world assertion the resolve
+    # left in assertion limbo (no confirmed/contested/false verdict).
+    _audit_fact_adjudications(ctx, out, interp)
 
     # One general prose-vs-diff reconciliation pass (subsumes the old
     # warn-only restraint backstop): deterministic placeholder floor,

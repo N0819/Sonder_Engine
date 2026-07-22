@@ -205,17 +205,21 @@ def move_lorebook(book_id, parent_id, position=None):
                 qi("UPDATE lorebooks SET sort_order=? WHERE id=?", (idx, rid))
 
 def reorder_lorebook(book_id, direction="up"):
-    book = q("SELECT parent_id, sort_order FROM lorebooks WHERE id=?", (book_id,), one=True)
+    book = q("SELECT parent_id, sort_order, chat_id FROM lorebooks WHERE id=?", (book_id,), one=True)
     if not book:
         raise ValueError("Lorebook not found")
-    
+
     parent_id = book["parent_id"]
     sort_order = book["sort_order"]
-    
+    # Scope the swap partner to the same chat (mirrors move_lorebook's root
+    # branch): without this, a root book (parent_id NULL) could swap
+    # sort_order with a root book of a DIFFERENT chat or a global book.
+    chat_id = book["chat_id"]
+
     if direction == "up":
         prev = q(
-            "SELECT id FROM lorebooks WHERE parent_id IS ? AND sort_order < ? ORDER BY sort_order DESC LIMIT 1",
-            (parent_id, sort_order),
+            "SELECT id FROM lorebooks WHERE parent_id IS ? AND chat_id IS ? AND sort_order < ? ORDER BY sort_order DESC LIMIT 1",
+            (parent_id, chat_id, sort_order),
             one=True,
         )
         if prev:
@@ -223,8 +227,8 @@ def reorder_lorebook(book_id, direction="up"):
             qi("UPDATE lorebooks SET sort_order=? WHERE id=?", (sort_order - 1, book_id))
     elif direction == "down":
         nxt = q(
-            "SELECT id FROM lorebooks WHERE parent_id IS ? AND sort_order > ? ORDER BY sort_order ASC LIMIT 1",
-            (parent_id, sort_order),
+            "SELECT id FROM lorebooks WHERE parent_id IS ? AND chat_id IS ? AND sort_order > ? ORDER BY sort_order ASC LIMIT 1",
+            (parent_id, chat_id, sort_order),
             one=True,
         )
         if nxt:
@@ -2031,7 +2035,10 @@ def apply_relationship_updates(chat_id, char_id, turn_idx, updates):
             fear=_clamp_signed(current.fear + fear_delta, -1.0, 1.0),
             familiarity=min(1.0, current.familiarity + 0.03),
             last_interaction_turn=turn_idx,
-            salient_event=triggers[-300:])
+            # Only overwrite the recorded salient event when this update
+            # actually carries triggers -- a routine trigger-less delta
+            # must not erase previously recorded history.
+            **({"salient_event": triggers[-300:]} if triggers else {}))
     save_relationships(chat_id, char_id, graph)
     return graph
 

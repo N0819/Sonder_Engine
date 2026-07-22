@@ -33,6 +33,7 @@ from .common import (
     _agent_json,
     _already_established_phrases,
     _check_narrator_fidelity,
+    _dedupe_view_sentences,
     _narration_person_counts,
     _protected_view_quotes,
     _strip_player_echo,
@@ -134,7 +135,10 @@ def _craft_tells(prose: str) -> list:
     rewritten away, which would burn a pointless retry every turn."""
     if not prose:
         return []
-    scan = re.sub(r'"[^"]*"', " ", prose)
+    # Mask curly-quoted dialogue too -- models routinely emit it, and every
+    # other dialogue regex in the pipeline (agents/common.py) accepts it; a
+    # tell inside curly quotes would otherwise burn unwinnable retries.
+    scan = re.sub(r'"[^"]*"|“[^“”]*”', " ", prose)
     found = []
     for pat, label in _CRAFT_TELLS:
         if re.search(pat, scan, re.I):
@@ -196,8 +200,11 @@ def narrator(ctx, nonce):
         "raw_input": ctx.input or "",
     }
 
-    player_name = pers.get("identity", {}).get("name") or "Player" if isinstance(pers, dict) else "Player"
-    player_pronouns = pers.get("identity", {}).get("pronouns", {}) if isinstance(pers, dict) else {}
+    # (x or {}) rather than .get(key, {}): a hand-edited sheet with an
+    # explicit "identity": null defeats the .get default and would crash
+    # the narrator stage every turn.
+    player_name = (pers.get("identity") or {}).get("name") or "Player" if isinstance(pers, dict) else "Player"
+    player_pronouns = (pers.get("identity") or {}).get("pronouns", {}) if isinstance(pers, dict) else {}
     # Durable persistence of a newly detected person is deferred to commit
     # (commit.py's commit_narration_person) via this pending sink -- the
     # narrator stage itself must not write world state before the commit
@@ -213,7 +220,7 @@ def narrator(ctx, nonce):
         "do_not_quote_verbatim": p_lines,
         "scene_opening": bool(est),
         "private_voice_setting": (
-            pers.get("narration", {}).get("voice_setting", "")
+            (pers.get("narration") or {}).get("voice_setting", "")
             if isinstance(pers, dict) else ""
         ),
         "narration_person": narration_person,
@@ -279,10 +286,13 @@ def narrator(ctx, nonce):
 
     if pending_person_writes:
         out["narration_person_writes"] = pending_person_writes
-    out["prose"] = _strip_player_echo(
+    # Within-view dedupe (W12): a duplicated beat -- the same sentence
+    # rendered twice in one turn's prose -- is dropped deterministically.
+    # Quoted dialogue and short sentences are exempt (see the helper).
+    out["prose"] = _dedupe_view_sentences(_strip_player_echo(
         out.get("prose", ""), p_lines,
         protect_quotes=_protected_view_quotes(view, p_lines),
-    )
+    ))
     return out
 
 def narrator_extra(ctx, nonce):
@@ -372,10 +382,11 @@ def narrator_extra(ctx, nonce):
 
         if pending_person_writes:
             out["narration_person_writes"] = pending_person_writes
-        out["prose"] = _strip_player_echo(
+        # Within-view dedupe (W12) -- see the matching comment in narrator().
+        out["prose"] = _dedupe_view_sentences(_strip_player_echo(
             out.get("prose", ""), p_lines,
             protect_quotes=_protected_view_quotes(view, p_lines),
-        )
+        ))
         return pid_key, out, warnings, fidelity_warnings
 
     # Each extra player's narration only reads data already computed before

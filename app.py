@@ -43,6 +43,7 @@ from importers import (
     recover_greetings_from_source,
 )
 from commit import (commit_all, promotable_background_presences,
+                    promote_background_character,
                     _known_name_roster, sync_room_registry_with_scene)
 from prompts import presets, active_preset, get_prompt, DEFAULT_PROMPTS, nsfw_enabled
 from memory import (
@@ -230,7 +231,10 @@ def _require_chat_idle(chat_id: int):
     concurrency model -- recompute (reroll/rerun/resume/step edit/step
     activate/turn delete), branch, export/import, and lorebook
     attach/detach (which touches checkpoints spanning every frame)."""
-    if any(key[0] == chat_id for key in ABORTS):
+    # list() snapshots the keys atomically -- pipeline threads insert/pop
+    # ABORTS entries concurrently, and iterating the live dict can raise
+    # RuntimeError("dictionary changed size during iteration").
+    if any(key[0] == chat_id for key in list(ABORTS)):
         raise HTTPException(
             409,
             "This chat still has an active pipeline. Abort it and wait for "
@@ -804,6 +808,7 @@ def bootstrap():
         "lorebooks": [dict(r) for r in q("SELECT * FROM lorebooks WHERE chat_id IS NULL")],
         "chats": [dict(r) for r in q("SELECT * FROM chats ORDER BY id DESC")],
         "nsfw_enabled": get_setting("nsfw_enabled") == "1",
+        "auto_promote": get_setting("auto_promote") != "0",
         "default_prompts": DEFAULT_PROMPTS,
         "prompt_presets": presets(),
         "active_preset": active_preset(),
@@ -1742,68 +1747,19 @@ def confirm_promotion(cid: int, body: dict = Body(...)):
     if not name or not isinstance(sheet, dict):
         raise HTTPException(400, "Missing name or sheet")
 
-    sheet = normalize_character_data(sheet)
     memory_seeds = [str(m) for m in (body.get("memory_seeds") or []) if str(m).strip()]
-
-    char_id = qi(
-        "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
-        (
-            character_name(sheet), json.dumps(sheet, ensure_ascii=False),
-            json.dumps({"format": "promoted", "chat_id": cid}, ensure_ascii=False),
-            time.time(),
-        ),
-    )
-    qi(
-        "INSERT INTO chat_chars(chat_id,char_id,status) VALUES(?,?,'active')",
-        (cid, char_id),
-    )
-
-    chat_row = dict(q("SELECT * FROM chats WHERE id=?", (cid,), one=True))
-    sc = wget(cid, "scene", None)
-    if isinstance(sc, dict):
-        positions = sc.setdefault("positions", {})
-        if character_name(sheet) not in positions:
-            player_name = persona_name(persona_of(chat_row))
-            positions[character_name(sheet)] = positions.get(player_name)
-        wset(cid, "scene", sc)
-
-    # Seed mutual recognition with the player and with every other
-    # already-registered cast member -- she's been part of the scene the
-    # whole time, so treating her as a stranger to everyone else present
-    # would be as wrong as it was to treat her as a stranger to the player.
-    cast_rows = q(
-        "SELECT ch.sheet FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
-        "WHERE cc.chat_id=? AND cc.status='active' AND ch.id!=?",
-        (cid, char_id),
-    )
-    roster = _known_name_roster(chat_row, cast_rows)
-    known = wget(cid, "known", {})
-    her_name = character_name(sheet)
-    known.setdefault(her_name, [])
-    for other in roster:
-        if other not in known[her_name]:
-            known[her_name].append(other)
-        known.setdefault(other, [])
-        if her_name not in known[other]:
-            known[other].append(her_name)
-    wset(cid, "known", known)
-
-    if memory_seeds:
-        add_memories_batch([
-            {
-                "chat_id": cid, "char_id": char_id, "turn_id": None,
-                "kind": "episode", "provenance": "witnessed", "salience": 0.6,
-                "content": seed, "turn_idx": None,
-                "event_key": f"promotion:{cid}:{char_id}:{i}",
-            }
-            for i, seed in enumerate(memory_seeds)
-        ])
-
-    presences = wget(cid, "background_presences", {})
-    presences.pop(name, None)
-    wset(cid, "background_presences", presences)
-
+    char_id = promote_background_character(
+        cid, name, sheet=sheet, memory_seeds=memory_seeds)
     return {"ok": True, "char_id": char_id}
+
+@app.get("/api/auto_promote")
+def get_auto_promote():
+    return {"enabled": get_setting("auto_promote") != "0"}
+
+@app.put("/api/auto_promote")
+def set_auto_promote(body: dict = Body(...)):
+    set_setting("auto_promote", "1" if body.get("enabled", True) else "0")
+    return {"enabled": bool(body.get("enabled", True))}
 
 @app.get("/api/chats/{cid}/personas")
 def chat_list_extra_personas(cid: int):

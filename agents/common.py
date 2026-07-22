@@ -457,7 +457,7 @@ def _extract_authority_claims(sequence, raw_input, actor_name=None):
                 if eff is None:
                     continue
                 claims.append({
-                    "claim_id": f"claim:{i}:intent",
+                    "claim_id": f"claim:{i}:intent:{effect_index}",
                     "scope": "intent",
                     "subject_id": eff.get("target_id") or self_subject,
                     "predicate": eff.get("kind", ""),
@@ -1370,6 +1370,62 @@ def _already_established_phrases(view, recent_prose, limit=12):
     for prev in recent_prose or []:
         hits |= (view_shingles & _word_shingles(prev))
     return sorted(hits)[:limit]
+
+# Within-view dedupe (W12): the same sentence rendered twice in ONE turn's
+# view/prose ("Picard turns his head slightly toward Troi" appearing twice in
+# a single beat). Splitting is a plain sentence-boundary regex; a quote whose
+# body contains sentence punctuation mis-splits into fragments, but every such
+# fragment carries a quote character and is therefore exempt from dropping
+# (below), so mis-splits can only UNDER-dedupe, never eat real content.
+_VIEW_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])(\s+)")
+# Double-quote characters only: curly/straight single quotes double as
+# apostrophes in ordinary prose and cannot mark dialogue reliably.
+_VIEW_QUOTE_CHARS = ('"', "“", "”")
+_VIEW_DEDUPE_MIN_WORDS = 5
+
+def _dedupe_view_sentences(text):
+    """Drop a sentence that repeats an EARLIER sentence of the same text
+    verbatim (case/whitespace/terminal-punctuation-insensitive), keeping the
+    first occurrence. Deterministic and deliberately conservative:
+
+    - sentences containing quoted dialogue are never dropped -- quotes must
+      survive verbatim (dialogue fidelity), and a character repeating a line
+      on purpose is legitimate;
+    - short sentences (< 5 words) are never dropped -- intentional beats
+      ("No. No.") and terse stage directions must survive;
+    - only exact normalized repeats go; paraphrase is out of scope.
+
+    Returns the text unchanged (same object) when nothing repeats.
+    """
+    text = str(text or "")
+    if not text.strip():
+        return text
+    pieces = _VIEW_SENTENCE_SPLIT_RE.split(text)
+    seen = set()
+    kept = []
+    dropped = False
+    # pieces alternates [sentence, separator, sentence, separator, ...];
+    # each sentence is kept/dropped together with ITS OWN trailing
+    # separator, so removing a duplicate leaves the surrounding
+    # whitespace/paragraph structure intact.
+    for i in range(0, len(pieces), 2):
+        sent = pieces[i]
+        sep = pieces[i + 1] if i + 1 < len(pieces) else ""
+        key = re.sub(r"\s+", " ", sent).strip().strip(".!?…").casefold()
+        droppable = (
+            len(key.split()) >= _VIEW_DEDUPE_MIN_WORDS
+            and not any(qc in sent for qc in _VIEW_QUOTE_CHARS)
+        )
+        if droppable:
+            if key in seen:
+                dropped = True
+                continue
+            seen.add(key)
+        kept.append(sent)
+        kept.append(sep)
+    if not dropped:
+        return text
+    return "".join(kept).rstrip()
 
 _NARRATION_QUOTE_RE = re.compile(r'["“][^"“”]*["”]')
 _NARRATION_SQUOTE_RE = re.compile(r"(?<!\w)'[^']{3,}?'(?!\w)")

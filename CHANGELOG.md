@@ -1,5 +1,67 @@
 # Changelog
 
+## alpha3.0 — Interior depth: layered goals, blended mood, earned drive rupture
+
+The headline of this release is **moment-to-moment character depth**. Character
+agents no longer act from a single goal and a single mood — they carry a layered
+interior that the information barrier keeps private, leaking only through
+observable behavior.
+
+### Added
+- **Three-tier goal hierarchy** (`character_schema.py`, `affect.py`,
+  `agents/character.py`): a stable **core drive** (essence / expression / taboo),
+  **standing intentions** that persist across turns, and per-beat **wants** the
+  character forms and drops in the moment. `effective_drive()` reads the live
+  drive, honoring any active override.
+- **Blended, appraisal-driven mood** (`affect.py`): moods are no longer a single
+  label. An OCC-style appraisal reads the model's `goal_impacts`, and the engine
+  deterministically computes affect on canonical `valence`/`arousal` axes —
+  blending a **surface** reaction over a slower **undercurrent** above a
+  character **baseline**, with decay between beats. The model proposes; the
+  engine floors and reconciles, so even weaker models produce rich, stable
+  affect.
+- **Calibrated tells** (`agents/perception.py`, `agents/narration.py`,
+  `prompts.py`): interior state surfaces as physical cues gated per perceiver — a
+  tell only lands for observers who could actually read it — with a `_recent_tells`
+  ledger and an anti-repetition scrub so the same tell doesn't fire every beat.
+- **Earned drive rupture** (`affect.py`, `commit.py`, `agents/character.py`): a
+  major personal event can shift a character's core drive, but only through a
+  two-key lock — a sustained **strain primer** plus a high-impact **event
+  score** — over a deliberate detect → open-window → proposable protocol.
+  Ruptures leave **scars** (`former_drives`) and respect a cooldown. Drive
+  overrides are written to character runtime state only, never silently onto the
+  sheet.
+- **Autonomous background-character promotion** (`commit.py`, `app.py`): a named
+  background presence that keeps carrying scenes is promoted to a real character
+  automatically (dialogue threshold), minting a sheet and memory seeds *after*
+  the primary transaction so a promotion can never roll back an otherwise valid
+  turn. The manual confirm-promotion path now shares one code path with the
+  autonomous one; `GET/PUT /api/auto_promote` toggles the behavior.
+- **Obligation ledger** (`commit.py`, `agents/director.py`, `prompts.py`): the
+  Director tracks pending social/narrative obligations across turns and flags
+  overdue ones, committed as a transaction domain that rolls back with the turn.
+- **Player-asserted-fact adjudication** (`agents/director.py`, `prompts.py`,
+  `schemas.py`): a first-class path (with a backstop audit) for the Director to
+  accept, qualify, or reject facts the player asserts in narration.
+- **`demo/enterprise_d/`**: a 30-turn Enterprise-D test flight (transcript,
+  feature-coverage audit, harsh-critic narrative audit, and the W1–W12
+  weakness/fix findings that drove much of this release).
+
+### Fixed
+- Interior state is written only to `cstate` at commit, never to the character
+  sheet, preserving the objective-truth / private-state barrier.
+- Orientation refreshes in `perception_outcome` so post-move facing/left-right
+  stays consistent within a turn.
+- Narrator prose gained a mind-reading scrub and narrative-integrity guards
+  (action-first, person/pronoun discipline, no fabricated callbacks); duplicate
+  view sentences are de-duped.
+- Whole-project audit sweep of bugs and rough edges surfaced during the
+  Enterprise flight.
+
+New regression coverage: `tests/test_affect.py`, `test_director_obligations.py`,
+`test_background_auto_promotion.py`, `test_rupture_window_and_tells.py`,
+`test_view_dedupe.py`. `make check` green: **1053 tests passing.**
+
 ## alpha2.1 — Egocentric space: bearings, field of view, and on-the-fly rooms
 
 Builds the second layer of the physical world: every mind now has an ORIENTATION.

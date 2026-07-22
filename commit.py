@@ -1,9 +1,9 @@
 """Atomic world-state commit with mutation validation."""
 
 import copy
-import json, re, threading, weakref
+import json, re, threading, time, weakref
 from concurrent.futures import ThreadPoolExecutor
-from db import q, qi, qtx, transaction, wget, wset
+from db import q, qi, qtx, transaction, wget, wset, get_setting
 from memory import (
     add_memories_batch, prepare_memories_batch, delete_turn_memories, search_lore, add_lore,
     update_lore, LORE_CATEGORIES, LOREBOOK_TYPES,
@@ -16,7 +16,10 @@ from memory import (
 )
 from providers import embed_texts
 from prompts import get_prompt
-from character_schema import character_name, new_uid
+import affect
+from character_schema import (character_name, new_uid, character_psychology,
+                              character_initial_active_state, effective_drive,
+                              normalize_character_data, persona_name)
 from frames import is_recognized_in_frame
 from scene import set_char_state, set_char_status
 from mechanics import mechanics_sweep, news_latency_seconds, stable_event_key
@@ -1770,6 +1773,34 @@ def track_background_presences(ctx, nonce):
     wset(cid, "background_presences", presences)
     return {"tracked": len(presences)}
 
+def _flow_addressed_refs(ctx):
+    """Raw flow.addressed_to entries as the director emitted them, preserved
+    as flow.addressed_to_refs in schemas.py before int coercion. The string
+    entries are the only way the director can mark an UNREGISTERED background
+    presence (which has no character id) as the player's addressee; int-like
+    refs are registered-character ids and are ignored here (agents/loops.py
+    resolves those against the cast)."""
+    interp = ctx.get("director_interpret") or {}
+    flow = interp.get("flow") if isinstance(interp, dict) else None
+    if not isinstance(flow, dict):
+        return []
+    refs = []
+    for ref in (flow.get("addressed_to_refs") or []):
+        if isinstance(ref, str):
+            text = ref.strip()
+            if text and not text.isdigit():
+                refs.append(text)
+    return refs
+
+
+def _presence_in_addressed_refs(name, refs):
+    return any(
+        name.casefold() == ref.casefold()
+        or _background_name_mentioned(name, ref)
+        for ref in refs
+    )
+
+
 def pick_background_reactor(ctx, dr_output):
     """Single-winner convenience wrapper over pick_background_reactors: the
     top-ranked qualifying background presence, or None. Preserves the original
@@ -1800,7 +1831,12 @@ def pick_background_reactors(ctx, dr_output, cap=1):
 
     Returns [] when no candidate qualifies (the common case -- most turns
     have no salient, un-voiced background presence at all). cap defaults to 1,
-    reproducing the historical single-winner behavior exactly.
+    reproducing the historical single-winner behavior exactly -- with one
+    exception: a presence the director's flow.addressed_to named (a direct
+    player address, see _flow_addressed_refs) is FORCED into the picks,
+    bypassing `cap` if necessary, so a directly-addressed background NPC
+    always gets to answer with its own line instead of being displaced by a
+    merely-standing presence or a foreground character's interception.
     """
     chat = ctx.chat
     cid = chat.id
@@ -1823,11 +1859,19 @@ def pick_background_reactors(ctx, dr_output, cap=1):
     sc = wget(cid, "scene", {}) or {}
     presences = wget(cid, "background_presences", {})
 
+    addressed_refs = _flow_addressed_refs(ctx)
+
     candidates = []
+    forced = 0
     for name, record in presences.items():
         cf = name.casefold()
         if cf in roster or cf in voiced_this_beat:
             continue
+        # The director's own flow plan named this presence as the player's
+        # addressee -- the strongest possible salience signal, and one the
+        # raw-text checks below can miss entirely (an address by role or
+        # epithet never mentions the tracked name).
+        flow_addressed = _presence_in_addressed_refs(name, addressed_refs)
         addressed = _background_name_mentioned(name, player_input)
         # A registered character (or the player) who spoke directly TO this
         # presence this beat -- read-only here; the owed-reply debt is written
@@ -1837,17 +1881,24 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         owed = _valid_pending_reply(record, turn_idx)
         mentioned = _background_name_mentioned(name, resolved_event)
         dialogue_turns = record.get("dialogue_turns") or []
-        if not (addressed or char_addr or owed or mentioned or dialogue_turns):
+        if not (flow_addressed or addressed or char_addr or owed
+                or mentioned or dialogue_turns):
             continue
-        priority = (bool(addressed), bool(char_addr), bool(owed),
-                    bool(mentioned), len(dialogue_turns),
+        if flow_addressed:
+            forced += 1
+        priority = (bool(flow_addressed), bool(addressed), bool(char_addr),
+                    bool(owed), bool(mentioned), len(dialogue_turns),
                     record.get("last_turn") or -1)
         candidates.append((priority, name))
 
     if not candidates:
         return []
     candidates.sort(reverse=True)
-    return [name for _, name in candidates[:max(0, int(cap))]]
+    # Every flow-addressed presence sorts first (top priority bit) and must
+    # answer THIS beat: widen the cap to fit them all, then fill any slots
+    # left up to `cap` with the normally-ranked candidates.
+    slots = max(forced, max(0, int(cap)))
+    return [name for _, name in candidates[:slots]]
 
 def promotable_background_presences(chat_id):
     presences = wget(chat_id, "background_presences", {})
@@ -1867,6 +1918,168 @@ def promotable_background_presences(chat_id):
         })
     out.sort(key=lambda r: (-r["promotable"], -(r["last_turn"] or 0)))
     return out
+
+
+def promote_background_character(cid, name, sheet=None, memory_seeds=None):
+    """Attach a tracked background presence as a real character: mint the
+    characters/chat_chars rows, seed her scene position, mutual recognition
+    with the player and every registered cast member, and any starter
+    memories, then drop the presence record. Forward-only: past turns'
+    steps/variants are untouched -- she becomes character_step-eligible
+    starting next turn, the same as manually attaching any other character
+    mid-chat.
+
+    `sheet`/`memory_seeds` are the reviewed draft when called from the
+    confirm-promotion route (app.py); when omitted (the autonomous path,
+    see auto_promote_background_characters) a sheet is minted from the
+    chat's own events record via importers.draft_promoted_character -- an
+    LLM call, so this must never run inside the turn's commit transaction.
+    Returns the new character id.
+    """
+    from importers import draft_promoted_character
+    from scene import persona_of
+
+    if sheet is None:
+        draft = draft_promoted_character(cid, name)
+        sheet = draft["sheet"]
+        if memory_seeds is None:
+            memory_seeds = draft["memory_seeds"]
+
+    sheet = normalize_character_data(sheet)
+    memory_seeds = [str(m) for m in (memory_seeds or []) if str(m).strip()]
+
+    char_id = qi(
+        "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
+        (
+            character_name(sheet), json.dumps(sheet, ensure_ascii=False),
+            json.dumps({"format": "promoted", "chat_id": cid}, ensure_ascii=False),
+            time.time(),
+        ),
+    )
+    qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status) VALUES(?,?,'active')",
+        (cid, char_id),
+    )
+
+    chat_row = dict(q("SELECT * FROM chats WHERE id=?", (cid,), one=True))
+    sc = wget(cid, "scene", None)
+    if isinstance(sc, dict):
+        positions = sc.setdefault("positions", {})
+        if character_name(sheet) not in positions:
+            player_name = persona_name(persona_of(chat_row))
+            positions[character_name(sheet)] = positions.get(player_name)
+        wset(cid, "scene", sc)
+
+    # Seed mutual recognition with the player and with every other
+    # already-registered cast member -- she's been part of the scene the
+    # whole time, so treating her as a stranger to everyone else present
+    # would be as wrong as it was to treat her as a stranger to the player.
+    cast_rows = q(
+        "SELECT ch.sheet FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
+        "WHERE cc.chat_id=? AND cc.status='active' AND ch.id!=?",
+        (cid, char_id),
+    )
+    roster = _known_name_roster(chat_row, cast_rows)
+    known = wget(cid, "known", {})
+    her_name = character_name(sheet)
+    known.setdefault(her_name, [])
+    for other in roster:
+        if other not in known[her_name]:
+            known[her_name].append(other)
+        known.setdefault(other, [])
+        if her_name not in known[other]:
+            known[other].append(her_name)
+    wset(cid, "known", known)
+
+    if memory_seeds:
+        add_memories_batch([
+            {
+                "chat_id": cid, "char_id": char_id, "turn_id": None,
+                "kind": "episode", "provenance": "witnessed", "salience": 0.6,
+                "content": seed, "turn_idx": None,
+                "event_key": f"promotion:{cid}:{char_id}:{i}",
+            }
+            for i, seed in enumerate(memory_seeds)
+        ])
+
+    presences = wget(cid, "background_presences", {})
+    presences.pop(name, None)
+    wset(cid, "background_presences", presences)
+
+    return char_id
+
+
+# The autonomous path demands more accrued voice than the UI's "promotable"
+# badge (dialogue threshold 2): auto-minting a full character is irreversible
+# spend, so it waits for one more beat of demonstrated salience.
+AUTO_PROMOTE_DIALOGUE_THRESHOLD = 3
+
+
+def _auto_promote_enabled():
+    value = str(get_setting("auto_promote") or "").strip().casefold()
+    return value not in ("0", "off", "false", "no")
+
+
+def auto_promote_background_characters(ctx):
+    """Commit-side sweep: autonomously promote the single most-deserving
+    tracked background presence that has crossed the auto-threshold --
+    promotable (see promotable_background_presences) AND at least
+    AUTO_PROMOTE_DIALOGUE_THRESHOLD dialogue turns AND present/addressed
+    THIS beat. Promotion used to be UI-only (app.py's draft/confirm
+    routes were promotable_background_presences' sole callers), so a
+    deserving presence could stay shallow forever in hands-off play.
+
+    At most one promotion per beat: each mints a sheet with an LLM call,
+    and any remaining qualifiers stay tracked and promote on a later beat.
+    Runs AFTER the turn's primary transaction (see _commit_all_locked) --
+    it is additive and forward-only, so a failure is a warning, never a
+    rollback. Gated by setting('auto_promote'), default on.
+    """
+    if not _auto_promote_enabled():
+        return {"promoted": []}
+    cid = ctx.chat.id
+    turn_idx = ctx.turn.idx
+    presences = wget(cid, "background_presences", {}) or {}
+    if not presences:
+        return {"promoted": []}
+
+    promotable = {
+        r["name"] for r in promotable_background_presences(cid) if r["promotable"]
+    }
+    selected = {
+        str(n).casefold()
+        for n in ((ctx.get("background_react") or {}).get("selected") or [])
+    }
+    addressed_refs = _flow_addressed_refs(ctx)
+
+    candidates = []
+    for name, record in presences.items():
+        if name not in promotable:
+            continue
+        dialogue_turns = record.get("dialogue_turns") or []
+        if len(dialogue_turns) < AUTO_PROMOTE_DIALOGUE_THRESHOLD:
+            continue
+        # "Present/addressed this beat": their record was touched this turn
+        # (spoke / mentioned), the gate picked them, a character's address
+        # left them an owed reply this turn, or the director's flow named
+        # them as the player's addressee.
+        active = (
+            record.get("last_turn") == turn_idx
+            or name.casefold() in selected
+            or (record.get("pending_reply") or {}).get("turn") == turn_idx
+            or _presence_in_addressed_refs(name, addressed_refs)
+        )
+        if not active:
+            continue
+        candidates.append(
+            (len(dialogue_turns), record.get("last_turn") or -1, name))
+
+    if not candidates:
+        return {"promoted": []}
+    candidates.sort(reverse=True)
+    name = candidates[0][-1]
+    char_id = promote_background_character(cid, name)
+    return {"promoted": [{"name": name, "char_id": char_id}]}
 
 # Filler tokens ignored when reducing an entity id / display name to its
 # canonical token key ("ferry_tamsin" vs "tamsin_ferry_entity" must meet).
@@ -2278,7 +2491,134 @@ def commit_mapping(ctx, nonce, *, prepared=None):
     wset(cid, "known", known)
     return {"mout": mout, "applied": applied, "book_ids": book_ids, "seed": seed}
 
+# ---- Obligation ledger ----
+#
+# The world-KV `pending_obligations` ledger tracks open narrative debts --
+# demands, promises, announced actions, unanswered questions -- registered by
+# director_resolve's `obligations` ops and applied here deterministically
+# (mirroring the standing_intentions machinery). Each entry:
+# {id, who, what, kind, opened_turn}. director_resolve's payload surfaces
+# pending_obligation_view, whose must_discharge_this_beat flag plus the
+# prompt's hard rule forbid re-deferring an obligation past its window.
+
+OBLIGATION_OVERDUE_AGE = 2   # beats after which an open obligation must discharge
+OBLIGATION_CAP = 12
+
+def pending_obligation_view(chat_id, turn_idx):
+    """Payload-ready view of the obligation ledger: each entry with its
+    deterministically computed age and must-discharge flag."""
+    view = []
+    for entry in (wget(chat_id, "pending_obligations", []) or [])[:OBLIGATION_CAP]:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            age = max(0, int(turn_idx) - int(entry.get("opened_turn", turn_idx)))
+        except (TypeError, ValueError):
+            age = 0
+        view.append({
+            "id": entry.get("id"),
+            "who": entry.get("who"),
+            "what": entry.get("what"),
+            "kind": entry.get("kind", "demand"),
+            "age_beats": age,
+            "must_discharge_this_beat": age >= OBLIGATION_OVERDUE_AGE,
+        })
+    return view
+
+def _find_obligation(ledger, op):
+    """Index of the ledger entry an op targets: exact id first, then a
+    fuzzy same-debtor/overlapping-text fallback (models routinely echo the
+    text but not the id)."""
+    oid = str(op.get("id") or "").strip()
+    if oid:
+        for i, entry in enumerate(ledger):
+            if str(entry.get("id") or "") == oid:
+                return i
+    who = _normalized_fact(op.get("who"))
+    what = _normalized_fact(op.get("what"))
+    if not what:
+        return None
+    for i, entry in enumerate(ledger):
+        entry_who = _normalized_fact(entry.get("who"))
+        entry_what = _normalized_fact(entry.get("what"))
+        if who and entry_who and who != entry_who:
+            continue
+        if entry_what and (what in entry_what or entry_what in what):
+            return i
+    return None
+
+def commit_obligations(ctx, nonce):
+    """Apply director_resolve's obligation ops to the pending_obligations
+    ledger. Deterministic: open appends (deduped -- re-demanding an open
+    debt is not a second debt), discharge/refuse removes. The commit-side
+    reminder: any entry still open past OBLIGATION_OVERDUE_AGE after this
+    beat's ops was re-deferred against the prompt's hard rule -- warn, and
+    leave it flagged for the next beat's payload."""
+    cid = ctx.chat.id
+    turn = ctx.turn
+    res = ctx.director_resolve or {}
+    ops = res.get("obligations") if isinstance(res.get("obligations"), list) else []
+    ledger = [
+        dict(entry)
+        for entry in (wget(cid, "pending_obligations", []) or [])
+        if isinstance(entry, dict) and entry.get("what")
+    ]
+
+    opened = discharged = 0
+    for op in ops:
+        if not isinstance(op, dict):
+            continue
+        op_kind = str(op.get("op") or "").strip().lower()
+        if op_kind == "open":
+            what = str(op.get("what") or "").strip()
+            if not what or _find_obligation(ledger, op) is not None:
+                continue
+            ledger.append({
+                "id": f"obl:{turn.idx}:{opened}",
+                "who": str(op.get("who") or "").strip(),
+                "what": what,
+                "kind": str(op.get("kind") or "demand").strip() or "demand",
+                "opened_turn": turn.idx,
+            })
+            opened += 1
+        elif op_kind in ("discharge", "refuse"):
+            idx = _find_obligation(ledger, op)
+            if idx is None:
+                ctx.add_warning(
+                    f"obligation {op_kind} matched no open ledger entry: "
+                    f"{(op.get('id') or op.get('what') or '')!r}"
+                )
+                continue
+            ledger.pop(idx)
+            discharged += 1
+
+    overdue = []
+    for entry in ledger:
+        try:
+            age = turn.idx - int(entry.get("opened_turn", turn.idx))
+        except (TypeError, ValueError):
+            age = 0
+        if age >= OBLIGATION_OVERDUE_AGE:
+            overdue.append(entry)
+            ctx.add_warning(
+                f"Obligation re-deferred past its window: {entry.get('who')!r} "
+                f"still owes {entry.get('what')!r} (opened turn "
+                f"{entry.get('opened_turn')}, age {age} beats). It MUST be "
+                "discharged or explicitly refused on-page next beat."
+            )
+
+    if len(ledger) > OBLIGATION_CAP:
+        ledger = ledger[-OBLIGATION_CAP:]
+    wset(cid, "pending_obligations", ledger)
+    return {"opened": opened, "discharged": discharged,
+            "open": len(ledger), "overdue": len(overdue)}
+
 # ---- Memory commit ----
+
+# How many of a character's most recent physical tells (manifest cues) are
+# kept on cstate as the anti-repetition ledger fed back into the character
+# payload (see agents/character.py's TELL VARIETY block).
+RECENT_TELLS_CAP = 6
 
 def _durable_dialogue_category(text):
     lowered = (text or "").lower()
@@ -2451,12 +2791,174 @@ def prepare_memory_commit(ctx, *, scene=None):
                         update.get("kind"), update.get("claim"),
                     ),
                 })
-            if own_result.get("active_state"):
-                asv = own_result["active_state"]
-                st["active_state"] = (
-                    asv if isinstance(asv, dict)
-                    else {"mood": str(asv), "goal": ""}
-                )
+            # --- Interior depth: deterministic floors over the model's proposed
+            # active_state (goals + blended affect). All fields are optional;
+            # absent ones degrade to the legacy {mood,goal}. affect.py is pure;
+            # this is the single write point where the floors apply.
+            if own_result.get("active_state") is not None:
+                asv = own_result.get("active_state")
+                if not isinstance(asv, dict):
+                    asv = {"mood": str(asv), "goal": ""}
+                prev_as = st.get("active_state") if isinstance(st.get("active_state"), dict) else {}
+                interior = st.get("interior") if isinstance(st.get("interior"), dict) else {}
+                intentions = interior.get("intentions") or []
+                drive = (character_psychology(sh) or {}).get("drive") or {}
+
+                # this beat's evidence pool: resolved event + spoken lines, for
+                # gating intention satisfy/abandon (light floor: cited + present).
+                _ev_text = (res.get("resolved_event") or "") + " " + " ".join(
+                    str(d.get("exact_quote") or "") for d in dlog)
+
+                def _evidence_ok(op, _t=_ev_text):
+                    ev = op.get("evidence") or []
+                    if not ev:
+                        return False
+                    return any(str(e) and str(e) in _t for e in ev) or bool(op.get("why"))
+
+                intentions, _iwarn = affect.apply_intent_ops(
+                    intentions, own_result.get("intent_ops") or [], turn.idx, _evidence_ok)
+                for w in _iwarn:
+                    ctx.add_warning(f"{cname}: intention -- {w}")
+                valid_ids = {str(i.get("id")) for i in intentions if isinstance(i, dict)}
+
+                def _priority(serves, _ids=valid_ids, _intents=intentions):
+                    # Models emit serves as "intention:<id-or-text>"; resolve
+                    # it to the bare id so a goal-serving impact scores at
+                    # intention priority, not the situational default.
+                    serves = affect.normalize_serves(serves, _intents)
+                    if serves == "drive":
+                        return 1.0
+                    return 0.8 if str(serves) in _ids else 0.4
+
+                wants, enacted, suppressed = affect.normalize_wants(
+                    asv.get("wants") or [], valid_ids)
+
+                appraisal_out = affect.appraise(
+                    ((own_result.get("appraisal") or {}).get("goal_impacts")) or [], _priority)
+                prev_affect = prev_as.get("affect") if isinstance(prev_as, dict) else None
+                baseline = ((prev_affect or {}).get("baseline")
+                            or character_initial_active_state(sh)["affect"]["baseline"])
+                turns_since = max(1, turn.idx - int(prev_as.get("affect_turn") or (turn.idx - 1)))
+                new_affect = affect.resolve_affect(
+                    prev_affect, appraisal_out, baseline, turns_since,
+                    proposed=asv.get("affect") or asv.get("mood"))
+
+                # Leak tripwire: this character's OWN speech must not state a
+                # suppressed want / the undercurrent / an unenacted intention.
+                own_speech = [str(d.get("exact_quote") or "") for d in dlog
+                              if d.get("speaker") == cname]
+                for w in affect.leak_scan(own_speech, wants,
+                                          new_affect.get("undercurrent"), intentions):
+                    ctx.add_warning(f"{cname}: interior leak -- {w}")
+
+                surface = new_affect.get("surface") or {}
+                enacted_goal = (wants[enacted]["want"]
+                                if (wants and enacted is not None
+                                    and 0 <= enacted < len(wants)) else asv.get("goal") or "")
+                st["active_state"] = {
+                    "mood": surface.get("label") or str(asv.get("mood") or ""),
+                    "goal": str(enacted_goal or ""),
+                    # canonical valence/arousal, projected to the flat legacy keys.
+                    "valence": float(surface.get("valence") or 0.0),
+                    "arousal": float(surface.get("arousal") or 0.0),
+                    "affect": new_affect,
+                    "wants": wants,
+                    "enacted_want": enacted,
+                    "suppressed_want": suppressed,
+                    "affect_turn": turn.idx,
+                }
+                # --- Drive rupture (Tier 1): a deterministic strain ledger and
+                # two-key gate that can, rarely and earned, crack the core drive.
+                def _serves_of(i):
+                    return (str(wants[i].get("serves") or "")
+                            if (isinstance(wants, list) and isinstance(i, int)
+                                and 0 <= i < len(wants)) else "")
+                strain = float(interior.get("drive_strain") or 0.0)
+                strain_log = list(interior.get("strain_log") or [])
+                _strain_turns = max(1, turn.idx - int(interior.get("strain_turn") or (turn.idx - 1)))
+                strain, _slog = affect.update_drive_strain(
+                    strain, strain_log, appraisal_out,
+                    _serves_of(enacted), _serves_of(suppressed), _strain_turns)
+                if _slog:
+                    _slog["turn"] = turn.idx
+                    strain_log = (strain_log + [_slog])[-12:]
+                cur_drive = effective_drive(character_psychology(sh), interior)
+                former = list(interior.get("former_drives") or [])
+                last_shift = interior.get("last_shift_turn")
+                override = interior.get("drive_override") if isinstance(interior.get("drive_override"), dict) else None
+                rupture = interior.get("drive_rupture") if isinstance(interior.get("drive_rupture"), dict) else None
+                window_open = bool(rupture and turn.idx <= int(rupture.get("window_expires") or -1))
+                if not window_open:
+                    _det = affect.detect_drive_rupture(strain, appraisal_out, turn.idx, last_shift)
+                    if _det:
+                        rupture = {"turn": turn.idx, "why": _det.get("why"),
+                                   "direction": _det.get("direction"), "window_expires": turn.idx + 3}
+                        ctx.add_warning(f"{cname}: DRIVE RUPTURE window opened -- {_det.get('why')}")
+                elif own_result.get("drive_shift"):
+                    _norm, _kind, _vw = affect.validate_drive_shift(
+                        own_result.get("drive_shift"), cur_drive, former, rupture)
+                    for w in _vw:
+                        ctx.add_warning(f"{cname}: drive_shift -- {w}")
+                    if _norm and _kind == "break":
+                        _rw = str(rupture.get("why") or "")
+                        former = (former + [affect.former_drive_entry(cur_drive, turn.idx, _rw)])[-5:]
+                        override = {**_norm, "since_turn": turn.idx, "by_event": _rw}
+                        strain, last_shift, rupture = 0.0, turn.idx, None
+                        ctx.add_warning(f"{cname}: DRIVE SHIFTED -> {_norm.get('essence')}")
+                        pending_memories.append({
+                            "chat_id": cid, "char_id": ccid, "turn_id": turn.id, "turn_idx": turn.idx,
+                            "kind": "episode", "category": "self", "provenance": "remembered", "salience": 1.0,
+                            "content": (f"Something in me broke when {_rw}. What I lived for -- "
+                                        f"{cur_drive.get('essence')} -- no longer holds me. Now I live for: "
+                                        f"{_norm.get('essence')}."),
+                            "gist": f"drive shift -> {_norm.get('essence')}"[:240],
+                            "entities": [cname], "location": room_name,
+                            "emotional_context": surface.get("label") or "",
+                            "event_key": _stable_event_key(turn.id, ccid, "drive_shift", cname,
+                                                           _norm.get("essence"), ""),
+                        })
+                    elif _norm and _kind == "bend":
+                        override = {**_norm, "since_turn": turn.idx, "by_event": str(rupture.get("why") or "")}
+                        strain, last_shift, rupture = strain * 0.5, (turn.idx - 30), None
+                if rupture and turn.idx > int(rupture.get("window_expires") or -1):
+                    if strain >= affect.RUPTURE_STRAIN_MIN:
+                        # Strain still at rupture level: the crisis is
+                        # unresolved, so the window RE-OPENS (extends)
+                        # instead of quietly closing -- denial is a phase,
+                        # not an exit. It closes for good only once
+                        # relief/decay pays strain below the floor or a
+                        # shift lands.
+                        rupture = {**rupture, "window_expires": turn.idx + 3}
+                        ctx.add_warning(
+                            f"{cname}: drive-rupture window extended -- "
+                            f"strain {strain:.2f} still at rupture level")
+                    else:
+                        strain, rupture = strain * 0.5, None   # weathered the crisis, no shift
+                _interior_out = {
+                    "intentions": intentions,
+                    "drive_strain": round(float(strain), 4),
+                    "strain_log": strain_log,
+                    "former_drives": former,
+                    "last_shift_turn": last_shift,
+                    "strain_turn": turn.idx,
+                }
+                if rupture is not None:
+                    _interior_out["drive_rupture"] = rupture
+                if override is not None:
+                    _interior_out["drive_override"] = override
+                st["interior"] = _interior_out
+            # --- Recent-tell ledger: the last few physical cues this
+            # character has shown, kept on cstate and fed back into the
+            # next character payload (self.recent_tells) so the model
+            # stops reaching for the same gesture every beat.
+            _cues = [str(t.get("cue") or "").strip()
+                     for t in ((own_result.get("manifest") or {}).get("tells") or [])
+                     if isinstance(t, dict)]
+            _cues = [c for c in _cues if c]
+            if _cues:
+                _prev_cues = [str(c) for c in (st.get("recent_tells") or [])
+                              if str(c).strip()]
+                st["recent_tells"] = (_prev_cues + _cues)[-RECENT_TELLS_CAP:]
             stance = st.get("stance") or sh.get("stance") or {"axes": {}}
             for u in own_result.get("stance_updates") or []:
                 ax = u.get("axis")
@@ -2695,6 +3197,10 @@ def _commit_all_locked(ctx, nonce):
                 lambda: commit_narration_person(ctx, nonce),
             )
             _commit_domain(
+                ctx, results, "obligations",
+                lambda: commit_obligations(ctx, nonce),
+            )
+            _commit_domain(
                 ctx, results, "pending",
                 lambda: wset(ctx.chat.id, "pending", []),
             )
@@ -2709,6 +3215,16 @@ def _commit_all_locked(ctx, nonce):
     results["memories"]["committed"].extend(
         _consolidate_committed_memories(ctx)
     )
+
+    # Autonomous background->cast promotion likewise runs after the primary
+    # transaction: it mints a sheet with an LLM call and is additive and
+    # forward-only (the new character becomes step-eligible next turn), so a
+    # failure is a warning, never a turn rollback.
+    try:
+        results["promotions"] = auto_promote_background_characters(ctx)
+    except Exception as exc:
+        ctx.add_warning(f"auto-promotion failed: {exc}")
+        results["promotions"] = {"promoted": [], "error": str(exc)}
 
     return {
         "summary": (

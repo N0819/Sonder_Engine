@@ -864,7 +864,8 @@ def import_lorebook(payload, name=None, reinterpret=False,
     # author switched OFF gets imported as active canon lore (audit #24).
     src = [
         e for e in (src or [])
-        if isinstance(e, dict) and not e.get("disable") and e.get("enabled", True) is not False
+        if isinstance(e, dict) and not e.get("disable")
+        and e.get("enabled", True) not in (False, 0)
     ]
 
     # A payload this project exported stamps every entry with the

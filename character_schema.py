@@ -63,6 +63,12 @@ def default_character_data(name: str = "Unnamed") -> dict:
                 "shame_triggers": [],
             },
             "coping": {"under_stress": [], "default_conflict_style": ""},
+            # Overarching core drive (Tier 1 of the goal hierarchy): identity-
+            # level, rarely changes, and deliberately NOT part of the character
+            # agent's output contract -- a model cannot flip-flop a field it
+            # never emits. Read-only in the payload; backfilled on normalize for
+            # older sheets via _deep_defaults.
+            "drive": {"essence": "", "expression": "", "taboo": ""},
         },
         "social": {
             "voice": {
@@ -465,6 +471,19 @@ def character_voice(sheet: dict) -> dict:
 def character_psychology(sheet: dict) -> dict:
     return copy.deepcopy(normalize_character_data(sheet).get("psychology", {}))
 
+def effective_drive(psychology: dict, interior: dict) -> dict:
+    """The character's CURRENT core drive: a rupture-installed
+    cstate.interior.drive_override when present, else the authored sheet drive
+    (psychology.drive). The single read path so the payload and appraisal always
+    see the live drive after a shift -- commit writes cstate, never the sheet."""
+    override = interior.get("drive_override") if isinstance(interior, dict) else None
+    if isinstance(override, dict) and str(override.get("essence") or "").strip():
+        return {"essence": str(override.get("essence") or ""),
+                "expression": str(override.get("expression") or ""),
+                "taboo": str(override.get("taboo") or "")}
+    drive = (psychology or {}).get("drive")
+    return drive if isinstance(drive, dict) else {"essence": "", "expression": "", "taboo": ""}
+
 def character_private_history(sheet: dict) -> list[dict]:
     return copy.deepcopy(normalize_character_data(sheet).get("knowledge", {}).get("private_history", []))
 
@@ -486,15 +505,36 @@ def character_knowledge_config(sheet: dict) -> dict:
 
 def character_initial_active_state(sheet: dict) -> dict:
     state = normalize_character_data(sheet).get("initial_state", {})
-    mood = state.get("mood") or {}
+    # _legacy_mood tolerates a bare-string mood ("wary") from an imported
+    # card -- _deep_defaults keeps a non-dict leaf as-is, so a plain
+    # `or {}` here crashed every turn that loaded such a character.
+    mood = _legacy_mood(state.get("mood"))
     goals = state.get("goals") or []
+    label = mood.get("label") or "neutral"
+    v = _float_or(mood.get("valence"), 0.0)
+    a = _float_or(mood.get("arousal"), 0.0)
     return {
-        "mood": mood.get("label") or "neutral",
-        "valence": _float_or(mood.get("valence"), 0.0),
-        "arousal": _float_or(mood.get("arousal"), 0.0),
+        # Legacy flat projection -- kept so every existing reader (sheet_state,
+        # memory recall query, commit's emotional_context) works unchanged.
+        "mood": label,
+        "valence": v,
+        "arousal": a,
         "goal": (str(goals[0].get("goal") or "")
                  if goals and isinstance(goals[0], dict) else ""),
         "active_concerns": state.get("active_concerns") or [],
+        # Interior-depth: blended affect (surface + optional undercurrent over a
+        # resting baseline) and this-beat wants. undercurrent starts null (the
+        # graceful-degradation state); the baseline is the return attractor.
+        # Canonical valence/arousal keys (what the model emits; affect.py is
+        # tolerant on input and emits these on output).
+        "affect": {
+            "surface": {"label": label, "valence": v, "arousal": a},
+            "undercurrent": None,
+            "baseline": {"valence": v, "arousal": a},
+        },
+        "wants": [],
+        "enacted_want": None,
+        "suppressed_want": None,
     }
 
 def character_initial_stance(sheet: dict) -> dict:

@@ -27,6 +27,7 @@ from scene import (
 )
 import os
 
+import affect
 from spatial import (
     ambient_scope,
     egocentric_frame,
@@ -60,6 +61,7 @@ from .common import (
     _append_micro_view,
     _append_once,
     _contextual_rooms,
+    _dedupe_view_sentences,
     _ensure_environment,
     _fallback_perception_views,
     _inject_action,
@@ -183,6 +185,55 @@ def _behind_sources(scene, observer, sources):
     return [s.get("name") for s in sources
             if s.get("name") and s.get("name") != observer
             and entity_arc(scene, observer, s.get("name")) == "rear"]
+
+
+def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name):
+    """Per SOURCE this observer can read: {surface_demeanor, cues:[cue,...]} --
+    the interior-depth payoff (Phase 4). A character's `manifest` (surface
+    demeanor + physical tells) is authored by that character; the ENGINE decides
+    which cues reach THIS observer here, before the LLM call, exactly like the
+    dialogue-injection backstop. A tell is delivered iff (a) the observer can
+    receive its channel -- a visual tell needs sight (same-visual-channel, not
+    in the rear blind spot); a voice/breath tell needs to be audible (same
+    room) -- AND (b) affect.tell_gate: subtlety <= acuity + familiarity +
+    attention. MEANING and the character's own labels never cross; only the
+    observable cue text does."""
+    out = {}
+    focus = _focus_target(scene, observer)
+    behind = set(_behind_sources(scene, observer, sources))
+    o_room = room_of(scene, observer)
+    for s in sources:
+        sname = s.get("name")
+        cid = cast_by_name.get(sname) if sname else None
+        if not sname or sname == observer or cid is None:
+            continue
+        manifest = (ctx.character_results.get(cid) or {}).get("manifest") or {}
+        demeanor = manifest.get("surface_demeanor")
+        tells = [t for t in (manifest.get("tells") or [])
+                 if isinstance(t, dict) and t.get("cue")]
+        if not demeanor and not tells:
+            continue
+        rel = spatial_rel(scene, s.get("room"), o_room)
+        visible = has_visual(rel) and sname not in behind
+        audible = bool(rel.get("same_room"))
+        acuity = 0.4
+        familiarity = 0.45 if (observer in (known.get(sname) or [])
+                               or sname in (known.get(observer) or [])) else 0.15
+        attention = 0.4 if focus == sname else 0.15
+        cues = []
+        for t in tells:
+            chan = str(t.get("channel") or "").lower()
+            reachable = visible or (chan in ("voice", "breath") and audible)
+            if reachable and affect.tell_gate(t, acuity, familiarity, attention):
+                cues.append(t.get("cue"))
+        entry = {}
+        if visible and demeanor:
+            entry["surface_demeanor"] = demeanor
+        if cues:
+            entry["cues"] = cues
+        if entry:
+            out[sname] = entry
+    return out
 
 
 def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map):
@@ -386,7 +437,7 @@ def perception_establish(ctx, nonce):
             view = " ".join(parts)
         view = _scrub_view_for(
             ctx, "perception_establish", view, p["name"], known, roster)
-        clean_views[pid] = view or None
+        clean_views[pid] = _dedupe_view_sentences(view) or None
 
     return {"views": clean_views}
 
@@ -599,13 +650,13 @@ def perception_act(ctx, nonce):
                 view,
                 allowed_forms=[p["name"]],
                 unknown_sources=[{"name": p_name,
-                                  "appearance": p_appearance}],
+                                  "appearance": p_visible}],
             )
             if leaked:
                 ctx.warnings.append(
                     f"perception_act: scrubbed unearned identity {leaked} "
                     f"from the view of {p['name']}")
-        clean_views[pid] = view or None
+        clean_views[pid] = _dedupe_view_sentences(view) or None
 
     _disguise_leak_check(ctx, "perception_act", clean_views, perceivers,
                          p_name, p_disguise_terms, p_disguise_known)
@@ -731,7 +782,7 @@ def perception_outcome(ctx, nonce):
     concealed = []
     for a in (interp.get("actions") or
               ([interp["action"]] if interp.get("action") else [])):
-        if a and a.get("visibility") == "concealed":
+        if isinstance(a, dict) and a.get("visibility") == "concealed":
             concealed.append({"actor": p_name, "attempt": a.get("attempt"),
                               "conceal_from": a.get("conceal_from") or []})
     for d in enriched_dlog:
@@ -785,6 +836,10 @@ def perception_outcome(ctx, nonce):
         extra_entries.append((extra, pid_key, e_name, e_room))
 
     p_rdata = (sc.get("rooms") or {}).get(p_room) if p_room else None
+    # name -> cast id, so perception can pull each present character's authored
+    # `manifest` (surface demeanor + tells) and gate delivery per observer.
+    cast_by_name = {character_name(json.loads(c["sheet"])): c["id"] for c in ctx.cast}
+
     perceivers = [{
         "id": "player", "name": p_name, "room": p_room,
         "room_name": (p_rdata or {}).get("name") or p_room or "an unspecified area",
@@ -800,6 +855,7 @@ def perception_outcome(ctx, nonce):
         "room_layout": room_layout(sc, p_name),
         "behind_rooms": _behind_rooms(sc, p_name),
         "focus_target": _focus_target(sc, p_name),
+        "source_manifest": _delivered_manifest(ctx, sc, p_name, sources, known, cast_by_name),
         **_perceiver_spatial_facts(sc, p_name, sources),
     }]
 
@@ -820,6 +876,7 @@ def perception_outcome(ctx, nonce):
             "room_layout": room_layout(sc, e_name),
             "behind_rooms": _behind_rooms(sc, e_name),
             "focus_target": _focus_target(sc, e_name),
+            "source_manifest": _delivered_manifest(ctx, sc, e_name, sources, known, cast_by_name),
             **_perceiver_spatial_facts(sc, e_name, sources),
         })
 
@@ -845,6 +902,8 @@ def perception_outcome(ctx, nonce):
             "room_layout": room_layout(sc, character_name(sh)),
             "behind_rooms": _behind_rooms(sc, character_name(sh)),
             "focus_target": _focus_target(sc, character_name(sh)),
+            "source_manifest": _delivered_manifest(
+                ctx, sc, character_name(sh), sources, known, cast_by_name),
         })
 
     resolved_event_text = res.get("resolved_event", "")
@@ -1006,7 +1065,7 @@ def perception_outcome(ctx, nonce):
         # perceiver's recognized set; quoted speech survives verbatim.
         view = _scrub_view_for(
             ctx, "perception_outcome", view, p["name"], known, ident_roster)
-        clean_views[pid] = view or None
+        clean_views[pid] = _dedupe_view_sentences(view) or None
 
     loop = ctx.interaction_loop or {}
     for round_data in loop.get("rounds") or []:
@@ -1015,7 +1074,11 @@ def perception_outcome(ctx, nonce):
             if key == "player":
                 continue
             current = clean_views.get(key) or ""
-            clean_views[key] = _append_micro_view(current, additions)
+            # Interaction-round additions can restate a beat the base view
+            # already carries -- same within-view dedupe as the per-perceiver
+            # pass above.
+            clean_views[key] = _dedupe_view_sentences(
+                _append_micro_view(current, additions))
 
     _disguise_leak_check(ctx, "perception_outcome", clean_views, perceivers,
                          p_name, p_disguise_terms, p_disguise_known)

@@ -630,6 +630,7 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone):
         # wake up with amnesia.
         for key, default in (
             ("known", {}), ("simulation_clock", {}), ("standing_intentions", []),
+            ("pending_obligations", []),
             ("shadow_profile", ""), ("background_presences", {}), ("offscreen_log", []),
         ):
             wset_for_frame(chat_id, key, wget_for_frame(chat_id, key, parent_frame_id, default),

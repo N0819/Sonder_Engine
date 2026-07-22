@@ -23,8 +23,8 @@ active_frame_id = contextvars.ContextVar("active_frame_id", default=None)
 # frame is currently executing.
 FRAME_SCOPED_WORLD_KEYS = {
     "scene", "known", "simulation_clock", "pending", "background_presences",
-    "offscreen_log", "standing_intentions", "shadow_profile", "lore_cache",
-    "active_books",
+    "offscreen_log", "standing_intentions", "pending_obligations",
+    "shadow_profile", "lore_cache", "active_books",
 }
 FRAME_SCOPED_WORLD_PREFIXES = ("relationships:",)
 

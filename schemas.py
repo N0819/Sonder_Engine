@@ -338,6 +338,7 @@ class FlowPlan(BaseModel):
     reactors: list[int] = Field(default_factory=list)
     reactor_refs: list[Any] = Field(default_factory=list)
     addressed_to: list[int] = Field(default_factory=list)
+    addressed_to_refs: list[Any] = Field(default_factory=list)
     dialogue_mode: bool = False
     needs_mapping: bool = False
     mapping_request: str = ""
@@ -779,6 +780,14 @@ class DirectorResolve(BaseModel):
     dice: list[dict] = Field(default_factory=list)
     claim_dispositions: list[dict] = Field(default_factory=list)
     fiction_frame: dict[str, Any] = Field(default_factory=dict)
+    # Obligation-ledger ops: {op:'open'|'discharge'|'refuse', id, who, what,
+    # kind}. Applied deterministically to the world-KV pending_obligations
+    # ledger by commit.py's commit_obligations (mirrors standing_intentions).
+    obligations: list[dict] = Field(default_factory=list)
+    # Player-asserted plot-fact verdicts: {claim_id, claim, subject,
+    # verdict:'confirmed'|'contested'|'false', landing}. Audited
+    # deterministically in agents/director.py (_audit_fact_adjudications).
+    fact_adjudications: list[dict] = Field(default_factory=list)
 
 # ---- Resolve reconciliation (agents/director.py's post-resolve seam) ----
 
@@ -883,6 +892,13 @@ class CharacterOutput(BaseModel):
     action: Optional[dict] = None
     actions: list[dict] = Field(default_factory=list)
     active_state: dict = Field(default_factory=dict)
+    # Interior depth (all optional; the deterministic floors in affect.py apply
+    # at commit). Kept as permissive dicts/lists -- affect.py validates/normalizes.
+    intent_ops: list[dict] = Field(default_factory=list)
+    manifest: dict = Field(default_factory=dict)
+    # A drive rupture proposal -- only valid inside an engine-opened window;
+    # commit (validate_drive_shift) decides whether it counts.
+    drive_shift: Optional[dict] = None
     mind_model_updates: list[MindHypothesis] = Field(default_factory=list)
     relationship_updates: list[RelationshipUpdate] = Field(default_factory=list)
     interaction: InteractionControl = Field(default_factory=InteractionControl)
@@ -1350,6 +1366,10 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
 
         flow["reactor_refs"] = list(reactors)
         flow["tom_trigger_refs"] = list(tom_triggers)
+        # Raw refs preserved BEFORE int coercion: a name string here is the
+        # only way the director can address an UNREGISTERED background
+        # presence (commit.pick_background_reactors forces it to answer).
+        flow["addressed_to_refs"] = list(addressed_to)
         flow["reactors"] = _coerce_int_list(reactors)
         flow["tom_triggers"] = _coerce_int_list(tom_triggers)
         flow["addressed_to"] = _coerce_int_list(addressed_to)
@@ -1503,6 +1523,15 @@ OUTPUT_EXAMPLES = {
         ],
         "dice": [],
         "fiction_frame": {},
+        "obligations": [
+            {"op": "open", "who": "Merek", "what": "deliver the survey "
+             "report Captain Hale demanded", "kind": "demand"},
+        ],
+        "fact_adjudications": [
+            {"claim_id": "claim:0:event", "claim": "the crew on deck 12 "
+             "are dead", "subject": "deck 12 crew", "verdict": "confirmed",
+             "landing": "the medic confirms the deaths on-page"},
+        ],
     },
     "character": {
         "observations_used": [],
