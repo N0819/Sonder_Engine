@@ -299,3 +299,47 @@ def test_fallback_views_gate_speaker_name(temp_db):
     views = _fallback_perception_views(
         perceivers, dlog, known={"Dr. Moon": ["Hinami"]})
     assert "Hinami" in views["7"]
+
+
+def test_single_quoted_spoken_name_survives_the_scrub():
+    """A name introduced ALOUD this beat is legitimate sensory signal the
+    hearer receives; it must survive the identity scrub verbatim. The
+    perception model renders speech with single quotes ('...') as often as
+    double, and the double-quote-only span guard let a self-introduction like
+    'I-I'm Hinami' get scrubbed out of what the hearer plainly heard -- while a
+    third-person narrative reference to the same stranger must still be
+    anonymized."""
+    from agents.common import _scrub_unknown_identities
+
+    view = ("She mutters, 'Uhm... Hello?' then says clearly, 'I-I'm Hinami.' "
+            "Hinami's tails puff as Hinami stands there.")
+    out, leaked = _scrub_unknown_identities(
+        view,
+        allowed_forms=["Dr. Moon"],
+        unknown_sources=[{"name": "Hinami",
+                          "appearance": "a fox-eared young woman",
+                          "aliases": []}],
+    )
+    # spoken self-introduction preserved
+    assert "'I-I'm Hinami.'" in out
+    # narrative references (possessive + bare) anonymized
+    assert "Hinami's tails" not in out
+    assert "as Hinami stands" not in out
+    assert leaked == ["Hinami"]
+
+
+def test_apostrophes_do_not_open_a_protected_span():
+    """Contraction/possessive apostrophes ('She's', 'Hinami's') must not be
+    mistaken for opening dialogue quotes, or a stranger's name in plain
+    narration would slip through the scrub inside a bogus protected span."""
+    from agents.common import _scrub_unknown_identities
+
+    view = "She's watching. Hinami's tail sways as Hinami waits. No one speaks."
+    out, _ = _scrub_unknown_identities(
+        view,
+        allowed_forms=["Dr. Moon"],
+        unknown_sources=[{"name": "Hinami",
+                          "appearance": "a fox-eared young woman",
+                          "aliases": []}],
+    )
+    assert "Hinami" not in out

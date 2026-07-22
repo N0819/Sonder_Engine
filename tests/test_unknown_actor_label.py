@@ -39,3 +39,23 @@ def test_two_different_strangers_get_two_different_labels():
 def test_strips_leading_article_and_stays_short():
     label = _unknown_actor_label("X", "An old woman with silver hair and sharp eyes.")
     assert label == "the old woman with silver hair"
+
+
+def test_trims_trailing_dangling_function_word():
+    # The 5-word cap used to slice mid-phrase and leave a dangling article or
+    # preposition ("...five-foot-seven-inches with a"), which reads as broken
+    # prose when the label is injected inline. It now ends on a content word.
+    label = _unknown_actor_label(
+        "Dr. Moon",
+        "A young woman, five-foot-seven-inches, with a slightly disheveled uniform",
+        aliases=["Sarah Moon"],
+    )
+    assert label == "the young woman five-foot-seven-inches"
+    assert not label.rstrip().endswith((" a", " with", " in", " of"))
+
+    label2 = _unknown_actor_label(
+        "Hinami",
+        "A beautiful young woman appearing in her early twenties, with golden "
+        "fox ears and six golden tails",
+    )
+    assert label2 == "the beautiful young woman appearing"

@@ -862,6 +862,16 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
         while words and words[0].lower() in ("a", "an", "the"):
             words = words[1:]
         words = words[:5]
+        # The 5-word cap can slice mid-phrase and leave a dangling function
+        # word ("...five-foot-seven-inches with a" / "...appearing in"), which
+        # reads as broken prose when this label is injected inline. Trim any
+        # trailing article/preposition/conjunction/possessive so the label
+        # ends on a content word.
+        _DANGLING = {"a", "an", "the", "with", "of", "and", "or", "in", "on",
+                     "at", "to", "for", "from", "by", "her", "his", "their",
+                     "its", "as"}
+        while words and words[-1].lower() in _DANGLING:
+            words = words[:-1]
         if words:
             return "the " + " ".join(words).rstrip(".;:").lower()
     return "the unfamiliar person"
@@ -905,7 +915,21 @@ _COMMON_WORD_NAMES = frozenset({
 # Mirrors _protected_view_quotes' quoted-span shape: a name inside a quote
 # is sensory signal the observer legitimately heard (an introduction, a
 # name called aloud) and must survive the identity scrub verbatim.
-_QUOTED_SPAN_RE = re.compile(r'(["“][^"“”]+["”])')
+#
+# Single-quoted dialogue must be protected too -- the perception model
+# routinely renders speech as '...' rather than "...", and the double-quote-
+# only form let a name spoken aloud this beat (a self-introduction like
+# 'I-I'm Hinami') get scrubbed straight out of what the hearer legitimately
+# heard. The single-quote alternative is apostrophe-aware: the opening quote
+# must not follow a word char or another quote (so contraction/possessive
+# apostrophes -- She's, Hinami's -- never open a span), and an internal '
+# counts as content only when a word char follows it (I'm, don't), so the
+# span still closes at the real terminating quote.
+_QUOTED_SPAN_RE = re.compile(
+    r'(["“][^"“”]+["”]'
+    r"|(?<![\w'’])'(?:[^']|'(?=\w))*?'(?![\w])"
+    r")"
+)
 
 def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources):
     """Deterministic identity floor for perception view prose.

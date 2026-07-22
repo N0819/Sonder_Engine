@@ -1,5 +1,25 @@
 # Changelog
 
+## alpha3.0.2 — Scrubber fixes: spoken names survive, no mangled stranger labels
+
+Follow-on fixes to alpha3.0.1. Starting a story as strangers now actually runs
+the perception identity scrubber on the player↔character views, which surfaced
+two latent defects in that scrubber.
+
+### Fixed
+- **Spoken name scrubbed from dialogue** (`agents/common.py`): a name introduced
+  aloud this beat (a self-introduction like `'I-I'm Hinami'`) was scrubbed out of
+  what the hearer plainly heard, because the quoted-span guard only protected
+  double quotes (`"…"`) while the perception model routinely renders speech in
+  single quotes (`'…'`). Single-quoted dialogue is now protected too, in an
+  apostrophe-aware way so contractions/possessives (`She's`, `Hinami's`) in plain
+  narration are still anonymized for an observer who doesn't recognize the actor.
+- **Mangled unknown-actor label** (`agents/common.py`): the 5-word cap on
+  `_unknown_actor_label` could slice mid-phrase and leave a dangling article or
+  preposition (`"the young woman five-foot-seven-inches with a"`), which read as
+  broken prose when injected inline. The label now trims trailing function-words
+  so it ends on a content word.
+
 ## alpha3.0.1 — Strangers stay strangers: opt-in name recognition at quick start
 
 Fixes a name-identity leak where a character could begin a story already knowing
