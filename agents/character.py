@@ -26,7 +26,7 @@ from memory import (
 from prompts import get_prompt
 from scene import all_cast_name_to_id, dialogue_budget, get_scene, private_knowledge_for, sheet_state
 from schemas import validate_llm_output
-from spatial import room_of
+from spatial import room_of, spatial_digest
 from theory_of_mind import mind_models_for_payload
 
 from .common import (
@@ -151,7 +151,14 @@ def character_step(ctx, cid, nonce):
             "recent_self_lines": _recent_self_lines(
                 chat.id, character_name(sh), ctx.turn.idx),
         },
-        "perception": {"view": view or "You register nothing new this beat."},
+        "perception": {
+            "view": view or "You register nothing new this beat.",
+            # This character's OWN egocentric exits (ahead/behind/left/right of
+            # the way THEY face) -- grounding for their movement/positioning
+            # choices, not a script to narrate. Empty when they have no
+            # established orientation.
+            "spatial_frame": spatial_digest(sc, character_name(sh)),
+        },
         "memory": memory_context,
         "relationships": relationships,
         "mind_models": mind_models,

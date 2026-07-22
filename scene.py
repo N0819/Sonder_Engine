@@ -160,7 +160,7 @@ def get_scene(chat_id, chat=None):
             "overlays": {},
             "attire": {},
         }
-    for k in ("rooms", "entities", "positions", "overlays", "attire"):
+    for k in ("rooms", "entities", "positions", "overlays", "attire", "orientation"):
         sc.setdefault(k, {})
     return sc
 

@@ -25,7 +25,8 @@ from spatial import (merge_scene_with_diff,
 from theory_of_mind import apply_mind_model_updates
 from paradox import check_and_apply_paradox
 from spatial_frames import detect_and_reconcile as detect_and_reconcile_spatial
-from spatial_frames import infer_companion_carry, infer_vehicle_zones
+from spatial_frames import (infer_companion_carry, infer_vehicle_zones,
+                            infer_came_from, infer_focus, infer_facing)
 
 _COMMIT_LOCKS = weakref.WeakValueDictionary()
 _COMMIT_LOCKS_GUARD = threading.Lock()
@@ -990,6 +991,36 @@ def prepare_scene_commit(ctx):
         prev_scene, diff,
         doomed={destruction["target"]: destruction["doomed_rooms"]}
         if destruction else None)
+
+    # Fold mapping's advisory MAP DETAIL (within-room `anchors`, `size`, and
+    # compass `dir`/`vertical` on edges) into the Director's causal diff BEFORE
+    # the merge -- so it passes through the merge's bearing reciprocity and
+    # station-anchor normalization like any authored room, and a station keyed
+    # to a mapping-authored anchor is not stranded by normalize_scene_stations
+    # running on an anchorless room. Confirmed live: every model authored
+    # anchors in scene_patch, but the Director drops them when echoing rooms
+    # (like it drops remove_rooms below). Fill ONLY fields the Director's room
+    # LACKS (it wins if it echoed them); apply room_renames so a rekeyed minted
+    # room keeps its detail; never CREATE a room the Director itself didn't.
+    _mapping_patch = ((ctx.mapping_stage or {}).get("scene_patch")
+                      or (ctx.mapping_quick or {}).get("scene_patch") or {})
+    _diff_rooms = diff.get("rooms")
+    if isinstance(_diff_rooms, dict):
+        for _rid, _mroom in (_mapping_patch.get("rooms") or {}).items():
+            _droom = _diff_rooms.get(room_renames.get(_rid, _rid))
+            if not isinstance(_droom, dict) or not isinstance(_mroom, dict):
+                continue
+            for _f in ("anchors", "size"):
+                if _mroom.get(_f) and not _droom.get(_f):
+                    _droom[_f] = _mroom[_f]
+            _medges = {e.get("to"): e for e in (_mroom.get("adjacent") or [])
+                       if isinstance(e, dict) and e.get("to")}
+            for _edge in (_droom.get("adjacent") or []):
+                _me = _medges.get(_edge.get("to")) if isinstance(_edge, dict) else None
+                for _k in ("dir", "vertical"):
+                    if _me and _me.get(_k) and not _edge.get(_k):
+                        _edge[_k] = _me[_k]
+
     sc = merge_scene_with_diff(prev_scene, diff)
     if destruction:
         # Guard-approved departures (cast_changes) left stale positions
@@ -1118,11 +1149,22 @@ def prepare_scene_commit(ctx):
             sc["time"] = td
 
     infer_vehicle_zones(cid, ctx.turn.frame_id, prev_scene, sc)
+    _carry_names = [character_name(json.loads(c["sheet"])) for c in ctx.cast]
     infer_companion_carry(
         cid, ctx.turn.frame_id, prev_scene, sc,
-        [character_name(json.loads(c["sheet"])) for c in ctx.cast],
+        _carry_names,
         diff.get("cast_changes") or [],
     )
+    # Per-character orientation (came_from + focus + facing), read by
+    # egocentric_frame. Runs AFTER companion-carry so a carried companion's
+    # inferred new position is already in sc when its came_from is computed;
+    # infer_focus runs after infer_came_from (which clears focus on a
+    # disorienting jump); infer_facing runs LAST -- it reads the freshly-set
+    # came_from and focus to derive the compass heading left/right depends on.
+    infer_came_from(cid, ctx.turn.frame_id, prev_scene, sc, _carry_names)
+    infer_focus(cid, ctx.turn.frame_id, prev_scene, sc,
+                ctx.get("director_resolve") or {}, _carry_names)
+    infer_facing(cid, ctx.turn.frame_id, prev_scene, sc, _carry_names)
 
     if destruction:
         base_clock = clock or wget(

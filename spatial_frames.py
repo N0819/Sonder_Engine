@@ -37,7 +37,7 @@ from db import q, qi, transaction, wget, wget_for_frame, wset, wset_for_frame
 from frames import create_frame, get_frame
 from paradox import get_paradox
 from scene import active_cast, persona_of, set_char_state, set_char_status
-from spatial import room_of
+from spatial import room_of, rooms_adjacent, travel_bearing, anchor_bearing_of
 
 NOT_A_ZONE = None
 
@@ -315,6 +315,183 @@ def infer_companion_carry(chat_id, frame_id, prev_scene, new_scene, cast_names,
         new_positions[name] = new_room
         changed = True
 
+    return changed
+
+
+def infer_came_from(chat_id, frame_id, prev_scene, new_scene, cast_names):
+    """Deterministic per-character orientation, joining the infer_vehicle_zones
+    / infer_companion_carry family (called from commit_scene on the merged
+    scene before it is persisted).
+
+    When a character's position changes from A to an ADJACENT room B this beat,
+    record A as their `came_from` -- the room now at their back, which
+    spatial.egocentric_frame reads to place a coherent 'behind'. A non-adjacent
+    jump (teleport, gap-cross, long carry) clears came_from AND focus: they are
+    disoriented, and asserting a 'behind' would be a guess. Staying put keeps
+    the prior orientation. Orientation for a name no longer positioned in the
+    scene is pruned. Mutates new_scene['orientation'] in place; returns whether
+    anything changed."""
+    prev_pos = prev_scene.get("positions") or {}
+    new_pos = new_scene.get("positions") or {}
+    orientation = new_scene.setdefault("orientation", {})
+
+    names = set(cast_names or [])
+    names.update(new_pos.keys())
+
+    changed = False
+    for name in names:
+        old_r = prev_pos.get(name)
+        new_r = new_pos.get(name)
+        if not new_r or new_r == old_r:
+            continue  # didn't move this beat -> keep existing orientation
+        rec = orientation.setdefault(name, {})
+        if old_r and rooms_adjacent(prev_scene, old_r, new_r):
+            rec["came_from"] = old_r
+        else:
+            rec["came_from"] = None   # teleport / gap -> disoriented
+            rec["focus"] = None
+        changed = True
+
+    for name in list(orientation.keys()):
+        if name not in new_pos:
+            orientation.pop(name, None)  # left the scene
+            changed = True
+
+    return changed
+
+
+def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names):
+    """Deterministic end-of-beat attention `focus` per character (FOV spec
+    rules A/D). Focus is what a character is attending at the END of the beat;
+    egocentric_frame renders it 'ahead', and perception gives a focused source
+    full visual detail vs a coarse periphery. Runs at commit, AFTER
+    infer_came_from (which already clears focus on a disorienting jump).
+
+    Precedence, strongest first (first match wins):
+      - addressing/replying to someone -> focus them (a conversation thus auto-
+        holds mutual focus with no 'I look at them' tax; cross-room -> the
+        doorway toward them);
+      - moving without addressing anyone -> focus clears (locomotion resets gaze;
+        egocentric_frame's pass-through inference still supplies 'ahead');
+      - being addressed by someone -> focus the speaker;
+      - otherwise focus PERSISTS unchanged (no time decay), except a focused
+        target who is no longer co-located is garbage-collected to None.
+    Reflexive salience-snap (spec B) is intentionally not implemented here; the
+    perception prompt's salient-event zone-exemption stands in for it."""
+    positions = new_scene.get("positions") or {}
+    prev_pos = prev_scene.get("positions") or {}
+    orientation = new_scene.setdefault("orientation", {})
+    dlog = (dr_output or {}).get("dialogue_log") or []
+
+    spoke_to, addressed_by = {}, {}
+    for d in dlog:
+        if not isinstance(d, dict):
+            continue
+        sp = str(d.get("speaker") or "").strip()
+        tg = str(d.get("intended_target") or "").strip()
+        if sp and tg and sp != tg:
+            spoke_to[sp] = tg            # last line this beat wins
+            addressed_by.setdefault(tg, sp)
+
+    def colocated(a, b):
+        return a in positions and b in positions and positions[a] == positions[b]
+
+    def focus_on(name, other):
+        """Face `other`: the entity if co-located, else the doorway toward
+        their room (edge focus)."""
+        if colocated(name, other):
+            return {"kind": "target", "ref": other}
+        room = positions.get(other)
+        return {"kind": "edge", "ref": room} if room else None
+
+    names = set(cast_names or [])
+    names.update(positions.keys())
+
+    changed = False
+    for name in names:
+        if name not in positions:
+            continue  # no focus for an unpositioned name (don't mint empty records)
+        rec = orientation.setdefault(name, {})
+        moved = name in prev_pos and positions.get(name) != prev_pos.get(name)
+
+        if rec.get("came_from") is None and moved:
+            new_focus = None                      # disoriented jump
+        elif spoke_to.get(name):
+            new_focus = focus_on(name, spoke_to[name]) or rec.get("focus")
+        elif moved:
+            new_focus = None                      # locomotion resets gaze
+        elif addressed_by.get(name):
+            new_focus = focus_on(name, addressed_by[name]) or rec.get("focus")
+        else:
+            new_focus = rec.get("focus")          # persist (no decay)
+            if isinstance(new_focus, dict) and new_focus.get("kind") == "target" \
+                    and not colocated(name, new_focus.get("ref")):
+                new_focus = None                  # focused target left -> GC
+
+        if new_focus != rec.get("focus"):
+            rec["focus"] = new_focus
+            changed = True
+    return changed
+
+
+def infer_facing(chat_id, frame_id, prev_scene, new_scene, cast_names):
+    """Deterministic per-character `facing` -- an ABSOLUTE compass bearing --
+    joining the infer_came_from / infer_focus family. Runs at commit AFTER both
+    (it reads the freshly-set came_from and focus). facing is the observer's
+    heading; egocentric_frame combines it with each exit's `dir` bearing to
+    derive that exit's LEFT/RIGHT (see spatial.lateral_of).
+
+    Rules (first match wins), per character still positioned this beat:
+      - moved A->B but the disorienting-jump path cleared came_from -> facing
+        None (heading unknown; suppresses all left/right, the same fail-closed
+        idiom as came_from);
+      - moved A->B through a bearinged edge -> face the travel bearing; if that
+        adjacency carries NO bearing, facing None (we will not guess a heading);
+      - stayed put but now facing a doorway (focus is an edge) whose edge has a
+        bearing -> face that bearing (turned toward someone across the doorway);
+      - otherwise facing PERSISTS unchanged (no decay).
+    Names no longer positioned are pruned by infer_came_from already. Mutates
+    new_scene['orientation'] in place; returns whether anything changed."""
+    prev_pos = prev_scene.get("positions") or {}
+    new_pos = new_scene.get("positions") or {}
+    orientation = new_scene.setdefault("orientation", {})
+
+    names = set(cast_names or [])
+    names.update(new_pos.keys())
+
+    changed = False
+    for name in names:
+        if name not in new_pos:
+            continue
+        rec = orientation.setdefault(name, {})
+        old_r, new_r = prev_pos.get(name), new_pos.get(name)
+        moved = bool(new_r) and new_r != old_r
+        prev_facing = rec.get("facing")
+
+        if moved:
+            if rec.get("came_from") is None:
+                new_facing = None                 # disoriented jump
+            else:
+                new_facing = travel_bearing(new_scene, old_r, new_r)
+        else:
+            focus = rec.get("focus") or {}
+            ref = focus.get("ref")
+            if focus.get("kind") == "edge" and ref:
+                turned = travel_bearing(new_scene, new_r, ref)
+                new_facing = turned if turned else prev_facing
+            elif focus.get("kind") == "target" and ref:
+                # Turned to attend a CO-LOCATED person -> face their anchor's
+                # bearing, so a rear source you turn toward deterministically
+                # enters your front arc (the blind-spot LIFT that must not
+                # depend on a strong narrator honouring a prompt exemption).
+                toward = anchor_bearing_of(new_scene, ref)
+                new_facing = toward if toward else prev_facing
+            else:
+                new_facing = prev_facing          # persist (no decay)
+
+        if new_facing != prev_facing:
+            rec["facing"] = new_facing
+            changed = True
     return changed
 
 
