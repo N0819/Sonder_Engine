@@ -1,5 +1,29 @@
 # Changelog
 
+## alpha3.0.1 — Strangers stay strangers: opt-in name recognition at quick start
+
+Fixes a name-identity leak where a character could begin a story already knowing
+the player's name they had no in-fiction way to learn.
+
+### Fixed
+- **Quick-start name leak** (`greetings.py`, `app.py`): starting a story from a
+  character's greeting ("⚡ Quick start with this greeting") unconditionally
+  seeded *mutual* name-recognition between the character and the player. For a
+  strangers-meeting greeting this handed the character the player's name at
+  scene creation, so perception legitimately rendered it into the character's
+  view and mind-model from turn 1. `start_story` now takes an `already_known`
+  flag (default `True`, preserving companion-card behavior); when off, no
+  recognition is pre-seeded and the character starts as a true stranger.
+
+### Added
+- **"Already knows me" toggle** (`static/js/editors.js`): the character-card
+  quick-start modal now exposes a per-start checkbox (default on) to control
+  whether the character begins knowing the player's name.
+- **"Already knows you" per generated character** (`static/js/app.js`): the
+  "New story" wizard's described-character briefs gained the same recognition
+  checkbox that attached existing characters already had, so a freshly generated
+  cast member can also start acquainted with the player.
+
 ## alpha3.0 — Interior depth: layered goals, blended mood, earned drive rupture
 
 The headline of this release is **moment-to-moment character depth**. Character

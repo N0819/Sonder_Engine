@@ -216,3 +216,24 @@ class TestQuickStartLorebook:
         with pytest.raises(ValueError):
             greetings.start_story(cid_char, pid, lorebook_id=999999)
         assert q("SELECT COUNT(*) AS n FROM chats", one=True)["n"] == 0
+
+    def test_already_known_default_seeds_mutual_recognition(self, temp_db, monkeypatch):
+        from db import wget
+        greetings = self._stub_launch(monkeypatch)
+        cid_char, pid, _lb = self._fixtures()
+
+        chat_id, _tid = greetings.start_story(cid_char, pid, greeting_index=0)
+        # Default: greeting written TO the player -> both know each other's name.
+        assert wget(chat_id, "known", {}) == {"Dr. Moon": ["Dana"],
+                                              "Dana": ["Dr. Moon"]}
+
+    def test_stranger_start_seeds_no_recognition(self, temp_db, monkeypatch):
+        from db import wget
+        greetings = self._stub_launch(monkeypatch)
+        cid_char, pid, _lb = self._fixtures()
+
+        # A strangers-meeting greeting: the character must not begin knowing the
+        # player's name, or perception leaks it into their view from turn 1.
+        chat_id, _tid = greetings.start_story(
+            cid_char, pid, greeting_index=0, already_known=False)
+        assert wget(chat_id, "known", {}) == {}

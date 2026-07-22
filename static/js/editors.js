@@ -113,6 +113,12 @@ function quickStartModal(character, greetingIndex) {
     el("option", { value: "" }, "— none —"),
     ...books.map(b => el("option", { value: String(b.id) },
       b.name + (b.book_type && b.book_type !== "general" ? ` (${b.book_type})` : ""))));
+  const knownCb = el("input", {
+    type: "checkbox", checked: "",
+    title: character.name + " already knows your persona by name from the start. "
+      + "Uncheck for a strangers-meeting greeting, so they don't begin knowing "
+      + "your name."
+  });
   modal("Quick start — " + character.name, b => {
     b.append(
       el("div", { class: "small dim" },
@@ -122,6 +128,8 @@ function quickStartModal(character, greetingIndex) {
       el("label", { class: "small dim", style: "display:block;margin-top:10px" },
         "Attach a lorebook (optional)"),
       loreSel,
+      el("label", { class: "row small dim", style: "gap:6px;margin-top:10px" },
+        knownCb, character.name + " already knows me"),
       el("div", { class: "row", style: "margin-top:12px" },
         el("button", {
           class: "primary",
@@ -130,7 +138,8 @@ function quickStartModal(character, greetingIndex) {
             const lorebook_id = loreSel.value ? +loreSel.value : null;
             backgroundTask("Starting story",
               () => api("POST", `/api/characters/${character.id}/start`,
-                { persona_id, greeting_index: greetingIndex, lorebook_id }),
+                { persona_id, greeting_index: greetingIndex, lorebook_id,
+                  already_known: knownCb.checked }),
               {
                 onSuccess: async r => {
                   closeAllModals();
