@@ -222,6 +222,7 @@ function wizardState() {
     personaBrief: "",
     personaId: null,
     characterBriefs: [""],
+    characterBriefsKnown: [false],
     existingCharacterIds: new Set(),
     alreadyKnownCharacterIds: new Set()
   };
@@ -288,13 +289,26 @@ function renderWizardCharacters(b, state) {
           + "e.g. \"Yusuf Kessler, a jumpy station engineer hiding what he did during the breach.\""
       }, val);
       ta.oninput = () => { state.characterBriefs[i] = ta.value };
+      const knownCb = el("input", {
+        type: "checkbox",
+        title: "They already know your persona by name from the start, "
+          + "instead of meeting for the first time in-story."
+      });
+      knownCb.checked = !!state.characterBriefsKnown[i];
+      knownCb.onchange = () => { state.characterBriefsKnown[i] = knownCb.checked };
+      const knownLbl = el("label", { class: "row small dim", style: "gap:6px;margin-top:4px" },
+        knownCb, "already knows you");
       const row = el("div", { class: "row", style: "align-items:flex-start" }, ta);
       if (state.characterBriefs.length > 1) {
         row.append(el("button", {
-          title: "Remove", onclick: () => { state.characterBriefs.splice(i, 1); renderBriefs() }
+          title: "Remove", onclick: () => {
+            state.characterBriefs.splice(i, 1);
+            state.characterBriefsKnown.splice(i, 1);
+            renderBriefs();
+          }
         }, "✕"));
       }
-      briefList.append(row);
+      briefList.append(el("div", {}, row, knownLbl));
     });
   };
   renderBriefs();
@@ -334,6 +348,7 @@ function renderWizardCharacters(b, state) {
     briefList,
     el("button", { style: "margin-top:6px", onclick: () => {
       state.characterBriefs.push("");
+      state.characterBriefsKnown.push(false);
       renderBriefs();
     } }, "+ Add another character"),
     S.boot.characters.length
@@ -376,11 +391,13 @@ async function runWizard(state) {
     }
 
     const characterIds = [...state.existingCharacterIds];
-    for (const brief of state.characterBriefs) {
-      const text = brief.trim();
+    const knownIds = new Set(state.alreadyKnownCharacterIds);
+    for (let i = 0; i < state.characterBriefs.length; i++) {
+      const text = state.characterBriefs[i].trim();
       if (!text) continue;
       const r = await api("POST", "/api/characters/generate", { prompt: text });
       characterIds.push(r.id);
+      if (state.characterBriefsKnown[i]) knownIds.add(r.id);
     }
 
     const chat = await api("POST", "/api/chats", {
@@ -393,7 +410,7 @@ async function runWizard(state) {
     for (const cid of characterIds) {
       await api("POST", `/api/chats/${chat.id}/characters`, {
         char_id: cid,
-        already_known: state.alreadyKnownCharacterIds.has(cid)
+        already_known: knownIds.has(cid)
       });
     }
     return chat;

@@ -78,12 +78,20 @@ def _override_narrator(tid: int, prose: str) -> None:
 
 
 def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
-                lorebook_id: int | None = None) -> tuple[int, int]:
+                lorebook_id: int | None = None,
+                already_known: bool = True) -> tuple[int, int]:
     """'Start story now': create a chat seeded from a character's greeting.
     The greeting is shown verbatim; its private knowledge routes to the
     character. An optional lorebook is attached before turn 0 runs, so the
     opening establishment can already draw on that world's lore. Returns
-    (chat_id, turn_id)."""
+    (chat_id, turn_id).
+
+    `already_known` seeds mutual name-recognition between the character and the
+    player. It defaults True because greeting cards are typically written TO the
+    player as an already-acquainted companion. Set False for a strangers-meeting
+    greeting, where the character has no legitimate way to know the player's name
+    yet -- otherwise perception hands the character that name from turn 1 (the
+    canonical name-leak this guards against)."""
     ch = db.q("SELECT * FROM characters WHERE id=?", (char_id,), one=True)
     per = db.q("SELECT * FROM personas WHERE id=?", (persona_id,), one=True)
     if not ch:
@@ -114,13 +122,16 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     prose_final = sub(prose_tok)
 
     # chat + cast. Scenario = the full (substituted) greeting so establishment
-    # builds the scene from the author's opening; recognition is mutual because
-    # the greeting is written TO the player.
+    # builds the scene from the author's opening. Recognition is seeded mutual
+    # by default (the greeting is written TO the player), but a strangers-meeting
+    # greeting starts with `already_known=False` so neither party begins knowing
+    # the other's name.
     cid = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                 (f"{c_name} — {p_name}", prose_final, time.time()))
     db.qi("UPDATE chats SET persona_id=? WHERE id=?", (persona_id, cid))
     db.qi("INSERT INTO chat_chars(chat_id,char_id,status) VALUES(?,?, 'active')", (cid, char_id))
-    db.wset(cid, "known", {c_name: [p_name], p_name: [c_name]})
+    if already_known:
+        db.wset(cid, "known", {c_name: [p_name], p_name: [c_name]})
     db.wset(cid, "fiction_model", {"genre": {"primary": "as written in the card"},
                                    "ontology": {}, "causal_regimes": [],
                                    "scale_rules": {}, "abstraction_rules": {}})

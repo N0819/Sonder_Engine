@@ -1101,7 +1101,8 @@ def character_start_story(cid: int, body: dict = Body(default={})):
     try:
         chat_id, turn_id = greetings.start_story(
             cid, int(persona_id), int(body.get("greeting_index", 0)),
-            lorebook_id=int(lorebook_id) if lorebook_id else None)
+            lorebook_id=int(lorebook_id) if lorebook_id else None,
+            already_known=bool(body.get("already_known", True)))
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     return {"chat_id": chat_id, "turn_id": turn_id}
