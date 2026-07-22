@@ -10,7 +10,7 @@
 | `agents/__init__.py` | 81 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 250 |  | `agents.common`, `commit`, `db`, `prompts`, `schemas`, `spatial` |
 | `agents/character.py` | 285 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/common.py` | 1629 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/common.py` | 1653 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/director.py` | 2227 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 442 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 190 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
@@ -82,12 +82,12 @@
 |---|---:|---:|
 | `norm_sequence()` | 624 | 146 lines |
 | `_extract_authority_claims()` | 380 | 90 lines |
-| `_check_narrator_fidelity()` | 1501 | 65 lines |
-| `_scrub_unknown_identities()` | 910 | 57 lines |
-| `_strip_player_echo()` | 1293 | 56 lines |
+| `_check_narrator_fidelity()` | 1525 | 65 lines |
+| `_scrub_unknown_identities()` | 934 | 57 lines |
+| `_strip_player_echo()` | 1317 | 56 lines |
 | `_assert_plan_materialized()` | 83 | 55 lines |
-| `_dedupe_view_sentences()` | 1386 | 43 lines |
-| `_inject_visible_actor()` | 1153 | 41 lines |
+| `_dedupe_view_sentences()` | 1410 | 43 lines |
+| `_unknown_actor_label()` | 837 | 41 lines |
 
 ### `agents/director.py`
 
