@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from db import q
 from character_schema import (
     character_abilities,
     character_name,
@@ -40,6 +41,42 @@ from .common import (
     character_room,
     norm_sequence,
 )
+
+def _recent_self_lines(chat_id, char_name, current_turn_idx, n_turns=3, cap=4):
+    """The character's own most-recent spoken lines, verbatim, oldest->newest,
+    from the last few committed turns' director_resolve dialogue_log.
+
+    Without this the character agent only ever sees the CURRENT beat plus its
+    static sheet, so a character in a standing situation (an escort repeating
+    'keep moving' at a checkpoint that will not clear) re-derives the same line
+    turn after turn -- verbatim repetition reads as a broken machine. Feeding
+    its own recent lines lets it notice the refrain and vary or escalate
+    (through specificity/consequence, per the character prompt), never as an
+    emotional-volume spike."""
+    if current_turn_idx is None:
+        return []
+    rows = q(
+        "SELECT t.idx AS idx, v.content AS content FROM turns t "
+        "JOIN steps s ON s.turn_id=t.id AND s.key='director_resolve' "
+        "JOIN variants v ON v.step_id=s.id AND v.active=1 "
+        "WHERE t.chat_id=? AND t.idx < ? ORDER BY t.idx DESC LIMIT ?",
+        (chat_id, current_turn_idx, n_turns),
+    )
+    cf = str(char_name or "").casefold()
+    lines = []
+    for r in rows:
+        try:
+            dr = json.loads(r["content"])
+        except (TypeError, ValueError):
+            continue
+        for d in (dr.get("dialogue_log") or []):
+            if str(d.get("speaker") or "").casefold() == cf:
+                quote = str(d.get("exact_quote") or "").strip()
+                if quote:
+                    lines.append({"turn": r["idx"], "said": quote})
+    lines.sort(key=lambda x: x["turn"])
+    return lines[-cap:]
+
 
 def character_step(ctx, cid, nonce):
     chat = ctx.chat
@@ -111,6 +148,8 @@ def character_step(ctx, cid, nonce):
             "senses": senses_as_text(character_senses(sh)),
             "abilities": character_abilities(sh),
             "attire": sc.get("attire", {}).get(character_name(sh)),
+            "recent_self_lines": _recent_self_lines(
+                chat.id, character_name(sh), ctx.turn.idx),
         },
         "perception": {"view": view or "You register nothing new this beat."},
         "memory": memory_context,

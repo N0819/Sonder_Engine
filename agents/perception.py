@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 
 from character_schema import (
     character_appearance,
@@ -14,7 +15,10 @@ from character_schema import (
 from db import wget
 from prompts import get_prompt
 from scene import (
+    active_disguises,
     appearance_of,
+    disguise_known_to,
+    disguised_visible_appearance,
     get_scene,
     is_player_speaker,
     persona_of,
@@ -106,6 +110,73 @@ def _scrub_view_for(ctx, stage, view, perceiver_name, known, roster):
             f"{stage}: scrubbed unearned identity {leaked} "
             f"from the view of {perceiver_name}")
     return view
+
+def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map):
+    """Resolve a subject's active physical_disguise into perception inputs.
+
+    Returns (visible_appearance, disguise_payload_or_None, known_to_or_None):
+    - visible_appearance: what EVERY observer visually perceives -- the
+      disguised outward form when a disguise is active (a concealed feature is
+      not seen even by someone who knows it is there), else the true
+      appearance unchanged.
+    - disguise_payload: the block handed to the perception LLM so it can give
+      observers in known_to the concealed truth as KNOWLEDGE (never as vision)
+      and preserve the subject's real capabilities; None when no disguise.
+    - known_to: casefolded names that legitimately know the truth (for the
+      leak tripwire), or None.
+
+    Feeding the disguised appearance is the primary, fail-safe fix: the LLM is
+    never handed the concealed features, so it cannot render them. The payload
+    and tripwire are the knowledge layer and QA around that.
+    """
+    disguise = active_disguises(chat_id).get(str(subject_name or "").casefold())
+    if not disguise:
+        return true_appearance, None, None
+    known_to = disguise_known_to(disguise, subject_name, known_map)
+    visible = disguised_visible_appearance(true_appearance, disguise)
+    payload = {
+        "active": True,
+        "outward_visible_appearance": visible,
+        "concealed_truth": disguise.get("description") or "",
+        "known_to": sorted(known_to),
+        "capability_note": (
+            "The disguise conceals APPEARANCE only. The subject's real senses "
+            "and abilities are unchanged -- e.g. concealed ears still hear."),
+        "instruction": (
+            "Every observer VISUALLY perceives only outward_visible_appearance; "
+            "never describe a concealed feature as seen. An observer whose name "
+            "is in known_to additionally KNOWS (does not see) the concealed_truth "
+            "and may act on it; an observer not in known_to has no awareness of it."),
+    }
+    return visible, payload, known_to
+
+
+def _disguise_leak_check(ctx, stage, views, perceivers, subject_name,
+                         concealed_terms, known_to):
+    """Deterministic fidelity tripwire (a WARNING, never a scrubber). Flags an
+    UNAWARE perceiver whose view names one of the disguised subject's concealed
+    features. Scoped to that subject's own terms, so unrelated lore (a
+    'Nine-Tailed Fox' task-force name) is never touched. The real fix is
+    upstream -- feeding the disguised appearance so correct text is generated
+    -- this only catches a model that leaked anyway."""
+    if not concealed_terms:
+        return
+    known = known_to or set()
+    for p in perceivers:
+        pid = str(p["id"])
+        if pid.casefold() == "player":
+            continue  # the player is the subject / always knows
+        if str(p.get("name") or "").casefold() in known:
+            continue
+        v = str(views.get(pid) or "").lower()
+        for t in concealed_terms:
+            t = str(t).strip().lower()
+            if t and re.search(rf"\b{re.escape(t)}\b", v):
+                ctx.warnings.append(
+                    f"{stage}: disguise leak -- '{t}' (a concealed feature of "
+                    f"{subject_name}) surfaced in the view of {p.get('name')}")
+                break
+
 
 def perception_establish(ctx, nonce):
     chat = ctx.chat
@@ -255,6 +326,14 @@ def perception_act(ctx, nonce):
     p_name = pers.get("name") or persona_name(pers)
     p_appearance = appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc)
+    # A physical disguise conceals the actor's real appearance from observers:
+    # p_visible is what is actually SEEN (disguised form when active), fed to
+    # both the LLM and the deterministic injection below so a concealed feature
+    # is never rendered as perceived.
+    p_visible, p_disguise, p_disguise_known = _subject_disguise_context(
+        chat["id"], p_name, p_appearance, known)
+    p_disguise_terms = (active_disguises(chat["id"]).get(str(p_name).casefold())
+                        or {}).get("concealed_terms") or []
 
     speech_elems = [
         e for e in (interp.get("sequence") or [])
@@ -287,7 +366,7 @@ def perception_act(ctx, nonce):
         "actor_name": p_name,
         "actor_room": p_room,
         "actor_room_name": (p_rdata or {}).get("name") or p_room,
-        "actor_present_appearance": p_appearance,
+        "actor_present_appearance": p_visible,
         "sequence": interp.get("sequence") or [],
         "player_speech": player_speech,
         "speech": interp.get("speech"),
@@ -298,6 +377,8 @@ def perception_act(ctx, nonce):
         "targets": action.get("targets") or [],
         "commitment": action.get("commitment", "contestable"),
     }
+    if p_disguise:
+        action_onset["subject_disguise"] = p_disguise
 
     perceivers = []
     flow = interp.get("flow")
@@ -332,9 +413,12 @@ def perception_act(ctx, nonce):
     # copied into a context with an instruction to ignore it" pattern the
     # engine forbids for character agents, and is why even strong models
     # wrote the name into stranger views.
-    p_appearance_safe = _strip_identity_tokens(p_appearance, [p_name])
+    # Strip identity from the VISIBLE (disguise-adjusted) appearance, never the
+    # true one -- otherwise a disguised subject's concealed features leak into
+    # the stranger-facing safe form.
+    p_appearance_safe = _strip_identity_tokens(p_visible, [p_name])
     if perceivers and not any(p.get("knows_identity") for p in perceivers):
-        neutral = _unknown_actor_label(p_name, p_appearance)
+        neutral = _unknown_actor_label(p_name, p_visible)
         action_onset = {**action_onset, "actor": neutral,
                         "actor_name": neutral,
                         "actor_present_appearance": p_appearance_safe}
@@ -384,7 +468,7 @@ def perception_act(ctx, nonce):
         rel = p.get("spatial_to_actor") or {}
         vis = p.get("visual_channel_to_actor", False)
         knows_identity = bool(p.get("knows_identity"))
-        display = p_name if knows_identity else _unknown_actor_label(p_name, p_appearance)
+        display = p_name if knows_identity else _unknown_actor_label(p_name, p_visible)
         view = clean_views.get(pid)
         view = _ensure_environment(view, p, display, rel, vis, action_desc)
 
@@ -438,6 +522,8 @@ def perception_act(ctx, nonce):
                     f"from the view of {p['name']}")
         clean_views[pid] = view or None
 
+    _disguise_leak_check(ctx, "perception_act", clean_views, perceivers,
+                         p_name, p_disguise_terms, p_disguise_known)
     return {"views": clean_views}
 
 def perception_outcome(ctx, nonce):
@@ -479,8 +565,16 @@ def perception_outcome(ctx, nonce):
     ctx["_player_room"] = p_room
 
     p_name = pers.get("name") or persona_name(pers)
-    p_appearance = appearance_of(
+    p_appearance_true = appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc)
+    # Conceal a disguised subject's real appearance in every observer's outcome
+    # view: p_appearance becomes the disguised (visible) form, so present_
+    # appearances and the deterministic injection below never expose concealed
+    # features. The knowledge layer (who KNOWS the truth) rides the payload.
+    p_appearance, p_disguise, p_disguise_known = _subject_disguise_context(
+        chat["id"], p_name, p_appearance_true, known)
+    p_disguise_terms = (active_disguises(chat["id"]).get(str(p_name).casefold())
+                        or {}).get("concealed_terms") or []
 
     # background_react (agents/background.py) is a separate, later stage
     # in the plan -- its output is merged in HERE rather than by mutating
@@ -642,6 +736,7 @@ def perception_outcome(ctx, nonce):
         "dialogue_log": enriched_dlog,
         "sources": sources,
         "present_appearances": appearances,
+        **({"subject_disguise": p_disguise} if p_disguise else {}),
         "concealed_actions": concealed,
         "scene": {"location": sc.get("location"), "time": sc.get("time"),
                   "rooms": _contextual_rooms(sc, ctx.cast, p_room),
@@ -800,4 +895,6 @@ def perception_outcome(ctx, nonce):
             current = clean_views.get(key) or ""
             clean_views[key] = _append_micro_view(current, additions)
 
+    _disguise_leak_check(ctx, "perception_outcome", clean_views, perceivers,
+                         p_name, p_disguise_terms, p_disguise_known)
     return {"views": clean_views}

@@ -42,6 +42,52 @@ def test_authority_claims_classify_commitment_from_raw_input():
     assert claims and claims[0]["commitment"] == "contestable"
 
 
+# ---- self-directed effect resolves to the declaring actor ---------------
+
+def test_self_directed_effect_resolves_to_actor():
+    # A wave / going rigid: the action names no targets and the effect has no
+    # target_id -> the subject is the player, not None (which tripped the
+    # resolve reconciliation's 'no resolvable subject' note every beat).
+    from agents.common import _extract_authority_claims
+
+    sequence = [{
+        "type": "action", "attempt": "give a little wave", "targets": [],
+        "asserted_effects": [{"target_id": None, "kind": "The player waves."}],
+        "commitment": "asserted",
+    }]
+    claims = _extract_authority_claims(sequence, "give a little wave",
+                                       actor_name="Hinami")
+    assert claims and claims[0]["subject_id"] == "Hinami"
+
+
+def test_transitive_effect_not_hijacked_to_actor():
+    # The action DOES name a target -> a null effect target is a dropped
+    # reference, NOT the actor's own body. Must not resolve to the player,
+    # or the player would silently author effects on other entities.
+    from agents.common import _extract_authority_claims
+
+    sequence = [{
+        "type": "action", "attempt": "punch the guard", "targets": ["guard"],
+        "asserted_effects": [{"target_id": None, "kind": "staggers"}],
+        "commitment": "asserted",
+    }]
+    claims = _extract_authority_claims(sequence, "I punch the guard",
+                                       actor_name="Hinami")
+    assert claims and claims[0]["subject_id"] != "Hinami"
+
+
+def test_world_event_assertion_not_hijacked_to_actor():
+    # The actor-less `event` branch (a player-authored world fact) stays for
+    # the director to adjudicate even when an actor_name is supplied.
+    from agents.common import _extract_authority_claims
+
+    sequence = [{"type": "event", "description": "two guards appear",
+                 "subject": ""}]
+    claims = _extract_authority_claims(sequence, "two guards appear",
+                                       actor_name="Hinami")
+    assert claims and claims[0]["subject_id"] != "Hinami"
+
+
 # ---- gap (B): actor-less environmental events survive norm_sequence -----
 
 def test_norm_sequence_keeps_environmental_events():

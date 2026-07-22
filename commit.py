@@ -1594,8 +1594,25 @@ def track_background_presences(ctx, nonce):
     dialogue_speakers = set()  # names that spoke a dialogue_log line this beat
     sketches = {}              # name -> {role_hint, station_room} from structured defs
 
+    # Scene entities are keyed by an opaque id ("char_guard_alpha") but carry
+    # a human display name ("Security Guard Alpha"). The director normally
+    # voices a background entity by its display name, but sometimes slips and
+    # writes the raw entity id into dialogue_log.speaker. Tracked verbatim,
+    # that id becomes a SECOND, duplicate presence alongside the real one --
+    # fragmenting the figure's dialogue/mention history and, worse, orphaning
+    # its owed-reply debt onto the ghost id (observed live: a guard challenges
+    # the player under its id, then never gets to answer, because the debt is
+    # keyed to the id while the reactor gate ranks the display name). Fold an
+    # id-shaped speaker back to its display name before it is ever tracked.
+    entity_id_to_name = {
+        eid: str((edef or {}).get("name") or "").strip()
+        for eid, edef in ((wget(cid, "scene", {}) or {}).get("entities") or {}).items()
+        if isinstance(edef, dict) and str((edef or {}).get("name") or "").strip()
+    }
+
     for d in (res.get("dialogue_log") or []):
         speaker = str(d.get("speaker") or "").strip()
+        speaker = entity_id_to_name.get(speaker, speaker)
         if speaker and speaker.casefold() not in roster:
             candidates.add(speaker)
             dialogue_speakers.add(speaker.casefold())

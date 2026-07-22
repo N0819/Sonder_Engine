@@ -301,9 +301,13 @@ def director_interpret(ctx, nonce):
     if fl.get("generation_requests"):
         fl["needs_mapping"] = True
 
-    # Extract authority claims from the sequence
+    # Extract authority claims from the sequence. The player is the declaring
+    # actor, so a self-directed effect (no target) resolves to them -- see
+    # _extract_authority_claims; this stops the resolve reconciliation flagging
+    # the player's own body actions (wave, go rigid) as 'no resolvable subject'.
     fl["authority_claims"] = _extract_authority_claims(
-        out.get("sequence"), ctx.input)
+        out.get("sequence"), ctx.input,
+        actor_name=(pers.get("name") or persona_name(pers)))
 
     # Detect contested actions
     seq = out.get("sequence")

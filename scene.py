@@ -176,6 +176,93 @@ def appearance_of(name, base, scene):
         s += "; currently: " + "; ".join(map(str, ov))
     return s
 
+
+# ---- Physical disguise (appearance concealment) ----
+# A `physical_disguise` condition (written by director_resolve, persisted in
+# world_conditions) conceals a subject's real APPEARANCE from observers who
+# don't already know the truth. Nothing consumed it before -- perception kept
+# rendering the true appearance, so a concealed feature was still perceived
+# (a kitsune's hidden fox ears shown to a guard she is passing herself off to).
+# These helpers are the consumer. The disguise conceals appearance only, never
+# capability (concealed fox ears still hear) -- perception must preserve the
+# subject's real senses.
+
+def active_disguises(chat_id):
+    """Active physical_disguise conditions for `chat_id`, keyed by casefolded
+    subject name. Each value: {subject, description, presented_appearance,
+    concealed_terms, known_to}. Legacy conditions carry only a freeform
+    `description`; newer ones (see the director prompt) also carry a positive
+    `presented_appearance` (what an unaware observer sees), `concealed_terms`
+    (feature words to keep out of unaware views / to tripwire on), and
+    `known_to` (observers who legitimately know the real form)."""
+    out = {}
+    for row in q(
+        "SELECT subject_id, payload FROM world_conditions WHERE chat_id=? "
+        "AND kind='physical_disguise' AND active=1", (chat_id,),
+    ):
+        try:
+            payload = json.loads(row["payload"])
+        except (TypeError, ValueError):
+            payload = {}
+        subject = str(payload.get("subject_id") or row["subject_id"] or "").strip()
+        if not subject:
+            continue
+        state = payload.get("state") or {}
+        pick = lambda k: state.get(k) or payload.get(k)
+        out[subject.casefold()] = {
+            "subject": subject,
+            "description": str(pick("description") or "").strip(),
+            "presented_appearance": str(pick("presented_appearance") or "").strip(),
+            "concealed_terms": [str(t).strip() for t in (pick("concealed_terms") or [])
+                                if str(t).strip()],
+            "known_to": [str(n).strip() for n in (pick("known_to") or []) if str(n).strip()],
+        }
+    return out
+
+
+def disguised_visible_appearance(true_appearance, disguise):
+    """What is VISIBLY perceived of a disguised subject -- by every observer,
+    including one who knows the truth (a concealed feature is not seen even by
+    someone who knows it's there). Prefers the director-authored positive
+    `presented_appearance`. Falls back to stripping `concealed_terms` from the
+    true appearance when they're provided; and, when neither is available
+    (legacy conditions), returns a deliberately generic label rather than the
+    true appearance -- an information barrier must fail toward concealment, so
+    a leaky-but-detailed description is never the fallback."""
+    presented = (disguise or {}).get("presented_appearance")
+    if presented:
+        return presented
+    terms = (disguise or {}).get("concealed_terms") or []
+    if terms and true_appearance:
+        scrubbed = true_appearance
+        for t in terms:
+            scrubbed = re.sub(rf"\b{re.escape(t)}\b", "", scrubbed, flags=re.IGNORECASE)
+        # Collapse the punctuation/space debris a removal leaves behind.
+        scrubbed = re.sub(r"\s*[;,]\s*(?=[;,])", "", scrubbed)
+        scrubbed = re.sub(r"\s{2,}", " ", scrubbed).strip(" ;,")
+        if scrubbed:
+            return scrubbed
+    return "a person whose appearance is unremarkable"
+
+
+def disguise_known_to(disguise, subject_name, known_map):
+    """Casefolded names that legitimately KNOW the concealed truth: the subject
+    themselves, anyone the director listed in the condition's `known_to`, and --
+    only as a backstop for legacy conditions with no explicit list -- observers
+    who already know the subject's identity (`known` map), a reasonable proxy
+    for 'was present for / close enough to know the real form'. Everyone else
+    is unaware and perceives only the disguised outward form."""
+    who = {str(subject_name or "").casefold()}
+    listed = (disguise or {}).get("known_to") or []
+    for n in listed:
+        who.add(str(n).strip().casefold())
+    if not listed:
+        subj_cf = str(subject_name or "").casefold()
+        for observer, knows in (known_map or {}).items():
+            if any(subj_cf == str(k).casefold() for k in (knows or [])):
+                who.add(str(observer).casefold())
+    return who
+
 def senses_of(sheet):
     if "psychology" in sheet or "core" in sheet:
         return senses_as_text(character_senses(sheet))

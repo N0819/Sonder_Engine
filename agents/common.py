@@ -377,7 +377,7 @@ def _normalize_effect(effect):
         return None
     return {"target_id": None, "kind": str(effect), "details": {}}
 
-def _extract_authority_claims(sequence, raw_input):
+def _extract_authority_claims(sequence, raw_input, actor_name=None):
     """Extract authority claims from the interpreted sequence.
 
     raw_input is the player's own declaration and serves as the FALLBACK
@@ -385,7 +385,19 @@ def _extract_authority_claims(sequence, raw_input):
     both for commitment classification and for the claim's source_text.
     (It used to be accepted and ignored, so an element the model emitted
     without raw_text produced empty-source claims classified against "".)
-    """
+
+    actor_name, when given, is the declaring actor (the player). A
+    self-directed action effect -- one whose own target_id is empty AND
+    whose parent action names no explicit targets -- is about the actor's
+    OWN body (a wave, going rigid, a pleading look), so its subject is the
+    actor. Without this those claims carried subject_id=None and tripped
+    the resolve reconciliation's 'no resolvable subject' note every beat.
+    Scoped deliberately narrow: a transitive effect (the action DOES name
+    targets, so a null effect target is a dropped reference, not the self)
+    and the actor-less `event` branch (a player-authored WORLD assertion
+    like "two guards appear") are left for the director to adjudicate --
+    resolving them to the player would silently hand the player authorship
+    of world facts."""
     fallback_text = str(raw_input or "")
     claims = []
     for i, event in enumerate(sequence or []):
@@ -417,6 +429,9 @@ def _extract_authority_claims(sequence, raw_input):
                 event.get("raw_text") or event.get("attempt")
                 or fallback_text)
         event["commitment"] = commitment
+        # A null effect target is the actor's own body only when the action
+        # named no targets at all; if it did, the null is a dropped reference.
+        self_subject = actor_name if not (event.get("targets") or []) else None
         if commitment == "asserted":
             for effect_index, effect in enumerate(
                 event.get("asserted_effects") or []
@@ -427,7 +442,7 @@ def _extract_authority_claims(sequence, raw_input):
                 claims.append({
                     "claim_id": f"claim:{i}:effect:{effect_index}",
                     "scope": "effect",
-                    "subject_id": eff.get("target_id"),
+                    "subject_id": eff.get("target_id") or self_subject,
                     "predicate": eff.get("kind", ""),
                     "value": eff.get("details"),
                     "commitment": "asserted",
@@ -444,7 +459,7 @@ def _extract_authority_claims(sequence, raw_input):
                 claims.append({
                     "claim_id": f"claim:{i}:intent",
                     "scope": "intent",
-                    "subject_id": eff.get("target_id"),
+                    "subject_id": eff.get("target_id") or self_subject,
                     "predicate": eff.get("kind", ""),
                     "value": eff.get("details"),
                     "commitment": "contestable",

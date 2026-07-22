@@ -149,6 +149,34 @@ def test_declared_agents_of_any_kind_are_tracked(temp_db):
         assert inert not in presences, inert
 
 
+def test_id_shaped_speaker_folds_to_entity_display_name(temp_db):
+    # Regression: the director sometimes voices a background entity by its
+    # raw scene-entity id ("char_guard_alpha") instead of its display name
+    # ("Security Guard Alpha"). Tracked verbatim that fragmented the guard
+    # into two presences and orphaned its owed-reply debt on the id ghost
+    # (a guard challenged the player under its id, then never answered).
+    # The id must fold to the display name so exactly one presence exists
+    # and the reply debt lands on the same figure the reactor gate ranks.
+    chat_id = _make_chat(temp_db)
+    temp_db.wset(chat_id, "scene", {"entities": {
+        "char_guard_alpha": {"kind": "actor", "name": "Security Guard Alpha"},
+    }})
+
+    ctx = _ctx(chat_id, 5, [], {
+        "dialogue_log": [
+            {"speaker": "char_guard_alpha",
+             "exact_quote": "Halt. State your designation."},
+        ],
+    })
+    track_background_presences(ctx, nonce=0)
+
+    presences = temp_db.wget(chat_id, "background_presences", {})
+    assert "Security Guard Alpha" in presences
+    assert "char_guard_alpha" not in presences
+    # The dialogue turn is credited to the real (display-name) presence.
+    assert presences["Security Guard Alpha"]["dialogue_turns"] == [5]
+
+
 def test_mentions_only_count_for_already_tracked_names(temp_db):
     chat_id = _make_chat(temp_db)
     temp_db.wset(chat_id, "background_presences", {
