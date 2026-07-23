@@ -870,21 +870,57 @@ def _untracked_restraint_subjects(resolved_event, dialogue_log, conditions,
 # -- unlike the destruction tripwire -- this DOES feed the Tier-2 self-repair:
 # an awareness condition is reversible and non-cascading, so a false positive
 # costs one degraded beat while a miss is a multi-turn perception-barrier
-# breach. The keyword scan is only the deterministic floor UNDER the broad
-# semantic omission auditor (resolve_reconcile), never the mechanism.
-_UNCONSCIOUSNESS_KEYWORDS = (
-    "unconscious", "knocked out", "knocked unconscious", "out cold",
-    "blacks out", "blacked out", "passes out", "passed out", "faints",
-    "fainted", "loses consciousness", "lost consciousness", "goes limp",
-    "slumps unconscious", "sedated", "put under", "knocked senseless",
+# breach. HIGH-PRECISION via grammatical-subject attribution (like the
+# destruction tripwire): a cue is pinned to the single nearest tracked name in
+# the same clause, so a bystander merely co-mentioned with the fallen one ("Dr.
+# Moon kneels beside the unconscious anomaly") is never flagged. It is the
+# deterministic floor UNDER the broad semantic omission auditor, never the
+# mechanism.
+_UNCONSCIOUSNESS_CUE = re.compile(
+    r"\b(?:"
+    r"unconscious|out\s+cold|"
+    r"knocked\s+(?:out|unconscious|senseless)|"
+    r"blacks?\s+out|blacked\s+out|"
+    r"passes?\s+out|passed\s+out|"
+    r"faints|fainted|"
+    r"loses\s+consciousness|lost\s+consciousness|"
+    r"goes\s+limp|slumps?\s+unconscious|"
+    r"sedated|put\s+under"
+    r")\b"
 )
+# Titles whose trailing period is not a sentence break (so "Dr. Moon" is one
+# clause, and "unconscious ... Dr. Moon" across a real "anomaly." break stays
+# two clauses).
+_TITLE_ABBREV = frozenset((
+    "dr", "mr", "mrs", "ms", "prof", "st", "sr", "jr", "mt", "rev", "hon",
+    "gen", "capt", "sgt", "lt", "col", "gov", "fr", "det", "sen", "rep",
+))
+_MAX_UNCONSCIOUSNESS_GAP = 5  # word tokens between a cue and its subject name
+
+
+def _sentence_break_positions(low):
+    """Offsets in casefolded `low` that terminate a sentence -- a '.', '!',
+    '?' or newline -- excluding an abbreviation period (one preceded by a
+    short title word in _TITLE_ABBREV). Used as clause barriers so a cue and
+    a name on opposite sides of a real break are never paired."""
+    breaks = []
+    for m in re.finditer(r"[.!?]|\n", low):
+        if low[m.start()] == ".":
+            wm = re.search(r"([a-z]+)$", low[:m.start()])
+            if wm and wm.group(1) in _TITLE_ABBREV:
+                continue
+        breaks.append(m.start())
+    return breaks
+
 
 def _untracked_unconsciousness_subjects(resolved_event, dialogue_log, conditions,
                                         tracked_names):
     """Named, tracked characters narrated as losing consciousness with no
-    matching `awareness` condition in the diff. Mirrors
-    _untracked_restraint_subjects, but the presence check is specific to
-    kind:'awareness' -- an unrelated wound/restraint condition on the same
+    matching `awareness` condition in the diff. Each cue is attributed to a
+    SINGLE subject -- the nearest tracked name in the same sentence within
+    _MAX_UNCONSCIOUSNESS_GAP words -- so a bystander merely co-mentioned with
+    the fallen one is never flagged. Presence check is specific to
+    kind:'awareness'; an unrelated wound/restraint condition on the same
     subject must not suppress the awareness flag."""
     text_units = [str(resolved_event or "")]
     for entry in (dialogue_log or []):
@@ -897,14 +933,36 @@ def _untracked_unconsciousness_subjects(resolved_event, dialogue_log, conditions
             if isinstance(c, dict) and c.get("kind") == "awareness":
                 aware_subjects.add(str(c.get("subject_id") or "").casefold())
 
+    name_res = [(name, re.compile(r"\b" + re.escape(name.casefold()) + r"(?:'s)?\b"))
+                for name in tracked_names if name]
+
     flagged = set()
     for text in text_units:
-        lower = text.casefold()
-        if not any(k in lower for k in _UNCONSCIOUSNESS_KEYWORDS):
+        low = str(text).casefold()
+        name_hits = [(m.start(), m.end(), name)
+                     for name, rx in name_res for m in rx.finditer(low)]
+        if not name_hits:
             continue
-        for name in tracked_names:
-            if name and name.casefold() in lower:
-                flagged.add(name)
+        breaks = _sentence_break_positions(low)
+        for cm in _UNCONSCIOUSNESS_CUE.finditer(low):
+            cs, ce = cm.start(), cm.end()
+            best = None  # (word_gap, name) -- the closest same-clause subject
+            for ns, ne, name in name_hits:
+                if ne <= cs:            # name before the cue
+                    lo, hi = ne, cs
+                elif ns >= ce:          # name after the cue
+                    lo, hi = ce, ns
+                else:                   # overlaps the cue span; skip
+                    continue
+                if any(lo <= p < hi for p in breaks):
+                    continue            # a sentence break separates them
+                gap = len(re.findall(r"\w+", low[lo:hi]))
+                if gap > _MAX_UNCONSCIOUSNESS_GAP:
+                    continue
+                if best is None or gap < best[0]:
+                    best = (gap, name)
+            if best is not None:
+                flagged.add(best[1])
     return [n for n in sorted(flagged) if n.casefold() not in aware_subjects]
 
 # Destruction tripwire (movement/space Phase 3b follow-up). Observed live:
