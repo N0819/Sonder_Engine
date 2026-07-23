@@ -767,8 +767,30 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok):
             step = _INTENT_PROGRESS_STEP if kind == "progress" else -_INTENT_PROGRESS_STEP
             target["progress"] = _clamp01(_float_or(target.get("progress")) + step)
             target["last_progress_turn"] = turn_idx
-            if target.get("status") == "dormant":
-                target["status"] = "active"  # engagement revives a dormant goal
+            if target.get("status") in ("dormant", "blocked"):
+                # engagement revives a set-aside goal; a blocked goal that is
+                # progressed again is being routed around, so clear the block.
+                target["status"] = "active"
+                target.pop("blocked_why", None)
+        elif kind == "nonviable":
+            # The world has CLOSED this goal this beat (route sealed, target
+            # destroyed, tool lost). Guarded like satisfy/abandon: the op must
+            # cite on-screen evidence (or carry a `why`), so a goal is never
+            # quietly dropped. A blocked goal stops steering and stops being a
+            # valid `serves` target until engagement (progress/add) revives it.
+            try:
+                ok = bool(evidence_ok(op))
+            except Exception:
+                ok = False
+            if not ok:
+                warnings.append(
+                    f"intent nonviable rejected for {target.get('id')!r}: no "
+                    "on-screen evidence the goal became impossible")
+                continue
+            target["status"] = "blocked"
+            target["blocked_why"] = str(op.get("why") or "").strip()
+            target["blocked_turn"] = turn_idx
+            target["last_progress_turn"] = turn_idx
         elif kind in ("satisfy", "abandon"):
             formed = int(_float_or(target.get("formed_turn"), turn_idx))
             if turn_idx - formed <= _INTENT_EVIDENCE_WINDOW:

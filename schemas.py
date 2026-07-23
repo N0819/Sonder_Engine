@@ -363,6 +363,10 @@ class FlowPlan(BaseModel):
     generation_requests: list[dict] = Field(default_factory=list)
     authority_claims: list[dict] = Field(default_factory=list)
     fiction_frame: dict[str, Any] = Field(default_factory=dict)
+    # Future world beats the player narrated for a LATER turn (P4). Each
+    # {summary, due_in_turns}; the engine stores and re-delivers them when due
+    # so a player-scheduled event is never silently dropped.
+    scheduled_assertions: list[dict] = Field(default_factory=list)
 
 # ---- Director Interpret ----
 

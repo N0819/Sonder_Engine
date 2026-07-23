@@ -3141,6 +3141,33 @@ def commit_narration_person(ctx, nonce):
 
 # ---- Top-level atomic commit ----
 
+def commit_authored_events(ctx, nonce):
+    """P4: resolve this beat's DUE authored (player-scheduled) future events
+    against the resolved prose (fire / bounded re-queue / stale), then mint any
+    NEW ones the Director captured this turn from a future-tense player
+    assertion (flow.scheduled_assertions). Runs inside the turn transaction so a
+    rollback un-does both -- a rerun re-mints with stable ids (no double
+    schedule) and re-resolves idempotently."""
+    from authored_events import mint_authored_events, resolve_authored_events
+    cid = ctx.chat.id
+    res = ctx.director_resolve or ctx.director_establish or {}
+    fired, requeued, dropped = resolve_authored_events(
+        cid, ctx.turn.idx, str(res.get("resolved_event") or ""))
+    if requeued:
+        ctx.add_warning(
+            f"{requeued} authored future-event(s) not enacted this beat; "
+            "re-queued to next turn rather than dropped")
+    if dropped:
+        ctx.add_warning(
+            f"{dropped} authored future-event(s) went unresolved past the "
+            "re-queue limit and were marked stale")
+    interp = ctx.director_interpret or {}
+    minted = mint_authored_events(
+        cid, ctx.turn.idx, (interp.get("flow") or {}).get("scheduled_assertions"))
+    return {"fired": fired, "requeued": requeued, "dropped": dropped,
+            "minted": minted}
+
+
 def commit_all(ctx, nonce):
     """Commit one turn exactly once and atomically.
 
@@ -3233,6 +3260,10 @@ def _commit_all_locked(ctx, nonce):
             _commit_domain(
                 ctx, results, "obligations",
                 lambda: commit_obligations(ctx, nonce),
+            )
+            _commit_domain(
+                ctx, results, "authored_events",
+                lambda: commit_authored_events(ctx, nonce),
             )
             _commit_domain(
                 ctx, results, "pending",

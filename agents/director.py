@@ -223,6 +223,12 @@ def director_interpret(ctx, nonce):
     fm = fiction_model(chat["id"])
     clock = simulation_clock(chat["id"])
 
+    # Authored future events the player scheduled on a prior beat and that are
+    # due NOW (P4). Delivered with a resolve-now contract; commit_authored_events
+    # re-queues any the resolution fails to enact rather than dropping them.
+    from authored_events import due_authored_events
+    _due_authored = due_authored_events(chat["id"], ctx.turn.idx)
+
     world_books = [
         {"name": m["name"], "type": m["type"], "summary": (m["summary"] or "")[:240],
          "scope_world_id": m.get("scope_world_id"),
@@ -256,6 +262,10 @@ def director_interpret(ctx, nonce):
         "world_books": world_books,
         "standing_intentions": raw_intents[:12],
         "pending": wget(chat["id"], "pending", []),
+        # Future beats the PLAYER scheduled earlier ("the elevator crashes next
+        # turn") that are due NOW: resolve them as occurring this beat, folded
+        # in with whatever the player declares this turn.
+        "due_authored_events": [e["summary"] for e in _due_authored],
         # Mechanical notices from the previous commit's transit sweep (e.g.
         # a timed arrival that completed) -- facts the engine already made
         # true, for the director to acknowledge rather than re-invent.
@@ -469,6 +479,13 @@ def director_interpret(ctx, nonce):
             ).strip()
 
     if wget(chat["id"], "pending", []):
+        fl["needs_mapping"] = True
+
+    # Carry the due authored events onto the output so director_resolve can
+    # enact them, and force mapping when one is due (a scheduled world beat --
+    # a crash, an arrival -- may reshape the scene graph).
+    out["due_authored_events"] = [e["summary"] for e in _due_authored]
+    if _due_authored:
         fl["needs_mapping"] = True
 
     # Do NOT set ctx["_player_room"] to the declared movement target here.
@@ -2029,6 +2046,10 @@ def director_resolve(ctx, nonce):
         "standing_intentions": raw_intents[:12],
         "pending_obligations": pending_obligation_view(chat["id"], turn["idx"]),
         "social_standing": social_standing,
+        # Player-authored future beats scheduled earlier and due NOW: enact them
+        # as occurring this beat (see director_interpret). commit re-queues any
+        # left unresolved rather than dropping them.
+        "due_authored_events": (ctx.director_interpret or {}).get("due_authored_events") or [],
         # See director_interpret: already-completed mechanical transitions
         # (timed arrivals) the prose should acknowledge, not re-resolve.
         "engine_notices": wget(chat["id"], "engine_notices", []),
