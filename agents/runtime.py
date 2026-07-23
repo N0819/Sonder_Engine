@@ -14,7 +14,14 @@ from commit import commit_all
 from db import active_frame_id, q, qi, wset
 from pipeline_context import ChatData, PipelineContext, TurnData
 from providers import Aborted, cancel_event, generation_event_sink, token_sink
-from scene import active_cast, dialogue_config, get_scene
+from scene import (
+    NON_AWAKE_GATED,
+    active_cast,
+    awareness_map,
+    awareness_of,
+    dialogue_config,
+    get_scene,
+)
 
 from .background import background_react
 from .character import character_step
@@ -380,6 +387,18 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None):
     valid_ids = {int(row["id"]) for row in cast_rows}
     reactors = [int(char_id) for char_id in (fl.get("reactors") or [])
                 if int(char_id) in valid_ids]
+
+    # Consciousness gate: an unconscious/asleep/sedated mind neither perceives
+    # nor deliberates, so drop it from the reactor set before any character
+    # step is planned (perception excludes it too -- defense-in-depth). Awake by
+    # absence (fail-open); waking is a Director state transition, so a roused
+    # character acts on the NEXT beat, matching the onset/outcome separation.
+    if chat_id is not None and reactors:
+        amap = awareness_map(chat_id)
+        _names_by_id = {int(row["id"]): character_name(json.loads(row["sheet"]))
+                        for row in cast_rows}
+        reactors = [cid for cid in reactors
+                    if awareness_of(amap, _names_by_id.get(cid, "")) not in NON_AWAKE_GATED]
 
     autonomy = 0
     if chat_id is not None:

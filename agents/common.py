@@ -63,11 +63,17 @@ def _is_mental_action(verb, attempt):
     mother taught her'). Conservative: only the leading token is checked, so a
     physical act that merely mentions thought later ('carve while recalling
     the shape') is NOT suppressed."""
+    def _stem(tok):
+        for suf in ("ing", "es", "ed", "s"):
+            if len(tok) > len(suf) + 2 and tok.endswith(suf):
+                return tok[:-len(suf)]
+        return tok
     v = str(verb or "").strip().lower()
-    if v in _MENTAL_VERBS:
+    if v in _MENTAL_VERBS or _stem(v) in _MENTAL_VERBS:
         return True
-    head = re.split(r"\s+", str(attempt or "").strip().lower(), maxsplit=1)
-    return bool(head and head[0] in _MENTAL_VERBS)
+    head = re.split(r"[^\w]+", str(attempt or "").strip().lower(), maxsplit=1)
+    lead = head[0] if head else ""
+    return bool(lead) and (lead in _MENTAL_VERBS or _stem(lead) in _MENTAL_VERBS)
 
 
 def observable_action_text(elem):
@@ -1225,6 +1231,86 @@ def _inject_dialogue(view, display, quote, level, volume, can_see):
         add = f'You hear {display} {verb}: "{body}"'
     return _append_once(view, add)
 
+_OBSERVED_STOPWORDS = frozenset({
+    "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "at", "with",
+    "her", "his", "their", "its", "she", "he", "they", "it", "him", "them",
+    "as", "into", "toward", "towards", "across", "for", "from", "by", "up",
+    "down", "over", "under", "then", "while", "is", "are", "was", "were", "be",
+    "been", "this", "that", "these", "those", "your", "you", "herself",
+    "himself", "themselves", "itself", "slightly", "slowly", "again",
+})
+
+
+def _content_tokens(text):
+    """Distinctive (stopword-stripped, crudely stemmed) word tokens of a phrase
+    -- the basis for 'has this beat already been narrated?' overlap."""
+    toks = []
+    for raw in re.split(r"[^\w]+", str(text or "").lower()):
+        if not raw or raw in _OBSERVED_STOPWORDS:
+            continue
+        for suf in ("ing", "ed", "es", "s"):
+            if len(raw) > len(suf) + 2 and raw.endswith(suf):
+                raw = raw[:-len(suf)]
+                break
+        toks.append(raw)
+    return toks
+
+
+def _observable_predicate(display, surface):
+    """Compose one clean delivered sentence from an actor `display` label and an
+    intent-free `observable` surface, without the double-subject run-ons the
+    alpha3.1.2 full-sentence observable produced ('Dr. Moon Dr. Moon tilts...',
+    'Dr. Moon The flashlight beam moves...'). Strip a leading occurrence of the
+    actor's own name tokens (so an actor-led surface becomes a predicate); then
+    if the surface still opens with its OWN capitalized subject (an independent
+    clause like 'The flashlight beam moves...'), keep it verbatim as its own
+    sentence -- prepending display would double the subject; otherwise it is a
+    predicate and takes the display prefix."""
+    surface = str(surface or "").strip()
+    if not surface:
+        return None
+    disp_tokens = _identity_token_set(display)
+    words = surface.split()
+    # Peel leading actor-name tokens / a leading pronoun off the surface.
+    while words and (words[0].strip(".,;:'").casefold() in disp_tokens
+                     or words[0].casefold() in ("she", "he", "they", "it")):
+        words = words[1:]
+    stripped = " ".join(words).strip()
+    if not stripped:
+        return f"{display}."
+    first = stripped.split(maxsplit=1)[0]
+    # Independent subject clause (starts with a capitalized non-actor word that
+    # isn't a normal sentence-initial cap): render as its own sentence.
+    independent = first[:1].isupper() and first.casefold() not in disp_tokens
+    if independent:
+        return stripped if stripped.endswith((".", "!", "?")) else stripped + "."
+    body = stripped[0].lower() + stripped[1:]
+    return f"{display} {body}."
+
+
+def _action_already_rendered(view, display, surface):
+    """True when the view already narrates this action (so the deterministic
+    backstop should stay silent). Upgrades the old exact-substring test to
+    content-token overlap, which catches the LLM's paraphrase of the same
+    beat. Biases toward silence: since alpha3.1.2 duplication is the common,
+    player-visible failure and a missed injection the rare one."""
+    surf = set(_content_tokens(surface))
+    if not surf:
+        return False
+    disp_tokens = _identity_token_set(display)
+    for sent in re.split(r"(?<=[.!?])\s+", str(view or "")):
+        raw = set(re.split(r"[^\w]+", sent.lower()))
+        stoks = set(_content_tokens(sent))
+        overlap = surf & stoks
+        if not overlap:
+            continue
+        if len(overlap) / len(surf) >= 0.6:
+            return True
+        if (disp_tokens & raw) and len(overlap) >= 2:
+            return True
+    return False
+
+
 def _inject_action(view, display, attempt, can_see, event_id=None, delivered=None):
     if not attempt or not can_see:
         return view
@@ -1232,11 +1318,12 @@ def _inject_action(view, display, attempt, can_see, event_id=None, delivered=Non
         if event_id in delivered:
             return view
         delivered.add(event_id)
-    normalized_attempt = re.sub(r"\s+", " ", str(attempt).strip().lower())
-    normalized_view = re.sub(r"\s+", " ", str(view or "").lower())
-    if normalized_attempt and normalized_attempt in normalized_view:
+    if _action_already_rendered(view, display, attempt):
         return view
-    return _append_once(view, f"{display} {attempt}.", marker=f"{display} {attempt}")
+    sentence = _observable_predicate(display, attempt)
+    if not sentence:
+        return view
+    return _append_once(view, sentence, marker=sentence)
 
 def _inject_visible_actor(
     view,
@@ -1309,6 +1396,38 @@ def _normalise_views(raw_views, perceivers):
         clean[sk] = v
     return clean
 
+def _compose_residue_view(level, *, targeted=False, loud_event=False, pain=False):
+    """The content-free perception RESIDUE for a non-awake mind (asleep /
+    sedated / unconscious). An unconscious mind integrates no channel into
+    scene, identity, or words -- so this NEVER carries speech content, a name, a
+    visual scene, or a spatial fact. It delivers only interoception (pain, being
+    moved) and the direction-less trace of the strongest stimuli (a loud event
+    as a wordless intrusion). Deterministic and template-built: the perception
+    LLM is never asked for a non-awake view (it would leak with the full payload
+    in hand), so this IS the whole output. The fragments become, verbatim, that
+    mind's fragmentary memory of the beat (commit mints episodic memory from the
+    view), which is exactly the vague recovered impression waking should give."""
+    lead = {
+        "unconscious": "Darkness.",
+        "sedated": "A thick, floating dark.",
+        "asleep": "You are under, below waking.",
+    }.get(level, "Darkness.")
+    frag = []
+    if pain:
+        frag.append("a dull pain, far off, in a body you can't quite feel")
+    if targeted:
+        frag.append("something shifts you; the world tilts without a direction")
+    if loud_event:
+        frag.append("a sound, huge and wordless, reaches down and is gone")
+    if not frag:
+        closing = {"unconscious": " Nothing reaches you.",
+                   "sedated": " Nothing holds shape.",
+                   "asleep": ""}.get(level, "")
+        return (lead + closing).strip()
+    body = "; ".join(frag[:2])
+    return f"{lead} {body[0].upper()}{body[1:]}."
+
+
 def _ensure_environment(view, perceiver, display, rel, vis, action_desc):
     if view:
         return view
@@ -1318,7 +1437,12 @@ def _ensure_environment(view, perceiver, display, rel, vis, action_desc):
     if rel.get("same_room"):
         parts.append(f"{display} is here with you.")
         if action_desc:
-            parts.append(f"{display} attempts to {action_desc}.")
+            # action_desc is now an intent-free `observable` surface (predicate
+            # or independent clause); compose it cleanly rather than gluing it
+            # after "attempts to" (which double-verbs "attempts to tilts...").
+            sentence = _observable_predicate(display, action_desc)
+            if sentence:
+                parts.append(sentence)
     elif vis:
         parts.append(f"You can see {display} nearby.")
     return " ".join(parts)

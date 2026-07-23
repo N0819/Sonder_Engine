@@ -6,7 +6,14 @@ import json
 
 from character_schema import character_appearance, character_name
 from db import wget
-from scene import dialogue_config, get_scene, reaction_config
+from scene import (
+    NON_AWAKE_GATED,
+    awareness_map,
+    awareness_of,
+    dialogue_config,
+    get_scene,
+    reaction_config,
+)
 from spatial import has_visual, hear_level, room_of, spatial_rel
 
 from .character import character_step
@@ -23,6 +30,7 @@ from .common import (
     _list,
     _merge_character_results,
     _next_speaker_candidates,
+    _observable_predicate,
     _requires_director_resolution,
     observable_action_text,
     _sequence_has_content,
@@ -101,24 +109,41 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
                     continue
                 # Intent-free `observable` surface only -- never the raw
                 # attempt (which carries the actor's purpose/intent). A mental
-                # beat (observable "") is imperceptible and skipped.
+                # beat (observable "") is imperceptible and skipped. Composed via
+                # the shared predicate helper so an actor-led / independent-clause
+                # surface never double-names ('Dr. Moon Dr. Moon tilts...').
                 surface = observable_action_text(event)
-                if surface:
-                    additions.append(f"{display} {surface}.")
+                sentence = _observable_predicate(display, surface) if surface else None
+                if sentence:
+                    additions.append(sentence)
                     perceived_by.add(observer_id)
         if additions:
             views[observer_id] = additions
     return views, perceived_by
+
+def _drop_non_awake(ctx, reactor_ids):
+    """Remove unconscious/asleep/sedated cast from a reactor list -- a non-awake
+    mind neither perceives nor reacts. build_plan does the same before planning;
+    both loops read flow.reactors independently, so they must gate too (a rerun
+    that re-enters a loop with a stale plan is covered by the character_step
+    guard as a final backstop)."""
+    if not reactor_ids:
+        return reactor_ids
+    amap = awareness_map(ctx.chat.id)
+    id_to_name = {c["id"]: character_name(json.loads(c["sheet"])) for c in ctx.cast}
+    return [rid for rid in reactor_ids
+            if awareness_of(amap, id_to_name.get(rid, "")) not in NON_AWAKE_GATED]
+
 
 def interaction_loop(ctx, nonce):
     config = dialogue_config(ctx.chat.id)
 
     interp = _dict(ctx.director_interpret)
     flow = _dict(interp.get("flow"))
-    initial_reactors = normalize_character_refs(
+    initial_reactors = _drop_non_awake(ctx, normalize_character_refs(
         _list(flow.get("reactors")),
         ctx.cast,
-    )
+    ))
 
     # Direct address gives priority, not exclusivity: a character the player
     # explicitly spoke to should be queued ahead of others who merely appear
@@ -408,7 +433,8 @@ def reaction_loop(ctx, nonce):
     perception_views = (ctx.perception_act or {}).get("views") or {}
     reactor_ids = flow.get("reactors") or []
     valid_ids = {int(row["id"]) for row in ctx.cast}
-    reactor_ids = [int(rid) for rid in reactor_ids if int(rid) in valid_ids][:max_reactors]
+    reactor_ids = [int(rid) for rid in reactor_ids if int(rid) in valid_ids]
+    reactor_ids = _drop_non_awake(ctx, reactor_ids)[:max_reactors]
 
     if not reactor_ids:
         return {"rounds": [], "reaction_results": {}, "calls": 0, "stop_reason": "no reactors"}

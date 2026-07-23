@@ -47,6 +47,7 @@ from .common import (
     _inject_dialogue,
     _inject_action,
     _inject_visible_actor,
+    _compose_residue_view,
     observable_action_text,
     _normalise_views,
     _ensure_environment,
