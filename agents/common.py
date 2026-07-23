@@ -1590,43 +1590,95 @@ def _already_established_phrases(view, recent_prose, limit=12):
 # fragment carries a quote character and is therefore exempt from dropping
 # (below), so mis-splits can only UNDER-dedupe, never eat real content.
 _SPEECH_VERBS = (
-    "say", "says", "said", "whisper", "whispers", "whispered", "mutter",
-    "mutters", "muttered", "murmur", "murmurs", "murmured", "manage", "managed",
+    "say", "says", "said", "saying", "whisper", "whispers", "whispered",
+    "whispering", "mutter", "mutters", "muttered", "muttering", "murmur",
+    "murmurs", "murmured", "murmuring", "manage", "managed",
     "manages", "breathe", "breathes", "breathed", "gasp", "gasps", "gasped",
-    "croak", "croaks", "croaked", "rasp", "rasps", "rasped", "reply", "replies",
-    "replied", "answer", "answers", "answered", "hiss", "hisses", "hissed",
+    "gasping", "croak", "croaks", "croaked", "rasp", "rasps", "rasped",
+    "reply", "replies", "replied", "replying", "answer", "answers",
+    "answered", "answering", "hiss", "hisses", "hissed",
     "stammer", "stammers", "stammered", "whimper", "whimpers", "whimpered",
     "choke", "chokes", "force", "forces", "add", "adds", "added", "plead",
-    "pleads", "pleaded", "beg", "begs", "begged", "cry", "cries", "call",
-    "calls", "called", "get out", "let out",
+    "pleads", "pleaded", "pleading", "beg", "begs", "begged", "begging",
+    "cry", "cries", "call", "calls", "called", "get out", "let out",
+    "shout", "shouts", "shouted", "shouting", "scream", "screams",
+    "screamed", "screaming", "yell", "yells", "yelled", "yelling",
+    "ask", "asks", "asked", "asking", "respond", "responds", "responded",
+    "sob", "sobs", "sobbed", "sobbing", "snap", "snaps", "snapped",
+    "growl", "growls", "growled", "blurt", "blurts", "blurted",
+    "exclaim", "exclaims", "exclaimed", "repeat", "repeats", "repeated",
+    "insist", "insists", "insisted", "demand", "demands", "demanded",
+    "announce", "announces", "announced", "declare", "declares", "declared",
+    "wail", "wails", "wailed", "moan", "moans", "moaned",
+    "intone", "intones", "intoned", "utter", "utters", "uttered",
+    "speak", "speaks", "spoke", "speaking", "tell", "tells", "told",
 )
 _SPEECH_VERB_RE = re.compile(
     r"\b(?:" + "|".join(re.escape(v) for v in _SPEECH_VERBS) + r")\b", re.I)
+# Attribution cue for the dialogue-fidelity floor: a speech verb, or a bare
+# voice noun ("A muffled voice: ..."). Deliberately excludes reading verbs
+# (reads, is written/painted/carved, displays) so quoted ENVIRONMENTAL text --
+# signage, labels, screens -- is never mistaken for dialogue.
+_DIALOGUE_CUE_RE = re.compile(
+    _SPEECH_VERB_RE.pattern + r"|\bvoices?\b", re.I)
 _YOU_RE = re.compile(r"\byou\b|\byour\b", re.I)
 _NPC_PRONOUN_RE = re.compile(r"\bshe\b|\bhe\b|\bthey\b|\bher\b|\bhim\b|\bhis\b", re.I)
 
 
-def _scrub_undeclared_player_speech(view, declared_bodies, protected_bodies=(),
-                                    cast_names=()):
-    """PLAYER-SPEECH AUTHORITY at the perception layer: drop any sentence of the
-    PLAYER's own view that quotes a player-attributed line the player did NOT
-    declare this beat. The perception LLM sometimes invents a fresh player
-    utterance -- often echoing a PAST player line as if spoken now (live: the
-    turn-39 fragment "The same..." resurfaced as "Same... the one who... did
-    this... before." in a later turn's view) -- which then propagates as
-    canonical player speech through the narrator and memory. The engine (any
-    stage) may never author the player's words.
+def _scrub_invented_dialogue(view, spoken_bodies, *, cast_names=(), mode="all"):
+    """DIALOGUE-FIDELITY FLOOR at the perception layer: drop any quoted line
+    of a perceiver view that is presented as SPEECH but whose body is not in
+    the set of lines actually spoken this beat (declared player/character
+    speech + dialogue_log). The perception LLM sometimes invents a fresh
+    utterance -- often a memory/backstory callback rendered as if freshly
+    spoken (live t42: a fabricated player line about "trapped under the
+    rubble" injected into Dr. Moon's view) -- which then propagates into
+    other minds' character context and durable memory. No stage may author
+    words a speaker did not say.
 
-    A quote is left untouched when its body matches the player's DECLARED speech
-    or a legitimately-perceived NPC line (protected_bodies). Only a quote whose
-    NEAREST speaker cue before it is the player ('you'/'your', closer than any
-    NPC pronoun/name) AND whose body is undeclared triggers removal of its
-    sentence. Returns (scrubbed_view, dropped_sentences)."""
+    Kept untouched:
+    - any quote whose body matches a spoken line GENEROUSLY (case/whitespace
+      normalized; substring either direction, so a distant perceiver's
+      legitimate muffled FRAGMENT of a real line survives; an ellipsis-split
+      quote survives when every fragment is verbatim from one spoken line);
+    - environmental quoted text (mode="all"): signage, labels, screens --
+      recognized by the ABSENCE of a speech-attribution cue around the quote
+      ("reads"/"is painted" are not speech verbs);
+    - quotes with no player attribution (mode="player": only a quote whose
+      nearest speaker cue is 'you'/'your' is in scope -- the original
+      player-view-only scrub semantics).
+
+    Removal is clause surgery: the quote plus its immediate attribution
+    clause (before it, and after it for a trailing '"...," she says.'),
+    never the surrounding prose. Returns (scrubbed_view, dropped)."""
     if not view:
         return view, []
-    legit = {(_quote_body(b) or "").casefold()
-             for b in list(declared_bodies) + list(protected_bodies)}
-    legit.discard("")
+    legit = []
+    for b in spoken_bodies:
+        nb = re.sub(r"\s+", " ", (_quote_body(b) or "")).casefold().strip()
+        if nb:
+            legit.append(nb)
+
+    def _matches_spoken(raw_body):
+        body = re.sub(r"\s+", " ", (_quote_body(raw_body) or "")).casefold().strip()
+        if not body or not re.search(r"\w", body):
+            return True  # empty / pure punctuation: nothing was authored
+        if any(body == L or body in L or L in body for L in legit):
+            return True
+        core = body.strip(" .…—–-")
+        if core and any(core in L for L in legit):
+            return True
+        # Muffled/partial rendering: an ellipsis-chunked quote is legitimate
+        # when EVERY chunk is a verbatim piece of some actually-spoken line.
+        chunks = []
+        for c in re.split(r"\.{2,}|…", body):
+            c = c.strip(" ,;:—–-.!?")
+            if c.startswith("something about "):
+                c = c[len("something about "):]
+            if len(c) >= 3:
+                chunks.append(c)
+        return bool(chunks) and all(any(c in L for L in legit) for c in chunks)
+
     name_re = re.compile(
         "|".join(r"\b" + re.escape(str(n).lower()) + r"\b" for n in cast_names if n),
         re.I) if cast_names else None
@@ -1647,6 +1699,7 @@ def _scrub_undeclared_player_speech(view, declared_bodies, protected_bodies=(),
     for _s, qe, _b in quote_spans:
         boundaries.add(qe)
     boundaries = sorted(boundaries)
+    quote_starts = [qs for qs, _qe, _b in quote_spans]
 
     def _clause_start(pos):
         b = 0
@@ -1659,23 +1712,57 @@ def _scrub_undeclared_player_speech(view, declared_bodies, protected_bodies=(),
             b += 1
         return b
 
+    def _tail_stop(pos):
+        # The attribution tail of a quote runs to the next sentence boundary,
+        # but never INTO a following quote -- a legit quote after 'she says,
+        # and X replies,' must survive the surgery.
+        stop = len(view)
+        for bp in boundaries:
+            if bp > pos:
+                stop = bp
+                break
+        for q2 in quote_starts:
+            if pos < q2 < stop:
+                stop = q2
+                break
+        return stop
+
     removals, dropped = [], []
     for qs, qe, raw_body in quote_spans:
-        body = (_quote_body(raw_body) or "").casefold()
-        if not body or body in legit:
+        if _matches_spoken(raw_body):
             continue
-        prefix = view[:qs]
-        you = max((mm.start() for mm in _YOU_RE.finditer(prefix)), default=-1)
-        npc = max((mm.start() for mm in _NPC_PRONOUN_RE.finditer(prefix)), default=-1)
-        if name_re:
-            npc = max([npc] + [mm.start() for mm in name_re.finditer(prefix)])
-        if you >= 0 and you > npc:  # the player is the nearest speaker
-            start = _clause_start(qs)
-            end = qe
-            while end < len(view) and view[end] in " \n\t":
-                end += 1
-            removals.append((start, end))
-            dropped.append(view[start:qe].strip())
+        if mode == "player":
+            # Original player-view semantics: only a quote whose NEAREST
+            # speaker cue before it is the player ('you'/'your', closer than
+            # any NPC pronoun/cast name) is in scope.
+            prefix = view[:qs]
+            you = max((mm.start() for mm in _YOU_RE.finditer(prefix)), default=-1)
+            npc = max((mm.start() for mm in _NPC_PRONOUN_RE.finditer(prefix)), default=-1)
+            if name_re:
+                npc = max([npc] + [mm.start() for mm in name_re.finditer(prefix)])
+            if you < 0 or you <= npc:
+                continue
+            start, end = _clause_start(qs), qe
+        else:
+            cstart = _clause_start(qs)
+            pre_attr = bool(_DIALOGUE_CUE_RE.search(view[cstart:qs]))
+            tstop = _tail_stop(qe)
+            tail = view[qe:tstop]
+            tail_lead = tail.lstrip()
+            # A trailing attribution ('"...," she says.') continues the same
+            # sentence, so it starts lowercase or with a dash -- an uppercase
+            # tail is a NEW sentence and out of scope.
+            tail_attr = bool(tail_lead) and (
+                tail_lead[0].islower() or tail_lead[0] in ",—–-") \
+                and bool(_DIALOGUE_CUE_RE.search(tail))
+            if not pre_attr and not tail_attr:
+                continue  # no speech attribution: environmental text (signage)
+            start = cstart if pre_attr else qs
+            end = tstop if tail_attr else qe
+        while end < len(view) and view[end] in " \n\t":
+            end += 1
+        removals.append((start, end))
+        dropped.append(view[start:qe].strip())
 
     if not removals:
         return view, []
@@ -1683,6 +1770,20 @@ def _scrub_undeclared_player_speech(view, declared_bodies, protected_bodies=(),
     for start, end in sorted(removals, reverse=True):
         out = out[:start] + out[end:]
     return re.sub(r"\s{2,}", " ", out).strip(), dropped
+
+
+def _scrub_undeclared_player_speech(view, declared_bodies, protected_bodies=(),
+                                    cast_names=()):
+    """PLAYER-SPEECH AUTHORITY at the perception layer: drop any sentence of the
+    PLAYER's own view that quotes a player-attributed line the player did NOT
+    declare this beat (live: the turn-39 fragment "The same..." resurfaced as
+    "Same... the one who... did this... before." in a later turn's view).
+    Thin wrapper over _scrub_invented_dialogue's player mode; NPC lines the
+    player legitimately heard ride in as protected_bodies. Returns
+    (scrubbed_view, dropped_sentences)."""
+    return _scrub_invented_dialogue(
+        view, list(declared_bodies) + list(protected_bodies),
+        cast_names=cast_names, mode="player")
 
 
 _VIEW_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])(\s+)")
