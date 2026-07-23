@@ -1589,6 +1589,102 @@ def _already_established_phrases(view, recent_prose, limit=12):
 # body contains sentence punctuation mis-splits into fragments, but every such
 # fragment carries a quote character and is therefore exempt from dropping
 # (below), so mis-splits can only UNDER-dedupe, never eat real content.
+_SPEECH_VERBS = (
+    "say", "says", "said", "whisper", "whispers", "whispered", "mutter",
+    "mutters", "muttered", "murmur", "murmurs", "murmured", "manage", "managed",
+    "manages", "breathe", "breathes", "breathed", "gasp", "gasps", "gasped",
+    "croak", "croaks", "croaked", "rasp", "rasps", "rasped", "reply", "replies",
+    "replied", "answer", "answers", "answered", "hiss", "hisses", "hissed",
+    "stammer", "stammers", "stammered", "whimper", "whimpers", "whimpered",
+    "choke", "chokes", "force", "forces", "add", "adds", "added", "plead",
+    "pleads", "pleaded", "beg", "begs", "begged", "cry", "cries", "call",
+    "calls", "called", "get out", "let out",
+)
+_SPEECH_VERB_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(v) for v in _SPEECH_VERBS) + r")\b", re.I)
+_YOU_RE = re.compile(r"\byou\b|\byour\b", re.I)
+_NPC_PRONOUN_RE = re.compile(r"\bshe\b|\bhe\b|\bthey\b|\bher\b|\bhim\b|\bhis\b", re.I)
+
+
+def _scrub_undeclared_player_speech(view, declared_bodies, protected_bodies=(),
+                                    cast_names=()):
+    """PLAYER-SPEECH AUTHORITY at the perception layer: drop any sentence of the
+    PLAYER's own view that quotes a player-attributed line the player did NOT
+    declare this beat. The perception LLM sometimes invents a fresh player
+    utterance -- often echoing a PAST player line as if spoken now (live: the
+    turn-39 fragment "The same..." resurfaced as "Same... the one who... did
+    this... before." in a later turn's view) -- which then propagates as
+    canonical player speech through the narrator and memory. The engine (any
+    stage) may never author the player's words.
+
+    A quote is left untouched when its body matches the player's DECLARED speech
+    or a legitimately-perceived NPC line (protected_bodies). Only a quote whose
+    NEAREST speaker cue before it is the player ('you'/'your', closer than any
+    NPC pronoun/name) AND whose body is undeclared triggers removal of its
+    sentence. Returns (scrubbed_view, dropped_sentences)."""
+    if not view:
+        return view, []
+    legit = {(_quote_body(b) or "").casefold()
+             for b in list(declared_bodies) + list(protected_bodies)}
+    legit.discard("")
+    name_re = re.compile(
+        "|".join(r"\b" + re.escape(str(n).lower()) + r"\b" for n in cast_names if n),
+        re.I) if cast_names else None
+
+    # Quoted spans (a body may itself contain '...'/'!' -- so we cannot split
+    # into sentences first; we work over the whole view). Clause boundaries are
+    # sentence terminators OUTSIDE any quote, plus the END of each quoted span
+    # (a new clause almost always begins after a quoted line).
+    quote_spans = [(m.start(), m.end(), m.group(1))
+                   for m in re.finditer(r'["“]([^"”]*)["”]', view)]
+    boundaries = {0}
+    inside = False
+    for i, ch in enumerate(view):
+        if ch in '"“”':
+            inside = not inside
+        elif ch in ".!?…" and not inside:
+            boundaries.add(i + 1)
+    for _s, qe, _b in quote_spans:
+        boundaries.add(qe)
+    boundaries = sorted(boundaries)
+
+    def _clause_start(pos):
+        b = 0
+        for bp in boundaries:
+            if bp <= pos:
+                b = bp
+            else:
+                break
+        while b < len(view) and view[b] in " \n\t":
+            b += 1
+        return b
+
+    removals, dropped = [], []
+    for qs, qe, raw_body in quote_spans:
+        body = (_quote_body(raw_body) or "").casefold()
+        if not body or body in legit:
+            continue
+        prefix = view[:qs]
+        you = max((mm.start() for mm in _YOU_RE.finditer(prefix)), default=-1)
+        npc = max((mm.start() for mm in _NPC_PRONOUN_RE.finditer(prefix)), default=-1)
+        if name_re:
+            npc = max([npc] + [mm.start() for mm in name_re.finditer(prefix)])
+        if you >= 0 and you > npc:  # the player is the nearest speaker
+            start = _clause_start(qs)
+            end = qe
+            while end < len(view) and view[end] in " \n\t":
+                end += 1
+            removals.append((start, end))
+            dropped.append(view[start:qe].strip())
+
+    if not removals:
+        return view, []
+    out = view
+    for start, end in sorted(removals, reverse=True):
+        out = out[:start] + out[end:]
+    return re.sub(r"\s{2,}", " ", out).strip(), dropped
+
+
 _VIEW_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])(\s+)")
 # Double-quote characters only: curly/straight single quotes double as
 # apostrophes in ordinary prose and cannot mark dialogue reliably.

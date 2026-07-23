@@ -75,8 +75,10 @@ from .common import (
     _resolve_player_room,
     _room_notes_from_lore,
     _scrub_unknown_identities,
+    _scrub_undeclared_player_speech,
     _compose_residue_view,
     observable_action_text,
+    player_speech_lines,
     _strip_identity_tokens,
     _unknown_actor_label,
     cast_room,
@@ -1197,6 +1199,21 @@ def perception_outcome(ctx, nonce):
         # perceiver's recognized set; quoted speech survives verbatim.
         view = _scrub_view_for(
             ctx, "perception_outcome", view, p["name"], known, ident_roster)
+        # PLAYER-SPEECH AUTHORITY (perception layer): the player's OWN view must
+        # not put words in the player's mouth. Drop any player-attributed quote
+        # the player did not declare this beat (the perception LLM sometimes
+        # invents one, often echoing a past player line). NPC lines the player
+        # legitimately heard (npc_dlog) are protected.
+        if pid == "player":
+            view, _leaked = _scrub_undeclared_player_speech(
+                view,
+                declared_bodies=player_speech_lines(interp),
+                protected_bodies=[d.get("exact_quote") for d in npc_dlog],
+                cast_names=[r["name"] for r in ident_roster])
+            if _leaked:
+                ctx.warnings.append(
+                    "perception_outcome: dropped undeclared player-attributed "
+                    f"speech from the player's view: {_leaked}")
         clean_views[pid] = _dedupe_view_sentences(view) or None
 
     loop = ctx.interaction_loop or {}
