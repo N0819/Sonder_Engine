@@ -2307,9 +2307,19 @@ def director_resolve(ctx, nonce):
         cname.casefold(): {_quote_body(s["text"]) for s in speeches}
         for cname, speeches in char_speech.items()
     }
+    # PLAYER-SPEECH AUTHORITY: the Director may never author the player's
+    # words. The same backstop as the cast check below, applied to the player:
+    # observed live (Elevator Adventure t42) the director took the player's
+    # wordless cry "AaUaa!" and silently ADDED a second player line, an
+    # invented refusal "Can't... not now...", to dialogue_log -- which then
+    # propagated as canonical player speech through perception -> narrator ->
+    # memory. Any player-attributed entry whose quote is not among the player's
+    # OWN declared speech this beat is dropped.
+    player_speech_bodies = {_quote_body(s) for s in player_speech_lines(interp)}
     checked_dlog = []
     for d in dlog:
-        speaker_cf = str(d.get("speaker") or "").casefold()
+        speaker = d.get("speaker") or ""
+        speaker_cf = str(speaker).casefold()
         if speaker_cf in cast_names_lower:
             body = _quote_body(d.get("exact_quote", ""))
             if body not in char_speech_bodies.get(speaker_cf, set()):
@@ -2317,6 +2327,15 @@ def director_resolve(ctx, nonce):
                     f"Dropped director-invented dialogue line for "
                     f"registered character {d.get('speaker')!r}: not "
                     "present in their own declared speech."
+                )
+                continue
+        elif is_player_speaker(speaker, chat):
+            body = _quote_body(d.get("exact_quote", ""))
+            if body not in player_speech_bodies:
+                ctx.add_warning(
+                    f"Dropped director-invented dialogue line for the PLAYER "
+                    f"{speaker!r}: not in the player's declared speech "
+                    "(player-speech authority)."
                 )
                 continue
         checked_dlog.append(d)
