@@ -1,5 +1,79 @@
 # Changelog
 
+## alpha3.1 — Resolve what you open: ruptures that land, narration that doesn't repeat itself
+
+Driven by a fresh **40-turn Star Trek audit run** (`demo/enterprise_d_v2/`, graded
+**C+** by the Fable critic, up from the prior D+). The prior run's two CRITICALs —
+autonomous promotion and obligation discharge — were already fixed and confirmed
+firing; this release closes the next tier, led by the central open flaw: the engine
+could detect that a character *should* break and even stage the collapse, but could
+not make the change actually happen.
+
+### Fixed — interior
+- **Drive rupture now has a floor** (`affect.py`, `commit.py`, `agents/character.py`)
+  *(the headline)*. A rupture window used to re-extend indefinitely while the model
+  quietly declined to shift — observed live as a **23-turn crisis limbo** (strain
+  pinned near 1.0, the character neither transforming nor recovering). Two floors
+  close it: after `RUPTURE_FORCE_AFTER` (3) turns the character prompt escalates from
+  an optional "you MAY shift" to a **FORCED RESOLUTION** — passive calm is removed as
+  an option, so the character must either shift *and enact it this beat* or visibly,
+  costingly reaffirm the old drive; and after `RUPTURE_MAX_OPEN` (6) turns
+  `commit.py` force-closes the window and pays strain below the floor, so a rupture
+  the engine opened can no longer sit forever unresolved. New regression tests cover
+  both floors.
+
+### Fixed — narration
+- **Player echo, done right** (`prompts.py`). The narrator no longer re-narrates the
+  player's own declared action ("You <verb>…" openings) *and* no longer substitutes a
+  vague placeholder for suppressed player speech ("I tell him what he needs to hear").
+  It renders the weight and motion concretely, then moves to consequence — never the
+  words, never a limp summary of the words.
+- **Each line once** (`prompts.py`). The narrator renders each distinct declared line
+  of dialogue exactly once; redundant view/interaction surfacing is not license to
+  stutter a line back in a reworded attribution.
+
+### Reduced (prompt-level; deterministic enforcement deferred)
+These are probabilistic prompt rules that *reduce* a tic but do not yet eliminate it —
+the 4-turn confirmation run still saw each slip occasionally. The absolute fix is a
+deterministic correction-retry (mirroring the dialogue-fidelity floor), scheduled next.
+- **Pronoun pin** (`agents/narration.py`, `prompts.py`). The narrator now receives
+  `cast_pronouns` (each character's canonical subject/object/possessive) and is told to
+  use them instead of guessing gender from a name. Cuts the flips; a mismatch-retry is
+  still needed to make it absolute (confirmation still saw one "her" for a he/him
+  character).
+- **Ambient restraint** (`prompts.py`). A standing background sensation ("the bridge
+  hums", flickering lights, a door left open) is told to be first-establishment-only
+  unless it changes. Reduces the reworded-repeat tic the exact-word-run diff missed;
+  not yet eliminated.
+
+### Fixed — objective causality
+- **Player-authored NPC acts belong to the NPC** (`prompts.py`). When the player
+  narrates a volitional act *by* a sheeted character ("Vorne lunges for the console",
+  "she sets the badge down"), the Director no longer executes it as a bare mechanical
+  fact stripped of interiority — it attributes the act to the character (their motive,
+  their voice) and, if it contradicts what they would choose, adjudicates it contested.
+- **Being acted upon is not passive** (`prompts.py`). When the player physically acts
+  ON a present, volitional character (grabs, restrains, wrenches something away), the
+  resolved beat must render that character's immediate physical/emotional reaction —
+  a struggle with only one side rendered is half a struggle.
+- **Obligation timing** (`prompts.py`). The obligation ledger gains a narrow timing
+  exception: a purely mechanical delivery (a requested report/padd) may wait one — and
+  only one — beat when the current beat is an intimate/climactic close, so a delivery
+  receipt doesn't walk into the middle of an emotional beat. Never applies to a demand,
+  promise, or question.
+
+### Known follow-ups (deferred to keep this release surgical)
+Several audit findings need real work in the delicate director/perception/reaction
+seams and are scheduled rather than rushed into a release: an `established_facts`
+ledger for second-act continuity (W3), full deterministic routing of player-authored
+NPC acts through the character agent's reaction (W2/W9), room-boundary scene-truth on
+silent door/position drift (W10), the character-dialogue side of pronoun pinning (W6),
+promotion-turn identity binding (W8), and the source-count-capped deterministic
+dialogue dedupe (W4). The narrator pronoun pin and ambient restraint shipped
+**partial** (prompt rules that reduce but don't eliminate the tic; deterministic
+correction-retries pending). Resume-ready backlog with root causes and fix
+approaches: `docs/AUDIT_FOLLOWUPS.md`; full evidence: `demo/enterprise_d_v2/findings.md`.
+
 ## alpha3.0.2 — Scrubber fixes: spoken names survive, no mangled stranger labels
 
 Follow-on fixes to alpha3.0.1. Starting a story as strangers now actually runs

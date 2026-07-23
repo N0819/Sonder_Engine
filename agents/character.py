@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from affect import CRISIS_STRAIN_MIN
+from affect import CRISIS_STRAIN_MIN, RUPTURE_FORCE_AFTER
 from db import q
 from character_schema import (
     character_abilities,
@@ -151,6 +151,14 @@ def character_step(ctx, cid, nonce):
     _rupture = _interior.get("drive_rupture")
     _window_open = bool(isinstance(_rupture, dict)
                         and ctx.turn.idx <= int(_rupture.get("window_expires") or -1))
+    # How long the window has been open. Once it has stayed open
+    # RUPTURE_FORCE_AFTER turns, the optional "you MAY shift" becomes a FORCED
+    # resolution (below) -- the fix for a rupture that the engine keeps holding
+    # open while the model quietly declines it every beat (the 23-turn limbo).
+    _rupture_turns_open = (
+        ctx.turn.idx - int(_rupture.get("opened_turn") or _rupture.get("turn") or ctx.turn.idx)
+        if isinstance(_rupture, dict) else 0)
+    _rupture_forced = _window_open and _rupture_turns_open >= RUPTURE_FORCE_AFTER
     # Crisis: strain at visible-breaking level. Even before any drive_shift,
     # the flag (plus the CRISIS prompt block below) forces the manifest/tells
     # to show the character cracking instead of playing untouched calm.
@@ -184,7 +192,8 @@ def character_step(ctx, cid, nonce):
         "former_drives": _interior.get("former_drives") or [],
     }
     if _window_open:
-        _self["rupture"] = {"why": _rupture.get("why"), "direction": _rupture.get("direction")}
+        _self["rupture"] = {"why": _rupture.get("why"), "direction": _rupture.get("direction"),
+                            "forced": _rupture_forced}
     if _crisis:
         _self["crisis"] = True
     if _recent_tells:
@@ -241,6 +250,21 @@ def character_step(ctx, cid, nonce):
             "and irreversible -- do not shift for a survivable wound; but do not "
             "play untouched calm either. NEVER announce the change in dialogue; it "
             "shows only in what you do and come to want.")
+        if _rupture_forced:
+            _cprompt += (
+                "\n\nRUPTURE -- FORCED RESOLUTION: this window has now stayed open "
+                "several beats and you have kept deferring. Deferral is over. THIS "
+                "beat you must LAND it, one way or the other, visibly on the page -- "
+                "passive, untouched, wait-and-see calm is NOT an available option "
+                "anymore; the strain has been on you far too long for that. Choose "
+                "exactly one and enact it in your sequence this beat: (A) emit "
+                "drive_shift {essence, expression, taboo, because} AND let your "
+                "action/speech this beat already do the new thing -- not a promise "
+                "to change, the change itself; or (B) if your core genuinely holds, "
+                "stop merely enduring and REAFFIRM it in a concrete, costly act your "
+                "pre-rupture self would recognize as doubling down -- a line said, a "
+                "hand that acts, a refusal made real. Do not simply describe the "
+                "strain again. Resolve it.")
     if _crisis:
         _cprompt += (
             "\n\nCRISIS (self.crisis -- your drive is under extreme strain): what "
