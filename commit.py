@@ -2891,7 +2891,8 @@ def prepare_memory_commit(ctx, *, scene=None):
                 if not window_open:
                     _det = affect.detect_drive_rupture(strain, appraisal_out, turn.idx, last_shift)
                     if _det:
-                        rupture = {"turn": turn.idx, "why": _det.get("why"),
+                        rupture = {"turn": turn.idx, "opened_turn": turn.idx,
+                                   "why": _det.get("why"),
                                    "direction": _det.get("direction"), "window_expires": turn.idx + 3}
                         ctx.add_warning(f"{cname}: DRIVE RUPTURE window opened -- {_det.get('why')}")
                 elif own_result.get("drive_shift"):
@@ -2921,19 +2922,38 @@ def prepare_memory_commit(ctx, *, scene=None):
                         override = {**_norm, "since_turn": turn.idx, "by_event": str(rupture.get("why") or "")}
                         strain, last_shift, rupture = strain * 0.5, (turn.idx - 30), None
                 if rupture and turn.idx > int(rupture.get("window_expires") or -1):
-                    if strain >= affect.RUPTURE_STRAIN_MIN:
-                        # Strain still at rupture level: the crisis is
-                        # unresolved, so the window RE-OPENS (extends)
-                        # instead of quietly closing -- denial is a phase,
-                        # not an exit. It closes for good only once
-                        # relief/decay pays strain below the floor or a
-                        # shift lands.
+                    _opened_turn = int(rupture.get("opened_turn") or rupture.get("turn") or turn.idx)
+                    _turns_open = turn.idx - _opened_turn
+                    if strain >= affect.RUPTURE_STRAIN_MIN \
+                            and _turns_open < affect.RUPTURE_MAX_OPEN:
+                        # Strain still at rupture level and the hard cap not yet
+                        # reached: the crisis is unresolved, so the window RE-OPENS
+                        # (extends) instead of quietly closing -- denial is a phase,
+                        # not an exit. (agents/character.py escalates the prompt to a
+                        # FORCED resolution once the window has been open
+                        # RUPTURE_FORCE_AFTER turns, so this extension is not the
+                        # unpressured "you MAY" it used to be.)
                         rupture = {**rupture, "window_expires": turn.idx + 3}
                         ctx.add_warning(
                             f"{cname}: drive-rupture window extended -- "
                             f"strain {strain:.2f} still at rupture level")
                     else:
-                        strain, rupture = strain * 0.5, None   # weathered the crisis, no shift
+                        # Force-close: either strain finally decayed below the floor,
+                        # OR the window has been open RUPTURE_MAX_OPEN turns with no
+                        # shift. A model that will not shift within the forced window
+                        # has, in effect, reaffirmed the drive under maximal pressure
+                        # -- so resolve the crisis (pay strain down below the floor)
+                        # rather than leaving the character in a permanent, never-
+                        # resolving limbo (the 23-turn Vorne case).
+                        if strain >= affect.RUPTURE_STRAIN_MIN:
+                            strain = affect.RUPTURE_STRAIN_MIN * 0.75
+                            ctx.add_warning(
+                                f"{cname}: drive-rupture force-closed after "
+                                f"{_turns_open} turns unresolved -- drive reaffirmed "
+                                f"under pressure, strain paid down")
+                        else:
+                            strain = strain * 0.5   # weathered the crisis, no shift
+                        rupture = None
                 _interior_out = {
                     "intentions": intentions,
                     "drive_strain": round(float(strain), 4),

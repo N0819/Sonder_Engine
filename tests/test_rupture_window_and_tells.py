@@ -93,6 +93,33 @@ def test_expired_rupture_window_extends_while_strain_high(temp_db):
     assert any("window extended" in w for w in ctx.warnings)
 
 
+def test_rupture_window_force_closes_after_max_open_turns(temp_db):
+    # W1: a window that keeps re-extending while the model never shifts used to
+    # sit open forever (23-turn Vorne limbo). Once it has been open
+    # RUPTURE_MAX_OPEN turns it must force-close even though strain is still high
+    # -- deferral under maximal pressure resolves AS reaffirmation.
+    opened = 2
+    chat_id, char_id, cast = _story(temp_db, {
+        "interior": {
+            "drive_strain": 0.95,
+            "strain_turn": opened + 7,
+            "drive_rupture": {"turn": opened, "opened_turn": opened,
+                              "why": "the court executed the clerk",
+                              "direction": "contradiction", "window_expires": 9},
+        },
+    })
+    # turn 10: window (expires 9) lapsed AND it has been open 8 turns (>= MAX).
+    ctx = _commit_ctx(chat_id, char_id, cast, 10,
+                      {"active_state": {"mood": "grim", "goal": ""}})
+    st = _committed_state(prepare_memory_commit(ctx), char_id)
+
+    interior = st["interior"]
+    assert "drive_rupture" not in interior, "limbo must not persist past the cap"
+    # strain paid down below the rupture floor so it cannot immediately re-open
+    assert interior["drive_strain"] < affect.RUPTURE_STRAIN_MIN
+    assert any("force-closed" in w for w in ctx.warnings)
+
+
 def test_expired_rupture_window_closes_once_strain_drops(temp_db):
     chat_id, char_id, cast = _story(temp_db, {
         "interior": {
@@ -221,3 +248,21 @@ def test_open_rupture_window_prompts_with_worked_example(temp_db, monkeypatch):
     assert "ALREADY changed you" in system
     assert "WORKED EXAMPLE" in system
     assert "drive_shift" in system
+    # freshly opened (turns_open 0): optional, not yet forced
+    assert captured["payload"]["self"]["rupture"]["forced"] is False
+    assert "FORCED RESOLUTION" not in system
+
+
+def test_rupture_prompt_escalates_to_forced_after_several_beats(temp_db, monkeypatch):
+    # W1 agent side: once the window has been open RUPTURE_FORCE_AFTER turns the
+    # optional "you MAY shift" becomes a FORCED resolution -- passive calm is no
+    # longer offered, so the model can no longer quietly decline every beat.
+    captured = _run_character_step(temp_db, monkeypatch, {
+        "interior": {"drive_rupture": {
+            "turn": 1, "opened_turn": 1, "why": "the court executed the clerk",
+            "direction": "contradiction", "window_expires": 8}},
+    }, turn_idx=5)  # opened at 1, now turn 5 -> open 4 beats (>= RUPTURE_FORCE_AFTER)
+    assert captured["payload"]["self"]["rupture"]["forced"] is True
+    system = captured["system"]
+    assert "FORCED RESOLUTION" in system
+    assert "NOT an available option" in system

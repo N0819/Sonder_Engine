@@ -214,9 +214,26 @@ def narrator(ctx, nonce):
         chat["id"], ctx.input or "", player_name, player_pronouns,
         pending=pending_person_writes)
 
+    # Authoritative pronouns per cast member, so the narrator renders each
+    # named character in third person with their GIVEN pronouns instead of
+    # guessing from the name (which flipped Vorne he/she across beats). W6.
+    cast_pronouns = {}
+    for _row in ctx.cast:
+        try:
+            _ident = (json.loads(_row["sheet"]).get("identity") or {})
+        except Exception:
+            continue
+        _nm = str(_ident.get("name") or "").strip()
+        _pr = _ident.get("pronouns") or {}
+        _clean = {k: _pr[k] for k in ("subject", "object", "possessive")
+                  if isinstance(_pr, dict) and _pr.get(k)}
+        if _nm and _clean:
+            cast_pronouns[_nm] = _clean
+
     payload = {
         "player_view": view,
         "player_declared": player_declared,
+        "cast_pronouns": cast_pronouns,
         "do_not_quote_verbatim": p_lines,
         "scene_opening": bool(est),
         "private_voice_setting": (

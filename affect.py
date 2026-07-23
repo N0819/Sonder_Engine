@@ -127,6 +127,19 @@ _SHIFT_RELATED_SIM = 0.2
 RUPTURE_STRAIN_MIN = _RUPTURE_STRAIN_MIN
 CRISIS_STRAIN_MIN = 0.8
 
+# A rupture window that keeps re-extending with no drive_shift used to sit open
+# indefinitely (observed live: 23 turns at strain ~1.0, the character neither
+# transforming nor recovering -- a permanent crisis limbo). Two floors close it:
+#   * RUPTURE_FORCE_AFTER: once the window has been open this many turns,
+#     agents/character.py escalates the prompt from an optional "you MAY shift"
+#     to a FORCED resolution -- shift now, or reaffirm the old drive in a
+#     concrete, page-visible act; passive untouched calm is no longer offered.
+#   * RUPTURE_MAX_OPEN: the hard cap -- once the window has been open this long,
+#     commit.py force-closes it and pays strain down below the floor, so denial
+#     resolves (as reaffirmation) instead of persisting forever.
+RUPTURE_FORCE_AFTER = 3
+RUPTURE_MAX_OPEN = 6
+
 # ---- Affect lexicon ----
 #
 # Label -> V/A quadrant *signs* only ({-1, 0, +1}); 0 means the lexicon is

@@ -6,22 +6,22 @@
 
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
-| `affect.py` | 1065 |  | `theory_of_mind` |
+| `affect.py` | 1078 |  | `theory_of_mind` |
 | `agents/__init__.py` | 81 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 250 |  | `agents.common`, `commit`, `db`, `prompts`, `schemas`, `spatial` |
-| `agents/character.py` | 285 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/character.py` | 309 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/common.py` | 1653 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/director.py` | 2227 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 442 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 190 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
-| `agents/narration.py` | 429 | Player-facing narration agent. | `agents.common`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
+| `agents/narration.py` | 446 | Player-facing narration agent. | `agents.common`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/perception.py` | 1085 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 881 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 72 | Step and active-variant persistence helpers. | `db` |
 | `app.py` | 3528 | FastAPI application, resource CRUD, import/export, turn control, and streaming endpoints. | `agents`, `character_schema`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `updates` |
 | `character_schema.py` | 614 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
 | `checkpoints.py` | 516 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
-| `commit.py` | 3296 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `spatial`, `spatial_frames`, `theory_of_mind` |
+| `commit.py` | 3316 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `spatial`, `spatial_frames`, `theory_of_mind` |
 | `db.py` | 1245 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 193 |  | `db` |
 | `greetings.py` | 173 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
@@ -34,7 +34,7 @@
 | `paradox.py` | 486 |  | `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 1669 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 1727 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1041 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 601 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 1802 | Pydantic output contracts and semantic validation for agent payloads. | — |
@@ -49,14 +49,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `resolve_affect()` | 459 | 134 lines |
-| `apply_intent_ops()` | 692 | 98 lines |
-| `validate_drive_shift()` | 915 | 79 lines |
-| `update_drive_strain()` | 793 | 78 lines |
-| `normalize_wants()` | 599 | 72 lines |
-| `leak_scan()` | 1008 | 44 lines |
-| `detect_drive_rupture()` | 872 | 38 lines |
-| `appraise()` | 342 | 36 lines |
+| `resolve_affect()` | 472 | 134 lines |
+| `apply_intent_ops()` | 705 | 98 lines |
+| `validate_drive_shift()` | 928 | 79 lines |
+| `update_drive_strain()` | 806 | 78 lines |
+| `normalize_wants()` | 612 | 72 lines |
+| `leak_scan()` | 1021 | 44 lines |
+| `detect_drive_rupture()` | 885 | 38 lines |
+| `appraise()` | 355 | 36 lines |
 
 ### `agents/background.py`
 
@@ -73,7 +73,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 85 | 201 lines |
+| `character_step()` | 85 | 225 lines |
 | `_recent_self_lines()` | 47 | 36 lines |
 
 ### `agents/common.py`
@@ -121,8 +121,8 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `narrator_extra()` | 298 | 132 lines |
-| `narrator()` | 173 | 124 lines |
+| `narrator()` | 173 | 141 lines |
+| `narrator_extra()` | 315 | 132 lines |
 | `_resolve_narration_person()` | 43 | 47 lines |
 | `_generate_narration()` | 148 | 24 lines |
 | `_craft_tells()` | 131 | 16 lines |
@@ -209,14 +209,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 2665 | 339 lines |
+| `prepare_memory_commit()` | 2665 | 359 lines |
 | `prepare_scene_commit()` | 973 | 220 lines |
 | `track_background_presences()` | 1606 | 169 lines |
 | `_prepare_destruction()` | 416 | 158 lines |
 | `prepare_mapping_commit()` | 2239 | 132 lines |
 | `commit_world_entities()` | 1324 | 123 lines |
 | `commit_mapping()` | 2373 | 120 lines |
-| `_commit_all_locked()` | 3144 | 94 lines |
+| `_commit_all_locked()` | 3164 | 94 lines |
 
 ### `db.py`
 
@@ -342,10 +342,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 1660 | 10 lines |
-| `presets()` | 1651 | 2 lines |
-| `active_preset()` | 1654 | 2 lines |
-| `nsfw_enabled()` | 1657 | 2 lines |
+| `get_prompt()` | 1718 | 10 lines |
+| `presets()` | 1709 | 2 lines |
+| `active_preset()` | 1712 | 2 lines |
+| `nsfw_enabled()` | 1715 | 2 lines |
 
 ### `providers.py`
 
