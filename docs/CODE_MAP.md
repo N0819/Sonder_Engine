@@ -21,7 +21,7 @@
 | `app.py` | 3528 | FastAPI application, resource CRUD, import/export, turn control, and streaming endpoints. | `agents`, `character_schema`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `updates` |
 | `character_schema.py` | 614 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
 | `checkpoints.py` | 516 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
-| `commit.py` | 3316 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `spatial`, `spatial_frames`, `theory_of_mind` |
+| `commit.py` | 3330 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `spatial`, `spatial_frames`, `theory_of_mind` |
 | `db.py` | 1245 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 193 |  | `db` |
 | `greetings.py` | 173 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
@@ -209,14 +209,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 2665 | 359 lines |
+| `prepare_memory_commit()` | 2665 | 373 lines |
 | `prepare_scene_commit()` | 973 | 220 lines |
 | `track_background_presences()` | 1606 | 169 lines |
 | `_prepare_destruction()` | 416 | 158 lines |
 | `prepare_mapping_commit()` | 2239 | 132 lines |
 | `commit_world_entities()` | 1324 | 123 lines |
 | `commit_mapping()` | 2373 | 120 lines |
-| `_commit_all_locked()` | 3164 | 94 lines |
+| `_commit_all_locked()` | 3178 | 94 lines |
 
 ### `db.py`
 
