@@ -7,15 +7,15 @@
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
 | `affect.py` | 1078 |  | `theory_of_mind` |
-| `agents/__init__.py` | 81 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
+| `agents/__init__.py` | 82 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 250 |  | `agents.common`, `commit`, `db`, `prompts`, `schemas`, `spatial` |
 | `agents/character.py` | 309 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/common.py` | 1653 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/common.py` | 1717 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/director.py` | 2227 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
-| `agents/loops.py` | 442 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
+| `agents/loops.py` | 446 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 190 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 446 | Player-facing narration agent. | `agents.common`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/perception.py` | 1085 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
+| `agents/perception.py` | 1147 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 881 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 72 | Step and active-variant persistence helpers. | `db` |
 | `app.py` | 3528 | FastAPI application, resource CRUD, import/export, turn control, and streaming endpoints. | `agents`, `character_schema`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `updates` |
@@ -34,10 +34,10 @@
 | `paradox.py` | 486 |  | `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 1727 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 1741 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1041 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 601 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
-| `schemas.py` | 1802 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `schemas.py` | 1809 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 1475 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | — |
 | `spatial_frames.py` | 871 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `theory_of_mind.py` | 288 |  | — |
@@ -80,14 +80,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 624 | 146 lines |
-| `_extract_authority_claims()` | 380 | 90 lines |
-| `_check_narrator_fidelity()` | 1525 | 65 lines |
-| `_scrub_unknown_identities()` | 934 | 57 lines |
-| `_strip_player_echo()` | 1317 | 56 lines |
-| `_assert_plan_materialized()` | 83 | 55 lines |
-| `_dedupe_view_sentences()` | 1410 | 43 lines |
-| `_unknown_actor_label()` | 837 | 41 lines |
+| `norm_sequence()` | 673 | 161 lines |
+| `_extract_authority_claims()` | 429 | 90 lines |
+| `_check_narrator_fidelity()` | 1589 | 65 lines |
+| `_scrub_unknown_identities()` | 998 | 57 lines |
+| `_strip_player_echo()` | 1381 | 56 lines |
+| `_assert_plan_materialized()` | 132 | 55 lines |
+| `_dedupe_view_sentences()` | 1474 | 43 lines |
+| `_unknown_actor_label()` | 901 | 41 lines |
 
 ### `agents/director.py`
 
@@ -106,9 +106,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `interaction_loop()` | 109 | 264 lines |
-| `deterministic_micro_perception()` | 31 | 77 lines |
-| `reaction_loop()` | 374 | 69 lines |
+| `interaction_loop()` | 113 | 264 lines |
+| `deterministic_micro_perception()` | 32 | 80 lines |
+| `reaction_loop()` | 378 | 69 lines |
 
 ### `agents/mapping.py`
 
@@ -132,14 +132,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `perception_outcome()` | 665 | 421 lines |
-| `perception_act()` | 444 | 220 lines |
-| `perception_establish()` | 306 | 137 lines |
-| `_delivered_manifest()` | 190 | 47 lines |
-| `_subject_disguise_context()` | 239 | 38 lines |
-| `_disguise_leak_check()` | 279 | 25 lines |
-| `_ambient_location_for()` | 81 | 20 lines |
-| `_scrub_view_for()` | 117 | 18 lines |
+| `perception_outcome()` | 719 | 429 lines |
+| `perception_act()` | 479 | 239 lines |
+| `perception_establish()` | 341 | 137 lines |
+| `_delivered_manifest()` | 191 | 47 lines |
+| `_subject_disguise_context()` | 240 | 38 lines |
+| `_observer_facing_sequence()` | 307 | 32 lines |
+| `_disguise_leak_check()` | 280 | 25 lines |
+| `_ambient_location_for()` | 82 | 20 lines |
 
 ### `agents/runtime.py`
 
@@ -342,10 +342,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 1718 | 10 lines |
-| `presets()` | 1709 | 2 lines |
-| `active_preset()` | 1712 | 2 lines |
-| `nsfw_enabled()` | 1715 | 2 lines |
+| `get_prompt()` | 1732 | 10 lines |
+| `presets()` | 1723 | 2 lines |
+| `active_preset()` | 1726 | 2 lines |
+| `nsfw_enabled()` | 1729 | 2 lines |
 
 ### `providers.py`
 
@@ -377,14 +377,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 1219 | 193 lines |
-| `semantic_output_errors()` | 1673 | 76 lines |
-| `validate_llm_output_strict()` | 1750 | 53 lines |
+| `preprocess_llm_output()` | 1226 | 193 lines |
+| `semantic_output_errors()` | 1680 | 76 lines |
+| `validate_llm_output_strict()` | 1757 | 53 lines |
 | `_coerce_str_list()` | 12 | 33 lines |
-| `_coerce_considered_responses()` | 1070 | 32 lines |
-| `validate_llm_output()` | 1413 | 29 lines |
-| `_coerce_conditions()` | 1133 | 27 lines |
-| `_hoist_misplaced_entity_siblings()` | 1175 | 21 lines |
+| `_coerce_considered_responses()` | 1077 | 32 lines |
+| `validate_llm_output()` | 1420 | 29 lines |
+| `_coerce_conditions()` | 1140 | 27 lines |
+| `_hoist_misplaced_entity_siblings()` | 1182 | 21 lines |
 
 ### `spatial.py`
 

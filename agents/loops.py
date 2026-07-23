@@ -24,6 +24,7 @@ from .common import (
     _merge_character_results,
     _next_speaker_candidates,
     _requires_director_resolution,
+    observable_action_text,
     _sequence_has_content,
     normalize_character_refs,
 )
@@ -98,9 +99,12 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
                     continue
                 if not has_visual(relation):
                     continue
-                attempt = str(event.get("attempt") or "")
-                if attempt:
-                    additions.append(f"{display} {attempt}.")
+                # Intent-free `observable` surface only -- never the raw
+                # attempt (which carries the actor's purpose/intent). A mental
+                # beat (observable "") is imperceptible and skipped.
+                surface = observable_action_text(event)
+                if surface:
+                    additions.append(f"{display} {surface}.")
                     perceived_by.add(observer_id)
         if additions:
             views[observer_id] = additions

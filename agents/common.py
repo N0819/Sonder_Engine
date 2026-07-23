@@ -37,6 +37,55 @@ _REACTIVE_STAGES = {
     "preparation", "approach", "contact", "sustained",
 }
 
+# Verbs whose act is INTERIOR -- it happens inside the actor's mind and has no
+# outward manifestation a bystander could perceive. An observer cannot see
+# someone "remember" or "decide"; surfacing such an act to another perceiver
+# is a pure information-barrier leak (the actor's private cognition). Used by
+# norm_sequence to default an action element's `observable` surface to "" (see
+# observable_action_text) so the deterministic perception-delivery backstops
+# never paste it into an observer's view. A mental act that DOES have an
+# outward tell (eyes going distant, a whispered incantation) can still be
+# delivered -- the director just authors an explicit `observable` for it,
+# which overrides this default.
+_MENTAL_VERBS = {
+    "recall", "remember", "recollect", "consider", "think", "ponder",
+    "reflect", "deliberate", "decide", "resolve", "realize", "realise",
+    "understand", "know", "recognize", "recognise", "plan", "intend",
+    "imagine", "visualize", "visualise", "concentrate", "focus", "sense",
+    "feel", "believe", "assume", "wonder", "hope", "fear", "doubt",
+}
+
+
+def _is_mental_action(verb, attempt):
+    """True when an action element is purely interior (no outward surface):
+    its declared verb is a mental verb, or -- for a weak model that left verb
+    unset -- its attempt LEADS with a mental verb ('remember the runes her
+    mother taught her'). Conservative: only the leading token is checked, so a
+    physical act that merely mentions thought later ('carve while recalling
+    the shape') is NOT suppressed."""
+    v = str(verb or "").strip().lower()
+    if v in _MENTAL_VERBS:
+        return True
+    head = re.split(r"\s+", str(attempt or "").strip().lower(), maxsplit=1)
+    return bool(head and head[0] in _MENTAL_VERBS)
+
+
+def observable_action_text(elem):
+    """The outward, intent-free surface of an action element for delivery to
+    OTHER perceivers -- what a bystander literally sees/hears, never the
+    actor's purpose, magical intent, or private mental content.
+
+    Prefers the director-authored `observable` surface. An explicit empty
+    string means the act has no outward manifestation (a purely mental beat --
+    recalling, deciding) and returns "" so the caller SKIPS it. Only when the
+    element predates the field entirely (key absent -- e.g. an un-normalized
+    character declaration) does it fall back to the raw `attempt`, preserving
+    legacy delivery for paths norm_sequence does not touch."""
+    obs = elem.get("observable")
+    if obs is None:
+        return str(elem.get("attempt") or "")
+    return str(obs or "")
+
 ATTEMPT_CUES = (
     "try", "attempt", "aim", "rush", "lunge", "swing at", "reach for",
     "move toward", "charge", "throw at", "shoot at", "fire at",
@@ -718,9 +767,24 @@ def norm_sequence(out):
                     for eff in raw_asserted
                     if _normalize_effect(eff) is not None
                 ]
+                # The intent-free OUTWARD surface handed to other perceivers
+                # (see observable_action_text). `attempt` is the actor's own
+                # framing and routinely embeds purpose/magic-intent ("scratch
+                # runes of slow and soften", "channel divine heritage") or
+                # pure cognition ("remember the rune crafting") -- copying it
+                # into an observer's view leaks meaning the perception filter
+                # exists to strip. Prefer the director-authored `observable`;
+                # default a mental act to "" (imperceptible -> skipped) and a
+                # physical act with no authored surface to `attempt` (no
+                # delivery regression for un-migrated / plain physical acts).
+                observable = e.get("observable")
+                if observable is None:
+                    observable = "" if _is_mental_action(
+                        e.get("verb"), att) else att
                 clean.append({
                     "type": "action",
                     "attempt": att,
+                    "observable": str(observable),
                     "visibility": e.get("visibility", "overt"),
                     "conceal_from": e.get("conceal_from") or [],
                     "targets": tg,

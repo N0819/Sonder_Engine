@@ -249,6 +249,13 @@ class ActionElement(BaseModel):
     actor_id: str = ""
     raw_text: str = ""
     attempt: str = ""
+    # Intent-free OUTWARD surface of the act -- what a bystander literally
+    # sees/hears, with no purpose, magical intent, or private mental content.
+    # Delivered to OTHER perceivers in place of `attempt` (which is the actor's
+    # own intent-laden framing). "" = the act has no outward manifestation (a
+    # purely mental beat) and must not be surfaced to observers at all. See
+    # agents/common.observable_action_text and norm_sequence.
+    observable: str = ""
     verb: str = ""
     commitment: ActionCommitment = ActionCommitment.contestable
     stage: ActionStage = ActionStage.immediate

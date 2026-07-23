@@ -1,5 +1,35 @@
 # Changelog
 
+## alpha3.1.2 — Observers see the act, not the intent (perception stops leaking purpose)
+
+Found in a live **Elevator Adventure** run: as Hinami carved protective runes beside
+Dr. Moon, Dr. Moon's perception views were told the runes' *purpose* ("runes of slow
+and soften"), Hinami's private nature ("divine heritage"), and even a purely mental
+beat ("remember the rune crafting *her mother taught her*"). An observer should see
+claws, frantic scratching, and a glow — never what the magic is *for*.
+
+### Fixed
+- **The deterministic perception backstops leaked action intent** (`agents/perception.py`,
+  `agents/loops.py`, `agents/common.py`, `schemas.py`, `prompts.py`). The perception
+  prompt was already correct (*"never add meaning, name intent"*) and the LLM obeyed it —
+  its prose was clean. The leak was entirely in the deterministic delivery paths
+  (`perception_act`, `perception_outcome`, and `loops.py` micro-perception), which pasted
+  the director's raw `attempt` strings — the actor's own intent-laden framing — straight
+  past the filter into every observer's view. The perception LLM was also *handed* the
+  intent in its input (`intended_effects` plus the loaded `attempt`/`action_attempt`).
+- **Every action element now carries an intent-free `observable` surface** — what a
+  bystander literally sees/hears, no *why*. `norm_sequence` computes the contract
+  centrally: a purely mental act (verb like `recall`/`decide`, or a mental leading verb
+  when `verb` is unset) gets `observable ""` and is delivered to **no one**; a physical
+  act uses the director/character-authored surface, falling back to `attempt` only for
+  paths the field does not yet cover (so ordinary actions do not regress). All three
+  delivery paths render `observable` via a single `observable_action_text` helper and
+  skip mental beats; the perception LLM payload is projected through
+  `_observer_facing_sequence`, which strips the `intended_effects`/`asserted_effects`
+  ledger and drops mental beats — so the filter never even *receives* the intent (the
+  pattern the engine forbids for character agents). Director and character prompts now
+  author `observable`. +8 regression tests reproducing the Elevator turn.
+
 ## alpha3.1.1 — Memories carry their affect (valence/arousal no longer always zero)
 
 ### Fixed

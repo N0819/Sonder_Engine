@@ -71,6 +71,7 @@ from .common import (
     _resolve_player_room,
     _room_notes_from_lore,
     _scrub_unknown_identities,
+    observable_action_text,
     _strip_identity_tokens,
     _unknown_actor_label,
     cast_room,
@@ -303,6 +304,40 @@ def _disguise_leak_check(ctx, stage, views, perceivers, subject_name,
                 break
 
 
+def _observer_facing_sequence(sequence):
+    """Project a declared action sequence into what OTHER perceivers may be
+    handed. Each action element carries only its intent-free `observable`
+    surface (via observable_action_text) as `attempt`, with the causal-intent
+    ledger (intended_effects/asserted_effects) and the actor's own framing
+    (verb, raw attempt) removed; a mental element (observable "") is dropped
+    entirely, being imperceptible. Speech/event elements pass through unchanged
+    (their concealment is handled separately). This keeps the perception filter
+    from ever RECEIVING the actor's purpose ('runes of slow and soften',
+    'channel divine heritage') -- honoring the barrier rather than handing over
+    hidden intent with an instruction to ignore it (the very pattern the engine
+    forbids for character agents)."""
+    out = []
+    for e in sequence or []:
+        if not isinstance(e, dict):
+            continue
+        if e.get("type") != "action":
+            out.append(e)
+            continue
+        surface = observable_action_text(e)
+        if not surface:
+            continue
+        out.append({
+            "type": "action",
+            "event_id": e.get("event_id", ""),
+            "attempt": surface,
+            "visibility": e.get("visibility", "overt"),
+            "conceal_from": e.get("conceal_from") or [],
+            "targets": e.get("targets") or [],
+            "stage": e.get("stage", "immediate"),
+        })
+    return out
+
+
 def perception_establish(ctx, nonce):
     chat = ctx.chat
     est = ctx.director_establish or {}
@@ -477,13 +512,16 @@ def perception_act(ctx, nonce):
         speech_elems = [{"type": "speech", "text": interp["speech"],
                          "volume": interp.get("speech_volume", "normal"), "tone": ""}]
 
+    # Observer-facing action text is the intent-free `observable` surface, never
+    # the actor's intent-laden `attempt` -- a mental beat (observable "") is
+    # skipped so it never reaches the empty-view fallback below.
     action_desc = ""
     for e in (interp.get("sequence") or []):
-        if e.get("type") == "action" and e.get("attempt"):
-            action_desc = e["attempt"]
-            break
-    if not action_desc and action.get("attempt"):
-        action_desc = action["attempt"]
+        if e.get("type") == "action":
+            surface = observable_action_text(e)
+            if surface:
+                action_desc = surface
+                break
 
     player_speech = [
         {"text": e.get("text"), "volume": e.get("volume", "normal"),
@@ -493,6 +531,16 @@ def perception_act(ctx, nonce):
         for e in speech_elems
     ]
 
+    # The sequence handed to the perception LLM is the observer-facing
+    # projection: intent-free surfaces only, intent ledger stripped, mental
+    # beats dropped. action_attempt (the scalar mirror) follows the same
+    # surface -- action.get("attempt") is the actor's raw framing and, being
+    # the FIRST element, is frequently the mental beat ("remember the runes").
+    observer_sequence = _observer_facing_sequence(interp.get("sequence"))
+    observer_action_attempt = next(
+        (e["attempt"] for e in observer_sequence
+         if e.get("type") == "action" and e.get("attempt")), None)
+
     # Build action onset for reaction eligibility
     action_onset = {
         "actor_id": "PLAYER",
@@ -501,11 +549,11 @@ def perception_act(ctx, nonce):
         "actor_room": p_room,
         "actor_room_name": (p_rdata or {}).get("name") or p_room,
         "actor_present_appearance": p_visible,
-        "sequence": interp.get("sequence") or [],
+        "sequence": observer_sequence,
         "player_speech": player_speech,
         "speech": interp.get("speech"),
         "speech_volume": interp.get("speech_volume") or "normal",
-        "action_attempt": action.get("attempt"),
+        "action_attempt": observer_action_attempt,
         "visibility": action.get("visibility", "overt"),
         "conceal_from": action.get("conceal_from") or [],
         "targets": action.get("targets") or [],
@@ -584,11 +632,17 @@ def perception_act(ctx, nonce):
     clean_views = _normalise_views(
         out.get("views") if isinstance(out, dict) else {}, perceivers)
 
-    action_elems = [
-        e for e in (interp.get("sequence") or [])
-        if e.get("type") == "action" and e.get("attempt")
-        and e.get("visibility") != "concealed"
-    ]
+    # Deterministic action delivery uses the intent-free `observable` surface,
+    # NOT the raw attempt. Each element is tagged with its surface here; a
+    # mental beat (observable "") is dropped so it is never injected into any
+    # observer's view (an observer cannot perceive "remember the runes").
+    action_elems = []
+    for e in (interp.get("sequence") or []):
+        if e.get("type") != "action" or e.get("visibility") == "concealed":
+            continue
+        surface = observable_action_text(e)
+        if surface:
+            action_elems.append({**e, "_surface": surface})
     # Mirror the action_elems concealment filter for speech: a speech
     # element marked visibility:'concealed' must never reach the blanket
     # hear_level-based injection below, which has no concept of an
@@ -636,7 +690,7 @@ def perception_act(ctx, nonce):
         can_see = rel.get("same_room") or vis
         for e in action_elems:
             view = _inject_action(
-                view, display, e["attempt"], can_see,
+                view, display, e["_surface"], can_see,
                 event_id=e.get("event_id"), delivered=delivered,
             )
         # Deterministic identity floor, LAST: the LLM's free prose was
@@ -966,17 +1020,25 @@ def perception_outcome(ctx, nonce):
     # end state. Injecting every sub-action under that end-state visibility
     # would retroactively grant sight through what was, at the time, a
     # closed door or wall.
+    # Delivered as the intent-free `observable` surface, never the raw attempt;
+    # a mental beat (observable "") is skipped, so the "last overt action" is
+    # the last PERCEIVABLE one (a terminal "remember the runes" does not become
+    # what observers see the actor do).
     last_overt_by_actor = {}
     for e in (interp.get("sequence") or []):
-        if e.get("type") == "action" and e.get("attempt") and e.get("visibility") != "concealed":
-            last_overt_by_actor[p_name] = {"actor": p_name, "attempt": e["attempt"]}
+        if e.get("type") == "action" and e.get("visibility") != "concealed":
+            surface = observable_action_text(e)
+            if surface:
+                last_overt_by_actor[p_name] = {"actor": p_name, "attempt": surface}
     for c in ctx.cast:
         d = ctx.character_results.get(c["id"])
         sh = json.loads(c["sheet"])
         cname = character_name(sh)
         for e in ((d or {}).get("sequence") or []):
-            if e.get("type") == "action" and e.get("attempt") and e.get("visibility") != "concealed":
-                last_overt_by_actor[cname] = {"actor": cname, "attempt": e["attempt"]}
+            if e.get("type") == "action" and e.get("visibility") != "concealed":
+                surface = observable_action_text(e)
+                if surface:
+                    last_overt_by_actor[cname] = {"actor": cname, "attempt": surface}
 
     for p in perceivers:
         pid = str(p["id"])
