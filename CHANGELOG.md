@@ -1,5 +1,67 @@
 # Changelog
 
+## alpha3.2 — Minds that switch off, authors who direct, and characters who want things
+
+A run of the **Elevator Adventure** and **Enterprise-D** demos exposed a cluster of
+agency and information-barrier gaps. This release closes all of them: an unconscious mind
+now perceives and acts like one, the player can author the world (and other minds) without
+puppeting them, characters can set aside goals the world has closed, and — the root cause of
+passive NPCs — every character can finally be given a **drive** and standing goals.
+
+### Fixed — information barrier
+- **The unconscious perceived everything** (`agents/perception.py`, `scene.py`, `agents/common.py`,
+  `agents/runtime.py`, `agents/loops.py`, `agents/character.py`, `agents/narration.py`,
+  `agents/director.py`, `prompts.py`). Found live: a knocked-out player received a full
+  first-person *sighted* perception view every turn (she "saw" a lobby reveal while
+  unconscious). Consciousness existed nowhere as state. Now a Director-authored `awareness`
+  world-condition (level `unconscious|sedated|asleep|dazed`) — reusing the whole conditions
+  machinery, so no schema/checkpoint work — gates the receiver: a non-awake mind is **excluded
+  from the perception LLM call and every deterministic backstop** and gets only a content-free
+  residue (which becomes its fragmentary memory of the beat); it is dropped from reactor
+  planning and its character step no-ops. Born at `director_resolve` (prompt clause + a
+  high-precision, grammatical-subject deterministic floor). Narrator renders an honest fade-out.
+  Fail-open (absent condition ⇒ awake). *The floor was tightened post-release-candidate after a
+  live false-positive that flagged a conscious first-aider standing over the fallen character.*
+- **Observer views double-named and duplicated the actor** (`agents/common.py`, `agents/loops.py`,
+  `prompts.py`). Since alpha3.1.2 the delivery used a full-sentence `observable` surface, so the
+  backstop produced "Dr. Moon Dr. Moon tilts…" / "Dr. Moon The flashlight beam moves…". Fixed
+  with a verb-first predicate contract + a deterministic composer, and content-token overlap
+  replacing the exact-substring dedupe so the model's paraphrase of a beat is not re-injected.
+
+### Fixed — authorship & agency
+- **No authorial channel; the player puppeted NPCs** (`agents/director.py`, `agents/character.py`,
+  `schemas.py`, `prompts.py`). When the player authored a character's interior ("Dr. Moon
+  remembers she has her smartphone"), the Director enacted it as truth, pre-scripting her. A
+  mental-verb beat whose grammatical subject is a sheeted cast member is now rerouted to an
+  **offer** handed to that character's own agent (which decides in-character), and dropped from
+  the resolved sequence. New action-element field `mode`.
+- **Player-scheduled future events were silently dropped** (`authored_events.py`, `commit.py`,
+  `agents/director.py`, `schemas.py`, `prompts.py`). "The elevator crashes next turn" vanished,
+  forcing the player to re-narrate it. Now captured in `flow.scheduled_assertions`, stored in
+  `scheduled_events` (kind `authored_event`), delivered when due with a resolve-now contract,
+  and **re-queued rather than dropped** (bounded) via omission-detection if the resolution fails
+  to enact them.
+
+### Fixed — proactive characters (the passivity root cause)
+- **`drive` and standing goals were authored nowhere** (`prompts.py`, `static/js/editors.js`,
+  `character_schema.py`, `agents/character.py`, `commit.py`). Diagnosed from the Enterprise-D
+  demo: NPC Captain Picard was passive because the decision procedure derives proactive wants
+  from `drive` + standing intentions — but character **generation omitted `drive` entirely** and
+  the **card editor had no drive section**, so every generated/edited character ran on an empty
+  drive and no goals and could only react. Generation now emits `psychology.drive` (with guidance
+  that a blank drive makes a character passive and that expression must drive *initiative*) and
+  requires 1–3 standing goals; the editor gained a Drive section; and authored
+  `initial_state.goals` now actually reach the agent as standing intentions (always in context,
+  seeded into the live list at commit so they evolve via `intent_ops`).
+- **Goals the world had closed steered forever** (`affect.py`, `prompts.py`). A character could
+  observe its objective was now impossible (every corridor sealed) yet keep serving it. New
+  guarded `nonviable` intent op sets a goal aside (engagement revives it); plus an
+  *urgent-situational-fact* rule so the obvious high-salience action (a dying person in front of
+  them) always appears in `considered_responses` — "the option must exist; the refusal may be in
+  character."
+
+Design by the Fable model; +50 regression tests across the areas above; full suite 1108 passed.
+
 ## alpha3.1.2 — Observers see the act, not the intent (perception stops leaking purpose)
 
 Found in a live **Elevator Adventure** run: as Hinami carved protective runes beside
