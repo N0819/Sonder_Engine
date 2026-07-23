@@ -11,7 +11,7 @@
 | `agents/background.py` | 250 |  | `agents.common`, `commit`, `db`, `prompts`, `schemas`, `spatial` |
 | `agents/character.py` | 359 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/common.py` | 1841 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/director.py` | 2427 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
+| `agents/director.py` | 2446 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 472 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 190 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 466 | Player-facing narration agent. | `agents.common`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
@@ -35,7 +35,7 @@
 | `paradox.py` | 486 |  | `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 1834 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 1849 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1041 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 693 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 1820 | Pydantic output contracts and semantic validation for agent payloads. | — |
@@ -95,7 +95,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 1919 | 509 lines |
+| `director_resolve()` | 1919 | 528 lines |
 | `director_interpret()` | 200 | 301 lines |
 | `_reconcile_resolution()` | 1624 | 224 lines |
 | `_reconcile_interpretation()` | 649 | 119 lines |
@@ -354,10 +354,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 1825 | 10 lines |
-| `presets()` | 1816 | 2 lines |
-| `active_preset()` | 1819 | 2 lines |
-| `nsfw_enabled()` | 1822 | 2 lines |
+| `get_prompt()` | 1840 | 10 lines |
+| `presets()` | 1831 | 2 lines |
+| `active_preset()` | 1834 | 2 lines |
+| `nsfw_enabled()` | 1837 | 2 lines |
 
 ### `providers.py`
 
