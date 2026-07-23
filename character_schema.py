@@ -537,6 +537,31 @@ def character_initial_active_state(sheet: dict) -> dict:
         "suppressed_want": None,
     }
 
+def character_standing_intentions(sheet: dict) -> list[dict]:
+    """Authored STANDING intentions -- the character's defining, durable goals,
+    read from the card's initial_state.goals in the runtime-intention context
+    shape. These are always present in the character's decision context so it
+    pursues them proactively (a captain's 'hold command of the crisis'), which
+    is what keeps an authored character from defaulting to purely reactive
+    behavior. Distinct from EMERGENT intentions that form at runtime via
+    intent_ops; ids are namespaced 'ia<n>' so they never collide with the
+    emergent 'i<n>' space."""
+    state = normalize_character_data(sheet).get("initial_state", {})
+    goals = state.get("goals") or []
+    out = []
+    for i, g in enumerate(goals, 1):
+        if not isinstance(g, dict):
+            continue
+        text = str(g.get("goal") or "").strip()
+        if not text:
+            continue
+        out.append({
+            "id": f"ia{i}", "intent": text, "status": "active",
+            "progress": 0.0, "authored": True,
+            "priority": _float_or(g.get("priority"), 0.5),
+        })
+    return out
+
 def character_initial_stance(sheet: dict) -> dict:
     social = normalize_character_data(sheet).get("social", {})
     if isinstance(social.get("legacy_stance"), dict):

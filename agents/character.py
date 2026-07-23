@@ -10,6 +10,7 @@ from character_schema import (
     character_abilities,
     character_name,
     character_psychology,
+    character_standing_intentions,
     effective_drive,
     character_public_history,
     character_sampler,
@@ -51,6 +52,23 @@ from .common import (
     character_room,
     norm_sequence,
 )
+
+def _merge_standing_intentions(authored, emergent):
+    """Merge a character's authored standing intentions with the emergent ones
+    formed at runtime. Authored intentions are always present (the character's
+    defining goals), but an emergent intention whose text closely restates an
+    authored one SUPERSEDES it -- the emergent copy carries live progress/status
+    (including a `blocked`/nonviable state), so a goal the world has closed does
+    not reappear as freshly-active. De-dup is by casefolded intent text."""
+    emergent = [i for i in (emergent or []) if isinstance(i, dict)]
+    seen = {str(i.get("intent") or "").strip().casefold() for i in emergent}
+    kept_authored = [
+        a for a in (authored or [])
+        if isinstance(a, dict)
+        and str(a.get("intent") or "").strip().casefold() not in seen
+    ]
+    return kept_authored + emergent
+
 
 def _recent_self_lines(chat_id, char_name, current_turn_idx, n_turns=3, cap=4,
                        frame_id=None):
@@ -203,9 +221,13 @@ def character_step(ctx, cid, nonce):
         "recent_self_lines": _recent_self_lines(
             chat.id, character_name(sh), ctx.turn.idx,
             frame_id=ctx.turn.frame_id),
-        # Tier-2 goal hierarchy: durable standing intentions (evolve via
-        # intent_ops -> commit). Read-only context for deriving this beat's wants.
-        "intentions": _interior.get("intentions") or [],
+        # Tier-2 goal hierarchy: the character's AUTHORED standing intentions
+        # (its defining goals, always present so it acts proactively) merged
+        # with EMERGENT intentions formed at runtime via intent_ops. An emergent
+        # intention that restates an authored one wins (it carries live
+        # progress/status). Read-only context for deriving this beat's wants.
+        "intentions": _merge_standing_intentions(
+            character_standing_intentions(sh), _interior.get("intentions") or []),
         # Former drives (scars) give continuity to a character who has changed.
         "former_drives": _interior.get("former_drives") or [],
     }

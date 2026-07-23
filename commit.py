@@ -19,6 +19,7 @@ from prompts import get_prompt
 import affect
 from character_schema import (character_name, new_uid, character_psychology,
                               character_initial_active_state, effective_drive,
+                              character_standing_intentions,
                               normalize_character_data, persona_name)
 from frames import is_recognized_in_frame
 from scene import set_char_state, set_char_status
@@ -2816,6 +2817,18 @@ def prepare_memory_commit(ctx, *, scene=None):
                 prev_as = st.get("active_state") if isinstance(st.get("active_state"), dict) else {}
                 interior = st.get("interior") if isinstance(st.get("interior"), dict) else {}
                 intentions = interior.get("intentions") or []
+                # Seed the character's AUTHORED standing intentions (from the
+                # card's initial_state.goals) into the live list, so the model
+                # can progress/close them via intent_ops and they persist and
+                # evolve. Dedup by text against the CURRENT list (including any
+                # already-abandoned/blocked copy), so a goal the character has
+                # set aside never re-seeds. Mirrors the read-side merge in
+                # agents/character._merge_standing_intentions.
+                _seen_intent = {str(i.get("intent") or "").strip().casefold()
+                                for i in intentions if isinstance(i, dict)}
+                for _a in character_standing_intentions(sh):
+                    if str(_a.get("intent") or "").strip().casefold() not in _seen_intent:
+                        intentions = intentions + [_a]
                 drive = (character_psychology(sh) or {}).get("drive") or {}
 
                 # this beat's evidence pool: resolved event + spoken lines, for
