@@ -2701,6 +2701,17 @@ def prepare_memory_commit(ctx, *, scene=None):
         own_result = _normalize_character_output(own_result)
         active_state = own_result.get("active_state") or {}
         mood = str(active_state.get("mood") or "")
+        # The character's blended surface affect this beat carries the numeric
+        # valence/arousal that go with the `mood` label; without this the
+        # emotional_context text was stored but valence/arousal stayed at their
+        # 0.0 default on every memory (the memory editor showed them as always
+        # zero). Mirror the label onto the numeric axes for this beat's memories.
+        _surface = (active_state.get("affect") or {}).get("surface") or {}
+        try:
+            _mem_valence = float(_surface.get("valence") or 0.0)
+            _mem_arousal = float(_surface.get("arousal") or 0.0)
+        except (TypeError, ValueError):
+            _mem_valence, _mem_arousal = 0.0, 0.0
         if est and not v:
             room_label = char_room or "the scene"
             room_data2 = (sc.get("rooms") or {}).get(room_label, {})
@@ -2731,6 +2742,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                             "gist": f"{spk}: {qbody}", "key_phrases": [qbody, spk],
                             "entities": [spk], "location": room_name,
                             "emotional_context": mood,
+                            "valence": _mem_valence, "arousal": _mem_arousal,
                             "event_key": _stable_event_key(
                                 turn.id, ccid, "dialogue", d.get("speaker"),
                                 qbody, d.get("intended_target"),
@@ -2743,6 +2755,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                 "provenance": "witnessed", "salience": _salience_of(episode_content),
                 "content": episode_content, "location": room_name,
                 "emotional_context": mood,
+                "valence": _mem_valence, "arousal": _mem_arousal,
                 "event_key": _stable_event_key(turn.id, ccid, "episode"),
             })
         if own_result:
@@ -2765,6 +2778,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                     "content": f"I chose to {desc}",
                     "gist": f"I chose to {desc}"[:240],
                     "location": room_name, "emotional_context": mood,
+                    "valence": _mem_valence, "arousal": _mem_arousal,
                     "event_key": _stable_event_key(turn.id, ccid, "own_acts"),
                 })
             for update in own_result.get("mind_model_updates") or []:

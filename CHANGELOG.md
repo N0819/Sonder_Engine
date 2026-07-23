@@ -1,5 +1,18 @@
 # Changelog
 
+## alpha3.1.1 — Memories carry their affect (valence/arousal no longer always zero)
+
+### Fixed
+- **Memory valence/arousal were never written** (`commit.py`). A character's memories
+  stored the `emotional_context` *label* (from its mood) but left the numeric
+  valence/arousal at their `0.0` schema default — so the memory editor's valence and
+  arousal boxes always read zero. The commit path now propagates the character's blended
+  **surface affect** (`active_state.affect.surface`) onto the dialogue, episodic, and
+  own-action memories it forms each beat, so the numbers travel with the label they
+  belong to. The read/write plumbing (list endpoint, editor, PUT) was already correct.
+  Applies to memories formed from here on; existing memories have no stored affect to
+  backfill. +2 regression tests.
+
 ## alpha3.1 — Resolve what you open: ruptures that land, narration that doesn't repeat itself
 
 Driven by a fresh **40-turn Star Trek audit run** (`demo/enterprise_d_v2/`, graded
