@@ -75,6 +75,7 @@ from .common import (
     _resolve_player_room,
     _room_notes_from_lore,
     _scrub_unknown_identities,
+    _scrub_invented_dialogue,
     _scrub_undeclared_player_speech,
     _compose_residue_view,
     observable_action_text,
@@ -1092,6 +1093,30 @@ def perception_outcome(ctx, nonce):
                 if surface:
                     last_overt_by_actor[cname] = {"actor": cname, "attempt": surface}
 
+    # DIALOGUE-FIDELITY FLOOR: the complete set of lines actually spoken this
+    # beat. Any quoted line in ANY perceiver's view presented as speech whose
+    # body is not (a generous substring/fragment match of) one of these is
+    # invented -- the perception LLM confabulates memory/backstory callbacks,
+    # and director_resolve's resolved_event PROSE can itself carry a line its
+    # own dialogue_log backstop already dropped (live t42: a fabricated
+    # "trapped under the rubble" player line reached Dr. Moon's view via the
+    # prose even though dialogue_log was clean).
+    spoken_lines = list(player_speech_lines(interp))
+    spoken_lines += [d.get("exact_quote") for d in enriched_dlog]
+    for _rmap in (ctx.character_results, ctx.reaction_results):
+        for _d in (_rmap or {}).values():
+            if not isinstance(_d, dict):
+                continue
+            for _e in (_d.get("sequence") or []):
+                if _e.get("type") == "speech" and _e.get("text"):
+                    spoken_lines.append(_e["text"])
+            if _d.get("speech"):
+                spoken_lines.append(_d["speech"])
+    for _entry in (interp.get("other_players") or {}).values():
+        for _e in ((_entry or {}).get("sequence") or []):
+            if _e.get("type") == "speech" and _e.get("text"):
+                spoken_lines.append(_e["text"])
+
     for p in perceivers:
         pid = str(p["id"])
         # Consciousness gate: a non-awake mind gets ONLY the deterministic
@@ -1214,6 +1239,20 @@ def perception_outcome(ctx, nonce):
                 ctx.warnings.append(
                     "perception_outcome: dropped undeclared player-attributed "
                     f"speech from the player's view: {_leaked}")
+        # DIALOGUE-FIDELITY FLOOR (every view, every speaker): drop any quote
+        # presented as speech whose body is not in spoken_lines. This closes
+        # the gap the player-only scrub left open -- in an NPC's view the
+        # player is referred to by name/descriptor, never "you", so an
+        # invented player line there survived the scrub above and propagated
+        # into that NPC's next-turn context and memory. Muffled fragments of
+        # real lines and quoted environmental text (signage, labels) survive
+        # by construction -- see _scrub_invented_dialogue.
+        view, _invented = _scrub_invented_dialogue(
+            view, spoken_lines, cast_names=[r["name"] for r in ident_roster])
+        if _invented:
+            ctx.warnings.append(
+                "perception_outcome: dropped invented dialogue from view "
+                f"'{pid}': {_invented}")
         clean_views[pid] = _dedupe_view_sentences(view) or None
 
     loop = ctx.interaction_loop or {}
