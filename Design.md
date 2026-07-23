@@ -471,7 +471,7 @@ A character receives:
 - Senses.
 - Abilities.
 - Current attire.
-- Current mood and goal.
+- Its layered interior: effective core drive (possibly rupture-shifted), standing intentions, blended affect, and — only inside an open rupture window — the rupture context and, once the window has stayed open, a forced-resolution instruction; plus a crisis flag and its recent-tell ledger at extreme strain.
 - Its filtered perception.
 - Recent memories.
 - Recalled older memories.
@@ -494,7 +494,9 @@ A character may return:
 - Speech.
 - Physical action.
 - Silence.
-- Mood and goal updates.
+- Per-beat wants (with the enacted/suppressed distinction), mood/affect, and standing-intention ops.
+- A manifest of physical tells gated per perceiver.
+- A drive shift, but only inside an open rupture window.
 - Mind-model updates.
 - Relationship changes.
 - Interaction-control signals.
@@ -859,9 +861,13 @@ It may not:
 - Reveal hidden events.
 - Rewrite proper nouns.
 - Paraphrase NPC dialogue when an exact quote is present.
-- repeat the player’s own speech as if newly narrated.
+- Repeat the player's own speech as if newly narrated — nor substitute a vague placeholder for it ("I say my piece"); the player's declared action anchors the beat lightly (cause-before-effect ordering) but is rendered as weight and motion, never re-narrated in full or opened with the same "You <verb>…" restatement each beat.
+- Render a distinct declared line more than once, or re-narrate a standing ambient sensation ("the bridge hums") that has not changed.
+- Guess a character's gender from their name: the Narrator is given `cast_pronouns` (each character's canonical subject/object/possessive) and must use them consistently.
 
-Hard specifics coined by the Narrator are surfaced as`new_specifics` for potential canon validation.
+A deterministic dialogue-fidelity floor triggers a correction-retry when an audible line is dropped or altered. Some of these rules are prompt-level and reduce rather than eliminate a tic (pronoun consistency, ambient restraint); the deterministic correction-retries that would make them absolute are tracked in `docs/AUDIT_FOLLOWUPS.md`.
+
+Hard specifics coined by the Narrator are surfaced as `new_specifics` for potential canon validation.
 
 ## Persistence, variants, and checkpoints
 
@@ -990,7 +996,7 @@ The following capabilities are present end to end in the supplied implementation
 - Action-onset perception.
 - Physical reaction loop.
 - Character interaction loop.
-- Objective resolution.
+- Objective resolution, including: an **obligation ledger** (world-KV `pending_obligations`) that tracks open narrative debts — demands, promises, announced actions, unanswered questions — and forces each to be discharged or explicitly refused on-page once it ages past its window, so a promised beat can no longer be deferred forever; and **player-fact adjudication** that classifies a player-asserted plot fact (an off-screen death, an unread document's contents, another character's change of heart) as confirmed, contested, or false and lands that verdict on-page this beat rather than leaving it in assertion limbo.
 - Deterministically-gated background-presence reaction (a named, unregistered presence of any non-inert kind — bystander, guard, creature, drone — may get one stateless, one-beat reaction when salient and otherwise unvoiced; no LLM call spent on the common case of nothing to react to).
 - Outcome perception.
 - Player-facing narration.
@@ -1009,7 +1015,10 @@ The following capabilities are present end to end in the supplied implementation
 - Visible versus latent embodiment.
 - Private and public history.
 - Filtered character contexts.
-- Active mood and goals.
+- Layered interior (three-tier goal hierarchy): a stable **core drive** (essence / expression / taboo), persistent **standing intentions**, and per-beat **wants** the character forms and drops in the moment, with an enacted/suppressed-want distinction.
+- Blended, appraisal-driven mood: an OCC-style appraisal reads the model's per-beat `goal_impacts`, and the engine deterministically computes affect on canonical valence/arousal axes — a **surface** reaction over a slower **undercurrent** above a character **baseline**, with decay between beats (`affect.py`). The model proposes; the engine floors and reconciles.
+- Calibrated tells: interior state surfaces only as physical cues gated per perceiver, with a per-character recent-tell ledger and an anti-repetition rule so the same cue does not fire every beat.
+- Earned drive rupture with a resolution floor: a sustained strain primer plus a high-impact event opens a rupture window; the window force-escalates the character prompt to a resolution after a few turns and force-closes after a hard cap, so a rupture the engine opens cannot sit in permanent unresolved limbo. A completed shift leaves a scar (`former_drives`) and respects a cooldown; overrides are written to runtime state, never silently onto the sheet.
 - Mind-model hypotheses.
 - Confidence caps.
 - Relationship graphs.
@@ -1021,8 +1030,8 @@ The following capabilities are present end to end in the supplied implementation
 ### Background-presence tracking and promotion
 
 - Deterministic, LLM-free tracking of named entities of any non-inert kind (a deny-list of clearly-inert kinds, not a `person`/`npc` allow-list) that the Director keeps writing into the resolved event or dialogue log without a character sheet, a character step, or memory of their own — so a player-declared guard (`kind:"actor"`), monster, robot, or drone is tracked rather than left declared-but-inert, while objects, fixtures, vehicles, and locations stay excluded.
-- Threshold-based promotion suggestions surfaced to the user; nothing is promoted automatically.
-- On request, an evidence-grounded draft character sheet and starter memories are generated from that entity's actual recorded turns, then reviewed and edited by the user before the character is attached to the cast.
+- Autonomous background→cast promotion: a named presence that keeps carrying scenes (a dialogue-turn threshold, addressed/present this beat) is promoted to a real character automatically at commit — minting an evidence-grounded sheet and starter memories from that entity's own recorded turns *after* the primary transaction, so a promotion can never roll back an otherwise valid turn. Gated behind an `auto_promote` setting (default on); the manual confirm-promotion path shares one code path with the autonomous one.
+- Threshold-based promotion suggestions are also surfaced to the user, and on request the same evidence-grounded draft sheet and starter memories can be reviewed and edited before the character is attached.
 
 ### Spatial simulation
 
@@ -1177,9 +1186,9 @@ Missing pieces include:
 
 Current support includes active and dormant status, arrival and departure handling, and retire-not-delete for rooms and lorebooks — destroyed or removed structure is retired with the turn that ended it, preserving its history rather than erasing it, so a ruined region remains retrievable.
 
-Missing pieces include:
+Autonomous background→cast promotion now fires at commit (see *Background-presence tracking and promotion*). Missing pieces include:
 
-- Automatic promotion and downgrading.
+- Automatic downgrading (autonomous promotion is done; the reverse is not).
 - Gap-history generation.
 - Character integrity review.
 - Negotiated reactivation.
@@ -1256,6 +1265,10 @@ Critical state-mutation stages need stronger repair, retry, or rejection policie
 
 Identity leakage is now closed deterministically. A per-observer scrub removes the canonical name of any source an observer has not legitimately identified from the model-rendered view — outside verbatim heard speech — the appearance-derived unknown-actor label is name-stripped, and ambient and location information is scoped by nesting depth so a deeply nested interior cannot perceive an ancestor location. What remains is the semantic residual: species, occupation, relationship, intent, or paraphrased identity a capable model could still imply. That class is not deterministically catchable and would need an auditing pass. Spatial delivery is deterministic; this is not yet a formal noninterference proof.
 
+### Interior rupture and some narration rules are prompt-nudged, not yet deterministic
+
+The drive-rupture window now has a hard floor — it force-escalates the character prompt to a resolution and force-closes after a cap, so it cannot sit in permanent limbo — but the *shift itself* is still emitted by the character model, not forced deterministically: a weaker model can reaffirm the old drive under the forced prompt rather than transform. Likewise, several narration-integrity rules (pronoun consistency via `cast_pronouns`, ambient anti-repetition, one-line-per-turn) are prompt rules that reduce but do not eliminate their tic; the deterministic correction-retries that would make them absolute — plus a settled-facts continuity ledger, routing player-authored NPC acts through the character agent's reaction, and room-boundary scene-truth enforcement — are a resume-ready backlog in `docs/AUDIT_FOLLOWUPS.md` (P1–P7), evidenced by the `demo/enterprise_d_v2/` audit run.
+
 ### Migration behavior
 
 Recent migrations (v15, v16) follow the recreate-copy-swap pattern, are idempotent and crash-re-runnable, and were validated against a copy of a real production database — integrity check, row preservation, composite-key repartition — in addition to round-trip checkpoint, export, and import tests. The general principle still holds: fresh-database success does not prove upgrade safety, and every supported version's upgrade path should stay under test.
@@ -1282,7 +1295,7 @@ The service is safer to expose over a tunnel than before, but it remains a singl
 
 ## Development roadmap
 
-The movement-and-space work advances several priorities below: data integrity (Priority 1) is largely delivered by the physical-truth consolidation and room registry; authority and mutation safety (Priority 4) by interpret-side declaration capture and single- and multi-book destruction; first-class movers (Priority 5) by the transit model; and world-model integration (Priority 8) by the consolidation. That work has shipped (alpha2.0, with a follow-up in alpha2.0.1); a full re-prioritization of the list below is still pending.
+The movement-and-space work advances several priorities below: data integrity (Priority 1) is largely delivered by the physical-truth consolidation and room registry; authority and mutation safety (Priority 4) by interpret-side declaration capture and single- and multi-book destruction; first-class movers (Priority 5) by the transit model; and world-model integration (Priority 8) by the consolidation. That work has shipped (alpha2.0, with a follow-up in alpha2.0.1). Since then, further releases have advanced Priorities 3, 4, 6, and 7: alpha3.0 delivered the layered interior and earned drive rupture (Priority 3), the obligation ledger and player-fact adjudication (Priority 4), and autonomous background→cast promotion (Priorities 6–7); alpha3.1 added the drive-rupture resolution floor and a cluster of narration-integrity rules. Scheduled-event and condition ticking (Priority 4) is also delivered via the commit-time mechanics sweep. A full re-prioritization of the list below is still pending; the concrete near-term backlog now lives in `docs/AUDIT_FOLLOWUPS.md`.
 
 ### Priority 0 — health and project control
 
