@@ -26,7 +26,15 @@ from memory import (
     relationships_for_payload,
 )
 from prompts import get_prompt
-from scene import all_cast_name_to_id, dialogue_budget, get_scene, private_knowledge_for, sheet_state
+from scene import (
+    NON_AWAKE_GATED,
+    all_cast_name_to_id,
+    awareness_of,
+    dialogue_budget,
+    get_scene,
+    private_knowledge_for,
+    sheet_state,
+)
 from schemas import validate_llm_output
 from spatial import room_of, spatial_digest
 from theory_of_mind import mind_models_for_payload
@@ -87,6 +95,16 @@ def character_step(ctx, cid, nonce):
     row = next(c for c in ctx.cast if c["id"] == cid)
     sh, active, stance = sheet_state(row)
     sc = get_scene(chat["id"], chat)
+
+    # Consciousness gate (choke point): an unconscious/asleep/sedated mind does
+    # not deliberate or act. The planner and both loops already drop non-awake
+    # reactors; this guard protects rerun/resume paths that hydrate a stale plan
+    # and makes the invariant hold no matter who calls character_step. No LLM
+    # call, no manifest (which perception would otherwise deliver as tells).
+    if awareness_of(chat["id"], character_name(sh)) in NON_AWAKE_GATED:
+        return {"sequence": [], "speech": None, "action": None, "actions": [],
+                "manifest": {}, "mind_model_updates": [],
+                "_awareness_gated": True}
 
     interaction_views = ctx.get("interaction_views", {}) or {}
     reaction_views = ctx.get("reaction_views", {}) or {}
@@ -220,6 +238,16 @@ def character_step(ctx, cid, nonce):
         },
         "variant_seed": nonce,
     }
+
+    # Authorial offers (P3): propositions the PLAYER authored about THIS
+    # character's interior/behavior, rerouted here instead of being enacted as
+    # truth (see director._route_authorial_npc_cognition). The character decides
+    # in-character how (or whether) each lands -- its agency is preserved.
+    _offers = [o.get("proposition") for o in
+               ((ctx.get("director_interpret") or {}).get("authorial_offers") or [])
+               if o.get("subject_id") == cid and o.get("proposition")]
+    if _offers:
+        payload["decision"]["authorial_offers"] = _offers
 
     role = {"bg": "character_bg", "mid": "character_mid",
             "major": "character_major"}.get(character_tier(sh), "character_mid")

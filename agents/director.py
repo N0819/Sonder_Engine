@@ -50,6 +50,7 @@ from .common import (
     _dict,
     _dict_list,
     _extract_authority_claims,
+    _is_mental_action,
     _list,
     _normalize_scene_patch,
     _quote_body,
@@ -65,6 +66,68 @@ from .common import (
     normalize_character_refs,
     player_speech_lines,
 )
+
+def _route_authorial_npc_cognition(ctx, out):
+    """Authorial-channel floor (P3): when the PLAYER authors another character's
+    INTERIOR cognition -- a mental-verb beat whose grammatical SUBJECT is a
+    sheeted cast member ('Dr. Moon remembers she has her smartphone') -- that is
+    the player puppeting a mind the character alone owns. Reroute it from a
+    fait-accompli pc_action into an OFFER handed to that character's own agent
+    (out['authorial_offers'], surfaced in character_step), and drop it from the
+    resolved sequence so the Director never enacts the cognition as objective
+    truth. Any OBJECT the same input introduces (the phone exists) still rides
+    the normal world/generation path -- only the interior state is rerouted.
+
+    High precision: requires the cast name to be the LEADING subject AND the act
+    to be mental, so 'I remember Dr. Moon's face' (player's own recall about an
+    NPC) is untouched -- its subject is the player, not the NPC."""
+    cast = ctx.cast or []
+    if not cast:
+        return
+    name_to_id = {}
+    for c in cast:
+        try:
+            nm = character_name(json.loads(c["sheet"]))
+        except Exception:
+            continue
+        if nm:
+            name_to_id[nm.casefold()] = c["id"]
+    if not name_to_id:
+        return
+    offers = out.setdefault("authorial_offers", [])
+    kept = []
+    changed = False
+    for e in (out.get("sequence") or []):
+        if e.get("type") != "action":
+            kept.append(e)
+            continue
+        att = str(e.get("attempt") or "")
+        low = att.casefold()
+        subject_cid = None
+        for nm_cf, cid in name_to_id.items():
+            if low.startswith(nm_cf + " ") or low.startswith(nm_cf + "'"):
+                remainder = att[len(nm_cf):].strip(" '’")
+                if _is_mental_action(e.get("verb"), remainder):
+                    subject_cid = cid
+                break
+        if subject_cid is not None:
+            offers.append({
+                "subject_id": subject_cid,
+                "proposition": att,
+                "source": "player",
+            })
+            ctx.add_warning(
+                "director_interpret: player-authored NPC cognition rerouted to "
+                f"an offer for cast {subject_cid} ({att!r})")
+            changed = True
+            continue  # drop the puppeted cognition from the resolved sequence
+        kept.append(e)
+    if changed:
+        out["sequence"] = kept
+        # Re-derive the scalar mirrors (action/actions/speech) after dropping an
+        # element. Runs on the already-normalized sequence (norm_sequence first).
+        _sync_sequence_mirrors(out)
+
 
 def director_establish(ctx, nonce):
     chat = ctx.chat
@@ -224,6 +287,7 @@ def director_interpret(ctx, nonce):
     ctx.warnings.extend(warnings)
 
     norm_sequence(out)
+    _route_authorial_npc_cognition(ctx, out)
     out["sequence"] = assign_event_ids(
         out.get("sequence"), f"turn:{ctx.turn.id}:player")
 
@@ -780,6 +844,51 @@ def _untracked_restraint_subjects(resolved_event, dialogue_log, conditions,
 
     return [name for name in sorted(flagged_names)
             if name.casefold() not in tracked_condition_subjects]
+
+# Consciousness floor (awareness Phase 1). Observed live: an elevator crash
+# resolved with the prose narrating the player "unconscious" and "knocked out"
+# while state_diff.conditions was null -- so no `awareness` condition was born
+# and perception kept handing the unconscious mind a full sighted view for
+# turns. High-precision loss-of-consciousness cues, keyed on tracked names, and
+# -- unlike the destruction tripwire -- this DOES feed the Tier-2 self-repair:
+# an awareness condition is reversible and non-cascading, so a false positive
+# costs one degraded beat while a miss is a multi-turn perception-barrier
+# breach. The keyword scan is only the deterministic floor UNDER the broad
+# semantic omission auditor (resolve_reconcile), never the mechanism.
+_UNCONSCIOUSNESS_KEYWORDS = (
+    "unconscious", "knocked out", "knocked unconscious", "out cold",
+    "blacks out", "blacked out", "passes out", "passed out", "faints",
+    "fainted", "loses consciousness", "lost consciousness", "goes limp",
+    "slumps unconscious", "sedated", "put under", "knocked senseless",
+)
+
+def _untracked_unconsciousness_subjects(resolved_event, dialogue_log, conditions,
+                                        tracked_names):
+    """Named, tracked characters narrated as losing consciousness with no
+    matching `awareness` condition in the diff. Mirrors
+    _untracked_restraint_subjects, but the presence check is specific to
+    kind:'awareness' -- an unrelated wound/restraint condition on the same
+    subject must not suppress the awareness flag."""
+    text_units = [str(resolved_event or "")]
+    for entry in (dialogue_log or []):
+        if isinstance(entry, dict) and entry.get("exact_quote"):
+            text_units.append(str(entry["exact_quote"]))
+
+    aware_subjects = set()
+    for cond_value in (conditions or {}).values():
+        for c in (cond_value if isinstance(cond_value, list) else [cond_value]):
+            if isinstance(c, dict) and c.get("kind") == "awareness":
+                aware_subjects.add(str(c.get("subject_id") or "").casefold())
+
+    flagged = set()
+    for text in text_units:
+        lower = text.casefold()
+        if not any(k in lower for k in _UNCONSCIOUSNESS_KEYWORDS):
+            continue
+        for name in tracked_names:
+            if name and name.casefold() in lower:
+                flagged.add(name)
+    return [n for n in sorted(flagged) if n.casefold() not in aware_subjects]
 
 # Destruction tripwire (movement/space Phase 3b follow-up). Observed live:
 # the resolved_event narrated a whole-town firestorm consuming a named
@@ -1460,6 +1569,18 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
             "change": (f"{name} is under physical restraint/duress in the "
                        "prose but has no state_diff.conditions entry"),
             "evidence": "", "source": "restraint_scan",
+        })
+    for name in _untracked_unconsciousness_subjects(
+            resolved_event, dialogue_log, sd.get("conditions") or {},
+            tracked_names):
+        signals.append({
+            "category": "conditions", "subject": name,
+            "change": (f"{name} is narrated as losing consciousness (knocked "
+                       "out / unconscious / faints) but has no awareness "
+                       "condition -- add a state_diff.conditions entry of "
+                       "kind:'awareness' with state.level (unconscious|asleep|"
+                       "sedated|dazed) for them"),
+            "evidence": "", "source": "unconsciousness_scan",
         })
 
     claim_omissions, claim_notes, contract_warnings = _player_claim_findings(

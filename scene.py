@@ -268,6 +268,98 @@ def disguise_known_to(disguise, subject_name, known_map):
                 who.add(str(observer).casefold())
     return who
 
+# --- Consciousness / awareness (world_conditions kind 'awareness') ----------
+# A director-authored condition, read at perception and planning time exactly
+# like physical_disguise above. It gates the RECEIVER (an unconscious mind
+# integrates no channel into scene/identity/words), where disguise/senses gate
+# CHANNELS. Absent condition => awake (fail-open): the vast majority of turns
+# carry no awareness condition, so their behavior is byte-identical to before.
+
+# Ordered fully-present -> absent. "awake" is the implicit default.
+AWARENESS_LEVELS = ("awake", "dazed", "asleep", "sedated", "unconscious")
+# Levels at which a mind no longer integrates sensory input and takes no
+# in-character action -- perception delivers only a content-free residue and
+# the planner runs no character step. "dazed" is NOT gated: a dazed mind is
+# present but degraded (rendered via the existing periphery rules).
+NON_AWAKE_GATED = frozenset({"asleep", "sedated", "unconscious"})
+
+
+def _normalize_awareness_level(raw):
+    """Casefold a level string to the enum. Unknown/garbage degrades to the
+    MILDEST gate ('dazed') rather than vanishing; empty/awake -> 'awake'."""
+    level = str(raw or "").strip().casefold()
+    if level == "" or level == "awake":
+        return "awake"
+    if level not in AWARENESS_LEVELS:
+        return "dazed"
+    return level
+
+
+def awareness_map(chat_id):
+    """Active `awareness` conditions for chat_id, keyed by casefolded subject
+    name -> {subject, level, cause, rousable_by}. Mirrors active_disguises.
+    Only non-awake subjects appear; everyone else is awake by absence."""
+    out = {}
+    for row in q(
+        "SELECT subject_id, payload FROM world_conditions WHERE chat_id=? "
+        "AND kind='awareness' AND active=1", (chat_id,),
+    ):
+        try:
+            payload = json.loads(row["payload"])
+        except (TypeError, ValueError):
+            payload = {}
+        subject = str(payload.get("subject_id") or row["subject_id"] or "").strip()
+        if not subject:
+            continue
+        state = payload.get("state") or {}
+        level = _normalize_awareness_level(state.get("level") or payload.get("level"))
+        if level == "awake":
+            continue
+        out[subject.casefold()] = {
+            "subject": subject,
+            "level": level,
+            "cause": str(state.get("cause") or payload.get("cause") or "").strip(),
+            "rousable_by": str(state.get("rousable_by") or "").strip(),
+        }
+    return out
+
+
+def apply_awareness_diff(amap, diff):
+    """Overlay a not-yet-committed state_diff's awareness conditions onto a
+    committed awareness_map, so a knockout resolved THIS beat gates the outcome
+    view of the same beat (perception_outcome runs pre-commit). Returns a copy;
+    deactivation / waking this beat removes the subject."""
+    out = dict(amap or {})
+    for _cid, cond_list in ((diff or {}).get("conditions") or {}).items():
+        if not isinstance(cond_list, list):
+            cond_list = [cond_list]
+        for cond in cond_list:
+            if not isinstance(cond, dict) or cond.get("kind") != "awareness":
+                continue
+            subj = str(cond.get("subject_id") or "").strip()
+            if not subj:
+                continue
+            key = subj.casefold()
+            state = cond.get("state") or {}
+            level = _normalize_awareness_level(state.get("level"))
+            if not int(cond.get("active", 1)) or level == "awake":
+                out.pop(key, None)  # woke / condition ended this beat
+                continue
+            out[key] = {"subject": subj, "level": level,
+                        "cause": str(state.get("cause") or "").strip(),
+                        "rousable_by": str(state.get("rousable_by") or "").strip()}
+    return out
+
+
+def awareness_of(chat_id_or_map, name):
+    """Awareness level of `name` -- 'awake' when no active gating condition
+    exists (fail-open). Accepts a chat_id (queries) or a prebuilt awareness_map
+    (avoids re-querying per perceiver)."""
+    amap = chat_id_or_map if isinstance(chat_id_or_map, dict) else awareness_map(chat_id_or_map)
+    entry = amap.get(str(name or "").casefold())
+    return entry["level"] if entry else "awake"
+
+
 def senses_of(sheet):
     if "psychology" in sheet or "core" in sheet:
         return senses_as_text(character_senses(sheet))

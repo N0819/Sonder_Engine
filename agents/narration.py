@@ -8,7 +8,14 @@ from concurrent.futures import ThreadPoolExecutor
 
 from db import get_setting, q, wget, wset
 from prompts import get_prompt
-from scene import persona_of, get_scene
+from scene import (
+    NON_AWAKE_GATED,
+    apply_awareness_diff,
+    awareness_map,
+    awareness_of,
+    persona_of,
+    get_scene,
+)
 import os
 import re
 
@@ -230,12 +237,28 @@ def narrator(ctx, nonce):
         if _nm and _clean:
             cast_pronouns[_nm] = _clean
 
+    # Consciousness gate: when the player is non-awake, their `player_view` is
+    # already the deterministic residue (perception_outcome). Do NOT also hand
+    # the narrator the room's spatial frame/facts -- passing scene layout with
+    # an instruction to render only a residue is exactly the "objective state +
+    # instruction to ignore it" pattern the engine forbids. Gate the payload,
+    # not the prose: the narrator renders an honest fade-out from the residue.
+    _res_diff = (ctx.get("director_resolve") or {}).get("state_diff") or {}
+    player_awareness = awareness_of(
+        apply_awareness_diff(awareness_map(chat["id"]), _res_diff), player_name)
+    _scene_for_frame = ctx.get("outcome_scene") or get_scene(chat["id"], chat)
+    _spatial_fields = ({} if player_awareness in NON_AWAKE_GATED else {
+        "spatial_frame": spatial_digest(_scene_for_frame, player_name),
+        **_spatial_facts_field(_scene_for_frame, player_name),
+    })
+
     payload = {
         "player_view": view,
         "player_declared": player_declared,
         "cast_pronouns": cast_pronouns,
         "do_not_quote_verbatim": p_lines,
         "scene_opening": bool(est),
+        "player_awareness": player_awareness,
         "private_voice_setting": (
             (pers.get("narration") or {}).get("voice_setting", "")
             if isinstance(pers, dict) else ""
@@ -248,11 +271,8 @@ def narrator(ctx, nonce):
         # where no movement has happened and orientation is fresh anyway. Using
         # the committed scene here would describe the space with LAST beat's
         # facing on movement beats (commit runs after this stage).
-        "spatial_frame": spatial_digest(
-            ctx.get("outcome_scene") or get_scene(chat["id"], chat), player_name),
+        **_spatial_fields,
         "recent_prose_for_rhythm": prev,
-        **_spatial_facts_field(
-            ctx.get("outcome_scene") or get_scene(chat["id"], chat), player_name),
         "already_established_phrases": _already_established_phrases(view, prev),
         "exemplars": json.loads(get_setting("exemplars") or "[]"),
         "variant_seed": nonce,

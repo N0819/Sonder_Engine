@@ -15,8 +15,12 @@ from character_schema import (
 from db import wget
 from prompts import get_prompt
 from scene import (
+    NON_AWAKE_GATED,
     active_disguises,
     appearance_of,
+    apply_awareness_diff,
+    awareness_map,
+    awareness_of,
     disguise_known_to,
     disguised_visible_appearance,
     get_scene,
@@ -71,6 +75,7 @@ from .common import (
     _resolve_player_room,
     _room_notes_from_lore,
     _scrub_unknown_identities,
+    _compose_residue_view,
     observable_action_text,
     _strip_identity_tokens,
     _unknown_actor_label,
@@ -428,11 +433,19 @@ def perception_establish(ctx, nonce):
         "conceal_from": [], "targets": [],
     }
 
+    # Consciousness gate (rare at opening, but a scenario may start someone
+    # unconscious/asleep): overlay the establish diff onto committed conditions.
+    amap = apply_awareness_diff(awareness_map(chat["id"]), diff)
+    for p in perceivers:
+        p["awareness"] = awareness_of(amap, p["name"])
+    awake_perceivers = [p for p in perceivers
+                        if p.get("awareness") not in NON_AWAKE_GATED]
+
     payload = {
         "scene": {"location": sc.get("location"), "time": sc.get("time"),
                   "rooms": sc.get("rooms"), "entities": sc.get("entities")},
         "declared_act": declared,
-        "perceivers": perceivers,
+        "perceivers": awake_perceivers,
         "scene_opening": True,
         "note": "This is a scene opening. Each perceiver perceives their surroundings "
                 "and their own initial state. The player's entity_state contains their "
@@ -451,12 +464,15 @@ def perception_establish(ctx, nonce):
     )
     raw_views = out.get("views") if isinstance(out, dict) else {}
     if not raw_views:
-        raw_views = _fallback_perception_views(perceivers, [], known=known)
-    clean_views = _normalise_views(raw_views, perceivers)
+        raw_views = _fallback_perception_views(awake_perceivers, [], known=known)
+    clean_views = _normalise_views(raw_views, awake_perceivers)
 
     roster = _identity_roster(p_name, p_appearance, ctx.cast)
     for p in perceivers:
         pid = str(p["id"])
+        if p.get("awareness") in NON_AWAKE_GATED:
+            clean_views[pid] = _compose_residue_view(p["awareness"])
+            continue
         view = clean_views.get(pid)
         if not view:
             parts = [f"You are in {p.get('room_name')}."]
@@ -600,8 +616,18 @@ def perception_act(ctx, nonce):
     # Strip identity from the VISIBLE (disguise-adjusted) appearance, never the
     # true one -- otherwise a disguised subject's concealed features leak into
     # the stranger-facing safe form.
+    # Consciousness gate: a non-awake reactor is excluded from the LLM call and
+    # gets a deterministic residue below (P3 also drops them from flow.reactors
+    # upstream; this is defense-in-depth). Onset conditions read the committed
+    # map -- a knockout THIS beat resolves later, so the reactor is awake now.
+    amap = awareness_map(chat["id"])
+    for p in perceivers:
+        p["awareness"] = awareness_of(amap, p["name"])
+    awake_perceivers = [p for p in perceivers
+                        if p.get("awareness") not in NON_AWAKE_GATED]
+
     p_appearance_safe = _strip_identity_tokens(p_visible, [p_name])
-    if perceivers and not any(p.get("knows_identity") for p in perceivers):
+    if awake_perceivers and not any(p.get("knows_identity") for p in awake_perceivers):
         neutral = _unknown_actor_label(p_name, p_visible)
         action_onset = {**action_onset, "actor": neutral,
                         "actor_name": neutral,
@@ -612,7 +638,7 @@ def perception_act(ctx, nonce):
                   "rooms": _contextual_rooms(sc, ctx.cast, p_room),
                   "entities": sc.get("entities")},
         "declared_act": action_onset,
-        "perceivers": perceivers,
+        "perceivers": awake_perceivers,
         "note": (
             "a private thought exists but its contents are withheld"
             if interp.get("private_thought") else "no private thought"
@@ -630,7 +656,7 @@ def perception_act(ctx, nonce):
     )
 
     clean_views = _normalise_views(
-        out.get("views") if isinstance(out, dict) else {}, perceivers)
+        out.get("views") if isinstance(out, dict) else {}, awake_perceivers)
 
     # Deterministic action delivery uses the intent-free `observable` surface,
     # NOT the raw attempt. Each element is tagged with its surface here; a
@@ -653,8 +679,20 @@ def perception_act(ctx, nonce):
         e for e in speech_elems if e.get("visibility") != "concealed"
     ]
 
+    onset_targets = {str(t).casefold() for t in (action.get("targets") or [])}
+    onset_loud = any(str(e.get("volume", "")).lower() in ("loud", "shout")
+                     for e in audible_speech_elems)
     for p in perceivers:
         pid = str(p["id"])
+        if p.get("awareness") in NON_AWAKE_GATED:
+            p_name_cf = p["name"].casefold()
+            cause = (amap.get(p_name_cf) or {}).get("cause", "").lower()
+            pain = any(w in cause for w in
+                       ("injur", "wound", "blood", "hurt", "struck", "broke", "burn"))
+            clean_views[pid] = _compose_residue_view(
+                p["awareness"], targeted=(p_name_cf in onset_targets),
+                loud_event=onset_loud, pain=pain)
+            continue
         rel = p.get("spatial_to_actor") or {}
         vis = p.get("visual_channel_to_actor", False)
         knows_identity = bool(p.get("knows_identity"))
@@ -960,6 +998,18 @@ def perception_outcome(ctx, nonce):
                 ctx, sc, character_name(sh), sources, known, cast_by_name),
         })
 
+    # Consciousness gate: overlay THIS beat's just-resolved awareness
+    # conditions (a knockout resolves before perception_outcome commits) onto
+    # the committed map, then tag every perceiver. A non-awake mind (asleep/
+    # sedated/unconscious) is EXCLUDED from the LLM call entirely -- it cannot
+    # leak a view it was never asked to write -- and receives a deterministic
+    # residue below instead. 'dazed' stays in the call (present but degraded).
+    amap = apply_awareness_diff(awareness_map(chat["id"]), diff)
+    for p in perceivers:
+        p["awareness"] = awareness_of(amap, p["name"])
+    awake_perceivers = [p for p in perceivers
+                        if p.get("awareness") not in NON_AWAKE_GATED]
+
     resolved_event_text = res.get("resolved_event", "")
     _br_actions = [f"{r.get('name')}: {r['action']}" for r in _fired if r.get("action")]
     if _br_actions:
@@ -976,7 +1026,7 @@ def perception_outcome(ctx, nonce):
         "scene": {"location": sc.get("location"), "time": sc.get("time"),
                   "rooms": _contextual_rooms(sc, ctx.cast, p_room),
                   "entities": sc.get("entities")},
-        "perceivers": perceivers,
+        "perceivers": awake_perceivers,
         "output_reminder": (
             "You MUST return a view for EVERY perceiver in the perceivers list, "
             "keyed by their 'id' field exactly as given."
@@ -993,8 +1043,8 @@ def perception_outcome(ctx, nonce):
     )
     raw_views = out.get("views") if isinstance(out, dict) else {}
     if not raw_views:
-        raw_views = _fallback_perception_views(perceivers, npc_dlog, known=known)
-    clean_views = _normalise_views(raw_views, perceivers)
+        raw_views = _fallback_perception_views(awake_perceivers, npc_dlog, known=known)
+    clean_views = _normalise_views(raw_views, awake_perceivers)
 
     # Identity roster for the deterministic scrub below: every named
     # source/appearance in play this beat, with the uid/alias forms a
@@ -1042,6 +1092,26 @@ def perception_outcome(ctx, nonce):
 
     for p in perceivers:
         pid = str(p["id"])
+        # Consciousness gate: a non-awake mind gets ONLY the deterministic
+        # residue -- no LLM view (it was excluded from the call), no injection
+        # backstops (they would re-create the leak at zero temperature). The
+        # residue becomes its fragmentary memory of the beat (commit mints
+        # memory from the view), which is the right recovered impression.
+        if p.get("awareness") in NON_AWAKE_GATED:
+            p_name_cf = p["name"].casefold()
+            loud_event = any(
+                str(d.get("volume", "")).lower() in ("loud", "shout")
+                for d in npc_dlog)
+            targeted = any(
+                str(d.get("intended_target") or "").casefold() == p_name_cf
+                for d in enriched_dlog)
+            cause = (amap.get(p_name_cf) or {}).get("cause", "").lower()
+            pain = any(w in cause for w in
+                       ("injur", "wound", "blood", "hurt", "struck", "broke", "burn"))
+            clean_views[pid] = _compose_residue_view(
+                p["awareness"], targeted=targeted,
+                loud_event=loud_event, pain=pain)
+            continue
         spatial = p.get("spatial_to_sources") or {}
         visual = p.get("visual_channel_to_sources") or {}
         # Per-source recognition: whether THIS perceiver (player or NPC)

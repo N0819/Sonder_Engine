@@ -256,6 +256,13 @@ class ActionElement(BaseModel):
     # purely mental beat) and must not be surfaced to observers at all. See
     # agents/common.observable_action_text and norm_sequence.
     observable: str = ""
+    # Authorship mode of a player-authored element. 'pc_action' (default) is
+    # the player's character acting. 'npc_offer' is the player authoring another
+    # character's interior/behavior -- rerouted to that character's own agent as
+    # an offer rather than enacted as truth (the character owns its psychology).
+    # 'world_assertion'/'ooc_directive' name the authorial and out-of-character
+    # channels. Legacy payloads with no mode default to pc_action.
+    mode: str = "pc_action"
     verb: str = ""
     commitment: ActionCommitment = ActionCommitment.contestable
     stage: ActionStage = ActionStage.immediate
