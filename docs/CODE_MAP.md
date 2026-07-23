@@ -11,7 +11,7 @@
 | `agents/background.py` | 250 |  | `agents.common`, `commit`, `db`, `prompts`, `schemas`, `spatial` |
 | `agents/character.py` | 359 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/common.py` | 1841 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/director.py` | 2369 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
+| `agents/director.py` | 2427 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 472 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 190 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 466 | Player-facing narration agent. | `agents.common`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
@@ -95,12 +95,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 1861 | 509 lines |
+| `director_resolve()` | 1919 | 509 lines |
 | `director_interpret()` | 200 | 301 lines |
-| `_reconcile_resolution()` | 1566 | 224 lines |
+| `_reconcile_resolution()` | 1624 | 224 lines |
 | `_reconcile_interpretation()` | 649 | 119 lines |
-| `_evidence_present()` | 1338 | 89 lines |
-| `_narrated_destruction_subjects()` | 964 | 79 lines |
+| `_evidence_present()` | 1396 | 89 lines |
+| `_narrated_destruction_subjects()` | 1022 | 79 lines |
 | `director_establish()` | 132 | 67 lines |
 | `_route_authorial_npc_cognition()` | 70 | 60 lines |
 

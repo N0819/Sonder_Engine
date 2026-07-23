@@ -241,3 +241,40 @@ def test_director_floor_flags_untracked_knockout():
     wound = {"c": [{"subject_id": "Hinami", "kind": "wound"}]}
     assert _untracked_unconsciousness_subjects(
         "Hinami is knocked out cold.", [], wound, ["Hinami"]) == ["Hinami"]
+
+
+def test_director_floor_does_not_flag_conscious_bystander():
+    """The precision fix (Elevator Adventure, chat 23 latest turn): the
+    resolved_event narrates the PLAYER unconscious while a fully-conscious
+    Dr. Moon tends her in the same passage. The floor must flag ONLY the
+    fallen subject, never the bystander whose name co-occurs with the cue.
+    """
+    from agents.director import _untracked_unconsciousness_subjects
+    names = ["Hinami", "Dr. Moon"]
+
+    # The exact live text that mislabeled Dr. Moon: the cue "unconscious"
+    # attaches to "anomaly" (Hinami), and "Dr. Moon" sits across a real
+    # sentence break -> neither is Dr. Moon's, and Hinami is already tracked.
+    live = ("Freeing both hands, she kneels directly into the plaster dust "
+            "beside the unconscious anomaly. Dr. Moon presses both palms "
+            "firmly over the heaviest bloodstain on Hinami's side.")
+    tracked = {"c": [{"subject_id": "Hinami", "kind": "awareness",
+                      "state": {"level": "unconscious"}}]}
+    assert _untracked_unconsciousness_subjects(live, [], tracked, names) == []
+
+    # Same sentence, bystander named alongside the fallen one: flag Hinami only.
+    assert _untracked_unconsciousness_subjects(
+        "Dr. Moon kneels beside Hinami, who lies unconscious.",
+        [], {}, names) == ["Hinami"]
+
+    # Bystander is closer in raw distance but not the grammatical subject:
+    # "Dr. Moon watches as Hinami slumps unconscious" -> closest subject wins.
+    assert _untracked_unconsciousness_subjects(
+        "Dr. Moon watches helplessly as Hinami slumps unconscious.",
+        [], {}, names) == ["Hinami"]
+
+    # A transitive knockout of the bystander IS still caught (name adjacent
+    # to the cue) -- precision, not blanket suppression of Dr. Moon.
+    assert _untracked_unconsciousness_subjects(
+        "The falling beam knocks Dr. Moon out cold.",
+        [], {}, names) == ["Dr. Moon"]
