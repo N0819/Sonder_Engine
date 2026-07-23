@@ -3,7 +3,7 @@ function defaultCharacterSheet() {
     identity: { name: "New Character", aliases: [], pronouns: { subject: "they", object: "them", possessive: "their" } },
     simulation: { tier: "mid", temperature: 0.8, sampler: {} },
     embodiment: { senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", notes: "ordinary human senses" }], visible: { summary: "A person of unremarkable appearance.", build: "", face: "", hair: "", eyes: "", distinctive_features: [] }, latent: [] },
-    psychology: { traits: [], values: [], self_model: { summary: "", protected_beliefs: [], pride_triggers: [], shame_triggers: [] }, coping: { under_stress: [], default_conflict_style: "" } },
+    psychology: { drive: { essence: "", expression: "", taboo: "" }, traits: [], values: [], self_model: { summary: "", protected_beliefs: [], pride_triggers: [], shame_triggers: [] }, coping: { under_stress: [], default_conflict_style: "" } },
     social: { voice: { register: "", cadence: "", verbosity: "natural", markers: [], notes: "" }, baseline_stances: { unknown_person: { trust: 0, warmth: 0, threat_sensitivity: 0 } } },
     competence: { abilities: [] },
     knowledge: { access_tags: ["common"], excluded_titles: [], public_history: "", private_history: [] },
@@ -178,6 +178,9 @@ function charEditor(c) {
   f.distinctive = fStrList("Distinctive features", sheet.embodiment?.visible?.distinctive_features);
   f.latent = fLatent("Latent/hidden capabilities (powers, secret identities, equipment functions)", sheet.embodiment?.latent);
 
+  f.drive_essence = fText("Drive — essence (the deepest thing they pursue/protect)", sheet.psychology?.drive?.essence);
+  f.drive_expression = fText("Drive — expression (how it shows in ACTION, incl. their initiative)", sheet.psychology?.drive?.expression);
+  f.drive_taboo = fText("Drive — taboo (the line they will not cross)", sheet.psychology?.drive?.taboo);
   f.traits = fTraits("Core traits", sheet.psychology?.traits);
   f.values = fValues("Core values", sheet.psychology?.values);
   f.self_summary = fArea("Self-model summary", sheet.psychology?.self_model?.summary, 3);
@@ -208,7 +211,7 @@ function charEditor(c) {
   f.mood = fText("Current mood label", sheet.initial_state?.mood?.label);
   f.valence = fNum("Mood valence (-1..1)", sheet.initial_state?.mood?.valence, "0.1");
   f.arousal = fNum("Mood arousal (0..1)", sheet.initial_state?.mood?.arousal, "0.1");
-  f.goals = fGoals("Current goals", sheet.initial_state?.goals);
+  f.goals = fGoals("Standing goals (durable objectives the character actively pursues)", sheet.initial_state?.goals);
   f.active_concerns = fStrList("Active concerns", sheet.initial_state?.active_concerns);
 
   f.first_message = fArea("First message (optional, for scene open)", sheet.opening?.first_message, 3);
@@ -229,6 +232,10 @@ function charEditor(c) {
       el("details", { open: "" }, el("summary", {}, "Embodiment (Visible & Senses)"),
         f.summary.node, f.senses.node, f.build.node, f.face.node, f.hair.node, f.eyes.node, f.distinctive.node, f.latent.node),
       el("details", { open: "" }, el("summary", {}, "Psychology & Coping"),
+        el("div", { class: "small dim", style: "margin-bottom:6px" },
+          "Drive is the character's core motivation — the engine derives their proactive "
+          + "wants from it every beat. A blank drive makes the character passive."),
+        f.drive_essence.node, f.drive_expression.node, f.drive_taboo.node,
         f.traits.node, f.values.node, f.self_summary.node, f.protected.node, f.pride.node, f.shame.node, f.coping.node, f.conflict.node),
       el("details", { open: "" }, el("summary", {}, "Social & Voice"),
         f.voice_register.node, f.voice_cadence.node, f.voice_verbosity.node, f.voice_markers.node, f.voice_notes.node,
@@ -261,6 +268,7 @@ function charEditor(c) {
               latent: f.latent.read()
             },
             psychology: {
+              drive: { essence: f.drive_essence.read(), expression: f.drive_expression.read(), taboo: f.drive_taboo.read() },
               traits: f.traits.read(),
               values: f.values.read(),
               self_model: { summary: f.self_summary.read(), protected_beliefs: f.protected.read(), pride_triggers: f.pride.read(), shame_triggers: f.shame.read() },
