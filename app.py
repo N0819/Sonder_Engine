@@ -483,15 +483,53 @@ def _remap_scheduled_event_frames(rows, frame_idmap):
             payload["frame_id"] = frame_idmap.get(payload.get("frame_id"))
             row["payload"] = json.dumps(payload, ensure_ascii=False)
 
-def _build_world_id_remap(blob):
+def _branch_protected_identity_ids(chat_id, persona_id):
+    """Identity strings that a branch's world-id remap must leave untouched: the
+    cast characters' names + uids, and the player persona's name. These are the
+    stable keys scene.positions uses for people (character_scene_keys /
+    persona_name); a character is also projected into world_entities under its
+    name, so without this protection the remap clobbers its position key."""
+    protected = set()
+    try:
+        prow = q("SELECT sheet FROM personas WHERE id=?", (persona_id,), one=True) \
+            if persona_id is not None else None
+        if prow:
+            ps = json.loads(prow["sheet"])
+            protected.add((ps.get("identity") or {}).get("name") or persona_name(ps))
+    except Exception:
+        pass
+    for c in q("SELECT ch.sheet AS sheet FROM chat_chars cc "
+               "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?", (chat_id,)):
+        try:
+            sh = json.loads(c["sheet"])
+        except (TypeError, ValueError):
+            continue
+        ident = sh.get("identity") or {}
+        for key in (ident.get("name"), ident.get("uid"), character_name(sh)):
+            if key:
+                protected.add(str(key))
+    return protected
+
+
+def _build_world_id_remap(blob, protected_ids=None):
     """Generate fresh IDs for all world entities/conditions/events/worlds/locations
-    in a checkpoint blob. Returns a mapping of old_id -> new_id."""
+    in a checkpoint blob. Returns a mapping of old_id -> new_id.
+
+    `protected_ids` are identity strings that must NOT be remapped -- chiefly
+    CHARACTER and player-persona identities (names/uids). A character positioned
+    in the scene is looked up by its stable name/uid (character_scene_keys), but
+    is ALSO projected into world_entities keyed by that same name; without this
+    guard, remapping that world_entities row's id rewrote the scene.positions
+    key from "Dr. Moon" to a fresh opaque uid, so the character no longer
+    resolved to any room after a branch ("unspecified location" on the next
+    turn). Object/entity ids remap freely; identity keys stay put."""
     import uuid
 
+    protected = {str(p) for p in (protected_ids or set()) if p}
     remap = {}
 
     def reg(old_id):
-        if old_id and old_id not in remap:
+        if old_id and old_id not in protected and old_id not in remap:
             remap[old_id] = uuid.uuid4().hex[:16]
         return remap.get(old_id) if old_id else old_id
 
@@ -3070,7 +3108,13 @@ def turn_branch(tid: int):
         # the lorebook clone below needs it to remap vehicle-book
         # anchor_entity_id, and every checkpoint for the branched chat must
         # reuse the same new ids.
-        world_id_remap = _build_world_id_remap(blob)
+        #
+        # Protect character / player-persona identities from remapping: they
+        # appear in world_entities keyed by name but are looked up by that
+        # stable name/uid, so remapping their id orphans the scene position (the
+        # "unspecified location" branch bug). Object entity ids remap freely.
+        _protected_ids = _branch_protected_identity_ids(cid, src.get("persona_id"))
+        world_id_remap = _build_world_id_remap(blob, _protected_ids)
 
         # --- Lorebook Tree Cloning ---
         bookmap = {}
