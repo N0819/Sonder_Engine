@@ -53,3 +53,32 @@ def test_a_colon_with_content_after_it_is_left_alone():
 def test_noop_when_nothing_is_stripped():
     prose = "The bridge hums. Vorne watches the Array."
     assert _strip_player_echo(prose, []) == prose
+
+
+# ---- V4: the dangling-verb heal must not corrupt a surviving NPC attribution ----
+#
+# Live, Doctor Who run t7: a beat that stripped a player echo ALSO ran the
+# global dangling-speech-verb heal, which fired on the Doctor's own attribution
+# "he says, quiet and gentle, 'Ellie'" -> "he says it., quiet and gentle,". The
+# heal must fire only at a genuine sentence end, not on a comma that continues
+# the attribution around a quote that survived.
+
+def test_surviving_npc_attribution_is_not_healed():
+    prose = ('I say, "Tell me that is good." Then he says, quiet and gentle, '
+             '"Ellie." He steps back.')
+    out = _strip_player_echo(prose, ["Tell me that is good."])
+    assert "says it." not in out
+    assert 'he says, quiet and gentle, "Ellie."' in out
+
+
+def test_a_genuinely_dangling_verb_at_sentence_end_still_heals():
+    assert _strip_player_echo('I only whisper, "no."', ["no."]) == "I only whisper it."
+
+
+def test_unquoted_object_after_a_speech_verb_is_never_eaten():
+    """'he tells Karen the truth' -- 'tells' is followed by a proper-noun
+    object, not a dangling end. Healing on a following capital would destroy it,
+    so the heal is sentence-end only."""
+    prose = 'I say, "Go." He tells Karen the truth. She nods.'
+    out = _strip_player_echo(prose, ["Go."])
+    assert "tells Karen the truth" in out
