@@ -1139,34 +1139,57 @@ def cast_room(sc, name, cast):
             return character_room(sc, sheet)
     return None
 
-def canonicalize_positions(positions, cast):
+def canonicalize_positions(positions, cast, player_name=None):
     """Rewrite any positions key that identifies a registered cast character
-    (matched by identity.uid or display name -- exact or alphanumeric-
-    normalized) to that character's display name, the positions-key convention
-    every reader (perception, commit, spatial) expects. Non-character keys
-    (objects, unregistered entities) are left untouched. Deliberately does NOT
-    match on aliases: a generic alias (e.g. "John Smith") could collide with a
-    genuinely separate entity, and rewriting a write is higher-stakes than a
-    read. This keeps a director that keyed a position by uid from hiding a
-    character from perception."""
-    if not isinstance(positions, dict) or not cast:
-        return positions if isinstance(positions, dict) else {}
+    (or the player) to that person's display name -- the positions-key
+    convention every reader (perception, commit, spatial) expects. Recognized
+    key forms per person: identity.uid, display name (exact or alphanumeric-
+    normalized), AND the director's `character:<id>` scheme (from the cast
+    payload's integer ids). Non-person keys (objects, unregistered background
+    presences) are left untouched. Deliberately does NOT match on aliases.
+
+    Recognizing `character:<id>` and the player is load-bearing: the director
+    model keys the SAME person by different schemes across a turn (Data as
+    `character:29` here, `Lt. Commander Data` there), and without collapsing
+    them to one canonical key the person acquired TWO position entries in
+    conflicting rooms -- observed live, Data was simultaneously on the bridge
+    (`character:29`) and in a corridor (`Lt. Commander Data`), so name-lookup
+    resolved him to the corridor and perception rendered his bridge station as
+    empty. Collapsing to a single key makes a later move update the one entry."""
+    if not isinstance(positions, dict):
+        return {}
+    if not cast and not player_name:
+        return positions
     keymap = {}
-    for row in cast:
+
+    def _register(forms, canon):
+        for key in forms:
+            text = str(key or "").strip()
+            if not text:
+                continue
+            keymap.setdefault(text.lower(), canon)
+            norm = re.sub(r"[^a-z0-9]", "", text.lower())
+            if norm:
+                keymap.setdefault(norm, canon)
+
+    for row in (cast or []):
         try:
             sheet = json.loads(row["sheet"])
         except Exception:
             continue
         ident = normalize_character_data(sheet).get("identity", {})
         name = ident.get("name") or character_name(sheet)
-        for key in (ident.get("uid"), name):
-            text = str(key or "").strip()
-            if not text:
-                continue
-            keymap.setdefault(text.lower(), name)
-            norm = re.sub(r"[^a-z0-9]", "", text.lower())
-            if norm:
-                keymap.setdefault(norm, name)
+        forms = [ident.get("uid"), name]
+        try:
+            rid = row["id"]
+        except Exception:
+            rid = None
+        if rid is not None:
+            forms.append(f"character:{rid}")
+        _register(forms, name)
+    if player_name:
+        _register([player_name, "character:player"], player_name)
+
     result = {}
     for key, room in positions.items():
         text = str(key or "").strip()

@@ -10,8 +10,8 @@
 | `agents/__init__.py` | 83 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 250 |  | `agents.common`, `commit`, `db`, `prompts`, `schemas`, `spatial` |
 | `agents/character.py` | 359 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/common.py` | 2038 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/director.py` | 2446 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
+| `agents/common.py` | 2061 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/director.py` | 2447 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 472 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 190 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 466 | Player-facing narration agent. | `agents.common`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
@@ -83,25 +83,25 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `norm_sequence()` | 679 | 161 lines |
-| `_scrub_invented_dialogue()` | 1628 | 145 lines |
+| `_scrub_invented_dialogue()` | 1651 | 145 lines |
 | `_extract_authority_claims()` | 435 | 90 lines |
-| `_check_narrator_fidelity()` | 1910 | 65 lines |
+| `_check_narrator_fidelity()` | 1933 | 65 lines |
+| `canonicalize_positions()` | 1142 | 58 lines |
 | `_scrub_unknown_identities()` | 1004 | 57 lines |
-| `_strip_player_echo()` | 1505 | 56 lines |
+| `_strip_player_echo()` | 1528 | 56 lines |
 | `_assert_plan_materialized()` | 138 | 55 lines |
-| `_dedupe_view_sentences()` | 1795 | 43 lines |
 
 ### `agents/director.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 1919 | 528 lines |
-| `director_interpret()` | 200 | 301 lines |
-| `_reconcile_resolution()` | 1624 | 224 lines |
-| `_reconcile_interpretation()` | 649 | 119 lines |
-| `_evidence_present()` | 1396 | 89 lines |
-| `_narrated_destruction_subjects()` | 1022 | 79 lines |
-| `director_establish()` | 132 | 67 lines |
+| `director_resolve()` | 1920 | 528 lines |
+| `director_interpret()` | 201 | 301 lines |
+| `_reconcile_resolution()` | 1625 | 224 lines |
+| `_reconcile_interpretation()` | 650 | 119 lines |
+| `_evidence_present()` | 1397 | 89 lines |
+| `_narrated_destruction_subjects()` | 1023 | 79 lines |
+| `director_establish()` | 132 | 68 lines |
 | `_route_authorial_npc_cognition()` | 70 | 60 lines |
 
 ### `agents/loops.py`
