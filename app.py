@@ -13,6 +13,8 @@ from db import _FRAME_KEY_SEP
 from providers import (
     chat_complete, chat_complete_async, token_sink, cancel_event,
     resolve_role, list_models, provider, agent_models,
+    max_output_tokens, _coerce_max_output_tokens,
+    MAX_OUTPUT_TOKENS_DEFAULT, MAX_OUTPUT_TOKENS_MIN, MAX_OUTPUT_TOKENS_MAX,
     DEFAULT_BASES, ROLES, SAMPLER_KEYS, DEFAULT_SAMPLERS, Aborted,
 )
 from pipeline_context import PipelineContext, ChatData, TurnData
@@ -841,6 +843,12 @@ def bootstrap():
         "memory_categories": MEMORY_CATEGORIES,
         "memory_provenance": MEMORY_PROVENANCE,
         "agent_models": json.loads(get_setting("agent_models") or "{}"),
+        "max_output_tokens": max_output_tokens(),
+        "max_output_tokens_bounds": {
+            "default": MAX_OUTPUT_TOKENS_DEFAULT,
+            "min": MAX_OUTPUT_TOKENS_MIN,
+            "max": MAX_OUTPUT_TOKENS_MAX,
+        },
         "characters": [dict(r) for r in q("SELECT id,name,sheet FROM characters")],
         "personas": [dict(r) for r in q("SELECT id,name,sheet FROM personas")],
         "lorebooks": [dict(r) for r in q("SELECT * FROM lorebooks WHERE chat_id IS NULL")],
@@ -857,6 +865,15 @@ def bootstrap():
 def put_agent_models(body: dict = Body(...)):
     set_setting("agent_models", json.dumps(body))
     return {"ok": True}
+
+@app.put("/api/max_output_tokens")
+def put_max_output_tokens(body: dict = Body(...)):
+    """The per-call output-token ceiling every LLM request is clamped to.
+    Coerced into range rather than rejected -- this value gates every call, so
+    a bad one must degrade to a usable number, not break generation."""
+    value = _coerce_max_output_tokens(body.get("value"))
+    set_setting("max_output_tokens", str(value))
+    return {"ok": True, "value": value}
 
 @app.put("/api/prompt_presets")
 def save_preset(body: dict = Body(...)):
