@@ -17,7 +17,7 @@ Read these in order when orienting yourself:
 Python 3.11 or newer is recommended.
 
 ### Windows (Quick Start)
-Double-click `Start Sonder.bat`. This automatically sets up the environment, installs dependencies, and opens the app in your browser.
+Double-click `Start Sonder.bat`. This automatically sets up the environment, installs dependencies and opens the app in your browser.
 
 ### Manual / Mac / Linux
 python -m venv .venv
