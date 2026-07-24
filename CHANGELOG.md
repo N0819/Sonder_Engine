@@ -1,5 +1,75 @@
 # Changelog
 
+## alpha3.2.2 — Say who serves you, and what it costs
+
+Provider-layer fixes from a user issue report, plus the deterministic half of the
+pronoun-consistency work the alpha3.1 audit left open.
+
+### Fixed
+- **Unreachable output budgets locked callers out of models** (`providers.py`,
+  `agents/director.py`, `agents/narration.py`). Four stages -- the three director stages and
+  the narrator -- requested `max_tokens=200000`, a figure no model can produce but which
+  providers still act on: a pay-per-use aggregator reserves credit against the requested
+  maximum, and a model is rejected outright when input + max_tokens exceeds its context
+  window. An unreachable ceiling therefore made models silently unusable and demanded a
+  balance sized to an output that could never happen. Every request is now clamped in
+  `providers.py` at both `chat_complete` entry points, so no single call site can
+  reintroduce it, and a test walks the AST of every module to catch one that tries.
+- **Claude reached through OpenRouter never cached** (`providers.py`). Prompt caching was
+  implemented only on the `kind="anthropic"` branch. The caching is Anthropic's, not the
+  aggregator's -- so Claude routed through OpenRouter took the OpenAI-compatible branch,
+  sent a plain-string system message, set no cache breakpoint, and cached nothing. Since the
+  per-role system prompt is the large byte-stable prefix repeated on every call for that
+  role, this was the single largest cache win available and it was being missed entirely.
+  Anthropic models on a cache-passthrough aggregator now get the cache-marked content-part
+  form; every other provider keeps the plain string it expects.
+- **Caching could not be verified** (`providers.py`, `logging_utils.py`). `_log_usage` read
+  only the OpenAI-compatible dialect, so an Anthropic response's `cache_read_input_tokens` /
+  `cache_creation_input_tokens` always reported zero -- making "caching is broken" and "we
+  never looked" indistinguishable. Of the eight response paths (2 dialects x streaming/not x
+  sync/async), only two logged anything; neither Anthropic path did. All eight now report,
+  both dialects are read, and cache writes are logged separately from reads -- writes with no
+  subsequent reads is the signature of a prefix that isn't stable across calls, which costs
+  more than not caching at all.
+- **Pronouns flipped mid-scene** (`agents/common.py`, `agents/character.py`,
+  `agents/perception.py`, `prompts.py`). The alpha3.1 prompt rule reduced but did not
+  enforce cast-pronoun consistency. A deterministic floor now flags a clause that opens with
+  exactly one known cast name and then uses a pronoun from a different paradigm, and drives
+  the narrator's existing correction-retry. Deliberately narrow -- a false positive costs a
+  full rewrite -- so it stays silent on ambiguous referents, quoted dialogue, plural "they",
+  and neopronoun sets. Character agents now receive the pronouns of people they already
+  know (recognition-gated, so a stranger's are absent), and perception receives them for
+  everyone except a character under an active disguise, whose canonical pronouns are part of
+  the identity the disguise conceals.
+
+### Added
+- **Choose which upstream provider serves an OpenRouter model.** One OpenRouter model id is
+  fronted by several upstreams (Anthropic direct, Amazon Bedrock, Azure, Google Vertex,
+  third-party hosts) whose output quality *and* prompt-retention policy differ -- so this is
+  a privacy control, not only a quality preference. API Connections gains allow-only and
+  blacklist lists, "only providers that don't retain or train on prompts", "never fall back
+  to another upstream" (pinning alone still silently reroutes when the upstream is busy),
+  and a preference sort. Because the slugs are not guessable,
+  `GET /api/openrouter/endpoints` lists the upstreams actually serving a given model with
+  their retention policy shown, and the picker fills the lists from it.
+- **Windows double-click launcher** (`Start Sonder.bat`) — creates a virtual environment and
+  installs dependencies on first run, then just starts the server and opens a browser on
+  later runs. Contributed by **DonBananas** (PR #5), along with README setup instructions.
+- **A configurable response limit.** The output-token ceiling is now a setting
+  (`PUT /api/max_output_tokens`, shown in API Connections) defaulting to **20000** --
+  comfortably above the longest single output the engine produces, a narrator turn. Read per
+  call, so a change applies on the next turn without a restart, and coerced into range
+  rather than rejected: it gates every LLM call, so a bad value must degrade to a usable
+  number instead of breaking generation.
+
+### Notes
+- On Claude Opus, three role prompts (`perception`, `director_interpret`, `character`) sit
+  below Anthropic's 4096-token minimum cacheable prefix and will not cache however correct
+  the breakpoint is. Sonnet-tier minimums are lower and unaffected. Consolidating those
+  prompts is a prompt-architecture decision, not a code fix, and remains open.
+- `demo/enterprise_d_v3 Alpha 3.2 Dev/` holds a salvaged partial of a destroyed v3 run; see
+  its README.
+
 ## alpha3.2.1 — The hallucination hunt (coherence fixes from live play)
 
 A run of the alpha3.2 features in **Elevator Adventure** (and its branches) surfaced a
