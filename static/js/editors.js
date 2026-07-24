@@ -60,6 +60,24 @@ function greetingCarousel(character, initial) {
     } }, "＋ Add");
   const del = el("button", { title: "Remove this greeting",
     onclick: () => { if (list.length) { list.splice(i, 1); render(); } } }, "🗑");
+  const gen = el("button", { title: "Generate a greeting in this character's voice",
+    onclick: async () => {
+      // Optional situation brief -- blank lets the model invent a fitting moment.
+      const brief = await promptModal(
+        "Situation for the greeting? (optional — leave blank to let the model choose)");
+      if (brief === null) return;  // cancelled
+      const label = gen.textContent;
+      gen.textContent = "…"; gen.disabled = true;
+      try {
+        const r = await api("POST",
+          `/api/characters/${character.id}/generate_greeting`, { prompt: brief });
+        list.push({ ...r.greeting });
+        i = list.length - 1; render();
+        toast("Greeting generated — edit it if you like, then save or quick-start.", "ok");
+      } catch (e) {
+        toast("Generate failed: " + e.message, "err");
+      } finally { gen.textContent = label; gen.disabled = false; }
+    } }, "✨ Generate");
   const recover = el("button", { title: "Recover greetings from the imported card",
     onclick: async () => {
       try {
@@ -90,7 +108,7 @@ function greetingCarousel(character, initial) {
   return {
     node: el("div", { style: "margin-bottom:4px" },
       el("div", { class: "row", style: "align-items:center;gap:6px;flex-wrap:wrap" },
-        prev, counter, next, add, del, el("span", { class: "spacer" }), recover),
+        prev, counter, next, add, gen, del, el("span", { class: "spacer" }), recover),
       slot,
       el("div", { class: "row", style: "margin-top:8px" }, quick)),
     read: () => list.map(g => ({ ...g }))

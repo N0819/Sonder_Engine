@@ -1201,6 +1201,21 @@ def char_recover_greetings(cid: int):
     return {"sheet": sheet,
             "greetings": (sheet.get("opening") or {}).get("greetings") or []}
 
+@app.post("/api/characters/{cid}/generate_greeting")
+def char_generate_greeting(cid: int, body: dict = Body(default={})):
+    """Generate one greeting in the character's voice from an optional situation
+    brief. Returns the greeting entry WITHOUT persisting it -- the greeting
+    editor adds it to the list and saves through the normal character-update
+    path, exactly like a hand-added greeting."""
+    if not q("SELECT 1 FROM characters WHERE id=?", (cid,), one=True):
+        raise HTTPException(404, "Character not found")
+    brief = str(body.get("prompt") or body.get("brief") or body.get("situation") or "")
+    try:
+        greeting = greetings.generate_greeting(cid, brief)
+    except Exception as exc:
+        raise HTTPException(502, f"Greeting generation failed: {exc}") from exc
+    return {"greeting": greeting}
+
 @app.get("/api/characters/{cid}/export")
 def char_export(cid: int):
     c = q("SELECT * FROM characters WHERE id=?", (cid,), one=True)

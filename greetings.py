@@ -171,3 +171,82 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     list(_run_pipeline(cid, tid))
     _override_narrator(tid, prose_final)
     return cid, tid
+
+
+def generate_greeting(char_id: int, brief: str = "") -> dict:
+    """Generate one greeting for a character, in that character's voice, and
+    return it as a `sheet.opening.greetings` entry (NOT persisted -- the caller
+    adds it to the list and saves through the normal character-update path,
+    exactly like a hand-added greeting).
+
+    The player is referred to with the {{PLAYER}} token so the greeting stays
+    reusable across personas, matching imported card greetings.
+    """
+    from importers import _substitute_macros
+    from providers import chat_complete
+    from character_schema import (
+        character_voice, character_psychology,
+    )
+
+    ch = db.q("SELECT sheet FROM characters WHERE id=?", (char_id,), one=True)
+    if not ch:
+        raise ValueError(f"character {char_id} not found")
+    sheet = json.loads(ch["sheet"])
+    name = character_name(sheet)
+
+    payload = {
+        "character": {
+            "name": name,
+            "appearance": character_appearance(sheet),
+            "voice": character_voice(sheet),
+            "psychology": character_psychology(sheet),
+            "public_history": character_public_history(sheet),
+        },
+        "situation_brief": (brief or "").strip()
+        or "No brief given -- invent an ordinary, evocative opening that suits this character.",
+        "player_token": PLAYER_TOKEN,
+    }
+
+    raw = chat_complete(
+        "utility",
+        get_prompt("generator_greeting"),
+        json.dumps(payload, ensure_ascii=False),
+        temperature=0.9,
+        max_tokens=2000,
+        json_mode=False,
+    )
+    prose = _strip_greeting_wrapping(raw)
+    if not prose:
+        raise RuntimeError("Greeting generator returned no usable text.")
+
+    # Keep any literal character-name macros consistent with the card
+    # convention; {{PLAYER}} is deliberately left intact for per-play
+    # substitution downstream (start_story resolves it).
+    prose = _substitute_macros(prose, name).strip()
+
+    import hashlib
+    return {
+        "greeting_id": "greet_" + hashlib.sha1(prose.encode("utf-8")).hexdigest()[:16],
+        "prose": prose,
+        "extraction": None,
+        "extractor_version": None,
+    }
+
+
+def _strip_greeting_wrapping(raw: str) -> str:
+    """A utility model sometimes wraps prose in a code fence, a leading label,
+    or whole-string quotes despite the prompt. Peel those without touching the
+    prose itself."""
+    text = str(raw or "").strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1]
+        if text.rstrip().endswith("```"):
+            text = text.rstrip()[:-3]
+    text = text.strip()
+    # A single pair of wrapping quotes around the ENTIRE greeting (not internal
+    # dialogue) -- only strip when both ends are quotes and there's no earlier
+    # closing quote that would make this real dialogue.
+    if len(text) >= 2 and text[0] in "\"“" and text[-1] in "\"”" \
+            and text.count('"') + text.count("“") == 1 + text.count("”"):
+        pass  # ambiguous -- leave dialogue-opening greetings intact
+    return text.strip()
