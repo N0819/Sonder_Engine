@@ -158,6 +158,14 @@ def interaction_loop(ctx, nonce):
             initial_reactors, key=lambda cid: 0 if cid in addressed else 1
         )
 
+    # flow.tom_triggers is the Director's statement of whose mind matters this
+    # beat. It is used below as a last-chance guard: a beat must not end with
+    # that character unsimulated (see the stop_on_question_to_player branch).
+    tom_focus = set(normalize_character_refs(
+        _list(flow.get("tom_triggers")),
+        ctx.cast,
+    ))
+
     max_rounds = int(
         config.get("max_micro_rounds", 1)
     )
@@ -230,6 +238,7 @@ def interaction_loop(ctx, nonce):
     calls = 0
     already_spoke = set()
     no_content_streak = 0
+    focus_deferred = False
     stop_reason = "budget exhausted"
 
     while queue_ids and len(rounds) < max_rounds:
@@ -317,6 +326,28 @@ def interaction_loop(ctx, nonce):
             )
             and _asks_player(result, ctx.chat, ctx.cast)
         ):
+            # A question to the player normally ends the beat. But when the
+            # Director flagged a character as this beat's focus
+            # (flow.tom_triggers) and they have not been called yet, they
+            # answer FIRST. Ending here was observed to render that
+            # character's silence as a deliberate refusal no agent ever
+            # chose -- and, because appraisal exists only for characters that
+            # actually ran, it also denied them the goal_impacts their drive
+            # strain accrues from, so a drive could never build toward rupture
+            # on precisely the beats aimed at it. Granted at most once per
+            # beat, so a focus character who also turns to the player cannot
+            # hold the loop open.
+            pending_focus = [
+                cid for cid in queue_ids
+                if cid in tom_focus and cid not in already_spoke
+            ]
+            if pending_focus and not focus_deferred and calls < max_calls:
+                focus_deferred = True
+                first = pending_focus[0]
+                queue_ids = [first] + [
+                    cid for cid in queue_ids if cid != first
+                ]
+                continue
             stop_reason = (
                 "awaiting player response"
             )

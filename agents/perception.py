@@ -710,6 +710,16 @@ def perception_act(ctx, nonce):
         e for e in speech_elems if e.get("visibility") != "concealed"
     ]
 
+    # Each perceiver's own name/alias forms, so the action backstop renders
+    # them in second person inside their OWN view: the player's declared
+    # observable is authored in third person and names its targets, so
+    # "reaches toward Dr. Moon" reached Dr. Moon's own view naming her.
+    # See agents/common.py's _self_second_person.
+    self_forms_by_name = {}
+    for c in ctx.cast:
+        _sh = json.loads(c["sheet"])
+        self_forms_by_name[character_name(_sh)] = character_scene_keys(_sh)
+
     onset_targets = {str(t).casefold() for t in (action.get("targets") or [])}
     onset_loud = any(str(e.get("volume", "")).lower() in ("loud", "shout")
                      for e in audible_speech_elems)
@@ -761,6 +771,7 @@ def perception_act(ctx, nonce):
             view = _inject_action(
                 view, display, e["_surface"], can_see,
                 event_id=e.get("event_id"), delivered=delivered,
+                self_forms=self_forms_by_name.get(p["name"]) or [p["name"]],
             )
         # Deterministic identity floor, LAST: the LLM's free prose was
         # never checked against knows_identity, so a model that wrote the
@@ -1094,6 +1105,17 @@ def perception_outcome(ctx, nonce):
             ident_roster.append(
                 {"name": s["name"], "appearance": None, "aliases": []})
 
+    # Every perceiver's own name/alias forms, so the deterministic action
+    # backstop below can render THEM in second person inside their OWN view
+    # instead of pasting the actor's third-person surface verbatim (which
+    # named the perceiver and broke the view's person). See
+    # agents/common.py's _self_second_person.
+    self_forms_by_name = {
+        nm: [nm, *(cast_aliases.get(nm) or [])] for nm in appearances
+    }
+    self_forms_by_name[p_name] = [
+        p_name, *((pers.get("identity") or {}).get("aliases") or [])]
+
     # Only the LAST overt sub-action of each actor's sequence represents
     # their terminal, currently-visible state. Earlier sub-actions (e.g.
     # "stand up", "walk across the room") may have happened before any
@@ -1247,7 +1269,9 @@ def perception_outcome(ctx, nonce):
                         view = _append_once(view, appearance_text, marker=appearance_text)
                     described_this_pass.add(act["actor"])
                 display = _unknown_actor_label(act["actor"], appearance_text)
-            view = _inject_action(view, display, act["attempt"], can_see)
+            view = _inject_action(
+                view, display, act["attempt"], can_see,
+                self_forms=self_forms_by_name.get(p["name"]) or [p["name"]])
         # Deterministic identity floor, LAST (see perception_act): the
         # model's free prose is scrubbed per-source against THIS
         # perceiver's recognized set; quoted speech survives verbatim.
