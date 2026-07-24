@@ -10,8 +10,8 @@
 | `agents/__init__.py` | 86 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 250 |  | `agents.common`, `commit`, `db`, `prompts`, `schemas`, `spatial` |
 | `agents/character.py` | 399 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/common.py` | 2473 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/director.py` | 2474 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
+| `agents/common.py` | 2516 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/director.py` | 2512 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 538 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 196 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 487 | Player-facing narration agent. | `agents.common`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
@@ -84,19 +84,19 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `norm_sequence()` | 679 | 161 lines |
-| `_scrub_invented_dialogue()` | 1883 | 145 lines |
+| `_scrub_invented_dialogue()` | 1926 | 145 lines |
 | `_extract_authority_claims()` | 435 | 90 lines |
-| `_check_pronoun_fidelity()` | 2213 | 76 lines |
-| `_check_narrator_fidelity()` | 2339 | 71 lines |
+| `_check_pronoun_fidelity()` | 2256 | 76 lines |
+| `_check_narrator_fidelity()` | 2382 | 71 lines |
 | `canonicalize_positions()` | 1142 | 58 lines |
 | `_scrub_unknown_identities()` | 1004 | 57 lines |
-| `_strip_player_echo()` | 1760 | 56 lines |
+| `_strip_player_echo()` | 1803 | 56 lines |
 
 ### `agents/director.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 1924 | 551 lines |
+| `director_resolve()` | 1924 | 589 lines |
 | `director_interpret()` | 205 | 301 lines |
 | `_reconcile_resolution()` | 1629 | 224 lines |
 | `_reconcile_interpretation()` | 654 | 119 lines |
