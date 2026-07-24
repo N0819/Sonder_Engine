@@ -608,6 +608,60 @@ def fiction_model(chat_id):
         "abstraction_rules": {},
     }
 
+# Authored house style for anything the engine GENERATES. Distinct from
+# fiction_model, which the engine derives for itself: this is the author's
+# standing instruction, and nothing infers or overwrites it.
+#
+# It reaches the Director and the mapping agent only. Character agents are
+# deliberately excluded -- a character's manner comes from their own authored
+# voice and psychology, and piping a house style into their heads would make
+# every mind in the world sound like the same narrator. Perception is excluded
+# for the same reason it is excluded from everything else: it is a filter, not
+# an author.
+STYLE_GUIDE_FIELDS = ("genre", "tone", "director_notes", "mapping_notes", "avoid")
+STYLE_GUIDE_LIMIT = 2000
+
+# Explicit "work it out yourself" values for genre. Pinning a genre is the new
+# capability, but self-determination is the DEFAULT and stays first-class: the
+# engine already infers a fiction_model from the scenario and lore, and an
+# author who has not decided on a genre should not be forced to invent one.
+# Normalizing these to an absent key means the payload simply carries no genre,
+# which is exactly the pre-existing behaviour.
+STYLE_GUIDE_AUTO = {"auto", "self determine", "self-determine", "selfdetermine",
+                    "engine", "unspecified", "any", "default"}
+
+
+def normalize_style_guide(raw):
+    """A style guide from arbitrary input. Every field is optional free text;
+    anything unrecognized is dropped and the whole thing degrades to {} rather
+    than reaching a prompt malformed."""
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw or "{}")
+        except Exception:
+            return {}
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for key in STYLE_GUIDE_FIELDS:
+        value = raw.get(key)
+        if value is None:
+            continue
+        text = " ".join(str(value).split()) if key in ("genre", "tone") \
+            else str(value).strip()
+        if not text:
+            continue
+        if key == "genre" and text.casefold() in STYLE_GUIDE_AUTO:
+            continue  # self-determine: carry no genre at all
+        out[key] = text[:STYLE_GUIDE_LIMIT]
+    return out
+
+
+def style_guide(chat_id):
+    """The authored style guide, or {} when none is set. Read per turn so an
+    edit applies to the next beat without a restart."""
+    return normalize_style_guide(wget(chat_id, "style_guide", None) or {})
+
 def simulation_clock(chat_id):
     return wget(chat_id, "simulation_clock", None) or {
         "elapsed_seconds": 0.0,

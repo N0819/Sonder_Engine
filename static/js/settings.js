@@ -28,6 +28,77 @@ $("#b-attire").onclick = async () => {
       el("button", { class: "primary", onclick: async () => { let j; try { j = JSON.parse(ta.value) } catch (e) { return toast("Invalid JSON", "err") } await api("PUT", `/api/chats/${S.chatId}/attire`, j); closeModal(); toast("Attire saved.", "ok"); } }, "Save"))));
 };
 
+// Genre & style: the author's standing instruction for anything the engine
+// INVENTS. Self-determination is the default and stays first-class -- a blank
+// genre means "you work it out", which is what the engine did before this
+// existed, not "this world has no style".
+$("#b-style").onclick = async () => {
+  if (!S.chatId) return;
+  const r = await api("GET", `/api/chats/${S.chatId}/style_guide`);
+  const g = r.style_guide || {};
+
+  const SELF = "(self-determine — infer from scenario & lore)";
+  const PRESETS = ["cosmic horror", "noir", "cyberpunk", "high fantasy",
+    "grimdark", "space opera", "weird western", "gothic romance",
+    "hardboiled mystery", "post-apocalyptic", "slice of life"];
+
+  // A datalist rather than a fixed dropdown: the presets are a starting point,
+  // not a closed set -- any genre can be typed.
+  const listId = "style-genre-presets";
+  const genre = el("input", {
+    style: "flex:1", list: listId, placeholder: SELF, value: g.genre || "",
+  });
+  const datalist = el("datalist", { id: listId },
+    PRESETS.map(x => el("option", { value: x })));
+  const selfBtn = el("button", {
+    onclick: () => { genre.value = ""; toast("Genre left to the engine.", "ok"); },
+  }, "Self-determine");
+
+  const tone = el("input", { style: "flex:1", value: g.tone || "",
+    placeholder: "e.g. cold, clinical, understated" });
+  const dirNotes = el("textarea", { rows: "3", style: "width:100%",
+    placeholder: "Standing instruction for the Director — how events should resolve and read." },
+    g.director_notes || "");
+  const mapNotes = el("textarea", { rows: "3", style: "width:100%",
+    placeholder: "Standing instruction for mapping — how NEW rooms, objects and lore should feel." },
+    g.mapping_notes || "");
+  const avoid = el("textarea", { rows: "2", style: "width:100%",
+    placeholder: "Never generate — e.g. modern tech, gore, named real people." },
+    g.avoid || "");
+
+  modal("Genre & style", b => b.append(
+    el("div", { class: "small dim" },
+      "Applies to what the engine ", el("b", {}, "invents"),
+      " — new rooms, objects, lore, and the register of resolved events. It never overrides canon, an established room, or something you declared yourself, and it is never quoted back into the prose."),
+    el("div", { class: "row", style: "margin-top:10px" },
+      el("span", { class: "small", style: "width:70px" }, "Genre"), genre, datalist, selfBtn),
+    el("div", { class: "row", style: "margin-top:6px" },
+      el("span", { class: "small", style: "width:70px" }, "Tone"), tone),
+    el("div", { style: "margin-top:10px" },
+      el("div", { class: "small" }, "Director notes"), dirNotes),
+    el("div", { style: "margin-top:8px" },
+      el("div", { class: "small" }, "Mapping notes ", el("span", { class: "dim" }, "— shapes newly generated rooms")), mapNotes),
+    el("div", { style: "margin-top:8px" },
+      el("div", { class: "small" }, "Avoid"), avoid),
+    el("div", { class: "row", style: "margin-top:10px" },
+      el("button", { class: "primary", onclick: async () => {
+        const out = await api("PUT", `/api/chats/${S.chatId}/style_guide`, {
+          style_guide: {
+            genre: genre.value, tone: tone.value,
+            director_notes: dirNotes.value, mapping_notes: mapNotes.value,
+            avoid: avoid.value,
+          },
+        });
+        closeModal();
+        toast(Object.keys(out.style_guide).length
+          ? "Style guide saved." : "Style guide cleared — the engine self-determines.", "ok");
+      } }, "Save"),
+      el("button", { onclick: async () => {
+        await api("PUT", `/api/chats/${S.chatId}/style_guide`, { style_guide: {} });
+        closeModal(); toast("Style guide cleared — the engine self-determines.", "ok");
+      } }, "Clear all"))));
+};
+
 $("#b-dlg").onclick = async () => {
   if (!S.chatId) return;
   const c = await api("GET", `/api/chats/${S.chatId}/dialogue_config`);

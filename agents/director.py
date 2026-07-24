@@ -33,6 +33,7 @@ from scene import (
     senses_of,
     sheet_state,
     simulation_clock,
+    style_guide,
 )
 from providers import Aborted
 from schemas import validate_llm_output
@@ -139,6 +140,8 @@ def director_establish(ctx, nonce):
 
     payload = {
         "scenario": chat.get("scenario"),
+        **({"style_guide": style_guide(chat["id"])}
+           if style_guide(chat["id"]) else {}),
         "player": {
             "name": pers.get("name") or persona_name(pers),
             "appearance": persona_appearance(pers),
@@ -2055,6 +2058,12 @@ def director_resolve(ctx, nonce):
     social_standing[p_name] = (persona_public_history(pers) or "")[:240]
 
     payload = {
+        # Authored house style, for the prose and any world detail this stage
+        # mints. director_interpret deliberately does NOT get it: that stage
+        # reads what the player declared, and a style note there would bias
+        # interpretation of the player's own words rather than shape new content.
+        **({"style_guide": style_guide(chat["id"])}
+           if style_guide(chat["id"]) else {}),
         "scene": {
             "location": sc.get("location"),
             # Filtered to nearby rooms for the payload only -- the
