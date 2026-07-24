@@ -60,12 +60,20 @@ def _load_extra_players(chat_id, turn_idx, frame_id=None):
     single beat gets no rendered update at all while someone else keeps
     ticking turns.
     """
+    # Exclude the chat's PRIMARY persona: it is the main player (rendered by
+    # narrator, perceived as "player"), never an "extra". chat_personas is for
+    # ADDITIONAL co-players only, but an import or a hand-built chat can wrongly
+    # list the primary here too -- and then it was double-rendered: a spurious
+    # `extra:<pid>` perceiver identical to `player` and a wasted narrator_extra
+    # call every beat. The subquery makes the primary an extra-player only over
+    # this engine's dead body.
     rows = q(
         "SELECT cp.persona_id, p.sheet, tpi.input FROM chat_personas cp "
         "JOIN personas p ON p.id=cp.persona_id "
         "LEFT JOIN turn_player_inputs tpi "
         "  ON tpi.chat_id=cp.chat_id AND tpi.persona_id=cp.persona_id AND tpi.turn_idx=? "
-        "WHERE cp.chat_id=? AND cp.status='active' AND cp.frame_id IS ?",
+        "WHERE cp.chat_id=? AND cp.status='active' AND cp.frame_id IS ? "
+        "  AND cp.persona_id IS NOT (SELECT persona_id FROM chats WHERE id=cp.chat_id)",
         (turn_idx, chat_id, frame_id),
     )
     extras = []
@@ -473,8 +481,10 @@ def _chat_has_extra_players(chat_id, frame_id=None):
     # then render for zero perceivers).
     return bool(q(
         "SELECT 1 FROM chat_personas WHERE chat_id=? AND status='active' "
-        "AND frame_id IS ? LIMIT 1",
-        (chat_id, frame_id), one=True,
+        "AND frame_id IS ? "
+        "AND persona_id IS NOT (SELECT persona_id FROM chats WHERE id=?) "
+        "LIMIT 1",
+        (chat_id, frame_id, chat_id), one=True,
     ))
 
 def establishment_plan():
