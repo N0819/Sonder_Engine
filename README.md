@@ -16,6 +16,10 @@ Read these in order when orienting yourself:
 
 Python 3.11 or newer is recommended.
 
+### Windows (Quick Start)
+Double-click `Start Sonder.bat`. This automatically sets up the environment, installs dependencies and opens the app in your browser.
+
+### Manual / Mac / Linux
 ```bash
 python -m venv .venv
 source .venv/bin/activate
@@ -23,8 +27,9 @@ pip install -r requirements.txt
 uvicorn app:app --host 127.0.0.1 --port 8008 --reload
 ```
 
-Open `http://127.0.0.1:8008`. The default SQLite database is `engine.db`; set `ENGINE_DB` before startup to use another path.
-
+Open http://127.0.0.1:8008. The default SQLite database is engine.db; set ENGINE_DB before startup to use another path.
+```
+```
 ## Development commands
 
 ```bash
