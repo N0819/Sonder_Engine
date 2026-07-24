@@ -1,5 +1,47 @@
 # Changelog
 
+## alpha3.2.1 — The hallucination hunt (coherence fixes from live play)
+
+A run of the alpha3.2 features in **Elevator Adventure** (and its branches) surfaced a
+cluster of coherence bugs, almost all the same shape: **prose asserts a state or a line the
+structured layer never recorded, so a downstream stage re-hallucinates it.** Closed at the
+earliest stage in each case, with deterministic floors where a prompt alone had proven
+unreliable.
+
+### Fixed
+- **Branching orphaned character positions** (`app.py`). After branching a chat, Dr. Moon
+  (and the player) resolved to no room — rendered as *"unspecified location"* on the next
+  turn. Characters are projected into `world_entities` keyed by their name, and the branch
+  ID-remap regenerated a fresh opaque uid for *every* entity id — including the character
+  names — so the `scene.positions` key was rewritten off the character's stable identity.
+  The remap now protects character / player-persona identities; object ids remap freely. The
+  four already-corrupted branches were repaired in place.
+- **Director invented player speech** (`agents/director.py`, `prompts.py`). A wordless cry
+  *"AaUaa!"* became a fabricated player line in `dialogue_log`. The deterministic guard that
+  already drops director-invented lines for cast now covers the **player**, and the
+  "write a plausible line" license is scoped to exclude the player.
+- **Cross-room object teleport** (`prompts.py`). Retrieving supplies the player placed in the
+  lobby, the Director slid the objects into the actor's room (leaving their anchor behind) so
+  she "reached across" to a desk in another room. New **OBJECT REACH & RETRIEVAL** rule: an
+  actor must move to an object in another room and carry it back, not teleport it to
+  themselves.
+- **Perception invented player speech** (`agents/perception.py`, `agents/common.py`). Even
+  with the director guard, the perception LLM fabricated a player line in views (echoing a
+  past utterance, or laundering one from `resolved_event` prose). A **dialogue-fidelity
+  floor** now runs on **every** perceiver view: any quote presented as speech whose body is
+  not a line actually spoken this beat is dropped — while muffled/partial **fragments** of
+  real lines and quoted **environmental text** (signage like *CONDEMNED*) are preserved. The
+  upstream root is closed too: `resolved_event` prose is held to the same speech-authority
+  rule as `dialogue_log`.
+- **A spent effect kept coming back** (`prompts.py`). The protective runes died at turn 17,
+  but the elevator room's `desc` was frozen mid-event (*"flicker weakly with dying
+  blue-white light"*) and re-rendered every turn. New **ROOM DESCRIPTION FRESHNESS** rule:
+  update a room's desc when a feature it names terminally changes. Stale descs repaired in
+  the live chats.
+
+Perception-layer design assist by the Fable model. +~25 regression tests; full suite 1122
+passed.
+
 ## alpha3.2 — Minds that switch off, authors who direct, and characters who want things
 
 A run of the **Elevator Adventure** and **Enterprise-D** demos exposed a cluster of
