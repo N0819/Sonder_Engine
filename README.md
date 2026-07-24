@@ -29,7 +29,7 @@ uvicorn app:app --host 127.0.0.1 --port 8008 --reload
 
 Open http://127.0.0.1:8008. The default SQLite database is engine.db; set ENGINE_DB before startup to use another path.
 ```
-
+```
 ## Development commands
 
 ```bash
