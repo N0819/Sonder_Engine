@@ -38,7 +38,8 @@ from character_schema import (
     persona_export_document,
     persona_name,
 )
-from scene import dialogue_config, interaction_limits
+from scene import (dialogue_config, interaction_limits, style_guide,
+                   normalize_style_guide, STYLE_GUIDE_FIELDS)
 from importers import (
     import_character, import_persona, import_lorebook,
     generate_character, generate_persona, generate_lore_entries,
@@ -2153,6 +2154,23 @@ def attire_put(cid: int, body: dict = Body(...)):
     scene["attire"] = body
     wset(cid, "scene", scene)
     return {"ok": True}
+
+@app.get("/api/chats/{cid}/style_guide")
+def style_guide_get(cid: int):
+    """The authored house style for generated content. `{}` means the engine
+    self-determines, which is the default."""
+    return {"style_guide": style_guide(cid), "fields": list(STYLE_GUIDE_FIELDS)}
+
+@app.put("/api/chats/{cid}/style_guide")
+def style_guide_put(cid: int, body: dict = Body(...)):
+    """Set or clear the style guide. Normalized rather than trusted: it reaches
+    a prompt on every generative beat, so unknown keys are dropped and bad
+    input degrades to "self-determine" instead of malforming the payload.
+    Clearing any field (or sending a genre of 'auto'/'self-determine') restores
+    engine self-determination for it."""
+    guide = normalize_style_guide(body.get("style_guide", body))
+    wset(cid, "style_guide", guide)
+    return {"ok": True, "style_guide": guide}
 
 @app.get("/api/chats/{cid}/dialogue_config")
 def dlg_get(cid: int):

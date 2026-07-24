@@ -17,6 +17,7 @@ from scene import (
     get_scene,
     persona_of,
     recent_events,
+    style_guide,
 )
 
 from .common import (
@@ -68,6 +69,11 @@ def mapping_stage(ctx, nonce):
         },
         "player_raw_input": ctx.input or "",
         "scenario": chat.get("scenario") or "",
+        # Authored house style for generated content (see scene.style_guide).
+        # Omitted entirely when unset, so the self-determining default path is
+        # byte-identical to what it was before this existed.
+        **({"style_guide": style_guide(chat["id"])}
+           if style_guide(chat["id"]) else {}),
         "player": {
             "name": persona_name(pers),
             "appearance": persona_appearance(pers),
