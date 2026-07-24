@@ -1229,35 +1229,65 @@ def player_speech_lines(interp):
 # Physical verbs a resolved_event uses when it gives someone an ACT. Kept to
 # unambiguous bodily/manipulative verbs: the check exists to catch the player
 # being handed conduct they never declared, not to police prose.
-_PLAYER_ACT_VERBS = (
-    r"take[sn]?|took|grab(?:s|bed)?|lift(?:s|ed)?|raise[sd]?|lower(?:s|ed)?|"
-    r"drink[s]?|drank|sip(?:s|ped)?|eat[s]?|ate|swallow(?:s|ed)?|"
-    r"nod(?:s|ded)?|shrug(?:s|ged)?|shake[sd]? her head|smile[sd]?|"
-    r"step(?:s|ped)?|walk(?:s|ed)?|move[sd]?|turn(?:s|ed)?|stand[s]?|stood|"
-    r"sit[s]?|sat|kneel(?:s|ed)?|lean(?:s|ed)?|shift(?:s|ed)?|reach(?:es|ed)?|"
-    r"push(?:es|ed)?|pull(?:s|ed)?|open(?:s|ed)?|close[sd]?|hand(?:s|ed)?|"
-    r"press(?:es|ed)?|grip(?:s|ped)?|hold[s]?|held|accept(?:s|ed)?|"
-    r"reply|replies|answer(?:s|ed)?|follow(?:s|ed)?"
+# Verb STEMS a resolved_event uses when it gives someone an ACT, matched with
+# ordinary English inflection (-s/-es/-ed/-ing) so "straightens", "shifting"
+# and "reached" all count. Kept to unambiguous bodily/manipulative verbs: this
+# exists to catch the player being handed conduct they never declared, not to
+# police prose.
+_PLAYER_ACT_STEMS = (
+    "take", "took", "grab", "lift", "raise", "lower", "drink", "drank", "sip",
+    "eat", "ate", "swallow", "nod", "shrug", "smile", "step", "walk", "move",
+    "turn", "stand", "stood", "straighten", "rise", "rose", "sit", "sat",
+    "kneel", "crouch", "lean", "shift", "reach", "push", "pull", "open",
+    "close", "hand", "press", "grip", "hold", "held", "accept", "follow",
+    "drop", "place", "put", "set", "wipe", "brush", "tighten", "loosen",
+    "cross", "tilt", "lift", "swing", "climb", "duck", "slide", "settle",
 )
+_PLAYER_ACT_VERBS = "|".join(
+    rf"{stem}(?:e?s|ed|ing|d)?" for stem in _PLAYER_ACT_STEMS
+)
+
+
+
+# Leading words that are not the name itself. Splitting a name on whitespace
+# and taking token 0 matched "The" for a player called "The Stranger", which
+# then matched almost every sentence in the beat.
+_NAME_LEADERS = {"the", "a", "an", "dr", "dr.", "mr", "mr.", "mrs", "mrs.",
+                 "ms", "ms.", "miss", "lord", "lady", "sir", "captain", "cmdr",
+                 "cmdr.", "commander", "doctor", "lt", "lt.", "sgt", "sgt."}
+
+
+def _player_name_forms(player_name):
+    """Sentence-opening forms that identify the player: the full name, plus any
+    single word of it substantial enough to stand alone."""
+    name = str(player_name or "").strip()
+    if not name:
+        return []
+    forms = [name]
+    for word in re.split(r"[\s,]+", name):
+        clean = word.strip()
+        if (len(clean) >= 3 and clean[:1].isupper()
+                and clean.casefold() not in _NAME_LEADERS):
+            forms.append(clean)
+    # Longest first so "The Stranger" is preferred over "Stranger".
+    return sorted(set(forms), key=len, reverse=True)
 
 
 def _player_subject_sentences(prose, player_name):
     """Sentences of `prose` whose grammatical subject is plainly the player --
-    the sentence OPENS with their name. Deliberately narrow: a pronoun subject
-    ("She lifts it") could refer to any woman in the beat, and guessing would
-    make this cry wolf on ordinary narration."""
-    name = str(player_name or "").strip()
-    if not prose or not name:
-        return []
-    first = re.split(r"[\s,]+", name)[0]
-    if len(first) < 3:
+    the sentence OPENS with their name (optionally possessive). Deliberately
+    narrow: a pronoun subject ("She lifts it") could refer to any character in
+    the beat, and guessing would make this cry wolf on ordinary narration."""
+    forms = _player_name_forms(player_name)
+    if not prose or not forms:
         return []
     out = []
     for sentence in re.split(r"(?<=[.!?])\s+", prose):
         stripped = sentence.strip()
-        if re.match(rf"^{re.escape(first)}\b", stripped) or \
-                re.match(rf"^{re.escape(name)}\b", stripped):
-            out.append(stripped)
+        for form in forms:
+            if re.match(rf"^{re.escape(form)}(?:'s)?\b", stripped):
+                out.append(stripped)
+                break
     return out
 
 
@@ -1281,12 +1311,25 @@ def _check_player_act_authority(resolved_event, declared_actions, player_name):
     """
     if declared_actions:
         return []
+    forms = _player_name_forms(player_name)
     warnings = []
     for sentence in _player_subject_sentences(resolved_event, player_name):
         # Speech attribution ("Hinami says, ...") is not a physical act; the
         # quote itself is guarded separately by the dialogue_log check.
         without_quotes = re.sub(r'"[^"]*"|“[^“”]*”', " ", sentence)
-        if re.search(rf"\b(?:{_PLAYER_ACT_VERBS})\b", without_quotes, re.I):
+        # Only the sentence's MAIN verb counts -- the act must be what the
+        # player is doing, not a word appearing anywhere in a long sentence.
+        # "The Stranger asks Mara how she is holding up" has the player merely
+        # ASKING; "holding" belongs to a subordinate clause about someone else.
+        for form in forms:
+            match = re.match(rf"^{re.escape(form)}(?:'s)?\b", without_quotes)
+            if match:
+                tail = without_quotes[match.end():]
+                break
+        else:
+            continue
+        head = " ".join(re.findall(r"[A-Za-z']+", tail)[:3])
+        if re.search(rf"\b(?:{_PLAYER_ACT_VERBS})\b", head, re.I):
             warnings.append(
                 "Player act not declared this beat (player-act authority): "
                 f"{sentence[:120]!r}"

@@ -2136,6 +2136,57 @@ def director_resolve(ctx, nonce):
         max_tokens=16000,
     )
 
+    # PLAYER-ACT AUTHORITY, enforced. The prompt rule alone measurably reduced
+    # this (a live reroll dropped an invented drink-and-nod down to a single
+    # invented "Hinami straightens") but did not eliminate it, and a warning
+    # was worth nothing on its own: ctx.warnings is accumulated pipeline-wide
+    # and never surfaced, so flagging an invented act neither removed it nor
+    # told anyone. resolved_event feeds perception -> narrator -> memory, so a
+    # fabricated act becomes canon and then replays when the player declares it
+    # for real a beat later. One correction retry, mirroring the narrator's
+    # enforceable-warning loop; the retry is kept only if it actually reduces
+    # the violation count, so a worse rewrite can never win.
+    _declared_player_actions = [
+        e for e in (interp.get("sequence") or [])
+        if isinstance(e, dict) and e.get("type") == "action"
+        and (e.get("attempt") or e.get("observable"))
+    ]
+    _player_name = (pers.get("name") or persona_name(pers)) if pers else ""
+    _invented = _check_player_act_authority(
+        out.get("resolved_event") or "", _declared_player_actions, _player_name)
+    if _invented:
+        _note = (
+            "Your previous resolved_event gave the PLAYER physical acts they "
+            "did not declare this beat. The player declared "
+            + ("no action at all -- only speech."
+               if not _declared_player_actions else "only the listed actions.")
+            + " Rewrite it keeping every other fact identical: describe what "
+            "OTHER characters do, and the player ONLY as they declared. An NPC "
+            "may offer, hold out, brace or wait -- the player accepts on their "
+            "own turn. You may add sensory detail to a declared act; you may "
+            "not add an act. Offending sentences: "
+            + " | ".join(w.split(": ", 1)[-1] for w in _invented))
+        _retry = _agent_json(
+            "director",
+            "director_resolve",
+            get_prompt("director_resolve"),
+            {**payload, "correction_notes": _note},
+            temperature=0.0,
+            max_tokens=16000,
+        )
+        _retry_invented = _check_player_act_authority(
+            _retry.get("resolved_event") or "",
+            _declared_player_actions, _player_name)
+        if len(_retry_invented) < len(_invented):
+            out, _invented = _retry, _retry_invented
+        for _w in _invented:
+            ctx.add_warning(_w)
+    # Surfaced on the step itself, not only in ctx.warnings -- a content
+    # violation that survives the retry must at least be visible in the
+    # step/variant inspector rather than vanishing.
+    if _invented:
+        out["player_act_warnings"] = _invented
+
     # Warning-only re-normalization; strict validation already ran inside
     # _agent_json (see director_establish above).
     out, warnings = validate_llm_output("director_resolve", out)
@@ -2328,22 +2379,9 @@ def director_resolve(ctx, nonce):
     # OWN declared speech this beat is dropped.
     player_speech_bodies = {_quote_body(s) for s in player_speech_lines(interp)}
 
-    # PLAYER-ACT AUTHORITY: the speech guard below covers the player's WORDS;
-    # this covers their CONDUCT. Elaborating a declared act is legitimate and
-    # is not flagged -- only an act appearing on a beat where the player
-    # declared none, which is invented by construction and replays when they
-    # actually declare it later (see _check_player_act_authority).
-    _declared_player_actions = [
-        e for e in (interp.get("sequence") or [])
-        if isinstance(e, dict) and e.get("type") == "action"
-        and (e.get("attempt") or e.get("observable"))
-    ]
-    for _w in _check_player_act_authority(
-        out.get("resolved_event") or "",
-        _declared_player_actions,
-        persona_name(pers) if pers else "",
-    ):
-        ctx.add_warning(_w)
+    # PLAYER-ACT AUTHORITY for the player's CONDUCT is enforced earlier, at the
+    # point resolved_event is generated (correction retry). The loop below is
+    # the matching guard for their WORDS.
     checked_dlog = []
     for d in dlog:
         speaker = d.get("speaker") or ""
