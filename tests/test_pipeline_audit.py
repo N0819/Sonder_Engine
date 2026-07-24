@@ -424,6 +424,75 @@ class TestOnlyKeyStaleUpstream:
         assert events[-1]["type"] == "done"
         assert active_content(turn_id, "mapping_quick") == {"relevant_lore": ["fresh"]}
 
+    def _seed_committed_tail(self, temp_db, chat_id):
+        """A plan whose tail is narrator -> commit, already committed."""
+        turn_id = _make_turn(temp_db, chat_id, idx=1)
+        plan = [("director_interpret", "Director"), ("director_resolve", "Resolve"),
+                ("narrator", "Narrator"), ("commit", "Commit")]
+        for i, (key, label) in enumerate(plan):
+            save_step(turn_id, key, label, i,
+                      {"flow": {}} if key == "director_interpret"
+                      else {"prose": "old"} if key == "narrator"
+                      else {"committed": True} if key == "commit"
+                      else {"resolved_event": "x"})
+        return turn_id
+
+    def test_narrator_reroll_flows_through_commit_and_leaves_it_committed(
+        self, temp_db, monkeypatch,
+    ):
+        """A narrator reroll used to restore the pre-turn checkpoint, mark
+        commit stale and STOP -- reverting the whole turn's world state until a
+        manual resume, purely to get different prose. It must now flow through
+        commit and leave the turn committed."""
+        chat_id = _make_chat(temp_db)
+        turn_id = self._seed_committed_tail(temp_db, chat_id)
+        commit_calls = {"n": 0}
+        monkeypatch.setitem(runtime.STEP_HANDLERS, "narrator",
+                            lambda ctx, nonce: {"prose": "new"})
+
+        def recommit(ctx, nonce):
+            commit_calls["n"] += 1
+            # commit sees the FRESH narrator prose, not the stale one.
+            assert ctx.get("narrator") == {"prose": "new"}
+            return {"committed": True, "n": commit_calls["n"]}
+
+        monkeypatch.setitem(runtime.STEP_HANDLERS, "commit", recommit)
+
+        events = list(_run_pipeline(chat_id, turn_id, only_key="narrator"))
+
+        assert events[-1]["type"] == "done"
+        # commit re-ran once, so the new prose is committed.
+        assert commit_calls["n"] == 1
+        assert variant_count(turn_id, "narrator") == 2
+        assert active_content(turn_id, "narrator") == {"prose": "new"}
+        assert variant_count(turn_id, "commit") == 2
+        # No step is left stale: the turn is committed and fresh, not
+        # half-reverted awaiting a resume.
+        stale = temp_db.q(
+            "SELECT key FROM steps WHERE turn_id=? AND stale=1", (turn_id,))
+        assert stale == []
+
+    def test_upstream_reroll_still_stops_for_manual_resume(
+        self, temp_db, monkeypatch,
+    ):
+        """The auto-through-commit behaviour is scoped to the presentational
+        tail: rerolling director_resolve (whose outcome commit depends on)
+        must still stop and leave commit stale for a deliberate resume."""
+        chat_id = _make_chat(temp_db)
+        turn_id = self._seed_committed_tail(temp_db, chat_id)
+        commit_calls = {"n": 0}
+        monkeypatch.setitem(runtime.STEP_HANDLERS, "director_resolve",
+                            lambda ctx, nonce: {"resolved_event": "y"})
+        monkeypatch.setitem(runtime.STEP_HANDLERS, "commit",
+                            lambda ctx, nonce: commit_calls.__setitem__("n", commit_calls["n"] + 1) or {})
+
+        list(_run_pipeline(chat_id, turn_id, only_key="director_resolve"))
+
+        assert commit_calls["n"] == 0  # commit NOT auto-run
+        row = temp_db.q("SELECT stale FROM steps WHERE turn_id=? AND key='commit'",
+                        (turn_id,), one=True)
+        assert row["stale"] == 1  # left stale for manual resume
+
     def test_only_key_reroll_adds_a_variant_without_mutating_the_old_one(
         self, temp_db, monkeypatch,
     ):

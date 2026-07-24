@@ -80,3 +80,31 @@ verb ("you say.", "I whisper," at line end) still heals; an attribution around a
 surviving quote is left intact. Healing on a following capital was rejected: it
 would eat a proper-noun object ("he tells Karen the truth" -> "he tells it.").
 Fixed with `tests/test_echo_colon_heal.py`.
+
+## DW-4 — Auto-created entity duplicated across two rooms via id-vs-name position keys  *(run-state repaired; root fix queued)*
+
+**Symptom.** t8: Karen appears in `scene.positions` twice — `"karen_marsh":
+"Bethnal_Green_Road"` (still on the road) AND `"Karen Marsh":
+"tardis_console_room"` (in the ship). She is co-present in two rooms, which
+corrupts perception's co-present set.
+
+**Root cause.** Positions are canonically keyed by DISPLAY NAME (as everywhere:
+`room_of` looks up by name; the player and cast use `"Ellie Marsh"`, `"The
+Doctor"`). `director_resolve` consistently writes name keys (`"Karen Marsh"`).
+But Karen was **auto-created** from Ellie's backstory as entity id `karen_marsh`,
+and that path seeded an **id-keyed** position. The commit scene-merge never
+reconciles that an id-key and a name-key denote the same entity, so both persist
+and every `director_resolve` move touches only the name-key, orphaning the
+id-key in the departed room.
+
+**Same class as `d9e6a3e`** ("scene positions keyed inconsistently duplicated a
+character into two rooms"), which fixed the branch-remap path. This is the
+live entity-auto-creation path, unfixed.
+
+**Fix direction.** Normalize position keys to the canonical display-name form on
+commit (or forbid the auto-creation path from writing an id-keyed position when
+a name-keyed one is the convention). A deterministic invariant check — no two
+position keys resolving to the same entity — would have caught it. Not fixed
+mid-run to avoid a rushed change to the commit scene-writer; the run's scene
+state was repaired in place (stray id-key removed) so co-presence is correct
+going forward.
