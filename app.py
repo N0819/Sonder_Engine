@@ -13,6 +13,7 @@ from db import _FRAME_KEY_SEP
 from providers import (
     chat_complete, chat_complete_async, token_sink, cancel_event,
     resolve_role, list_models, provider, agent_models,
+    openrouter_routing, normalize_openrouter_routing, list_openrouter_endpoints,
     max_output_tokens, _coerce_max_output_tokens,
     MAX_OUTPUT_TOKENS_DEFAULT, MAX_OUTPUT_TOKENS_MIN, MAX_OUTPUT_TOKENS_MAX,
     DEFAULT_BASES, ROLES, SAMPLER_KEYS, DEFAULT_SAMPLERS, Aborted,
@@ -844,6 +845,7 @@ def bootstrap():
         "memory_provenance": MEMORY_PROVENANCE,
         "agent_models": json.loads(get_setting("agent_models") or "{}"),
         "max_output_tokens": max_output_tokens(),
+        "openrouter_routing": openrouter_routing(),
         "max_output_tokens_bounds": {
             "default": MAX_OUTPUT_TOKENS_DEFAULT,
             "min": MAX_OUTPUT_TOKENS_MIN,
@@ -865,6 +867,32 @@ def bootstrap():
 def put_agent_models(body: dict = Body(...)):
     set_setting("agent_models", json.dumps(body))
     return {"ok": True}
+
+@app.put("/api/openrouter_routing")
+def put_openrouter_routing(body: dict = Body(...)):
+    """Which upstream providers may serve an OpenRouter model.
+
+    One OpenRouter model id is served by several upstreams (Anthropic direct,
+    Bedrock, Azure, Vertex, third-party hosts) whose output quality AND
+    prompt-retention policy differ, so this is a privacy control as much as a
+    quality one. Normalized rather than trusted: it rides on every request and
+    must never be able to make one invalid.
+    """
+    routing = normalize_openrouter_routing(body)
+    set_setting("openrouter_routing", json.dumps(routing))
+    return {"ok": True, "routing": routing}
+
+@app.get("/api/openrouter/endpoints")
+def get_openrouter_endpoints(provider_id: int, model: str):
+    """The upstream providers actually serving one model, so the picker offers
+    real choices instead of a slug the user has to know by heart."""
+    prov = provider(provider_id)
+    if not prov:
+        raise HTTPException(404, "no such provider")
+    try:
+        return {"endpoints": list_openrouter_endpoints(prov, model)}
+    except Exception as exc:
+        raise HTTPException(502, f"could not list endpoints: {exc}")
 
 @app.put("/api/max_output_tokens")
 def put_max_output_tokens(body: dict = Body(...)):

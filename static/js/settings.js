@@ -959,6 +959,95 @@ function renderFullApiSettings(b) {
           el("div", { style: "margin-top:6px" }, el("b", {}, "Lower it"), " to hard-cap what a single call can cost, or when you're on a small local model whose output limit is well under the default."),
           el("div", { style: "margin-top:6px" }, "Values outside " + motBounds.min + "–" + motBounds.max + " are pulled into range on save."))));
 
+    // OpenRouter upstream routing. One OpenRouter model id is served by
+    // several upstreams (Anthropic direct, Bedrock, Azure, Vertex, third-party
+    // hosts) whose output quality AND prompt-retention policy differ -- so
+    // this is a privacy control, not only a quality preference.
+    if ((S.boot.providers || []).some(p => p.kind === "openrouter")) {
+      const routing = structuredClone(S.boot.openrouter_routing || {});
+      const orProv = S.boot.providers.find(p => p.kind === "openrouter");
+      const list = v => (v || []).join(", ");
+
+      const onlyIn = el("input", { style: "flex:1", placeholder: "e.g. anthropic, amazon-bedrock (blank = any)", value: list(routing.only) });
+      const ignoreIn = el("input", { style: "flex:1", placeholder: "e.g. some-host (blank = none)", value: list(routing.ignore) });
+      const denyBox = el("input", { type: "checkbox", ...(routing.data_collection === "deny" ? { checked: "" } : {}) });
+      const pinBox = el("input", { type: "checkbox", ...(routing.allow_fallbacks === false ? { checked: "" } : {}) });
+      const sortSel = el("select", {}, ["", "price", "throughput", "latency"].map(v =>
+        el("option", { value: v, ...(routing.sort === v ? { selected: "" } : {}) }, v || "(OpenRouter default)")));
+
+      const epBox = el("div", { class: "small dim", style: "margin-top:4px" });
+      const modelIn = el("input", { style: "flex:1", placeholder: "model id, e.g. anthropic/claude-opus-4-6" });
+      const loadEps = async () => {
+        epBox.innerHTML = "";
+        epBox.append(el("span", {}, "Loading…"));
+        try {
+          const r = await api("GET", "/api/openrouter/endpoints?provider_id="
+            + orProv.id + "&model=" + encodeURIComponent(modelIn.value.trim()));
+          epBox.innerHTML = "";
+          if (!r.endpoints.length) { epBox.append(el("span", {}, "No upstreams reported for that model id.")); return; }
+          for (const e of r.endpoints) {
+            const risky = e.trains_on_data || e.retains_prompts;
+            epBox.append(el("div", { class: "row", style: "gap:6px;align-items:center" },
+              el("code", {}, e.slug),
+              el("span", {}, e.name),
+              el("span", { class: "badge" }, risky
+                ? (e.trains_on_data ? "trains on prompts" : "retains prompts")
+                : "no retention"),
+              el("button", {
+                onclick: () => {
+                  const cur = onlyIn.value.split(/[,\s]+/).filter(Boolean);
+                  if (!cur.includes(e.slug)) cur.push(e.slug);
+                  onlyIn.value = cur.join(", ");
+                },
+              }, "allow only"),
+              el("button", {
+                onclick: () => {
+                  const cur = ignoreIn.value.split(/[,\s]+/).filter(Boolean);
+                  if (!cur.includes(e.slug)) cur.push(e.slug);
+                  ignoreIn.value = cur.join(", ");
+                },
+              }, "blacklist")));
+          }
+        } catch (err) {
+          epBox.innerHTML = "";
+          epBox.append(el("span", {}, "Could not list upstreams: " + err.message));
+        }
+      };
+
+      b.append(el("h4", {}, "OpenRouter upstream routing"),
+        el("div", { class: "small dim" },
+          "One OpenRouter model is served by several upstream providers — Anthropic direct, Amazon Bedrock, Azure, Google Vertex, and third-party hosts. Output quality varies between them, and so does whether they retain or train on your prompts. Leave blank to let OpenRouter choose."),
+        el("div", { class: "row", style: "margin:6px 0" }, modelIn,
+          el("button", { onclick: loadEps }, "List upstreams for this model")),
+        epBox,
+        el("div", { class: "row", style: "margin:6px 0" },
+          el("span", { class: "small", style: "width:90px" }, "Allow only"), onlyIn),
+        el("div", { class: "row", style: "margin:6px 0" },
+          el("span", { class: "small", style: "width:90px" }, "Blacklist"), ignoreIn),
+        el("div", { class: "row", style: "margin:6px 0" },
+          el("label", { class: "small" }, denyBox, " Only providers that don't retain or train on prompts"),
+          el("label", { class: "small" }, pinBox, " Never fall back to another upstream")),
+        el("div", { class: "row", style: "margin:6px 0" },
+          el("span", { class: "small", style: "width:90px" }, "Prefer by"), sortSel,
+          el("button", {
+            onclick: async () => {
+              const split = v => v.split(/[,\s]+/).filter(Boolean);
+              const r = await api("PUT", "/api/openrouter_routing", {
+                only: split(onlyIn.value),
+                ignore: split(ignoreIn.value),
+                data_collection: denyBox.checked ? "deny" : "allow",
+                allow_fallbacks: !pinBox.checked,
+                sort: sortSel.value || null,
+              });
+              await boot();
+              toast(Object.keys(r.routing).length
+                ? "Upstream routing saved." : "Upstream routing cleared — OpenRouter chooses.", "ok");
+            },
+          }, "Save routing")),
+        el("div", { class: "small dim" },
+          "Pinning one upstream without 'never fall back' still lets OpenRouter route elsewhere when that upstream is busy — tick both to guarantee it."));
+    }
+
     b.append(el("h4", {}, "Agent models"),
       el("div", { class: "small dim" },
         "Type to search the provider's model list. Open 'advanced' for samplers and backup models."),

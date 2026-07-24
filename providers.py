@@ -260,6 +260,87 @@ def _openai_system_message(system, prov, model):
                              "cache_control": {"type": "ephemeral"}}]}
     return {"role": "system", "content": system}
 
+# OpenRouter provider routing. One OpenRouter model id is served by several
+# upstream providers (Anthropic direct, Amazon Bedrock, Azure, Google Vertex,
+# and third-party hosts), and they are not interchangeable: output quality
+# varies between them, and -- the part that isn't a preference -- so does the
+# prompt-retention policy. Without this, routing is OpenRouter's choice on
+# every call, so a privacy-sensitive caller has no way to keep a prompt away
+# from a provider that retains it.
+#
+# Sent as the `provider` field on the request body (OpenRouter reads it and
+# every other backend ignores an unknown field, but it is only attached for
+# kind="openrouter" so nothing else has to tolerate it).
+_ROUTING_LIST_KEYS = ("order", "only", "ignore")
+_ROUTING_SORTS = ("price", "throughput", "latency")
+
+
+def _clean_slugs(value):
+    """A provider-slug list from arbitrary stored input: strings only, trimmed,
+    de-duplicated, order preserved (order is meaningful for `order`)."""
+    if isinstance(value, str):
+        value = re.split(r"[,\s]+", value)
+    if not isinstance(value, (list, tuple)):
+        return []
+    out = []
+    for item in value:
+        slug = str(item or "").strip()
+        if slug and slug not in out:
+            out.append(slug)
+    return out
+
+
+def normalize_openrouter_routing(raw):
+    """A valid OpenRouter `provider` block from stored settings, or {} when
+    nothing is configured. Unknown keys are dropped rather than forwarded --
+    this rides on every request, so it must never be able to make one invalid.
+    """
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw or "{}")
+        except Exception:
+            return {}
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for key in _ROUTING_LIST_KEYS:
+        slugs = _clean_slugs(raw.get(key))
+        if slugs:
+            out[key] = slugs
+    # "deny" restricts routing to providers that do not train on / retain
+    # prompts. Only ever sent when explicitly chosen -- "allow" is OpenRouter's
+    # own default, so sending it would just be noise.
+    if str(raw.get("data_collection") or "").lower() == "deny":
+        out["data_collection"] = "deny"
+    sort = str(raw.get("sort") or "").lower()
+    if sort in _ROUTING_SORTS:
+        out["sort"] = sort
+    if raw.get("allow_fallbacks") is False:
+        # Pinning without this still silently falls back to another provider,
+        # which defeats the point of pinning one.
+        out["allow_fallbacks"] = False
+    return out
+
+
+def openrouter_routing():
+    """The configured routing block. Read per call so a settings change applies
+    on the next turn without a restart."""
+    try:
+        stored = get_setting("openrouter_routing")
+    except Exception:
+        return {}
+    return normalize_openrouter_routing(stored)
+
+
+def _apply_provider_routing(body, prov, routing=None):
+    """Attach the routing block for OpenRouter requests only."""
+    if prov.get("kind") != "openrouter":
+        return body
+    routing = openrouter_routing() if routing is None else routing
+    if routing:
+        body["provider"] = routing
+    return body
+
 # Output-token ceiling. Four stages used to request 200000 output tokens, which
 # no model can produce -- but which providers still act on: OpenRouter reserves
 # credit against the requested maximum and rejects a model outright when
@@ -821,6 +902,7 @@ def _chat_complete_once(
         ],
     }
     body.update(merged)
+    _apply_provider_routing(body, prov)
 
     if json_mode:
         body["response_format"] = {
@@ -1016,6 +1098,7 @@ async def _chat_complete_async_once(
 
     body = {"model": model, "temperature": t, "max_tokens": max_tokens, "messages": [_openai_system_message(system, prov, model), {"role": "user", "content": user}]}
     body.update(merged)
+    _apply_provider_routing(body, prov)
     if json_mode:
         body["response_format"] = {"type": "json_object"}
 
@@ -1115,6 +1198,45 @@ async def _sse_anthropic_async(base, headers, body, sink, client, role=None, mod
     if role:
         _log_usage(role, model, t0, usage)
     return text
+
+def list_openrouter_endpoints(prov, model):
+    """The upstream providers currently serving one OpenRouter model.
+
+    A model id like `anthropic/claude-opus-4-6` is fronted by several
+    upstreams whose quality and prompt-retention policy differ, and their
+    slugs are not guessable -- this is what lets a picker offer the real set
+    instead of asking someone to type one from memory.
+    """
+    if prov.get("kind") != "openrouter":
+        return []
+    slug = str(model or "").strip()
+    if not slug:
+        return []
+    base = prov["base_url"].rstrip("/")
+    r = _session().get(f"{base}/models/{slug}/endpoints",
+                       headers=_headers(prov), timeout=REQUEST_TIMEOUT)
+    r.raise_for_status()
+    data = (r.json() or {}).get("data") or {}
+    out = []
+    for ep in data.get("endpoints") or []:
+        if not isinstance(ep, dict):
+            continue
+        # `tag` is the slug the routing block expects; `name` is for humans.
+        slug_name = ep.get("tag") or ep.get("provider_name") or ep.get("name")
+        if not slug_name:
+            continue
+        policy = ep.get("data_policy") or {}
+        out.append({
+            "slug": slug_name,
+            "name": ep.get("provider_name") or ep.get("name") or slug_name,
+            "context": ep.get("context_length"),
+            "quantization": ep.get("quantization"),
+            # Surfaced so the privacy decision can be made in the picker
+            # rather than by cross-referencing OpenRouter's own docs.
+            "trains_on_data": bool(policy.get("training")),
+            "retains_prompts": bool(policy.get("retains_prompts")),
+        })
+    return out
 
 def list_models(prov):
     base = prov["base_url"].rstrip("/")
