@@ -919,6 +919,46 @@ function renderFullApiSettings(b) {
     const nk = el("select", {}, Object.keys(S.boot.provider_presets).map(k => el("option", { value: k }, k)));
     b.append(el("div", { class: "row", style: "margin:6px 0" }, nk,
       el("button", { onclick: async () => { await api("POST", "/api/providers", { kind: nk.value }); await boot(); closeModal(); $("#b-api").click(); } }, "+ Provider")));
+
+    // Output-token ceiling. Sits with Providers rather than Agent models
+    // because what it protects against is provider-side: pay-per-use
+    // aggregators reserve credit against the requested maximum, and a model
+    // is rejected outright when input + max_tokens exceeds its context
+    // window -- so a ceiling above what a model can actually emit locks you
+    // out of it and inflates the balance you need, buying nothing.
+    const motBounds = S.boot.max_output_tokens_bounds
+      || { default: 20000, min: 1024, max: 128000 };
+    const motInput = el("input", {
+      type: "number", style: "width:110px",
+      min: String(motBounds.min), max: String(motBounds.max), step: "1000",
+      value: String(S.boot.max_output_tokens ?? motBounds.default),
+    });
+    b.append(el("h4", {}, "Response limit"),
+      el("div", { class: "row", style: "margin:6px 0" },
+        el("span", { class: "small" }, "Max output tokens per call"),
+        motInput,
+        el("button", {
+          onclick: async () => {
+            const r = await api("PUT", "/api/max_output_tokens", { value: motInput.value });
+            motInput.value = String(r.value);
+            await boot();
+            toast("Response limit saved: " + r.value + " tokens.", "ok");
+          },
+        }, "Save"),
+        el("button", {
+          onclick: () => { motInput.value = String(motBounds.default); },
+        }, "Reset to " + motBounds.default)),
+      el("div", { class: "small dim" },
+        "The cap on how much any single call may generate — not your context window. ",
+        el("b", {}, motBounds.default + " is the recommended default"),
+        " and comfortably fits every stage; the longest thing the engine writes in one call is a narrator turn, which runs well under it. A stage asking for less keeps its own smaller budget, so raising this never makes a short call expensive."),
+      el("details", { style: "margin-top:6px" },
+        el("summary", {}, "When should I change this?"),
+        el("div", { class: "small dim", style: "margin-top:6px" },
+          el("div", {}, el("b", {}, "Raise it"), " only if you're running a model with a genuinely large output window AND you're seeing replies cut off mid-sentence. Setting it above what your model can actually emit is not free: pay-per-use providers reserve credit against the number you ask for, and a model whose context can't fit your prompt plus this number is refused outright — which reads as 'that model doesn't work' when the real cause is this setting."),
+          el("div", { style: "margin-top:6px" }, el("b", {}, "Lower it"), " to hard-cap what a single call can cost, or when you're on a small local model whose output limit is well under the default."),
+          el("div", { style: "margin-top:6px" }, "Values outside " + motBounds.min + "–" + motBounds.max + " are pulled into range on save."))));
+
     b.append(el("h4", {}, "Agent models"),
       el("div", { class: "small dim" },
         "Type to search the provider's model list. Open 'advanced' for samplers and backup models."),

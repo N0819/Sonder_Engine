@@ -160,7 +160,7 @@ def director_establish(ctx, nonce):
         get_prompt("director_establish"),
         payload,
         temperature=0.7,
-        max_tokens=200000,
+        max_tokens=16000,
     )
     # Warning-only re-normalization; strict schema+semantic validation
     # (with repair/fallback/raise) already ran inside _agent_json.
@@ -289,7 +289,7 @@ def director_interpret(ctx, nonce):
         "director_interpret",
         get_prompt("director_interpret"),
         payload,
-        max_tokens=200000,
+        max_tokens=16000,
     )
 
     # Warning-only re-normalization; strict validation already ran inside
@@ -2123,7 +2123,7 @@ def director_resolve(ctx, nonce):
         get_prompt("director_resolve"),
         payload,
         temperature=0.5,
-        max_tokens=200000,
+        max_tokens=16000,
     )
 
     # Warning-only re-normalization; strict validation already ran inside

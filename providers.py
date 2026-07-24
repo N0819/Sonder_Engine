@@ -233,6 +233,95 @@ def _anthropic_system(system):
                  "cache_control": {"type": "ephemeral"}}]
     return system
 
+# An Anthropic model reached through an OpenAI-compatible aggregator still
+# needs an explicit cache breakpoint -- the caching is Anthropic's, not the
+# aggregator's, so the plain-string system message every other provider takes
+# produces no breakpoint and nothing ever caches. OpenRouter passes a
+# content-part array's cache_control through to Anthropic verbatim, so the
+# marked form is how a Claude-via-OpenRouter caller gets the same ~90%
+# cached-prefix discount as a direct kind="anthropic" caller.
+_CACHE_PASSTHROUGH_KINDS = ("openrouter",)
+
+
+def _model_is_anthropic(model):
+    m = str(model or "").lower()
+    return m.startswith("anthropic/") or "claude" in m
+
+
+def _openai_system_message(system, prov, model):
+    """The system message for an OpenAI-compatible request. Anthropic models on
+    a cache-passthrough aggregator get the cache-marked content-part form;
+    everyone else gets the plain string they expect."""
+    if (PROMPT_CACHE_ENABLED and system
+            and prov.get("kind") in _CACHE_PASSTHROUGH_KINDS
+            and _model_is_anthropic(model)):
+        return {"role": "system",
+                "content": [{"type": "text", "text": system,
+                             "cache_control": {"type": "ephemeral"}}]}
+    return {"role": "system", "content": system}
+
+# Output-token ceiling. Four stages used to request 200000 output tokens, which
+# no model can produce -- but which providers still act on: OpenRouter reserves
+# credit against the requested maximum and rejects a model outright when
+# input + max_tokens exceeds its context window, so an unreachable ceiling
+# silently locked callers out of models and required a balance to match. Every
+# request is clamped here rather than at the call sites, so no single stage can
+# reintroduce the problem.
+#
+# 20000 suits every stage in the pipeline: the longest single output the engine
+# produces is a narrator turn (prose plus a small JSON envelope), which runs
+# well under this. Raise it only for a model with a genuinely larger usable
+# output window AND a reason to fill it -- the ceiling costs nothing when
+# unused, but a value above the model's own output cap is what re-creates the
+# lockout. Lower it to hard-cap spend per call.
+MAX_OUTPUT_TOKENS_DEFAULT = 20000
+MAX_OUTPUT_TOKENS_MIN = 1024
+MAX_OUTPUT_TOKENS_MAX = 128000
+
+
+def _coerce_max_output_tokens(value, fallback=MAX_OUTPUT_TOKENS_DEFAULT):
+    """A usable ceiling from arbitrary input (a settings row, an env var, a
+    request body). Out-of-range values are pulled into range rather than
+    rejected -- this gates every LLM call, so it must always yield a number."""
+    try:
+        n = int(float(value))
+    except (TypeError, ValueError):
+        return fallback
+    return max(MAX_OUTPUT_TOKENS_MIN, min(n, MAX_OUTPUT_TOKENS_MAX))
+
+
+def max_output_tokens():
+    """The configured ceiling. Read per call rather than cached at import so a
+    change in the settings UI takes effect on the next turn without a restart
+    -- the DB read is trivial next to the HTTP request it precedes.
+
+    Precedence: the saved setting, then the env override (which is what a
+    headless/CI run has), then the default."""
+    env = os.environ.get("FICTION_ENGINE_MAX_OUTPUT_TOKENS")
+    fallback = (_coerce_max_output_tokens(env) if env
+                else MAX_OUTPUT_TOKENS_DEFAULT)
+    try:
+        stored = get_setting("max_output_tokens")
+    except Exception:
+        # No configured DB yet (import-time callers, some tests) -- the env
+        # value or the default still has to work.
+        return fallback
+    if stored in (None, ""):
+        return fallback
+    return _coerce_max_output_tokens(stored, fallback)
+
+
+def _clamp_max_tokens(max_tokens):
+    """Cap a requested output budget at the configured ceiling. Only ever
+    lowers -- a caller asking for less (a 1000-token utility call) keeps its
+    own smaller budget."""
+    ceiling = max_output_tokens()
+    try:
+        requested = int(max_tokens)
+    except (TypeError, ValueError):
+        return ceiling
+    return max(1, min(requested, ceiling))
+
 ROLES = [
     "default",
     "director",
@@ -489,6 +578,7 @@ def chat_complete(
 ):
     _check_cancel()
     retry_config = retry_config or DEFAULT_RETRY
+    max_tokens = _clamp_max_tokens(max_tokens)
 
     candidates = resolve_role_candidates(role)
 
@@ -658,10 +748,7 @@ def _chat_complete_once(
         "temperature": t,
         "max_tokens": max_tokens,
         "messages": [
-            {
-                "role": "system",
-                "content": system,
-            },
+            _openai_system_message(system, prov, model),
             {
                 "role": "user",
                 "content": user,
@@ -751,6 +838,7 @@ async def chat_complete_async(
 ):
     _check_cancel()
     retry_config = retry_config or DEFAULT_RETRY
+    max_tokens = _clamp_max_tokens(max_tokens)
 
     candidates = resolve_role_candidates(role)
     candidates = candidates[max(0, int(candidate_offset)):]
@@ -858,7 +946,7 @@ async def _chat_complete_async_once(
                 raise LLMError(f"{prov['name']}: HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
             return "".join(b.get("text", "") for b in r.json().get("content", []))
 
-    body = {"model": model, "temperature": t, "max_tokens": max_tokens, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+    body = {"model": model, "temperature": t, "max_tokens": max_tokens, "messages": [_openai_system_message(system, prov, model), {"role": "user", "content": user}]}
     body.update(merged)
     if json_mode:
         body["response_format"] = {"type": "json_object"}
