@@ -39,6 +39,7 @@ from schemas import validate_llm_output
 from .common import (
     _agent_json,
     _already_established_phrases,
+    _cap_repeated_quotes,
     _overused_phrases,
     _check_narrator_fidelity,
     _dedupe_view_sentences,
@@ -348,10 +349,12 @@ def narrator(ctx, nonce):
     # Within-view dedupe (W12): a duplicated beat -- the same sentence
     # rendered twice in one turn's prose -- is dropped deterministically.
     # Quoted dialogue and short sentences are exempt (see the helper).
-    out["prose"] = _dedupe_view_sentences(_strip_player_echo(
-        out.get("prose", ""), p_lines,
-        protect_quotes=_protected_view_quotes(view, p_lines),
-    ))
+    out["prose"] = _cap_repeated_quotes(
+        _dedupe_view_sentences(_strip_player_echo(
+            out.get("prose", ""), p_lines,
+            protect_quotes=_protected_view_quotes(view, p_lines),
+        )),
+        view, exclude_bodies=p_lines)
     return out
 
 def narrator_extra(ctx, nonce):
@@ -444,10 +447,12 @@ def narrator_extra(ctx, nonce):
         if pending_person_writes:
             out["narration_person_writes"] = pending_person_writes
         # Within-view dedupe (W12) -- see the matching comment in narrator().
-        out["prose"] = _dedupe_view_sentences(_strip_player_echo(
-            out.get("prose", ""), p_lines,
-            protect_quotes=_protected_view_quotes(view, p_lines),
-        ))
+        out["prose"] = _cap_repeated_quotes(
+            _dedupe_view_sentences(_strip_player_echo(
+                out.get("prose", ""), p_lines,
+                protect_quotes=_protected_view_quotes(view, p_lines),
+            )),
+            view, exclude_bodies=p_lines)
         return pid_key, out, warnings, fidelity_warnings
 
     # Each extra player's narration only reads data already computed before

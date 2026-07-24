@@ -10,11 +10,11 @@
 | `agents/__init__.py` | 86 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 250 |  | `agents.common`, `commit`, `db`, `prompts`, `schemas`, `spatial` |
 | `agents/character.py` | 399 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/common.py` | 2615 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/common.py` | 2661 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/director.py` | 2512 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 538 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 196 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
-| `agents/narration.py` | 490 | Player-facing narration agent. | `agents.common`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
+| `agents/narration.py` | 495 | Player-facing narration agent. | `agents.common`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/perception.py` | 1375 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 941 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 72 | Step and active-variant persistence helpers. | `db` |
@@ -35,7 +35,7 @@
 | `paradox.py` | 486 |  | `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 1948 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 1968 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1352 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 747 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 1824 | Pydantic output contracts and semantic validation for agent payloads. | — |
@@ -84,12 +84,12 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `norm_sequence()` | 679 | 161 lines |
-| `_scrub_invented_dialogue()` | 2025 | 145 lines |
+| `_scrub_invented_dialogue()` | 2071 | 145 lines |
 | `_extract_authority_claims()` | 435 | 90 lines |
-| `_check_pronoun_fidelity()` | 2355 | 76 lines |
-| `_check_narrator_fidelity()` | 2481 | 71 lines |
+| `_check_pronoun_fidelity()` | 2401 | 76 lines |
+| `_check_narrator_fidelity()` | 2527 | 71 lines |
 | `canonicalize_positions()` | 1142 | 58 lines |
-| `_strip_player_echo()` | 1837 | 58 lines |
+| `_strip_player_echo()` | 1883 | 58 lines |
 | `_scrub_unknown_identities()` | 1004 | 57 lines |
 
 ### `agents/director.py`
@@ -126,12 +126,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `narrator()` | 215 | 141 lines |
-| `narrator_extra()` | 357 | 134 lines |
-| `_resolve_narration_person()` | 51 | 47 lines |
-| `_generate_narration()` | 187 | 27 lines |
-| `_cast_pronouns()` | 166 | 19 lines |
-| `_craft_tells()` | 149 | 16 lines |
+| `narrator()` | 216 | 143 lines |
+| `narrator_extra()` | 360 | 136 lines |
+| `_resolve_narration_person()` | 52 | 47 lines |
+| `_generate_narration()` | 188 | 27 lines |
+| `_cast_pronouns()` | 167 | 19 lines |
+| `_craft_tells()` | 150 | 16 lines |
 | `_spatial_facts_field()` | 25 | 12 lines |
 
 ### `agents/perception.py`
@@ -359,10 +359,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 1939 | 10 lines |
-| `presets()` | 1930 | 2 lines |
-| `active_preset()` | 1933 | 2 lines |
-| `nsfw_enabled()` | 1936 | 2 lines |
+| `get_prompt()` | 1959 | 10 lines |
+| `presets()` | 1950 | 2 lines |
+| `active_preset()` | 1953 | 2 lines |
+| `nsfw_enabled()` | 1956 | 2 lines |
 
 ### `providers.py`
 

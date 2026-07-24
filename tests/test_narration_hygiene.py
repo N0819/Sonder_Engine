@@ -90,3 +90,49 @@ def test_within_block_repeat_is_not_double_counted():
 def test_empty_or_short_history_yields_nothing():
     assert _overused_phrases([]) == []
     assert _overused_phrases(["one block only, nothing to compare"]) == []
+
+
+# ---- A1: a line rendered more often than its source authorized ----
+#
+# _dedupe_view_sentences exempts quotes (W12: an intentional repeat is legit), so
+# a line the narrator both summarised and quoted verbatim rendered twice (Fable
+# A1 / backlog P3 -- impostor t9's last stand, t5's kitchen-door line).
+
+from agents.common import _cap_repeated_quotes
+
+
+def test_a_quote_beyond_its_source_count_is_capped():
+    view = 'Lady Thorne says, "Nell, after my mother."'
+    prose = ('She says "Nell, after my mother." The clock ticks. '
+             'She says again "Nell, after my mother." and waits.')
+    out = _cap_repeated_quotes(prose, view)
+    assert out.count("Nell, after my mother") == 1
+
+
+def test_a_genuinely_repeated_source_line_survives():
+    """If the source presents the line twice, both survive."""
+    view = 'He says "Nell." A beat. He says "Nell."'
+    prose = '"Nell." A pause. Then again: "Nell."'
+    assert _cap_repeated_quotes(prose, view).count("Nell") == 2
+
+
+def test_player_lines_are_excluded_from_the_cap():
+    """The player's own echoed lines are handled by the strip, not here."""
+    view = "The bridge hums."
+    prose = '"Let\'s go." I move. "Let\'s go," I say again.'
+    out = _cap_repeated_quotes(prose, view, exclude_bodies=["Let's go."])
+    assert out.count("Let's go") == 2  # untouched — not this check's job
+
+
+def test_noop_when_no_quote_repeats():
+    prose = 'She says "One." He says "Two."'
+    assert _cap_repeated_quotes(prose, 'She says "One." He says "Two."') == prose
+
+
+def test_director_and_narrator_carry_the_authority_rules():
+    """A3/B1 at director_interpret; B4 at the narrator. Prompt-level fixes for
+    the player-inbound half of the barrier and the perception/memory collapse."""
+    from prompts import DEFAULT_PROMPTS
+    assert "AUTHORITY STOPS AT OTHER MINDS" in DEFAULT_PROMPTS["director_interpret"]
+    assert "PERCEPTION IS NOT MEMORY" in DEFAULT_PROMPTS["narrator"]
+    assert "NO ORIGINATED PLAYER CONDUCT" in DEFAULT_PROMPTS["narrator"]
