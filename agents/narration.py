@@ -39,6 +39,7 @@ from schemas import validate_llm_output
 from .common import (
     _agent_json,
     _already_established_phrases,
+    _overused_phrases,
     _check_narrator_fidelity,
     _dedupe_view_sentences,
     _narration_person_counts,
@@ -294,6 +295,7 @@ def narrator(ctx, nonce):
         **_spatial_fields,
         "recent_prose_for_rhythm": prev,
         "already_established_phrases": _already_established_phrases(view, prev),
+        "overused_phrases": _overused_phrases(prev),
         "exemplars": json.loads(get_setting("exemplars") or "[]"),
         "variant_seed": nonce,
     }
@@ -422,6 +424,7 @@ def narrator_extra(ctx, nonce):
                 extra.get("name") or ""),
             "recent_prose_for_rhythm": prev,
             "already_established_phrases": _already_established_phrases(view, prev),
+            "overused_phrases": _overused_phrases(prev),
             "exemplars": json.loads(get_setting("exemplars") or "[]"),
             "variant_seed": nonce,
         }

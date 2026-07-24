@@ -1890,7 +1890,71 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
         prose = _DANGLING_SPEECH_COLON_RE.sub(_heal_dangling_colon, prose)
     for token, form in masks:
         prose = prose.replace(token, form)
+    prose = _collapse_empty_quote_debris(prose)
     return re.sub(r"\s{2,}", " ", prose).strip()
+
+
+# An empty quote pair -- '' "" “” -- left where a stripped player line used to
+# sit (Fable review, DW t12: "I can't hold her eyes. ''"). Collapse the orphan
+# and heal the punctuation/space it leaves. Only a genuinely EMPTY pair is
+# touched, so real quoted dialogue is never harmed.
+_EMPTY_QUOTE_RE = re.compile(r"""\s*(?:''|""|“”|‘’|"\s*"|'\s*')\s*""")
+
+
+def _collapse_empty_quote_debris(prose):
+    if not prose:
+        return prose
+    out = _EMPTY_QUOTE_RE.sub(" ", prose)
+    # A lead-in left dangling against the removed quote ("She said, .", "then, .")
+    out = re.sub(r"[,:]\s*\.", ".", out)
+    out = re.sub(r"\s+([.,!?;])", r"\1", out)
+    return out
+
+def _phrase_ngrams(text, n):
+    """Lower-cased n-word phrases of `text`, punctuation-stripped."""
+    words = re.findall(r"[a-z']+", str(text or "").lower())
+    return [" ".join(words[i:i + n]) for i in range(len(words) - n + 1)]
+
+
+# Content words whose repetition is a genuine tic; function-word runs ("in the
+# middle of") are not. A phrase must carry at least one of these to be flagged.
+_TIC_STOPWORDS = frozenset(
+    "the a an and or but of to in on at by for with from as is are was were be "
+    "been it its his her their my your our i he she they we you him them me "
+    "that this these those there here then when once again still not no".split())
+
+
+def _overused_phrases(recent_prose, current_prose="", n=3, min_hits=2, cap=12):
+    """The narrator's own recurring set-dressing tics (Fable A4): short phrases
+    that recur across recent turns' prose -- "the clock ticks", "thumps her tail
+    once", "the fire settles". Fed back to the narrator as a ban list so it
+    varies them, and used by the repetition check below.
+
+    A phrase counts once per prose block it appears in (so a within-block
+    repeat isn't inflated), must contain a content word, and must recur in at
+    least `min_hits` blocks including the current draft when supplied.
+    """
+    blocks = [p for p in list(recent_prose or []) + [current_prose] if p]
+    if len(blocks) < min_hits:
+        return []
+    counts = {}
+    for block in blocks:
+        for phrase in set(_phrase_ngrams(block, n)):
+            words = phrase.split()
+            if all(w in _TIC_STOPWORDS for w in words):
+                continue
+            counts[phrase] = counts.get(phrase, 0) + 1
+    # Prefer the longest/most-specific phrases; drop a phrase fully contained
+    # in a longer flagged one so "clock ticks" and "the clock ticks" don't both
+    # list.
+    hits = sorted((p for p, c in counts.items() if c >= min_hits),
+                  key=len, reverse=True)
+    kept = []
+    for phrase in hits:
+        if not any(phrase in longer for longer in kept):
+            kept.append(phrase)
+    return kept[:cap]
+
 
 def _word_shingles(text, n=6):
     words = re.findall(r"[a-z0-9']+", str(text or "").lower())
