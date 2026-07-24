@@ -1772,10 +1772,16 @@ def _fallback_perception_views(perceivers, dlog, resolved_event=None, known=None
         views[pid] = " ".join(parts) if parts else None
     return views
 
+# A speech verb left dangling by the echo strip ("you say.", "I ask,") is healed
+# to "<verb> it." The lookahead is SENTENCE-end only ([.!?] or end of string):
+# a verb followed by a comma that CONTINUES the sentence ("he says, quiet and
+# gentle, 'Ellie'") is a normal attribution around a quote that survived, not a
+# dangling verb -- healing it produced "he says it., quiet and gentle," in live
+# NPC dialogue whenever the same beat also stripped a player echo (v4).
 _DANGLING_SPEECH_VERB_RE = re.compile(
     r"\b(say|says|said|ask|asks|asked|tell|tells|told|call|calls|called|"
     r"shout|shouts|shouted|murmur|murmurs|murmured|whisper|whispers|whispered|"
-    r"reply|replies|replied|answer|answers|answered)\b,?\s*(?=[.,]|$)",
+    r"reply|replies|replied|answer|answers|answered)\b,?\s*(?=[.!?]|$)",
     re.IGNORECASE,
 )
 
