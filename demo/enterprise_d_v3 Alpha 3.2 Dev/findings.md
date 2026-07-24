@@ -179,10 +179,12 @@ lead-in that introduced the quote is left behind, running straight into the next
 sentence. t8 shows the related shape: an orphaned line lands after narration that
 already describes the speaking.
 
-**Fix.** `_strip_player_echo` (`agents/narration.py`) should heal the sentence it
-cuts from — drop a trailing attributive lead-in (`", and when I speak again it's
-quieter, almost gentle:"`) when the quote it introduced is removed, rather than
-only removing the quoted span.
+**Fix.** `_strip_player_echo` (`agents/common.py`) now heals a dangling
+attributive colon left when the quote it introduced is stripped: the lead-in
+TEXT is kept and only the orphaned colon becomes a full stop, so nothing
+legitimate is eaten and a real non-speech colon (list, ratio, time) is untouched.
+
+**Status: FIXED** (`tests/test_echo_colon_heal.py`).
 
 ---
 
@@ -193,10 +195,19 @@ unfamiliar person nods once: 'I second that. Doctor, you've earned the right to
 be heard first on this.'"* A presence articulate enough to second a captain's
 ruling is still anonymized to the player.
 
-**Relation to backlog P7.** This is the promotion-turn identity binding item
-(v2 W8) recurring — but not only on the promotion turn, which is what P7
-describes. Here it persists across beats while the presence speaks substantively.
-Worth re-scoping P7 before implementing it.
+**Root cause.** A background presence voiced as "Commander Riker"; the player
+recognized "William T. Riker". Perception's identity scrub compared names by
+exact string, so the rank variant missed the recognized set and was anonymized.
+
+**Fix.** Recognition now allows a rank/title VARIANT of a known person
+(`_recognizes` in `agents/perception.py`), kept deliberately tight to protect the
+information barrier: a variant resolves only when every one of its significant
+tokens is contained in a single known name. "Commander Riker" resolves against
+"William T. Riker"; a true stranger ("Commander Sato") and a same-surname
+stranger ("Thomas Riker") both stay anonymized.
+
+**Status: FIXED** (`tests/test_name_variant_recognition.py`). This closes the
+name-variant half of backlog P7; the promotion-turn seeding half remains open.
 
 ## Note on run methodology
 

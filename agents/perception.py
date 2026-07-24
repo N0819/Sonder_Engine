@@ -149,6 +149,54 @@ def _observed_pronouns(chat_id, cast):
             out[name] = clean
     return out
 
+# Rank/title/honorific tokens dropped before comparing names, plus single-letter
+# middle initials. So "Commander Riker" and "Cmdr. Riker" reduce to {riker}.
+_NAME_TITLE_TOKENS = {
+    "commander", "cmdr", "captain", "capt", "lieutenant", "lt", "ensign",
+    "doctor", "dr", "mr", "mrs", "ms", "miss", "lord", "lady", "sir", "chief",
+    "admiral", "general", "sergeant", "sgt", "colonel", "col", "major",
+    "professor", "prof", "the", "a", "an",
+}
+
+
+def _significant_name_tokens(name):
+    """Lower-cased identifying tokens of a name -- titles, ranks and single
+    initials removed. 'Commander Riker' -> {'riker'}."""
+    out = set()
+    for tok in re.findall(r"[A-Za-z']+", str(name or "")):
+        low = tok.strip(".'").casefold()
+        if len(low) < 3 or low in _NAME_TITLE_TOKENS:
+            continue
+        out.add(low)
+    return out
+
+
+def _recognizes(name, recognized):
+    """Whether an observer who recognizes the `recognized` name forms also
+    recognizes `name`, allowing a rank/title VARIANT of a known person
+    (P7 / v3 V3: a background presence voiced as 'Commander Riker' was
+    anonymized to 'the unfamiliar person' though the observer knew 'William T.
+    Riker').
+
+    Deliberately tight to protect the information barrier: a variant is
+    recognized ONLY if every one of its significant tokens is contained in a
+    single known name. That admits 'Commander Riker' against 'William T. Riker'
+    but still anonymizes 'Commander Sato' (no shared token) AND 'Thomas Riker'
+    (shares a surname but 'Thomas' is not known) -- a same-surname stranger
+    stays a stranger.
+    """
+    if name in recognized:
+        return True
+    tokens = _significant_name_tokens(name)
+    if not tokens:
+        return False
+    for known_name in recognized:
+        known_tokens = _significant_name_tokens(known_name)
+        if known_tokens and tokens <= known_tokens:
+            return True
+    return False
+
+
 def _scrub_view_for(ctx, stage, view, perceiver_name, known, roster):
     """Apply the deterministic identity floor to one perceiver's view:
     every roster identity the perceiver does not recognize (and is not) is
@@ -156,7 +204,8 @@ def _scrub_view_for(ctx, stage, view, perceiver_name, known, roster):
     the original bug was quiet, which is how it went unnoticed."""
     recognized = set(known.get(perceiver_name) or [])
     unknown = [s for s in roster
-               if s["name"] != perceiver_name and s["name"] not in recognized]
+               if s["name"] != perceiver_name
+               and not _recognizes(s["name"], recognized)]
     view, leaked = _scrub_unknown_identities(
         view,
         allowed_forms=[perceiver_name, *recognized],
