@@ -29,14 +29,14 @@
 | `guest_access.py` | 303 |  | `db` |
 | `importers.py` | 1318 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `memory`, `prompts`, `providers` |
 | `llm_quality.py` | 263 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
-| `logging_utils.py` | 110 | Structured timing and observability helpers. | — |
+| `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `mechanics.py` | 270 |  | `spatial`, `spatial_frames` |
 | `memory.py` | 2095 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `prompts`, `providers` |
 | `paradox.py` | 486 |  | `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
 | `prompts.py` | 1885 | Default system prompts and prompt preset access. | `db` |
-| `providers.py` | 1129 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
+| `providers.py` | 1217 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 693 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 1820 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 1475 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | — |
@@ -303,7 +303,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `log_llm_call()` | 91 | 20 lines |
+| `log_llm_call()` | 91 | 28 lines |
 | `measure_step()` | 72 | 18 lines |
 
 ### `mechanics.py`
@@ -365,14 +365,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 674 | 153 lines |
-| `async chat_complete_async()` | 828 | 88 lines |
-| `chat_complete()` | 568 | 83 lines |
-| `async _chat_complete_async_once()` | 917 | 58 lines |
+| `_chat_complete_once()` | 734 | 158 lines |
+| `async chat_complete_async()` | 893 | 88 lines |
+| `chat_complete()` | 580 | 83 lines |
+| `async _chat_complete_async_once()` | 982 | 64 lines |
 | `resolve_role_candidates()` | 371 | 52 lines |
-| `list_models()` | 1031 | 47 lines |
+| `list_models()` | 1119 | 47 lines |
 | `_sse_openai()` | 490 | 46 lines |
-| `_sse_anthropic()` | 537 | 30 lines |
+| `_sse_anthropic()` | 537 | 42 lines |
 
 ### `scene.py`
 
