@@ -22,11 +22,12 @@ after t2, `tardis`, `Ellie Marsh`, `The Doctor` and the auto-created
 narrator payload carries that top-level `location`, so it surfaced the departed
 place name even though every entity had moved.
 
-**Fix direction.** On a scene relocation (a movement whose destination is a room
-in a different top-level location, or a mapping-authored place change), update
-`scene.location` to match where the occupants now are — or derive the narrator's
-location label from the player's own room rather than the frame string. The
-commit-path scene writer is where the positions moved but the label did not.
+**FIXED.** commit.py's `_refresh_relocated_location` updates `scene.location`
+when the player relocates to a room that did not exist before this turn: it
+prefers a `state_diff.location` the Director named (a new `location` field, with
+a RELOCATION LABEL prompt rule) and otherwise falls back to the new room's own
+name. A same-place move (the room already existed) leaves the label untouched.
+Tests: `tests/test_dw_audit_scene.py`.
 
 **Note.** Distinct from the alpha3.2.1 "stale room description" fix, which was
 about a room's own `desc` freezing mid-event; this is the top-level location
@@ -53,7 +54,17 @@ knowledge, not in the Director's general causal model — so this is arguably
 correct scoping (the Director owns physics, not genre metaphysics) rather than a
 pure miss.
 
-**Open question the run now tests.** The in-world authority who DOES know is the
+**PARTIALLY ADDRESSED.** The mechanism (`world_facts`) already existed; the gap
+was the Director's JUDGMENT of significance — it recorded "the horn blared" but
+not "a fixed-point death was prevented". A new LASTING CONSEQUENCES prompt rule
+(director_resolve) directs it to record persistent, situation-reshaping changes
+(a death, a death prevented, a structure destroyed, a secret revealed) as
+durable world_facts rather than transient sensory detail, even when the player
+narrated the event. A full DETERMINISTIC significance floor remains a design
+item (see the backburner note: omission-detection, not a keyword list) — the
+prompt rule reduces the miss but does not guarantee capture.
+
+**Original open question (unchanged).** The in-world authority who DOES know is the
 Doctor (Reapers are in his private history). If, once he names the wound, the
 Director/mapping can pick up the escalation the style guide seeded (stalled
 clocks → greying light → Reapers) and then resolve it, the engine handles
@@ -101,10 +112,8 @@ id-key in the departed room.
 character into two rooms"), which fixed the branch-remap path. This is the
 live entity-auto-creation path, unfixed.
 
-**Fix direction.** Normalize position keys to the canonical display-name form on
-commit (or forbid the auto-creation path from writing an id-keyed position when
-a name-keyed one is the convention). A deterministic invariant check — no two
-position keys resolving to the same entity — would have caught it. Not fixed
-mid-run to avoid a rushed change to the commit scene-writer; the run's scene
-state was repaired in place (stray id-key removed) so co-presence is correct
-going forward.
+**FIXED.** `merge_scene_with_diff` (spatial.py) now collapses a genuine id+name
+position DUPLICATE via `_dedup_duplicate_position_keys`, keeping the fresh write
+(the key this diff touched) and dropping the stale twin. Scoped to a real
+duplicate, so a lone id-keyed object position (a TARDIS, a dropped item) is
+never touched. Tests: `tests/test_dw_audit_scene.py`.

@@ -971,6 +971,30 @@ def sync_room_registry_with_scene(cid, canon_book_id, prev_scene, scene):
     return registry
 
 
+def _refresh_relocated_location(sc, prev_scene, diff, ctx):
+    """Refresh scene.location when the player has relocated to a room that did
+    not exist before this turn. See the DW-1 call site in prepare_scene_commit.
+    """
+    try:
+        from scene import persona_of
+        player_name = persona_name(persona_of(ctx.chat))
+    except Exception:
+        return
+    player_room = _room_of(sc, player_name)
+    if not player_room:
+        return
+    prev_rooms = (prev_scene.get("rooms") or {})
+    if player_room in prev_rooms:
+        return  # same-place move (or no move) -- label stays put
+    # A room new to the scene this turn. Prefer a location the Director named.
+    new_loc = str(diff.get("location") or "").strip()
+    if not new_loc:
+        room = (sc.get("rooms") or {}).get(player_room) or {}
+        new_loc = str(room.get("name") or "").strip()
+    if new_loc and new_loc != sc.get("location"):
+        sc["location"] = new_loc
+
+
 def prepare_scene_commit(ctx):
     """Build the exact post-turn scene without mutating durable state.
 
@@ -1139,6 +1163,17 @@ def prepare_scene_commit(ctx):
         sc["location"] = est.get("location", sc.get("location"))
         sc["time"] = est.get("time", sc.get("time"))
         sc["description"] = est.get("scene_description", sc.get("description"))
+    else:
+        # DW-1: on a NORMAL turn scene.location was never refreshed, so after a
+        # relocation to a genuinely new place (time travel, a new city) the
+        # top-level label stayed stale and leaked the departed location's name
+        # into perception/narration ("opens onto Bute Street" after landing in
+        # 2003 Bethnal Green). Update it when the party has moved to a room
+        # that did not exist before this turn: prefer a location the Director
+        # named in the diff, else fall back to the new room's own name -- both
+        # beat a stale, wrong label. Same-place moves (the room already
+        # existed) leave the label untouched.
+        _refresh_relocated_location(sc, prev_scene, diff, ctx)
 
     clock = None
     if diff.get("time"):
