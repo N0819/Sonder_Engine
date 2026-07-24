@@ -16,7 +16,7 @@
 | `agents/mapping.py` | 196 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 487 | Player-facing narration agent. | `agents.common`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/perception.py` | 1375 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
-| `agents/runtime.py` | 931 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
+| `agents/runtime.py` | 941 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 72 | Step and active-variant persistence helpers. | `db` |
 | `app.py` | 3650 | FastAPI application, resource CRUD, import/export, turn control, and streaming endpoints. | `agents`, `character_schema`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `updates` |
 | `authored_events.py` | 124 |  | `db` |
@@ -151,14 +151,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_run_pipeline()` | 537 | 343 lines |
-| `build_plan()` | 372 | 71 lines |
-| `resume_key_for_turn()` | 317 | 54 lines |
-| `run_pipeline()` | 881 | 51 lines |
-| `_stream_one()` | 208 | 48 lines |
-| `_stream_parallel()` | 257 | 45 lines |
-| `_load_extra_players()` | 39 | 44 lines |
-| `_rehydrate_loop_results()` | 489 | 41 lines |
+| `_run_pipeline()` | 547 | 343 lines |
+| `build_plan()` | 380 | 71 lines |
+| `resume_key_for_turn()` | 325 | 54 lines |
+| `_load_extra_players()` | 39 | 52 lines |
+| `run_pipeline()` | 891 | 51 lines |
+| `_stream_one()` | 216 | 48 lines |
+| `_stream_parallel()` | 265 | 45 lines |
+| `_rehydrate_loop_results()` | 499 | 41 lines |
 
 ### `agents/storage.py`
 
