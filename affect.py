@@ -104,6 +104,18 @@ _LEAK_SIMILARITY = 0.5
 #   an unrelated personality transplant; both are refused as breaks.
 
 _STRAIN_HALF_LIFE = 60.0
+# Certainty floor for DRIVE-STRAIN accrual and rupture ignition -- lower than
+# the mood-appraisal _CERTAINTY_THRESHOLD (0.8) on purpose. A drive rupture is
+# the ONE domain where a character is inherently uncertain ("was it a fool's
+# errand? ask me when I know"); gating strain behind 0.8 demanded certainty
+# ABOUT the self-doubt before letting the self-doubt accumulate, so the more
+# authentic (uncertain) the pre-rupture signal, the more the ledger discarded
+# it -- observed live: a capable model registered a -0.35 drive contradiction
+# at certainty 0.7 and it accrued nothing. The magnitude gates
+# (_RUPTURE_STRAIN_MIN, _RUPTURE_EVENT_MIN) still keep ignition earned; only the
+# certainty bar moves. The accrual delta already scales by certainty, so a
+# less-confident hit contributes proportionally less rather than nothing.
+_STRAIN_CERTAINTY_MIN = 0.5
 _STRAIN_CONTRADICTION_GAIN = 0.25
 _STRAIN_RELIEF_GAIN = 0.30
 _STRAIN_SELF_MULT = 1.5
@@ -365,6 +377,13 @@ def appraise(goal_impacts, priority_of):
     d_v, d_a = 0.0, 0.0
     tag_weights: dict[str, float] = {}
     dominant, dominant_weight = None, -1.0
+    # The DRIVE-serving impact is tracked separately from the overall dominant:
+    # drive strain must accrue from a wound to the drive whenever one is present
+    # this beat, NOT only when it happens to be the single highest-weight impact.
+    # Observed live: a -0.5 drive contradiction (weight 0.40) was discarded
+    # because an intention wound (weight 0.43) narrowly out-ranked it, so the
+    # drive never registered the hit -- the exact reason ruptures never built.
+    drive_impact, drive_weight = None, -1.0
 
     for raw in goal_impacts or []:
         if not isinstance(raw, dict):
@@ -379,6 +398,8 @@ def appraise(goal_impacts, priority_of):
         tag_weights[tag] = tag_weights.get(tag, 0.0) + weight
         if weight > dominant_weight:  # strict > keeps first-wins ties deterministic
             dominant, dominant_weight = norm, weight
+        if norm["serves"] == "drive" and weight > drive_weight:
+            drive_impact, drive_weight = norm, weight
 
     # sorted() is stable, so equal-weight tags keep first-seen order.
     emotions = [t for t, _ in sorted(tag_weights.items(), key=lambda kv: -kv[1])]
@@ -387,6 +408,7 @@ def appraise(goal_impacts, priority_of):
         "dA": _clamp(d_a),
         "emotions": emotions,
         "dominant": dominant,
+        "drive_impact": drive_impact,
     }
 
 # ---- Mood dynamics ----
@@ -825,6 +847,23 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok):
 
 # ---- Drive rupture ----
 
+def _drive_serving_impact(appraisal):
+    """The impact wounding (or relieving) the DRIVE this beat, for the strain
+    ledger. Prefers appraise()'s dedicated `drive_impact` (the highest-weight
+    drive-serving impact, tracked separately so a drive wound registers even
+    when an intention wound out-ranks it); falls back to `dominant` when IT
+    serves the drive, so a bare/legacy/single-impact appraisal still works."""
+    if not isinstance(appraisal, dict):
+        return None
+    di = appraisal.get("drive_impact")
+    if isinstance(di, dict) and str(di.get("serves") or "") == "drive":
+        return di
+    dom = appraisal.get("dominant")
+    if isinstance(dom, dict) and str(dom.get("serves") or "") == "drive":
+        return dom
+    return None
+
+
 def update_drive_strain(strain, strain_log, appraisal_out, enacted_serves,
                         suppressed_serves, turns_since):
     """Accrue or pay down the slow strain a character's core drive carries.
@@ -864,15 +903,14 @@ def update_drive_strain(strain, strain_log, appraisal_out, enacted_serves,
     recent = [e for e in (strain_log or []) if isinstance(e, dict)]
     recent = recent[-_STRAIN_PUMP_WINDOW:]
     appraisal = appraisal_out if isinstance(appraisal_out, dict) else {}
-    dominant = appraisal.get("dominant")
-    dominant = dominant if isinstance(dominant, dict) else {}
+    drive_hit = _drive_serving_impact(appraisal)
 
     accruals = []  # (delta, source, why)
-    if str(dominant.get("serves") or "") == "drive":
-        impact = _clamp(dominant.get("impact"))
-        certainty = _clamp01(dominant.get("certainty"))
-        why = str(dominant.get("why") or "")
-        if certainty >= _CERTAINTY_THRESHOLD and impact != 0.0:
+    if drive_hit:
+        impact = _clamp(drive_hit.get("impact"))
+        certainty = _clamp01(drive_hit.get("certainty"))
+        why = str(drive_hit.get("why") or "")
+        if certainty >= _STRAIN_CERTAINTY_MIN and impact != 0.0:
             if impact < 0:
                 pumped = any(
                     claim_similarity(why, str(e.get("why") or ""))
@@ -880,7 +918,7 @@ def update_drive_strain(strain, strain_log, appraisal_out, enacted_serves,
                     for e in recent)
                 if not pumped:
                     delta = _STRAIN_CONTRADICTION_GAIN * abs(impact) * certainty
-                    if str(dominant.get("agency") or "") == "self":
+                    if str(drive_hit.get("agency") or "") == "self":
                         delta *= _STRAIN_SELF_MULT
                     accruals.append((delta, "contradiction", why))
             else:
@@ -925,20 +963,18 @@ def detect_drive_rupture(strain, appraisal_out, turn_idx, last_shift_turn):
             and turn_idx - int(_float_or(last_shift_turn)) < _RUPTURE_COOLDOWN):
         return None
     appraisal = appraisal_out if isinstance(appraisal_out, dict) else {}
-    dominant = appraisal.get("dominant")
-    dominant = dominant if isinstance(dominant, dict) else {}
-    impact = _clamp(dominant.get("impact"))
-    certainty = _clamp01(dominant.get("certainty"))
+    drive_hit = _drive_serving_impact(appraisal) or {}
+    impact = _clamp(drive_hit.get("impact"))
+    certainty = _clamp01(drive_hit.get("certainty"))
     event_score = 0.0
-    if (str(dominant.get("serves") or "") == "drive"
-            and certainty >= _CERTAINTY_THRESHOLD):
+    if drive_hit and certainty >= _STRAIN_CERTAINTY_MIN:
         event_score = abs(impact) * certainty
-        if str(dominant.get("agency") or "") == "self":
+        if str(drive_hit.get("agency") or "") == "self":
             event_score *= _RUPTURE_SELF_MULT
     if _clamp01(strain) < _RUPTURE_STRAIN_MIN or event_score < _RUPTURE_EVENT_MIN:
         return None
     return {
-        "why": str(dominant.get("why") or ""),
+        "why": str(drive_hit.get("why") or ""),
         "direction": "contradiction" if impact < 0 else "transformation",
         "score": round(event_score, 4),
     }
