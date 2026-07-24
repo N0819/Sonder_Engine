@@ -1337,6 +1337,52 @@ def _check_player_act_authority(resolved_event, declared_actions, player_name):
     return warnings
 
 
+def _cap_repeated_quotes(prose, view, exclude_bodies=()):
+    """Cap each spoken line's occurrences in the prose at how many times it
+    actually appears in the authoritative source (the view). (Fable A1 / backlog
+    P3.) `_dedupe_view_sentences` deliberately exempts quotes so an intentional
+    repeat survives, which let a line the narrator both SUMMARIZED and quoted
+    verbatim render twice (impostor t9: the last-stand speech; t5: Lady Thorne's
+    kitchen-door line, verbatim, twice). A quote appearing more often than the
+    source authorized is an artifact; drop the surplus occurrences, keep the
+    first. The player's own lines are handled by the echo strip and excluded.
+    """
+    if not prose:
+        return prose
+    excluded = {re.sub(r"\s+", " ", str(b).casefold()) for b in (exclude_bodies or [])}
+    quote_re = re.compile(r'(["“])([^"“”]{6,})(["”])')
+    source_text = re.sub(r"\s+", " ", str(view or "").casefold())
+    # Source count per body: how many times the view presents that exact line.
+    source_counts = {}
+    for m in quote_re.finditer(str(view or "")):
+        body = re.sub(r"\s+", " ", m.group(2).strip().casefold())
+        if body:
+            source_counts[body] = source_counts.get(body, 0) + 1
+
+    seen = {}
+    out_parts = []
+    last = 0
+    for m in quote_re.finditer(prose):
+        body = re.sub(r"\s+", " ", m.group(2).strip().casefold())
+        if not body or body in excluded:
+            continue
+        cap = source_counts.get(body, 1)
+        seen[body] = seen.get(body, 0) + 1
+        if seen[body] > cap:
+            # Surplus occurrence: excise this quoted span (keep the text
+            # around it; the dangling-verb heal below tidies "he says ,").
+            out_parts.append(prose[last:m.start()])
+            last = m.end()
+    if not out_parts:
+        return prose
+    out_parts.append(prose[last:])
+    result = "".join(out_parts)
+    result = _DANGLING_SPEECH_VERB_RE.sub(lambda mm: f"{mm.group(1)} it.", result)
+    result = _DANGLING_SPEECH_COLON_RE.sub(_heal_dangling_colon, result)
+    result = _collapse_empty_quote_debris(result)
+    return re.sub(r"\s{2,}", " ", result).strip()
+
+
 def _quote_body(quote):
     return (quote or "").strip().strip('"' + "'" + "\u201c\u201d\u2018\u2019")
 
