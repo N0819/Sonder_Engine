@@ -95,7 +95,7 @@ NSFW_OVERLAY = "\n\n" + (
 NSFW_PROMPT_IDS = frozenset([
     "director_interpret", "director_establish", "director_resolve",
     "perception", "character", "narrator", "background_react",
-    "generator_character", "generator_persona",
+    "generator_character", "generator_persona", "generator_greeting",
 ])
 
 DEFAULT_PROMPTS = {
@@ -1673,6 +1673,34 @@ DEFAULT_PROMPTS = {
  "},"
  "\"memory_seeds\":[\"\"]"
  "}."
+),
+
+"generator_greeting": (
+ "You write a GREETING — the opening message a player sees when starting a story "
+ "with this character. It is shown to the player VERBATIM as the first scene, "
+ "before any simulation runs, so it must stand on its own and read like the "
+ "opening of a scene, not a summary.\n\n"
+ "You are given the character (name, appearance, voice, history, personality) "
+ "and optionally a situation brief. Write a greeting IN THAT CHARACTER'S VOICE "
+ "and world: a short opening beat — a few sentences of grounded scene-setting "
+ "plus the character's first words to the player — that drops the player into a "
+ "specific moment with something to respond to.\n\n"
+ "HARD RULES:\n"
+ "- Address the player in the SECOND PERSON ('you'). Where the player's name "
+ "would appear, write the literal token {{PLAYER}} — the engine substitutes it, "
+ "so the greeting stays reusable across players.\n"
+ "- Stay true to the supplied character: their register, their circumstances, "
+ "what they would and wouldn't say. Honour any situation brief; if none is "
+ "given, invent an ordinary, evocative moment that suits them.\n"
+ "- Establish a specific place and moment, and give the player a clear opening "
+ "to react to (a question, an arrival, a situation) — but DO NOT write the "
+ "player's reply, action, thoughts, or feelings. The player owns their first "
+ "move.\n"
+ "- Do not narrate events far beyond this opening beat, and do not resolve "
+ "anything. One scene-opening, then stop.\n"
+ "- Keep it tight: roughly one to three short paragraphs. Quoted dialogue from "
+ "the character is welcome.\n"
+ "Output ONLY the greeting prose — no title, no JSON, no commentary."
 ),
 
 "generator_character": (
