@@ -22,7 +22,7 @@
 | `authored_events.py` | 124 |  | `db` |
 | `character_schema.py` | 639 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
 | `checkpoints.py` | 516 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
-| `commit.py` | 3374 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `spatial`, `spatial_frames`, `theory_of_mind` |
+| `commit.py` | 3409 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `spatial`, `spatial_frames`, `theory_of_mind` |
 | `db.py` | 1245 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 193 |  | `db` |
 | `greetings.py` | 252 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
@@ -35,11 +35,11 @@
 | `paradox.py` | 486 |  | `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 1918 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 1932 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1352 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 747 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
-| `schemas.py` | 1820 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 1475 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | — |
+| `schemas.py` | 1824 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `spatial.py` | 1507 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | — |
 | `spatial_frames.py` | 871 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `theory_of_mind.py` | 288 |  | — |
 | `updates.py` | 254 |  | — |
@@ -224,14 +224,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 2666 | 385 lines |
-| `prepare_scene_commit()` | 974 | 220 lines |
-| `track_background_presences()` | 1607 | 169 lines |
+| `prepare_memory_commit()` | 2701 | 385 lines |
+| `prepare_scene_commit()` | 998 | 231 lines |
+| `track_background_presences()` | 1642 | 169 lines |
 | `_prepare_destruction()` | 417 | 158 lines |
-| `prepare_mapping_commit()` | 2240 | 132 lines |
-| `commit_world_entities()` | 1325 | 123 lines |
-| `commit_mapping()` | 2374 | 120 lines |
-| `_commit_all_locked()` | 3218 | 98 lines |
+| `prepare_mapping_commit()` | 2275 | 132 lines |
+| `commit_world_entities()` | 1360 | 123 lines |
+| `commit_mapping()` | 2409 | 120 lines |
+| `_commit_all_locked()` | 3253 | 98 lines |
 
 ### `db.py`
 
@@ -359,10 +359,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 1909 | 10 lines |
-| `presets()` | 1900 | 2 lines |
-| `active_preset()` | 1903 | 2 lines |
-| `nsfw_enabled()` | 1906 | 2 lines |
+| `get_prompt()` | 1923 | 10 lines |
+| `presets()` | 1914 | 2 lines |
+| `active_preset()` | 1917 | 2 lines |
+| `nsfw_enabled()` | 1920 | 2 lines |
 
 ### `providers.py`
 
@@ -394,22 +394,22 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 1237 | 193 lines |
-| `semantic_output_errors()` | 1691 | 76 lines |
-| `validate_llm_output_strict()` | 1768 | 53 lines |
+| `preprocess_llm_output()` | 1241 | 193 lines |
+| `semantic_output_errors()` | 1695 | 76 lines |
+| `validate_llm_output_strict()` | 1772 | 53 lines |
 | `_coerce_str_list()` | 12 | 33 lines |
-| `_coerce_considered_responses()` | 1088 | 32 lines |
-| `validate_llm_output()` | 1431 | 29 lines |
-| `_coerce_conditions()` | 1151 | 27 lines |
-| `_hoist_misplaced_entity_siblings()` | 1193 | 21 lines |
+| `_coerce_considered_responses()` | 1092 | 32 lines |
+| `validate_llm_output()` | 1435 | 29 lines |
+| `_coerce_conditions()` | 1155 | 27 lines |
+| `_hoist_misplaced_entity_siblings()` | 1197 | 21 lines |
 
 ### `spatial.py`
 
 | Function | Start | Size |
 |---|---:|---:|
 | `apply_transit_dock_edges()` | 1107 | 137 lines |
+| `merge_scene_with_diff()` | 1342 | 121 lines |
 | `visible_adjacent_rooms()` | 864 | 113 lines |
-| `merge_scene_with_diff()` | 1319 | 112 lines |
 | `egocentric_frame()` | 513 | 80 lines |
 | `passable_route_exists()` | 336 | 53 lines |
 | `hear_level()` | 390 | 53 lines |

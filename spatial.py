@@ -1316,6 +1316,29 @@ def ambient_scope(scene: dict, room_id: str):
     )
     return seen, open_to_world
 
+def _dedup_duplicate_position_keys(positions, entities, incoming_positions=None):
+    """Collapse a position keyed under BOTH an entity's id and its display name
+    to one key. Only a genuine duplicate is touched; a lone id-keyed position
+    (an object with no name twin) is left alone. When both keys are present the
+    FRESH write wins -- the one in this diff's incoming positions -- else the
+    display-name key (the convention `room_of` and every character use).
+    """
+    if not isinstance(positions, dict) or not isinstance(entities, dict):
+        return positions
+    incoming = incoming_positions if isinstance(incoming_positions, dict) else {}
+    for eid, ent in list(entities.items()):
+        name = (ent.get("name") or "").strip() if isinstance(ent, dict) else ""
+        if not name or name == eid:
+            continue
+        if eid in positions and name in positions:
+            # Prefer whichever key this diff just wrote; default to the name.
+            if eid in incoming and name not in incoming:
+                positions[name] = positions.pop(eid)
+            else:
+                positions.pop(eid, None)
+    return positions
+
+
 def merge_scene_with_diff(
     scene: dict,
     diff: dict | None,
@@ -1355,6 +1378,15 @@ def merge_scene_with_diff(
 
     if isinstance(incoming_positions, dict):
         merged["positions"].update(incoming_positions)
+    # DW-4: an entity can end up in `positions` under BOTH its id key and its
+    # display-name key -- e.g. an auto-created backstory person seeded with an
+    # id-keyed position (`karen_marsh`) while director_resolve moves it by name
+    # (`Karen Marsh`). The blind update() above then leaves BOTH, so the entity
+    # is co-present in two rooms and perception's co-present set is corrupted.
+    # Collapse only a genuine id+name DUPLICATE -- a lone id-keyed object
+    # position (tardis, a dropped item) has no name-key twin and is untouched.
+    _dedup_duplicate_position_keys(
+        merged["positions"], merged["entities"], incoming_positions)
 
     # Stations (within-room position) are a sibling of positions, merged per
     # entity so a diff touching only `at` keeps the entity's `near` list, and

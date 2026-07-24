@@ -770,6 +770,10 @@ class StateDiff(BaseModel):
     cast_changes: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
     introductions: list[dict] = Field(default_factory=list)
+    # Top-level place label, set only when the beat relocates the party to a
+    # genuinely different place (DW-1). commit.py's _refresh_relocated_location
+    # prefers this over the new room's own name.
+    location: str = ""
     time: Optional[dict] = None
     claim_dispositions: list[dict] = Field(default_factory=list)
     # Destruction declaration (DestructionEffect shape -- see its
