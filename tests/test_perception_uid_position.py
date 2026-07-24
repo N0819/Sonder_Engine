@@ -78,6 +78,38 @@ def test_canonicalize_positions_leaves_alias_keys_alone():
     assert out == {"The Oncoming Storm": "genkan"}
 
 
+def test_canonicalize_positions_folds_character_id_scheme_and_player():
+    """Live bug (Enterprise fresh run): the director keyed the SAME person by
+    different schemes across a turn -- Data as 'character:29' AND
+    'Lt. Commander Data', the player as 'Cmdr. Vale' AND snake 'cmdr_vale' --
+    so each acquired two conflicting position entries and name-lookup mislocated
+    them. Every scheme must fold to ONE canonical key; unregistered background
+    presences are left alone."""
+    data = {"id": 29, "sheet": json.dumps(
+        {"identity": {"name": "Lt. Commander Data", "uid": "char_data"}})}
+    positions = {
+        "character:29": "bridge",              # id scheme
+        "Lt. Commander Data": "corridor",      # name (the conflicting duplicate)
+        "Cmdr. Vale": "bridge",                # player by name
+        "cmdr_vale": "turbolift",              # player, snake-case
+        "william_riker": "bridge",             # background presence -- untouched
+    }
+    out = canonicalize_positions(positions, [data], player_name="Cmdr. Vale")
+    assert "character:29" not in out                 # id scheme folded
+    assert list(out).count("Lt. Commander Data") == 1  # single entry, no dup
+    assert "cmdr_vale" not in out                    # player snake folded
+    assert list(out).count("Cmdr. Vale") == 1
+    assert out.get("william_riker") == "bridge"      # background left alone
+
+
+def test_canonicalize_positions_id_scheme_needs_id_field():
+    """A cast row without an 'id' (legacy shape) must not crash and must not
+    invent a character:<id> mapping."""
+    row = {"sheet": json.dumps(_doctor_sheet())}  # no 'id'
+    out = canonicalize_positions({"character:5": "hall"}, [row])
+    assert out == {"character:5": "hall"}  # untouched, no id to match
+
+
 # ---- integration: perception_act via a uid-keyed scene --------------------
 
 def test_perception_act_resolves_uid_keyed_reactor_room(temp_db, monkeypatch):

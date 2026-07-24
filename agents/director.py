@@ -182,10 +182,11 @@ def director_establish(ctx, nonce):
         "rooms": out.get("rooms") if isinstance(out.get("rooms"), dict) else {},
         "entities": out.get("entities") if isinstance(out.get("entities"), dict) else {},
         # Key positions by the registered character name (the convention every
-        # reader uses), even when the model keyed a cast member by identity.uid.
+        # reader uses), even when the model keyed a cast member by identity.uid,
+        # a 'character:<id>' scheme, or a snake-case variant of the player name.
         "positions": canonicalize_positions(
             out.get("positions") if isinstance(out.get("positions"), dict) else {},
-            ctx.cast),
+            ctx.cast, player_name=(pers.get("name") or persona_name(pers))),
         "remove_entities": [],
         "remove_rooms": [],
         "attire": out.get("attire") if isinstance(out.get("attire"), dict) else {},
@@ -2135,7 +2136,7 @@ def director_resolve(ctx, nonce):
     # Same canonicalization as director_establish: fold any uid/normalized-name
     # position key for a cast member onto the registered name before it reaches
     # perception's mid-turn merge or the commit boundary.
-    sd["positions"] = canonicalize_positions(sd["positions"], ctx.cast)
+    sd["positions"] = canonicalize_positions(sd["positions"], ctx.cast, player_name=p_name)
     out["state_diff"] = sd
     out["dice"] = dice if isinstance(dice, list) else []
 
