@@ -534,9 +534,14 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
         _log_usage(role, model, t0, usage)
     return text
 
-def _sse_anthropic(base, headers, body, sink):
+def _sse_anthropic(base, headers, body, sink, role=None, model=None):
     body["stream"] = True
     text = ""
+    # Anthropic splits usage across two events: input and cache counts arrive
+    # on message_start, the final output count on message_delta. Neither alone
+    # is the whole picture, so both are folded together.
+    usage = None
+    t0 = time.time()
     _check_cancel()
     with _session().post(base + "/v1/messages", headers=headers, json=body, stream=True, timeout=REQUEST_TIMEOUT) as r:
         if r.status_code >= 400:
@@ -558,11 +563,18 @@ def _sse_anthropic(base, headers, body, sink):
                 err = j.get("error") or {}
                 msg = err.get("message") if isinstance(err, dict) else str(err)
                 raise LLMError(f"provider stream error: {msg or 'overloaded'}", 0, True)
+            if j.get("type") == "message_start":
+                usage = _merge_usage(
+                    usage, (j.get("message") or {}).get("usage"))
+            elif j.get("type") == "message_delta":
+                usage = _merge_usage(usage, j.get("usage"))
             if j.get("type") == "content_block_delta":
                 d = j.get("delta", {}).get("text")
                 if d:
                     text += d
                     sink(d)
+    if role:
+        _log_usage(role, model, t0, usage)
     return text
 
 def chat_complete(
@@ -649,23 +661,71 @@ def chat_complete(
         retryable=False,
     )
 
-def _log_usage(role, model, t0, usage):
-    """nanogpt (and most OpenAI-compatible backends) apply implicit prompt
-    caching automatically -- there's no client-side field to opt into, so
-    there's nothing to configure here. This just makes the effect visible:
-    without reading `usage` back, there's no way to confirm caching is
-    actually reducing the tokens billed/processed for a role's static
-    system prompt, which is repeated byte-for-byte on every call.
+def _int(value):
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _normalize_usage(usage):
+    """One shape from either provider dialect.
+
+    The two report caching in entirely different fields, and reading only one
+    dialect makes the other look like caching never happened -- which is
+    exactly how a real cache miss and an unread field become indistinguishable.
+
+    - OpenAI-compatible: prompt_tokens / completion_tokens, with implicit-cache
+      reads under prompt_tokens_details.cached_tokens.
+    - Anthropic: input_tokens / output_tokens, with explicit cache_read_ and
+      cache_creation_input_tokens. An aggregator fronting Anthropic may pass
+      either or both through, so both are always checked.
+
+    `cache_write` matters as much as `cache_read`: a first call writes the
+    prefix and later ones read it, so writes with no subsequent reads is the
+    signature of a prefix that is changing between calls (or sitting under the
+    model's minimum cacheable length) rather than caching working.
     """
+    usage = usage if isinstance(usage, dict) else {}
+    details = usage.get("prompt_tokens_details")
+    details = details if isinstance(details, dict) else {}
+    return {
+        "input": _int(usage.get("prompt_tokens") or usage.get("input_tokens")),
+        "output": _int(usage.get("completion_tokens")
+                       or usage.get("output_tokens")),
+        "cache_read": _int(usage.get("cache_read_input_tokens")
+                           or details.get("cached_tokens")),
+        "cache_write": _int(usage.get("cache_creation_input_tokens")),
+    }
+
+
+def _merge_usage(base, extra):
+    """Fold a later usage report into an earlier one. Anthropic streams usage
+    in two pieces -- input and cache counts on message_start, the final output
+    count on message_delta -- so neither event alone is the whole picture."""
+    base = base if isinstance(base, dict) else {}
+    extra = extra if isinstance(extra, dict) else {}
+    merged = dict(base)
+    for key, value in extra.items():
+        if _int(value) or key not in merged:
+            merged[key] = value
+    return merged
+
+
+def _log_usage(role, model, t0, usage):
+    """Make caching observable. Without reading `usage` back there is no way to
+    confirm that a role's static system prompt -- repeated byte-for-byte on
+    every call for that role -- is actually being served from cache instead of
+    reprocessed, which is how a silently-uncached setup goes unnoticed."""
     from logging_utils import log_llm_call
-    usage = usage or {}
-    details = usage.get("prompt_tokens_details") or {}
+    counts = _normalize_usage(usage)
     try:
         log_llm_call(
             role, model,
-            system_tokens=usage.get("prompt_tokens", 0),
-            response_tokens=usage.get("completion_tokens", 0),
-            cached_tokens=details.get("cached_tokens", 0),
+            system_tokens=counts["input"],
+            response_tokens=counts["output"],
+            cached_tokens=counts["cache_read"],
+            cache_write_tokens=counts["cache_write"],
             duration=time.time() - t0,
         )
     except Exception:
@@ -720,8 +780,11 @@ def _chat_complete_once(
                 h,
                 dict(body),
                 sink,
+                role=role,
+                model=model,
             )
 
+        _t0 = time.time()
         response = _session().post(
             base + "/v1/messages",
             headers=h,
@@ -738,9 +801,11 @@ def _chat_complete_once(
                 in DEFAULT_RETRY.retryable_status,
             )
 
+        parsed = response.json()
+        _log_usage(role, model, _t0, parsed.get("usage"))
         return "".join(
             block.get("text", "")
-            for block in response.json().get("content", [])
+            for block in parsed.get("content", [])
         )
 
     body = {
@@ -940,11 +1005,14 @@ async def _chat_complete_async_once(
                 body[k] = merged[k]
         async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
             if sink:
-                return await _sse_anthropic_async(base, h, dict(body), sink, client)
+                return await _sse_anthropic_async(base, h, dict(body), sink, client, role=role, model=model)
+            _t0 = time.time()
             r = await client.post(base + "/v1/messages", headers=h, json=body)
             if r.status_code >= 400:
                 raise LLMError(f"{prov['name']}: HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
-            return "".join(b.get("text", "") for b in r.json().get("content", []))
+            parsed = r.json()
+            _log_usage(role, model, _t0, parsed.get("usage"))
+            return "".join(b.get("text", "") for b in parsed.get("content", []))
 
     body = {"model": model, "temperature": t, "max_tokens": max_tokens, "messages": [_openai_system_message(system, prov, model), {"role": "user", "content": user}]}
     body.update(merged)
@@ -954,15 +1022,16 @@ async def _chat_complete_async_once(
     async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
         if sink:
             try:
-                return await _sse_openai_async(base + "/chat/completions", _headers(prov), dict(body), sink, client)
+                return await _sse_openai_async(base + "/chat/completions", _headers(prov), dict(body), sink, client, role=role, model=model)
             except LLMError as e:
                 if e.status_code == 400:
                     b2 = dict(body)
                     if json_mode:
                         b2.pop("response_format", None)
                     b2 = _strip_extended(b2)
-                    return await _sse_openai_async(base + "/chat/completions", _headers(prov), b2, sink, client)
+                    return await _sse_openai_async(base + "/chat/completions", _headers(prov), b2, sink, client, role=role, model=model)
                 raise
+        _t0 = time.time()
         r = await client.post(base + "/chat/completions", headers=_headers(prov), json=body)
         if r.status_code == 400:
             b2 = _strip_extended(dict(body))
@@ -971,11 +1040,18 @@ async def _chat_complete_async_once(
             r = await client.post(base + "/chat/completions", headers=_headers(prov), json=b2)
         if r.status_code >= 400:
             raise LLMError(f"{prov['name']}: HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
-        return r.json()["choices"][0]["message"]["content"]
+        parsed = r.json()
+        _log_usage(role, model, _t0, parsed.get("usage"))
+        return parsed["choices"][0]["message"]["content"]
 
-async def _sse_openai_async(url, headers, body, sink, client):
+async def _sse_openai_async(url, headers, body, sink, client, role=None, model=None):
     body["stream"] = True
+    # Without this a streamed response reports no token counts at all -- see
+    # the matching comment in _sse_openai.
+    body["stream_options"] = {"include_usage": True}
     text = ""
+    usage = None
+    t0 = time.time()
     _check_cancel()
     async with client.stream("POST", url, headers=headers, json=body) as r:
         if r.status_code >= 400:
@@ -994,16 +1070,22 @@ async def _sse_openai_async(url, headers, body, sink, client):
                 j = json.loads(line)
             except Exception:
                 continue
+            if j.get("usage"):
+                usage = j["usage"]
             d = (j.get("choices") or [{}])[0].get("delta", {}).get("content")
             if d:
                 text += d
                 if sink:
                     sink(d)
+    if role:
+        _log_usage(role, model, t0, usage)
     return text
 
-async def _sse_anthropic_async(base, headers, body, sink, client):
+async def _sse_anthropic_async(base, headers, body, sink, client, role=None, model=None):
     body["stream"] = True
     text = ""
+    usage = None
+    t0 = time.time()
     _check_cancel()
     async with client.stream("POST", base + "/v1/messages", headers=headers, json=body) as r:
         if r.status_code >= 400:
@@ -1020,12 +1102,18 @@ async def _sse_anthropic_async(base, headers, body, sink, client):
                 j = json.loads(line)
             except Exception:
                 continue
+            if j.get("type") == "message_start":
+                usage = _merge_usage(usage, (j.get("message") or {}).get("usage"))
+            elif j.get("type") == "message_delta":
+                usage = _merge_usage(usage, j.get("usage"))
             if j.get("type") == "content_block_delta":
                 d = j.get("delta", {}).get("text")
                 if d:
                     text += d
                     if sink:
                         sink(d)
+    if role:
+        _log_usage(role, model, t0, usage)
     return text
 
 def list_models(prov):
