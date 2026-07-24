@@ -1,5 +1,91 @@
 # Changelog
 
+## alpha3.3 — Nobody speaks for the player, and nobody skips the person the scene is about
+
+Two authority failures and one authoring feature. Both failures were found by
+*running* the engine rather than by the suite, and both had the same shape: a
+stage quietly doing something on someone else's behalf.
+
+### Fixed
+- **The Director invented player actions** (`agents/director.py`,
+  `agents/common.py`, `prompts.py`). Reported from live play as "perception is
+  inventing player actions and also out of ordering events". Perception was
+  innocent -- it rendered faithfully what it was handed. `resolved_event` was
+  giving the player conduct they never declared: on a speech-only beat
+  ("Well... I love the confidence at least. Let's get going?") it had them take
+  a water bottle, drink from it and nod; when they merely ASKED "I hope you
+  don't mind if I lean on you", it performed the leaning for them.
+
+  The reported out-of-order symptom was the same bug's shadow, not a second
+  defect: the engine enacts the act, the player then declares that same act a
+  beat later, so the moment happens twice and the scene doubles back.
+
+  The line drawn is **elaboration vs invention**. Rendering a DECLARED act with
+  as much physical detail as the prose wants is the Director's job and is never
+  touched; only an act arriving from nowhere is. A new prompt rule (PLAYER ACT
+  AUTHORITY -- ELABORATE, NEVER INVENT) names the trap directly: **a request is
+  not an act.** An NPC may offer, hold out, brace or wait; the player accepts on
+  their own turn. Enforcement is a bounded correction retry on `director_resolve`,
+  kept only if it reduces the violation count, with anything surviving attached
+  to the step as `player_act_warnings` so it stays visible.
+
+  This is the action-side counterpart to the alpha3.2.1 player-SPEECH guard,
+  which covered the player's words but left their conduct open.
+- **A beat could end with the character it was about never simulated**
+  (`agents/loops.py`, `prompts.py`). Found by the v3 demo run. The Director
+  flagged Dr. Vorne in `flow.tom_triggers`, Picard's own line handed him the
+  floor ("Doctor, I would hear your answer as well"), and the interaction loop
+  then ended the beat after a single call with 5 of 6 permitted calls unused.
+  Vorne's agent never ran, and the narrator rendered "He does not speak" as a
+  characterful refusal no agent had chosen.
+
+  The cost compounds: appraisal -- and therefore the `goal_impacts` drive strain
+  accrues from -- exists only for characters that actually ran. Skipping the
+  focus character on precisely the beats aimed at his drive pinned his strain at
+  0.0 and made a rupture unreachable however correct the accrual arithmetic was.
+  This sits ABOVE the v2 audit's W1: alpha3.2 fixed the maths, this supplies the
+  input it was waiting on. Both of the loop's early exits now give a flagged
+  focus character one call before the beat ends.
+- **The player's own name in the player's own view** (`agents/perception.py`,
+  `agents/common.py`, `agents/narration.py`). Perception's "last overt action"
+  backstop appended the acting agent's `observable` surface verbatim to every
+  perceiver's view, and those surfaces are authored in third person naming
+  everyone else -- so the player's name landed in their own view at zero
+  temperature and the narrator copied it through. Two floors: the receiving
+  perceiver's own name is rewritten to second person before injection, and prose
+  naming the player while `narration_person` is second/first raises an
+  enforceable narrator warning. Both stay quiet on quoted dialogue and on
+  third-person narration, where naming the player is correct.
+
+### Added
+- **Genre and standing generation instructions** (`scene.py`, `prompts.py`, UI).
+  A per-chat style guide -- genre, tone, director notes, mapping notes, and
+  things to avoid -- so rooms minted mid-play match the world's theme instead of
+  drifting to a generic register. Reachable from a new **Genre & style** toolbar
+  panel.
+
+  **Self-determination stays the default and first-class:** an unset guide, or an
+  explicit "self-determine" genre, carries no genre at all, leaving the payload
+  identical to before this existed. The engine already infers a register from
+  scenario and lore, and an author who hasn't decided shouldn't be made to
+  invent one. The parts compose -- leave the genre to the engine while still
+  pinning "every room has exactly one working light".
+
+  Scope is generative stages only: `director_establish`, `director_resolve` and
+  mapping receive it. `director_interpret` does not -- it reads what the PLAYER
+  declared, and a house style there would colour how their own words are read.
+  Character agents and perception are excluded on the principle that keeps them
+  separate elsewhere: a character's manner comes from their authored voice, and
+  one house style in every head would make every mind sound like the narrator.
+
+### Notes
+- Both prompt-level rules state the same hard limit: a style guide is a STYLE,
+  not a fact source. It never overrides canon, an established room, a player
+  declaration, or plausibility, and is never quoted back into output.
+- On Claude Opus, three role prompts still sit below Anthropic's 4096-token
+  minimum cacheable prefix and will not cache however correct the breakpoint is
+  (carried over from alpha3.2.2). Sonnet-tier minimums are lower and unaffected.
+
 ## alpha3.2.3 — Provider rows are not dicts (hotfix)
 
 **alpha3.2.2 is broken; use this instead.** Two helpers added in that release read
