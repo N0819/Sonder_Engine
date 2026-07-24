@@ -1930,7 +1930,134 @@ def _detect_narration_person(raw_input, player_name=None, player_pronouns=None):
         return None
     return best
 
-def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None):
+# Third-person paradigms screened by _check_pronoun_fidelity. Only these three
+# closed sets are checked: a character whose declared pronouns fall outside the
+# table (neopronouns, mixed sets like she/them) is skipped entirely rather than
+# guessed at -- the check exists to catch UNAMBIGUOUS flips, so anything it
+# can't be certain about is not its business.
+_PRONOUN_GROUPS = {
+    "he": ("he", "him", "his", "himself"),
+    "she": ("she", "her", "hers", "herself"),
+    "they": ("they", "them", "their", "theirs", "themselves", "themself"),
+}
+_PRONOUN_TO_GROUP = {w: g for g, ws in _PRONOUN_GROUPS.items() for w in ws}
+
+# Splits a sentence into clauses. A pronoun is only scored against a name in
+# the SAME clause, which is what keeps "Vorne glanced at the ensign; her hands
+# shook" (referent is the ensign, not Vorne) out of the check.
+_CLAUSE_SPLIT = re.compile(
+    r"[,;:()\[\]—–]|\s+(?:and|but|while|as|when|then|though|although"
+    r"|so|yet|because|before|after|until|which|who|whose|that)\s+",
+    re.I,
+)
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+# Names that are also ordinary capitalized English words. A cast member called
+# one of these can't be told apart from the common word, so we decline to score
+# their clauses rather than burn a rewrite on "Will you hand him the padd".
+_AMBIGUOUS_NAME_WORDS = {
+    "will", "may", "art", "grace", "hope", "rose", "mark", "bill", "dawn",
+    "sky", "rain", "storm", "ray", "faith", "joy", "sun", "star",
+}
+
+
+def _pronoun_group(pronouns):
+    """The closed paradigm a declared pronoun set belongs to, or None when the
+    declared forms are absent, unknown, or disagree with each other."""
+    if not isinstance(pronouns, dict):
+        return None
+    groups = set()
+    for key in ("subject", "object", "possessive"):
+        word = str(pronouns.get(key) or "").strip().lower()
+        if not word:
+            continue
+        group = _PRONOUN_TO_GROUP.get(word)
+        if group is None:
+            return None
+        groups.add(group)
+    return groups.pop() if len(groups) == 1 else None
+
+
+def _check_pronoun_fidelity(prose, cast_pronouns):
+    """Third-person pronoun flips the narrator prose commits against a cast
+    member's canonical pronouns (W6).
+
+    The PRONOUN CONSISTENCY prompt rule reduces but does not enforce this --
+    a he/him character still picked up a "her" in live play. Deliberately
+    narrow: a clause must OPEN with exactly one known cast name and then use a
+    pronoun from a different paradigm, so the named subject is the only
+    possible referent. Anything looser (a second name in the clause, a bare
+    pronoun in a following sentence, an unnamed role noun) is left alone --
+    a false positive costs a needless full narrator rewrite.
+    """
+    if not prose or not isinstance(cast_pronouns, dict):
+        return []
+
+    # name token -> (canonical name, group). Good prose drops to a surname or
+    # first name alone after the first mention, so each word of a multi-word
+    # name is a referent in its own right. A token two cast members share is
+    # dropped: it no longer identifies one of them.
+    token_owner = {}
+    for name, pronouns in cast_pronouns.items():
+        group = _pronoun_group(pronouns)
+        canonical = str(name or "").strip()
+        if not group or not canonical:
+            continue
+        for token in re.findall(r"[A-Za-z']+", canonical):
+            if len(token) < 3 or not token[:1].isupper():
+                continue
+            if token.lower() in _AMBIGUOUS_NAME_WORDS:
+                continue
+            if token in token_owner and token_owner[token][0] != canonical:
+                token_owner[token] = None
+            elif token not in token_owner:
+                token_owner[token] = (canonical, group)
+    token_owner = {t: v for t, v in token_owner.items() if v}
+    if not token_owner:
+        return []
+
+    # A pronoun inside quoted dialogue belongs to the speaker talking about
+    # whoever they mean -- often someone the clause never names -- so it can't
+    # be scored against the clause's named subject.
+    scan = re.sub(r'"[^"]*"|“[^“”]*”', " ", prose)
+
+    warnings = []
+    flagged = set()
+    for sentence in _SENTENCE_SPLIT.split(scan):
+        for clause in _CLAUSE_SPLIT.split(sentence):
+            words = re.findall(r"[A-Za-z']+", clause)
+            if len(words) < 2:
+                continue
+            present = {token_owner[w] for w in words if w in token_owner}
+            if len(present) != 1:
+                continue
+            canonical, group = next(iter(present))
+            # The name must OPEN the clause: only then is it unambiguously the
+            # subject the following pronoun refers back to.
+            head = next(i for i, w in enumerate(words) if w in token_owner)
+            if head > 1:
+                continue
+            for word in words[head + 1:]:
+                other = _PRONOUN_TO_GROUP.get(word.lower())
+                # A stray "they" is routinely a group ("Vorne watched them
+                # scatter"), so only a GENDERED singular counts as a flip.
+                if not other or other == group or other == "they":
+                    continue
+                key = (canonical, word.lower())
+                if key in flagged:
+                    break
+                flagged.add(key)
+                expected = "/".join(_PRONOUN_GROUPS[group][:3])
+                warnings.append(
+                    f"Pronoun mismatch for '{canonical}' (canonical {expected}): "
+                    f"prose renders '{word}'"
+                )
+                break
+    return warnings
+
+
+def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
+                             cast_pronouns=None):
     warnings = []
     view_text = str(view or "")
     prose = out.get("prose") or ""
@@ -1993,6 +2120,8 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None):
             warnings.append(
                 f"Dialogue from view missing or altered in narrator prose: \"{quote[:80]}\""
             )
+
+    warnings.extend(_check_pronoun_fidelity(prose, cast_pronouns))
 
     return warnings
 

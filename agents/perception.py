@@ -123,6 +123,32 @@ def _identity_roster(p_name, p_appearance, cast):
         })
     return roster
 
+def _observed_pronouns(chat_id, cast):
+    """Canonical pronouns for each cast member a view may refer to in the third
+    person, so a view doesn't guess a character's gender from their name and
+    flip it between beats (W6).
+
+    A character under an ACTIVE DISGUISE is excluded: their canonical pronouns
+    are part of the identity the disguise conceals, and stating them in a view
+    an unaware observer receives would out them -- the exact leak the disguise
+    machinery above exists to prevent. Their pronouns come from the disguised
+    appearance instead, like every other visible feature.
+    """
+    disguised = active_disguises(chat_id) or {}
+    out = {}
+    for c in (cast or []):
+        sh, _, _ = sheet_state(c)
+        name = character_name(sh)
+        if not name or str(name).casefold() in disguised:
+            continue
+        pronouns = ((sh.get("identity") or {}).get("pronouns") or {}
+                    if isinstance(sh, dict) else {})
+        clean = {k: pronouns[k] for k in ("subject", "object", "possessive")
+                 if isinstance(pronouns, dict) and pronouns.get(k)}
+        if clean:
+            out[name] = clean
+    return out
+
 def _scrub_view_for(ctx, stage, view, perceiver_name, known, roster):
     """Apply the deterministic identity floor to one perceiver's view:
     every roster identity the perceiver does not recognize (and is not) is
@@ -449,6 +475,7 @@ def perception_establish(ctx, nonce):
                   "rooms": sc.get("rooms"), "entities": sc.get("entities")},
         "declared_act": declared,
         "perceivers": awake_perceivers,
+        "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
         "scene_opening": True,
         "note": "This is a scene opening. Each perceiver perceives their surroundings "
                 "and their own initial state. The player's entity_state contains their "
@@ -642,6 +669,7 @@ def perception_act(ctx, nonce):
                   "entities": sc.get("entities")},
         "declared_act": action_onset,
         "perceivers": awake_perceivers,
+        "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
         "note": (
             "a private thought exists but its contents are withheld"
             if interp.get("private_thought") else "no private thought"
@@ -1030,6 +1058,7 @@ def perception_outcome(ctx, nonce):
                   "rooms": _contextual_rooms(sc, ctx.cast, p_room),
                   "entities": sc.get("entities")},
         "perceivers": awake_perceivers,
+        "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
         "output_reminder": (
             "You MUST return a view for EVERY perceiver in the perceivers list, "
             "keyed by their 'id' field exactly as given."
