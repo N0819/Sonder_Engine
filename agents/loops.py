@@ -135,6 +135,36 @@ def _drop_non_awake(ctx, reactor_ids):
             if awareness_of(amap, id_to_name.get(rid, "")) not in NON_AWAKE_GATED]
 
 
+def _defer_to_focus(queue_ids, tom_focus, already_spoke,
+                    focus_deferred, calls, max_calls):
+    """Re-queue this beat's focus character ahead of an early exit, or None to
+    let the exit stand.
+
+    Both of the interaction loop's early exits -- a declared act needing
+    director resolution, and a question turned to the player -- end the beat
+    immediately. Observed live (v3 run, turns 5 and 8): the character the beat
+    was about, flagged by the Director in flow.tom_triggers and explicitly
+    invited to answer BY ANOTHER CHARACTER in the same beat, was never called.
+    The narrator then rendered the resulting absence as a deliberate silence
+    ("He says nothing for a long moment") that no agent had chosen.
+
+    The cost is not only dramatic: appraisal -- and therefore the goal_impacts
+    drive strain accrues from -- exists only for characters that actually ran,
+    so a drive could never build toward rupture on the very beats aimed at it.
+
+    Granted at most once per beat: a focus character who themselves trigger an
+    exit must not be able to hold the loop open.
+    """
+    if focus_deferred or calls >= max_calls:
+        return None
+    pending = [cid for cid in queue_ids
+               if cid in tom_focus and cid not in already_spoke]
+    if not pending:
+        return None
+    first = pending[0]
+    return [first] + [cid for cid in queue_ids if cid != first]
+
+
 def interaction_loop(ctx, nonce):
     config = dialogue_config(ctx.chat.id)
 
@@ -313,7 +343,16 @@ def interaction_loop(ctx, nonce):
             },
         })
 
+        # Both early exits below end the beat. Neither may end it with the
+        # character the beat is ABOUT never simulated -- see _defer_to_focus.
         if _requires_director_resolution(result):
+            deferred = _defer_to_focus(
+                queue_ids, tom_focus, already_spoke,
+                focus_deferred, calls, max_calls,
+            )
+            if deferred is not None:
+                queue_ids, focus_deferred = deferred, True
+                continue
             stop_reason = (
                 "physical resolution required"
             )
@@ -337,16 +376,12 @@ def interaction_loop(ctx, nonce):
             # on precisely the beats aimed at it. Granted at most once per
             # beat, so a focus character who also turns to the player cannot
             # hold the loop open.
-            pending_focus = [
-                cid for cid in queue_ids
-                if cid in tom_focus and cid not in already_spoke
-            ]
-            if pending_focus and not focus_deferred and calls < max_calls:
-                focus_deferred = True
-                first = pending_focus[0]
-                queue_ids = [first] + [
-                    cid for cid in queue_ids if cid != first
-                ]
+            deferred = _defer_to_focus(
+                queue_ids, tom_focus, already_spoke,
+                focus_deferred, calls, max_calls,
+            )
+            if deferred is not None:
+                queue_ids, focus_deferred = deferred, True
                 continue
             stop_reason = (
                 "awaiting player response"

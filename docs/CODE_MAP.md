@@ -12,7 +12,7 @@
 | `agents/character.py` | 399 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/common.py` | 2404 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/director.py` | 2447 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
-| `agents/loops.py` | 503 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
+| `agents/loops.py` | 538 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 190 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 487 | Player-facing narration agent. | `agents.common`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/perception.py` | 1326 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
@@ -109,9 +109,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `interaction_loop()` | 138 | 295 lines |
+| `interaction_loop()` | 168 | 300 lines |
 | `deterministic_micro_perception()` | 40 | 83 lines |
-| `reaction_loop()` | 434 | 70 lines |
+| `reaction_loop()` | 469 | 70 lines |
+| `_defer_to_focus()` | 138 | 28 lines |
 | `_drop_non_awake()` | 124 | 12 lines |
 
 ### `agents/mapping.py`

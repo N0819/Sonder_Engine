@@ -95,6 +95,32 @@ never arrives. A rupture cannot build no matter how well the math works.
 that character in `tom_triggers` and another cast member earlier in registration
 order; assert the targeted character receives a call.
 
+**Status: FIXED** in `86fa6ab`, with regression tests in
+`tests/test_interaction_focus_call.py`. Two changes: the interaction loop now
+gives a flagged `tom_triggers` character a call before yielding to the player
+(granted at most once per beat, so a focus character who also turns to the
+player cannot hold the loop open), and the Director's ADDRESSEE PRIORITY rule
+now covers role/title vocatives where context disambiguates.
+
+**Evidence.** `v1_evidence_prefix_run.jsonl` is the 9-turn (0–8) log of the run
+that exposed this, played against the *unfixed* engine. It is kept as the
+before-picture: Vorne's agent ran on turns 1, 2 and 5 only, and his drive strain
+never left 0.0. `run.db` / `run_log.jsonl` were then restarted from turn 0 on the
+fixed engine, so the transcript is uniformly one engine version rather than
+changing behaviour mid-episode. Turns 0–5 replay the same player inputs in both.
+
+Two caveats on the diagnosis, recorded because they narrow the claim:
+
+- `max_character_calls` is **6**, not 1. An early reading of the `.get(..., 1)`
+  default suggested the budget was binding; it was not. The loop had 5 calls
+  spare and stopped by choice, so the defect is the stop condition, not the
+  budget.
+- The empty `addressed_to` on turn 8 was **partly the player's fault**: the
+  vocative was a bare *"Doctor."* with two doctors present (Vorne and Crusher),
+  which the existing rule correctly treats as ambiguous. The prompt change
+  targets only the narrower gap — that surrounding context was available and
+  unused.
+
 ---
 
 ## Note on run methodology

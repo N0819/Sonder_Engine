@@ -143,3 +143,53 @@ def test_focus_character_who_already_spoke_is_not_recalled(monkeypatch):
 
     assert calls == [27]
     assert out["stop_reason"] == "awaiting player response"
+
+
+# ---- The second exit ----
+#
+# The first fix covered only the "question turned to the player" exit. The live
+# run then reproduced the identical failure through the OTHER early exit: on
+# turn 5 Picard said "Doctor Vorne -- the Commander's question is not
+# rhetorical. I'd like to hear your answer", a background presence added
+# "We're all waiting", and the beat ended on `physical resolution required`
+# with Vorne never called. Same defect, different door.
+
+def test_focus_character_answers_before_director_resolution(monkeypatch):
+    calls = []
+    _install(monkeypatch, calls, asks_player_ids=set())
+    # Picard's declared act needs director resolution, which ends the beat.
+    monkeypatch.setattr(loops, "_requires_director_resolution",
+                        lambda r: r["cid"] == 26)
+    ctx = _Ctx(reactors=[26, 27, 28], tom_triggers=[27])
+
+    out = loops.interaction_loop(ctx, nonce=0)
+
+    assert 27 in calls, (
+        "focus character never ran before physical-resolution exit "
+        f"(calls={calls}, stop={out.get('stop_reason')!r})")
+    assert calls.index(26) < calls.index(27)
+
+
+def test_director_resolution_deferral_is_also_once_only(monkeypatch):
+    calls = []
+    _install(monkeypatch, calls, asks_player_ids=set())
+    monkeypatch.setattr(loops, "_requires_director_resolution", lambda r: True)
+    ctx = _Ctx(reactors=[26, 27, 28], tom_triggers=[27])
+
+    out = loops.interaction_loop(ctx, nonce=0)
+
+    assert calls == [26, 27]
+    assert out["stop_reason"] == "physical resolution required"
+
+
+def test_no_focus_means_director_resolution_exits_immediately(monkeypatch):
+    calls = []
+    _install(monkeypatch, calls, asks_player_ids=set())
+    monkeypatch.setattr(loops, "_requires_director_resolution",
+                        lambda r: r["cid"] == 26)
+    ctx = _Ctx(reactors=[26, 27, 28], tom_triggers=[])
+
+    out = loops.interaction_loop(ctx, nonce=0)
+
+    assert calls == [26]
+    assert out["stop_reason"] == "physical resolution required"
