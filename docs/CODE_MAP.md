@@ -6,7 +6,7 @@
 
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
-| `affect.py` | 1100 |  | `theory_of_mind` |
+| `affect.py` | 1136 |  | `theory_of_mind` |
 | `agents/__init__.py` | 83 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 250 |  | `agents.common`, `commit`, `db`, `prompts`, `schemas`, `spatial` |
 | `agents/character.py` | 359 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
@@ -50,14 +50,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `resolve_affect()` | 472 | 134 lines |
-| `apply_intent_ops()` | 705 | 120 lines |
-| `validate_drive_shift()` | 950 | 79 lines |
-| `update_drive_strain()` | 828 | 78 lines |
-| `normalize_wants()` | 612 | 72 lines |
-| `leak_scan()` | 1043 | 44 lines |
-| `detect_drive_rupture()` | 907 | 38 lines |
-| `appraise()` | 355 | 36 lines |
+| `resolve_affect()` | 494 | 134 lines |
+| `apply_intent_ops()` | 727 | 120 lines |
+| `validate_drive_shift()` | 986 | 79 lines |
+| `update_drive_strain()` | 867 | 77 lines |
+| `normalize_wants()` | 634 | 72 lines |
+| `appraise()` | 367 | 46 lines |
+| `leak_scan()` | 1079 | 44 lines |
+| `detect_drive_rupture()` | 945 | 36 lines |
 
 ### `agents/background.py`
 

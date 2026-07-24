@@ -67,7 +67,8 @@ def test_lexicon_signs_are_valid():
 
 def test_appraise_empty_is_zero():
     out = appraise([], _priority_of)
-    assert out == {"dV": 0.0, "dA": 0.0, "emotions": [], "dominant": None}
+    assert out == {"dV": 0.0, "dA": 0.0, "emotions": [], "dominant": None,
+                   "drive_impact": None}
     assert appraise(None, _priority_of)["dV"] == 0.0
 
 def test_appraise_uncertain_threat_is_fear():
@@ -466,15 +467,44 @@ def test_strain_confirmed_contradiction_accrues_more_when_self_caused():
     assert self_entry["delta"] == pytest.approx(0.30375, abs=1e-3)
     assert set(self_entry) == {"source", "why", "delta"}  # caller stamps turn
 
-def test_strain_uncertain_or_offdrive_contradiction_accrues_nothing():
+def test_strain_below_floor_or_offdrive_contradiction_accrues_nothing():
+    # Below the strain certainty floor (0.5): a near-guess doesn't accrue.
     strain, entry = update_drive_strain(
-        0.3, [], _drive_hit(-0.9, 0.5, "self"), "drive", None, 0)
-    assert strain == pytest.approx(0.3) and entry is None  # still in prospect
+        0.3, [], _drive_hit(-0.9, 0.4, "self"), "drive", None, 0)
+    assert strain == pytest.approx(0.3) and entry is None  # too uncertain
     offdrive = appraise([{"serves": "i1", "impact": -0.9, "certainty": 0.9,
                           "agency": "self", "why": "the plan failed"}],
                         _priority_of)
     strain, entry = update_drive_strain(0.3, [], offdrive, "drive", None, 0)
     assert strain == pytest.approx(0.3) and entry is None  # not the drive's wound
+
+
+def test_strain_accrues_from_drive_wound_even_when_not_dominant():
+    # Live root cause (Enterprise run, Vorne t14): the beat wounded an intention
+    # (-0.6 @ 0.9 -> weight 0.43, dominant) AND the drive (-0.5 @ 0.8 self ->
+    # weight 0.40). The old "dominant-only" rule discarded the drive wound
+    # because the intention edged it out, so strain never built. The drive
+    # wound must register whenever present.
+    gi = [{"serves": "i1", "impact": -0.6, "certainty": 0.9, "agency": "self",
+           "why": "the immediate task failed"},
+          {"serves": "drive", "impact": -0.5, "certainty": 0.8, "agency": "self",
+           "why": "his life's work was careless of the human price"}]
+    ap = appraise(gi, _priority_of)
+    assert ap["dominant"]["serves"] == "i1"          # intention is dominant...
+    assert ap["drive_impact"]["serves"] == "drive"   # ...but the drive is surfaced
+    strain, entry = update_drive_strain(0.0, [], ap, "", "", 0)
+    assert strain > 0 and entry["source"] == "contradiction"  # accrues anyway
+
+
+def test_strain_moderate_certainty_drive_contradiction_accrues():
+    # The calibration fix: an authentic, less-than-certain drive wound
+    # (certainty 0.7) DOES accrue -- a rupture is inherently uncertain, so
+    # gating at 0.8 discarded exactly the signals that should build strain
+    # (observed live: a capable model's -0.35 @ 0.7 accrued nothing).
+    strain, entry = update_drive_strain(
+        0.0, [], _drive_hit(-0.35, 0.7, "other"), "drive", None, 0)
+    assert strain == pytest.approx(0.0612, abs=1e-3)  # 0.25 * 0.35 * 0.7
+    assert entry["source"] == "contradiction"
 
 def test_strain_relief_pays_down_and_clamps_at_zero():
     relief = _drive_hit(0.8, 1.0, "self", why="the oath held and saved her")
@@ -563,12 +593,18 @@ def test_rupture_fires_only_when_both_keys_turn():
     assert detect_drive_rupture(0.1, _drive_hit(-1.0, 1.0, "self"), 100, None) is None
 
 def test_rupture_requires_confirmed_drive_scale_event():
-    # uncertain, or not serving the drive: event_score is 0
-    assert detect_drive_rupture(0.9, _drive_hit(-1.0, 0.7, "self"), 100, None) is None
+    # Below the certainty floor (0.4), or not serving the drive: event_score 0.
+    assert detect_drive_rupture(0.9, _drive_hit(-1.0, 0.4, "self"), 100, None) is None
     offdrive = appraise([{"serves": "i1", "impact": -1.0, "certainty": 1.0,
                           "agency": "self", "why": "the plan collapsed"}],
                         _priority_of)
     assert detect_drive_rupture(0.9, offdrive, 100, None) is None
+    # The fix: a STRONG but not-certain (0.7) self-caused drive wound at high
+    # strain now ignites -- the magnitude gate (event_score >= 0.55) keeps it
+    # earned; only the certainty bar moved off the 0.8 that had made an honest
+    # (uncertain) rupture impossible.
+    out = detect_drive_rupture(0.9, _drive_hit(-1.0, 0.7, "self"), 100, None)
+    assert out is not None and out["direction"] == "contradiction"
 
 def test_rupture_self_agency_multiplier_tips_the_event_gate():
     # base 0.6 * 0.9 = 0.54 < 0.55; self-caused: 0.621 >= 0.55
