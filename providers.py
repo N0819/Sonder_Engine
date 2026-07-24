@@ -243,6 +243,19 @@ def _anthropic_system(system):
 _CACHE_PASSTHROUGH_KINDS = ("openrouter",)
 
 
+def _prov_field(prov, key, default=None):
+    """Read a provider field from either a sqlite3.Row (what provider() returns)
+    or a plain dict (tests, synthetic callers). Row supports subscripting but
+    NOT .get(), and raises IndexError rather than KeyError on a missing key --
+    calling .get() on one is an AttributeError at request time, which surfaces
+    as an opaque "all providers failed" turn error."""
+    try:
+        value = prov[key]
+    except (KeyError, IndexError, TypeError):
+        return default
+    return default if value is None else value
+
+
 def _model_is_anthropic(model):
     m = str(model or "").lower()
     return m.startswith("anthropic/") or "claude" in m
@@ -253,7 +266,7 @@ def _openai_system_message(system, prov, model):
     a cache-passthrough aggregator get the cache-marked content-part form;
     everyone else gets the plain string they expect."""
     if (PROMPT_CACHE_ENABLED and system
-            and prov.get("kind") in _CACHE_PASSTHROUGH_KINDS
+            and _prov_field(prov, "kind") in _CACHE_PASSTHROUGH_KINDS
             and _model_is_anthropic(model)):
         return {"role": "system",
                 "content": [{"type": "text", "text": system,
@@ -334,7 +347,7 @@ def openrouter_routing():
 
 def _apply_provider_routing(body, prov, routing=None):
     """Attach the routing block for OpenRouter requests only."""
-    if prov.get("kind") != "openrouter":
+    if _prov_field(prov, "kind") != "openrouter":
         return body
     routing = openrouter_routing() if routing is None else routing
     if routing:
@@ -1207,7 +1220,7 @@ def list_openrouter_endpoints(prov, model):
     slugs are not guessable -- this is what lets a picker offer the real set
     instead of asking someone to type one from memory.
     """
-    if prov.get("kind") != "openrouter":
+    if _prov_field(prov, "kind") != "openrouter":
         return []
     slug = str(model or "").strip()
     if not slug:

@@ -36,7 +36,7 @@
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
 | `prompts.py` | 1885 | Default system prompts and prompt preset access. | `db` |
-| `providers.py` | 1339 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
+| `providers.py` | 1352 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 693 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 1820 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 1475 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | — |
@@ -365,14 +365,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 815 | 159 lines |
-| `async chat_complete_async()` | 975 | 88 lines |
-| `chat_complete()` | 661 | 83 lines |
-| `async _chat_complete_async_once()` | 1064 | 65 lines |
-| `resolve_role_candidates()` | 452 | 52 lines |
-| `list_models()` | 1241 | 47 lines |
-| `_sse_openai()` | 571 | 46 lines |
-| `_sse_anthropic()` | 618 | 42 lines |
+| `_chat_complete_once()` | 828 | 159 lines |
+| `async chat_complete_async()` | 988 | 88 lines |
+| `chat_complete()` | 674 | 83 lines |
+| `async _chat_complete_async_once()` | 1077 | 65 lines |
+| `resolve_role_candidates()` | 465 | 52 lines |
+| `list_models()` | 1254 | 47 lines |
+| `_sse_openai()` | 584 | 46 lines |
+| `_sse_anthropic()` | 631 | 42 lines |
 
 ### `scene.py`
 

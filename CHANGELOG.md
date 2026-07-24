@@ -1,5 +1,23 @@
 # Changelog
 
+## alpha3.2.3 — Provider rows are not dicts (hotfix)
+
+**alpha3.2.2 is broken; use this instead.** Two helpers added in that release read
+the provider record with `.get()`, but `provider()` returns a `sqlite3.Row`, which
+supports subscripting and has no `.get()`. Every request to an OpenAI-compatible
+provider -- which is every provider except a direct `kind="anthropic"` connection --
+raised `AttributeError` inside request construction and surfaced as an opaque
+`all providers failed` turn error. The default configuration hits this on the first
+turn.
+
+The dict-based tests all passed because they never used a real row. Provider fields
+now go through one accessor that handles both `sqlite3.Row` (subscript, `IndexError`
+on a missing key) and plain dicts, and the regression tests build a genuine
+`sqlite3.Row` -- including a row missing a column, which must degrade rather than
+raise.
+
+Found by running the demo, not by the suite; the suite has been taught the case.
+
 ## alpha3.2.2 — Say who serves you, and what it costs
 
 Provider-layer fixes from a user issue report, plus the deterministic half of the

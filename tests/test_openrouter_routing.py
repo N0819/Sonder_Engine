@@ -163,3 +163,57 @@ def test_endpoint_listing_shapes_the_picker(monkeypatch):
 def test_endpoint_listing_is_openrouter_only():
     assert providers.list_openrouter_endpoints(DIRECT, "gpt-5") == []
     assert providers.list_openrouter_endpoints(OPENROUTER, "") == []
+
+
+# ---- Row vs dict ----
+#
+# provider() returns a sqlite3.Row, which supports subscripting but NOT .get(),
+# and raises IndexError rather than KeyError on a missing key. Helpers written
+# against dicts therefore pass every dict-based test and then raise
+# AttributeError on the first real request, surfacing as an opaque
+# "all providers failed" turn error. These tests use a real Row.
+
+def _row(**cols):
+    import sqlite3
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    keys = ", ".join(cols)
+    conn.execute(f"CREATE TABLE p ({keys})")
+    conn.execute(f"INSERT INTO p VALUES ({', '.join('?' * len(cols))})",
+                 tuple(cols.values()))
+    return conn.execute("SELECT * FROM p").fetchone()
+
+
+def test_provider_fields_read_from_a_real_row():
+    row = _row(id=1, kind="openrouter", name="or", api_key="k",
+               base_url="https://openrouter.ai/api/v1")
+    assert providers._prov_field(row, "kind") == "openrouter"
+    assert providers._prov_field(row, "nonexistent") is None
+    assert providers._prov_field(row, "nonexistent", "fallback") == "fallback"
+
+
+def test_routing_and_cache_shaping_accept_a_real_row():
+    row = _row(id=1, kind="openrouter", name="or", api_key="k",
+               base_url="https://openrouter.ai/api/v1")
+    assert providers._apply_provider_routing({}, row, {"only": ["anthropic"]}) == \
+        {"provider": {"only": ["anthropic"]}}
+
+    providers.PROMPT_CACHE_ENABLED = True
+    msg = providers._openai_system_message("stable prefix", row,
+                                           "anthropic/claude-opus-4-6")
+    assert msg["content"][0]["cache_control"] == {"type": "ephemeral"}
+
+
+def test_non_openrouter_row_is_left_alone():
+    row = _row(id=2, kind="deepseek", name="ds", api_key="k",
+               base_url="https://api.deepseek.com/v1")
+    assert providers._apply_provider_routing({}, row, {"only": ["x"]}) == {}
+    assert providers._openai_system_message("s", row, "deepseek/deepseek-v4") == \
+        {"role": "system", "content": "s"}
+
+
+def test_row_missing_a_column_does_not_raise():
+    """A provider row from an older schema must degrade, not explode."""
+    row = _row(id=3, name="legacy")
+    assert providers._prov_field(row, "kind") is None
+    assert providers._apply_provider_routing({}, row, {"only": ["x"]}) == {}
