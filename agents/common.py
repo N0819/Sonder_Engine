@@ -1261,6 +1261,12 @@ _OBSERVED_STOPWORDS = frozenset({
     "down", "over", "under", "then", "while", "is", "are", "was", "were", "be",
     "been", "this", "that", "these", "those", "your", "you", "herself",
     "himself", "themselves", "itself", "slightly", "slowly", "again",
+    # Same category as the prepositions already above -- function words, not
+    # distinctive content. Counting "against"/"beside" as evidence that two
+    # descriptions are the same beat inflated overlap on unrelated actions
+    # that merely happened near the same wall.
+    "against", "beside", "behind", "near", "through", "around", "before",
+    "between", "onto", "off", "out", "back", "away", "past", "along",
 })
 
 
@@ -1277,6 +1283,133 @@ def _content_tokens(text):
                 break
         toks.append(raw)
     return toks
+
+
+def _self_second_person(text, forms):
+    """Rewrite a PERCEIVER's own name/alias forms inside engine-supplied prose
+    into second person, before that prose is injected into their own view.
+
+    Every perception view is written from its perceiver's own vantage ("You
+    are in the lobby..."), but the deterministic action backstop appends an
+    actor's `observable` surface verbatim -- and those surfaces are authored
+    in third person by the acting agent, naming everyone else by name. So
+    Dr. Moon's "steps briskly from the barricade toward Hinami" landed in
+    HINAMI'S OWN view, producing the same beat twice in two different persons
+    ("...beside your shoulder. Dr. Moon steps briskly ... toward Hinami...")
+    and handing the narrator a player_view that names the player in the third
+    person -- the exact thing its PERSON DISCIPLINE rule forbids.
+
+    Scope is deliberately narrow and deterministic: only the perceiver's own
+    explicit name/alias tokens are rewritten (possessive -> "your", every
+    other form -> "you"), never pronouns. A third-person pronoun later in the
+    same clause that referred to the perceiver ("...beside her shoulder") is
+    left alone -- resolving that anaphora needs a referent the engine cannot
+    determine when the actor shares the perceiver's pronouns, and a wrong
+    guess would be worse than a mildly loose one. Quoted spans survive
+    verbatim: a name spoken aloud is sensory signal, and dialogue fidelity
+    forbids rewriting it.
+    """
+    text = str(text or "")
+    if not text:
+        return text
+    patterns = []
+    for form in forms or []:
+        form = str(form or "").strip()
+        if not form:
+            continue
+        # Ordinary-English single-token names ("Rose", "Hope") are matched
+        # case-sensitively, exactly as the identity scrub does, so common
+        # lowercase prose is never rewritten into second person.
+        flags = 0 if form.casefold() in _COMMON_WORD_NAMES else re.I
+        patterns.append(re.compile(
+            r"(?<!\w)" + re.escape(form) + r"(['’]s)?(?!\w)", flags))
+    if not patterns:
+        return text
+    segments = _QUOTED_SPAN_RE.split(text)
+    for i in range(0, len(segments), 2):  # even indices = unquoted prose
+        before = segments[i]
+        after = before
+        for pattern in patterns:
+            after = pattern.sub(_self_pronoun_sub, after)
+        # A name in SUBJECT position leaves the verb inflected for third
+        # person singular ("Hinami is caught" -> "You is caught"), which
+        # would reach the player as visibly broken prose. Only run the
+        # repair on segments this pass actually rewrote.
+        segments[i] = _fix_you_agreement(after) if after != before else before
+    return "".join(segments)
+
+
+# Third-person-singular forms that must agree with an inserted "you".
+_YOU_AGREEMENT = {
+    "is": "are", "was": "were", "has": "have", "does": "do",
+    "isn't": "aren't", "wasn't": "weren't", "hasn't": "haven't",
+    "doesn't": "don't", "isn’t": "aren’t", "wasn’t": "weren’t",
+    "hasn’t": "haven’t", "doesn’t": "don’t",
+}
+
+# Words that can follow a subject, end in -s, and are NOT verbs -- the guard
+# on the regular-verb rule below, which otherwise strips a meaningful "s"
+# ("You always" -> "You alway"). Deliberately a closed list: a missed entry
+# costs one dropped letter, while dropping the rule entirely costs "You steps".
+_NON_VERB_S_WORDS = frozenset({
+    "afterwards", "always", "anyways", "backwards", "besides", "downwards",
+    "forwards", "nevertheless", "onwards", "perhaps", "sideways", "sometimes",
+    "thus", "towards", "unless", "upwards", "yes",
+})
+
+_YOU_VERB_RE = re.compile(r"(?<!\w)([Yy]ou)(\s+)([A-Za-z’']+)")
+
+# Stems that take -es rather than a bare -s ("catch/catches", "push/pushes",
+# "fix/fixes", "go/goes", "pass/passes"); everything else drops a single -s.
+# "ss" not "s": a stem ending in ONE s is rare ("bus"), while "loses",
+# "raises", "closes" are common and keep their stem-final e.
+_ES_STEM_ENDINGS = ("ss", "x", "z", "ch", "sh", "o")
+
+
+def _base_from_third_person_s(word):
+    """Undo third-person-singular -s/-es/-ies on a regular present verb, or
+    return None when the word is not one."""
+    low = word.lower()
+    if (low in _NON_VERB_S_WORDS or len(low) <= 3 or not low.endswith("s")
+            or low.endswith(("ss", "us", "is", "as", "'s", "’s"))):
+        return None
+    if low.endswith("ies") and len(low) > 4:      # carries -> carry
+        return word[:-3] + "y"
+    if low.endswith("es") and low[:-2].endswith(_ES_STEM_ENDINGS):
+        return word[:-2]                          # catches -> catch
+    return word[:-1]                              # steps -> step
+
+
+def _fix_you_agreement(text):
+    """Re-inflect the verb after a "you" that replaced a third-person subject.
+
+    Handles the irregular copulas/auxiliaries by table and regular present-
+    tense verbs by undoing the third-person-singular -s. "you is/was/has/does
+    <x>" and "you <verb>s" are never grammatical English, so this is safe to
+    run over prose that already contained a legitimate "you".
+    """
+    def _sub(m):
+        you, gap, word = m.group(1), m.group(2), m.group(3)
+        fixed = _YOU_AGREEMENT.get(word.lower())
+        if fixed is None:
+            fixed = _base_from_third_person_s(word)
+        if fixed is None:
+            return m.group(0)
+        if word[:1].isupper():
+            fixed = fixed[:1].upper() + fixed[1:]
+        return f"{you}{gap}{fixed}"
+
+    return _YOU_VERB_RE.sub(_sub, str(text or ""))
+
+
+def _self_pronoun_sub(m):
+    """Replacement callback for _self_second_person: possessive -> your,
+    anything else -> you, capitalized when it opens a sentence."""
+    word = "your" if m.group(1) else "you"
+    before = m.string[:m.start()].rstrip()
+    if not before or before[-1] in ".!?\n":
+        word = word.capitalize()
+    return word
 
 
 def _observable_predicate(display, surface):
@@ -1320,8 +1453,9 @@ def _action_already_rendered(view, display, surface):
     surf = set(_content_tokens(surface))
     if not surf:
         return False
+    view_text = str(view or "")
     disp_tokens = _identity_token_set(display)
-    for sent in re.split(r"(?<=[.!?])\s+", str(view or "")):
+    for sent in re.split(r"(?<=[.!?])\s+", view_text):
         raw = set(re.split(r"[^\w]+", sent.lower()))
         stoks = set(_content_tokens(sent))
         overlap = surf & stoks
@@ -1331,16 +1465,45 @@ def _action_already_rendered(view, display, surface):
             return True
         if (disp_tokens & raw) and len(overlap) >= 2:
             return True
+    # WHOLE-VIEW pass. The per-sentence loop above misses two common shapes:
+    # the perception LLM spreads ONE beat over several sentences ("Dr. Moon is
+    # right in front of you, having crossed quickly. Her arm is under yours,
+    # bracing you against the wall."), and the sentence splitter itself breaks
+    # on the abbreviation in a name like "Dr. Moon" -- which strands the actor
+    # token in one fragment and the action tokens in the next, disarming the
+    # disp_tokens rule exactly where it was needed. Live consequence (chat 27
+    # turn 54): the beat was appended a SECOND time at the end of the view,
+    # AFTER the dialogue, so the narrator rendered Dr. Moon crossing to brace
+    # the player, then speaking, then crossing to brace them again.
+    #
+    # Requires the view to NAME this actor and to share strictly more
+    # distinctive tokens than the per-sentence rule asks for: the whole view
+    # is a far larger surface for coincidental matches than one sentence.
+    raw_all = set(re.split(r"[^\w]+", view_text.lower()))
+    whole_overlap = surf & set(_content_tokens(view_text))
+    if (disp_tokens & raw_all) and len(whole_overlap) >= 3:
+        return True
     return False
 
 
-def _inject_action(view, display, attempt, can_see, event_id=None, delivered=None):
+def _inject_action(view, display, attempt, can_see, event_id=None, delivered=None,
+                   self_forms=None):
+    """Append one actor's observable action to a perceiver's view.
+
+    `self_forms` are the RECEIVING perceiver's own name/alias forms. They are
+    rewritten to second person BEFORE the duplicate check, so the check scores
+    the same person the LLM's own prose used ("...beside your shoulder") rather
+    than the acting agent's third-person surface -- which is why the duplicate
+    slipped through as well as the person mismatch. See _self_second_person.
+    """
     if not attempt or not can_see:
         return view
     if delivered is not None and event_id:
         if event_id in delivered:
             return view
         delivered.add(event_id)
+    if self_forms:
+        attempt = _self_second_person(attempt, self_forms)
     if _action_already_rendered(view, display, attempt):
         return view
     sentence = _observable_predicate(display, attempt)
@@ -2056,8 +2219,57 @@ def _check_pronoun_fidelity(prose, cast_pronouns):
     return warnings
 
 
+def _check_player_person(prose, player_name, narration_person, player_aliases=None):
+    """Deterministic backstop for the narrator's PERSON DISCIPLINE rule.
+
+    When narration_person is 'second' or 'first', the player character is
+    'you'/'I' -- naming them is, in the prompt's own words, a hard error. The
+    rule was prompt-only, so a player_view that named the player (see
+    _self_second_person for how the engine itself used to do that) produced
+    prose mixing persons for one character with nothing to catch it, and the
+    competing PROPER NOUN FIDELITY instruction actively pushed the model to
+    copy the name through.
+
+    Name-based only, and outside quoted spans: a character ADDRESSING the
+    player by name aloud is legitimate dialogue that must survive verbatim,
+    and a third-person descriptor ('the kitsune') cannot be distinguished
+    from a reference to someone else without resolving it -- so this scores
+    the one signal that is unambiguous.
+    """
+    person = str(narration_person or "").strip().lower()
+    if person not in ("second", "first"):
+        return []
+    text = str(prose or "")
+    if not text:
+        return []
+    segments = _QUOTED_SPAN_RE.split(text)
+    hits = []
+    for form in [player_name, *(player_aliases or [])]:
+        form = str(form or "").strip()
+        if not form:
+            continue
+        flags = 0 if form.casefold() in _COMMON_WORD_NAMES else re.I
+        pattern = re.compile(
+            r"(?<!\w)" + re.escape(form) + r"(?:['’]s)?(?!\w)", flags)
+        for i in range(0, len(segments), 2):  # even indices = unquoted prose
+            if pattern.search(segments[i]):
+                hits.append(form)
+                break
+    if not hits:
+        return []
+    pronoun = "you/your" if person == "second" else "I/me/my"
+    return [
+        "Player named in third person: narration_person is "
+        f"'{person}', so the player character is {pronoun} and must never be "
+        f"named in the prose -- found {', '.join(sorted(set(hits)))} outside "
+        "quoted dialogue. Rewrite those references in the correct person, "
+        "keeping every quoted line verbatim."
+    ]
+
+
 def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
-                             cast_pronouns=None):
+                             cast_pronouns=None, player_name=None,
+                             narration_person=None, player_aliases=None):
     warnings = []
     view_text = str(view or "")
     prose = out.get("prose") or ""
@@ -2122,6 +2334,8 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
             )
 
     warnings.extend(_check_pronoun_fidelity(prose, cast_pronouns))
+    warnings.extend(_check_player_person(
+        prose, player_name, narration_person, player_aliases))
 
     return warnings
 

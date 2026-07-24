@@ -11,3 +11,6 @@ venv/
 .env
 .claude/settings.local.json
 .DS_Store
+
+# Agent worktrees live inside the repo; never commit them
+.claude/worktrees/

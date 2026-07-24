@@ -112,6 +112,11 @@ _ENFORCEABLE_PREFIXES = (
     # the check that raises it (agents/common.py's _check_pronoun_fidelity)
     # only fires on unambiguous flips, so it is cheap enough to enforce.
     "Pronoun mismatch for",
+    # PERSON DISCIPLINE is called an ABSOLUTE, hard error by the narrator
+    # prompt itself, and the check that raises it (agents/common.py's
+    # _check_player_person) only fires on the player's literal name outside
+    # quoted dialogue -- unambiguous enough to spend a rewrite on.
+    "Player named in third person",
 )
 
 # Deterministic craft screen: AI-tell phrases the PROSE CRAFT prompt bans. A
@@ -201,7 +206,9 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None):
     # positive.
     fidelity_warnings = _check_narrator_fidelity(
         out, view, recent_prose=prev, exclude_quotes=p_lines,
-        cast_pronouns=call_payload.get("cast_pronouns"))
+        cast_pronouns=call_payload.get("cast_pronouns"),
+        player_name=call_payload.get("player_name"),
+        narration_person=call_payload.get("narration_person"))
     return out, warnings, fidelity_warnings
 
 def narrator(ctx, nonce):
