@@ -33,6 +33,7 @@ from scene import (
     awareness_of,
     dialogue_budget,
     get_scene,
+    persona_of,
     private_knowledge_for,
     sheet_state,
 )
@@ -106,6 +107,41 @@ def _recent_self_lines(chat_id, char_name, current_turn_idx, n_turns=3, cap=4,
                     lines.append({"turn": r["idx"], "said": quote})
     lines.sort(key=lambda x: x["turn"])
     return lines[-cap:]
+
+
+def _known_pronouns(cast, persona, recognized, exclude=None):
+    """Canonical pronouns for the people this character ALREADY KNOWS, so a
+    speaker refers to others correctly instead of guessing from a name (W6 --
+    Crusher said "her discovery" about a he/him character).
+
+    Info barrier: `recognized` is the character's own relationship/mind-model
+    key set, which the caller has already frame-filtered by recognition. A
+    stranger in the room is deliberately absent -- you don't know an
+    unfamiliar person's pronouns, and handing them over would leak identity
+    the character never legitimately acquired.
+    """
+    sheets = []
+    for row in (cast or []):
+        try:
+            sheets.append((json.loads(row["sheet"]).get("identity") or {}))
+        except Exception:
+            continue
+    if isinstance(persona, dict):
+        sheets.append(persona.get("identity") or {})
+    out = {}
+    skip = {str(n or "").strip().casefold() for n in (exclude or [])}
+    known = {str(n or "").strip().casefold() for n in (recognized or [])}
+    for ident in sheets:
+        name = str(ident.get("name") or "").strip()
+        folded = name.casefold()
+        if not name or folded in skip or folded not in known:
+            continue
+        pronouns = ident.get("pronouns") or {}
+        clean = {k: pronouns[k] for k in ("subject", "object", "possessive")
+                 if isinstance(pronouns, dict) and pronouns.get(k)}
+        if clean:
+            out[name] = clean
+    return out
 
 
 def character_step(ctx, cid, nonce):
@@ -251,6 +287,10 @@ def character_step(ctx, cid, nonce):
         "memory": memory_context,
         "relationships": relationships,
         "mind_models": mind_models,
+        "known_pronouns": _known_pronouns(
+            ctx.cast, persona_of(chat),
+            set(relationships) | set(mind_models),
+            exclude=[character_name(sh)]),
         "private_knowledge": private_knowledge_for(chat, character_name(sh), ctx.turn.frame_id),
         "world_knowledge": knowledge,
         "decision": {

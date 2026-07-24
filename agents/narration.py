@@ -107,6 +107,11 @@ def _resolve_narration_person(chat_id, raw_input, player_name, player_pronouns,
 # actually say aloud).
 _ENFORCEABLE_PREFIXES = (
     "Dialogue from view missing or altered",
+    # A cast member's pronouns flipping mid-scene is the same tier of failure
+    # as a dropped line -- the reader sees a character silently change -- and
+    # the check that raises it (agents/common.py's _check_pronoun_fidelity)
+    # only fires on unambiguous flips, so it is cheap enough to enforce.
+    "Pronoun mismatch for",
 )
 
 # Deterministic craft screen: AI-tell phrases the PROSE CRAFT prompt bans. A
@@ -152,6 +157,27 @@ def _craft_tells(prose: str) -> list:
             found.append(label)
     return list(dict.fromkeys(found))
 
+def _cast_pronouns(cast):
+    """Authoritative pronouns per cast member, so the narrator renders each
+    named character in third person with their GIVEN pronouns instead of
+    guessing from the name (which flipped Vorne he/she across beats). W6.
+    Also the reference the deterministic pronoun-fidelity check scores against
+    (agents/common.py's _check_pronoun_fidelity)."""
+    out = {}
+    for row in (cast or []):
+        try:
+            ident = (json.loads(row["sheet"]).get("identity") or {})
+        except Exception:
+            continue
+        name = str(ident.get("name") or "").strip()
+        pronouns = ident.get("pronouns") or {}
+        clean = {k: pronouns[k] for k in ("subject", "object", "possessive")
+                 if isinstance(pronouns, dict) and pronouns.get(k)}
+        if name and clean:
+            out[name] = clean
+    return out
+
+
 def _generate_narration(payload, view, prev, p_lines, correction_notes=None):
     call_payload = dict(payload)
     if correction_notes:
@@ -174,7 +200,8 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None):
     # push the retry loop toward violating the echo rule to "fix" a false
     # positive.
     fidelity_warnings = _check_narrator_fidelity(
-        out, view, recent_prose=prev, exclude_quotes=p_lines)
+        out, view, recent_prose=prev, exclude_quotes=p_lines,
+        cast_pronouns=call_payload.get("cast_pronouns"))
     return out, warnings, fidelity_warnings
 
 def narrator(ctx, nonce):
@@ -221,21 +248,7 @@ def narrator(ctx, nonce):
         chat["id"], ctx.input or "", player_name, player_pronouns,
         pending=pending_person_writes)
 
-    # Authoritative pronouns per cast member, so the narrator renders each
-    # named character in third person with their GIVEN pronouns instead of
-    # guessing from the name (which flipped Vorne he/she across beats). W6.
-    cast_pronouns = {}
-    for _row in ctx.cast:
-        try:
-            _ident = (json.loads(_row["sheet"]).get("identity") or {})
-        except Exception:
-            continue
-        _nm = str(_ident.get("name") or "").strip()
-        _pr = _ident.get("pronouns") or {}
-        _clean = {k: _pr[k] for k in ("subject", "object", "possessive")
-                  if isinstance(_pr, dict) and _pr.get(k)}
-        if _nm and _clean:
-            cast_pronouns[_nm] = _clean
+    cast_pronouns = _cast_pronouns(ctx.cast)
 
     # Consciousness gate: when the player is non-awake, their `player_view` is
     # already the deterministic residue (perception_outcome). Do NOT also hand
@@ -390,6 +403,7 @@ def narrator_extra(ctx, nonce):
         payload = {
             "player_view": view,
             "player_declared": player_declared,
+            "cast_pronouns": _cast_pronouns(ctx.cast),
             "do_not_quote_verbatim": p_lines,
             "scene_opening": bool(est),
             "private_voice_setting": "",

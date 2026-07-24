@@ -9,28 +9,37 @@ symptom, root cause with `file:line`, concrete fix, and a test hint.
 
 Ordering ≈ leverage. Prefer a focused test-first change per item; run `make check`.
 
+**Shipped since:** P1 (pronoun fidelity). Open: P2–P7.
+
 ---
 
-## P1 — Pronoun mismatch correction-retry  *(W6, partial — highest priority)*
-**State.** alpha3.1 added `cast_pronouns` to the narrator payload
-(`agents/narration.py`) + a PRONOUN CONSISTENCY rule (`prompts.py`). The 4-turn
-confirmation still saw one "her" for a he/him character (Vorne, turn 2) — the prompt
-rule reduces but does not enforce.
-**Fix.** Add a deterministic pronoun-fidelity check mirroring the dialogue-fidelity
-floor: after narration, scan the prose for a third-person pronoun applied to a named
-character whose `cast_pronouns` disagree, and if found, trigger the existing
-correction-retry (`_ENFORCEABLE_PREFIXES` in `agents/narration.py:~112`; the retry
-loop is `narration.py:~245`). The check belongs near `_check_narrator_fidelity`
-(`agents/common.py`). Careful: only flag an *unambiguous* mismatch (a possessive/subject
-pronoun in a clause whose only named subject is that character) to avoid false positives
-on multi-character sentences.
-**Also (the harder half):** the flip appears inside *character-agent dialogue* too
-(prior run: Crusher said "her discovery" about Vorne). That needs each *other*
-character's pronouns in the character/perception payload — plumb pronouns through
-`mind_models`/perception so a speaker refers to others correctly.
-**Test.** Feed a narrator draft with "Vorne… her jaw" + cast_pronouns{Vorne: he/him};
-assert a fidelity warning fires and (with the retry stubbed) the enforceable-prefix path
-is taken.
+## P1 — Pronoun mismatch correction-retry  *(W6, SHIPPED)*
+**Shipped.** Three layers, all tested in `tests/test_pronoun_fidelity.py`:
+
+1. **Deterministic narrator floor.** `_check_pronoun_fidelity`
+   (`agents/common.py`, called from `_check_narrator_fidelity`) flags a clause that
+   OPENS with exactly one known cast name and then uses a pronoun from a different
+   paradigm. Its warning prefix (`"Pronoun mismatch for"`) is in
+   `_ENFORCEABLE_PREFIXES` (`agents/narration.py`), so it drives the existing
+   correction-retry. Deliberately narrow — a false positive costs a full narrator
+   rewrite — so it stays silent on: a second name in the clause, a pronoun in a later
+   clause, quoted dialogue, plural "they", neopronoun/mixed sets, a name two cast
+   members share, and names that are ordinary English words.
+2. **Character agents.** `_known_pronouns` (`agents/character.py`) adds a
+   `known_pronouns` map to the payload, gated on the character's own
+   relationship/mind-model key set (already frame-filtered by recognition) — so a
+   speaker gets the pronouns of people they KNOW and nothing about a stranger.
+   Prompt rule: PRONOUNS OF OTHERS (`prompts.py`, character).
+3. **Perception.** `_observed_pronouns` (`agents/perception.py`) adds `cast_pronouns`
+   to all three perception payloads, **excluding any character under an active
+   disguise** — canonical pronouns are part of the identity a disguise conceals, and
+   supplying them would out the subject in an unaware observer's view. Prompt rule:
+   PRONOUNS (`prompts.py`, perception).
+
+**Known limit.** The narrator check scores same-clause pronouns only, so a
+cross-sentence flip ("Vorne stepped back. She said nothing.") is not caught — the
+referent of a bare leading pronoun is genuinely ambiguous in prose and enforcing it
+would misfire on any nearby unnamed person. The prompt rule still covers that case.
 
 ## P2 — Ambient repetition, deterministic  *(W7, partial)*
 **State.** alpha3.1 added an AMBIENT RESTRAINT prompt rule (`prompts.py`). "The bridge

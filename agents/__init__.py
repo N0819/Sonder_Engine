@@ -54,6 +54,7 @@ from .common import (
     _fallback_perception_views,
     _strip_player_echo,
     _check_narrator_fidelity,
+    _check_pronoun_fidelity,
     _llm_resolve_player_room,
     _resolve_player_room,
 )
