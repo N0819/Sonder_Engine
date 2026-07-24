@@ -10,8 +10,8 @@
 | `agents/__init__.py` | 86 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 250 |  | `agents.common`, `commit`, `db`, `prompts`, `schemas`, `spatial` |
 | `agents/character.py` | 399 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/common.py` | 2404 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/director.py` | 2456 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
+| `agents/common.py` | 2473 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/director.py` | 2474 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 538 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 196 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 487 | Player-facing narration agent. | `agents.common`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
@@ -35,7 +35,7 @@
 | `paradox.py` | 486 |  | `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 1889 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 1890 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1352 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 747 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 1820 | Pydantic output contracts and semantic validation for agent payloads. | — |
@@ -84,26 +84,26 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `norm_sequence()` | 679 | 161 lines |
-| `_scrub_invented_dialogue()` | 1814 | 145 lines |
+| `_scrub_invented_dialogue()` | 1883 | 145 lines |
 | `_extract_authority_claims()` | 435 | 90 lines |
-| `_check_pronoun_fidelity()` | 2144 | 76 lines |
-| `_check_narrator_fidelity()` | 2270 | 71 lines |
+| `_check_pronoun_fidelity()` | 2213 | 76 lines |
+| `_check_narrator_fidelity()` | 2339 | 71 lines |
 | `canonicalize_positions()` | 1142 | 58 lines |
 | `_scrub_unknown_identities()` | 1004 | 57 lines |
-| `_strip_player_echo()` | 1691 | 56 lines |
+| `_strip_player_echo()` | 1760 | 56 lines |
 
 ### `agents/director.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 1923 | 534 lines |
-| `director_interpret()` | 204 | 301 lines |
-| `_reconcile_resolution()` | 1628 | 224 lines |
-| `_reconcile_interpretation()` | 653 | 119 lines |
-| `_evidence_present()` | 1400 | 89 lines |
-| `_narrated_destruction_subjects()` | 1026 | 79 lines |
-| `director_establish()` | 133 | 70 lines |
-| `_route_authorial_npc_cognition()` | 71 | 60 lines |
+| `director_resolve()` | 1924 | 551 lines |
+| `director_interpret()` | 205 | 301 lines |
+| `_reconcile_resolution()` | 1629 | 224 lines |
+| `_reconcile_interpretation()` | 654 | 119 lines |
+| `_evidence_present()` | 1401 | 89 lines |
+| `_narrated_destruction_subjects()` | 1027 | 79 lines |
+| `director_establish()` | 134 | 70 lines |
+| `_route_authorial_npc_cognition()` | 72 | 60 lines |
 
 ### `agents/loops.py`
 
@@ -357,10 +357,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 1880 | 10 lines |
-| `presets()` | 1871 | 2 lines |
-| `active_preset()` | 1874 | 2 lines |
-| `nsfw_enabled()` | 1877 | 2 lines |
+| `get_prompt()` | 1881 | 10 lines |
+| `presets()` | 1872 | 2 lines |
+| `active_preset()` | 1875 | 2 lines |
+| `nsfw_enabled()` | 1878 | 2 lines |
 
 ### `providers.py`
 
