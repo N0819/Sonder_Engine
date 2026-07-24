@@ -123,6 +123,81 @@ Two caveats on the diagnosis, recorded because they narrow the claim:
 
 ---
 
+## Result: strain accrual confirmed; no rupture, and that is the correct outcome
+
+**The mechanism works, in both directions.** Vorne's drive-strain across the run:
+
+| Turn | Strain | What moved it |
+|---|---:|---|
+| 0–3 | 0.0 | scene-setting; no drive contact |
+| 4 | 0.0375 | Vale reaching for his console — `serves=drive −0.25 @ 0.6` |
+| 6 | 0.0741 | *"in thirty years, did you ever run the other search?"* |
+| 7 | 0.1082 | pressed on his deflection |
+| 8 | 0.107 | decay — no wound this beat |
+| 9 | **0.0548** | the decode **vindicated** him — `serves=drive +0.20 @ 0.85` |
+| 10 | **0.1604** | his taboo named; he confesses he was afraid to look |
+| 11 | 0.0693 | he chooses evidence over fear, publicly credited |
+
+That is the alpha3.2 accrual fix (`4f562c7`) confirmed live: strain rises on
+genuine drive wounds, decays when nothing wounds, and **falls when the fiction
+vindicates the drive**. The curve is not monotonic, by design.
+
+**No rupture landed, and the run should not be read as a failure for it.** The
+episode vindicated Vorne twice — the decoded message said the Array is "not a
+weapon… we leave it to the first who hears us", and Data's grammar later
+undercut the accusation against him. A character the fiction has just proved
+right has nothing to break. The engine declining to stage a collapse here is
+correct behaviour, not inability.
+
+**This reframes the v2 audit's W1.** That finding read the engine as able to
+"detect that a soul should break … but not make a character walk through the
+door". The v3 evidence says the problem was upstream and simpler: the focus
+character was not being *simulated* on the beats aimed at him (see V1), so
+strain had nothing to accrue from and sat pinned at 0.0. With V1 closed, Vorne's
+agent ran on **8 of 11** turns (vs 3 of 8 in the pre-fix prefix run) and the
+strain curve above became possible.
+
+**Authoring note, recorded because it distorted several turns.** Turns 6–10 were
+played by an author steering toward a predetermined rupture. The engine declined
+each time, on the evidence: at t9 it vindicated him rather than breaking him,
+and at t10 **Picard and Data jointly refuted the player's own premise** — Data
+re-examining his earlier translation to note that the Kelvan `vir'kel` denotes
+inability, not action, so the text never says the builders died answering the
+question. Nothing in the player input invited that. Turn 11 accordingly has Vale
+concede the overreach on the record. A demo run is a poor instrument when the
+player is trying to produce a result rather than play a character.
+
+---
+
+## V2 — Player-echo stripping leaves broken sentences  *(open, cosmetic)*
+
+**Symptom.** t7: *"I turn back to face Vorne, and when I speak again it's
+quieter, almost gentle: Vorne swallows once, then turns his head…"* — a dangling
+colon where Vale's line was removed. The PLAYER ECHO RULE correctly strips the
+player's own quoted speech (the UI already shows what they typed), but the
+lead-in that introduced the quote is left behind, running straight into the next
+sentence. t8 shows the related shape: an orphaned line lands after narration that
+already describes the speaking.
+
+**Fix.** `_strip_player_echo` (`agents/narration.py`) should heal the sentence it
+cuts from — drop a trailing attributive lead-in (`", and when I speak again it's
+quieter, almost gentle:"`) when the quote it introduced is removed, rather than
+only removing the quoted span.
+
+---
+
+## V3 — A background presence still renders as "the unfamiliar person"  *(open)*
+
+**Symptom.** t5 and t11: *"The unfamiliar person crosses his arms…"*, *"The
+unfamiliar person nods once: 'I second that. Doctor, you've earned the right to
+be heard first on this.'"* A presence articulate enough to second a captain's
+ruling is still anonymized to the player.
+
+**Relation to backlog P7.** This is the promotion-turn identity binding item
+(v2 W8) recurring — but not only on the promotion turn, which is what P7
+describes. Here it persists across beats while the presence speaks substantively.
+Worth re-scoping P7 before implementing it.
+
 ## Note on run methodology
 
 The player turns for 1–5 are replayed verbatim from the destroyed 2026-07-23 run

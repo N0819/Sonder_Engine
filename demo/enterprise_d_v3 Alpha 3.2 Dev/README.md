@@ -1,9 +1,35 @@
-# Enterprise-D — The Kelvan Array (v3, alpha3.2-dev)
+# Enterprise-D — The Kelvan Array (v3, alpha3.3)
 
-**Status: salvaged partial. The run's database was destroyed and is not
-recoverable.** A clean re-run is the intended replacement for this folder.
+**Status: complete — a 12-beat run on `alpha3.3`.** An earlier v3 attempt was
+destroyed by a power cut; what could be salvaged of it is kept alongside as
+evidence (see *The destroyed first attempt* below).
 
-## What happened
+| File | What it is |
+|---|---|
+| `transcript.md` | The run, beat by beat: player input, narrated prose, speakers. |
+| `findings.md` | V1 (fixed), V2/V3 (open), and the result — strain accrual confirmed, no rupture, and why that is correct. |
+| `run_log.jsonl` | Per-turn machine-readable capture, appended as each beat committed. |
+| `run.db` | The isolated run database. Gitignored; kept locally. |
+| `transcript_partial.md` | Salvage of the destroyed first attempt. |
+| `v1_evidence_prefix_run.jsonl` | The 9-turn log of the pre-fix run that exposed V1 — kept as the before-picture. |
+
+## Headline
+
+- **Strain accrual works, in both directions** — it rises on genuine drive
+  wounds, decays when nothing wounds, and falls when the fiction *vindicates*
+  the drive. `findings.md` has the full curve.
+- **No rupture landed, and that is the correct outcome.** The episode vindicated
+  Dr. Vorne twice over; a character the fiction has just proved right has
+  nothing to break.
+- **V1**: a beat could end with the character it was about never simulated —
+  found here, fixed in `86fa6ab`, and it reframes the v2 audit's W1.
+- The run's best beat is one the player did not author: Picard and Data jointly
+  refuted the *player's* premise using a grammatical distinction inside a
+  translation Data had produced four turns earlier.
+
+## The destroyed first attempt
+
+### What happened
 
 A v3 run of the Kelvan Array scenario was played on 2026-07-23 against
 alpha3.2-dev, to regression-test the fixes that shipped after the v2 run —
@@ -25,7 +51,7 @@ database, the harness, and the per-turn output files went with it.
 scaffold the run was seeded from; it holds the scenario, cast, and lorebook but
 zero turns, because every turn was written to the scratch copy.
 
-## What survived, and how
+### What survived, and how
 
 The driving session's own log lives outside `/tmp`
 (`~/.claude/projects/.../*.jsonl`) and was mined for anything the run had
@@ -45,7 +71,7 @@ Treat the excerpt section of `transcript_partial.md` as evidence, not as a
 transcript — it is a selection made for discussion at the time, not a record of
 the beat-by-beat run.
 
-## Lesson applied
+### Lesson applied
 
 The isolation was right; the location was wrong. A run database belongs
 somewhere durable (this folder, gitignored) rather than `/tmp`, so that
