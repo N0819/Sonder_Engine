@@ -528,6 +528,12 @@ def _rehydrate_loop_results(ctx, key, content):
         if isinstance(result, dict):
             target.setdefault(cid, result)
 
+# Presentational tail stages: they render the committed turn for the reader and
+# nothing downstream except commit consumes them, so rerolling one may flow
+# straight through commit and leave the turn committed (see the only_key branch).
+_PRESENTATIONAL_TAIL = ("narrator", "narrator_extra")
+
+
 def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
     bus = Bus()
     chat_row = dict(q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True))
@@ -614,6 +620,31 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
         qi("UPDATE steps SET stale=1 WHERE turn_id=? AND ord>?", (turn_id, s["ord"]))
         yield from _step_stream(bus, turn_id, only_key, s["label"], s["ord"],
                                 ctx, variant_count(turn_id, only_key))
+
+        # Rerolling a presentational TAIL stage (the narrator, or narrator_extra)
+        # used to leave the whole turn uncommitted: on a committed turn the
+        # branch above restores the pre-turn checkpoint (rolling the world
+        # back) and marks commit stale, then stops -- so a reroll done purely
+        # to get nicer prose silently reverted every world mutation the turn
+        # had made until a manual resume. Nothing between the narrator and
+        # commit reads the narrator's prose, so flow straight through the
+        # remaining tail (any narrator_extra, then commit) and leave the turn
+        # committed with the new prose. An UPSTREAM reroll (director_resolve,
+        # a character step, perception) still stops for manual resume, because
+        # re-running the tail there would silently re-commit a turn whose
+        # actual outcome changed -- that must stay a deliberate choice.
+        if (only_key in _PRESENTATIONAL_TAIL and has_existing_steps
+                and active_content(turn_id, "commit") is not None):
+            for ts in q("SELECT * FROM steps WHERE turn_id=? AND ord>? "
+                        "ORDER BY ord", (turn_id, s["ord"])):
+                yield from _step_stream(
+                    bus, turn_id, ts["key"], ts["label"], ts["ord"],
+                    ctx, variant_count(turn_id, ts["key"]))
+            clear_steps_stale(
+                turn_id,
+                [only_key] + [ts["key"] for ts in
+                              q("SELECT key FROM steps WHERE turn_id=? AND ord>?",
+                                (turn_id, s["ord"]))])
         yield {"type": "done", "turn_id": turn_id}
         return
 
