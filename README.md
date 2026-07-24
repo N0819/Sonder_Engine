@@ -32,7 +32,7 @@ Open http://127.0.0.1:8008. The default SQLite database is engine.db; set ENGINE
 
 Open `http://127.0.0.1:8008`. The default SQLite database is `engine.db`; set `ENGINE_DB` before startup to use another path.
 
-### Development commands
+## Development commands
 
 ```bash
 make test       # run the test suite
