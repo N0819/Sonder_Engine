@@ -1779,6 +1779,34 @@ _DANGLING_SPEECH_VERB_RE = re.compile(
     re.IGNORECASE,
 )
 
+# A quote can also be introduced by an attributive CLAUSE ending in a colon
+# ("...and when I speak again it's quieter, almost gentle:"). Stripping the
+# player's echoed quote leaves the colon dangling against the next sentence
+# (live: v3 t7 "...almost gentle: Vorne swallows once..."). Drop the orphaned
+# lead-in back to the preceding clause/sentence boundary -- but only a clause
+# that actually carries a speech cue, so a legitimate non-speech colon (a
+# list, a ratio, a time) is never eaten. The colon match also consumes an
+# orphaned period the strip may have left ("gentle: .").
+_SPEECH_CUE = (
+    r"say|says|said|speak|speaks|spoke|speaking|add|adds|added|ask|asks|asked|"
+    r"tell|tells|told|reply|replies|replied|answer|answers|answered|voice|"
+    r"voices|voiced|murmur|murmurs|murmured|whisper|whispers|whispered|"
+    r"continue|continues|continued|offer|offers|offered"
+)
+# The lead-in TEXT is kept -- only the dangling colon (and any orphaned period
+# the strip left) is converted to a full stop, so nothing legitimate can be
+# eaten. Requiring a speech cue in the same clause keeps this off a real
+# non-speech colon (a list, a ratio, a time). `[^.!?:]*` cannot cross a
+# sentence boundary, so the cue and the colon are always in one clause.
+_DANGLING_SPEECH_COLON_RE = re.compile(
+    r"(\b(?:" + _SPEECH_CUE + r")\b[^.!?:]*):\s*\.?\s*(?=[A-Z]|$)",
+    re.IGNORECASE,
+)
+
+
+def _heal_dangling_colon(m):
+    return m.group(1) + ". "
+
 def _protected_view_quotes(view, player_lines=None):
     """Quoted spans in a perceiver's view that belong to a NON-player speaker
     -- the exact lines DIALOGUE FIDELITY requires the narrator to keep
@@ -1853,6 +1881,7 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
         # with narration_person (first/second/third), so match on the verb
         # rather than assuming "you".
         prose = _DANGLING_SPEECH_VERB_RE.sub(lambda m: f"{m.group(1)} it.", prose)
+        prose = _DANGLING_SPEECH_COLON_RE.sub(_heal_dangling_colon, prose)
     for token, form in masks:
         prose = prose.replace(token, form)
     return re.sub(r"\s{2,}", " ", prose).strip()
