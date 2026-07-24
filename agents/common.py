@@ -1225,6 +1225,75 @@ def player_speech_lines(interp):
         lines = [interp["speech"]]
     return lines
 
+
+# Physical verbs a resolved_event uses when it gives someone an ACT. Kept to
+# unambiguous bodily/manipulative verbs: the check exists to catch the player
+# being handed conduct they never declared, not to police prose.
+_PLAYER_ACT_VERBS = (
+    r"take[sn]?|took|grab(?:s|bed)?|lift(?:s|ed)?|raise[sd]?|lower(?:s|ed)?|"
+    r"drink[s]?|drank|sip(?:s|ped)?|eat[s]?|ate|swallow(?:s|ed)?|"
+    r"nod(?:s|ded)?|shrug(?:s|ged)?|shake[sd]? her head|smile[sd]?|"
+    r"step(?:s|ped)?|walk(?:s|ed)?|move[sd]?|turn(?:s|ed)?|stand[s]?|stood|"
+    r"sit[s]?|sat|kneel(?:s|ed)?|lean(?:s|ed)?|shift(?:s|ed)?|reach(?:es|ed)?|"
+    r"push(?:es|ed)?|pull(?:s|ed)?|open(?:s|ed)?|close[sd]?|hand(?:s|ed)?|"
+    r"press(?:es|ed)?|grip(?:s|ped)?|hold[s]?|held|accept(?:s|ed)?|"
+    r"reply|replies|answer(?:s|ed)?|follow(?:s|ed)?"
+)
+
+
+def _player_subject_sentences(prose, player_name):
+    """Sentences of `prose` whose grammatical subject is plainly the player --
+    the sentence OPENS with their name. Deliberately narrow: a pronoun subject
+    ("She lifts it") could refer to any woman in the beat, and guessing would
+    make this cry wolf on ordinary narration."""
+    name = str(player_name or "").strip()
+    if not prose or not name:
+        return []
+    first = re.split(r"[\s,]+", name)[0]
+    if len(first) < 3:
+        return []
+    out = []
+    for sentence in re.split(r"(?<=[.!?])\s+", prose):
+        stripped = sentence.strip()
+        if re.match(rf"^{re.escape(first)}\b", stripped) or \
+                re.match(rf"^{re.escape(name)}\b", stripped):
+            out.append(stripped)
+    return out
+
+
+def _check_player_act_authority(resolved_event, declared_actions, player_name):
+    """Physical acts a resolved_event gives the PLAYER on a beat where they
+    declared none (live: Elevator Adventure t63 -- the player said only
+    "Let's get going?" and the Director had them take a bottle, drink from it
+    and nod; t59 -- the player ASKED "I hope you don't mind if I lean on you"
+    and the Director performed the leaning for them).
+
+    Adding detail to a declared act is legitimate and is NOT flagged -- the
+    Director is supposed to render an act richly. What this catches is an act
+    appearing from nowhere, which then replays when the player declares it a
+    beat later, so the same moment happens twice and the scene falls out of
+    order.
+
+    Scoped to the unambiguous case: the player declared NO action at all this
+    beat, so any physical act attributed to them is invented by construction.
+    A beat WITH declared actions is left alone, because separating elaboration
+    from addition there needs more than a verb list.
+    """
+    if declared_actions:
+        return []
+    warnings = []
+    for sentence in _player_subject_sentences(resolved_event, player_name):
+        # Speech attribution ("Hinami says, ...") is not a physical act; the
+        # quote itself is guarded separately by the dialogue_log check.
+        without_quotes = re.sub(r'"[^"]*"|“[^“”]*”', " ", sentence)
+        if re.search(rf"\b(?:{_PLAYER_ACT_VERBS})\b", without_quotes, re.I):
+            warnings.append(
+                "Player act not declared this beat (player-act authority): "
+                f"{sentence[:120]!r}"
+            )
+    return warnings
+
+
 def _quote_body(quote):
     return (quote or "").strip().strip('"' + "'" + "\u201c\u201d\u2018\u2019")
 

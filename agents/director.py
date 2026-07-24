@@ -54,6 +54,7 @@ from .common import (
     _is_mental_action,
     _list,
     _normalize_scene_patch,
+    _check_player_act_authority,
     _quote_body,
     _requires_reaction_phase,
     _resolve_player_room,
@@ -2326,6 +2327,23 @@ def director_resolve(ctx, nonce):
     # memory. Any player-attributed entry whose quote is not among the player's
     # OWN declared speech this beat is dropped.
     player_speech_bodies = {_quote_body(s) for s in player_speech_lines(interp)}
+
+    # PLAYER-ACT AUTHORITY: the speech guard below covers the player's WORDS;
+    # this covers their CONDUCT. Elaborating a declared act is legitimate and
+    # is not flagged -- only an act appearing on a beat where the player
+    # declared none, which is invented by construction and replays when they
+    # actually declare it later (see _check_player_act_authority).
+    _declared_player_actions = [
+        e for e in (interp.get("sequence") or [])
+        if isinstance(e, dict) and e.get("type") == "action"
+        and (e.get("attempt") or e.get("observable"))
+    ]
+    for _w in _check_player_act_authority(
+        out.get("resolved_event") or "",
+        _declared_player_actions,
+        persona_name(pers) if pers else "",
+    ):
+        ctx.add_warning(_w)
     checked_dlog = []
     for d in dlog:
         speaker = d.get("speaker") or ""
