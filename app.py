@@ -39,8 +39,8 @@ from character_schema import (
     persona_export_document,
     persona_name,
 )
-from scene import (dialogue_config, interaction_limits, style_guide,
-                   normalize_style_guide, STYLE_GUIDE_FIELDS)
+from scene import (background_config, dialogue_config, interaction_limits,
+                   style_guide, normalize_style_guide, STYLE_GUIDE_FIELDS)
 from importers import (
     import_character, import_persona, import_lorebook,
     generate_character, generate_persona, generate_lore_entries,
@@ -2249,6 +2249,36 @@ def dlg_put(cid: int, body: dict = Body(...)):
     config["max_lines"] = max(config["min_lines"], config["max_lines"])
 
     wset(cid, "dialogue_config", config)
+    return config
+
+@app.get("/api/chats/{cid}/background_config")
+def bg_cfg_get(cid: int):
+    return background_config(cid)
+
+@app.put("/api/chats/{cid}/background_config")
+def bg_cfg_put(cid: int, body: dict = Body(...)):
+    """Scene-manager settings (docs/BACKGROUND_LIFE_DESIGN.md §3.10).
+
+    Lives beside dialogue_config rather than the style guide because these are
+    simulation dials -- who gets to speak and act -- the same family as
+    allow_npc_to_npc_dialogue. The style guide governs how invented people
+    SOUND (blurb theming, the §3.8.1 canon licence), which is a separate axis
+    and already wired.
+    """
+    level = str(body.get("scene_life", "off")).strip().casefold()
+    if level not in ("off", "ambient", "full"):
+        raise HTTPException(400, "scene_life must be off, ambient or full")
+    try:
+        config = {
+            "scene_life": level,
+            # Hard-capped to match agents/background.py: past a handful of
+            # individually-voiced extras a crowd reads as noise.
+            "max_managed": max(1, min(8, int(body.get("max_managed", 6)))),
+            "max_reactors": max(1, min(3, int(body.get("max_reactors", 1)))),
+        }
+    except (TypeError, ValueError):
+        raise HTTPException(400, "background config numeric fields must be numbers")
+    wset(cid, "background_config", config)
     return config
 
 @app.get("/api/chats/{cid}/frames")
