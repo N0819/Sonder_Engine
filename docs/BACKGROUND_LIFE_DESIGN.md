@@ -11,6 +11,37 @@ pokes it.
 
 ---
 
+## 0. Why this is worth priority: the engine loses to the baseline here
+
+The engine's registered characters are the point of the whole architecture, and
+they beat plain single-context LLM roleplay decisively — private perception,
+real memory, minds that do not know what they were never told.
+
+Background extras go the other way. A single LLM improvising a tavern holds
+every regular in one context and plays them as an ensemble, for free, forever.
+That is the *baseline*, and on this one axis the engine is **behind** it.
+
+The cause is not an oversight, which is what makes it worth stating plainly:
+**the engine applied its central discipline to the one tier that does not need
+it.** Information barriers exist to stop a mind from using what it never
+legitimately received. That discipline is priceless for a character with
+secrets, private motives and a relationship to protect. A bystander with no
+sheet, no memory and no hidden state has *nothing to protect* — so the
+per-presence isolation buys almost nothing there, while costing exactly the
+thing that makes crowds feel alive: an ensemble improvised in one context.
+
+Everything in §3 follows from that reframe. The batched `scene_life` call is not
+a new invention; it is **recovering the thing plain LLM roleplay is already good
+at**, fenced inside a partition (`spatial.ambient_scope`) that keeps the
+discipline where it actually pays. The engine should not be paying its strictest
+tax in the tier with the least to protect.
+
+Priority follows too. A missing feature is a backlog item; being *worse than the
+baseline* at something the baseline does effortlessly is a defect, and it is the
+first thing a player notices about a populated room.
+
+---
+
 ## 1. What exists today
 
 Read this section as an accurate summary of current behaviour, not a complaint.
@@ -404,6 +435,62 @@ set of archetypes (the gruff one, the chatty one, the sad one). Mitigate by
 passing the existing presences' blurbs as **negative** examples ("do not reuse
 these registers"). Cheap, and it also keeps a long-running location from
 accumulating five variations on the same person.
+
+#### 3.8.1 Canon-referenced blurbs
+
+When the fiction *is* a known setting, a thematically-right extra is often a
+recognizable one — a Ferengi barkeep in a Star Trek game, a Nazgûl-shaped rider
+on the road. The blurb schema should be able to say so:
+
+```
+"canon_ref": "Ferengi barkeep, Quark register — acquisitive, obsequious, sly"
+```
+
+This is deliberately in tension with a standing engine rule. `prompts.py` tells
+both the greeting interpreter and the mapping agent to treat names as opaque and
+*"Do NOT import facts, identities, technology"* from outside canon. That rule is
+right and should stay — but read what it protects against: the engine **drifting
+into borrowed canon unbidden**, inventing a world it was not asked for. An
+author who has explicitly set the game in a known setting is not that failure
+mode; they are the opposite of it.
+
+So the licence is **authorial and opt-in**, never inferred:
+
+- It lives in the **style guide** — the existing mechanism for the author's
+  standing instruction about anything the engine generates, already plumbed to
+  mapping and the Director, and extended to background presences by §3.7.
+- With no such licence, the current no-import rule stands unchanged. The blurb
+  minter must not decide on its own that a tavern is Middle-earth.
+
+**Register, not biography.** Even under licence, a `canon_ref` should carry
+*manner, role and register* — what a model reliably knows and what a blurb is
+for — and not canonical **facts**: dates, relationships, plot events, who
+betrayed whom. Facts are where confabulation lives, the player usually knows the
+source better than the engine does, and worst of all a fact entering the digest
+becomes indistinguishable from something the presence actually perceived (§3.1).
+A costume is safe; a borrowed history is not.
+
+**Recognition raises expectations — so make it a promotion accelerant.** This is
+the real design problem, and it is not the canon rule. A player who recognizes
+someone expects depth immediately, and a frozen blurb with one line per beat
+cannot meet that. Rendering a recognizable figure as permanent furniture is
+*worse* than not having them.
+
+Treat `canon_ref` as a strong signal the presence deserves a mind:
+
+- lower the promotion threshold for a canon-referenced presence, or promote on
+  first direct player engagement rather than at `dialogue_turns >= 3`;
+- pass `canon_ref` to the sheet minter so the promoted character *is* the
+  intended figure rather than a generic barkeep who happens to share a room with
+  the memory of one;
+- route it through the **existing review surface** — `/api/chats/{cid}/
+  promotions/draft` → `/confirm` (`app.py`) already lets a human read and edit a
+  drafted sheet before it attaches. That is precisely where borrowed canonical
+  facts should enter: deliberately, once, under authorial review — not
+  accumulated turn by turn into a digest nobody approved.
+
+The resulting behaviour is the right one: the recognizable barkeep is furniture
+while you pass through, and becomes a real character the moment you talk to him.
 
 *Risk — the tic becomes a catchphrase.* Frozen cuts both ways: a `tell` replayed
 into every voicing call is a standing instruction to perform it, and an extra
