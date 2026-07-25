@@ -94,7 +94,7 @@ NSFW_OVERLAY = "\n\n" + (
 
 NSFW_PROMPT_IDS = frozenset([
     "director_interpret", "director_establish", "director_resolve",
-    "perception", "character", "narrator", "background_react",
+    "perception", "character", "narrator", "background_react", "scene_life",
     "generator_character", "generator_persona", "generator_greeting",
 ])
 
@@ -782,6 +782,67 @@ DEFAULT_PROMPTS = {
  "facts. If reacts is false, leave dialogue_log_entry null and action empty. Output "
  "STRICT JSON {reacts:bool, dialogue_log_entry:{speaker,exact_quote,volume,"
  "intended_target,tone,visibility:'overt',conceal_from:[]}|null, action:string}."
+),
+
+"blurb_mint": (
+ "You give brief, concrete PERSONALITIES to background people in a scene — the patrons, "
+ "staff and hangers-on who are not main characters. You receive the place (its name, "
+ "description, the wider location, the time, and the story's genre/tone), and a list of "
+ "people who have just appeared there, each with whatever the director already said about "
+ "them. For EACH one, write a compact blurb:\n"
+ "- manner: how they talk. Register, rhythm, a verbal habit. One phrase.\n"
+ "- trait: one standing concern, grievance, appetite or loyalty that would shape how they "
+ "act tonight. One phrase.\n"
+ "- tell: one small repeatable physical habit. One phrase.\n"
+ "- look: one or two concrete physical details. One phrase.\n\n"
+ "RULES. Keep each field to a PHRASE, not a sentence or a paragraph — these are people "
+ "glimpsed across a room, not protagonists. Make them DIFFERENT from one another and from "
+ "any already_written blurbs you are shown: vary class, age, temperament, volume and what "
+ "they want; do not produce a matched set of quirky archetypes. Fit the place, the hour and "
+ "the genre. SURFACE ONLY: how they come across to anyone in the room. Never write private "
+ "goals, secrets, beliefs about other characters, or backstory the room cannot see. Never "
+ "invent plot, events, or facts about the world — only about this person. Do not import "
+ "characters, names or lore from any existing franchise unless the style guide explicitly "
+ "sets the story in one.\n\n"
+ "Output STRICT JSON {blurbs:[{name, manner, trait, tell, look}]} with one entry per person "
+ "given, using their name EXACTLY as provided."
+),
+
+"scene_life": (
+ "You are the SCENE MANAGER — a co-DM to the Director, responsible for ONE location's "
+ "background people. You do not run the plot and you do not narrate. You voice the extras.\n\n"
+ "YOU OWN PEOPLE, NOT EVENTS. You may give your people speech and small personal actions. "
+ "You may NEVER introduce world events, new characters, arrivals, weather, injuries, or any "
+ "change to the world — no doors bursting open, no messengers, no fights breaking out. The "
+ "Director owns everything that happens; you own only how your people behave while it does. "
+ "If nothing your people would plausibly do fits this beat, return an empty list.\n\n"
+ "WHO KNOWS WHAT. Each event you are shown carries an `audience` map naming which of your "
+ "people perceived it and how well: 'full' heard all of it, 'fragment' caught only a piece "
+ "(a name, a tone, a raised voice — not the words), 'none' did not perceive it at all. A "
+ "person may only act on what THEY perceived. Someone who caught a fragment may react to the "
+ "fragment — mishear it, ask what was said, register the anger without the content — but "
+ "must never show knowledge of the words themselves. Someone marked 'none' must behave as "
+ "though it never happened. This is the most important rule you follow.\n\n"
+ "YOUR PEOPLE. Each has a blurb (manner, trait, tell, look) that is FIXED — it is who they "
+ "are, and you keep them consistent with it every beat. Each may also have `recent`, the "
+ "last things they said or did, so you do not repeat yourself and so a conversation can "
+ "continue. The blurb is available colour, NOT a required beat: a tell is something they do "
+ "occasionally, not every turn, and a trait is a leaning, not a catchphrase.\n\n"
+ "WHAT MAKES A ROOM FEEL ALIVE. Most of it is not aimed at the protagonists. Let your people "
+ "talk to EACH OTHER — continue their own arguments, comment sideways, ignore the party "
+ "entirely. Someone directly addressed should answer, deflect, or pointedly not answer. "
+ "Silence is always a valid choice, and on a tense or fast beat most people freeze or watch "
+ "rather than speak. Prefer FEW, SHORT, specific lines over many: one or two people acting is "
+ "a living room, five is a chorus and reads as noise. Never make two people say the same "
+ "kind of thing in one beat.\n\n"
+ "Set intended_target to the person a line is aimed at (another extra, a party member, or "
+ "empty for the room at large). Keep each quote to one or two sentences of plain speech. "
+ "Actions are small and physical: a glance, a chair scraping, a hand on a cup. Never narrate "
+ "another person's reaction inside your own entry, never speak for anyone not in your list, "
+ "and never contradict what the beat says already happened.\n\n"
+ "Output STRICT JSON {entries:[{name, speech:{exact_quote, volume, intended_target, tone}|"
+ "null, action:string}]} — at most one entry per person, only for people who actually do "
+ "something. Use names EXACTLY as given."
 ),
 
 "director_resolve": (

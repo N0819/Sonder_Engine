@@ -1789,6 +1789,10 @@ def track_background_presences(ctx, nonce):
             # objective self-knowledge wins; overwrite the prior sketch.
             record.setdefault("sketch", {}).update(sk)
 
+    # Scene-manager bookkeeping (docs/BACKGROUND_LIFE_DESIGN.md §3.8, §3.11).
+    _persist_blurbs(br, presences)
+    _append_manager_conduct(br, presences, turn_idx)
+
     resolved_event = str(res.get("resolved_event") or "")
     for name, record in presences.items():
         if name in candidates:
@@ -1829,6 +1833,56 @@ def track_background_presences(ctx, nonce):
 
     wset(cid, "background_presences", presences)
     return {"tracked": len(presences)}
+
+BACKGROUND_RECENT_TAIL = 4
+
+def _persist_blurbs(br, presences):
+    """Write minted blurbs (§3.8). FROZEN: a blurb is written once and never
+    rewritten -- immutability is the feature, and it is the anchor against the
+    self-feeding drift §3.11 describes."""
+    for name, blurb in ((br or {}).get("blurbs") or {}).items():
+        rec = presences.get(name)
+        if rec is None or rec.get("blurb") or not isinstance(blurb, dict):
+            continue
+        if any(str(v or "").strip() for v in blurb.values()):
+            rec["blurb"] = blurb
+
+def _append_manager_conduct(br, presences, turn_idx):
+    """Route each attributed entry to its OWN presence's record (§3.11).
+
+    This is a routing operation, not an authoring one: the model emitted
+    structurally attributed entries and deterministic code files each under the
+    name it carries, so no shared-context prose is ever written to storage and
+    §3.2's write-unbatched rule holds.
+    """
+    for r in _background_fired_reactions_any(br):
+        name = str(r.get("name") or "").strip()
+        rec = presences.get(name)
+        if rec is None:
+            continue
+        entry = r.get("dialogue_log_entry") or {}
+        parts = []
+        if entry.get("exact_quote"):
+            parts.append('said "%s"' % str(entry["exact_quote"]).strip())
+        if r.get("action"):
+            parts.append(str(r["action"]).strip())
+        if not parts:
+            continue
+        tail = rec.setdefault("recent", [])
+        tail.append({"turn": turn_idx, "text": "; ".join(parts)})
+        del tail[:-BACKGROUND_RECENT_TAIL]
+
+def _background_fired_reactions_any(br):
+    """Like _background_fired_reactions but also yields action-only entries --
+    the scene manager may have someone act without speaking, and that conduct
+    still belongs in their profile."""
+    if not isinstance(br, dict):
+        return []
+    reactions = br.get("reactions")
+    if reactions:
+        return [r for r in reactions if isinstance(r, dict)
+                and (r.get("dialogue_log_entry") or r.get("action"))]
+    return _background_fired_reactions(br)
 
 def _flow_addressed_refs(ctx):
     """Raw flow.addressed_to entries as the director emitted them, preserved
