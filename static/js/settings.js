@@ -1030,43 +1030,6 @@ function renderFullApiSettings(b) {
           el("div", { style: "margin-top:6px" }, el("b", {}, "Lower it"), " to hard-cap what a single call can cost, or when you're on a small local model whose output limit is well under the default."),
           el("div", { style: "margin-top:6px" }, "Values outside " + motBounds.min + "–" + motBounds.max + " are pulled into range on save."))));
 
-    // Reasoning effort — PER ROLE, for models that expose it (OpenAI o-series,
-    // OpenRouter's reasoning block, GLM/DeepSeek thinking variants on aggregators
-    // that pass it through). Each role: (default) / off / minimal / low / medium
-    // / high. A role left at default follows the 'default' role, then the model.
-    const effLevels = S.boot.reasoning_effort_levels || ["off", "minimal", "low", "medium", "high"];
-    const effMap = { ...(S.boot.reasoning_effort || {}) };
-    const effRoles = S.boot.roles || Object.keys(effMap);
-    const effSelects = {};
-    const effRow = (role) => {
-      const sel = el("select", { style: "min-width:130px" },
-        [el("option", { value: "" }, role === "default" ? "(model default)" : "(follow default)")]
-          .concat(effLevels.map(l => el("option",
-            { value: l, ...(effMap[role] === l ? { selected: "" } : {}) }, l))));
-      effSelects[role] = sel;
-      return el("tr", {},
-        el("td", { style: "padding-right:10px" }, el("span", { class: "small" }, role)),
-        el("td", {}, sel));
-    };
-    b.append(el("h4", {}, "Reasoning effort (per role)"),
-      el("div", { class: "small dim" },
-        "How hard reasoning-capable models think, ", el("b", {}, "set separately for each role"),
-        ". ", el("b", {}, "off"), " disables reasoning; ", el("b", {}, "low"),
-        " is faster/cheaper for mechanical stages (perception, mapping, utility); higher for the hard ones (director, narrator, major characters). A role on ",
-        el("i", {}, "(follow default)"), " uses the default role's setting; that on ",
-        el("i", {}, "(model default)"), " sends nothing. Ignored by models that don't support it."),
-      el("table", { style: "margin:8px 0;border-collapse:collapse" }, effRoles.map(effRow)),
-      el("div", { class: "row" },
-        el("button", { class: "primary", onclick: async () => {
-          const efforts = {};
-          for (const role of effRoles) { const v = effSelects[role].value; if (v) efforts[role] = v; }
-          const r = await api("PUT", "/api/reasoning_effort", { efforts });
-          await boot();
-          const n = Object.keys(r.reasoning_effort || {}).length;
-          toast(n ? ("Reasoning effort saved for " + n + " role(s).") : "Reasoning effort cleared — all model default.", "ok");
-        } }, "Save reasoning effort"),
-        el("button", { onclick: () => { for (const role of effRoles) effSelects[role].value = ""; } }, "Clear all")));
-
     // OpenRouter upstream routing. One OpenRouter model id is served by
     // several upstreams (Anthropic direct, Bedrock, Azure, Vertex, third-party
     // hosts) whose output quality AND prompt-retention policy differ -- so
@@ -1330,6 +1293,18 @@ function renderFullApiSettings(b) {
         ...(following ? { checked: "" } : {}),
       });
 
+      // Reasoning effort for this role, sitting with its model. "(follow
+      // default)" (empty) means it inherits the Default role's effort exactly
+      // as the model does; "(model default)" on Default means send nothing.
+      const effLevels = S.boot.reasoning_effort_levels || ["off", "minimal", "low", "medium", "high"];
+      const effMap = S.boot.reasoning_effort || {};
+      const effortSel = el("select", { style: "min-width:118px", title: "Reasoning effort" },
+        [el("option", { value: "" }, isDefault ? "reasoning: default" : "reasoning: follow default")]
+          .concat(effLevels.map(l => el("option",
+            { value: l, ...(effMap[role] === l ? { selected: "" } : {}) }, "reasoning: " + l))));
+      roleInputs[role] = roleInputs[role] || {};
+      roleInputs[role].effort = effortSel;
+
       const rebuildPrimary = (provider, model) => {
         primaryContainer.innerHTML = "";
         const combo = modelCombobox(
@@ -1382,7 +1357,8 @@ function renderFullApiSettings(b) {
                 "follow default"
               )
             : null,
-          primaryContainer
+          primaryContainer,
+          effortSel
         ),
         advanced,
         fallbackControls
@@ -1454,7 +1430,18 @@ function renderFullApiSettings(b) {
           out[role] = roleConfig;
         }
 
+        // Per-role reasoning effort travels with the models: a role whose
+        // effort select is left blank (follow-default / model-default) is
+        // simply omitted, so the backend's role->default->unset fallback
+        // applies, exactly like the model's follow-default.
+        const efforts = {};
+        for (const [role, entry] of Object.entries(roleInputs)) {
+          const v = entry.effort ? entry.effort.value : "";
+          if (v) efforts[role] = v;
+        }
+
         await api("PUT", "/api/agent_models", out);
+        await api("PUT", "/api/reasoning_effort", { efforts });
         await boot();
         closeModal();
         toast("Agent models saved.", "ok");
