@@ -1292,6 +1292,10 @@ _ENTITY_KEY_SUFFIX = re.compile(r"[_\-](entity|obj|object|item|node)$", re.I)
 # Keys a model reaches for instead of `name`, mirroring the dialogue_log
 # alias handling below.
 _ENTITY_NAME_ALIASES = ("name", "label", "title", "display_name", "displayName")
+# A generated handle rather than a word: long, separator-free, and either pure
+# hex or all digits. Live scenes key some entities this way
+# ("10ae6b6a11324780") alongside semantic ones ("sake_carafe").
+_OPAQUE_ID = re.compile(r"(?:[0-9a-f]{12,}|[0-9]{6,})", re.I)
 
 
 def _entity_name_from_key(key) -> str:
@@ -1305,6 +1309,13 @@ def _entity_name_from_key(key) -> str:
     same over-strictness the dialogue_log repair below already addresses.
     """
     slug = _ENTITY_KEY_SUFFIX.sub("", str(key or "").strip())
+    # An opaque generated id ("10ae6b6a11324780") names nothing. Live scenes
+    # mix semantic keys with hex ids, and title-casing one produces a display
+    # name like "10Ae6B6A11324780" that would then be shown to the player and
+    # used as a lookup key. Better to derive nothing and let the caller fall
+    # back to the schema default than to invent a garbage name.
+    if _OPAQUE_ID.fullmatch(slug):
+        return ""
     words = [w for w in re.split(r"[_\-\s]+", slug) if w]
     # Preserve deliberate acronyms (LCARS, EPS) rather than title-casing them.
     return " ".join(w if w.isupper() else w.capitalize() for w in words)
@@ -1326,9 +1337,14 @@ def _fill_entity_names(container) -> None:
                 entity["name"] = value.strip()
                 break
         else:
-            derived = _entity_name_from_key(key)
-            if derived:
-                entity["name"] = derived
+            # Preference order: a semantic key names the thing; an opaque
+            # generated id names nothing, so fall back to the kind rather than
+            # either showing the player "10Ae6B6A11324780" or failing the turn
+            # over a missing required field.
+            derived = (_entity_name_from_key(key)
+                       or str(entity.get("kind") or "").strip().title()
+                       or "Object")
+            entity["name"] = derived
 
 
 def preprocess_llm_output(step_key: str, raw: dict) -> dict:

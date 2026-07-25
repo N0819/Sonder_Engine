@@ -614,6 +614,34 @@ def background_config(chat_id):
     config.update(stored)
     return config
 
+def promotion_config(chat_id):
+    """How much a background presence must do before the engine offers it a
+    mind. Authorial pacing, not fixed law -- a crowded tavern wants a high bar,
+    a two-hander wants a low one -- so it is settable per chat.
+
+    `dialogue`      lines spoken before the UI offers promotion.
+    `mention`       passing mentions that do the same.
+    `auto_dialogue` lines before hands-off auto-promotion fires (gated
+                    separately by the global `auto_promote` setting).
+    """
+    from commit import (BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
+                        BACKGROUND_PROMOTION_MENTION_THRESHOLD,
+                        AUTO_PROMOTE_DIALOGUE_THRESHOLD)
+    config = {
+        "dialogue": BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
+        "mention": BACKGROUND_PROMOTION_MENTION_THRESHOLD,
+        "auto_dialogue": AUTO_PROMOTE_DIALOGUE_THRESHOLD,
+    }
+    stored = wget(chat_id, "promotion_thresholds", None) or {}
+    for key in config:
+        try:
+            value = int(stored[key])
+        except (KeyError, TypeError, ValueError):
+            continue
+        config[key] = max(1, min(50, value))
+    return config
+
+
 def fiction_model(chat_id):
     return wget(chat_id, "fiction_model", None) or {
         "genre": {"primary": "unspecified"},
