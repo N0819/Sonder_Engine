@@ -1812,15 +1812,27 @@ def track_background_presences(ctx, nonce):
     # the player under its id, then never gets to answer, because the debt is
     # keyed to the id while the reactor gate ranks the display name). Fold an
     # id-shaped speaker back to its display name before it is ever tracked.
+    _scene_now = wget(cid, "scene", {}) or {}
     entity_id_to_name = {
         eid: str((edef or {}).get("name") or "").strip()
-        for eid, edef in ((wget(cid, "scene", {}) or {}).get("entities") or {}).items()
+        for eid, edef in (_scene_now.get("entities") or {}).items()
         if isinstance(edef, dict) and str((edef or {}).get("name") or "").strip()
     }
+    # A bodiless voice (ship AI, station PA) is voiced by the Director and has
+    # no room. Tracking one as a background presence pinned it to whatever room
+    # it was positioned in and made it a promotion candidate -- observed live
+    # with the Enterprise computer sitting in Ten Forward.
+    try:
+        from scene import ubiquitous_speaker_names, is_ubiquitous_entity
+        _ubiquitous = ubiquitous_speaker_names(_scene_now)
+    except Exception:
+        _ubiquitous, is_ubiquitous_entity = frozenset(), (lambda e: False)
 
     for d in (res.get("dialogue_log") or []):
         speaker = str(d.get("speaker") or "").strip()
         speaker = entity_id_to_name.get(speaker, speaker)
+        if speaker.casefold() in _ubiquitous:
+            continue
         if speaker and not name_in_roster(speaker, roster):
             candidates.add(speaker)
             dialogue_speakers.add(speaker.casefold())
@@ -1856,6 +1868,8 @@ def track_background_presences(ctx, nonce):
                 continue
             name = str(entity_def.get("name") or "").strip()
             if not name or name_in_roster(name, roster):
+                continue
+            if is_ubiquitous_entity(entity_def) or name.casefold() in _ubiquitous:
                 continue
             candidates.add(name)
             sk = sketches.setdefault(name, {})

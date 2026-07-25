@@ -614,6 +614,46 @@ def background_config(chat_id):
     config.update(stored)
     return config
 
+# Kinds that are a voice rather than a body, recognized even when the model
+# forgets the explicit `ubiquitous` flag. Deliberately narrow: a mis-flagged
+# ordinary NPC would become unpositionable and un-promotable, which is worse
+# than a ship AI that stays room-bound.
+UBIQUITOUS_KINDS = frozenset({
+    "ship_ai", "shipai", "ship_computer", "station_ai", "station_computer",
+    "computer", "ai", "system", "intercom", "pa_system", "announcer",
+})
+
+
+def is_ubiquitous_entity(entity):
+    """True for a bodiless voice -- a ship's computer, a station AI, a PA.
+
+    Such a thing has no room, and giving it one is a category error: the
+    Enterprise computer is not "in Ten Forward", it is wherever the ship is.
+    Live play produced exactly that (`computer`, kind=agent, positioned in
+    `enterprise_ten_forward`), which pinned it to one room and made it a
+    promotion candidate.
+    """
+    if not isinstance(entity, dict):
+        return False
+    if entity.get("ubiquitous"):
+        return True
+    return str(entity.get("kind") or "").strip().casefold() in UBIQUITOUS_KINDS
+
+
+def ubiquitous_speaker_names(scene):
+    """Casefolded display names (and ids) of every bodiless voice in the scene,
+    for readers that must not treat them as room-bound speakers."""
+    names = set()
+    for eid, entity in ((scene or {}).get("entities") or {}).items():
+        if not is_ubiquitous_entity(entity):
+            continue
+        names.add(str(eid).strip().casefold())
+        display = str((entity or {}).get("name") or "").strip()
+        if display:
+            names.add(display.casefold())
+    return names
+
+
 def promotion_config(chat_id):
     """How much a background presence must do before the engine offers it a
     mind. Authorial pacing, not fixed law -- a crowded tavern wants a high bar,
