@@ -826,6 +826,82 @@ happened to do. Two consequences for implementation:
   recent material reaches the manager (a short tail plus the frozen blurb) long
   before reaching for anything cleverer.
 
+### 3.12 Co-DM, not co-author: the manager's relationship to the Director
+
+"A co-DM to the Director" is the right instinct, and it survives contact with
+the ownership model — with one correction and one genuinely interesting
+consequence.
+
+#### Delegate, not peer
+
+At a real table a co-DM runs a faction or a location while the primary DM keeps
+the final call on outcomes. That is exactly the available role here: the manager
+is the Director's **delegate for one location's populace**, not a second author
+with world authority.
+
+The correction is the one §3.10 already draws, and the co-DM framing makes it
+more urgent rather than less: **the manager gets people, not events.** A DM's
+single most characteristic move is "and then the door bursts open" — and that is
+precisely the move the manager must never make. This is not bureaucratic
+tidiness. Two agents that can both introduce world events will contradict each
+other, and there is no adjudicator standing above them to reconcile it. The
+Director's ownership of causality is what makes a single coherent world
+possible; a co-DM who can spawn events is just a second Director racing the
+first.
+
+#### Where it sits in the pipeline is the real question
+
+The co-DM idea gets architecturally concrete as a placement decision, and the
+two options differ more than they look:
+
+**(a) After `director_resolve`** — where `background_react` sits today. The
+manager reacts to an already-settled beat. Nothing downstream adjudicates its
+output, which is exactly *why* the output must be restricted to conduct that
+cannot fail: speech, and minor personal action. Cheap, safe, and the right
+starting point.
+
+**(b) Before `director_resolve`** — the manager *declares* its characters'
+intents, and the Director resolves them alongside everyone else's. This is the
+true co-DM position, and it fits the existing model with no strain at all: the
+manager becomes a **batched declaration source**, exactly parallel to the
+`character:<id>` steps that declare for registered cast. Character agents
+declare; the Director resolves. The manager is simply the cheap tier's version
+of the former.
+
+(b) unlocks something (a) structurally cannot: **contestable conduct.** Today a
+background presence can only ever do things that cannot fail. A regular who
+*tries* to block the door, grab an arm, or snatch the coin off the bar is
+currently inexpressible — not because it would be unsafe, but because nothing
+would adjudicate the attempt. Under (b), the Director resolves it like any other
+contested act. That is a large lifelike-ness gain, and it is the single strongest
+argument for the co-DM framing.
+
+The cost is real: at (b) the manager declares *into uncertainty*, not knowing how
+the beat resolves — which is correct and is what every character agent already
+does, but it means (b) cannot do the react-to-what-just-happened job that (a)
+does. These are genuinely two different stages at two different positions, not
+one stage that can be moved. Doing both is two calls per beat.
+
+**Recommendation: ship (a), design so (b) is reachable.** Keep the manager's
+output schema shaped so that adding a `commitment: asserted|contestable` field
+later is additive rather than a rewrite. Revisit (b) once the tier has proven
+itself in play.
+
+#### What this implies about the promotion boundary
+
+Follow (b) to its end and the manager is a full declaration source whose
+characters can attempt contestable acts — at which point it has quietly become a
+cheap character agent. That is worth noticing, because it sharpens where the
+promotion line actually belongs.
+
+What still separates the tier from a promoted character at that point is **not
+the ability to act.** It is memory depth and private psychology: real `memories`
+rows, mind-models, relationships, a perception slice of their own. §3.6 already
+treats interiority as the promotion boundary; this confirms it from the other
+direction. "Can they do things?" is the wrong question and always was — a
+bystander who can never attempt anything is not protecting an information
+barrier, just impoverished.
+
 ---
 
 ## 4. Follow-ons
