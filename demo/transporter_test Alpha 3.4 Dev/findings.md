@@ -18,7 +18,7 @@ transporter command ("two to beam down / up", "energize") as a relocation, and
   very beat, catching a real misattribution ("'With me, Lieutenant.' is spoken by
   Reyes but the nearest actor reference is T'Vel"). The new check is live and working.
 
-## TR-1 — Transporter relocation is incoherent across stages  *(major)*
+## TR-1 — Transporter relocation is incoherent across stages  *(operator-teleport half FIXED)*
 
 **Symptom.** On the single beam-down beat, four layers disagreed about who is
 where and in which room:
@@ -78,3 +78,23 @@ prose/diff contradiction class as F2, at the relocation layer.
 **Test.** A "two to beam down" beat with an operator present: assert exactly the
 two named entities change room, to the room mapping minted, and the operator's
 position is unchanged.
+
+
+## TR-1 UPDATE — operator-teleport half fixed
+
+The headline symptom (the transporter OPERATOR beamed down with the away team,
+despite mapping and resolve both keeping him aboard) was `infer_companion_carry`
+(spatial_frames.py): a deterministic backstop that, on a GAP-CROSS, copied the
+player's destination onto any co-located cast member whose position was
+unchanged -- exactly the operator at the console. Boarding a VEHICLE INTERIOR
+(ship/TARDIS) still auto-carries co-located companions (a reliable "walk aboard
+together" default), but a bare gap-cross (a teleport, a transporter beam) no
+longer does: who moves on a beam is a ROSTER the director/mapping sets, and a
+co-located bystander stays. Fixed with `tests/test_companion_carry.py::
+test_gap_cross_does_not_carry_a_bystander_tr1`; aligns with the function's own
+documented caution.
+
+Still open (separate, lower-impact): the room-id DIVERGENCE half -- mapping mints
+one surface room id, director_resolve names another, and the party can land in
+the id mapping never described. That is a minted-room reconciliation issue
+(dedup_minted_rooms), model-coordination-dependent, and worth its own change.
