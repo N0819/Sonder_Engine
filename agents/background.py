@@ -130,7 +130,7 @@ def _beat_for_presence(dr, sc, station_room, name):
     return re.sub(r"\s{2,}", " ", resolved).strip()
 
 
-def _result(selected, reactions):
+def _result(selected, reactions, mode="background_react", agent_calls=None):
     """Uniform stage output. `selected` is every presence the gate picked this
     beat (so commit can discharge their owed replies even if they stayed
     silent); `reactions` is the subset that actually spoke/acted. The legacy
@@ -143,6 +143,12 @@ def _result(selected, reactions):
         "action": first.get("action", ""),
         "reactions": reactions,
         "selected": selected,
+        # Provenance for the pipeline UI: which path ran and which sub-agents
+        # it actually spent. The scene manager and the per-presence backstop
+        # share a step key, so without this the technical log cannot tell a
+        # one-call room from a one-presence reaction.
+        "mode": mode,
+        "agent_calls": agent_calls or [],
     }
 
 
@@ -194,7 +200,8 @@ def background_react(ctx, nonce):
                            presences.get(name) or {}, nonce)
         if entry:
             reactions.append(entry)
-    return _result(names, reactions)
+    return _result(names, reactions, mode="background_react",
+                   agent_calls=["background_react"] * len(reactions))
 
 
 # ---------------------------------------------------------------------------
@@ -471,7 +478,11 @@ def scene_life(ctx, nonce, level, cfg):
                           "action": action})
     # Downstream merge paths key off dialogue_log_entry; an action-only entry
     # still rides through as a reaction so commit/narration can use it.
-    res = _result(names, reactions)
+    calls = ["scene_life"]
+    if minted:
+        calls.insert(0, "blurb_mint")
+    res = _result(names, reactions, mode="scene_life:%s" % level,
+                  agent_calls=calls)
     if minted:
         res["blurbs"] = minted  # persisted by commit.track_background_presences
     if claims:

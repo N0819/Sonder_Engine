@@ -440,7 +440,7 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None):
         # is a cheap, LLM-free check that returns None for the large
         # majority of turns (no salient, un-voiced background presence this
         # beat) -- only then does background_react spend an LLM call.
-        ("background_react", "Background · presence reaction"),
+        (_BG_KEY, _background_stage_label(chat_id)),
         ("perception_outcome", "Perception · pass 2 — the outcome"),
         ("narrator", "Narrator · render"),
     ]
@@ -448,6 +448,30 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None):
         plan.append(("narrator_extra", "Narrator · render (other players)"))
     plan.append(("commit", "Mapping & memory · commit-up"))
     return plan
+
+_BG_KEY = "background_react"
+
+
+def _background_stage_label(chat_id):
+    """Name the stage after the path it will actually take.
+
+    The scene manager and the one-at-a-time backstop share a step key (so every
+    downstream merge keeps working), but they are very different amounts of
+    work -- one call voicing a whole room versus one presence reacting. Showing
+    "Background · presence reaction" while the manager runs made the feature
+    invisible in the pipeline UI even when it was doing all the work.
+    """
+    try:
+        from scene import background_config
+        level = str(background_config(chat_id).get("scene_life") or "off").casefold()
+    except Exception:
+        level = "off"
+    if level == "ambient":
+        return "Scene life · manager (ambient)"
+    if level == "full":
+        return "Scene life · manager (full)"
+    return "Background · presence reaction"
+
 
 def _mapping_must_precede_perception(ctx):
     """Return True when perception needs freshly staged spatial lore.
