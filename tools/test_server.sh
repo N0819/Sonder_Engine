@@ -22,17 +22,39 @@ while [ $# -gt 0 ]; do
 done
 
 TEST_DB="$PWD/engine.test.db"
+
+# Where the real stories live. Resolved explicitly rather than assumed to sit
+# beside this script: run from a git worktree, the repo root is NOT the main
+# checkout, and a stray empty engine.db there gets copied instead -- which
+# silently serves an empty database that looks like data loss.
+SOURCE_DB="${ENGINE_SOURCE_DB:-}"
+if [ -z "$SOURCE_DB" ]; then
+  SOURCE_DB="$PWD/engine.db"
+  if git rev-parse --git-common-dir >/dev/null 2>&1; then
+    MAIN_ROOT="$(dirname "$(git rev-parse --git-common-dir)")"
+    [ -f "$MAIN_ROOT/engine.db" ] && SOURCE_DB="$MAIN_ROOT/engine.db"
+  fi
+fi
+
 if [ "$FRESH" = "1" ] || [ ! -f "$TEST_DB" ]; then
-  if [ -f engine.db ]; then
-    echo "copying engine.db -> engine.test.db (your real DB is untouched)"
+  if [ -f "$SOURCE_DB" ]; then
+    echo "copying $SOURCE_DB -> engine.test.db (source is opened read-only)"
     rm -f "$TEST_DB" "$TEST_DB-wal" "$TEST_DB-shm"
     # sqlite backup rather than cp: safe against an in-flight WAL.
-    python3 -c "
+    python3 - "$SOURCE_DB" "$TEST_DB" <<'PYCOPY'
 import sqlite3, sys
-src = sqlite3.connect('engine.db'); dst = sqlite3.connect(sys.argv[1])
-src.backup(dst); dst.close(); src.close()" "$TEST_DB"
+src = sqlite3.connect("file:%s?mode=ro" % sys.argv[1], uri=True)
+dst = sqlite3.connect(sys.argv[2])
+src.backup(dst)
+chats = dst.execute("SELECT COUNT(*) FROM chats").fetchone()[0]
+dst.close(); src.close()
+print("  copied %d chats" % chats)
+if chats == 0:
+    print("  WARNING: the copy has no chats -- wrong source database?")
+PYCOPY
   else
-    echo "no engine.db found; starting with an empty test database"
+    echo "no source database at $SOURCE_DB; starting empty"
+    echo "(override with ENGINE_SOURCE_DB=/path/to/engine.db)"
   fi
 fi
 
