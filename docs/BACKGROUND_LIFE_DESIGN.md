@@ -209,6 +209,13 @@ invention into a real character's memory.
 
 ### 3.2 The cardinal rule: voice batched, write unbatched
 
+**This rule is not a claim that the model cannot separate who knows what.** A
+capable model given explicit per-presence knowledge tags in one context does
+that job well (see §3.3.1 — the payload should lean on it, and the partition
+rule below is an optimization, not a safety boundary). The rule is about what
+happens on the fraction of occasions it slips, and that depends entirely on
+where the output goes.
+
 The risk of running N presences through one LLM is really two risks with very
 different blast radii:
 
@@ -229,6 +236,18 @@ Therefore:
 
 Storage never sees a shared context window. That single rule is the difference
 between an acceptable tier relaxation and a slow poison.
+
+**The asymmetry is error economics, not model capability.** Take any separation
+reliability *p*. Applied to speech, a slip costs one line that is gone next
+turn, so errors stay at rate *(1-p)* forever — a 99%-reliable model gives you
+one odd line per hundred turns, which is beneath the noise floor of fiction.
+Applied to storage, a slip is *written down, re-read on every subsequent turn,
+and folded into the next compaction* — so errors accumulate, and worse, a
+leaked fact in the digest is indistinguishable from a perceived one and will be
+faithfully preserved by every future compaction pass. Over a 100-turn chat the
+same model yields ~1 transient oddity versus ~1 permanent corruption per
+presence. The gap is not about how good the model is; it is about whether
+mistakes decay or compound.
 
 ### 3.3 Why batched voicing is safer than it sounds
 
@@ -258,6 +277,62 @@ is fatal to the premise; furniture leaking ambient common knowledge is not.
 What stays **absolute at every tier**: a concealed line never enters any digest,
 and never reaches any voicing call. That floor is enforced deterministically,
 before the model sees anything, by the filter that already exists.
+
+#### 3.3.1 Lean on the model's separation, then floor it deterministically
+
+The framing above treats divergence as something to *minimize* by partitioning.
+That is too pessimistic. A capable model given explicit per-presence knowledge
+in one context tracks who-knows-what well — this is not a hard task for a strong
+model, and designing as though batching automatically means bleed leaves real
+capability unused.
+
+So the payload should **ask for separation instead of engineering around it**:
+
+```
+"cast": [ { name, blurb, digest, present_since, knows: [...], not_privy_to: [...] } ]
+```
+
+with an explicit instruction that each speaker may draw only on their own entry.
+Three consequences, all of them improvements on the draft above:
+
+- **The partition rule demotes to an optimization.** Batching by
+  `spatial.ambient_scope` stops being a safety boundary and becomes a way to
+  keep payloads small and lines locally relevant. Cross-scope batching becomes
+  available when it saves calls.
+- **Arrival-time divergence stops being a tolerated residual.** `present_since`
+  is a tag the model can honour, rather than a leak to be excused as
+  tier-appropriate.
+- **The tier can hold genuinely divergent knowledge.** An extra who witnessed
+  something the others did not, a servant who overheard one line — these become
+  expressible instead of being flattened into "everyone in the room knows the
+  same things." That is *more* life, and it is the interesting version of this
+  feature.
+
+**But floor the one case that matters, deterministically.** This codebase's
+recurring lesson — stated in `AGENTS.md`, and the reason `background_react`
+exists at all — is that prompt compliance degrades under sustained narrative
+pressure. Note the *shape* of those failures though: a model omitting an
+instruction over many turns, fixed by a deterministic backstop rather than by
+abandoning the prompt. Same pattern applies here.
+
+The high-value leak is uniquely checkable because concealed content is known
+**verbatim**: the engine holds the exact quote bodies it withheld. So after the
+batched call, string-match every produced line (and every digest append) against
+the redacted bodies and drop any entry that reproduces one. This is the same
+technique `_beat_for_presence` already uses when it does
+`resolved.replace(body, "")`. It costs nothing, requires no semantic judgement,
+and makes the hard floor independent of model reliability entirely.
+
+Semantic paraphrase of a secret slips past this, of course — but the floor
+catches the verbatim case, and the tier argument covers the rest.
+
+**This is an empirical question, so measure it rather than arguing it.** Before
+building `scene_life`, write a small eval: construct N presences with
+deliberately divergent knowledge (one witnessed a theft, one arrived late, one
+was whispered to), run the batched call across several models, and string-check
+the outputs for tokens only one presence should have had. That produces a real
+leak rate, which decides both the partition rule and how large N can safely
+get — and it is cheap to build compared to the stage itself.
 
 ### 3.4 One stage, not two
 
@@ -626,14 +701,17 @@ scope holds no presences, so empty rooms stay free.
    though nothing reads it until step 6.
 4. **Per-presence compaction** (§3.5) — mirror
    `memory.consolidate_character_memory`'s incremental contract.
-5. **`scene_life`** (§3.4) — the batched stage replacing `background_react`:
+5. **The separation eval** (§3.3.1) — measure the real cross-presence leak rate
+   before committing to a partition rule or an N. Cheap, and it decides design
+   questions that are otherwise settled by argument.
+6. **`scene_life`** (§3.4) — the batched stage replacing `background_react`:
    new prompt, new schema entry, partition rule, post-validation, narrator
    clause. Needs tests mirroring `tests/test_background_react.py` and
    `tests/test_background_beat_filter.py`, plus a new one for the §5
    provenance invariant and one asserting ambient entries never accrue
    `dialogue_turns`.
-6. **Interim filler** (§3.9) — last, deliberately. It is the only fabricating
+7. **Interim filler** (§3.9) — last, deliberately. It is the only fabricating
    component, and it is worth building only once the derived layers work, so
    that its output is visibly distinguishable from theirs in real play. Needs a
    test that `interim` never reaches promotion as fact.
-7. **Follow-ons** (§4).
+8. **Follow-ons** (§4).
