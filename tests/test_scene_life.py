@@ -29,6 +29,7 @@ from agents.background import (
     _manager_events,
     _name_to_entity_id,
     _presence_room,
+    _redacted_resolved_event,
     _reproduces_withheld,
     _withheld_bodies,
     managed_presences,
@@ -186,6 +187,32 @@ def test_overt_shared_line_is_admitted_at_both_levels(temp_db):
         events = _manager_events(ctx, dr, sc, managed, level)
         assert len(events) == 1
         assert set(events[0]["audience"].values()) == {"full"}
+
+
+def test_concealed_content_is_redacted_from_the_directors_prose():
+    """Admission control must cover the Director's PROSE, not just its
+    dialogue_log. resolved_event is authored from the omniscient objective
+    frame and can restate a whispered line verbatim; the manager path passed it
+    raw until live play surfaced the gap."""
+    dr = {
+        "resolved_event": "Kessa leans in and murmurs that the map is a "
+                          "forgery. The barkeep pulls a tap.",
+        "dialogue_log": [
+            {"speaker": "Kessa Vane", "visibility": "concealed",
+             "exact_quote": '"the map is a forgery"'},
+        ],
+    }
+    out = _redacted_resolved_event(dr)
+    assert "forgery" not in out
+    assert "The barkeep pulls a tap." in out
+
+
+def test_overt_prose_survives_redaction():
+    dr = {"resolved_event": "The barkeep slides three ales across the plank.",
+          "dialogue_log": [{"speaker": "The Barkeep", "visibility": "overt",
+                            "exact_quote": '"three ales"'}]}
+    assert _redacted_resolved_event(dr) == \
+        "The barkeep slides three ales across the plank."
 
 
 # --- the verbatim floor (§3.3.1) ------------------------------------------

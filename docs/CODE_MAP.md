@@ -8,7 +8,7 @@
 |---|---:|---|---|
 | `affect.py` | 1203 |  | `theory_of_mind` |
 | `agents/__init__.py` | 86 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
-| `agents/background.py` | 605 |  | `agents.common`, `commit`, `db`, `prompts`, `schemas`, `spatial` |
+| `agents/background.py` | 626 |  | `agents.common`, `commit`, `db`, `prompts`, `schemas`, `spatial` |
 | `agents/character.py` | 429 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/common.py` | 3014 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/director.py` | 2595 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
@@ -63,10 +63,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `scene_life()` | 366 | 88 lines |
-| `_react_one()` | 551 | 55 lines |
+| `scene_life()` | 366 | 87 lines |
+| `_react_one()` | 572 | 55 lines |
 | `background_react()` | 141 | 49 lines |
-| `_mint_blurbs()` | 456 | 45 lines |
+| `_mint_blurbs()` | 455 | 45 lines |
 | `managed_presences()` | 268 | 40 lines |
 | `_beat_for_presence()` | 88 | 35 lines |
 | `_audience_map()` | 310 | 32 lines |
