@@ -168,3 +168,27 @@ def test_unknown_room_yields_a_harmless_stub():
     out = room_projection(_scene(), "nowhere")
     assert out["room"] == "nowhere"
     assert "desc" not in out
+
+
+def test_notes_are_excluded_because_they_carry_people():
+    """Real leak found by dry-running a live chat: a room's freeform `notes`
+    read "The TARDIS materializes in this room... Hinami and the Doctor are
+    outside it now." A whitelist that admits a freeform field is not one."""
+    from backdrops import room_projection
+    sc = _scene()
+    sc["rooms"]["ten_forward"]["notes"] = \
+        "Hinami and the Doctor are outside it now."
+    out = room_projection(sc, "ten_forward")
+    assert "notes" not in out
+    assert "Hinami" not in repr(out)
+
+
+def test_stale_global_location_is_excluded():
+    """Also from live data: the Enterprise's janitor closet still reported
+    location "Back Alley, City". A wrong one-line label would render a
+    starship cupboard as a city alley, and the room desc already carries the
+    setting."""
+    from backdrops import room_projection
+    sc = _scene()
+    sc["location"] = "Back Alley, City"
+    assert "Back Alley" not in repr(room_projection(sc, "ten_forward"))
