@@ -902,6 +902,106 @@ direction. "Can they do things?" is the wrong question and always was — a
 bystander who can never attempt anything is not protecting an information
 barrier, just impoverished.
 
+### 3.13 Keeping the invention: claims, not facts
+
+**Implemented** — `background_claims.py`, driven by a live result rather than a
+hypothesis. See `demo/tavern_scene_life/findings.md`.
+
+The tavern run showed the manager inventing small world facts through its
+people at roughly one proper noun per turn. Verified against the Director's own
+output: "Tam Briddock's boy" (t2) and "the tinker's lot last month" (t3) appear
+nowhere in `director_resolve` for those turns. §3.12 says the manager gets
+people, not events — so on a strict reading this is a defect.
+
+But the same run showed why it is worth keeping. The t2 invention was absorbed
+into canon, and by t6 the Director-voiced Widow says *"Ewe came back alone.
+Drover's boy didn't"* — the invented detail had become the dramatic spine of the
+best scene in the test. **The mechanism that makes the room feel alive is the
+same one that erodes the Director's ownership.** Suppressing it costs most of
+the texture.
+
+So the fix is not suppression. It is making every *outcome* coherent.
+
+#### The failure mode being designed out
+
+Today's failure is **"the engine forgot it said this."** The player asks who Tam
+Briddock is and nothing in the world knows: the Director never recorded it, no
+lore entry exists, and the next beat either confabulates fresh or silently
+denies it. That is incoherence, and it is the only genuinely bad outcome
+available.
+
+Record the claim and the three possible outcomes are all ordinary fiction:
+
+| outcome | what the player sees |
+|---|---|
+| **ratified** | the Director adopts it; it is canon |
+| **contradicted** | the Director establishes otherwise — the speaker misremembered, or lied. Because the *claimant* is recorded, the world can show that, which is better fiction than silence |
+| **expired** | nobody followed up. It was tavern talk |
+
+None is incoherent. That is what "robust failure" means here — not preventing
+the false claim, but ensuring no branch ends in the engine contradicting
+itself.
+
+#### Mechanism
+
+Deliberately the same shape as the Player Authority Contract in
+`director_interpret`, which already records a player's claim about another
+character's past words as *claimed, not established* and lets the named party
+confirm, correct or ignore it. A background presence's assertion about the
+world gets identical treatment for an identical reason: neither owns objective
+causality.
+
+- **Declare.** `SceneLifeEntry.asserts` — the manager lists names/details its
+  line introduced that the beat did not already establish.
+- **Backstop.** `novel_proper_nouns()` scans quotes for capitalized phrases
+  absent from everything already in play (scene entities, rooms, positions,
+  cast, persona, prior claim refs). Belt-and-braces, the standard shape here:
+  ask the model to report, and check cheaply for what it failed to report.
+  Note the scan is deliberately partial — lowercase lore ("the tinker's lot")
+  is invisible to it, which is exactly why `asserts` exists and why the scan
+  is only the backstop.
+- **Record.** `record_claims()` stores `{claimant, text, refs, credence, turn,
+  status, expires_turn}` in world KV, idempotent by content hash so a rerun
+  does not duplicate.
+- **Surface.** `unratified_claims()` rides the Director's `director_resolve`
+  payload beside `engine_notices` and `due_authored_events`, bounded to 6.
+- **Settle.** `settle_claims()` marks a claim ratified when the Director names
+  it in `state_diff.ratified_claims` *or* writes its reference into the
+  objective record — so adoption does not depend on the model remembering to
+  fill a list. Unclaimed after `CLAIM_TTL_TURNS` (8), it is dropped.
+
+Contradiction is deliberately **not** inferred. Guessing at semantic
+incompatibility with string matching would be worse than leaving it to time: an
+unratified claim simply stays hearsay and expires.
+
+#### Credence comes from the frozen blurb
+
+`claimant_credence()` derives how much weight the *fiction* has already given
+this speaker from their frozen blurb (§3.8). The tavern old man's real blurb —
+*"creaking voice, too slow for conversation, trails off mid-thought"* — yields
+`low`; a careful, precise presence yields `high`.
+
+This is what makes leaving a claim unratified safe. The player has already been
+signalled how much to trust it: a rambling drunk's story reads as suspect on
+sight, so it costs nothing if it is never confirmed. The unreliability is
+diegetic, not a system gap.
+
+#### What the Director is told
+
+`director_resolve`'s prompt gains an adopt / contradict / ignore clause, with an
+explicit instruction to adopt *sparingly* — a claim that would rewrite canon,
+contradict an established fact, or hand the player a plot the Director did not
+author should be contradicted or ignored, never adopted by default. And the
+manager's own prompt bounds what may be invented: village-sized and personal
+only, never the player's plot, never a place not on the map, never a large
+event, never a registered character.
+
+Precision matters here because a false positive puts noise in the Director's
+payload. Two real defects from the run are fixed and pinned: a mid-quote
+sentence start ("…end of autumn. **That'd** be…") is not a name, and an
+article-stripped reference ("the Widow") matches the established "The Widow"
+rather than inventing a second person.
+
 ---
 
 ## 4. Follow-ons

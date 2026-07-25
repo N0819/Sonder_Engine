@@ -768,6 +768,11 @@ class SceneLifeEntry(BaseModel):
     name: str
     speech: Optional[DialogueLogEntry] = None
     action: str = ""
+    # Proper nouns / world facts this entry introduces that the beat did not
+    # already establish. Self-declared so they can be recorded as CLAIMS rather
+    # than silently entering canon (background_claims.py); a deterministic
+    # novel-proper-noun scan backstops omissions.
+    asserts: list[str] = Field(default_factory=list)
 
 class SceneLifeOutput(BaseModel):
     entries: list[SceneLifeEntry] = Field(default_factory=list)
@@ -798,6 +803,10 @@ class StateDiff(BaseModel):
     cast_changes: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
     introductions: list[dict] = Field(default_factory=list)
+    # Names/details a background presence asserted on an earlier beat that this
+    # resolution ADOPTS as true (background_claims.py). Ratifying is the
+    # Director's alone -- an unratified claim stays hearsay and expires.
+    ratified_claims: list[str] = Field(default_factory=list)
     # Top-level place label, set only when the beat relocates the party to a
     # genuinely different place (DW-1). commit.py's _refresh_relocated_location
     # prefers this over the new room's own name.

@@ -53,6 +53,8 @@ from commit import (
     _valid_pending_reply,
 )
 
+from background_claims import claimant_credence, novel_proper_nouns
+
 from .common import _agent_json
 
 
@@ -412,7 +414,9 @@ def scene_life(ctx, nonce, level, cfg):
     # one malformed entry never fails the stage.
     allowed = {n.casefold(): n for n in names}
     withheld = _withheld_bodies(dr)
-    reactions, seen = [], set()
+    known_names = _known_world_names(ctx, sc, names)
+    rec_by_name = {n: r for _, n, r, _rm in managed}
+    reactions, seen, claims = [], set(), []
     for e in (out.get("entries") or []):
         if not isinstance(e, dict):
             continue
@@ -431,6 +435,15 @@ def scene_life(ctx, nonce, level, cfg):
                 "scene_life: dropped %s -- reproduced withheld content" % canon)
             continue
         seen.add(canon)
+        # Lore this line invents is recorded as a CLAIM, never as fact -- the
+        # Director ratifies, contradicts, or lets it expire (background_claims).
+        refs = _claimed_refs(e, quote, known_names)
+        if refs:
+            claims.append({
+                "claimant": canon, "text": quote or action, "refs": refs,
+                "credence": claimant_credence(
+                    (minted.get(canon) or (rec_by_name.get(canon) or {}).get("blurb"))),
+            })
         entry = None
         if quote:
             entry = {
@@ -449,7 +462,53 @@ def scene_life(ctx, nonce, level, cfg):
     res = _result(names, reactions)
     if minted:
         res["blurbs"] = minted  # persisted by commit.track_background_presences
+    if claims:
+        res["claims"] = claims  # recorded by commit; ratified by the Director
     return res
+
+
+def _known_world_names(ctx, sc, managed_names):
+    """Everything already named in play. A capitalized phrase outside this set
+    is something a background presence has just invented."""
+    known = set(managed_names)
+    known |= {str((e or {}).get("name") or "")
+              for e in (sc.get("entities") or {}).values() if isinstance(e, dict)}
+    known |= {str((r or {}).get("name") or "")
+              for r in (sc.get("rooms") or {}).values() if isinstance(r, dict)}
+    known |= set((sc.get("rooms") or {}).keys())
+    known |= set((sc.get("positions") or {}).keys())
+    if sc.get("location"):
+        known.add(str(sc["location"]))
+    try:
+        known |= set(_known_name_roster(ctx.chat, ctx.cast))
+    except Exception:
+        pass
+    for p in _present_others(ctx):
+        known.add(p)
+    try:
+        from db import wget as _wget
+        for rec in (_wget(ctx.chat.id, "background_claims", {}) or {}).values():
+            known |= {str(r) for r in (rec.get("refs") or [])}
+    except Exception:
+        pass
+    return {k for k in known if k}
+
+
+def _claimed_refs(entry, quote, known_names):
+    """What this entry introduced: the manager's own declaration, plus a
+    deterministic novel-proper-noun scan as the backstop for what it failed to
+    declare (the same belt-and-braces shape used everywhere else here)."""
+    declared = [str(a).strip() for a in (entry.get("asserts") or [])
+                if str(a).strip()]
+    detected = novel_proper_nouns(quote, known_names)
+    out = []
+    for ref in declared + detected:
+        if ref.casefold() in {o.casefold() for o in out}:
+            continue
+        if ref.casefold() in {k.casefold() for k in known_names}:
+            continue
+        out.append(ref)
+    return out
 
 
 def _mint_blurbs(ctx, managed, place):
