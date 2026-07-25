@@ -2042,8 +2042,9 @@ def director_resolve(ctx, nonce):
     # Lazy import: commit.py owns the ledger's deterministic semantics
     # (OBLIGATION_OVERDUE_AGE, the commit-side re-deferral reminder); the
     # payload view is built there so the flag the prompt's hard rule keys
-    # on and the flag commit warns on can never disagree.
-    from commit import pending_obligation_view
+    # on and the flag commit warns on can never disagree. world_pressure_view
+    # rides the same convention (F5).
+    from commit import pending_obligation_view, world_pressure_view
     _mv_for_context = interp.get("movement")
     _mv_target = _mv_for_context.get("to_room") if isinstance(_mv_for_context, dict) else None
 
@@ -2114,6 +2115,12 @@ def director_resolve(ctx, nonce):
         "relevant_lore": lore_for(ctx),
         "standing_intentions": raw_intents[:12],
         "pending_obligations": pending_obligation_view(chat["id"], turn["idx"]),
+        # F5: the world-pressure ledger -- every open ongoing off-character
+        # process, each of which the prompt's WORLD PRESSURE rule requires
+        # this resolve to tick, hold, or resolve. Deterministic floor: the
+        # must-tick retry below plus commit_world_pressure's implicit-hold
+        # warnings make silence a recorded choice, never a default.
+        "world_pressure": world_pressure_view(chat["id"], turn["idx"]),
         "social_standing": social_standing,
         # Player-authored future beats scheduled earlier and due NOW: enact them
         # as occurring this beat (see director_interpret). commit re-queues any
@@ -2135,6 +2142,74 @@ def director_resolve(ctx, nonce):
         temperature=0.5,
         max_tokens=16000,
     )
+
+    # WORLD PRESSURE must-tick floor (F5), enforced. The ledger + prompt rule
+    # ask the resolve to tick or hold every open pressure; commit warns on
+    # silence. But a pressure the payload flags must_tick_this_beat has
+    # ALREADY been held past its window -- the DW-2 lesson (and the spatial
+    # zone-tagging one before it) is that a prompt rule alone goes unused
+    # under sustained narrative pressure, so a violated flag buys exactly one
+    # correction retry, kept only if it actually covers more of the flagged
+    # pressures. Runs BEFORE the player-act authority retry below so player
+    # authority always gets the last word.
+    _pressures = payload.get("world_pressure") or []
+    _must_tick = [p for p in _pressures if p.get("must_tick_this_beat")]
+
+    def _unticked_pressures(res_out):
+        ops = res_out.get("world_pressure")
+        ops = ops if isinstance(ops, list) else []
+        tick_ids, tick_subjects = set(), []
+        for op in ops:
+            if isinstance(op, dict) \
+                    and str(op.get("op") or "").strip().lower() == "tick":
+                tick_ids.add(str(op.get("id") or "").strip())
+                subj = str(op.get("subject") or "").strip().casefold()
+                if subj:
+                    tick_subjects.append(subj)
+        missing = []
+        for p in _must_tick:
+            pid = str(p.get("id") or "").strip()
+            subj = str(p.get("subject") or "").strip().casefold()
+            if pid and pid in tick_ids:
+                continue
+            if subj and any(subj in s or s in subj for s in tick_subjects):
+                continue
+            missing.append(p)
+        return missing
+
+    _wp_missing = _unticked_pressures(out)
+    if _wp_missing:
+        _wp_note = (
+            "WORLD PRESSURE HARD RULE violated: these ongoing world processes "
+            "have already been held past their window and MUST advance this "
+            "beat -- "
+            + "; ".join(f"{p.get('id')}: {p.get('subject')}"
+                        for p in _wp_missing)
+            + ". Rewrite your resolution keeping every player and character "
+            "fact identical, but make each listed process visibly act ON-PAGE "
+            "this beat: one concrete external development drawn from the "
+            "process itself (a reading changes, a response arrives, the "
+            "hazard spreads, the authority moves), emit {op:'tick', id, note} "
+            "for it in world_pressure, and encode any persistent effect in "
+            "state_diff."
+        )
+        _wp_retry = _agent_json(
+            "director",
+            "director_resolve",
+            get_prompt("director_resolve"),
+            {**payload, "correction_notes": _wp_note},
+            temperature=0.3,
+            max_tokens=16000,
+        )
+        if len(_unticked_pressures(_wp_retry)) < len(_wp_missing):
+            out = _wp_retry
+            _wp_missing = _unticked_pressures(out)
+        for _p in _wp_missing:
+            ctx.add_warning(
+                f"World pressure must-tick violated: {_p.get('subject')!r} "
+                f"(id {_p.get('id')}) was not ticked this beat despite being "
+                "flagged must_tick_this_beat."
+            )
 
     # PLAYER-ACT AUTHORITY, enforced. The prompt rule alone measurably reduced
     # this (a live reroll dropped an invented drink-and-nod down to a single
@@ -2191,6 +2266,14 @@ def director_resolve(ctx, nonce):
     # _agent_json (see director_establish above).
     out, warnings = validate_llm_output("director_resolve", out)
     ctx.warnings.extend(warnings)
+
+    # Surfaced on the step itself, not only in ctx.warnings -- attached AFTER
+    # validation (the schema dump drops unknown keys).
+    if _wp_missing:
+        out["world_pressure_warnings"] = [
+            f"must-tick pressure not ticked: {p.get('id')}: "
+            f"{p.get('subject')}" for p in _wp_missing
+        ]
 
     # Safety net: LLM sometimes returns a string/list where an object belongs.
     sd = _normalize_diff_shape(out.get("state_diff"))
