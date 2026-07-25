@@ -1921,6 +1921,19 @@ def _audit_fact_adjudications(ctx, out, interp):
             "(confirmed|contested|false) landing it on-page."
         )
 
+def _unratified_background_claims(chat_id, turn_idx):
+    """Still-live hearsay from background presences, for the Director to settle.
+
+    Best-effort: a failure here must never cost the turn its resolution, so it
+    degrades to no claims rather than raising.
+    """
+    try:
+        from background_claims import unratified_claims
+        return unratified_claims(chat_id, turn_idx)
+    except Exception:
+        return []
+
+
 def director_resolve(ctx, nonce):
     chat = ctx.chat
     interp = _dict(ctx.director_interpret)
@@ -2129,6 +2142,10 @@ def director_resolve(ctx, nonce):
         # See director_interpret: already-completed mechanical transitions
         # (timed arrivals) the prose should acknowledge, not re-resolve.
         "engine_notices": wget(chat["id"], "engine_notices", []),
+        # Hearsay a background presence asserted on an earlier beat, still
+        # unratified. You are the only ratifier -- adopt, contradict, or ignore
+        # (background_claims.py).
+        "unratified_claims": _unratified_background_claims(chat["id"], turn["idx"]),
         "interaction_rounds": loop.get("rounds") or [],
         "reaction_rounds": (ctx.reaction_loop or {}).get("rounds") or [],
         "variant_seed": nonce,
