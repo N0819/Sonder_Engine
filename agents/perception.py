@@ -49,6 +49,50 @@ from spatial import (
 )
 
 
+def _addresses(intended_target, observer_name):
+    """True when a dialogue line's intended_target names this observer. The
+    target may be a single name or a list; comparison is casefolded. Used to
+    route a comm-channel transmission to the party it was addressed to, across
+    a physical barrier (see the medium:'comm' handling in perception_outcome)."""
+    if not intended_target or not observer_name:
+        return False
+    targets = intended_target if isinstance(intended_target, (list, tuple)) \
+        else [intended_target]
+    on = str(observer_name).casefold()
+    return any(str(t).casefold() == on for t in targets)
+
+
+def _dialogue_hear_level(entry, rel, observer_name):
+    """Audibility of one dialogue entry to an observer.
+
+    Ordinary spatial hearing (hear_level) decides first. It only ever gets
+    OVERRIDDEN in one direction -- a line it would DROP ('none', out of earshot)
+    is rescued to 'full' when the line is a TRANSMISSION addressed to THIS
+    observer: a combadge/radio/intercom carries the voice across the physical
+    barrier that ordinary hearing can't. A line already audible is never
+    altered, so same-room and open-door hearing are untouched.
+
+    A transmission is recognised by either signal:
+      - the director marked it medium:'comm' (explicit), or
+      - it plainly NAMES this observer (intended_target) at a spoken volume
+        while they are out of earshot -- you do not hold a by-name exchange with
+        someone in another room without a channel, so treating it as ambient
+        sound and dropping it is the TR-2 bug. This shape-based floor keeps the
+        guarantee from depending on the director remembering to tag every line.
+
+    The comm path carries only the VOICE; the caller sets can_see separately (a
+    transmission grants no sight)."""
+    base = hear_level(rel, entry.get("volume", "normal"))
+    if base != "none":
+        return base
+    if _addresses(entry.get("intended_target"), observer_name) and (
+        str(entry.get("medium") or "").lower() == "comm"
+        or str(entry.get("volume", "normal")).lower() in ("normal", "loud", "shout")
+    ):
+        return "full"
+    return base
+
+
 def _perceiver_spatial_facts(scene, observer, sources):
     """Env-gated (SPATIAL_SCAFFOLD=1) deterministic ground-truth spatial facts
     for a perceiver -- the same scaffold given to the narrator, applied at the
@@ -902,6 +946,9 @@ def perception_outcome(ctx, nonce):
             "tone": d.get("tone", ""), "speaker_room": sp_room,
             "visibility": d.get("visibility", "overt"),
             "conceal_from": d.get("conceal_from") or [],
+            # medium:'comm' carries a transmitted line to its addressed party
+            # across a physical barrier (see the perception_outcome injection).
+            "medium": d.get("medium"),
         })
 
     # A concealed line must never reach the blanket hear_level-based
@@ -1248,7 +1295,13 @@ def perception_outcome(ctx, nonce):
                         view = _append_once(view, appearance_text, marker=appearance_text)
                     described_this_pass.add(d_speaker)
                 display = _unknown_actor_label(d_speaker, appearance_text)
-            level = hear_level(rel, d.get("volume", "normal"))
+            # COMM CHANNEL: a line marked medium:'comm' reaches its addressed
+            # party across any physical barrier (see _dialogue_hear_level). It
+            # carries the VOICE, never SIGHT -- can_see is left untouched, so
+            # _inject_dialogue renders "You hear X say...". A co-located
+            # bystander is unaffected: not the addressed party, so they fall
+            # through to ordinary spatial hearing.
+            level = _dialogue_hear_level(d, rel, p["name"])
             view = _inject_dialogue(view, display, d.get("exact_quote"),
                                     level, d.get("volume", "normal"), can_see)
         for act in last_overt_by_actor.values():

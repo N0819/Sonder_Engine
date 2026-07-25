@@ -15,7 +15,7 @@
 | `agents/loops.py` | 538 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 196 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 765 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/perception.py` | 1329 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
+| `agents/perception.py` | 1382 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 941 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 72 | Step and active-variant persistence helpers. | `db` |
 | `app.py` | 3678 | FastAPI application, resource CRUD, import/export, turn control, and streaming endpoints. | `agents`, `character_schema`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `updates` |
@@ -35,8 +35,8 @@
 | `paradox.py` | 486 |  | `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 2029 | Default system prompts and prompt preset access. | `db` |
-| `providers.py` | 1484 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
+| `prompts.py` | 2039 | Default system prompts and prompt preset access. | `db` |
+| `providers.py` | 1502 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 747 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 1836 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 1507 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | — |
@@ -139,14 +139,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `perception_outcome()` | 802 | 528 lines |
-| `perception_act()` | 528 | 273 lines |
-| `perception_establish()` | 378 | 149 lines |
-| `_delivered_manifest()` | 228 | 47 lines |
-| `_subject_disguise_context()` | 277 | 38 lines |
-| `_observer_facing_sequence()` | 344 | 32 lines |
-| `_observed_pronouns()` | 128 | 25 lines |
-| `_disguise_leak_check()` | 317 | 25 lines |
+| `perception_outcome()` | 846 | 537 lines |
+| `perception_act()` | 572 | 273 lines |
+| `perception_establish()` | 422 | 149 lines |
+| `_delivered_manifest()` | 272 | 47 lines |
+| `_subject_disguise_context()` | 321 | 38 lines |
+| `_observer_facing_sequence()` | 388 | 32 lines |
+| `_dialogue_hear_level()` | 65 | 29 lines |
+| `_observed_pronouns()` | 172 | 25 lines |
 
 ### `agents/runtime.py`
 
@@ -360,21 +360,21 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 2020 | 10 lines |
-| `presets()` | 2011 | 2 lines |
-| `active_preset()` | 2014 | 2 lines |
-| `nsfw_enabled()` | 2017 | 2 lines |
+| `get_prompt()` | 2030 | 10 lines |
+| `presets()` | 2021 | 2 lines |
+| `active_preset()` | 2024 | 2 lines |
+| `nsfw_enabled()` | 2027 | 2 lines |
 
 ### `providers.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 944 | 174 lines |
-| `async chat_complete_async()` | 1119 | 88 lines |
+| `_chat_complete_once()` | 944 | 192 lines |
+| `async chat_complete_async()` | 1137 | 88 lines |
 | `chat_complete()` | 790 | 83 lines |
-| `async _chat_complete_async_once()` | 1208 | 66 lines |
+| `async _chat_complete_async_once()` | 1226 | 66 lines |
 | `resolve_role_candidates()` | 545 | 52 lines |
-| `list_models()` | 1386 | 47 lines |
+| `list_models()` | 1404 | 47 lines |
 | `_sse_openai()` | 700 | 46 lines |
 | `_sse_anthropic()` | 747 | 42 lines |
 

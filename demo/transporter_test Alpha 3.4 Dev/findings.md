@@ -120,3 +120,38 @@ transport, and the TR-1 fix held exactly:
 Room id matched across mapping and resolve (no divergence this run), and mapping
 invented `alien_structure` + `approaching_figure` on the surface -- worldbuild-
 on-the-fly working. Prose came back real (no skeleton) post-fix.
+
+## TR-2 — comms across rooms were never delivered  *(FIXED)*  (turns 6-7)
+
+Turn 6: Reyes (on the surface) hailed the ship over combadge; Chief Okonkwo (in
+the transporter room) answered -- the director simulated the reply correctly and
+put it in dialogue_log. But the PLAYER never heard it: the narrator prose showed
+only Reyes tapping the badge, silence back. Root cause was the earliest stage --
+perception delivered every spoken line by PHYSICAL hearing only
+(`hear_level`), and Okonkwo's line, coming from a 'separated far' room, scored
+'none' and was dropped before the narrator ever saw it. The `vouched`
+cross-barrier parameter on `hear_level` existed but no caller ever set it: comms
+was unimplemented.
+
+Fix (perception, earliest wrong stage): `_dialogue_hear_level` now rescues a line
+ordinary hearing would DROP when it is a TRANSMISSION addressed to that observer
+-- recognised either by the director's explicit `medium:'comm'` tag (new
+director-prompt rule + schema field) OR by shape: a by-name line at a spoken
+volume to a party who is out of earshot. It only ever UPGRADES a dropped line to
+'full' (voice, not sight), never alters an audible one, and only reaches the
+addressed party -- a non-addressed bystander in another room still hears nothing.
+The shape floor matters because GLM (director) proved unreliable at emitting the
+tag and nemotron (perception) will not rescue the line on its own -- the
+deterministic floor must not depend on either model cooperating. Tests:
+tests/test_comm_channel_hearing.py (7).
+
+Turn 7 (re-hail, deepseek perception): VERIFIED. Player prose now reads "Through
+the combadge, Chief Okonkwo's voice comes back steady: 'Compensation
+re-centered...'" while Okonkwo stays in meridian_transporter_room and Reyes on
+the surface -- the transmission crosses the barrier, the operator does not.
+
+Note (nemotron reliability): mid-run, nvidia/nemotron-3-ultra-550b-a55b:thinking
+began failing perception JSON validation ("views missing perceiver IDs"); switched
+narrator+perception to deepseek/deepseek-v4-flash:thinking, which is reliable and
+also reasons comms delivery correctly on its own (the shape floor guarantees it
+regardless).
