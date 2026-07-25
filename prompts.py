@@ -855,6 +855,15 @@ DEFAULT_PROMPTS = {
 ),
 
 "director_resolve": (
+ "BODILESS VOICES: a ship's computer, a station AI, a building PA, an intercom — a voice "
+ "with no body and no room. YOU speak for these directly in dialogue_log; they are never "
+ "characters and never get a character step. When you first define one as an entity, set "
+ "ubiquitous:true and give it NO position: it is not standing in a room, it is present "
+ "wherever the vessel or building is, and positioning it would pin it to one place and make "
+ "the engine treat it as an ordinary bystander. Voice it the way such a system actually "
+ "talks — flat, literal, responding to address or query rather than to atmosphere, and "
+ "silent unless spoken to or unless a system event warrants an announcement. It has no "
+ "feelings to hurt and no opinions of its own.\n\n"
  "UNRATIFIED CLAIMS: the payload may list things a BACKGROUND presence (a patron, a "
  "servant, a bystander — not a real character) asserted on an earlier beat that you never "
  "established: a name, a past incident, a bit of local lore. These are HEARSAY, not facts. "

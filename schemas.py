@@ -425,6 +425,13 @@ class SceneEntityDef(BaseModel):
     container: bool = False
     interior_rooms: list[str] = Field(default_factory=list)
     state: dict[str, Any] = Field(default_factory=dict)
+    # A voice with no body and no room: a ship's computer, a station AI, a
+    # building PA. Positioning one is a category error -- the Enterprise
+    # computer is not "in Ten Forward" -- and doing so both pinned it to a
+    # single room and made it a promotion candidate. Flagged entities are
+    # voiced by the Director, audible wherever the scene is, and never tracked
+    # as background presences.
+    ubiquitous: bool = False
 
 class RoomDef(BaseModel):
     name: str = ""

@@ -133,6 +133,18 @@ from .common import (
     character_scene_keys,
 )
 
+def _ubiquitous_names(sc):
+    """Bodiless voices in this scene (ship AI, station PA), casefolded.
+
+    Imported lazily: perception must not take a hard dependency on scene.py's
+    import graph for what is a small, optional lookup."""
+    try:
+        from scene import ubiquitous_speaker_names
+        return ubiquitous_speaker_names(sc)
+    except Exception:
+        return frozenset()
+
+
 def _ambient_location_for(sc, room_id):
     """Per-perceiver ambient/location scoping by nesting depth (item 5,
     coarse): the outermost place whose ambience legitimately reaches this
@@ -1258,6 +1270,7 @@ def perception_outcome(ctx, nonce):
         # dialogue line after an action, or vice versa) refers back to them
         # instead of re-pasting the whole appearance paragraph again.
         described_this_pass = set()
+        _ubiq = _ubiquitous_names(sc)
         for d in npc_dlog:
             d_speaker = d.get("speaker", "?")
             if d_speaker == p["name"]:
@@ -1265,7 +1278,16 @@ def perception_outcome(ctx, nonce):
             rel = spatial.get(d_speaker)
             if rel is None:
                 sp_room = d.get("speaker_room") or room_of(sc, d_speaker)
-                rel = spatial_rel(sc, sp_room, p.get("room"))
+                if sp_room is None and str(d_speaker).strip().casefold() in _ubiq:
+                    # A bodiless voice (ship AI, station PA) has no room, and
+                    # spatial_rel(None, ...) yields barrier='unknown' ->
+                    # hear_level 'none', so the Director could voice the ship's
+                    # computer and NOBODY would hear it. Treat it as present.
+                    rel = {"same_room": True, "barrier": "open",
+                           "distance": "near",
+                           "note": "bodiless voice, present throughout"}
+                else:
+                    rel = spatial_rel(sc, sp_room, p.get("room"))
             can_see = visual.get(d_speaker, False) or rel.get("same_room", False)
             if d_speaker in recognized_sources:
                 display = d_speaker
