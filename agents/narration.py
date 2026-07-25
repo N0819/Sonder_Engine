@@ -36,6 +36,8 @@ def _spatial_facts_field(scene, observer):
     return {"spatial_facts": facts} if facts else {}
 from schemas import validate_llm_output
 
+from character_schema import character_appearance, character_name
+
 from .common import (
     _agent_json,
     _already_established_phrases,
@@ -45,7 +47,14 @@ from .common import (
     _dedupe_view_sentences,
     _narration_person_counts,
     _protected_view_quotes,
+    _quote_body,
+    _recognizes,
+    _strip_identity_tokens,
     _strip_player_echo,
+    _unknown_actor_label,
+    cast_room,
+    character_scene_keys,
+    observable_action_text,
     player_speech_lines,
 )
 
@@ -119,6 +128,20 @@ _ENFORCEABLE_PREFIXES = (
     # _check_player_person) only fires on the player's literal name outside
     # quoted dialogue -- unambiguous enough to spend a rewrite on.
     "Player named in third person",
+    # F1: a response rendered before its stimulus breaks causality on the
+    # page; the check (_check_event_order) fires only on a strict verbatim
+    # position inversion between two located quotes.
+    "Dialogue rendered out of order",
+    # F4: a tracked mind's line reading as an anonymous body's is silent
+    # misattribution; the check (_check_quote_attribution) fires only when a
+    # DIFFERENT speaker's reference is positively nearest.
+    "Quote attributed to wrong speaker",
+    # F2: an unmoved character re-located by prose alone is a continuity
+    # break the reader sees (_check_position_fidelity).
+    "Character placed in wrong room",
+    # F3: a shut portal rendered open (or vice versa) contradicts committed
+    # world state (_check_portal_fidelity).
+    "Portal state contradicts the scene",
 )
 
 # Deterministic craft screen: AI-tell phrases the PROSE CRAFT prompt bans. A
@@ -185,7 +208,206 @@ def _cast_pronouns(cast):
     return out
 
 
-def _generate_narration(payload, view, prev, p_lines, correction_notes=None):
+def _speaker_display(name, recognized, appearance=None, aliases=None):
+    """How the narrator payload refers to one speaker: the canonical name when
+    the player recognizes them (rank/title variants included -- same
+    _recognizes rule perception used to build the view), else the same
+    appearance-derived anonymous label perception injects, so the binding
+    never leaks an identity past the view's own gate."""
+    if _recognizes(name, recognized):
+        return name
+    stripped = _strip_identity_tokens(appearance, [name, *(aliases or [])]) \
+        or None
+    return _unknown_actor_label(name, stripped, aliases)
+
+
+def _ordered_beat_events(ctx, p_name, view, recognized, cast_info):
+    """F1/F4: the pipeline's own numbered causal record of this beat, built
+    from step order + the loop call sequences (stimulus -> response pairs):
+    player declaration first, then reaction rounds, then interaction rounds in
+    call order, then parallel character declarations, then background
+    reactions. Info-barrier: an NPC line enters ONLY if its quote actually
+    reached the player's view; speakers render under the same display
+    (name or anonymous label) the view used."""
+    raw = []
+    di = ctx.get("director_interpret") or {}
+    for e in (di.get("sequence") or []):
+        if not isinstance(e, dict):
+            continue
+        if e.get("type") == "speech" and e.get("text"):
+            raw.append((p_name, "speech", e["text"]))
+        elif e.get("type") == "action":
+            surface = observable_action_text(e)
+            if surface:
+                raw.append((p_name, "action", surface))
+
+    def _seq_speech(name, seq):
+        for e in seq or []:
+            if isinstance(e, dict) and e.get("type") == "speech" \
+                    and e.get("text"):
+                raw.append((name, "speech", e["text"]))
+
+    covered = set()
+    for r in (ctx.reaction_loop or {}).get("rounds") or []:
+        _seq_speech(r.get("reactor"), (r.get("result") or {}).get("sequence"))
+        try:
+            covered.add(int(r.get("reactor_id")))
+        except (TypeError, ValueError):
+            pass
+    for r in (ctx.interaction_loop or {}).get("rounds") or []:
+        _seq_speech(r.get("speaker"), (r.get("result") or {}).get("sequence"))
+        try:
+            covered.add(int(r.get("speaker_id")))
+        except (TypeError, ValueError):
+            pass
+    for c in ctx.cast:
+        try:
+            cid = int(c["id"])
+        except (TypeError, ValueError):
+            continue
+        if cid in covered:
+            continue
+        d = ctx.character_results.get(c["id"]) \
+            or ctx.character_results.get(cid)
+        if not isinstance(d, dict):
+            continue
+        name = d.get("name")
+        _seq_speech(name, d.get("sequence"))
+        if not (d.get("sequence")) and d.get("speech"):
+            raw.append((name, "speech", d["speech"]))
+    br = ctx.get("background_react") or {}
+    reactions = br.get("reactions")
+    if reactions is None:
+        reactions = ([br] if br.get("fired") and br.get("dialogue_log_entry")
+                     else [])
+    for r in reactions:
+        entry = (r or {}).get("dialogue_log_entry") or {}
+        if entry.get("exact_quote") and entry.get("speaker"):
+            raw.append((entry["speaker"], "speech", entry["exact_quote"]))
+
+    view_norm = re.sub(r"\s+", " ", str(view or "")).casefold()
+    events = []
+    for name, kind, text in raw:
+        if not name:
+            continue
+        if kind == "speech" and name != p_name:
+            body = re.sub(r"\s+", " ", _quote_body(text)).casefold()
+            if not body or body not in view_norm:
+                continue  # the player never received this line
+        info = cast_info.get(name) or {}
+        display = name if name == p_name else _speaker_display(
+            name, recognized, info.get("appearance"), info.get("aliases"))
+        ev = {"n": len(events) + 1, "actor": display, "kind": kind}
+        if kind == "speech":
+            ev["quote"] = text
+        else:
+            ev["action"] = text
+        events.append(ev)
+    return events
+
+
+def _position_delta_payload(ctx, chat, p_name, p_room, recognized, cast_info):
+    """F2: each co-present cast member's position delta this beat
+    (prev committed room -> this beat's room, plus a moved flag). Returns
+    (payload_view, check_facts, room_display_names). Scoped to characters the
+    player can place: in the player's room now, or there last beat."""
+    prev_sc = get_scene(chat["id"], chat)
+    sc = ctx.get("outcome_scene") or prev_sc
+    rooms = sc.get("rooms") or {}
+    room_names = {
+        rid: str((r or {}).get("name") or rid.replace("_", " ").title())
+        for rid, r in rooms.items() if isinstance(r, dict) or r is None
+    }
+    payload, facts = {}, []
+    for name, info in cast_info.items():
+        prev_room = cast_room(prev_sc, name, ctx.cast)
+        now_room = cast_room(sc, name, ctx.cast)
+        if not now_room:
+            continue
+        if not p_room or (now_room != p_room and prev_room != p_room):
+            continue
+        moved = (prev_room is None) or (prev_room != now_room)
+        display = _speaker_display(
+            name, recognized, info.get("appearance"), info.get("aliases"))
+        payload[display] = {
+            "room": room_names.get(now_room, now_room),
+            "prev_room": room_names.get(prev_room, prev_room),
+            "moved": moved,
+        }
+        facts.append({"name": display, "room_id": now_room, "moved": moved})
+    return payload, facts, room_names
+
+
+def _visible_portal_states(scene, room_id):
+    """F3: committed open/shut state of every door/portal the player can
+    currently see, keyed by display name -- portal-link entities touching the
+    player's room, door-like entities in it, transit hatches of an enclosure
+    the player is in or beside, and this room's door adjacency barriers. A
+    generic 'doors' entry is added only when every visible door-state
+    agrees, so 'through the open doors' is checkable without a named
+    entity (the DW t12 case)."""
+    if not room_id or not isinstance(scene, dict):
+        return {}
+    out = {}
+    entities = scene.get("entities") or {}
+    positions = scene.get("positions") or {}
+    rooms = scene.get("rooms") or {}
+    interior_owner = {
+        rid: (r or {}).get("parent_entity")
+        for rid, r in rooms.items() if isinstance(r, dict)
+    }
+    for eid, ent in entities.items():
+        if not isinstance(ent, dict):
+            continue
+        name = str(ent.get("name") or eid).strip()
+        state = ent.get("state") if isinstance(ent.get("state"), dict) else {}
+        link = state.get("link")
+        if isinstance(link, dict) and room_id in (link.get("rooms") or []):
+            out[name] = ("open" if str(link.get("phase") or "").lower()
+                         == "open" else "shut")
+            continue
+        ent_room = positions.get(eid) or positions.get(name)
+        transit = state.get("transit")
+        if isinstance(transit, dict) and transit.get("hatch"):
+            if ent_room == room_id or interior_owner.get(room_id) == eid:
+                hatch = str(transit.get("hatch") or "").lower()
+                out[f"{name} hatch"] = "open" if hatch == "open" else "shut"
+            continue
+        blob = (str(ent.get("kind") or "") + " " + name).lower()
+        if ent_room == room_id and any(
+                w in blob for w in ("door", "gate", "hatch", "portal",
+                                    "shutter")):
+            val = state.get("open")
+            if isinstance(val, bool):
+                out[name] = "open" if val else "shut"
+            else:
+                sval = str(state.get("door") or state.get("status")
+                           or state.get("position") or "").lower()
+                if sval in ("open", "ajar"):
+                    out[name] = "open"
+                elif sval in ("closed", "shut", "sealed", "locked"):
+                    out[name] = "shut"
+    edge_states = set()
+    for edge in (rooms.get(room_id) or {}).get("adjacent") or []:
+        if not isinstance(edge, dict):
+            continue
+        barrier = str(edge.get("barrier") or "")
+        if barrier not in ("closed_door", "open_door"):
+            continue
+        to = edge.get("to")
+        to_name = str(((rooms.get(to) or {}).get("name")) or to or "").strip()
+        state = "shut" if barrier == "closed_door" else "open"
+        if to_name:
+            out.setdefault(f"door to {to_name}", state)
+        edge_states.add(state)
+    all_states = set(out.values()) | edge_states
+    if len(all_states) == 1 and (out or edge_states):
+        out.setdefault("doors", next(iter(all_states)))
+    return out
+
+
+def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
+                        fidelity_facts=None):
     call_payload = dict(payload)
     if correction_notes:
         call_payload["correction_notes"] = correction_notes
@@ -206,11 +428,16 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None):
     # not present), so scoring them here would make the two rules fight and
     # push the retry loop toward violating the echo rule to "fix" a false
     # positive.
+    facts = fidelity_facts or {}
     fidelity_warnings = _check_narrator_fidelity(
         out, view, recent_prose=prev, exclude_quotes=p_lines,
         cast_pronouns=call_payload.get("cast_pronouns"),
         player_name=call_payload.get("player_name"),
-        narration_person=call_payload.get("narration_person"))
+        narration_person=call_payload.get("narration_person"),
+        event_order=facts.get("event_order"),
+        position_facts=facts.get("position_facts"),
+        room_names=facts.get("room_names"),
+        portal_states=facts.get("portal_states"))
     return out, warnings, fidelity_warnings
 
 def narrator(ctx, nonce):
@@ -274,6 +501,45 @@ def narrator(ctx, nonce):
         **_spatial_facts_field(_scene_for_frame, player_name),
     })
 
+    # F1-F4 world-fidelity payload: the pipeline's own ordered event record,
+    # co-present position deltas, and visible portal states -- plus the same
+    # structures as check inputs for the deterministic backstops in
+    # _check_narrator_fidelity. Normal turns only (an opening turn has no
+    # prior beat to delta against and no loop order), and gated with the
+    # spatial fields on consciousness: a non-awake mind gets no scene.
+    _world_fields, _fidelity_facts = {}, {}
+    if not est and player_awareness not in NON_AWAKE_GATED:
+        known_map = wget(chat["id"], "known", {}) or {}
+        recognized = set(known_map.get(player_name) or [])
+        cast_info = {}
+        for _row in ctx.cast:
+            try:
+                _sh = json.loads(_row["sheet"])
+            except Exception:
+                continue
+            cast_info[character_name(_sh)] = {
+                "appearance": character_appearance(_sh),
+                "aliases": character_scene_keys(_sh)[1:],
+            }
+        p_room = ctx.get("_player_room") or room_of(_scene_for_frame, player_name)
+        event_order = _ordered_beat_events(
+            ctx, player_name, view, recognized, cast_info)
+        pos_payload, pos_facts, room_names = _position_delta_payload(
+            ctx, chat, player_name, p_room, recognized, cast_info)
+        portal_states = _visible_portal_states(_scene_for_frame, p_room)
+        if event_order:
+            _world_fields["event_order"] = event_order
+        if pos_payload:
+            _world_fields["co_present_positions"] = pos_payload
+        if portal_states:
+            _world_fields["portal_states"] = portal_states
+        _fidelity_facts = {
+            "event_order": event_order,
+            "position_facts": pos_facts,
+            "room_names": room_names,
+            "portal_states": portal_states,
+        }
+
     payload = {
         "player_view": view,
         "player_declared": player_declared,
@@ -294,13 +560,15 @@ def narrator(ctx, nonce):
         # the committed scene here would describe the space with LAST beat's
         # facing on movement beats (commit runs after this stage).
         **_spatial_fields,
+        **_world_fields,
         "recent_prose_for_rhythm": prev,
         "already_established_phrases": _already_established_phrases(view, prev),
         "overused_phrases": _overused_phrases(prev),
         "exemplars": json.loads(get_setting("exemplars") or "[]"),
         "variant_seed": nonce,
     }
-    out, warnings, fidelity_warnings = _generate_narration(payload, view, prev, p_lines)
+    out, warnings, fidelity_warnings = _generate_narration(
+        payload, view, prev, p_lines, fidelity_facts=_fidelity_facts)
 
     enforceable = [w for w in fidelity_warnings if w.startswith(_ENFORCEABLE_PREFIXES)]
     if enforceable:
@@ -308,7 +576,8 @@ def narrator(ctx, nonce):
                       "rewrite fixing them, without introducing new ones: "
                       + " | ".join(enforceable))
         out, warnings, fidelity_warnings = _generate_narration(
-            payload, view, prev, p_lines, correction_notes=correction)
+            payload, view, prev, p_lines, correction_notes=correction,
+            fidelity_facts=_fidelity_facts)
 
     # Craft screen: while the accepted draft carries banned AI tells, spend a
     # rewrite naming them (bounded to 2). Keep a rewrite ONLY if it preserves
@@ -324,7 +593,8 @@ def narrator(ctx, nonce):
                       "phrasing -- rewrite the PROSE to remove every one, keeping all "
                       "dialogue verbatim and every fact intact: " + "; ".join(best_tells))
         r_out, r_warnings, r_fid = _generate_narration(
-            payload, view, prev, p_lines, correction_notes=craft_note)
+            payload, view, prev, p_lines, correction_notes=craft_note,
+            fidelity_facts=_fidelity_facts)
         r_enforceable = [w for w in r_fid if w.startswith(_ENFORCEABLE_PREFIXES)]
         r_tells = _craft_tells(r_out.get("prose", ""))
         if not r_enforceable and len(r_tells) < len(best_tells):

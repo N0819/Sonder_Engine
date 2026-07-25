@@ -894,6 +894,57 @@ def _append_once(view, text, marker=None):
         return view
     return f"{view} {text}".strip()
 
+# Rank/title/honorific tokens dropped before comparing names, plus single-letter
+# middle initials. So "Commander Riker" and "Cmdr. Riker" reduce to {riker}.
+_NAME_TITLE_TOKENS = {
+    "commander", "cmdr", "captain", "capt", "lieutenant", "lt", "ensign",
+    "doctor", "dr", "mr", "mrs", "ms", "miss", "lord", "lady", "sir", "chief",
+    "admiral", "general", "sergeant", "sgt", "colonel", "col", "major",
+    "professor", "prof", "the", "a", "an",
+}
+
+
+def _significant_name_tokens(name):
+    """Lower-cased identifying tokens of a name -- titles, ranks and single
+    initials removed. 'Commander Riker' -> {'riker'}."""
+    out = set()
+    for tok in re.findall(r"[A-Za-z']+", str(name or "")):
+        low = tok.strip(".'").casefold()
+        if len(low) < 3 or low in _NAME_TITLE_TOKENS:
+            continue
+        out.add(low)
+    return out
+
+
+def _recognizes(name, recognized):
+    """Whether an observer who recognizes the `recognized` name forms also
+    recognizes `name`, allowing a rank/title VARIANT of a known person
+    (P7 / v3 V3: a background presence voiced as 'Commander Riker' was
+    anonymized to 'the unfamiliar person' though the observer knew 'William T.
+    Riker').
+
+    Deliberately tight to protect the information barrier: a variant is
+    recognized ONLY if every one of its significant tokens is contained in a
+    single known name. That admits 'Commander Riker' against 'William T. Riker'
+    but still anonymizes 'Commander Sato' (no shared token) AND 'Thomas Riker'
+    (shares a surname but 'Thomas' is not known) -- a same-surname stranger
+    stays a stranger.
+
+    Lives here (not in agents/perception.py) so the narrator payload builders
+    resolve speaker displays with the SAME recognition rule perception used to
+    build the view -- role modules never import each other."""
+    if name in recognized:
+        return True
+    tokens = _significant_name_tokens(name)
+    if not tokens:
+        return False
+    for known_name in recognized:
+        known_tokens = _significant_name_tokens(known_name)
+        if known_tokens and tokens <= known_tokens:
+            return True
+    return False
+
+
 def _identity_token_set(actor_name, aliases=None):
     """Casefolded word tokens of an actor's name and aliases -- the tokens
     that must never surface to an observer who does not recognize them."""
@@ -2524,9 +2575,301 @@ def _check_player_person(prose, player_name, narration_person, player_aliases=No
     ]
 
 
+def _flexible_quote_re(body, flags=re.I):
+    """Regex matching a quote body verbatim but whitespace-flexible (the
+    narrator may re-wrap lines) and terminal-punctuation-tolerant (English
+    convention turns a line's final period into a comma before a trailing
+    attribution: '"...," she says')."""
+    body = re.sub(r"\s+", " ", str(body or "").strip())
+    body = body.rstrip(".,!?…;: ")
+    if not body:
+        return None
+    return re.compile(
+        r"(?<!\w)" + r"\s+".join(re.escape(w) for w in body.split(" "))
+        + r"(?!\w)", flags)
+
+
+def _check_event_order(prose, event_order):
+    """F1 (A1 ordering half): a quoted line must not render before the event
+    it answers. event_order is the pipeline's own numbered causal record of
+    this beat (player declaration first, then reaction/interaction rounds in
+    call order, then parallel character declarations, then background
+    reactions -- see agents/narration.py's _ordered_beat_events).
+
+    Deterministic and conservative: only events whose quote appears VERBATIM
+    in the prose are scored (DIALOGUE FIDELITY guarantees NPC lines do; the
+    player's own echo-stripped lines simply won't match and are skipped), and
+    only a strict position inversion between two located quotes fires."""
+    if not prose or not event_order:
+        return []
+    located = []
+    for ev in event_order:
+        if not isinstance(ev, dict) or ev.get("kind") != "speech":
+            continue
+        body = _quote_body(str(ev.get("quote") or ""))
+        if len(body) < 4:
+            continue
+        pat = _flexible_quote_re(body)
+        m = pat.search(prose) if pat else None
+        if m:
+            located.append((m.start(), ev))
+    warnings = []
+    for (pos_a, ev_a), (pos_b, ev_b) in zip(located, located[1:]):
+        if pos_b < pos_a:
+            warnings.append(
+                "Dialogue rendered out of order: "
+                f"{ev_b.get('actor')}'s line "
+                f"\"{_quote_body(ev_b.get('quote'))[:60]}\" appears in the "
+                "prose BEFORE the earlier event it follows/answers "
+                f"({ev_a.get('actor')}: "
+                f"\"{_quote_body(ev_a.get('quote'))[:60]}\"). Render events "
+                "in event_order's numbered order."
+            )
+    return warnings
+
+
+def _actor_reference_patterns(display):
+    """Compiled patterns that count as a prose reference to one actor.
+
+    A canonical proper name yields one case-sensitive pattern per usable name
+    token (surname or first name alone is a normal reference). A descriptor
+    label ('the unfamiliar woman', 'a woman in a gray uniform') yields one
+    case-insensitive pattern for its content phrase minus the article."""
+    display = str(display or "").strip()
+    if not display:
+        return []
+    head = display.split()[0]
+    if head.lower() in ("the", "a", "an") or not display[:1].isupper():
+        phrase = re.sub(r"^(?:the|a|an)\s+", "", display, flags=re.I).strip()
+        if len(phrase) < 4:
+            return []
+        return [re.compile(
+            r"(?<!\w)" + r"\s+".join(re.escape(w) for w in phrase.split())
+            + r"(?!\w)", re.I)]
+    pats = []
+    for tok in re.findall(r"[A-Za-z']+", display):
+        if len(tok) < 3 or not tok[:1].isupper():
+            continue
+        if tok.lower() in _AMBIGUOUS_NAME_WORDS:
+            continue
+        pats.append(re.compile(
+            r"(?<!\w)" + re.escape(tok) + r"(?:['’]s)?(?!\w)"))
+    return pats
+
+
+def _check_quote_attribution(prose, event_order, actor_pronouns=None):
+    """F4: a quoted line's nearest preceding actor reference must resolve to
+    its actual speaker (prose convention assigns an unattributed quote to the
+    nearest prior actor -- Enterprise t4 rendered Vorne's line right after
+    'The unfamiliar woman pulls her hands back...', silently reassigning a
+    tracked mind's speech to an anonymous body).
+
+    Conservative by design -- it only fires when it POSITIVELY finds a
+    different speaker's reference closer than the true speaker's:
+    - a trailing attribution naming the true speaker clears the quote;
+    - no locatable actor reference at all -> no call;
+    - an intervening third-person pronoun whose gender differs from the
+      nearest candidate's declared pronouns -> ambiguous, no call."""
+    events = [ev for ev in (event_order or [])
+              if isinstance(ev, dict) and ev.get("kind") == "speech"
+              and ev.get("quote") and ev.get("actor")]
+    if not prose or not events:
+        return []
+    # Reference patterns per distinct actor; a pattern text shared by two
+    # actors identifies neither and is dropped.
+    actors = list(dict.fromkeys(str(ev["actor"]) for ev in events))
+    raw = {a: _actor_reference_patterns(a) for a in actors}
+    owner = {}
+    for a, pats in raw.items():
+        for p in pats:
+            owner.setdefault(p.pattern, set()).add(a)
+    pat_map = {
+        a: [p for p in pats if len(owner.get(p.pattern, ())) == 1]
+        for a, pats in raw.items()
+    }
+
+    def _group_of(actor):
+        return _pronoun_group((actor_pronouns or {}).get(actor))
+
+    warnings = []
+    flagged = set()
+    for ev in events:
+        expected = str(ev["actor"])
+        body = _quote_body(str(ev.get("quote") or ""))
+        if len(body) < 4 or body in flagged:
+            continue
+        qpat = _flexible_quote_re(body)
+        m = qpat.search(prose) if qpat else None
+        if not m:
+            continue
+        start, end = m.span()
+        # Trailing attribution: same sentence right after the quote.
+        tail = prose[end:end + 120]
+        stop = re.search(r"[.!?\n]", tail)
+        tail_seg = tail[:stop.end()] if stop else tail
+        if any(p.search(tail_seg) for p in pat_map.get(expected, [])):
+            continue
+        # Leading scan: nearest actor reference between the previous quote
+        # (or paragraph start) and this quote. The current quote's own
+        # OPENING delimiter sits just before `start` and must not truncate
+        # the context it opens.
+        prefix = prose[:start].rstrip()
+        while prefix and prefix[-1] in '"“':
+            prefix = prefix[:-1]
+        cut = max(prefix.rfind("\n"),
+                  max((prefix.rfind(qc) for qc in ('"', "”", "“")), default=-1))
+        prefix = prefix[cut + 1:]
+        best = None  # (pos, actor)
+        for actor, pats in pat_map.items():
+            for p in pats:
+                for mm in p.finditer(prefix):
+                    if best is None or mm.start() > best[0]:
+                        best = (mm.start(), actor)
+        if best is None or best[1] == expected:
+            continue
+        # A gendered pronoun AFTER the nearest (wrong) candidate that does not
+        # match that candidate's own declared pronouns re-points the reader
+        # elsewhere ("Vorne nods. She says...") -- ambiguous, decline to call.
+        between = prefix[best[0]:]
+        cand_group = _group_of(best[1])
+        ambiguous = False
+        for pm in re.finditer(r"\b(he|she|they)\b", between, re.I):
+            pg = _PRONOUN_TO_GROUP.get(pm.group(1).lower())
+            if cand_group and pg and pg != cand_group:
+                ambiguous = True
+                break
+        if ambiguous:
+            continue
+        flagged.add(body)
+        warnings.append(
+            f"Quote attributed to wrong speaker: \"{body[:60]}\" is spoken "
+            f"by {expected}, but the nearest preceding actor reference in "
+            f"the prose is {best[1]} and no attribution names {expected}. "
+            "Make the true speaker the quote's clear owner."
+        )
+    return warnings
+
+
+# Perception/gesture verbs that make a following room mention a LOOK, not a
+# placement ("glances at the corridor"); they must not trip the position check.
+_LOOK_VERB_RE = re.compile(
+    r"\b(?:glance[sd]?|glancing|look(?:s|ed|ing)?|stare[sd]?|staring|"
+    r"gaze[sd]?|gazing|point(?:s|ed|ing)?|gesture[sd]?|gesturing|"
+    r"nod(?:s|ded|ding)?|turn(?:s|ed|ing)?|face[sd]?|facing|"
+    r"toward[s]?)\s*$", re.I)
+
+
+def _check_position_fidelity(prose, position_facts, room_names):
+    """F2: a character narrated at a room that differs from their committed
+    position, with no movement event this beat, is a continuity break (DW t6:
+    the Doctor mid-road; t7 renders him back in the TARDIS doorway).
+
+    position_facts: [{name, room_id, moved}] -- display name, the room the
+    scene commits them to THIS beat, and whether this beat's diff moved them.
+    room_names: {room_id: display_name} for the rooms in play.
+
+    Narrow: only a placement preposition (in/inside/within/into/at/back in)
+    directly ahead of another room's display name, in a sentence whose nearest
+    preceding actor reference is the unmoved character, fires."""
+    if not prose or not position_facts:
+        return []
+    usable_rooms = {}
+    for rid, rname in (room_names or {}).items():
+        rname = str(rname or "").strip()
+        if len(rname) < 4 or rname.lower() in ("room", "area", "here"):
+            continue
+        usable_rooms[rid] = rname
+    warnings = []
+    for fact in position_facts:
+        if not isinstance(fact, dict) or fact.get("moved"):
+            continue
+        name = str(fact.get("name") or "").strip()
+        own_room = fact.get("room_id")
+        pats = _actor_reference_patterns(name)
+        if not name or not own_room or not pats:
+            continue
+        own_name = str(usable_rooms.get(own_room) or "").lower()
+        for sentence in _SENTENCE_SPLIT.split(prose):
+            # Quoted speech is a speaker's claim, not narration.
+            scan = re.sub(r'"[^"]*"|“[^“”]*”', " ", sentence)
+            best = max((mm.start() for p in pats for mm in p.finditer(scan)),
+                       default=-1)
+            if best < 0:
+                continue
+            for rid, rname in usable_rooms.items():
+                if rid == own_room:
+                    continue
+                low = rname.lower()
+                # A room whose name contains (or is contained by) the
+                # character's own room's name cannot be told apart reliably.
+                if own_name and (low in own_name or own_name in low):
+                    continue
+                place = re.compile(
+                    r"\b(?:back\s+)?(?:in|inside|within|into|at)\s+"
+                    r"(?:the\s+)?(?:\w+[ -]){0,2}?" + re.escape(rname)
+                    + r"\b", re.I)
+                pm = place.search(scan, best)
+                if not pm:
+                    continue
+                if _LOOK_VERB_RE.search(scan[:pm.start()]):
+                    continue
+                warnings.append(
+                    f"Character placed in wrong room: '{name}' is narrated "
+                    f"in '{rname}' but this beat's committed position is "
+                    f"'{usable_rooms.get(own_room, own_room)}' and no "
+                    "movement occurred for them this beat. Keep them where "
+                    "the scene puts them."
+                )
+                break
+            else:
+                continue
+            break
+    return warnings
+
+
+_PORTAL_OPEN_RE = r"(?:open|ajar|wide[- ]open)"
+_PORTAL_SHUT_RE = r"(?:shut|closed|sealed|locked)"
+
+
+def _check_portal_fidelity(prose, portal_states):
+    """F3: named portal state in prose must match the committed scene (DW t9
+    shuts the double doors; t12 renders 'through the open doors' with no
+    open event). portal_states: {display_name: 'open'|'shut'} for portals the
+    player can currently see (built in agents/narration.py)."""
+    if not prose or not portal_states:
+        return []
+    scan = re.sub(r'"[^"]*"|“[^“”]*”', " ", prose)
+    warnings = []
+    for name, state in portal_states.items():
+        name = str(name or "").strip()
+        state = str(state or "").strip().lower()
+        if len(name) < 4 or state not in ("open", "shut"):
+            continue
+        wrong = _PORTAL_SHUT_RE if state == "open" else _PORTAL_OPEN_RE
+        name_pat = r"\s+".join(re.escape(w) for w in name.split())
+        asserted = (
+            # "the open doors" / "still-sealed hatch"
+            re.search(r"\b" + wrong + r"(?:\s+\w+)?\s+" + name_pat + r"\b",
+                      scan, re.I)
+            # "the doors ... stand open" (same clause)
+            or re.search(r"\b" + name_pat + r"\b[^.!?\n,;]{0,60}?\b" + wrong
+                         + r"\b", scan, re.I)
+        )
+        if asserted:
+            opposite = "shut" if state == "open" else "open"
+            warnings.append(
+                f"Portal state contradicts the scene: '{name}' is committed "
+                f"{state} this beat, but the prose renders it {opposite}. "
+                "Match the committed portal state exactly."
+            )
+    return warnings
+
+
 def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
                              cast_pronouns=None, player_name=None,
-                             narration_person=None, player_aliases=None):
+                             narration_person=None, player_aliases=None,
+                             event_order=None, position_facts=None,
+                             room_names=None, portal_states=None):
     warnings = []
     view_text = str(view or "")
     prose = out.get("prose") or ""
@@ -2593,6 +2936,16 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     warnings.extend(_check_pronoun_fidelity(prose, cast_pronouns))
     warnings.extend(_check_player_person(
         prose, player_name, narration_person, player_aliases))
+
+    # F1-F4 world/ordering fidelity (all deterministic; each has its own
+    # enforceable prefix in agents/narration.py so a violation buys exactly
+    # one correction rewrite).
+    warnings.extend(_check_event_order(prose, event_order))
+    warnings.extend(_check_quote_attribution(
+        prose, event_order, actor_pronouns=cast_pronouns))
+    warnings.extend(_check_position_fidelity(
+        prose, position_facts, room_names))
+    warnings.extend(_check_portal_fidelity(prose, portal_states))
 
     return warnings
 

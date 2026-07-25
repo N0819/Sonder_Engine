@@ -1134,3 +1134,70 @@ def tell_gate(tell, acuity, familiarity, attention):
     subtlety = _float_or(tell.get("subtlety"), 0.5)
     threshold = (_float_or(acuity) + _float_or(familiarity) + _float_or(attention))
     return subtlety <= threshold
+
+
+def ground_tells(manifest, active_state):
+    """F6: every manifest tell must carry a non-empty `because` -- the
+    CONCRETE private ground the cue is evidence of -- so a planted tell can
+    be paid off in a later beat instead of dangling as fake significance
+    (impostor t2: a hand lingering 'a half-second longer than a servant's
+    glance should' whose ground -- handedness? habit? -- never existed
+    anywhere).
+
+    Deterministic floor, applied at the character stage (the earliest point
+    the data exists): a tell the model left ungrounded derives its `because`
+    from its own `betrays` pointer -- the suppressed want's text or the
+    undercurrent's label from active_state -- falling back to whichever of
+    the two exists. Only a tell with NO derivable ground at all is left
+    empty, and that is reported as a warning. The ground is PRIVATE: the
+    perception layer delivers only the cue text (_delivered_manifest), never
+    `because`.
+
+    Mutates and returns (manifest, warnings)."""
+    if not isinstance(manifest, dict):
+        return manifest, []
+    tells = manifest.get("tells")
+    if not isinstance(tells, list):
+        return manifest, []
+    state = active_state if isinstance(active_state, dict) else {}
+    affect_state = state.get("affect") if isinstance(state.get("affect"), dict) else {}
+    undercurrent = affect_state.get("undercurrent")
+    if isinstance(undercurrent, dict):
+        under_text = str(undercurrent.get("label") or "").strip()
+    else:
+        under_text = str(undercurrent or "").strip()
+    wants = state.get("wants") if isinstance(state.get("wants"), list) else []
+    suppressed_text = ""
+    sup_idx = state.get("suppressed_want")
+    if sup_idx is not None:
+        try:
+            want = wants[int(sup_idx)]
+            if isinstance(want, dict):
+                suppressed_text = _want_text(want)
+        except (TypeError, ValueError, IndexError):
+            pass
+
+    warnings = []
+    for tell in tells:
+        if not isinstance(tell, dict) or not str(tell.get("cue") or "").strip():
+            continue
+        because = str(tell.get("because") or "").strip()
+        if because:
+            tell["because"] = because
+            continue
+        betrays = str(tell.get("betrays") or "").strip().lower()
+        if betrays == "suppressed_want":
+            ground = suppressed_text or under_text
+        elif betrays == "undercurrent":
+            ground = under_text or suppressed_text
+        else:
+            ground = under_text or suppressed_text
+        if ground:
+            tell["because"] = ground
+        else:
+            warnings.append(
+                f"ungrounded tell: {str(tell.get('cue'))[:60]!r} has no "
+                "`because` and no undercurrent/suppressed want to derive "
+                "one from -- a planted tell needs a stored ground."
+            )
+    return manifest, warnings
