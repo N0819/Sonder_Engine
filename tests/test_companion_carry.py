@@ -151,3 +151,35 @@ class TestInferCompanionCarry:
 
         assert changed is False
         assert new_scene["positions"]["Reya"] == "room_a"
+
+
+    def test_gap_cross_does_not_carry_a_bystander_tr1(self, temp_db):
+        """TR-1: a transporter beam / teleport is a GAP-CROSS, not a vehicle
+        boarding. It must NOT auto-carry a co-located bystander -- the
+        transporter operator at the console stays aboard while the away team
+        beams down. Who moves on a beam comes from the director's roster, not
+        from this backstop."""
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("Test", "", time.time()),
+        )
+        # Two disconnected rooms (ship / planet surface), neither a vehicle.
+        prev_scene = {
+            "rooms": {"transporter_room": {"name": "Transporter Room", "adjacent": []},
+                      "surface": {"name": "Surface", "adjacent": []}},
+            "entities": {},
+            "positions": {"Reyes": "transporter_room", "Okonkwo": "transporter_room"},
+            "attire": {}, "overlays": {},
+        }
+        new_scene = json.loads(json.dumps(prev_scene))
+        # Player beams to the surface (a gap-cross); the operator's position is
+        # left untouched (he stays at the console).
+        new_scene["positions"]["Reyes"] = "surface"
+
+        changed = spatial_frames.infer_companion_carry(
+            chat_id, None, prev_scene, new_scene, ["Okonkwo"], [],
+        )
+
+        assert changed is False
+        assert new_scene["positions"]["Okonkwo"] == "transporter_room", \
+            "the transporter operator must not be beamed down by companion-carry"

@@ -40,7 +40,7 @@
 | `scene.py` | 747 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 1836 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 1507 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | — |
-| `spatial_frames.py` | 871 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
+| `spatial_frames.py` | 875 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `theory_of_mind.py` | 288 |  | — |
 | `updates.py` | 254 |  | — |
 
@@ -421,14 +421,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `perform_split()` | 601 | 94 lines |
-| `infer_companion_carry()` | 231 | 88 lines |
+| `perform_split()` | 605 | 94 lines |
+| `infer_companion_carry()` | 231 | 92 lines |
 | `infer_vehicle_zones()` | 144 | 85 lines |
-| `infer_focus()` | 363 | 72 lines |
-| `perform_merge()` | 773 | 69 lines |
-| `infer_facing()` | 437 | 59 lines |
-| `detect_split()` | 555 | 44 lines |
-| `infer_came_from()` | 321 | 40 lines |
+| `infer_focus()` | 367 | 72 lines |
+| `perform_merge()` | 777 | 69 lines |
+| `infer_facing()` | 441 | 59 lines |
+| `detect_split()` | 559 | 44 lines |
+| `infer_came_from()` | 325 | 40 lines |
 
 ### `theory_of_mind.py`
 

@@ -287,13 +287,17 @@ def infer_companion_carry(chat_id, frame_id, prev_scene, new_scene, cast_names,
         and entities[parent_entity].get("kind") == "vehicle"
     )
 
-    crossed_gap = False
-    if not is_vehicle_interior and prev_room:
-        prev_graph = _room_graph(prev_rooms)
-        component = _connected_component(prev_graph, prev_room)
-        crossed_gap = new_room not in component
-
-    if not is_vehicle_interior and not crossed_gap:
+    # Only a move into a VEHICLE INTERIOR auto-carries co-located companions.
+    # Boarding a ship/TARDIS/boat together is a reliable default: people in the
+    # room walk aboard with you. A bare GAP-CROSS is NOT -- a teleport or a
+    # transporter beam relocates a specific ROSTER ("two to beam down"), and a
+    # co-located bystander (the transporter operator at the console, someone
+    # left behind) does NOT come along. The gap-cross branch used to carry them
+    # anyway, teleporting the operator to the planet surface (TR-1); who moves
+    # on a beam/teleport comes from the director/mapping roster, not from here.
+    # This restores the function's own stated caution: a gap-cross "risks
+    # silently teleporting a character the player actually left behind."
+    if not is_vehicle_interior:
         return False
 
     departed = {
