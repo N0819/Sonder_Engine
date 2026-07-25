@@ -85,3 +85,14 @@ def test_endpoint_single_role_and_full_map(temp_db):
     out = app_module.put_reasoning_effort({"efforts": {"default": "low", "x": "bad"}})
     assert out["reasoning_effort"] == {"default": "low"}
     assert app_module.bootstrap()["reasoning_effort"] == {"default": "low"}
+
+
+def test_strip_extended_drops_reasoning_for_400_retry():
+    """A provider that 400s on an unsupported reasoning_effort (nanogpt's GLM
+    rejects 'none'/'low', supporting only high/max) must have it stripped on the
+    retry, not kill the turn."""
+    body = {"model": "glm", "reasoning_effort": "none", "top_k": 5,
+            "reasoning": {"effort": "low"}, "temperature": 0.7}
+    out = providers._strip_extended(body)
+    assert "reasoning_effort" not in out and "reasoning" not in out
+    assert out["temperature"] == 0.7  # non-optional params survive

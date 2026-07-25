@@ -623,7 +623,15 @@ def _headers(prov):
     return h
 
 def _strip_extended(body):
-    for k in ("top_k", "repetition_penalty", "min_p", "top_a"):
+    # The 400-retry path: drop OPTIONAL params a provider may reject with a hard
+    # 400 rather than ignore. Besides the extended samplers, this includes the
+    # reasoning controls -- a provider/model that doesn't support the requested
+    # reasoning_effort 400s ("Supported values are: high, max" on nanogpt's GLM
+    # for 'none'/'low'), so the value must be stripped and the call retried, not
+    # allowed to kill the turn. The assumption that an unknown key is ignored
+    # held for most providers but not all.
+    for k in ("top_k", "repetition_penalty", "min_p", "top_a",
+              "reasoning_effort", "reasoning"):
         body.pop(k, None)
     return body
 
