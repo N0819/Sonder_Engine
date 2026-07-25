@@ -52,6 +52,7 @@ function observeSceneMood(msgsEl, turnEntries) {
   // rather than read fresh each time.
   const ratios = new Map();
   const proseByEl = new Map(turnEntries.map(e => [e.el, e.prose]));
+  const turnByEl = new Map(turnEntries.map(e => [e.el, e.idx]));
 
   _moodObserver = new IntersectionObserver(entries => {
     for (const entry of entries) {
@@ -61,7 +62,14 @@ function observeSceneMood(msgsEl, turnEntries) {
     for (const [el, ratio] of ratios) {
       if (ratio > bestRatio) { bestRatio = ratio; bestEl = el; }
     }
-    if (bestEl) applySceneMood(proseByEl.get(bestEl));
+    if (bestEl) {
+      applySceneMood(proseByEl.get(bestEl));
+      // Same "which turn am I looking at" signal drives the backdrop, so
+      // scrolling back through the log walks back through its locations.
+      if (typeof backdropForTurn === "function") {
+        backdropForTurn(turnByEl.get(bestEl));
+      }
+    }
   }, { root: msgsEl, threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] });
 
   for (const { el } of turnEntries) _moodObserver.observe(el);
@@ -73,6 +81,9 @@ async function openChat(id) {
   S.currentFrameId = null; // always reopen viewing the present
   renderSide();
   renderChat();
+  // Backdrops are per-chat and entirely optional: this no-ops unless the
+  // feature is switched on AND an image model is configured.
+  if (typeof loadBackdrops === "function") loadBackdrops();
 }
 
 // Purely a client-side filter/view-selector -- see S.currentFrameId's
@@ -213,7 +224,7 @@ function renderChat() {
 
     d.append(btns);
     M.append(d);
-    turnEntries.push({ el: d, prose: t.prose || "" });
+    turnEntries.push({ el: d, prose: t.prose || "", idx: t.idx });
   }
 
   M.scrollTop = M.scrollHeight;

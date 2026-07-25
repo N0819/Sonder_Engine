@@ -23,10 +23,16 @@ color:var(--fg);height:100vh;height:100dvh;overflow:hidden;position:relative}
    solid-color overlay's background-color genuinely animates. */
 body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;
 background-color:var(--mood-tint,transparent);transition:background-color 1.8s ease}
-body[data-mood="tense"]{--acc:#d97a7a;--acc2:#e0954f;--mood-tint:rgba(150,60,60,.13)}
-body[data-mood="warm"]{--acc:#e0b465;--acc2:#d98f5a;--mood-tint:rgba(180,140,70,.12)}
-body[data-mood="somber"]{--acc:#8b96ab;--acc2:#8f8aa0;--mood-tint:rgba(70,80,100,.12)}
-body[data-mood="triumphant"]{--acc:#c9d97a;--acc2:#e0c15a;--mood-tint:rgba(170,150,60,.13)}
+/* Scene mood tints the SCENE, not the application.
+   These rules used to override --acc, which is used in 15 places for buttons,
+   focus rings and tab underlines -- so scrolling past a tense beat repainted
+   the entire UI chrome. Meanwhile --mood-tint and --acc2, the two variables
+   that sound scene-scoped, were declared here and used nowhere at all. Mood
+   now sets only --mood-tint, and only the scene surface consumes it. */
+body[data-mood="tense"]{--mood-tint:rgba(150,60,60,.13)}
+body[data-mood="warm"]{--mood-tint:rgba(180,140,70,.12)}
+body[data-mood="somber"]{--mood-tint:rgba(70,80,100,.12)}
+body[data-mood="triumphant"]{--mood-tint:rgba(170,150,60,.13)}
 #app{display:flex;height:100vh;height:100dvh;position:relative;z-index:0}
 button{background:linear-gradient(180deg,var(--bg4),var(--bg3));color:var(--fg);
 border:1px solid var(--bd);border-radius:6px;padding:4px 9px;cursor:pointer;
@@ -311,4 +317,51 @@ border-radius:10px;background:rgba(25,32,46,.42)}
   /* Short/landscape viewports: the technical-detail pane and composer
      between them otherwise eat most of the transcript's height. */
   #live{max-height:120px}
+}
+
+/* ---- Scene backdrops (EXPERIMENTAL) ---- */
+:root{ --backdrop-scrim:.55; --backdrop-ink:""; }
+
+#backdrop-layer{
+  position:absolute; inset:0; overflow:hidden; z-index:0;
+  pointer-events:none;                 /* never steals a click from the log */
+}
+#backdrop-layer .backdrop-img{
+  position:absolute; inset:0;
+  background-size:cover; background-position:center;
+  opacity:0; transition:opacity .8s ease;
+}
+#backdrop-layer .backdrop-img.on{ opacity:1 }
+
+/* The scrim is what keeps text readable. Its strength is set from the
+   image's measured luminance (backdrop.js), and the mood tint rides on top so
+   mood is finally visible somewhere it belongs. */
+body.has-backdrop #backdrop-layer::after{
+  content:""; position:absolute; inset:0;
+  background:
+    linear-gradient(var(--mood-tint,transparent), var(--mood-tint,transparent)),
+    rgba(11,14,20,var(--backdrop-scrim));
+  transition:background .6s ease;
+}
+
+/* #msgs has to establish a stacking context so the log sits above the layer. */
+body.has-backdrop #msgs{ position:relative; z-index:1; background:transparent }
+
+/* Translucent message boxes: the picture shows through, the words stay sharp.
+   backdrop-filter blurs only what is behind the box, so the text itself is
+   never softened. */
+body.has-backdrop #msgs .turn{
+  background:rgba(17,22,32,.62);
+  backdrop-filter:blur(7px) saturate(1.05);
+  -webkit-backdrop-filter:blur(7px) saturate(1.05);
+  border-radius:10px;
+}
+body.has-backdrop.backdrop-light #msgs .turn{
+  background:rgba(240,243,248,.70); color:var(--backdrop-ink,#10141c);
+}
+body.has-backdrop.backdrop-light #msgs .turn *{ color:inherit }
+
+@media (prefers-reduced-motion: reduce){
+  #backdrop-layer .backdrop-img{ transition:none }
+  body.has-backdrop #backdrop-layer::after{ transition:none }
 }

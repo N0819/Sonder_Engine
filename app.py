@@ -1,4 +1,4 @@
-import contextvars, json, queue, time, threading, os
+import contextvars, json, queue, re, time, threading, os
 import updates
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Body, HTTPException, Query, Request
@@ -14,7 +14,8 @@ from providers import (
     chat_complete, chat_complete_async, token_sink, cancel_event,
     resolve_role, list_models, provider, agent_models,
     openrouter_routing, normalize_openrouter_routing, list_openrouter_endpoints,
-    max_output_tokens, _coerce_max_output_tokens,
+    max_output_tokens, _coerce_max_output_tokens, image_model,
+    DEFAULT_IMAGE_SIZE,
     reasoning_efforts, _coerce_reasoning_effort, REASONING_EFFORTS,
     MAX_OUTPUT_TOKENS_DEFAULT, MAX_OUTPUT_TOKENS_MIN, MAX_OUTPUT_TOKENS_MAX,
     DEFAULT_BASES, ROLES, SAMPLER_KEYS, DEFAULT_SAMPLERS, Aborted,
@@ -2250,6 +2251,106 @@ def dlg_put(cid: int, body: dict = Body(...)):
 
     wset(cid, "dialogue_config", config)
     return config
+
+# ---- Scene backdrops (EXPERIMENTAL) ----
+# Generation is always out of band: these routes return what is cached and
+# kick off a background worker for what is not. No route ever blocks on an
+# image, and the turn pipeline never touches any of this.
+
+def _backdrop_player_name(cid: int):
+    chat = q("SELECT persona_id FROM chats WHERE id=?", (cid,), one=True)
+    if not chat or not chat["persona_id"]:
+        return None
+    row = q("SELECT sheet FROM personas WHERE id=?", (chat["persona_id"],), one=True)
+    if not row:
+        return None
+    try:
+        return (json.loads(row["sheet"]).get("identity") or {}).get("name")
+    except (ValueError, TypeError):
+        return None
+
+
+@app.get("/api/chats/{cid}/backdrops")
+def backdrops_index(cid: int):
+    """Per-turn backdrop map, so the client can crossfade as the reader
+    scrolls back through earlier locations."""
+    import backdrops
+    style = style_guide(cid)
+    return {"backdrops": backdrops.backdrop_index(
+        cid, _backdrop_player_name(cid), style),
+        "configured": bool(image_model())}
+
+
+@app.post("/api/chats/{cid}/backdrops/generate")
+def backdrops_generate(cid: int, body: dict = Body(default={})):
+    import backdrops
+    if not image_model():
+        raise HTTPException(400, "No image model configured")
+    try:
+        turn = int(body.get("turn"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "turn must be an integer")
+    out = backdrops.request_backdrop(
+        cid, turn, _backdrop_player_name(cid), style_guide(cid))
+    if not out:
+        raise HTTPException(404, "no room to depict for that turn")
+    return out
+
+
+@app.get("/api/chats/{cid}/backdrops/{signature}.png")
+def backdrop_image(cid: int, signature: str):
+    import backdrops
+    if not re.fullmatch(r"[0-9a-f]{8,64}", signature or ""):
+        raise HTTPException(400, "bad signature")
+    path = backdrops.cached_backdrop(cid, signature)
+    if not path:
+        err = backdrops.backdrop_error(signature)
+        raise HTTPException(404, err or "not generated yet")
+    # Content-addressed by visual signature, so it can be cached hard.
+    return FileResponse(path, media_type="image/png", headers={
+        "Cache-Control": "public, max-age=31536000, immutable"})
+
+
+@app.get("/api/image_model")
+def get_image_model():
+    return {"image_model": image_model() or {},
+            "default_size": DEFAULT_IMAGE_SIZE}
+
+
+@app.put("/api/image_model")
+def put_image_model(body: dict = Body(...)):
+    cfg = body.get("image_model", body) or {}
+    if not cfg.get("provider") or not cfg.get("model"):
+        set_setting("image_model", "")
+        return {"image_model": {}}
+    saved = {"provider": int(cfg["provider"]), "model": str(cfg["model"]),
+             "size": str(cfg.get("size") or DEFAULT_IMAGE_SIZE)}
+    set_setting("image_model", json.dumps(saved))
+    return {"image_model": saved}
+
+
+@app.get("/api/image_models")
+def list_image_models(provider: int = Query(...)):
+    """Image models offered by a provider. nano-gpt keeps these on a separate
+    endpoint from /v1/models, which lists no image-output models at all."""
+    import providers as _p
+    prov = _p.provider(provider)
+    if not prov:
+        raise HTTPException(404, "provider not found")
+    base = (prov["base_url"] or "").rstrip("/")
+    root = base[:-3] if base.endswith("/v1") else base
+    try:
+        r = _p._session().get(root + "/models/image",
+                              headers={"Authorization": "Bearer %s" % (prov["api_key"] or "")},
+                              timeout=30)
+        r.raise_for_status()
+        models = (r.json().get("models") or {}).get("image") or {}
+        return {"models": sorted(
+            [{"id": k, "name": (v or {}).get("name") or k}
+             for k, v in models.items()], key=lambda m: m["id"])}
+    except Exception as exc:
+        raise HTTPException(502, "could not list image models: %s" % str(exc)[:200])
+
 
 @app.get("/api/chats/{cid}/background_config")
 def bg_cfg_get(cid: int):

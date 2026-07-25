@@ -427,3 +427,92 @@ def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
     os.replace(tmp, path)          # atomic: a reader never sees a half image
     return {"path": path, "signature": req["signature"],
             "room": req["room_name"], "prompt": prompt, "cached": False}
+
+
+# --- out-of-band generation queue -----------------------------------------
+#
+# The turn pipeline never waits on an image. A caller asks for a backdrop, gets
+# either a cached one immediately or "pending", and a worker thread produces it
+# in the background. Generation takes ~12s against a fast model; putting that
+# inline would add it to every relocation.
+
+import threading
+
+_QUEUE_LOCK = threading.Lock()
+_IN_FLIGHT = {}          # signature -> True while a worker is generating
+_LAST_ERROR = {}         # signature -> str, so a failure is visible not silent
+
+
+def backdrop_status(chat_id, signature):
+    if cached_backdrop(chat_id, signature):
+        return "ready"
+    with _QUEUE_LOCK:
+        if signature in _IN_FLIGHT:
+            return "pending"
+        if signature in _LAST_ERROR:
+            return "error"
+    return "absent"
+
+
+def backdrop_error(signature):
+    with _QUEUE_LOCK:
+        return _LAST_ERROR.get(signature)
+
+
+def request_backdrop(chat_id, turn_idx, player_name=None, style=None):
+    """Ensure a backdrop exists for this turn, generating in the background.
+
+    Returns {signature, status, room}. Never blocks on the image.
+    """
+    req = build_backdrop_request(chat_id, turn_idx, player_name, style)
+    if not req:
+        return None
+    sig = req["signature"]
+    if req["cached"]:
+        return {"signature": sig, "status": "ready", "room": req["room_name"]}
+
+    with _QUEUE_LOCK:
+        if sig in _IN_FLIGHT:
+            return {"signature": sig, "status": "pending", "room": req["room_name"]}
+        _IN_FLIGHT[sig] = True
+        _LAST_ERROR.pop(sig, None)
+
+    def _work():
+        try:
+            generate_backdrop(chat_id, turn_idx, player_name, style)
+        except Exception as exc:
+            with _QUEUE_LOCK:
+                _LAST_ERROR[sig] = "%s: %s" % (type(exc).__name__, str(exc)[:300])
+        finally:
+            with _QUEUE_LOCK:
+                _IN_FLIGHT.pop(sig, None)
+
+    threading.Thread(target=_work, name="backdrop-%s" % sig[:8],
+                     daemon=True).start()
+    return {"signature": sig, "status": "pending", "room": req["room_name"]}
+
+
+def backdrop_index(chat_id, player_name=None, style=None, limit=400):
+    """Per-turn backdrop mapping for the whole chat.
+
+    The frontend needs this to crossfade as the reader scrolls back through
+    earlier locations: each turn maps to the signature of the room it happened
+    in. Rooms repeat, so distinct images are far fewer than turns.
+    """
+    turns = [r["idx"] for r in q(
+        "SELECT idx FROM turns WHERE chat_id=? ORDER BY idx DESC LIMIT ?",
+        (chat_id, limit))]
+    out, seen = [], {}
+    for idx in sorted(turns):
+        scene = scene_after_turn(chat_id, idx)
+        room_id = _room_of_player(scene, player_name)
+        if not room_id:
+            continue
+        sig = visual_signature(scene, room_id, style)
+        if sig not in seen:
+            room = ((scene.get("rooms") or {}).get(room_id) or {})
+            seen[sig] = room.get("name") or room_id
+        out.append({"turn": idx, "room": room_id, "room_name": seen[sig],
+                    "signature": sig,
+                    "status": backdrop_status(chat_id, sig)})
+    return out
