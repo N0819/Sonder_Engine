@@ -155,3 +155,24 @@ began failing perception JSON validation ("views missing perceiver IDs"); switch
 narrator+perception to deepseek/deepseek-v4-flash:thinking, which is reliable and
 also reasons comms delivery correctly on its own (the shape floor guarantees it
 regardless).
+
+## TR-3 — scene.location label didn't refresh when beaming BACK to an existing room  *(FIXED)*  (turn 10)
+
+Reverse transport worked perfectly at the position layer -- "Mark! Energize!"
+moved Reyes and T'Vel from the surface to meridian_transporter_room while the
+alien figure and structure correctly STAYED on the surface (TR-1's gap-cross
+fix holding in both directions, no scenery/NPC dragged aboard). But the scene's
+`location` LABEL still read "Sigma Draconis VII — Surface" while every position
+was aboard ship.
+
+Cause: `_refresh_relocated_location` (the DW-1 helper) only refreshed the label
+for a NEWLY-MINTED destination room (`if player_room in prev_rooms: return`).
+Beaming back to the transporter room -- a room that existed since turn 0 --
+tripped that guard and kept the stale label. Fix: the label refreshes whenever
+the player CHANGES rooms AND the label is genuinely stale for the destination --
+either the destination is brand new (DW-1) OR the current label still names a
+specific room the player just LEFT (TR-3). A venue-level label that matches no
+room (e.g. "The Old Anchor" over rooms "Bar"/"Kitchen") is still left untouched
+on an in-venue move, preserving DW-1 behavior. Tests: 2 added to
+tests/test_dw_audit_scene.py (10 total there). The committed turn-10 scene has
+been corrected to the fix's output ("Transporter Room").
