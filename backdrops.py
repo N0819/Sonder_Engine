@@ -163,11 +163,15 @@ def room_projection(scene, room_id):
     room = ((scene.get("rooms") or {}).get(room_id) or {})
     out = {k: room.get(k) for k in _PLACE_FIELDS if room.get(k)}
     out["room"] = room_id
-    # scene.location is NOT included. It is a single global label that goes
-    # stale on relocation -- live data had the Enterprise's janitor closet
-    # still reporting "Back Alley, City" -- and a wrong one-line location
-    # actively misleads an image model that would otherwise read a perfectly
-    # clear "standard starship deck plating" from the room description.
+    # scene.location is NOT included -- but NOT because the engine is broken.
+    # It tracks relocation correctly since TR-3 (checkpoints after that fix
+    # read "Corridor, Deck 10", "Ten Forward", "Turbolift Car" in step with the
+    # player's room). The reason to exclude it is that backdrops are also
+    # rendered for HISTORICAL turns when scrolling back, and checkpoints
+    # written before that fix carry a stale label -- the Enterprise's janitor
+    # closet still reads "Back Alley, City". A wrong one-line location would
+    # render a starship cupboard as a city alley, and the room description
+    # already says "standard starship deck plating", so it earns nothing.
     if scene.get("time"):
         out["time"] = scene["time"]
     # Adjacency as pure layout: which way the room opens, never who is through
