@@ -55,7 +55,7 @@ def test_a_visible_change_does_invalidate_it():
 
 
 def test_time_of_day_changes_the_picture():
-    sc = _scene()
+    sc = _scene()          # fixture is "night"
     before = visual_signature(sc, "ten_forward")
     sc["time"] = "dawn"
     assert visual_signature(sc, "ten_forward") != before
@@ -194,3 +194,36 @@ def test_global_location_is_excluded():
     sc = _scene()
     sc["location"] = "Back Alley, City"
     assert "Back Alley" not in repr(room_projection(sc, "ten_forward"))
+
+
+# --- narrative time must not bust the cache -------------------------------
+
+def test_narrative_time_flavour_is_bucketed():
+    """scene.time is freeform prose, not a clock. Live values seen include
+    "Night", "a few seconds", "a few seconds pass", "moments pass"."""
+    from backdrops import time_bucket
+    assert time_bucket("Night") == "night"
+    assert time_bucket("late afternoon") == "day"
+    assert time_bucket("dawn") == "morning"
+    # Pure duration says nothing about the light.
+    for noise in ("a few seconds", "a few seconds pass", "moments pass", ""):
+        assert time_bucket(noise) == ""
+
+
+def test_same_room_consecutive_turns_is_a_cache_hit():
+    """The bug this guards cost a full regeneration per beat: turns 4 and 6 of
+    a real chat had an IDENTICAL room description but times of "a few seconds"
+    and "a few seconds pass", so the raw string produced two different keys."""
+    sc = _scene()
+    sc["time"] = "a few seconds"
+    first = visual_signature(sc, "ten_forward")
+    sc["time"] = "a few seconds pass"
+    assert visual_signature(sc, "ten_forward") == first
+
+
+def test_real_time_of_day_still_changes_the_picture():
+    sc = _scene()
+    sc["time"] = "night"
+    night = visual_signature(sc, "ten_forward")
+    sc["time"] = "high noon"
+    assert visual_signature(sc, "ten_forward") != night

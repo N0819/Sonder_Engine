@@ -20,7 +20,7 @@
 | `agents/storage.py` | 72 | Step and active-variant persistence helpers. | `db` |
 | `app.py` | 3708 | FastAPI application, resource CRUD, import/export, turn control, and streaming endpoints. | `agents`, `character_schema`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `updates` |
 | `authored_events.py` | 124 |  | `db` |
-| `backdrops.py` | 309 |  | `db` |
+| `backdrops.py` | 429 |  | `db` |
 | `background_claims.py` | 287 |  | `db` |
 | `character_schema.py` | 639 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
 | `checkpoints.py` | 516 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
@@ -38,7 +38,7 @@
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
 | `prompts.py` | 2132 | Default system prompts and prompt preset access. | `db` |
-| `providers.py` | 1541 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
+| `providers.py` | 1619 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 830 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 1979 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 1507 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | — |
@@ -203,14 +203,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `room_projection()` | 155 | 39 lines |
-| `build_backdrop_request()` | 278 | 32 lines |
-| `visual_signature()` | 59 | 31 lines |
-| `_setting_only()` | 116 | 25 lines |
-| `player_view_for_turn()` | 196 | 24 lines |
-| `arrival_turn_for_room()` | 222 | 23 lines |
-| `scene_after_turn()` | 253 | 23 lines |
-| `_room_of_player()` | 52 | 5 lines |
+| `room_projection()` | 179 | 40 lines |
+| `build_backdrop_request()` | 303 | 32 lines |
+| `visual_signature()` | 83 | 31 lines |
+| `generate_backdrop()` | 401 | 29 lines |
+| `_setting_only()` | 140 | 25 lines |
+| `compose_prompt()` | 353 | 25 lines |
+| `player_view_for_turn()` | 221 | 24 lines |
+| `arrival_turn_for_room()` | 247 | 23 lines |
 
 ### `background_claims.py`
 
@@ -399,14 +399,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 983 | 192 lines |
-| `async chat_complete_async()` | 1176 | 88 lines |
-| `chat_complete()` | 829 | 83 lines |
-| `async _chat_complete_async_once()` | 1265 | 66 lines |
-| `resolve_role_candidates()` | 584 | 52 lines |
-| `list_models()` | 1443 | 47 lines |
-| `_sse_openai()` | 739 | 46 lines |
-| `_sse_anthropic()` | 786 | 42 lines |
+| `_chat_complete_once()` | 1061 | 192 lines |
+| `async chat_complete_async()` | 1254 | 88 lines |
+| `chat_complete()` | 907 | 83 lines |
+| `async _chat_complete_async_once()` | 1343 | 66 lines |
+| `resolve_role_candidates()` | 662 | 52 lines |
+| `list_models()` | 1521 | 47 lines |
+| `_sse_openai()` | 817 | 46 lines |
+| `_sse_anthropic()` | 864 | 42 lines |
 
 ### `scene.py`
 
