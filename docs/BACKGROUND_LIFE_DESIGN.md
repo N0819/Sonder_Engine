@@ -340,7 +340,10 @@ Once voicing is batched, **reaction and ambient chatter stop being separate
 problems.** The earlier draft split them only because per-presence calls made
 ambient life cost N calls; batching removes that pressure.
 
-A single `scene_life` stage, replacing `background_react`:
+A single `scene_life` stage. It sits *alongside* `background_react` rather than
+replacing it — see §3.10, where the default-off setting's `ambient` level keeps
+the existing per-presence path for directed conversation and uses the group call
+only for common-knowledge scene life:
 
 ```
 payload = {
@@ -632,6 +635,86 @@ else derives from committed records. Two containments, both load-bearing:
    whereas an invented visit from the town guard is a plot the Director never
    authored. Scope discipline, not tagging, is what prevents this one.
 
+### 3.10 The scene manager: opt-in, tiered, and filtered as a group
+
+**Off by default.** This ships behind a setting, not as new baseline behaviour.
+The reasons are practical as much as cautious: it is the one component here that
+relaxes an information rule, its value is a matter of taste (some authors will
+find a chattering room noise), and gating it makes the §3.3.1 eval runnable
+against real play without putting anyone's ongoing chat at risk. Home is
+`scene.background_config(chat_id)` — already per-chat, already backed by
+`wget(cid, "background_config")`, already holds `max_reactors` — with an
+optional global default via `get_setting`, mirroring how `auto_promote` works.
+
+#### The reframe: manage a place, not a list
+
+The useful unit is **one LLM given a location and the set of presences it
+manages**, asked to keep that place alive for a beat. That is a better frame
+than "voice N presences" because it is what the model is actually good at, and
+it is what plain LLM roleplay does well (§0).
+
+It also invites one specific scope error that must be closed up front:
+**the manager voices people; it does not change the world.** "Manage a location"
+is a phrase that slides toward authoring the fire, the weather, an arriving
+stranger — all of which are the Director's to own (`AGENTS.md`). The manager's
+output is dialogue plus minor personal action, no `state_diff`, no world facts,
+no new entities. Enforced by schema, not by prompt.
+
+#### Group-level filtering, and why it beats per-presence filtering
+
+Filter **once, for the managed group**, rather than per presence. The manager's
+context receives:
+
+- every **overt** line audible at the managed location (`hear_level` from the
+  speaker's room), and
+- a **directed or concealed** line *only* when its target is one of the managed
+  presences.
+
+It never receives whispers between other parties, lines concealed from all
+managed presences, the player's concealed sequence elements, or private thought
+— none of which reach the call at all, so no prompt discipline is required to
+protect them.
+
+This is a real simplification over §3.3.1's per-presence `knows` /
+`not_privy_to` arrays. After group filtering, **the only divergent content left
+in the context is the directed-at-one-managed-presence case** — a single, known
+category rather than a general knowledge model. And it can be marked **inline,
+at the content itself**:
+
+```
+{ speaker: "Player", quote: "...", audience: ["Mira"],  # Tomas did not hear this
+  note: "whispered — only Mira may act on it" }
+```
+
+Marking divergence next to the thing it constrains is meaningfully easier for a
+model to honour than reconciling a separate per-presence knowledge table, and it
+degrades gracefully: the worst case is one extra reacting to something they
+should not have heard, in a tier where that costs one line.
+
+#### Three levels, not a boolean
+
+The setting should expose the safety/richness tradeoff rather than hiding it:
+
+| level | manager context | divergence in context | cost |
+|---|---|---|---|
+| `off` *(default)* | — | none | current behaviour |
+| `ambient` | **common knowledge only** — directed lines withheld entirely | **zero, provably** | group call + existing per-presence path |
+| `full` | common knowledge + directed lines, inline-tagged | one marked category | group call only |
+
+`ambient` is the interesting middle and deserves emphasis: withhold directed
+lines from the group call entirely and let a directed line fall through to the
+**existing** `background_react` path, which already handles exactly that case
+correctly. The manager's context then contains nothing that is not common to all
+its managed presences, so cross-contamination is not mitigated — it is
+*impossible*. The engine keeps the mechanism it already has for the case it is
+already good at, and adds a group call only for the case it is bad at.
+
+The price is coherence: at `ambient`, an extra answering the player and another
+muttering about it come from two separate calls and will not reference each
+other. `full` buys that single-beat coherence and pays the tagged-divergence
+risk for it. That is a real authorial tradeoff, which is why it belongs in a
+setting rather than in a decision made here.
+
 ---
 
 ## 4. Follow-ons
@@ -704,12 +787,17 @@ scope holds no presences, so empty rooms stay free.
 5. **The separation eval** (§3.3.1) — measure the real cross-presence leak rate
    before committing to a partition rule or an N. Cheap, and it decides design
    questions that are otherwise settled by argument.
-6. **`scene_life`** (§3.4) — the batched stage replacing `background_react`:
-   new prompt, new schema entry, partition rule, post-validation, narrator
-   clause. Needs tests mirroring `tests/test_background_react.py` and
-   `tests/test_background_beat_filter.py`, plus a new one for the §5
-   provenance invariant and one asserting ambient entries never accrue
-   `dialogue_turns`.
+6. **`scene_life`** (§3.4, §3.10) — the batched scene-manager stage, **added
+   alongside `background_react` rather than replacing it**, and **off by
+   default**. Ship the `ambient` level first: its group context is
+   common-knowledge-only, so it needs no separation guarantee at all, and
+   directed lines keep falling through to the existing per-presence path. Add
+   `full` only if the §3.3.1 eval supports it. Needs a new prompt, schema entry,
+   group filter, post-validation, and narrator clause; tests mirroring
+   `tests/test_background_react.py` and `tests/test_background_beat_filter.py`;
+   plus new ones for the §5 provenance invariant, for ambient entries never
+   accruing `dialogue_turns`, and for the group filter withholding every
+   whisper and every line directed at a non-managed party.
 7. **Interim filler** (§3.9) — last, deliberately. It is the only fabricating
    component, and it is worth building only once the derived layers work, so
    that its output is visibly distinguishable from theirs in real play. Needs a
