@@ -3204,14 +3204,34 @@ def prepare_memory_commit(ctx, *, scene=None):
             # character has shown, kept on cstate and fed back into the
             # next character payload (self.recent_tells) so the model
             # stops reaching for the same gesture every beat.
-            _cues = [str(t.get("cue") or "").strip()
-                     for t in ((own_result.get("manifest") or {}).get("tells") or [])
-                     if isinstance(t, dict)]
+            _tells = [t for t in ((own_result.get("manifest") or {}).get("tells") or [])
+                      if isinstance(t, dict)]
+            _cues = [str(t.get("cue") or "").strip() for t in _tells]
             _cues = [c for c in _cues if c]
             if _cues:
                 _prev_cues = [str(c) for c in (st.get("recent_tells") or [])
                               if str(c).strip()]
                 st["recent_tells"] = (_prev_cues + _cues)[-RECENT_TELLS_CAP:]
+            # --- Tell-ground ledger (F6): each shown cue with the private
+            # ground it betrayed (`because`, grounded at the character stage
+            # by affect.ground_tells), kept on cstate and fed back as
+            # self.tell_grounds so a later beat can pay the tell off. Same
+            # cap as the cue ledger; grounds never leave the character's own
+            # private context.
+            _grounds = [
+                {"cue": str(t.get("cue") or "").strip(),
+                 "because": str(t.get("because") or "").strip(),
+                 "turn": turn.idx}
+                for t in _tells
+                if str(t.get("cue") or "").strip()
+                and str(t.get("because") or "").strip()
+            ]
+            if _grounds:
+                _prev_grounds = [
+                    g for g in (st.get("tell_grounds") or [])
+                    if isinstance(g, dict) and str(g.get("cue") or "").strip()
+                ]
+                st["tell_grounds"] = (_prev_grounds + _grounds)[-RECENT_TELLS_CAP:]
             stance = st.get("stance") or sh.get("stance") or {"axes": {}}
             for u in own_result.get("stance_updates") or []:
                 ax = u.get("axis")
