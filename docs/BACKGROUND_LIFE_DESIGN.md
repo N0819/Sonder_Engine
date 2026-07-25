@@ -163,6 +163,19 @@ it heard, what it said — and nothing else. No mind-models, no relationship
 tracking, no salience/confidence structure, no `memories` rows, no consolidation
 scheduler. One short string per presence.
 
+Three fields make up the tier, and keeping them **separate by provenance** is
+what makes the whole design auditable. They are not interchangeable prose:
+
+| field | provenance | mutability | may be batched? | §
+|---|---|---|---|---|
+| `blurb` | **invented** — who they are; contains no perceptual content | frozen at mint | **yes** — nothing to cross-contaminate | 3.8 |
+| `digest` | **derived** — compression of committed, filtered perceptual slices | append + periodic compaction | no | 3.5 |
+| `interim` | **fabricated** — offscreen filler for time the player missed | soft, low-confidence, replaceable | no | 3.9 |
+
+Never merge them into one string. The moment fabricated filler is
+indistinguishable from derived perception, the promotion path (§3.6) launders
+invention into a real character's memory.
+
 ### 3.2 The cardinal rule: voice batched, write unbatched
 
 The risk of running N presences through one LLM is really two risks with very
@@ -275,8 +288,9 @@ capped, the presence is shallow, and the raw tail is always uncompacted.
 
 **Freeze while unobserved.** Digests tick only while the presence is inside the
 player's ambient scope. A barkeep in a tavern the player left three days ago
-does not accumulate — the digest freezes and thaws on return. Cheap, and
-diegetically fine: nothing is being simulated off-screen anyway.
+does not accumulate — the digest freezes, and the gap is filled on return by the
+separate `interim` mechanism in §3.9 rather than by silently pretending no time
+passed.
 
 **Prune.** A seeded presence that has never spoken and has not been in scope for
 N turns is dropped, or the presence dict grows without bound.
@@ -295,6 +309,22 @@ Promotion therefore stays the same boundary it always was — the point at which
 someone gains **interiority** (psychology, mind-models, relationships,
 perception as a real observer). The digest is surface continuity only, and
 crossing the line converts it rather than duplicating it.
+
+Each field converts differently, and the typology in §3.1 is what makes that
+possible:
+
+- **`blurb` → the sheet.** The frozen blurb (§3.8) seeds voice and manner
+  directly. This fixes a real current defect: today promotion mints a sheet from
+  scratch, so a barkeep the player has been drinking with for twenty turns can
+  come back from promotion as a *different person*. A frozen blurb makes the
+  promoted character continuous with the extra.
+- **`digest` → memory seeds.** Derived from committed, filtered perception, so
+  it converts as ordinary autobiographical seed material.
+- **`interim` → low-confidence belief, or nothing.** Fabricated content must
+  never convert to fact. The `memories` table already carries `provenance`,
+  `confidence` and `salience` (see `consolidate_character_memory`'s payload) —
+  that is exactly the right layer for it. Dropping `interim` entirely at
+  promotion is also a defensible choice.
 
 **Guard the threshold.** Digest-fed ambient chatter must not accrue
 `dialogue_turns` (`AUTO_PROMOTE_DIALOGUE_THRESHOLD = 3` — three turns of
@@ -328,6 +358,106 @@ person in a room.
 
 This is ~30 lines, needs no schema or pipeline change, and is the entire
 location-theming lever. Ship it before building the digest.
+
+### 3.8 Personality blurbs: authored once, then frozen
+
+`sketch.role_hint` today is 160 characters of the **director's description** —
+externally observed appearance and function ("a heavyset man behind the bar").
+That is what a presence *looks like*, not who they are, and it is why two extras
+in the same room are interchangeable.
+
+Mint a short **blurb** for each presence the first time it is tracked:
+
+```
+"blurb": {
+    "manner":  "clipped, never finishes a sentence",   # speech register
+    "trait":   "resents the new management",           # one standing concern
+    "tell":    "polishes the same glass",              # one repeatable physical tic
+}
+```
+
+Four properties make this work:
+
+**Frozen.** Written once and never rewritten. Immutability *is* the feature —
+recognizability across turns is exactly what a re-derived-each-time personality
+cannot provide. Contrast `sketch.role_hint`, which is currently overwritten
+every time the director restates the entity, so a presence's identity drifts.
+
+**Batchable.** A blurb contains no perceptual content — it is invention about a
+person, not a record of what they heard. So it is the one write that may safely
+share a context window with other presences, and this follows from §3.2's rule
+rather than excepting it: that rule protects *derived* content. One call mints
+blurbs for a whole newly-populated room.
+
+**Style-governed.** Mint under the §3.7 `place` block: genre, tone, `avoid`, and
+the room description. This is where "location-themed" actually gets decided — a
+Regency innkeeper and a cyberpunk bartender diverge here, not in the reaction
+prompt.
+
+**Surface, not interiority.** A blurb is public affect — how someone comes
+across to anyone in the room. It is not a private goal, a belief about another
+character, a relationship, or a hidden motive. That line is the same one
+promotion guards, and the blurb stays firmly on the observable side of it.
+
+*Risk — cast homogenization.* One call minting a whole room produces a matched
+set of archetypes (the gruff one, the chatty one, the sad one). Mitigate by
+passing the existing presences' blurbs as **negative** examples ("do not reuse
+these registers"). Cheap, and it also keeps a long-running location from
+accumulating five variations on the same person.
+
+### 3.9 Time passed: interim filler on return
+
+A frozen digest plus a resumed scene means a presence behaves as though the
+player stepped out for a second when three in-world days elapsed. Fill the gap —
+but the gap is largely **measurable**, so most of it should not be invented at
+all.
+
+**What is measurable (use this first).** The engine has a real clock:
+`simulation_clock: {elapsed_seconds, display}` in world KV, advanced at commit
+from the director's `time_delta`. And `world_events` carries `occurred_at`,
+`duration_seconds` and `location_id`. So on return:
+
+```
+gap        = clock.elapsed_seconds - presence.last_seen_clock
+happenings = world_events WHERE location_id ∈ ambient_scope(station_room)
+                            AND occurred_at BETWEEN last_seen_clock AND now
+```
+
+Both are committed fact. Store `last_seen_clock` (and `last_seen_turn`) on the
+record when the presence leaves scope.
+
+**What is fabricated (constrain it hard).** The LLM authors only personal
+routine texture over that skeleton — "the lunch rush was ugly, we ran out of
+ice." Scope rules, enforced in the prompt and checked deterministically where
+possible:
+
+- **Own station, own routine only.** May not invent world events, plot
+  developments, other named characters' actions, or anything concerning the
+  player. A background presence does not own objective causality; the Director
+  does, and this is that boundary applied to offscreen time.
+- **Never contradicts `happenings`.** Real committed events at that location are
+  given as fixed input, not suggestions.
+- **Hard length cap** (~300 chars) and stored in `interim`, never appended to
+  `digest`.
+
+**Lazy: generate on first re-voicing, not on re-entry.** Cost is zero for the
+extras the player walks past and never speaks to, and you cannot write good
+filler until you know how long the gap turned out to be. Gate it on the presence
+having real history (`dialogue_turns` non-empty) — furniture the player never
+engaged does not need an offscreen life.
+
+**The sharp edge: filler is the only fabrication in this design.** Everything
+else derives from committed records. Two containments, both load-bearing:
+
+1. *Promotion.* Never converts to fact — low-confidence, provenance-tagged
+   belief, or dropped (§3.6). Otherwise the digest laundering path turns
+   invented filler into a real character's canon memory.
+2. *Speech.* The moment a presence **says** its filler out loud, the player
+   treats it as fact and the Director must honour it. Keeping filler to personal
+   routine at the presence's own station is what makes that survivable: an
+   invented bad lunch rush costs nothing if the Director never ratifies it,
+   whereas an invented visit from the town guard is a plot the Director never
+   authored. Scope discipline, not tagging, is what prevents this one.
 
 ---
 
@@ -388,15 +518,24 @@ scope holds no presences, so empty rooms stay free.
 
 1. **`place` block** (§3.7) — smallest diff, immediate qualitative win, no
    schema or pipeline change. Evaluate before building anything else.
-2. **Digest storage** (§3.5, append + freeze + prune) — deterministic, LLM-free,
+2. **Blurbs** (§3.8) — one batched mint call at tracking time, frozen
+   thereafter. Independent of everything below it, and on its own it already
+   makes two extras in one room distinguishable. Highest ratio of felt effect to
+   implementation cost in this document.
+3. **Digest storage** (§3.5, append + freeze + prune) — deterministic, LLM-free,
    no behavioural change yet. Land it and let digests accumulate in real play so
-   step 3 has material to test against.
-3. **Per-presence compaction** (§3.5) — mirror
+   step 4 has material to test against. Record `last_seen_clock` here even
+   though nothing reads it until step 6.
+4. **Per-presence compaction** (§3.5) — mirror
    `memory.consolidate_character_memory`'s incremental contract.
-4. **`scene_life`** (§3.4) — the batched stage replacing `background_react`:
+5. **`scene_life`** (§3.4) — the batched stage replacing `background_react`:
    new prompt, new schema entry, partition rule, post-validation, narrator
    clause. Needs tests mirroring `tests/test_background_react.py` and
    `tests/test_background_beat_filter.py`, plus a new one for the §5
    provenance invariant and one asserting ambient entries never accrue
    `dialogue_turns`.
-5. **Follow-ons** (§4).
+6. **Interim filler** (§3.9) — last, deliberately. It is the only fabricating
+   component, and it is worth building only once the derived layers work, so
+   that its output is visibly distinguishable from theirs in real play. Needs a
+   test that `interim` never reaches promotion as fact.
+7. **Follow-ons** (§4).
