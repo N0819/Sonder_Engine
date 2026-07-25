@@ -22,7 +22,7 @@
 | `authored_events.py` | 124 |  | `db` |
 | `character_schema.py` | 639 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
 | `checkpoints.py` | 516 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
-| `commit.py` | 3604 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `spatial`, `spatial_frames`, `theory_of_mind` |
+| `commit.py` | 3625 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `spatial`, `spatial_frames`, `theory_of_mind` |
 | `db.py` | 1245 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 193 |  | `db` |
 | `greetings.py` | 252 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
@@ -225,14 +225,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 2872 | 405 lines |
-| `prepare_scene_commit()` | 998 | 231 lines |
-| `track_background_presences()` | 1642 | 169 lines |
+| `prepare_memory_commit()` | 2893 | 405 lines |
+| `prepare_scene_commit()` | 1019 | 231 lines |
+| `track_background_presences()` | 1663 | 169 lines |
 | `_prepare_destruction()` | 417 | 158 lines |
-| `prepare_mapping_commit()` | 2275 | 132 lines |
-| `commit_world_entities()` | 1360 | 123 lines |
-| `commit_mapping()` | 2409 | 120 lines |
-| `commit_world_pressure()` | 2707 | 115 lines |
+| `prepare_mapping_commit()` | 2296 | 132 lines |
+| `commit_world_entities()` | 1381 | 123 lines |
+| `commit_mapping()` | 2430 | 120 lines |
+| `commit_world_pressure()` | 2728 | 115 lines |
 
 ### `db.py`
 

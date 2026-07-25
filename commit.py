@@ -972,8 +972,16 @@ def sync_room_registry_with_scene(cid, canon_book_id, prev_scene, scene):
 
 
 def _refresh_relocated_location(sc, prev_scene, diff, ctx):
-    """Refresh scene.location when the player has relocated to a room that did
-    not exist before this turn. See the DW-1 call site in prepare_scene_commit.
+    """Refresh scene.location when the player has CHANGED rooms this turn. See
+    the DW-1 call site in prepare_scene_commit.
+
+    Originally scoped to relocations into a NEWLY-MINTED room (DW-1: mapping
+    coins a fresh destination and the label still names the old place). But a
+    move into a room that ALREADY EXISTED needs the same refresh -- beaming
+    back aboard from a planet surface (TR-3) left the label reading 'Sigma
+    Draconis VII -- Surface' while every position was in the ship's transporter
+    room. The trigger is therefore the player's room changing, not the room
+    being new.
     """
     try:
         from scene import persona_of
@@ -983,15 +991,28 @@ def _refresh_relocated_location(sc, prev_scene, diff, ctx):
     player_room = _room_of(sc, player_name)
     if not player_room:
         return
-    prev_rooms = (prev_scene.get("rooms") or {})
-    if player_room in prev_rooms:
-        return  # same-place move (or no move) -- label stays put
-    # A room new to the scene this turn. Prefer a location the Director named.
-    new_loc = str(diff.get("location") or "").strip()
-    if not new_loc:
-        room = (sc.get("rooms") or {}).get(player_room) or {}
-        new_loc = str(room.get("name") or "").strip()
-    if new_loc and new_loc != sc.get("location"):
+    if player_room == _room_of(prev_scene, player_name):
+        return  # no move -- label stays put
+    rooms = sc.get("rooms") or {}
+    cur_loc = str(sc.get("location") or "").strip()
+    # Refresh only when the label is actually stale for the destination:
+    #   - the destination room is BRAND NEW to the scene (DW-1: mapping minted
+    #     it and the label still names the old place), or
+    #   - the current label still names a SPECIFIC room the player has now LEFT
+    #     (TR-3: 'Sigma Draconis VII -- Surface' while aboard the ship).
+    # A venue-level label that matches no room (e.g. 'The Old Anchor' with rooms
+    # 'Bar'/'Kitchen') is deliberately left alone on an in-venue room move.
+    new_room = player_room not in (prev_scene.get("rooms") or {})
+    names_left_room = any(
+        cur_loc and cur_loc == str((r or {}).get("name") or "").strip()
+        and rid != player_room
+        for rid, r in rooms.items())
+    if not (new_room or names_left_room):
+        return
+    # Prefer a location the Director named this turn, else the destination's name.
+    new_loc = str(diff.get("location") or "").strip() \
+        or str((rooms.get(player_room) or {}).get("name") or "").strip()
+    if new_loc and new_loc != cur_loc:
         sc["location"] = new_loc
 
 

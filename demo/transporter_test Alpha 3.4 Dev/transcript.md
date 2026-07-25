@@ -1,6 +1,6 @@
 # Transporter Test — Transcript (alpha3.4 dev)
 
-Narrator/perception: deepseek/deepseek-v4-flash:thinking (turns 0–6 nemotron) · director/character/mapping: zai-org/glm-latest
+Director/character/mapping: zai-org/glm-latest · narrator/perception: nemotron:thinking (turns 0–6) then deepseek-v4-flash:thinking (7+)
 
 
 ## Turn 0
@@ -55,3 +55,24 @@ I press the combadge, fingers finding the cold metal without looking away from t
 **> "Chief, talk to me — is that transporter lock still holding through this interference? Give me a straight answer." I keep my eyes on the figure, waiting on Okonkwo's voice in my ear.**
 
 The combadge chirps once, then Okonkwo's voice cuts through the static, steady and exact: "Compensation re-centered. Margin's as wide as I can make it. Standing by, Commander." I hold the figure in my sight, body still, one hand still at the combadge. The ground pulses again through my boots — a fourth thrum, deeper, pressing up through the stone. Southeast, the hooded biped lifts its palm from the rock and takes a deliberate step forward, its broad nasal ridge flaring as it draws the thin air in. Behind it, the alien array's rhythm tightens, the amber light pulsing faster against the pale sky. T'Vel's tricorder chirps low beside me, the amplitude curve climbing on her display. She hasn't moved, her gaze fixed on me across the clearing. The wind carries the mineral tang of the cold atmosphere.
+
+
+## Turn 8
+
+**> The figure steps closer and the array quickens. I hold my ground and speak slowly, pointing to the pulsing array then to my own chest. "That signal — you built it to be found. We answered. We're not a threat." T'Vel, quietly: "Read me anything on that array's frequency — is it responding to us?"**
+
+The figure takes a step forward from the scrub line, boots grinding the iron-dark grit. The broadcast array's pulse tightens in the same instant, each flash pressing harder against the amber sky, the thrum deepening through my soles. I hold my ground, raise my arm, and point north toward the hexagonal structure's pulsing emitter — hold it — then swing my hand in and press my fingertips against my own chest. My voice carries flat across the clearing, slow and deliberate. No edge, no hurry. A statement of fact for a listener who may not share my language. I turn my head just enough toward T'Vel and drop to a clipped whisper, the words meant for her tricorder and her alone. She answers in the same low register: "Commander — the array's pulse interval tightened within the same beat as the figure's step. The correlation is precise. I cannot yet determine whether the array responds to us or to the figure's movement. The 0.3 Hz secondary signature continues to strengthen. Its carrier frequency is shifting — not fixed. If it were a static beacon, I would expect a stable carrier. It is not behaving as one."
+
+
+## Turn 9
+
+**> The figure suddenly presses both palms flat to the ground and the array's light goes blinding-white, the thrum spiking into a bone-deep roar. "Chief — the array's surging! If it's building to a discharge I want us out. Stand by to beam the away team up on my mark." I brace, watching the figure, ready to give the word.**
+
+The figure presses both palms flat against the iron-dark rock, a deliberate, pressing gesture. The broadcast array flares blinding white at its crown in the same instant, washing out the amber sky and searing afterimages across my vision. The ground roars beneath me, a deep vibration that hammers through my boots and rattles in my chest; loose grit dances on the stone. Beside me, T'Vel widens her stance a half-step beyond what the tremor alone would require, tricorder angled north. I shout over the roar—a command, clipped and urgent—and drop low into a braced stance, eyes locked on the hooded figure. Its angular face remains shadowed, showing no reaction to the flare or the shuddering ground. Through the combadge, Okonkwo's voice cuts flat and clipped: "Understood, Commander. Both locks holding. Compensation's trending — five ripples and counting — but I've got them. On your mark." T'Vel raises her voice to carry: "Commander — standing by. The figure has not reacted to the flare. If this were an imminent discharge, a local would not remain standing in the open. I am reading the surge profile now — one moment."
+
+
+## Turn 10
+
+**> "Mark! Energize — get us out!" (Director's note: the beam-up succeeds — operate on the assumption it does. Reyes and T'Vel dematerialize from the surface and rematerialize in the transporter room aboard the Meridian, where Chief Okonkwo is working the console. The alien figure and the structure remain behind on the surface; only the two-person away team transports.)**
+
+I jam the combadge and bark the order, the words lost in the rising thrum. The transporter shimmer catches us—T'Vel's shape dissolving beside me, my own limbs unraveling into light—and then the surface is gone, replaced by the clean hum of the Meridian's transporter room. The blue-white light fades. I'm standing on the pad, residual shimmer crawling across the surface. T'Vel is solid beside me, unmoving. The mineral tang of Sigma Draconis VII still clings to my uniform. Across the room, Chief Okonkwo stands at the console, hands resting on the controls. The amber alert indicators pulse steadily. He straightens from his forward lean, one shoulder rolling back, and says, "Both patterns resolved clean. Welcome back, Commander." His gaze drops to the pattern-buffer readout, scanning left to right. The door to the corridor is closed to my left. The low thrum of the impulse engines vibrates through the deck.
