@@ -36,6 +36,15 @@ if [ -z "$SOURCE_DB" ]; then
   fi
 fi
 
+# Source and destination must not be the same file: the copy step deletes the
+# destination first, so pointing ENGINE_SOURCE_DB at engine.test.db destroys
+# the very database it is about to read.
+if [ "$(readlink -f "$SOURCE_DB" 2>/dev/null)" = "$(readlink -f "$TEST_DB" 2>/dev/null)" ]; then
+  echo "ENGINE_SOURCE_DB is the test database itself — refusing to copy it over itself."
+  echo "To serve engine.test.db directly:  ENGINE_DB=engine.test.db python3 -m uvicorn app:app --port PORT"
+  exit 2
+fi
+
 if [ "$FRESH" = "1" ] || [ ! -f "$TEST_DB" ]; then
   if [ -f "$SOURCE_DB" ]; then
     echo "copying $SOURCE_DB -> engine.test.db (source is opened read-only)"

@@ -1497,6 +1497,69 @@ function renderFullApiSettings(b) {
         closeModal();
         toast("Agent models saved.", "ok");
       } }, "Save all")));
+
+  renderImageModel(b);
+}
+
+// Image generation sits BELOW the agents because it is a different kind of
+// thing: a separate API surface (nano-gpt keeps 201 image models on
+// /api/models/image, and its /v1/models list contains no image-output models
+// at all), used by no pipeline stage, and entirely optional.
+async function renderImageModel(b) {
+  let current = {};
+  try { current = (await api("GET", "/api/image_model")).image_model || {}; }
+  catch { /* older backend */ return; }
+
+  const provSel = el("select", {},
+    [el("option", { value: "" }, "— none (backdrops off) —")].concat(
+      (S.boot.providers || []).map(p =>
+        el("option", { value: String(p.id),
+          ...(String(p.id) === String(current.provider) ? { selected: "" } : {}) },
+          p.name))));
+  const modelSel = el("select", { style: "min-width:260px" });
+  const sizeIn = el("input", { value: current.size || "1536x1024",
+                               style: "width:120px" });
+  const status = el("span", { class: "small dim" });
+
+  async function loadModels() {
+    modelSel.innerHTML = "";
+    if (!provSel.value) { status.textContent = ""; return; }
+    status.textContent = "loading image models…";
+    try {
+      const r = await api("GET", `/api/image_models?provider=${provSel.value}`);
+      for (const m of r.models || []) {
+        modelSel.append(el("option", {
+          value: m.id, ...(m.id === current.model ? { selected: "" } : {}) },
+          `${m.name} — ${m.id}`));
+      }
+      status.textContent = `${(r.models || []).length} image models`;
+    } catch (e) {
+      status.textContent = "this provider exposes no image-model list";
+    }
+  }
+  provSel.onchange = loadModels;
+  loadModels();
+
+  b.append(
+    el("h4", { style: "margin-top:22px" }, "Image model — scene backdrops"),
+    el("div", { class: "small dim" },
+      "Optional and experimental. Generates a picture of the room you are in "
+      + "and puts it behind the chat. Built from spatial data only, so people "
+      + "are never depicted; images are cached per room, so revisiting one "
+      + "costs nothing."),
+    el("table", { class: "grid", style: "margin-top:6px" },
+      el("tr", {}, el("td", {}, "provider"), el("td", {}, provSel)),
+      el("tr", {}, el("td", {}, "model"), el("td", {}, modelSel, " ", status)),
+      el("tr", {}, el("td", {}, "size"), el("td", {}, sizeIn,
+        el("span", { class: "small dim" },
+          "  landscape — a square gets cropped behind the text column")))),
+    el("div", { class: "row", style: "margin-top:8px" },
+      el("button", { class: "primary", onclick: async () => {
+        await api("PUT", "/api/image_model", { image_model: provSel.value
+          ? { provider: +provSel.value, model: modelSel.value, size: sizeIn.value }
+          : {} });
+        toast(provSel.value ? "Image model saved." : "Backdrops disabled.", "ok");
+      } }, "Save image model")));
 }
 
 $("#b-api").onclick = () => {

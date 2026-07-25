@@ -46,7 +46,13 @@
         class="nsfw-btn"
         title="Toggle uncensored adult content"
       >NSFW: OFF</button>
+      <button
+        id="b-backdrop"
+        title="Scene backdrops — generate a picture of the room behind the chat"
+      >Backdrop: OFF</button>
     </header>
+
+    <div id="backdrop-layer" aria-hidden="true"></div>
 
     <div id="msgs">
       <div class="dim" style="margin:auto">
@@ -101,6 +107,7 @@
 <script src="/static/js/components.js"></script>
 <script src="/static/js/editors.js"></script>
 <script src="/static/js/lorebooks.js"></script>
+<script src="/static/js/backdrop.js"></script>
 <script src="/static/js/chat.js"></script>
 <script src="/static/js/settings.js"></script>
 <script src="/static/js/app.js"></script>
