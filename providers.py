@@ -622,6 +622,34 @@ def _headers(prov):
         h["X-Title"] = "Sonder Engine"
     return h
 
+def _is_placeholder_json(text):
+    """A JSON object whose string leaves are all the placeholder '...' (or
+    empty) -- the skeleton some models emit under response_format=json_object
+    instead of real content. True only when there is at least one string leaf
+    and EVERY string leaf is a placeholder, so genuine prose is never mistaken
+    for one."""
+    try:
+        data = json.loads(str(text or "").strip())
+    except (TypeError, ValueError):
+        return False
+    strings = []
+
+    def walk(v):
+        if isinstance(v, str):
+            strings.append(v)
+        elif isinstance(v, dict):
+            for x in v.values():
+                walk(x)
+        elif isinstance(v, list):
+            for x in v:
+                walk(x)
+
+    walk(data)
+    if not strings:
+        return False
+    return all(s.strip().strip(".") == "" for s in strings)
+
+
 def _strip_extended(body):
     # The 400-retry path: drop OPTIONAL params a provider may reject with a hard
     # 400 rather than ignore. Besides the extended samplers, this includes the
@@ -1071,8 +1099,22 @@ def _chat_complete_once(
         )
 
     parsed = response.json()
+    content = parsed["choices"][0]["message"]["content"]
+    # Some models (nemotron:thinking observed) honour response_format=json_object
+    # by returning a syntactically-valid SKELETON with every string value set to
+    # the literal "..." -- which parses and validates fine, so "..." reaches the
+    # player as prose. When json_mode produced such a skeleton, retry once
+    # WITHOUT json_mode (the same model writes real content ungated).
+    if json_mode and _is_placeholder_json(content):
+        retry_body = dict(body)
+        retry_body.pop("response_format", None)
+        alt = _session().post(url, headers=headers, json=retry_body,
+                              timeout=REQUEST_TIMEOUT)
+        if alt.status_code < 400:
+            parsed = alt.json()
+            content = parsed["choices"][0]["message"]["content"]
     _log_usage(role, model, _t0, parsed.get("usage"))
-    return parsed["choices"][0]["message"]["content"]
+    return content
 
 async def chat_complete_async(
     role,
