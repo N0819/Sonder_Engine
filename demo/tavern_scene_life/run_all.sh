@@ -6,7 +6,10 @@ D=demo/tavern_scene_life
 rm -f $D/run_log.jsonl
 python3 $D/seed.py || exit 1
 
-play () { timeout 1200 python3 $D/play_turn.py "$1" 2>&1 | grep -vE '"level": "INFO"'; }
+play () {
+  timeout 1200 python3 -u $D/play_turn.py "$1" 2>&1 \
+    | grep -vE --line-buffered '"level": "INFO"'
+}
 
 play ""
 play "We shoulder through to the bar. Bran drops his good hand flat on the plank. 'Three ales, and a room if you've got one.'"
