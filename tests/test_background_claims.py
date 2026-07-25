@@ -166,3 +166,27 @@ def test_credence_reads_the_frozen_blurb():
         "trait": "Keeps the books precise."}) == "high"
     assert claimant_credence({"manner": "Brisk and clipped."}) == "ordinary"
     assert claimant_credence(None) == "ordinary"
+
+
+# --- title normalization (Enterprise run) ---------------------------------
+
+def test_bare_rank_is_not_an_invented_name():
+    """"...engagement profiles, Captain." addresses someone; it does not name a
+    new person. The Enterprise run recorded "Captain" as lore and ratified it."""
+    from background_claims import is_title_only
+    assert is_title_only("Captain")
+    assert is_title_only("Number One")
+    assert not is_title_only("Tam Briddock")
+    quote = "All three contacts are running pre-scripted profiles, Captain."
+    assert novel_proper_nouns(quote, KNOWN) == []
+
+
+def test_surname_matches_an_established_titled_name():
+    """Riker saying "Worf" refers to the established "Lieutenant Worf"."""
+    known = KNOWN | {"Lieutenant Worf"}
+    assert novel_proper_nouns("Worf, transfer tactical to ops.", known) == []
+
+
+def test_titled_form_matches_a_bare_established_name():
+    known = KNOWN | {"Jean-Luc Picard"}
+    assert novel_proper_nouns("Captain Jean-Luc Picard said so.", known) == []

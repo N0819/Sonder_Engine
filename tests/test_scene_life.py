@@ -297,3 +297,43 @@ def test_recent_tail_is_bounded():
     tail = presences["The Barkeep"]["recent"]
     assert len(tail) == 4
     assert "line 9" in tail[-1]["text"]
+
+
+# --- registered characters are never furniture (Enterprise run) -----------
+
+def test_titled_registered_character_is_not_managed(temp_db):
+    """The Director wrote "Captain Jean-Luc Picard" where the roster held
+    "Jean-Luc Picard", so an exact-casefold check tracked a REGISTERED
+    character as a background presence and handed him to the stateless manager.
+    The model declined to puppet him; the guarantee must not depend on that."""
+    scene = _scene()
+    scene["positions"]["Bran Holt"] = COMMON
+    presences = dict(_presences())
+    presences["Captain Bran Holt"] = {
+        "first_turn": 0, "last_turn": 9, "dialogue_turns": [],
+        "mention_turns": [], "sketch": {"station_room": COMMON}}
+    ctx = _make_ctx(temp_db, presences=presences, scene=scene)
+    managed, _ = managed_presences(ctx, cap=6)
+    names = {n for _, n, _r, _rm in managed}
+    assert "Captain Bran Holt" not in names   # Bran Holt is registered cast
+    assert "The Barkeep" in names
+
+
+def test_ref_dedup_drops_a_scanned_fragment_of_a_declared_ref(temp_db):
+    """The scan re-finds pieces of what the model already declared."""
+    from agents.background import _claimed_refs
+    entry = {"asserts": ["Two D'deridex-class warbirds"]}
+    refs = _claimed_refs(entry, "Two D'deridex-class warbirds, bearing mark eight.",
+                         {"The Barkeep"})
+    assert refs == ["Two D'deridex-class warbirds"]
+
+
+def test_long_declared_ref_is_truncated_to_a_matchable_key(temp_db):
+    """A ref is a ratification key, not a summary."""
+    from agents.background import _claimed_refs
+    from background_claims import MAX_REF_WORDS
+    entry = {"asserts": ["EPS relay feeding the tactical console's deck-nine "
+                         "junction suffered real hardware damage from the short"]}
+    refs = _claimed_refs(entry, "The damage is real.", {"The Barkeep"})
+    assert len(refs) == 1
+    assert len(refs[0].split()) <= MAX_REF_WORDS
