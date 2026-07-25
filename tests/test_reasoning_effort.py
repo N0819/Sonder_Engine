@@ -1,50 +1,87 @@
-"""Reasoning-effort setting: a global effort level applied to every role for
-models that expose it, mirroring the max_output_tokens setting."""
+"""Per-role reasoning-effort setting (with an 'off' level), for models that
+expose it. A role falls back to the 'default' role, then to unset. 'off'
+disables reasoning; unset sends nothing."""
 
 from __future__ import annotations
 
+import json
 import providers
 
 
-def test_coercion():
-    assert providers._coerce_reasoning_effort("low") == "low"
+def test_coercion_levels():
+    for lvl in ("off", "minimal", "low", "medium", "high"):
+        assert providers._coerce_reasoning_effort(lvl) == lvl
     assert providers._coerce_reasoning_effort("HIGH") == "high"
     assert providers._coerce_reasoning_effort("") == ""
     assert providers._coerce_reasoning_effort("default") == ""
-    assert providers._coerce_reasoning_effort("nonsense") == ""
-    assert providers._coerce_reasoning_effort(None) == ""
+    assert providers._coerce_reasoning_effort("turbo") == ""
 
 
-def test_setting_read_and_apply(temp_db):
+def test_per_role_map_and_fallback(temp_db):
     import db
-    assert providers.reasoning_effort() == ""
+    assert providers.reasoning_efforts() == {}
+    assert providers.reasoning_effort_for("director") == ""
 
-    db.set_setting("reasoning_effort", "low")
-    assert providers.reasoning_effort() == "low"
-
-    # OpenAI-compatible providers get the flat field.
-    body = providers._apply_reasoning_effort({}, {"kind": "nanogpt"})
-    assert body["reasoning_effort"] == "low"
-
-    # OpenRouter gets the nested reasoning block.
-    body = providers._apply_reasoning_effort({}, {"kind": "openrouter"})
-    assert body["reasoning"] == {"effort": "low"}
-
-
-def test_unset_adds_nothing(temp_db):
-    body = providers._apply_reasoning_effort({"model": "x"}, {"kind": "nanogpt"})
-    assert "reasoning_effort" not in body and "reasoning" not in body
+    db.set_setting("reasoning_effort", json.dumps(
+        {"default": "low", "director": "high", "junk": "nonsense"}))
+    # junk value dropped
+    assert providers.reasoning_efforts() == {"default": "low", "director": "high"}
+    # director has its own; perception falls back to default; a role in neither
+    # also falls back to default.
+    assert providers.reasoning_effort_for("director") == "high"
+    assert providers.reasoning_effort_for("perception") == "low"
+    assert providers.reasoning_effort_for("narrator") == "low"
 
 
-def test_bad_stored_value_degrades_to_unset(temp_db):
+def test_no_default_means_unset_for_unlisted_roles(temp_db):
     import db
-    db.set_setting("reasoning_effort", "turbo")
-    assert providers.reasoning_effort() == ""
-    assert providers._apply_reasoning_effort({}, {"kind": "nanogpt"}) == {}
+    db.set_setting("reasoning_effort", json.dumps({"narrator": "high"}))
+    assert providers.reasoning_effort_for("narrator") == "high"
+    assert providers.reasoning_effort_for("mapping") == ""   # no default entry
 
 
-def test_endpoint_round_trip(temp_db):
+def test_apply_per_provider_dialect(temp_db):
+    import db
+    db.set_setting("reasoning_effort", json.dumps({"default": "low"}))
+    assert providers._apply_reasoning_effort({}, {"kind": "nanogpt"}, "director") \
+        == {"reasoning_effort": "low"}
+    assert providers._apply_reasoning_effort({}, {"kind": "openrouter"}, "director") \
+        == {"reasoning": {"effort": "low"}}
+
+
+def test_off_disables_reasoning(temp_db):
+    import db
+    db.set_setting("reasoning_effort", json.dumps({"perception": "off"}))
+    assert providers._apply_reasoning_effort({}, {"kind": "nanogpt"}, "perception") \
+        == {"reasoning_effort": "none"}
+    body = providers._apply_reasoning_effort({}, {"kind": "openrouter"}, "perception")
+    assert body["reasoning"] == {"enabled": False}
+
+
+def test_unset_role_adds_nothing(temp_db):
+    import db
+    db.set_setting("reasoning_effort", json.dumps({"director": "high"}))
+    assert providers._apply_reasoning_effort({"model": "x"}, {"kind": "nanogpt"}, "mapping") \
+        == {"model": "x"}
+
+
+def test_legacy_global_string_becomes_default_role(temp_db):
+    import db
+    db.set_setting("reasoning_effort", "low")   # old single-string format
+    assert providers.reasoning_efforts() == {"default": "low"}
+    assert providers.reasoning_effort_for("anything") == "low"
+
+
+def test_endpoint_single_role_and_full_map(temp_db):
     import app as app_module
-    assert app_module.put_reasoning_effort({"value": "low"})["value"] == "low"
-    assert app_module.bootstrap()["reasoning_effort"] == "low"
-    assert app_module.put_reasoning_effort({"value": "bogus"})["value"] == ""
+    # single-role update
+    out = app_module.put_reasoning_effort({"role": "narrator", "value": "high"})
+    assert out["reasoning_effort"] == {"narrator": "high"}
+    # add another, clearing narrator via ""
+    app_module.put_reasoning_effort({"role": "director", "value": "off"})
+    app_module.put_reasoning_effort({"role": "narrator", "value": ""})
+    assert app_module.reasoning_efforts() == {"director": "off"}
+    # full-map replace
+    out = app_module.put_reasoning_effort({"efforts": {"default": "low", "x": "bad"}})
+    assert out["reasoning_effort"] == {"default": "low"}
+    assert app_module.bootstrap()["reasoning_effort"] == {"default": "low"}

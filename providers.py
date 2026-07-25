@@ -411,41 +411,74 @@ def max_output_tokens():
 # global setting applied to every role -- "" / "default" means send nothing and
 # let the model decide, exactly as before this existed. A provider that does not
 # understand the field ignores an unknown key, so it is safe to send.
-REASONING_EFFORTS = ("minimal", "low", "medium", "high")
+# "off" explicitly disables reasoning; minimal/low/medium/high set the level;
+# "" (unset) sends nothing and lets the model decide.
+REASONING_EFFORTS = ("off", "minimal", "low", "medium", "high")
 
 
 def _coerce_reasoning_effort(value):
     """A valid effort level, or "" for 'unset / model default'. Anything
     unrecognized degrades to "" rather than erroring -- this rides on requests."""
     v = str(value or "").strip().lower()
-    if v in ("", "default", "auto", "none", "off"):
+    if v in ("", "default", "auto", "unset", "inherit"):
         return ""
     return v if v in REASONING_EFFORTS else ""
 
 
-def reasoning_effort():
-    """The configured reasoning effort, or "" when unset. Read per call so a
-    settings change applies on the next turn without a restart. Precedence:
-    saved setting, then env override, then unset."""
-    env = os.environ.get("FICTION_ENGINE_REASONING_EFFORT")
+def reasoning_efforts():
+    """The per-role reasoning-effort map, {role: level}. Read per call so a
+    settings change applies on the next turn without a restart."""
     try:
-        stored = get_setting("reasoning_effort")
+        raw = get_setting("reasoning_effort")
     except Exception:
-        return _coerce_reasoning_effort(env)
-    if stored in (None, ""):
-        return _coerce_reasoning_effort(env)
-    return _coerce_reasoning_effort(stored)
+        return {}
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        # Legacy single-string value from the first (global) version: treat it
+        # as the default-role level so an old setting keeps working.
+        lvl = _coerce_reasoning_effort(raw)
+        return {"default": lvl} if lvl else {}
+    if not isinstance(data, dict):
+        return {}
+    out = {}
+    for role, level in data.items():
+        lvl = _coerce_reasoning_effort(level)
+        if lvl:
+            out[str(role)] = lvl
+    return out
 
 
-def _apply_reasoning_effort(body, prov):
-    """Attach the configured reasoning effort to an OpenAI-compatible request.
-    OpenRouter takes `reasoning: {effort}`; every other OpenAI-style backend
-    (nanogpt, openai, etc.) takes the flat `reasoning_effort`. Nothing is added
-    when unset."""
-    effort = reasoning_effort()
+def reasoning_effort_for(role):
+    """The effort level for one role: its own entry, else the 'default' role's,
+    else the env override, else "" (unset). Mirrors agent-model role fallback."""
+    efforts = reasoning_efforts()
+    if role in efforts:
+        return efforts[role]
+    if "default" in efforts:
+        return efforts["default"]
+    return _coerce_reasoning_effort(
+        os.environ.get("FICTION_ENGINE_REASONING_EFFORT"))
+
+
+def _apply_reasoning_effort(body, prov, role):
+    """Attach this role's reasoning effort to an OpenAI-compatible request.
+    OpenRouter takes `reasoning: {effort}` (and `{enabled: false}` to disable);
+    every other OpenAI-style backend takes the flat `reasoning_effort` ('none'
+    to disable). Nothing is added when the role is unset."""
+    effort = reasoning_effort_for(role)
     if not effort:
         return body
-    if _prov_field(prov, "kind") == "openrouter":
+    is_openrouter = _prov_field(prov, "kind") == "openrouter"
+    if effort == "off":
+        if is_openrouter:
+            body["reasoning"] = {"enabled": False}
+        else:
+            body["reasoning_effort"] = "none"
+        return body
+    if is_openrouter:
         body["reasoning"] = {"effort": effort}
     else:
         body["reasoning_effort"] = effort
@@ -963,7 +996,7 @@ def _chat_complete_once(
     }
     body.update(merged)
     _apply_provider_routing(body, prov)
-    _apply_reasoning_effort(body, prov)
+    _apply_reasoning_effort(body, prov, role)
 
     if json_mode:
         body["response_format"] = {
@@ -1160,7 +1193,7 @@ async def _chat_complete_async_once(
     body = {"model": model, "temperature": t, "max_tokens": max_tokens, "messages": [_openai_system_message(system, prov, model), {"role": "user", "content": user}]}
     body.update(merged)
     _apply_provider_routing(body, prov)
-    _apply_reasoning_effort(body, prov)
+    _apply_reasoning_effort(body, prov, role)
     if json_mode:
         body["response_format"] = {"type": "json_object"}
 
