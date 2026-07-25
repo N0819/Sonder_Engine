@@ -45,9 +45,25 @@ Three distinct defects compound:
    did NOT catch it because the prose says "still on the pad" — "pad" is not the
    room NAME the check matches on. A real limitation of F2's placement-name match.
 
-**Likely amplified by the weak model** (deepseek-v4-flash) producing inconsistent
-outputs across interpret/mapping/resolve; a stronger director model may cohere.
-But the engine should reconcile deterministically and does not.
+**CONFIRMED an engine bug, not a model artifact** (the whole point of the "try
+GLM" experiment). Re-run with `zai-org/glm-latest` for EVERY role:
+- GLM's PROSE was coherent — a clean successful beam, no failed-beam
+  self-contradiction like deepseek's.
+- GLM's mapping got the roster EXACTLY right: `{Reyes: surface, T'Vel: surface,
+  Okonkwo: transporter_room}` — the operator stays.
+- GLM's resolve ALSO kept Okonkwo in the transporter room.
+- Yet the COMMITTED scene still put all three on the surface, including Okonkwo,
+  whom BOTH stages explicitly left behind. The commit scene path relocates
+  co-present cast to the player's movement target_room, overriding the models'
+  correct positions. Reproduced identically under two very different models.
+
+Room-id divergence also persisted under GLM (mapping minted
+`sigma7_surface_beamdown`, resolve named `sigma7_surface_signal_source`, the
+party landed in resolve's id — the room mapping never described). So both halves
+of TR-1 are model-independent engine defects.
+
+The narrator model matters for COHERENCE (GLM > deepseek on prose/roster
+consistency) but not for these two deterministic defects.
 
 **Fix direction.** (a) A transporter/relocation is a first-class beat type: when
 interpret flags a beam with a named roster, carry that roster and destination
