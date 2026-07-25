@@ -22,6 +22,15 @@ The items below are real but touch delicate seams (perception attribution, a new
 world process, the scene-commit position/portal writers) and are specified here
 rather than rushed. Each is written to be resumable cold.
 
+**Status (2026-07-24): all six implemented.** F1–F4 as narrator payload fields
+plus deterministic `_check_*` backstops in `agents/common.py` wired through
+`agents/narration.py`'s enforceable-warning rewrite loop
+(`tests/test_narrator_world_fidelity.py`); F5 as the `world_pressures` world-KV
+ledger owned by `commit_world_pressure` with a director-side must-tick retry
+(`tests/test_world_pressure.py`); F6 as `affect.ground_tells` + the
+`tell_grounds` cstate ledger (`tests/test_tell_grounds.py`). Per-item notes
+appended below each spec.
+
 ---
 
 ## F1 — A1 ordering half: stimulus renders after the response it provokes  *(major, craft)*
@@ -36,6 +45,14 @@ NPC line, its position in the prose must not precede the rendered position of th
 event `flow` says it answers. Re-render narration only (cheap) on violation.
 **Test.** A beat where an NPC line answers the player's line; assert the player's
 line's prose position precedes the NPC line's.
+**Done.** `_ordered_beat_events` (agents/narration.py) builds the numbered list
+from step order + loop call sequences, view-filtered (a quote enters only if it
+reached the player); EVENT ORDER prompt rule; `_check_event_order`
+(agents/common.py) fires on a verbatim position inversion between located
+quotes and buys one narrator rewrite via `_ENFORCEABLE_PREFIXES`. Placement
+note: the deterministic check runs at the narrator stage's own rewrite loop
+rather than literally inside commit — same determinism, and re-rendering
+narration there is the engine's existing correction seam.
 
 ## F2 — Cast character position reverts without a movement event  *(major, simulation)*
 **Symptom.** DW t6 ends with the Doctor mid-road ("a dead sprint... closing the
@@ -48,6 +65,11 @@ movement event in this beat's diff, is a warning -> re-render. The DW-1 relocati
 work already sits in this neighborhood.
 **Test.** Character committed in room A last beat, no movement diff this beat,
 narration places them in room B -> warning fires.
+**Done.** `_position_delta_payload` (agents/narration.py) supplies
+`co_present_positions` (prev_room -> room + moved flag, committed KV vs
+outcome scene); POSITION CONTINUITY prompt rule; `_check_position_fidelity`
+flags an unmoved character narrated with a placement preposition at another
+known room (look-verbs and quoted speech exempt) -> one rewrite.
 
 ## F3 — A shut portal reads as open in a later beat  *(major, simulation/state)*
 **Symptom.** DW t9 "pulls the double doors shut... the street is gone"; t12 "through
@@ -57,6 +79,12 @@ touches this area). Narrator payload states `portals: {front_doors: shut}`;
 deterministic rule: named portal state in prose must match the scene blob.
 **Test.** Doors committed shut at N; at N+1 with no open event, narration saying
 "open doors" -> warning.
+**Done.** Portal state was already first-class in the scene blob
+(entity `state.link` phase, `state.transit.hatch`, door adjacency barriers);
+`_visible_portal_states` (agents/narration.py) projects all of them into
+`portal_states` for the player's room, adding a generic `doors` entry only
+when every visible door-state agrees (so DW t12's bare "the open doors" is
+checkable); PORTAL STATE prompt rule; `_check_portal_fidelity` -> one rewrite.
 
 ## F4 — A tracked mind's line renders under an anonymous body  *(major, simulation/attribution)*
 **Symptom.** Enterprise t4: Vorne's second line (per `spoke` metadata) renders
@@ -71,6 +99,24 @@ on mismatch. Separately investigate the "unfamiliar woman" recognition regress
 (the V3 rank-variant fix would not catch a bare role-noun with no name).
 **Test.** A dialogue_log line by character X placed after a reference to Y in the
 draft -> attribution warning.
+**Done.** Quotes bind to speakers in `event_order` (each entry carries the
+speaker's DISPLAY — the canonical name when the player recognizes them via the
+shared `_recognizes` rule, else the same appearance-derived anonymous label
+perception injects, so the binding never out-leaks the view).
+`_check_quote_attribution`: trailing attribution naming the true speaker
+clears; a positively-nearest DIFFERENT speaker's reference fires; a
+mismatched-gender pronoun in between declines to call -> one rewrite.
+**Investigation ("unfamiliar woman" regress).** The label is not producible by
+the deterministic scrub (whose fallback is "the unfamiliar person" and whose
+appearance-derived labels never contain "unfamiliar") — it is the perception
+LLM's own coinage for a speaker absent from the player's `known` set, i.e. the
+anonymization itself was CORRECT per the info barrier given the stored known
+map; what is wrong is that the known map was never seeded for crew who
+in-fiction obviously know each other. That is the still-open promotion/attach
+seeding half of backlog P7 (the V3 `_recognizes` fix covers only rank/title
+variants of names already known, and by design cannot admit a bare role-noun).
+The harm path — a tracked mind's line landing under the anonymous body — is
+now closed deterministically by the attribution check regardless of seeding.
 
 ## F5 — The world never acts: a scenario object stays inert across a whole run  *(major, craft; minor simulation)*
 **Symptom.** Enterprise: an active scan of an unknown alien Array produces zero
@@ -83,6 +129,16 @@ director_resolve (a required field, so silence is a choice). The DW-2 "significa
 floor" pointed at ongoing processes rather than one-shot events.
 **Test.** A scenario with an escalation note; assert director_resolve emits a
 world_pressure tick/hold each beat.
+**Done.** World-KV `world_pressures` ledger owned by
+`commit.commit_world_pressure` (new commit domain): open/tick/hold/resolve ops
+on `DirectorResolve.world_pressure` (+ `DirectorEstablish.world_pressure`
+openers for authored scenario processes); silence about an open entry is
+recorded as an implicit hold AND warned; `world_pressure_view` feeds the
+resolve payload with a deterministic `must_tick_this_beat` flag
+(held >= `WORLD_PRESSURE_STALL_AGE` beats), which agents/director.py enforces
+with one bounded correction retry. "Required field" is realized as the
+deterministic silence-accounting rather than schema-required (a required
+pydantic field would only fail validation, not create the tick).
 
 ## F6 — A planted tell has no stored referent  *(nit, craft)*
 **Symptom.** Impostor t2: Beaumont notes Sir Julian's right hand on the glass held
@@ -94,3 +150,10 @@ such detail.
 ground must exist so a later beat can pay it off — untethered tells are how a
 generator fakes significance.
 **Test.** An appraisal-flagged anomaly carries a non-empty `because`.
+**Done.** Manifest tells carry `because` (character prompt + JSON contract);
+`affect.ground_tells` is the deterministic floor at the character stage
+(derives a missing ground from the tell's own `betrays` pointer — suppressed
+want text / undercurrent label — and warns only when nothing is derivable);
+commit persists `{cue, because, turn}` onto the capped `tell_grounds` cstate
+ledger and character_step feeds it back as `self.tell_grounds` with a TELL
+PAYOFF prompt block. Observers still receive only the cue.

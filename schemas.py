@@ -737,6 +737,11 @@ class DirectorEstablish(BaseModel):
     opening: str = ""
     fiction_frame: dict[str, Any] = Field(default_factory=dict)
     simulation_clock: dict[str, Any] = Field(default_factory=dict)
+    # World-pressure openers (F5): scenario objects/processes established
+    # with authored threat/escalation potential register on the ledger from
+    # beat 0 -- {op:'open', subject, note}. Applied deterministically by
+    # commit.py's commit_world_pressure.
+    world_pressure: list[dict] = Field(default_factory=list)
 
 class DialogueLogEntry(BaseModel):
     speaker: str
@@ -806,6 +811,13 @@ class DirectorResolve(BaseModel):
     # kind}. Applied deterministically to the world-KV pending_obligations
     # ledger by commit.py's commit_obligations (mirrors standing_intentions).
     obligations: list[dict] = Field(default_factory=list)
+    # World-pressure ops (F5 -- THE WORLD ACTS): {op:'open'|'tick'|'hold'|
+    # 'resolve', id, subject, note}. Every open pressure on the world-KV
+    # world_pressures ledger must be ticked or explicitly held each resolve;
+    # commit.py's commit_world_pressure applies the ops deterministically and
+    # treats silence as an implicit hold WITH a warning, so an inert world is
+    # always a visible choice, never a default (Enterprise: the Array).
+    world_pressure: list[dict] = Field(default_factory=list)
     # Player-asserted plot-fact verdicts: {claim_id, claim, subject,
     # verdict:'confirmed'|'contested'|'false', landing}. Audited
     # deterministically in agents/director.py (_audit_fact_adjudications).
