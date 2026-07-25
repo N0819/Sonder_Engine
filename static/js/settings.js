@@ -1030,6 +1030,31 @@ function renderFullApiSettings(b) {
           el("div", { style: "margin-top:6px" }, el("b", {}, "Lower it"), " to hard-cap what a single call can cost, or when you're on a small local model whose output limit is well under the default."),
           el("div", { style: "margin-top:6px" }, "Values outside " + motBounds.min + "–" + motBounds.max + " are pulled into range on save."))));
 
+    // Reasoning effort — applied to every role, for models that expose it
+    // (OpenAI o-series, OpenRouter's reasoning block, GLM/DeepSeek thinking
+    // variants on aggregators that pass it through). Blank = model default.
+    const efforts = S.boot.reasoning_efforts || ["minimal", "low", "medium", "high"];
+    const effortSel = el("select", {},
+      [el("option", { value: "" }, "(model default)")].concat(
+        efforts.map(e => el("option",
+          { value: e, ...(S.boot.reasoning_effort === e ? { selected: "" } : {}) }, e))));
+    b.append(el("h4", {}, "Reasoning effort"),
+      el("div", { class: "row", style: "margin:6px 0" },
+        el("span", { class: "small" }, "Effort (all roles)"),
+        effortSel,
+        el("button", {
+          onclick: async () => {
+            const r = await api("PUT", "/api/reasoning_effort", { value: effortSel.value });
+            await boot();
+            toast(r.value
+              ? "Reasoning effort: " + r.value + "." : "Reasoning effort cleared — model default.", "ok");
+          },
+        }, "Save")),
+      el("div", { class: "small dim" },
+        "How hard reasoning-capable models think before answering, applied to every role. ",
+        el("b", {}, "Lower"), " is faster and cheaper (good for a thinking model that's slow on mechanical stages); ",
+        el("b", {}, "higher"), " spends more on the hard stages. Sent only to models that understand it — others ignore it. Blank leaves it to the model."));
+
     // OpenRouter upstream routing. One OpenRouter model id is served by
     // several upstreams (Anthropic direct, Bedrock, Azure, Vertex, third-party
     // hosts) whose output quality AND prompt-retention policy differ -- so

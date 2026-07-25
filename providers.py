@@ -405,6 +405,53 @@ def max_output_tokens():
     return _coerce_max_output_tokens(stored, fallback)
 
 
+# Reasoning effort for models that expose it (OpenAI o-series `reasoning_effort`;
+# OpenRouter's `reasoning: {effort}`; GLM / DeepSeek thinking variants via the
+# same OpenAI-compatible field on aggregators that pass it through). A single
+# global setting applied to every role -- "" / "default" means send nothing and
+# let the model decide, exactly as before this existed. A provider that does not
+# understand the field ignores an unknown key, so it is safe to send.
+REASONING_EFFORTS = ("minimal", "low", "medium", "high")
+
+
+def _coerce_reasoning_effort(value):
+    """A valid effort level, or "" for 'unset / model default'. Anything
+    unrecognized degrades to "" rather than erroring -- this rides on requests."""
+    v = str(value or "").strip().lower()
+    if v in ("", "default", "auto", "none", "off"):
+        return ""
+    return v if v in REASONING_EFFORTS else ""
+
+
+def reasoning_effort():
+    """The configured reasoning effort, or "" when unset. Read per call so a
+    settings change applies on the next turn without a restart. Precedence:
+    saved setting, then env override, then unset."""
+    env = os.environ.get("FICTION_ENGINE_REASONING_EFFORT")
+    try:
+        stored = get_setting("reasoning_effort")
+    except Exception:
+        return _coerce_reasoning_effort(env)
+    if stored in (None, ""):
+        return _coerce_reasoning_effort(env)
+    return _coerce_reasoning_effort(stored)
+
+
+def _apply_reasoning_effort(body, prov):
+    """Attach the configured reasoning effort to an OpenAI-compatible request.
+    OpenRouter takes `reasoning: {effort}`; every other OpenAI-style backend
+    (nanogpt, openai, etc.) takes the flat `reasoning_effort`. Nothing is added
+    when unset."""
+    effort = reasoning_effort()
+    if not effort:
+        return body
+    if _prov_field(prov, "kind") == "openrouter":
+        body["reasoning"] = {"effort": effort}
+    else:
+        body["reasoning_effort"] = effort
+    return body
+
+
 def _clamp_max_tokens(max_tokens):
     """Cap a requested output budget at the configured ceiling. Only ever
     lowers -- a caller asking for less (a 1000-token utility call) keeps its
@@ -916,6 +963,7 @@ def _chat_complete_once(
     }
     body.update(merged)
     _apply_provider_routing(body, prov)
+    _apply_reasoning_effort(body, prov)
 
     if json_mode:
         body["response_format"] = {
@@ -1112,6 +1160,7 @@ async def _chat_complete_async_once(
     body = {"model": model, "temperature": t, "max_tokens": max_tokens, "messages": [_openai_system_message(system, prov, model), {"role": "user", "content": user}]}
     body.update(merged)
     _apply_provider_routing(body, prov)
+    _apply_reasoning_effort(body, prov)
     if json_mode:
         body["response_format"] = {"type": "json_object"}
 

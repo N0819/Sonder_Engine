@@ -15,6 +15,7 @@ from providers import (
     resolve_role, list_models, provider, agent_models,
     openrouter_routing, normalize_openrouter_routing, list_openrouter_endpoints,
     max_output_tokens, _coerce_max_output_tokens,
+    reasoning_effort, _coerce_reasoning_effort, REASONING_EFFORTS,
     MAX_OUTPUT_TOKENS_DEFAULT, MAX_OUTPUT_TOKENS_MIN, MAX_OUTPUT_TOKENS_MAX,
     DEFAULT_BASES, ROLES, SAMPLER_KEYS, DEFAULT_SAMPLERS, Aborted,
 )
@@ -846,6 +847,8 @@ def bootstrap():
         "memory_provenance": MEMORY_PROVENANCE,
         "agent_models": json.loads(get_setting("agent_models") or "{}"),
         "max_output_tokens": max_output_tokens(),
+        "reasoning_effort": reasoning_effort(),
+        "reasoning_efforts": list(REASONING_EFFORTS),
         "openrouter_routing": openrouter_routing(),
         "max_output_tokens_bounds": {
             "default": MAX_OUTPUT_TOKENS_DEFAULT,
@@ -894,6 +897,15 @@ def get_openrouter_endpoints(provider_id: int, model: str):
         return {"endpoints": list_openrouter_endpoints(prov, model)}
     except Exception as exc:
         raise HTTPException(502, f"could not list endpoints: {exc}")
+
+@app.put("/api/reasoning_effort")
+def put_reasoning_effort(body: dict = Body(...)):
+    """Reasoning effort applied to every role that exposes it. Coerced rather
+    than rejected: it rides on every request, and an unrecognized value must
+    degrade to 'unset' (model default), not break generation. Empty clears it."""
+    value = _coerce_reasoning_effort(body.get("value"))
+    set_setting("reasoning_effort", value)
+    return {"ok": True, "value": value}
 
 @app.put("/api/max_output_tokens")
 def put_max_output_tokens(body: dict = Body(...)):
