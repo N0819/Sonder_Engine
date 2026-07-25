@@ -1,5 +1,38 @@
 # Changelog
 
+## alpha4.0.1 — The scene manager gets a switch
+
+alpha4.0 shipped `background_config` with **no route and no UI**, so `scene_life`
+was only reachable by writing world KV by hand — which is exactly how both demo
+runs had to enable it. Nobody using the app could turn the feature on.
+
+### Added
+- **Background life controls in the Dialogue config modal** (`app.py`,
+  `static/js/settings.js`, `tests/test_background_config_route.py`).
+  `GET`/`PUT /api/chats/{cid}/background_config` exposing `scene_life`
+  (off / ambient / full), `max_managed` and `max_reactors`.
+
+  They sit beside **Dialogue config** rather than **Genre & style** because
+  these are simulation dials — who gets to speak and act — the same family as
+  the `allow_npc_to_npc_dialogue` toggle already there. The style guide keeps
+  the other half of the feature: how invented extras *sound*, including the
+  §3.8.1 canon licence that produced the correct TNG senior staff from station
+  names alone. The panel says so, and points at Genre & style.
+
+  The copy explains the levels in terms of what they cost rather than their
+  internals: *ambient* is described as the manager only ever seeing what
+  everyone present already heard, *full* as also seeing lines aimed at one
+  person and relying on the model to honour who heard them. The known
+  auto-promotion gap is called out in the panel itself rather than left in the
+  changelog, since it bites whoever switches this on.
+
+  Values are clamped server-side to the same hard caps the stage enforces
+  (`max_managed` ≤ 8, `max_reactors` ≤ 3) so the UI cannot store a number
+  `agents/background.py` will silently ignore, and an unrecognized level is a
+  400 rather than a silent fallback.
+
+Defaults are unchanged: an untouched chat still reads `scene_life: "off"`.
+
 ## alpha4.0 — The room is alive when you are not looking at it
 
 Background extras were the one place the engine lost to plain single-context

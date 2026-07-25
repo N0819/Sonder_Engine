@@ -102,6 +102,7 @@ $("#b-style").onclick = async () => {
 $("#b-dlg").onclick = async () => {
   if (!S.chatId) return;
   const c = await api("GET", `/api/chats/${S.chatId}/dialogue_config`);
+  const bg = await api("GET", `/api/chats/${S.chatId}/background_config`);
   const st = el("select", {}, ["terse", "natural", "chatty"].map(s => el("option", { value: s, ...(s === c.style ? { selected: "" } : {}) }, s)));
   const mn = el("input", { type: "number", value: c.min_lines, min: "0" });
   const mx = el("input", { type: "number", value: c.max_lines, min: "0" });
@@ -115,6 +116,21 @@ $("#b-dlg").onclick = async () => {
   const stopAddr = el("input", { type: "checkbox", ...(c.stop_on_player_address ? { checked: "" } : {}) });
   const stopQ = el("input", { type: "checkbox", ...(c.stop_on_question_to_player ? { checked: "" } : {}) });
   const silence = el("input", { type: "checkbox", ...(c.silence_ends_exchange ? { checked: "" } : {}) });
+
+  // Background life (docs/BACKGROUND_LIFE_DESIGN.md). Sits here rather than in
+  // Genre & style because these are simulation dials -- who gets to speak --
+  // the same family as NPC-to-NPC dialogue above. The style guide still owns
+  // how invented extras SOUND.
+  const sceneLife = el("select", {}, [
+    ["off", "Off — extras react only when prompted"],
+    ["ambient", "Ambient — the room talks among itself (safest)"],
+    ["full", "Full — one manager runs the whole room"],
+  ].map(([v, label]) => el("option",
+    { value: v, ...(v === (bg.scene_life || "off") ? { selected: "" } : {}) }, label)));
+  const maxManaged = el("input", { type: "number", min: "1", max: "8",
+                                   value: bg.max_managed ?? 6 });
+  const maxReactors = el("input", { type: "number", min: "1", max: "3",
+                                    value: bg.max_reactors ?? 1 });
 
   modal("Dialogue config", b => b.append(
     el("div", { class: "small dim", style: "margin-bottom:10px" },
@@ -140,6 +156,37 @@ $("#b-dlg").onclick = async () => {
         el("div", {}, "Stop on player address — a scene running on its own pauses once an NPC speaks directly to you, so you don't miss your cue to respond."),
         el("div", {}, "Stop on question to player — same pause, triggered specifically by an NPC asking you something."),
         el("div", {}, "Silence ends exchange — if nobody has anything to say or do, the scene stops rather than manufacturing more dialogue to fill the turn."))),
+    el("div", { class: "card", style: "margin-top:10px" },
+      el("div", { class: "section-title", style: "margin-top:0" }, "Background life"),
+      el("div", { class: "small dim" },
+        "Extras with no character sheet — patrons, crew, bystanders. Normally they "
+        + "speak only when the scene pokes them. Turn this on and one model is given "
+        + "the room's whole populace each beat, so people talk to each other and act "
+        + "on their own instead of only reacting to you."),
+      el("table", { class: "grid", style: "margin-top:6px" },
+        el("tr", {}, el("td", {}, "scene life"), el("td", {}, sceneLife)),
+        el("tr", {}, el("td", {}, "max managed"), el("td", {}, maxManaged)),
+        el("tr", {}, el("td", {}, "max reactors"), el("td", {}, maxReactors))),
+      el("div", { class: "small dim", style: "margin-top:6px" },
+        el("div", {}, el("b", {}, "Ambient"), " — the manager is only ever shown what "
+          + "everyone present already heard, so it cannot leak one extra's knowledge "
+          + "to another. Anything said directly to an extra is handled the old way."),
+        el("div", {}, el("b", {}, "Full"), " — the manager also sees lines aimed at one "
+          + "person, tagged with who heard them. Richer, because a reply and a muttered "
+          + "aside can happen in one beat, but it relies on the model honouring those tags."),
+        el("div", {}, el("b", {}, "Max managed"), " — how many extras one call may hold. "
+          + "Past a handful a crowd reads as noise."),
+        el("div", {}, el("b", {}, "Max reactors"), " — used only when scene life is off: "
+          + "how many extras the old one-at-a-time path may voice."),
+        el("div", { style: "margin-top:4px" },
+          "Extras invent small local details — a name, an old grudge. These are recorded "
+          + "as hearsay for the Director to confirm, contradict, or quietly drop; they "
+          + "never become fact on their own."),
+        el("div", {}, "Their manner and look follow ",
+          el("b", {}, "Genre & style"), " — set the genre there first."),
+        el("div", { style: "margin-top:4px" }, el("b", {}, "Note: "),
+          "while this is on, leave auto-promotion off — background chatter currently "
+          + "counts toward promoting an extra into a full character."))),
     el("div", { class: "small dim", style: "margin-top:10px" },
       "Prose pacing for NPC dialogue — how much NPCs tend to say, independent of autonomy above."),
     el("table", { class: "grid" },
@@ -153,6 +200,10 @@ $("#b-dlg").onclick = async () => {
           style: st.value, min_lines: mn.value, max_lines: mx.value, variance: va.value,
           autonomy: +auto.value, allow_npc_initiative: npcInit.checked, allow_npc_to_npc_dialogue: npcNpc.checked,
           stop_on_player_address: stopAddr.checked, stop_on_question_to_player: stopQ.checked, silence_ends_exchange: silence.checked
+        });
+        await api("PUT", `/api/chats/${S.chatId}/background_config`, {
+          scene_life: sceneLife.value, max_managed: +maxManaged.value,
+          max_reactors: +maxReactors.value
         });
         closeModal(); toast("Dialogue config saved.", "ok");
       } }, "Save"))));
