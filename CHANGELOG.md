@@ -1,5 +1,118 @@
 # Changelog
 
+## alpha4.0 — The room is alive when you are not looking at it
+
+Background extras were the one place the engine lost to plain single-context
+LLM roleplay, and the cause was not an oversight: **the engine applied its
+central information discipline to the tier with nothing to protect.** A
+bystander with no sheet, no memory and no hidden state gains almost nothing
+from per-presence isolation, while the isolation costs exactly what makes a
+crowd feel inhabited — an ensemble improvised in one context.
+
+This release adds an opt-in scene manager that recovers that, fenced inside a
+partition that keeps the discipline where it pays. Everything here is **off by
+default** (`background_config.scene_life`); with it unset, behaviour is
+byte-for-byte what it was.
+
+Design: [`docs/BACKGROUND_LIFE_DESIGN.md`](docs/BACKGROUND_LIFE_DESIGN.md).
+Live evidence: `demo/tavern_scene_life/` and `demo/trek_bridge_scene_life/`.
+
+### Added
+- **The scene manager** (`agents/background.py`, `prompts.py`, `schemas.py`).
+  One batched call voices a whole location's populace per beat instead of one
+  LLM call per presence. It is selected by `scene_life`: `off` (default),
+  `ambient`, or `full`.
+
+  The cardinal rule is **voice batched, write unbatched**. This is not a claim
+  that models cannot separate who-knows-what in one context — they can, and the
+  payload asks them to, with per-presence `full`/`fragment`/`none` audience
+  tags. It is about error economics: at any reliability *p*, a slip in *speech*
+  decays (one odd line, gone next turn) while a slip written to *storage* is
+  re-read every subsequent turn and preserved by every future compaction.
+  Storage never sees a shared context window.
+
+  Perception is two layers with distinct roles. **Admission control** is the
+  guarantee: concealed lines, lines concealed from every managed presence, and
+  (at `ambient`) any divergent event never enter the context at all, so no
+  prompt discipline is protecting them. **Annotation** is fidelity, not safety.
+  At `ambient` the manager's context holds only what every managed presence
+  shares, making cross-contamination impossible rather than mitigated.
+
+  Selection is by room, not salience. `managed_presences` hands over the
+  populace of the player's ambient scope; the manager decides for itself who
+  acts. Every condition in the old gate mirrored the player, which is what made
+  extras feel reactive rather than alive.
+- **Frozen personality blurbs** (`§3.8`). A `manner`/`trait`/`tell`/`look`
+  sketch minted once per presence and never rewritten. Immutability is the
+  feature: recognizability across turns is what a re-derived personality cannot
+  give. Minting is batched — safely, and *because of* the rule above rather than
+  as an exception to it: a blurb carries no perceptual content, so there is
+  nothing to cross-contaminate. Blurbs are style-guide governed, which is where
+  location theming is actually decided.
+- **Claimed-not-established lore** (`background_claims.py`). Background
+  presences invent small world facts through their people — roughly one proper
+  noun per turn in live play. That is kept, because suppressing it costs most of
+  the texture, and made safe by recording it as **hearsay the Director
+  ratifies**: the same treatment the Player Authority Contract already gives a
+  player's claim about another character. Neither owns objective causality.
+
+  The failure being designed out is *"the engine forgot it said this."* With a
+  claim recorded, all three outcomes are ordinary fiction: ratified (canon),
+  contradicted (the speaker misremembered — and because the claimant is
+  recorded, the world can show it), or expired (it was tavern talk).
+  `claimant_credence` derives trust from the frozen blurb, so an unratified
+  claim is safe to leave floating: the fiction has already signalled how much to
+  believe a rambling old man.
+- **A `place` block** in the background payload (`§3.7`): room name and
+  description, location, nesting-aware ambient location, time, genre and style.
+  Previously a presence's entire sense of place was a bare room id.
+
+### Fixed
+Six defects, all found by *running* the engine rather than by the suite.
+
+- **A registered character could be handed to the stateless manager as
+  furniture.** The Director writes "Captain Jean-Luc Picard"; the roster holds
+  "Jean-Luc Picard". Exact-casefold comparison missed it, so a character with a
+  sheet, memory and psychology was tracked as a background presence and offered
+  to the manager on five consecutive turns. The model declined every time —
+  precisely the "compliance holds until it doesn't" case this codebase keeps
+  converting into a structural guarantee. New `commit.strip_name_titles` /
+  `name_in_roster`, applied to tracking and selection.
+- **Co-presence lookups missed nearly every presence.** Scene positions are
+  keyed by opaque entity id (`barkeep`) while presences are tracked by display
+  name (`The Barkeep`), so only one of five extras in a tavern ever qualified.
+  `_presence_room` folds through the entity map, mirroring the fold
+  `track_background_presences` already does in the other direction.
+- **Concealed content could reach the manager through the Director's prose.**
+  Admission control covered `dialogue_log` but not `resolved_event`, which is
+  authored from the omniscient objective frame and can restate a whisper
+  verbatim. The per-presence path had always redacted this;
+  `_redacted_resolved_event` brings the manager path in line.
+- **A bare rank was recorded as invented lore.** "...profiles, Captain." created
+  a claim on `Captain`, which then auto-ratified because the word is everywhere.
+  Fixed by `is_title_only`, with title-stripping so "Worf" resolves to the
+  established "Lieutenant Worf".
+- **Hyphenated names split** in the proper-noun scan ("Captain Jean" + "Luc
+  Picard"), matching nothing.
+- **Long refs were unmatchable ratification keys.** A presence self-declared a
+  whole sentence; the Director visibly acted on it but the ref shared no string
+  with the prose, so an adopted claim stayed hearsay and would have expired as
+  never established. Refs are capped and the prompt asks for a short referring
+  phrase.
+
+### Known gaps
+- Ambient conduct still accrues `dialogue_turns`, so auto-promotion should be
+  disabled alongside `scene_life` until a separate counter lands
+  (`AUTO_PROMOTE_DIALOGUE_THRESHOLD` is 3).
+- A frozen `tell` can become a catchphrase — one presence performed hers on
+  every turn she acted. The prompt fix (available colour, not a required beat)
+  is specified in `§3.8` but not yet applied.
+- Ratification is one-sided: a claim the Director *rejects* is indistinguishable
+  from one it ignored. An explicit `contradicted_claims` would let a later beat
+  show a presence was wrong.
+- The manager does not exclude presences the Director already voiced this beat.
+  It behaved correctly across both live runs, but nothing enforces it.
+
 ## alpha3.3 — Nobody speaks for the player, and nobody skips the person the scene is about
 
 Two authority failures and one authoring feature. Both failures were found by

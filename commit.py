@@ -1553,6 +1553,51 @@ _BACKGROUND_NAME_TITLE_WORDS = {
     "lieutenant", "sir", "madam", "professor", "doctor",
 }
 
+# Ranks and honorifics the Director routinely prefixes to a name that the
+# roster stores bare ("Jean-Luc Picard" vs "Captain Jean-Luc Picard"). Kept
+# SEPARATE from _BACKGROUND_NAME_TITLE_WORDS above, which feeds
+# _background_name_mentioned's significant-word matching -- widening that set
+# would silently make mention-detection stricter for short names.
+_NAME_TITLE_PREFIXES = frozenset({
+    "dr", "mr", "mrs", "ms", "mister", "madam", "madame", "sir", "lord",
+    "lady", "master", "professor", "doctor", "captain", "commander",
+    "cmdr", "lieutenant", "lt", "ensign", "chief", "admiral", "general",
+    "colonel", "major", "sergeant", "corporal", "private", "father",
+    "mother", "sister", "brother", "reverend", "king", "queen", "prince",
+    "princess", "the", "a", "an",
+})
+
+
+def strip_name_titles(name):
+    """A display name with leading ranks/honorifics removed.
+
+    The Director writes "Captain Jean-Luc Picard" where the cast roster holds
+    "Jean-Luc Picard", and "Lieutenant Worf" where a later line just says
+    "Worf". Exact-casefold comparison misses both, which in the Enterprise run
+    tracked a REGISTERED character as a background presence and handed him to
+    the stateless scene manager as furniture.
+    """
+    words = str(name or "").strip().split()
+    while words and words[0].strip(".,").casefold() in _NAME_TITLE_PREFIXES:
+        words = words[1:]
+    return " ".join(words).strip() or str(name or "").strip()
+
+
+def name_in_roster(name, roster):
+    """True when `name` denotes someone already registered (cast, persona,
+    extra player), comparing bare and title-stripped forms in both directions.
+    `roster` is a set of casefolded names."""
+    cf = str(name or "").strip().casefold()
+    if not cf:
+        return False
+    if cf in roster:
+        return True
+    bare = strip_name_titles(name).casefold()
+    if bare and bare in roster:
+        return True
+    return any(bare and bare == strip_name_titles(r).casefold() for r in roster)
+
+
 def _background_name_mentioned(name, text):
     """resolved_event prose almost never repeats someone's full tracked
     name after their first introduction -- "Crusher" carries a scene once
@@ -1715,7 +1760,7 @@ def track_background_presences(ctx, nonce):
     for d in (res.get("dialogue_log") or []):
         speaker = str(d.get("speaker") or "").strip()
         speaker = entity_id_to_name.get(speaker, speaker)
-        if speaker and speaker.casefold() not in roster:
+        if speaker and not name_in_roster(speaker, roster):
             candidates.add(speaker)
             dialogue_speakers.add(speaker.casefold())
 
@@ -1749,7 +1794,7 @@ def track_background_presences(ctx, nonce):
             if not kind or kind in _INERT_ENTITY_KINDS:
                 continue
             name = str(entity_def.get("name") or "").strip()
-            if not name or name.casefold() in roster:
+            if not name or name_in_roster(name, roster):
                 continue
             candidates.add(name)
             sk = sketches.setdefault(name, {})
@@ -1769,7 +1814,7 @@ def track_background_presences(ctx, nonce):
     br = ctx.get("background_react") or {}
     for _r in _background_fired_reactions(br):
         br_name = str((_r.get("dialogue_log_entry") or {}).get("speaker") or "").strip()
-        if br_name and br_name.casefold() not in roster:
+        if br_name and not name_in_roster(br_name, roster):
             candidates.add(br_name)
             dialogue_speakers.add(br_name.casefold())
 
@@ -1788,6 +1833,19 @@ def track_background_presences(ctx, nonce):
             # Director restated this presence's own description/position ->
             # objective self-knowledge wins; overwrite the prior sketch.
             record.setdefault("sketch", {}).update(sk)
+
+    # Scene-manager bookkeeping (docs/BACKGROUND_LIFE_DESIGN.md §3.8, §3.11).
+    _persist_blurbs(br, presences)
+    _append_manager_conduct(br, presences, turn_idx)
+
+    # Lore a background presence asserted this beat enters as a CLAIM, never as
+    # fact -- the Director ratifies it, contradicts it, or lets it expire
+    # (background_claims.py). Same treatment the Player Authority Contract
+    # already gives a player's claim about another character.
+    from background_claims import record_claims, settle_claims
+    record_claims(cid, turn_idx, (br or {}).get("claims"))
+    settle_claims(cid, turn_idx, str(res.get("resolved_event") or ""),
+                  ((res.get("state_diff") or {}).get("ratified_claims") or []))
 
     resolved_event = str(res.get("resolved_event") or "")
     for name, record in presences.items():
@@ -1829,6 +1887,56 @@ def track_background_presences(ctx, nonce):
 
     wset(cid, "background_presences", presences)
     return {"tracked": len(presences)}
+
+BACKGROUND_RECENT_TAIL = 4
+
+def _persist_blurbs(br, presences):
+    """Write minted blurbs (§3.8). FROZEN: a blurb is written once and never
+    rewritten -- immutability is the feature, and it is the anchor against the
+    self-feeding drift §3.11 describes."""
+    for name, blurb in ((br or {}).get("blurbs") or {}).items():
+        rec = presences.get(name)
+        if rec is None or rec.get("blurb") or not isinstance(blurb, dict):
+            continue
+        if any(str(v or "").strip() for v in blurb.values()):
+            rec["blurb"] = blurb
+
+def _append_manager_conduct(br, presences, turn_idx):
+    """Route each attributed entry to its OWN presence's record (§3.11).
+
+    This is a routing operation, not an authoring one: the model emitted
+    structurally attributed entries and deterministic code files each under the
+    name it carries, so no shared-context prose is ever written to storage and
+    §3.2's write-unbatched rule holds.
+    """
+    for r in _background_fired_reactions_any(br):
+        name = str(r.get("name") or "").strip()
+        rec = presences.get(name)
+        if rec is None:
+            continue
+        entry = r.get("dialogue_log_entry") or {}
+        parts = []
+        if entry.get("exact_quote"):
+            parts.append('said "%s"' % str(entry["exact_quote"]).strip())
+        if r.get("action"):
+            parts.append(str(r["action"]).strip())
+        if not parts:
+            continue
+        tail = rec.setdefault("recent", [])
+        tail.append({"turn": turn_idx, "text": "; ".join(parts)})
+        del tail[:-BACKGROUND_RECENT_TAIL]
+
+def _background_fired_reactions_any(br):
+    """Like _background_fired_reactions but also yields action-only entries --
+    the scene manager may have someone act without speaking, and that conduct
+    still belongs in their profile."""
+    if not isinstance(br, dict):
+        return []
+    reactions = br.get("reactions")
+    if reactions:
+        return [r for r in reactions if isinstance(r, dict)
+                and (r.get("dialogue_log_entry") or r.get("action"))]
+    return _background_fired_reactions(br)
 
 def _flow_addressed_refs(ctx):
     """Raw flow.addressed_to entries as the director emitted them, preserved
