@@ -34,7 +34,7 @@ import json
 import os
 import re
 
-from db import q, wget
+from db import q, wget_for_frame
 
 # Where generated images live. Deliberately NOT the database: engine.db is
 # already ~400MB of text, and a few hundred backdrops would dwarf it while
@@ -144,7 +144,12 @@ def _setting_only(text):
 # attire, conditions on people -- is omitted by construction, which is the whole
 # safety argument: a monster cannot appear in a backdrop built from a
 # projection that has no concept of occupants.
-_PLACE_FIELDS = ("name", "desc", "notes")
+# `notes` is deliberately EXCLUDED despite describing the room: it is freeform
+# and routinely carries occupants. Real example from live data --
+#   "The TARDIS materializes in this room... Hinami and the Doctor are
+#    outside it now."
+# A whitelist that admits a freeform field is not a whitelist.
+_PLACE_FIELDS = ("name", "desc")
 
 
 def room_projection(scene, room_id):
@@ -158,8 +163,11 @@ def room_projection(scene, room_id):
     room = ((scene.get("rooms") or {}).get(room_id) or {})
     out = {k: room.get(k) for k in _PLACE_FIELDS if room.get(k)}
     out["room"] = room_id
-    if scene.get("location"):
-        out["location"] = scene["location"]
+    # scene.location is NOT included. It is a single global label that goes
+    # stale on relocation -- live data had the Enterprise's janitor closet
+    # still reporting "Back Alley, City" -- and a wrong one-line location
+    # actively misleads an image model that would otherwise read a perfectly
+    # clear "standard starship deck plating" from the room description.
     if scene.get("time"):
         out["time"] = scene["time"]
     # Adjacency as pure layout: which way the room opens, never who is through
@@ -222,26 +230,45 @@ def arrival_turn_for_room(chat_id, turn_idx, room_id, player_name=None,
     # silently found nothing, and fell back to the current turn every time.
     # Blobs are ~1MB each, so the lookback is deliberately small -- a cheap
     # per-turn room index would be the right optimization if this ships.
-    rows = q(
-        "SELECT turn_idx, blob FROM checkpoints "
-        "WHERE chat_id=? AND turn_idx<=? ORDER BY turn_idx DESC LIMIT ?",
-        (chat_id, turn_idx, max(1, min(int(lookback), 8))))
     arrival = turn_idx
-    for row in rows:
+    for idx in range(turn_idx, max(-1, turn_idx - max(1, min(int(lookback), 8))), -1):
+        scene = scene_after_turn(chat_id, idx)
+        if _room_of_player(scene, player_name) == room_id:
+            arrival = idx
+        else:
+            break
+    return arrival
+
+
+def _turn_frame(chat_id, turn_idx):
+    row = q("SELECT frame_id FROM turns WHERE chat_id=? AND idx=?",
+            (chat_id, turn_idx), one=True)
+    return row["frame_id"] if row else None
+
+
+def scene_after_turn(chat_id, turn_idx):
+    """The scene as it stood AFTER `turn_idx` resolved.
+
+    Checkpoints are written BEFORE a turn runs, so checkpoint N is the state
+    going INTO turn N -- the state coming out of turn N is checkpoint N+1, or
+    the live scene when N is the latest turn. Mixing the two reads a room the
+    player has already left, which is exactly how an earlier draft "found" a
+    frame-scoping bug that did not exist.
+    """
+    row = q("SELECT blob FROM checkpoints WHERE chat_id=? AND turn_idx=?",
+            (chat_id, turn_idx + 1), one=True)
+    if row:
         try:
             world = (json.loads(row["blob"]) or {}).get("world") or {}
             scene = world.get("scene")
             if isinstance(scene, str):
                 scene = json.loads(scene)
+            if isinstance(scene, dict):
+                return scene
         except (ValueError, TypeError):
-            continue
-        if not isinstance(scene, dict):
-            continue
-        if _room_of_player(scene, player_name) == room_id:
-            arrival = row["turn_idx"]
-        else:
-            break
-    return arrival
+            pass
+    return wget_for_frame(chat_id, "scene", _turn_frame(chat_id, turn_idx),
+                          {}) or {}
 
 
 def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None):
@@ -251,7 +278,7 @@ def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None):
     perception-derived, people-stripped setting text an image prompt is written
     from. Returns None when there is no room to depict.
     """
-    scene = wget(chat_id, "scene", {}) or {}
+    scene = scene_after_turn(chat_id, turn_idx)
     room_id = _room_of_player(scene, player_name)
     if not room_id:
         return None
