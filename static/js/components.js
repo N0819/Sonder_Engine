@@ -380,7 +380,17 @@ async function fetchModels(pid) {
   try { const r = await api("GET", `/api/providers/${pid}/models`); S.models[pid] = r.models; return r.models }
   catch (e) { return [] }
 }
-function modelCombobox(providers, cp, cm, onChange) {
+async function fetchImageModels(pid) {
+  if (S.imageModels[pid]) return S.imageModels[pid];
+  try { const r = await api("GET", `/api/providers/${pid}/image_models`); S.imageModels[pid] = r.models; return r.models }
+  catch (e) { return [] }
+}
+// `opts.fetch`/`opts.cache` let the same widget drive a different catalogue
+// (image models) without duplicating the dropdown, filtering and
+// click-outside handling.
+function modelCombobox(providers, cp, cm, onChange, opts) {
+  const fetchList = (opts && opts.fetch) || fetchModels;
+  const cache = (opts && opts.cache) || S.models;
   const psel = el("select", {}, [el("option", { value: "" }, "(provider)"),
   ...providers.map(p => el("option", { value: p.id, ...(String(p.id) === String(cp) ? { selected: "" } : {}) }, p.name))]);
   const minput = el("input", { style: "flex:1", placeholder: "search models…", value: cm || "", autocomplete: "off" });
@@ -394,7 +404,7 @@ function modelCombobox(providers, cp, cm, onChange) {
   async function load(pid) {
     if (!pid) { models = []; return }
     dd.innerHTML = ""; dd.style.display = "block"; dd.append(el("div", { class: "dd-opt dim" }, "Loading…"));
-    models = await fetchModels(pid); showDD();
+    models = await fetchList(pid); showDD();
   }
   function showDD() {
     const q = minput.value.toLowerCase();
@@ -421,7 +431,7 @@ function modelCombobox(providers, cp, cm, onChange) {
       dd.append(o);
     }
   }
-  minput.onfocus = async () => { if (psel.value && !S.models[psel.value]) await load(+psel.value); showDD() };
+  minput.onfocus = async () => { if (psel.value && !cache[psel.value]) await load(+psel.value); showDD() };
   minput.oninput = () => { showDD(); emitChange() };
   const onDocClick = e => {
     // Self-remove once this combobox's DOM is detached (modal closed/rebuilt),

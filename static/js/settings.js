@@ -1011,6 +1011,26 @@ function renderFirstRunProviderSetup(b) {
         "Skip this — show full provider settings")));
 }
 
+// The size a scene backdrop wants out of a model's own list: landscape, and
+// as close as possible to the 1536x1024 the engine defaults to. Biggest would
+// be wrong -- these models price per size, so "largest available" quietly
+// picks the most expensive option in the list.
+function preferredBackdropSize(sizes) {
+  const target = 1536 * 1024;
+  // Separator varies by model in the same catalogue: "1536x1024" for some,
+  // "1024*1024" for others. Matching only "x" silently treated every
+  // asterisk model as unparseable and fell through to sizes[0] — a square,
+  // which is the one shape a backdrop should never be.
+  const parsed = sizes
+    .map(s => { const m = /^(\d+)\s*[x*×]\s*(\d+)$/i.exec(s); return m ? { s, w: +m[1], h: +m[2] } : null; })
+    .filter(d => d && d.w > d.h);
+  if (parsed.length) {
+    return parsed.sort((a, b) =>
+      Math.abs(a.w * a.h - target) - Math.abs(b.w * b.h - target))[0].s;
+  }
+  return sizes.find(s => /landscape/i.test(s)) || sizes[0];
+}
+
 function renderFullApiSettings(b) {
   const am = structuredClone(S.boot.agent_models || {});
   const ds = S.boot.default_samplers;
@@ -1168,6 +1188,56 @@ function renderFullApiSettings(b) {
           }, "Save routing")),
         el("div", { class: "small dim" },
           "Pinning one upstream without 'never fall back' still lets OpenRouter route elsewhere when that upstream is busy — tick both to guarantee it."));
+    }
+
+    // Scene backdrops. Its own picker rather than a row in Agent models
+    // because image generation is a different API surface entirely (a
+    // separate endpoint, and on nano-gpt a separate catalogue) -- see
+    // providers.image_model().
+    {
+      const cfg = S.boot.image_model || {};
+      const sizeIn = el("input", {
+        style: "width:150px", placeholder: "1536x1024", value: cfg.size || ""
+      });
+      // Sizes are per-model and not always WxH: plenty of these take named
+      // resolutions ("landscape_16_9", "square_hd") instead. Offering the
+      // model's own list is the difference between a picker and a trap --
+      // a mismatched size only fails later, at generation time.
+      const showSizesFor = ({ provider, model }) => {
+        const row = (S.imageModels[provider] || []).find(m => m.id === model);
+        const sizes = (row && row.sizes) || [];
+        if (!sizes.length) { sizeIn.placeholder = "1536x1024"; return; }
+        sizeIn.placeholder = sizes.slice(0, 3).join(" · ");
+        if (!sizes.includes(sizeIn.value.trim())) {
+          sizeIn.value = preferredBackdropSize(sizes);
+        }
+      };
+      const imgCombo = modelCombobox(S.boot.providers, cfg.provider ?? null,
+        cfg.model ?? null, showSizesFor,
+        { fetch: fetchImageModels, cache: S.imageModels });
+      const enableBox = el("input", {
+        type: "checkbox", ...(S.boot.backdrops_enabled ? { checked: "" } : {})
+      });
+      b.append(el("h4", {}, "Scene backdrops"),
+        el("div", { class: "small dim" },
+          "Paints a generated image of the room behind the story. The picture is built from the room's spatial description only — never from who is standing in it — so no character ever appears in one. Each distinct room is generated once and cached, so revisiting a place is free."),
+        el("div", { class: "row", style: "margin:6px 0" },
+          imgCombo.psel, imgCombo.mwrap, sizeIn,
+          el("button", {
+            onclick: async () => {
+              const picked = imgCombo.read();
+              await api("PUT", "/api/image_model", { ...picked, size: sizeIn.value.trim() });
+              await api("PUT", "/api/backdrops", { enabled: enableBox.checked });
+              await boot();
+              toast(picked.provider && picked.model
+                ? "Backdrop image model saved." : "Backdrop image model cleared.", "ok");
+            },
+          }, "Save")),
+        el("div", { class: "row", style: "margin:6px 0" },
+          el("label", { class: "small" }, enableBox,
+            " Generate backdrops for new rooms (costs one image per room)")),
+        el("div", { class: "small dim" },
+          "With this off, backdrops already generated still show — they're free — but no new ones are commissioned. Picking a model fills in a size it actually supports (they differ, and some take names like “landscape_16_9” rather than pixels); landscape is preferred because the picture sits behind a centred column in a browser window. Edit-only models are left out of the list — a backdrop is generated from text alone."));
     }
 
     b.append(el("h4", {}, "Agent models"),

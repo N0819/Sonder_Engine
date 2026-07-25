@@ -15,10 +15,14 @@ prompt from perception prose and stripped people with regexes; it merged
 sentences, leaked dialogue fragments, and produced a thin source. Structured
 data is both safer and considerably richer.
 
-**2. Backdrops depict the room EMPTY -- no people, ever.** Falls out of rule 1
-rather than needing enforcement: occupants are never in the projection to begin
-with, so a character or a monster cannot reach the image. This also avoids
-uncanny likenesses and is what makes per-room caching correct.
+**2. Backdrops depict the room EMPTY -- no people, ever.** Mostly this falls
+out of rule 1: occupants are never in the projection to begin with, so a
+character or a monster cannot reach the image. The one place it does not fall
+out for free is `rooms[id].desc`, which the whitelist admits and which live
+data proved carries populations ("Crew members and civilians gather here during
+off-duty hours"), so that one field is additionally people-stripped on the way
+out -- see `place_desc`. Keeping people out also avoids uncanny likenesses and
+is what makes per-room caching correct.
 
 **3. A cache key is a room plus its VISIBLE state.** Not the room id alone -- a
 room whose lights just failed, whose window broke, or which is now on fire is
@@ -33,6 +37,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 
 from db import q, wget_for_frame
 
@@ -73,6 +78,18 @@ def time_bucket(value):
     return ""
 
 
+def place_desc(room):
+    """A room's description with its occupants stripped out.
+
+    The single definition of "what this place looks like", used by BOTH the
+    prompt projection and the cache key so the two cannot drift: a key that
+    hashes text the prompt never sees would pay for regenerations the picture
+    cannot show. Defined here, above its callers, because `visual_signature`
+    is the first of them.
+    """
+    return _setting_only((room or {}).get("desc") or "")
+
+
 def _room_of_player(scene, player_name):
     positions = (scene or {}).get("positions") or {}
     if player_name and positions.get(player_name):
@@ -92,7 +109,11 @@ def visual_signature(scene, room_id, style=None):
     material = {
         "room": room_id,
         "name": room.get("name") or "",
-        "desc": room.get("desc") or "",
+        # The PROJECTED description, not the raw one: the cache key has to be a
+        # function of what actually reaches the image prompt. Hashing the raw
+        # text would regenerate a room because someone was written into (or out
+        # of) its description -- a change the picture cannot show.
+        "desc": place_desc(room),
         "time": time_bucket(scene.get("time")),
         "location": scene.get("location") or "",
         "style": style or {},
@@ -133,7 +154,19 @@ def cached_backdrop(chat_id, signature):
 _PERSON_CLAUSE = re.compile(
     r"[^.!?]*\b(he|she|they|him|her|them|his|hers|their|"
     r"says?|said|asks?|asked|replies|replied|leans?|turns?|looks?|walks?|"
-    r"stands?|sits?|smiles?|nods?|whispers?|shouts?|steps?)\b[^.!?]*[.!?]",
+    r"stands?|sits?|smiles?|nods?|whispers?|shouts?|steps?|"
+    # Collective occupants. Room DESCRIPTIONS name populations where narrative
+    # prose would name a character -- live data from chat 34 had "Crew members
+    # and civilians gather here during off-duty hours, conversations murmuring
+    # at various tables" sitting in rooms.enterprise_ten_forward.desc, which
+    # the pronoun/speech patterns above do not touch. A backdrop built from
+    # that sentence draws a lounge full of people.
+    # "crew members" and not bare "crew" on purpose: the same chat's corridor
+    # reads "doors lead to crew quarters, labs, and utility spaces" and the
+    # turbolift panel scrolls "crew registration data" -- both architecture,
+    # both kept.
+    r"crew ?members?|civilians?|patrons?|passengers?|bystanders?|"
+    r"onlookers?|crowds?|people|figures?)\b[^.!?]*[.!?]",
     re.I)
 
 
@@ -186,6 +219,18 @@ def room_projection(scene, room_id):
     scene = scene or {}
     room = ((scene.get("rooms") or {}).get(room_id) or {})
     out = {k: room.get(k) for k in _PLACE_FIELDS if room.get(k)}
+    # `desc` is the richest field and was assumed to be pure architecture. Live
+    # data says otherwise -- mapping writes occupants into it ("Crew members
+    # and civilians gather here...") -- so it goes through the same
+    # people-stripping filter as the optional prose flavour. Belt and braces
+    # over the whitelist, exactly like the "no people" instruction in the
+    # prompt: whichever one is imperfect, a person still has to get past both.
+    # No raw-text fallback when stripping empties it: a description made
+    # entirely of occupants must yield NO description, not the occupants back.
+    if out.get("desc"):
+        out["desc"] = place_desc(room)
+        if not out["desc"]:
+            out.pop("desc")
     out["room"] = room_id
     # scene.location is NOT included -- but NOT because the engine is broken.
     # It tracks relocation correctly since TR-3 (checkpoints after that fix
@@ -398,6 +443,25 @@ def refine_prompt(draft, place):
         return draft
 
 
+# Generation is slow and costs real money, and the same signature is very
+# easy to request twice at once: two turns in the same room become visible
+# together, the player scrolls back and forth, a second browser tab is open.
+# A per-signature lock makes the second caller WAIT for the first and then
+# take the cache hit instead of paying for the identical picture twice.
+# The dict is never pruned -- one small entry per distinct room-state seen in
+# a process lifetime -- because pruning it would race with the waiters.
+_GEN_LOCKS = {}
+_GEN_LOCKS_GUARD = threading.Lock()
+
+
+def _generation_lock(key):
+    with _GEN_LOCKS_GUARD:
+        lock = _GEN_LOCKS.get(key)
+        if lock is None:
+            lock = _GEN_LOCKS[key] = threading.Lock()
+        return lock
+
+
 def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
                       force=False):
     """Produce (or serve from cache) the backdrop for a turn.
@@ -415,15 +479,23 @@ def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
         return {"path": req["cached"], "signature": req["signature"],
                 "room": req["room_name"], "prompt": None, "cached": True}
 
-    prompt = refine_prompt(
-        compose_prompt(req["place"], style, req["flavour"]), req["place"])
-    data = generate_image(prompt)
+    with _generation_lock((chat_id, req["signature"])):
+        # Re-check inside the lock: whoever held it may have just written
+        # exactly the image this call was about to pay for.
+        existing = cached_backdrop(chat_id, req["signature"])
+        if existing and not force:
+            return {"path": existing, "signature": req["signature"],
+                    "room": req["room_name"], "prompt": None, "cached": True}
 
-    path = backdrop_path(chat_id, req["signature"])
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".part"
-    with open(tmp, "wb") as fh:
-        fh.write(data)
-    os.replace(tmp, path)          # atomic: a reader never sees a half image
+        prompt = refine_prompt(
+            compose_prompt(req["place"], style, req["flavour"]), req["place"])
+        data = generate_image(prompt)
+
+        path = backdrop_path(chat_id, req["signature"])
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".part"
+        with open(tmp, "wb") as fh:
+            fh.write(data)
+        os.replace(tmp, path)      # atomic: a reader never sees a half image
     return {"path": path, "signature": req["signature"],
             "room": req["room_name"], "prompt": prompt, "cached": False}

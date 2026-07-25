@@ -1,4 +1,4 @@
-import contextvars, json, queue, time, threading, os
+import contextvars, json, queue, re, time, threading, os
 import updates
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Body, HTTPException, Query, Request
@@ -12,7 +12,7 @@ from db import q, qi, qtx, transaction, wget, wset, get_setting, set_setting, pa
 from db import _FRAME_KEY_SEP
 from providers import (
     chat_complete, chat_complete_async, token_sink, cancel_event,
-    resolve_role, list_models, provider, agent_models,
+    resolve_role, list_models, list_image_models, image_model, provider, agent_models,
     openrouter_routing, normalize_openrouter_routing, list_openrouter_endpoints,
     max_output_tokens, _coerce_max_output_tokens,
     reasoning_efforts, _coerce_reasoning_effort, REASONING_EFFORTS,
@@ -68,6 +68,7 @@ from memory import (
     dump_character_memories, import_character_memories,
 )
 from scene import persona_of, get_scene
+from backdrops import build_backdrop_request, generate_backdrop, cached_backdrop
 
 # ---- App setup ----
 # No CORS middleware: the frontend is always served same-origin from this
@@ -860,6 +861,11 @@ def bootstrap():
         "lorebooks": [dict(r) for r in q("SELECT * FROM lorebooks WHERE chat_id IS NULL")],
         "chats": [dict(r) for r in q("SELECT * FROM chats ORDER BY id DESC")],
         "nsfw_enabled": get_setting("nsfw_enabled") == "1",
+        # Scene backdrops (backdrops.py). Off unless switched on: every new
+        # room costs a real image generation, so this is opt-in per install
+        # rather than something a first run starts spending money on.
+        "image_model": image_model(),
+        "backdrops_enabled": get_setting("backdrops_enabled") == "1",
         "auto_promote": get_setting("auto_promote") != "0",
         "default_prompts": DEFAULT_PROMPTS,
         "prompt_presets": presets(),
@@ -871,6 +877,34 @@ def bootstrap():
 def put_agent_models(body: dict = Body(...)):
     set_setting("agent_models", json.dumps(body))
     return {"ok": True}
+
+@app.put("/api/image_model")
+def put_image_model(body: dict = Body(...)):
+    """The image generator used for scene backdrops.
+
+    Its own setting rather than an `agent_models` role because image
+    generation is a different API surface -- see providers.image_model().
+    Sending no provider/model clears it, which switches backdrops off at the
+    source without touching the enabled flag.
+    """
+    pid, model = body.get("provider"), str(body.get("model") or "").strip()
+    if not pid or not model:
+        set_setting("image_model", "")
+        return {"ok": True, "image_model": None}
+    if not provider(int(pid)):
+        raise HTTPException(404, "Provider not found")
+    cfg = {"provider": int(pid), "model": model}
+    size = str(body.get("size") or "").strip()
+    if size:
+        cfg["size"] = size
+    set_setting("image_model", json.dumps(cfg))
+    return {"ok": True, "image_model": cfg}
+
+@app.put("/api/backdrops")
+def put_backdrops(body: dict = Body(...)):
+    enabled = bool(body.get("enabled"))
+    set_setting("backdrops_enabled", "1" if enabled else "0")
+    return {"enabled": enabled}
 
 @app.put("/api/openrouter_routing")
 def put_openrouter_routing(body: dict = Body(...)):
@@ -1153,6 +1187,15 @@ def models(pid: int):
     prov = provider(pid)
     if not prov: raise HTTPException(404)
     try: return {"models": list_models(prov)}
+    except Exception as e: raise HTTPException(502, str(e))
+
+@app.get("/api/providers/{pid}/image_models")
+def image_models(pid: int):
+    """Separate from /models because image generation is a separate catalogue
+    on the one provider that publishes one -- see providers.list_image_models."""
+    prov = provider(pid)
+    if not prov: raise HTTPException(404)
+    try: return {"models": list_image_models(prov)}
     except Exception as e: raise HTTPException(502, str(e))
 
 # ============================ CHARACTERS ============================
@@ -3706,3 +3749,118 @@ def turn_del(tid: int):
         qi("DELETE FROM turns WHERE id=?", (tid,))
 
     return {"ok": True}
+# ============================ SCENE BACKDROPS ============================
+# A generated image of the room the player is standing in, rendered behind the
+# transcript. Entirely out of band: nothing here is reachable from the turn
+# pipeline, and no turn ever waits on an image. See backdrops.py for the three
+# rules that make the feature safe (whitelisted spatial projection, never any
+# people, cache keyed on room + visible state).
+#
+# Every route below lives under /api/, so the access-control middleware makes
+# it host-only for free. Serving the PNGs from a StaticFiles mount instead
+# would have put an enumerable dump of every room in every story outside that
+# middleware entirely -- the paths are predictable and the middleware waves
+# through anything not under /api/.
+
+# A signature is sha256(...).hexdigest()[:24] (backdrops.visual_signature), so
+# hex-only is both the true shape and, because the value is interpolated into
+# a filesystem path, the thing that makes `../../engine.db` unrepresentable.
+_BACKDROP_SIGNATURE = re.compile(r"^[0-9a-f]{8,64}$")
+
+
+def _backdrop_turn(tid: int):
+    turn = q("SELECT * FROM turns WHERE id=?", (tid,), one=True)
+    if not turn:
+        raise HTTPException(404, "Turn not found")
+    return turn
+
+
+def _backdrop_player(chat_id: int):
+    """The player's display name, which is how backdrops.py finds their room.
+
+    The same persona_of/persona_name pair used by commit.py and the cast
+    routes -- deliberately not the denormalised personas.name column, which
+    diverges from the sheet.
+    """
+    chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+    return persona_name(persona_of(dict(chat)))
+
+
+def _backdrop_url(chat_id, signature):
+    return "/api/chats/%d/backdrop/%s.png" % (int(chat_id), signature)
+
+
+@app.get("/api/turns/{tid}/backdrop")
+def turn_backdrop(tid: int):
+    """What backdrop this turn wants, and whether it is already on disk.
+
+    Cheap and free: resolves the room and the cache signature, and NEVER
+    generates. The frontend calls this for whichever turn the reader is
+    looking at, then POSTs only if it wants to pay for a miss.
+    """
+    turn = _backdrop_turn(tid)
+    cid = turn["chat_id"]
+    req = build_backdrop_request(cid, turn["idx"], _backdrop_player(cid),
+                                 style_guide(cid))
+    configured = bool(image_model())
+    enabled = get_setting("backdrops_enabled") == "1"
+    if not req:
+        # No room resolved -- an opening turn before mapping has placed
+        # anyone, say. Not an error: there is simply nothing to depict.
+        return {"enabled": enabled, "configured": configured, "room": None,
+                "signature": None, "ready": False, "url": None}
+    return {
+        "enabled": enabled,
+        "configured": configured,
+        "room": req["room_name"],
+        "signature": req["signature"],
+        "ready": bool(req["cached"]),
+        "url": _backdrop_url(cid, req["signature"]) if req["cached"] else None,
+    }
+
+
+@app.post("/api/turns/{tid}/backdrop")
+def turn_backdrop_generate(tid: int, body: dict = Body(default={})):
+    """Generate this turn's backdrop, or return the cached one.
+
+    A plain sync def, so FastAPI runs the (tens of seconds) image call in its
+    threadpool exactly like every other slow route here. Concurrent callers
+    asking for the same signature are deduplicated inside generate_backdrop --
+    the second one waits and then takes the cache hit rather than paying
+    twice.
+    """
+    turn = _backdrop_turn(tid)
+    cid = turn["chat_id"]
+    if not image_model():
+        raise HTTPException(
+            503, "No image model configured — pick one under ⚙ API › Scene backdrops.")
+    try:
+        out = generate_backdrop(cid, turn["idx"], _backdrop_player(cid),
+                                style_guide(cid), force=bool(body.get("force")))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"Backdrop generation failed: {exc}") from exc
+    if not out:
+        raise HTTPException(409, "This turn has no room to depict yet.")
+    return {"enabled": get_setting("backdrops_enabled") == "1",
+            "configured": True,
+            "room": out["room"], "signature": out["signature"],
+            "ready": True, "cached": out["cached"],
+            "url": _backdrop_url(cid, out["signature"])}
+
+
+@app.get("/api/chats/{cid}/backdrop/{signature}.png")
+def backdrop_image(cid: int, signature: str):
+    if not _BACKDROP_SIGNATURE.match(signature or ""):
+        raise HTTPException(404)
+    path = cached_backdrop(cid, signature)
+    if not path:
+        raise HTTPException(404, "No backdrop for that signature")
+    # Content-addressed by signature: the bytes at a given URL can never
+    # change, so this is safely immutable and a revisited room repaints
+    # without touching the network at all.
+    return FileResponse(path, media_type="image/png",
+                        headers={"Cache-Control": "private, max-age=31536000, immutable"})
