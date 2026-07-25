@@ -16,3 +16,5 @@ venv/
 .claude/worktrees/
 demo/tavern_scene_life/run.db*
 demo/tavern_scene_life/run_out.txt
+demo/trek_bridge_scene_life/run.db*
+demo/trek_bridge_scene_life/run_out.txt

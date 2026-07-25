@@ -44,6 +44,7 @@ from prompts import get_prompt
 from spatial import hear_level, spatial_rel
 
 from commit import (
+    name_in_roster,
     pick_background_reactors,
     _background_name_mentioned,
     _character_address_of,
@@ -53,7 +54,12 @@ from commit import (
     _valid_pending_reply,
 )
 
-from background_claims import claimant_credence, novel_proper_nouns
+from background_claims import (
+    MAX_REF_WORDS,
+    claimant_credence,
+    is_title_only,
+    novel_proper_nouns,
+)
 
 from .common import _agent_json
 
@@ -297,7 +303,13 @@ def managed_presences(ctx, cap):
     name_ids = _name_to_entity_id(sc)
     out = []
     for name, rec in presences.items():
-        if name.casefold() in roster:
+        # Title-aware: the Enterprise run tracked "Captain Jean-Luc Picard"
+        # while the roster held "Jean-Luc Picard", so a REGISTERED character
+        # with a sheet, memory and psychology was handed to the stateless
+        # manager as furniture. The model declined to puppet him -- which is
+        # exactly the "compliance holds until it doesn't" situation this
+        # codebase keeps learning to make structural instead.
+        if name_in_roster(name, roster):
             continue
         room = _presence_room(sc, name, rec, name_ids)
         if scope is not None and room and room not in scope:
@@ -501,11 +513,22 @@ def _claimed_refs(entry, quote, known_names):
     declared = [str(a).strip() for a in (entry.get("asserts") or [])
                 if str(a).strip()]
     detected = novel_proper_nouns(quote, known_names)
+    known_cf = {k.casefold() for k in known_names}
     out = []
     for ref in declared + detected:
-        if ref.casefold() in {o.casefold() for o in out}:
+        # A ref is a RATIFICATION KEY, not a summary: it has to be short enough
+        # to reappear in later prose. La Forge self-declared a whole sentence
+        # in the Enterprise run, so when Picard acted on it ("isolate that
+        # junction") nothing matched and a plainly-adopted claim stayed hearsay.
+        if len(ref.split()) > MAX_REF_WORDS:
+            ref = " ".join(ref.split()[:MAX_REF_WORDS])
+        cf = ref.casefold()
+        if not cf or cf in known_cf or is_title_only(ref):
             continue
-        if ref.casefold() in {k.casefold() for k in known_names}:
+        # Drop anything already covered by a ref we kept, in either direction --
+        # the scan re-finds fragments of what the model already declared
+        # ("Two D'deridex" inside "Two D'deridex-class warbirds at bearing …").
+        if any(cf in o.casefold() or o.casefold() in cf for o in out):
             continue
         out.append(ref)
     return out

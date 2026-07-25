@@ -61,7 +61,32 @@ _STOPWORDS = frozenset({
     "come", "came", "go", "went", "take", "took", "bet", "heard", "said",
 })
 
-_PROPER = re.compile(r"\b([A-Z][a-z']+(?:\s+[A-Z][a-z']+)*)\b")
+# Ranks and honorifics. A line ending "...profiles, Captain." is addressing
+# someone, not naming a new person -- the Enterprise run recorded "Captain" as
+# invented lore and then ratified it. Titles are also stripped when matching
+# against known names, so "Worf" is recognized as the established
+# "Lieutenant Worf" rather than a second person.
+_TITLES = frozenset({
+    "dr", "mr", "mrs", "ms", "mister", "madam", "madame", "sir", "maam",
+    "lord", "lady", "master", "professor", "doctor", "captain", "commander",
+    "cmdr", "lieutenant", "lt", "ensign", "chief", "admiral", "general",
+    "colonel", "major", "sergeant", "corporal", "private", "father", "mother",
+    "sister", "brother", "reverend", "king", "queen", "prince", "princess",
+    "number one", "counselor", "counsellor", "helm", "conn", "ops", "tactical",
+    "engineering", "bridge", "sickbay",
+})
+
+# A ratification key must be short enough to actually appear in later prose.
+# The Enterprise run had La Forge self-declare a whole sentence as a ref, so
+# when Picard acted on it ("isolate that junction") nothing matched and a claim
+# the fiction had plainly adopted stayed hearsay until expiry.
+MAX_REF_WORDS = 6
+
+# Hyphenated given names are one token, not two: without this "Captain
+# Jean-Luc Picard" split into "Captain Jean" + "Luc Picard" and neither matched
+# the roster's "Jean-Luc Picard".
+_WORD = r"[A-Z][a-z']+(?:-[A-Z][a-z']+)*"
+_PROPER = re.compile(rf"\b({_WORD}(?:\s+{_WORD})*)\b")
 # A capitalized word is not evidence of a name when it merely opens a sentence.
 _SENTENCE_START = re.compile(r"(?:^|[.!?…]['\"]?\s+)$")
 _CONTRACTION = re.compile(r"'(?:d|s|ll|re|ve|t|m)$", re.IGNORECASE)
@@ -73,6 +98,26 @@ def _normalize_ref(phrase):
     Briddock" are one name rather than two claims."""
     words = [_CONTRACTION.sub("", w) for w in str(phrase or "").split()]
     return " ".join(w for w in words if w).strip()
+
+
+def _strip_titles(name):
+    """Leading ranks/honorifics removed, so "Lieutenant Worf" and "Worf" are
+    the same referent."""
+    words = str(name or "").strip().split()
+    while words and words[0].strip(".,").casefold() in _TITLES:
+        words = words[1:]
+    return " ".join(words).strip()
+
+
+def is_title_only(phrase):
+    """True when the phrase is nothing but a rank/honorific -- a form of
+    address, never an invented name."""
+    cf = _normalize_ref(phrase).casefold().strip(".,!?")
+    if not cf:
+        return True
+    if cf in _TITLES:
+        return True
+    return all(w.strip(".,") in _TITLES for w in cf.split())
 
 
 def _known_variants(known):
@@ -88,6 +133,9 @@ def _known_variants(known):
         stripped = _LEADING_ARTICLE.sub("", name).strip()
         if stripped:
             out.add(stripped.casefold())
+        titleless = _strip_titles(name)
+        if titleless:
+            out.add(titleless.casefold())
     return out
 
 
@@ -117,7 +165,12 @@ def novel_proper_nouns(quote, known):
         cf = phrase.casefold()
         if cf in known_cf or cf in _STOPWORDS:
             continue
+        # A bare rank is a form of address, not a new name.
+        if is_title_only(phrase):
+            continue
         if _LEADING_ARTICLE.sub("", cf).strip() in known_cf:
+            continue
+        if _strip_titles(phrase).casefold() in known_cf:
             continue
         # A single capitalized word that only opens a sentence is not a name --
         # and "sentence start" is not just offset 0 ("...end of autumn. That'd
