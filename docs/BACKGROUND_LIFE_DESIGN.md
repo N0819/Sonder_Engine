@@ -405,6 +405,17 @@ passing the existing presences' blurbs as **negative** examples ("do not reuse
 these registers"). Cheap, and it also keeps a long-running location from
 accumulating five variations on the same person.
 
+*Risk — the tic becomes a catchphrase.* Frozen cuts both ways: a `tell` replayed
+into every voicing call is a standing instruction to perform it, and an extra
+who polishes the same glass on all fourteen turns stops reading as a person and
+starts reading as a stuck animation. This is the failure mode most likely to
+show up in real play, and it argues for treating the blurb as **available
+colour, not a required beat** — the prompt should say the tell is something they
+*may* do occasionally, and the digest (which records what they actually did
+recently) is what should suppress an immediate repeat. Worth watching from the
+first play session, since it is a prompt-level fix if caught early and a design
+problem if the blurb schema hardens around it.
+
 ### 3.9 Time passed: interim filler on return
 
 A frozen digest plus a resumed scene means a presence behaves as though the
