@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from affect import CRISIS_STRAIN_MIN, RUPTURE_FORCE_AFTER
+from affect import CRISIS_STRAIN_MIN, RUPTURE_FORCE_AFTER, ground_tells
 from db import q
 from character_schema import (
     character_abilities,
@@ -243,6 +243,16 @@ def character_step(ctx, cid, nonce):
     # fed back so the model does not reuse the same gesture every beat.
     _recent_tells = [str(t) for t in (stored_state.get("recent_tells") or [])
                      if str(t).strip()]
+    # Tell-ground ledger (F6, written by commit): each recent cue with the
+    # private ground it betrayed, fed back so a planted tell can be PAID OFF
+    # in a later beat -- the ground surfacing in behavior or speech -- instead
+    # of dangling forever as fake significance. Private context only; the
+    # grounds never reach observers.
+    _tell_grounds = [
+        {"cue": str(g.get("cue") or ""), "because": str(g.get("because") or "")}
+        for g in (stored_state.get("tell_grounds") or [])
+        if isinstance(g, dict) and str(g.get("cue") or "").strip()
+    ]
     _self = {
         "entity_id": f"character:{cid}",
         "name": character_name(sh),
@@ -274,6 +284,8 @@ def character_step(ctx, cid, nonce):
         _self["crisis"] = True
     if _recent_tells:
         _self["recent_tells"] = _recent_tells
+    if _tell_grounds:
+        _self["tell_grounds"] = _tell_grounds
     payload = {
         "self": _self,
         "perception": {
@@ -373,6 +385,15 @@ def character_step(ctx, cid, nonce):
             "channel or gesture. A body under the same pressure finds new ways to "
             "betray it: vary the channel (face|eyes|voice|hands|posture|breath) "
             "and the cue itself.")
+    if _tell_grounds:
+        _cprompt += (
+            "\n\nTELL PAYOFF: self.tell_grounds lists physical cues you have "
+            "recently shown and, for each, the private ground it betrayed "
+            "(`because`). These are debts the story has planted: when the scene "
+            "gives a natural opening, let a ground SURFACE -- in what you do, "
+            "choose, or say -- so an observant witness's banked suspicion can pay "
+            "off. Never contradict a ground already shown, and never announce it "
+            "as exposition; it emerges through behavior.")
     out = _agent_json(
         role,
         "character",
@@ -390,6 +411,15 @@ def character_step(ctx, cid, nonce):
     ctx.warnings.extend(warnings)
 
     out = _normalize_character_output(out)
+    # F6: every manifest tell gets a stored ground (`because`) -- supplied by
+    # the model or derived deterministically from the tell's own `betrays`
+    # pointer -- so a planted anomaly always has a referent a later beat can
+    # pay off. The ground stays private (perception delivers only the cue).
+    if out.get("manifest"):
+        out["manifest"], _tell_warnings = ground_tells(
+            out.get("manifest"), out.get("active_state"))
+        for _w in _tell_warnings:
+            ctx.add_warning(f"character {character_name(sh)}: {_w}")
     out["mind_model_updates"] = cap_mind_model_updates(out.get("mind_model_updates") or [])
     norm_sequence(out)
     out["sequence"] = assign_event_ids(
