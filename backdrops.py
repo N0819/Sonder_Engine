@@ -499,3 +499,85 @@ def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
         os.replace(tmp, path)      # atomic: a reader never sees a half image
     return {"path": path, "signature": req["signature"],
             "room": req["room_name"], "prompt": prompt, "cached": False}
+
+
+# --- out-of-band generation queue -----------------------------------------
+#
+# Nothing may WAIT on an image. generate_backdrop() blocks for the length of a
+# generation -- tens of seconds, up to the provider timeout of three minutes --
+# and a route that calls it directly holds a server worker for that whole time,
+# for a picture the reader is not waiting on anyway: the prose is already on
+# screen. A caller asks for a backdrop, gets "ready" or "pending" straight
+# back, and a worker thread produces it.
+#
+# The queue is per-signature, like the generation lock it sits above: two
+# requests for the same picture produce one worker, and a request for a room
+# already being drawn simply joins it.
+
+_QUEUE_LOCK = threading.Lock()
+_IN_FLIGHT = {}          # signature -> True while a worker is generating
+_LAST_ERROR = {}         # signature -> str, so a failure is visible, not silent
+
+
+def backdrop_status(chat_id, signature):
+    """'ready' | 'pending' | 'error' | 'absent' for one signature."""
+    if cached_backdrop(chat_id, signature):
+        return "ready"
+    with _QUEUE_LOCK:
+        if signature in _IN_FLIGHT:
+            return "pending"
+        if signature in _LAST_ERROR:
+            return "error"
+    return "absent"
+
+
+def backdrop_error(signature):
+    """The last failure for this signature, or None.
+
+    Kept because the alternative is a picture that never appears and never
+    explains itself -- out-of-band work that fails silently is worse than work
+    that fails loudly.
+    """
+    with _QUEUE_LOCK:
+        return _LAST_ERROR.get(signature)
+
+
+def request_backdrop(chat_id, turn_idx, player_name=None, style=None,
+                     force=False):
+    """Ensure this turn's backdrop exists, generating in the background.
+
+    Returns {signature, status, room} and NEVER blocks on the image. A retry
+    after a failure is explicit: the error is cleared here, when someone asks
+    again, rather than expiring on a timer.
+    """
+    req = build_backdrop_request(chat_id, turn_idx, player_name, style)
+    if not req:
+        return None
+    signature = req["signature"]
+    if req["cached"] and not force:
+        return {"signature": signature, "status": "ready",
+                "room": req["room_name"]}
+
+    with _QUEUE_LOCK:
+        if signature in _IN_FLIGHT:
+            return {"signature": signature, "status": "pending",
+                    "room": req["room_name"]}
+        _IN_FLIGHT[signature] = True
+        _LAST_ERROR.pop(signature, None)
+
+    def _work():
+        try:
+            generate_backdrop(chat_id, turn_idx, player_name, style,
+                              force=force)
+        except Exception as exc:
+            with _QUEUE_LOCK:
+                _LAST_ERROR[signature] = "%s: %s" % (type(exc).__name__,
+                                                     str(exc)[:300])
+        finally:
+            with _QUEUE_LOCK:
+                _IN_FLIGHT.pop(signature, None)
+
+    threading.Thread(target=_work, name="backdrop-%s" % signature[:8],
+                     daemon=True).start()
+    return {"signature": signature, "status": "pending",
+            "room": req["room_name"]}

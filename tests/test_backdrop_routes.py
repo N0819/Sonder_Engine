@@ -41,6 +41,12 @@ def client(temp_db):
 def backdrop_dir(tmp_path, monkeypatch):
     """Never write into the repo's own gitignored backdrops/ during tests."""
     monkeypatch.setattr(backdrops, "BACKDROP_DIR", str(tmp_path))
+    # The queue's state is module-level and keyed by signature, and every test
+    # here builds the SAME scene -- so without this a failure recorded by one
+    # test is still "error" for the next one, which would make these pass or
+    # fail depending on the order they ran in.
+    backdrops._IN_FLIGHT.clear()
+    backdrops._LAST_ERROR.clear()
     return tmp_path
 
 
@@ -194,3 +200,135 @@ def test_backdrop_routes_are_host_only(story, backdrop_dir, temp_db):
         assert anon.get(
             f"/api/chats/{story['chat_id']}/backdrop/{sig}.png").status_code == 401
     guest.reset_host_account()
+
+
+# --- the generation queue --------------------------------------------------
+#
+# The point of these: a route must never hold a server worker for the length of
+# an image generation. The prose is already on screen; nobody is waiting.
+
+def _configure_image_model(client, temp_db):
+    pid = temp_db.qi(
+        "INSERT INTO providers(name,kind,base_url,api_key) VALUES(?,?,?,?)",
+        ("nano", "nanogpt", "https://nano-gpt.com/api/v1", "k"))
+    r = client.put("/api/image_model", json={"provider": pid, "model": "flux"})
+    assert r.status_code == 200
+    return pid
+
+
+def _wait_for(predicate, timeout=5.0):
+    import time as _time
+    deadline = _time.monotonic() + timeout
+    while _time.monotonic() < deadline:
+        if predicate():
+            return True
+        _time.sleep(0.05)
+    return False
+
+
+def test_generate_returns_immediately_and_finishes_in_the_background(
+        client, story, backdrop_dir, temp_db, monkeypatch):
+    import time as _time
+
+    import providers
+    started = []
+
+    def slow_image(prompt, *a, **k):
+        started.append(prompt)
+        _time.sleep(0.6)               # stands in for tens of seconds
+        return b"\x89PNG generated"
+
+    monkeypatch.setattr(providers, "generate_image", slow_image)
+    _configure_image_model(client, temp_db)
+
+    began = _time.monotonic()
+    r = client.post(f"/api/turns/{story['turn_id']}/backdrop", json={})
+    elapsed = _time.monotonic() - began
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "pending"
+    assert body["ready"] is False and body["url"] is None
+    # The whole point: the request returned while the image was still being
+    # made. A blocking route would have taken at least as long as the call.
+    assert elapsed < 0.5, "the route waited for the image (%.2fs)" % elapsed
+
+    # And the GET is pollable: pending now, ready once the worker lands.
+    assert client.get(
+        f"/api/turns/{story['turn_id']}/backdrop").json()["status"] == "pending"
+    assert _wait_for(lambda: client.get(
+        f"/api/turns/{story['turn_id']}/backdrop").json()["status"] == "ready")
+
+    body = client.get(f"/api/turns/{story['turn_id']}/backdrop").json()
+    assert body["ready"] is True
+    assert client.get(body["url"]).content == b"\x89PNG generated"
+    assert len(started) == 1
+
+
+def test_two_requests_for_one_picture_share_a_worker(
+        client, story, backdrop_dir, temp_db, monkeypatch):
+    import time as _time
+
+    import providers
+    calls = []
+
+    def slow_image(prompt, *a, **k):
+        calls.append(prompt)
+        _time.sleep(0.4)
+        return b"\x89PNG generated"
+
+    monkeypatch.setattr(providers, "generate_image", slow_image)
+    _configure_image_model(client, temp_db)
+
+    first = client.post(f"/api/turns/{story['turn_id']}/backdrop", json={}).json()
+    second = client.post(f"/api/turns/{story['turn_id']}/backdrop", json={}).json()
+    assert first["status"] == "pending" and second["status"] == "pending"
+    assert _wait_for(lambda: client.get(
+        f"/api/turns/{story['turn_id']}/backdrop").json()["status"] == "ready")
+    assert len(calls) == 1, "paid twice for one picture"
+
+
+def test_a_failed_generation_is_reported_not_swallowed(
+        client, story, backdrop_dir, temp_db, monkeypatch):
+    """Out-of-band work that fails silently is worse than work that fails
+    loudly: the reader would sit in front of a picture that never arrives."""
+    import providers
+
+    def broken(prompt, *a, **k):
+        raise RuntimeError("insufficient credit")
+
+    monkeypatch.setattr(providers, "generate_image", broken)
+    _configure_image_model(client, temp_db)
+
+    client.post(f"/api/turns/{story['turn_id']}/backdrop", json={})
+    assert _wait_for(lambda: client.get(
+        f"/api/turns/{story['turn_id']}/backdrop").json()["status"] == "error")
+    body = client.get(f"/api/turns/{story['turn_id']}/backdrop").json()
+    assert "insufficient credit" in body["error"]
+    assert body["ready"] is False
+
+
+def test_asking_again_after_a_failure_retries(
+        client, story, backdrop_dir, temp_db, monkeypatch):
+    """The error clears when someone asks again, rather than expiring on a
+    timer -- topping up credit and pressing the button should just work."""
+    import providers
+    attempts = []
+
+    def flaky(prompt, *a, **k):
+        attempts.append(prompt)
+        if len(attempts) == 1:
+            raise RuntimeError("insufficient credit")
+        return b"\x89PNG generated"
+
+    monkeypatch.setattr(providers, "generate_image", flaky)
+    _configure_image_model(client, temp_db)
+
+    client.post(f"/api/turns/{story['turn_id']}/backdrop", json={})
+    assert _wait_for(lambda: client.get(
+        f"/api/turns/{story['turn_id']}/backdrop").json()["status"] == "error")
+
+    client.post(f"/api/turns/{story['turn_id']}/backdrop", json={})
+    assert _wait_for(lambda: client.get(
+        f"/api/turns/{story['turn_id']}/backdrop").json()["status"] == "ready")
+    assert len(attempts) == 2

@@ -794,6 +794,9 @@ class BlurbMintEntry(BaseModel):
     tell: str = ""
     look: str = ""
 
+class BackdropPromptOutput(BaseModel):
+    prompt: str = ""
+
 class BlurbMintOutput(BaseModel):
     blurbs: list[BlurbMintEntry] = Field(default_factory=list)
 
@@ -1132,6 +1135,7 @@ SCHEMA_MAP = {
     "background_react": BackgroundReactOutput,
     "scene_life": SceneLifeOutput,
     "blurb_mint": BlurbMintOutput,
+    "backdrop_prompt": BackdropPromptOutput,
 }
 
 def _coerce_int_list(value):

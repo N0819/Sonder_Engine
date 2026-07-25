@@ -1,5 +1,33 @@
 # Changelog
 
+## alpha4.1.1 — Backdrops stop holding the door
+
+Two follow-ups to alpha4.1, both rescued from a parallel implementation of the
+same feature that was written in a session whose context was lost. That branch
+is superseded and will not be merged, but it was ahead on these two points and
+they are worth having.
+
+### Fixed
+- **Generating a backdrop no longer blocks a server worker.** `POST
+  /api/turns/{id}/backdrop` used to run the image call inline: tens of seconds
+  normally, up to the provider's three-minute ceiling, with a request held open
+  the whole time for a picture nobody is waiting on — the prose is already on
+  screen. It now queues the work and returns `pending` immediately; a worker
+  thread generates, and the GET reports `ready` / `pending` / `error` for
+  polling. Two callers wanting the same picture share one worker, and a failure
+  is reported rather than swallowed — out-of-band work that fails silently
+  leaves the reader in front of an image that never arrives and never explains
+  itself. Asking again clears the error and retries, so topping up credit and
+  pressing the button just works.
+- **The `backdrop_prompt` agent actually runs.** `refine_prompt` called
+  `get_prompt("backdrop_prompt")` for a prompt that was never defined, so the
+  optional prompt-writing stage silently no-op'd on every call and every
+  backdrop used the deterministic template. The prompt and its schema now
+  exist. It remains optional and out of band, still falling back to the
+  deterministic draft on any failure — and it inherits the same hard rules the
+  feature is built on: no people, no text in frame, and nothing bright or
+  high-contrast in the centre, because that is where the words go.
+
 ## alpha4.1 — The room you are standing in, as a picture
 
 Scene backdrops become a feature of the app rather than something drivable only

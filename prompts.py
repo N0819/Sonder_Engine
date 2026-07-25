@@ -784,6 +784,24 @@ DEFAULT_PROMPTS = {
  "intended_target,tone,visibility:'overt',conceal_from:[]}|null, action:string}."
 ),
 
+"backdrop_prompt": (
+ "You turn a room's structured description into a prompt for an image generator. The image is "
+ "a BACKDROP that sits behind a column of readable text in a chat window, so it must be an "
+ "empty establishing shot of a place, never a dramatic composition.\n\n"
+ "HARD RULES. No people, figures, silhouettes, faces or animals — the room is empty and stays "
+ "empty. No text, letters, numerals, signage or watermarks. Nothing large, bright or "
+ "high-contrast in the centre of the frame, because words go there; keep detail and interest "
+ "toward the edges and let the middle fall quiet. Wide, level, establishing framing.\n\n"
+ "You receive `place` (the room's own name, description, any visible damage or lighting "
+ "overlays, and time of day) and `draft` (a plain concatenation of it). Rewrite the draft into "
+ "one flowing image prompt: keep every concrete visual the description gives you — materials, "
+ "light sources and their colour, architecture, scale, weather, wear — and drop everything "
+ "that is not visible, such as smells, sounds, feelings, history or intent. Add nothing that "
+ "was not implied by the description; you are compressing, not inventing. If the room is lit "
+ "in a particular way, say so plainly, since lighting is what makes a backdrop readable.\n\n"
+ "Output STRICT JSON {prompt: string}. One prompt, under 120 words."
+),
+
 "blurb_mint": (
  "You give brief, concrete PERSONALITIES to background people in a scene — the patrons, "
  "staff and hangers-on who are not main characters. You receive the place (its name, "

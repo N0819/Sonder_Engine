@@ -138,10 +138,34 @@ function backdropWorking(on) {
 // for it. The server deduplicates too (a lock per signature), but doing it
 // here as well keeps a scroll-back from queueing a dozen identical 30-second
 // requests behind each other.
+// How long to keep asking before giving up on one picture. Generation is
+// normally 12-40s; the provider's own ceiling is three minutes, so this sits
+// just past it rather than abandoning an image that was about to arrive.
+const BD_POLL_MS = 3000, BD_POLL_LIMIT = 70;
+
+// The POST returns as soon as the work is QUEUED, so the wait happens here in
+// polls rather than in a request held open server-side for the length of a
+// generation.
+async function awaitBackdrop(turnId, signature, first) {
+  let state = first;
+  for (let i = 0; state.status === "pending" && i < BD_POLL_LIMIT; i++) {
+    await new Promise(resolve => setTimeout(resolve, BD_POLL_MS));
+    state = await api("GET", `/api/turns/${turnId}/backdrop`);
+    // The room changed under us (an edit, a reroll): whatever is rendering is
+    // no longer what this turn wants, so stop asking. The caller's own
+    // wanted-signature check then declines to paint it.
+    if (state.signature !== signature) break;
+  }
+  if (state.status === "error") throw new Error(state.error || "generation failed");
+  if (state.status === "pending") throw new Error("still generating after several minutes");
+  return state;
+}
+
 function generateBackdrop(turnId, signature) {
   if (BD.inflight.has(signature)) return BD.inflight.get(signature);
   backdropWorking(true);
   const job = api("POST", `/api/turns/${turnId}/backdrop`, {})
+    .then(res => awaitBackdrop(turnId, signature, res))
     .then(res => {
       BD.byTurn.set(turnId, res);
       // Every OTHER turn already known to want this same picture is ready
