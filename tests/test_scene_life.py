@@ -337,3 +337,39 @@ def test_long_declared_ref_is_truncated_to_a_matchable_key(temp_db):
     refs = _claimed_refs(entry, "The damage is real.", {"The Barkeep"})
     assert len(refs) == 1
     assert len(refs[0].split()) <= MAX_REF_WORDS
+
+
+# --- the stage names itself in the pipeline UI ----------------------------
+
+def test_stage_label_names_the_path_it_takes(temp_db):
+    """The manager and the per-presence backstop share a step key, so without
+    a mode-aware label the pipeline UI showed "Background · presence reaction"
+    while the manager was doing all the work."""
+    from agents.runtime import _background_stage_label
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("L", "", 0))
+    assert _background_stage_label(cid) == "Background · presence reaction"
+    temp_db.wset(cid, "background_config", {"scene_life": "ambient"})
+    assert "ambient" in _background_stage_label(cid)
+    temp_db.wset(cid, "background_config", {"scene_life": "full"})
+    assert _background_stage_label(cid).startswith("Scene life")
+
+
+def test_stage_label_survives_a_broken_config(temp_db):
+    from agents.runtime import _background_stage_label
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("L", "", 0))
+    temp_db.wset(cid, "background_config", {"scene_life": "nonsense"})
+    assert _background_stage_label(cid) == "Background · presence reaction"
+
+
+def test_result_reports_mode_and_sub_agents():
+    """The technical log needs to distinguish one call voicing a whole room
+    from one presence reacting."""
+    from agents.background import _result
+    out = _result(["A"], [], mode="scene_life:full",
+                  agent_calls=["blurb_mint", "scene_life"])
+    assert out["mode"] == "scene_life:full"
+    assert out["agent_calls"] == ["blurb_mint", "scene_life"]
+    # Default keeps the historical shape for the per-presence path.
+    assert _result([], [])["mode"] == "background_react"
