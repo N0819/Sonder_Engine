@@ -317,9 +317,26 @@ const FRIENDLY_STEP_LABELS = {
   perception_outcome: "Working out what everyone just saw",
   narrator: "Writing the scene",
   commit: "Saving the story",
+  // background_react was missing entirely, so it fell through to the raw
+  // technical label. It covers two very different paths, named at plan time.
+  background_react: "Bringing the room to life",
+};
+
+// Sub-agents that run INSIDE a stage rather than as their own step. They can
+// dominate a stage's wall-clock (a blurb mint for a new cohort, an image
+// prompt), so the progress line names them instead of leaving the stage
+// looking stuck.
+const FRIENDLY_SUBAGENTS = {
+  blurb_mint: "Giving the extras personalities",
+  scene_life: "Voicing the room",
+  backdrop_prompt: "Describing the room for a picture",
+  background_react: "A bystander reacts",
 };
 
 function friendlyPhase(key, label) {
+  // A stage whose plan label already names the mode (the scene manager) should
+  // keep that name rather than be flattened back to a generic one.
+  if (/^Scene life/.test(String(label || ""))) return "Bringing the room to life";
   if (FRIENDLY_STEP_LABELS[key]) return FRIENDLY_STEP_LABELS[key];
   if (String(key).startsWith("character:")) {
     const name = String(label || "").replace(/^Character\s*·\s*/, "").trim();
