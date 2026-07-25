@@ -3,9 +3,12 @@
 The feature renders the room the player is standing in as a chat background.
 These tests pin the two properties that make it safe and affordable:
 
-  * the prompt is derived from the player's PERCEPTION view with people and
-    speech stripped, never from the objective scene, so a picture cannot leak
-    what the prose withheld;
+  * the image prompt comes from a WHITELISTED spatial projection -- room
+    architecture, light, exits, damage -- with occupants excluded by
+    construction, so a character or monster cannot reach the picture. An
+    earlier draft derived it from perception prose and stripped people with
+    regexes; structured data is both safer and much richer, and the prose path
+    survives only as optional flavour.
   * the cache key changes when the room LOOKS different and not when someone
     walks through it, which is what makes revisiting a room free.
 """
@@ -114,3 +117,54 @@ def test_all_dialogue_yields_nothing_rather_than_leaking():
     recoverable, a character in the picture is not."""
     text = '"Get down!" he shouted. "They are already inside."'
     assert _setting_only(text).strip(" .") == ""
+
+
+# --- the spatial projection is a whitelist, not a filter -------------------
+
+def test_projection_excludes_occupants_by_construction():
+    """The safety argument for preferring spatial data over prose: a monster
+    cannot appear in a backdrop built from a projection that has no concept of
+    occupants. This is a whitelist, so a NEW scene field cannot silently start
+    leaking people either."""
+    from backdrops import room_projection
+    sc = _scene()
+    sc["entities"] = {"grue": {"name": "Lurking Grue", "kind": "monster"}}
+    sc["positions"]["Lurking Grue"] = "ten_forward"
+    sc["attire"] = {"Hinami": {"wearing": ["a red coat"]}}
+    sc["rooms"]["ten_forward"]["occupants_hint"] = "a grue waits in the dark"
+
+    out = room_projection(sc, "ten_forward")
+    blob = repr(out).lower()
+    for leak in ("grue", "hinami", "red coat", "occupants_hint"):
+        assert leak not in blob, "leaked %r into the backdrop source" % leak
+    assert out["desc"].startswith("Amber light")
+
+
+def test_projection_keeps_what_makes_a_picture():
+    from backdrops import room_projection
+    sc = _scene()
+    sc["rooms"]["ten_forward"]["adjacent"] = [
+        {"to": "deck10", "barrier": "open_door", "dir": "n"}]
+    sc["overlays"] = {"ten_forward": ["smoke-filled, emergency lighting"]}
+    out = room_projection(sc, "ten_forward")
+    assert out["name"] == "Ten Forward"
+    assert out["time"] == "night"
+    assert out["overlays"] == ["smoke-filled, emergency lighting"]
+    # Exits carry layout, never a destination occupant.
+    assert out["exits"] == [{"barrier": "open_door", "dir": "n"}]
+    assert "to" not in repr(out["exits"])
+
+
+def test_person_overlays_cannot_reach_the_projection():
+    """Overlays are keyed by room OR by person; only the room lookup is used."""
+    from backdrops import room_projection
+    sc = _scene()
+    sc["overlays"] = {"Hinami": ["bleeding from a head wound"]}
+    assert "bleeding" not in repr(room_projection(sc, "ten_forward"))
+
+
+def test_unknown_room_yields_a_harmless_stub():
+    from backdrops import room_projection
+    out = room_projection(_scene(), "nowhere")
+    assert out["room"] == "nowhere"
+    assert "desc" not in out
