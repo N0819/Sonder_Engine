@@ -20,7 +20,7 @@
 | `agents/storage.py` | 72 | Step and active-variant persistence helpers. | `db` |
 | `app.py` | 3708 | FastAPI application, resource CRUD, import/export, turn control, and streaming endpoints. | `agents`, `character_schema`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `updates` |
 | `authored_events.py` | 124 |  | `db` |
-| `backdrops.py` | 231 |  | `db` |
+| `backdrops.py` | 278 |  | `db` |
 | `background_claims.py` | 287 |  | `db` |
 | `character_schema.py` | 639 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
 | `checkpoints.py` | 516 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
@@ -203,14 +203,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `arrival_turn_for_room()` | 169 | 35 lines |
+| `arrival_turn_for_room()` | 210 | 35 lines |
+| `room_projection()` | 150 | 32 lines |
+| `build_backdrop_request()` | 247 | 32 lines |
 | `visual_signature()` | 59 | 31 lines |
-| `build_backdrop_request()` | 206 | 26 lines |
 | `_setting_only()` | 116 | 25 lines |
-| `player_view_for_turn()` | 143 | 24 lines |
+| `player_view_for_turn()` | 184 | 24 lines |
 | `_room_of_player()` | 52 | 5 lines |
 | `cached_backdrop()` | 96 | 4 lines |
-| `backdrop_path()` | 92 | 2 lines |
 
 ### `background_claims.py`
 

@@ -6,19 +6,19 @@ prose.
 
 Three rules shape everything here.
 
-**1. The prompt comes from the player's PERCEPTION VIEW, not the objective
-scene.** `scene.rooms[room].desc` is the omniscient record: it contains the
-concealed door, the watcher behind the crates, the thing the narrator
-deliberately withheld. Rendering that as a backdrop would leak, in a picture,
-exactly what the prose spent a pipeline stage protecting. The player's own view
-(`perception_outcome.views["player"]`) is the slice the narrator is already
-allowed to render, so it is the only legitimate source.
+**1. The prompt is built from STRUCTURED spatial data, with spoiler categories
+dropped by construction.** Not from narrative prose. The scene graph separates
+architecture (`rooms[id].name/desc`, location, time, adjacency) from occupants
+(`entities`, `positions`), so keeping the former and dropping the latter is a
+whitelist -- auditable, and it cannot half-work. An earlier draft derived the
+prompt from perception prose and stripped people with regexes; it merged
+sentences, leaked dialogue fragments, and produced a thin source. Structured
+data is both safer and considerably richer.
 
-**2. Backdrops depict the room EMPTY -- no people, ever.** This is a hard rule,
-not a style preference. It removes the residual leak (you cannot render a person
-the viewer has not met if you render no people at all), it avoids uncanny
-likenesses of characters the reader has imagined for themselves, and it is what
-makes per-room caching correct: people move constantly, architecture does not.
+**2. Backdrops depict the room EMPTY -- no people, ever.** Falls out of rule 1
+rather than needing enforcement: occupants are never in the projection to begin
+with, so a character or a monster cannot reach the image. This also avoids
+uncanny likenesses and is what makes per-room caching correct.
 
 **3. A cache key is a room plus its VISIBLE state.** Not the room id alone -- a
 room whose lights just failed, whose window broke, or which is now on fire is
@@ -140,6 +140,47 @@ def _setting_only(text):
     return stripped
 
 
+# Scene fields that describe the PLACE. Everything else -- entities, positions,
+# attire, conditions on people -- is omitted by construction, which is the whole
+# safety argument: a monster cannot appear in a backdrop built from a
+# projection that has no concept of occupants.
+_PLACE_FIELDS = ("name", "desc", "notes")
+
+
+def room_projection(scene, room_id):
+    """A whitelisted, occupant-free description of one room.
+
+    Deliberately a whitelist rather than a filter: adding a new scene field
+    cannot silently start leaking people into backdrops, because anything not
+    named here is simply absent.
+    """
+    scene = scene or {}
+    room = ((scene.get("rooms") or {}).get(room_id) or {})
+    out = {k: room.get(k) for k in _PLACE_FIELDS if room.get(k)}
+    out["room"] = room_id
+    if scene.get("location"):
+        out["location"] = scene["location"]
+    if scene.get("time"):
+        out["time"] = scene["time"]
+    # Adjacency as pure layout: which way the room opens, never who is through
+    # the door.
+    exits = []
+    for edge in (room.get("adjacent") or []):
+        if not isinstance(edge, dict):
+            continue
+        exits.append({k: edge[k] for k in ("barrier", "vertical", "dir")
+                      if edge.get(k)})
+    if exits:
+        out["exits"] = exits
+    # Per-room visual overlays (smoke, darkness, wreckage) DO belong: they
+    # change what the place looks like. Overlays keyed to a PERSON never reach
+    # here because the lookup is by room id.
+    overlay = (scene.get("overlays") or {}).get(room_id)
+    if overlay:
+        out["overlays"] = overlay
+    return out
+
+
 def player_view_for_turn(chat_id, turn_idx):
     """The player's own perceived prose for a turn, or ''.
 
@@ -221,9 +262,15 @@ def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None):
         "room_name": room.get("name") or room_id,
         "signature": signature,
         "cached": cached_backdrop(chat_id, signature),
-        # The arrival beat describes the place; a mid-scene beat describes
-        # people talking in it.
-        "source": _setting_only(player_view_for_turn(
+        # Structured, occupant-free: this is what an image prompt is written
+        # from. Rich (architecture, light, exits, damage) and safe by
+        # construction (no entities, no positions, no people).
+        "place": room_projection(scene, room_id),
+        # Optional atmosphere only, from the ARRIVAL beat (mid-scene prose is
+        # people talking; arrival prose describes the place). People and speech
+        # are stripped, but this is a supplement -- `place` is the source of
+        # record, so a thin or empty flavour string costs nothing.
+        "flavour": _setting_only(player_view_for_turn(
             chat_id, arrival_turn_for_room(chat_id, turn_idx, room_id,
                                            player_name))),
         "time": scene.get("time") or "",
