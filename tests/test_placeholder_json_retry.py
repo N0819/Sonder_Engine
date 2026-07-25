@@ -6,7 +6,8 @@ content)."""
 
 from __future__ import annotations
 
-from providers import _is_placeholder_json
+import providers
+from providers import _is_placeholder_json, token_sink
 
 
 def test_all_placeholder_strings_is_a_skeleton():
@@ -25,3 +26,36 @@ def test_non_string_or_non_json_is_not_a_skeleton():
     assert not _is_placeholder_json("not json at all")
     assert not _is_placeholder_json("")
     assert not _is_placeholder_json(None)
+
+
+def test_streaming_path_retries_skeleton_without_json_mode(monkeypatch):
+    """The pipeline runs on the STREAMING path (token_sink set for the live UI),
+    so the skeleton guard must fire there too -- not only on the non-streaming
+    path. First stream returns an all-'...' skeleton; the guard must retry once
+    WITHOUT response_format and stream the real prose."""
+    calls = []
+
+    def fake_sse(url, headers, body, sink, role=None, model=None):
+        calls.append(body)
+        if "response_format" in body:
+            return '{"prose":"..."}'          # skeleton under json_object
+        return '{"prose":"You step onto the pad."}'  # real prose ungated
+
+    monkeypatch.setattr(providers, "_sse_openai", fake_sse)
+    resolved = (
+        {"kind": "nanogpt", "base_url": "http://x/v1", "api_key": "k", "name": "nano"},
+        "nemotron:thinking",
+        {},
+    )
+    tok = token_sink.set(lambda _chunk: None)
+    try:
+        out = providers._chat_complete_once(
+            "narrator", "sys", "usr", None, True, 1000, None, resolved=resolved
+        )
+    finally:
+        token_sink.reset(tok)
+
+    assert out == '{"prose":"You step onto the pad."}'
+    assert len(calls) == 2                     # skeleton, then retry
+    assert "response_format" in calls[0]
+    assert "response_format" not in calls[1]
