@@ -2,6 +2,7 @@
 """Pydantic schemas for all pipeline and world-state structures."""
 
 import json
+import re
 
 from pydantic import BaseModel, Field, ValidationError, validator
 from dataclasses import dataclass, field
@@ -1284,6 +1285,52 @@ def _flatten_view_value(value):
         return " ".join(p for p in parts if p) or None
     return str(value)
 
+# Suffixes a model appends to an entity KEY purely to keep the id distinct
+# ("guinan_entity", "turbolift_car_entity"); they are not part of the display
+# name, as the model's own successful outputs show ("Guinan", "Turbolift Car").
+_ENTITY_KEY_SUFFIX = re.compile(r"[_\-](entity|obj|object|item|node)$", re.I)
+# Keys a model reaches for instead of `name`, mirroring the dialogue_log
+# alias handling below.
+_ENTITY_NAME_ALIASES = ("name", "label", "title", "display_name", "displayName")
+
+
+def _entity_name_from_key(key) -> str:
+    """A display name derived from the entity's own dict key.
+
+    `entities` is keyed by id, so the key ALREADY names the thing and models
+    routinely omit the redundant `name` -- observed live with glm-latest as
+    Director: "state_diff.entities.sake_carafe.name: field required;
+    state_diff.entities.computer.name: field required", which failed the whole
+    turn. Rejecting an output over a field recoverable from its own key is the
+    same over-strictness the dialogue_log repair below already addresses.
+    """
+    slug = _ENTITY_KEY_SUFFIX.sub("", str(key or "").strip())
+    words = [w for w in re.split(r"[_\-\s]+", slug) if w]
+    # Preserve deliberate acronyms (LCARS, EPS) rather than title-casing them.
+    return " ".join(w if w.isupper() else w.capitalize() for w in words)
+
+
+def _fill_entity_names(container) -> None:
+    """Give every entity def in `container['entities']` a name, in place."""
+    if not isinstance(container, dict):
+        return
+    entities = container.get("entities")
+    if not isinstance(entities, dict):
+        return
+    for key, entity in entities.items():
+        if not isinstance(entity, dict):
+            continue
+        for alias in _ENTITY_NAME_ALIASES:
+            value = entity.get(alias)
+            if isinstance(value, str) and value.strip():
+                entity["name"] = value.strip()
+                break
+        else:
+            derived = _entity_name_from_key(key)
+            if derived:
+                entity["name"] = derived
+
+
 def preprocess_llm_output(step_key: str, raw: dict) -> dict:
     if not isinstance(raw, dict):
         return {}
@@ -1297,6 +1344,12 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
             for field in ("remove_entities", "remove_rooms", "remove_adjacent"):
                 if field in patch:
                     patch[field] = _coerce_empty_dict_to_list(patch[field])
+            # ScenePatch.entities is untyped so a missing name does not fail
+            # validation here -- but it lands in the scene, where readers key
+            # display name -> entity id (commit.track_background_presences,
+            # agents/background._name_to_entity_id). A nameless entity is
+            # invisible to both.
+            _fill_entity_names(patch)
 
     if step_key == "perception":
         views = result.get("views")
@@ -1330,6 +1383,9 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
             for field in _STATE_DIFF_DICT_FIELDS:
                 if field in target:
                     target[field] = _coerce_empty_list_to_dict(target[field])
+            # SceneEntityDef.name is required but the dict key already carries
+            # it; recover rather than fail the turn.
+            _fill_entity_names(target)
     
     if "speech_volume" in result:
         result["speech_volume"] = normalize_speech_volume(
