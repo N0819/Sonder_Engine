@@ -1,5 +1,48 @@
 # Changelog
 
+## alpha4.0.2 — An entity's key already names it
+
+### Fixed
+- **A turn could die because the Director omitted a field its own dict key
+  carried** (`schemas.py`). Reported from live play with `glm-latest` as
+  Director:
+
+  ```
+  Pipeline error: director_resolve failed JSON validation:
+  state_diff.entities.sake_carafe.name: field required;
+  state_diff.entities.computer.name: field required
+  ```
+
+  `entities` is `dict[str, SceneEntityDef]`, so the key *is* the identifier and
+  a model reasonably declines to repeat it as `name`. `SceneEntityDef.name` was
+  required, so the whole beat was rejected — losing the resolution, the
+  dialogue, and every other entity in the diff over a redundant field.
+
+  The name is now recovered in `preprocess_llm_output`, the same place the
+  `dialogue_log` repair already turns a bare `"Speaker: quote"` string into a
+  valid entry. This is not guesswork: the *same chat's* successful turns show
+  the model performing exactly this transformation itself, so the derivation
+  reproduces its own convention — `sake_carafe` → "Sake Carafe",
+  `guinan_entity` → "Guinan", `turbolift_car_entity` → "Turbolift Car", with
+  deliberate acronyms (`LCARS_panel` → "LCARS Panel") preserved rather than
+  title-cased.
+
+  An explicit `name` always wins; common aliases (`label`, `title`,
+  `display_name`) are accepted the way `dialogue_log` accepts `quote`/`text`;
+  and a blank name is replaced rather than kept, since an empty string
+  satisfies `name: str` while leaving the entity invisible to every
+  display-name reader (`commit.track_background_presences`,
+  `agents/background._name_to_entity_id`).
+
+  Applied to `director_resolve`, `resolve_repair`, `director_establish` (which
+  carries entities at top level, not in a `state_diff`), and `mapping_stage`'s
+  `scene_patch`. The last never failed validation — `ScenePatch.entities` is
+  untyped — but a nameless entity still reaches the scene, where readers key
+  display name to entity id, so it was silently unreachable rather than loudly
+  broken.
+
+  Pre-existing since the schema was introduced; not a regression from alpha4.0.
+
 ## alpha4.0.1 — The scene manager gets a switch
 
 alpha4.0 shipped `background_config` with **no route and no UI**, so `scene_life`

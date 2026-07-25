@@ -39,7 +39,7 @@
 | `prompts.py` | 2123 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1502 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 762 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
-| `schemas.py` | 1900 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `schemas.py` | 1956 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 1507 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | — |
 | `spatial_frames.py` | 875 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `theory_of_mind.py` | 288 |  | — |
@@ -411,14 +411,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 1287 | 193 lines |
-| `semantic_output_errors()` | 1771 | 76 lines |
-| `validate_llm_output_strict()` | 1848 | 53 lines |
-| `_coerce_str_list()` | 12 | 33 lines |
-| `_coerce_considered_responses()` | 1138 | 32 lines |
-| `validate_llm_output()` | 1481 | 29 lines |
-| `_coerce_conditions()` | 1201 | 27 lines |
-| `_hoist_misplaced_entity_siblings()` | 1243 | 21 lines |
+| `preprocess_llm_output()` | 1334 | 202 lines |
+| `semantic_output_errors()` | 1827 | 76 lines |
+| `validate_llm_output_strict()` | 1904 | 53 lines |
+| `_coerce_str_list()` | 13 | 33 lines |
+| `_coerce_considered_responses()` | 1139 | 32 lines |
+| `validate_llm_output()` | 1537 | 29 lines |
+| `_coerce_conditions()` | 1202 | 27 lines |
+| `_hoist_misplaced_entity_siblings()` | 1244 | 21 lines |
 
 ### `spatial.py`
 
