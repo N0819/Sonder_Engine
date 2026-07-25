@@ -98,3 +98,25 @@ Still open (separate, lower-impact): the room-id DIVERGENCE half -- mapping mint
 one surface room id, director_resolve names another, and the party can land in
 the id mapping never described. That is a minted-room reconciliation issue
 (dedup_minted_rooms), model-coordination-dependent, and worth its own change.
+
+
+## TR-1 VERIFIED live (turns 1-3)
+
+Turn 1: "Two to beam down. Chief, energize." -- director resolved a *scattering-
+field malfunction* (no dice, no world-pressure gate: pure GLM drama). Beam
+collapsed, both stayed on the pad, a "ghost signature" hook seeded. Coherent,
+just not the mechanic under test. (The recurring "resolves dramatically" pattern.)
+
+Turn 2: retry ("compensate for the scattering field...") -- held on the pad again;
+narrator returned an all-"..." SKELETON (placeholder-json slipped past the fix on
+the STREAMING path). Fixed: the skeleton guard now also fires post-stream and
+retries without json_mode (test_placeholder_json_retry.py).
+
+Turn 3: "Energize." + a parenthetical DIRECTOR'S NOTE forcing success. Clean
+transport, and the TR-1 fix held exactly:
+  Reyes         -> sigma_draconis_vii_surface   (away team)
+  Lt. T'Vel     -> sigma_draconis_vii_surface   (away team)
+  Chief Okonkwo -> meridian_transporter_room    (OPERATOR STAYS ABOARD)  <-- fixed
+Room id matched across mapping and resolve (no divergence this run), and mapping
+invented `alien_structure` + `approaching_figure` on the surface -- worldbuild-
+on-the-fly working. Prose came back real (no skeleton) post-fix.

@@ -1044,7 +1044,7 @@ def _chat_complete_once(
 
     if sink:
         try:
-            return _sse_openai(
+            out = _sse_openai(
                 url,
                 headers,
                 dict(body),
@@ -1060,7 +1060,7 @@ def _chat_complete_once(
             if json_mode:
                 fallback_body.pop("response_format", None)
 
-            return _sse_openai(
+            out = _sse_openai(
                 url,
                 headers,
                 fallback_body,
@@ -1068,6 +1068,24 @@ def _chat_complete_once(
                 role=role,
                 model=model,
             )
+        # Same placeholder-skeleton guard as the non-streaming path below: a
+        # model that "honours" response_format=json_object by streaming an
+        # all-"..." skeleton would send that skeleton to the player as prose.
+        # The pipeline runs on THIS streaming path (sink set for the live UI),
+        # so the guard has to live here too. Retry once without json_mode --
+        # still streaming, so the live UI keeps receiving tokens.
+        if json_mode and _is_placeholder_json(out):
+            retry_body = dict(body)
+            retry_body.pop("response_format", None)
+            out = _sse_openai(
+                url,
+                headers,
+                retry_body,
+                sink,
+                role=role,
+                model=model,
+            )
+        return out
 
     _t0 = time.time()
     response = _session().post(
