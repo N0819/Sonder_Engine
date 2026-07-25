@@ -546,7 +546,85 @@ ROLES = [
     "mapping",
     "utility",
     "embeddings",
+    # Writes an image prompt from spatial data (backdrops.py). OPTIONAL and
+    # deliberately out of band: it never runs inside the turn pipeline, so a
+    # slow or failed image prompt cannot delay or break a beat. When no model
+    # is configured for it, backdrops fall back to a deterministic template.
+    "backdrop_prompt",
 ]
+
+# Image generation is a different API surface from chat completion, so it gets
+# its own setting rather than an entry in agent_models: {provider, model}.
+# nano-gpt exposes 201 image models at /api/models/image and an
+# OpenAI-compatible endpoint at /v1/images/generations; its /v1/models list
+# contains no image-output models at all, which is why this cannot simply
+# reuse the chat role plumbing.
+IMAGE_ENDPOINT = "/images/generations"
+
+
+def image_model():
+    """The configured image model as {provider, model}, or None."""
+    try:
+        raw = get_setting("image_model")
+    except Exception:
+        return None
+    if not raw:
+        return None
+    try:
+        cfg = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(cfg, dict) or not cfg.get("provider") or not cfg.get("model"):
+        return None
+    return cfg
+
+
+# A chat backdrop fills a browser viewport behind a centred text column, so the
+# default is LANDSCAPE. A square would be cropped hard top and bottom on any
+# normal window, throwing away most of what was paid for and usually the
+# horizon with it. Overridable per install via the image_model setting's
+# `size`, since supported sizes vary by model.
+DEFAULT_IMAGE_SIZE = "1536x1024"   # 3:2
+
+
+def generate_image(prompt, size=None, timeout=180):
+    """Generate one image, returning raw bytes. Raises on failure.
+
+    Never called from the turn pipeline -- see backdrops.py.
+    """
+    cfg = image_model()
+    if not cfg:
+        raise RuntimeError("No image model configured — set the `image_model` setting")
+    size = size or cfg.get("size") or DEFAULT_IMAGE_SIZE
+    prov = provider(cfg["provider"])
+    if not prov:
+        raise RuntimeError("Image provider %r not found" % cfg["provider"])
+    base = (_prov_field(prov, "base_url") or "").rstrip("/")
+    url = base + IMAGE_ENDPOINT
+    body = {"model": cfg["model"], "prompt": prompt, "n": 1, "size": size,
+            "response_format": "b64_json"}
+    headers = {"Authorization": "Bearer %s" % (_prov_field(prov, "api_key") or ""),
+               "Content-Type": "application/json"}
+    resp = _session().post(url, json=body, headers=headers, timeout=timeout)
+    if resp.status_code >= 400:
+        raise LLMError("image generation failed (%s): %s"
+                       % (resp.status_code, resp.text[:300]),
+                       status_code=resp.status_code)
+    payload = resp.json()
+    entries = payload.get("data") or []
+    if not entries:
+        raise LLMError("image generation returned no data: %s"
+                       % json.dumps(payload)[:300])
+    entry = entries[0]
+    if entry.get("b64_json"):
+        import base64
+        return base64.b64decode(entry["b64_json"])
+    if entry.get("url"):
+        got = _session().get(entry["url"], timeout=timeout)
+        got.raise_for_status()
+        return got.content
+    raise LLMError("image entry had neither b64_json nor url: %s"
+                   % json.dumps(entry)[:200])
 
 @dataclass
 class RetryConfig:

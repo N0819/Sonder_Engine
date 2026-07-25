@@ -46,7 +46,31 @@ BACKDROP_DIR = os.environ.get(
 # A backdrop is scenery, so the visual signature only tracks what changes how
 # the PLACE looks. Overlays and conditions can do that (smoke, darkness,
 # wreckage); positions and dialogue cannot.
-_VISUAL_STATE_KEYS = ("overlays", "conditions", "time", "weather")
+_VISUAL_STATE_KEYS = ("overlays", "conditions", "weather")
+
+# scene.time is freeform narrative text, not a clock: live values include
+# "Night", "a few seconds", "a few seconds pass", "moments pass". Hashing it
+# raw meant the SAME room with an IDENTICAL description produced a different
+# cache key on consecutive turns ("a few seconds" vs "a few seconds pass"),
+# which would have defeated caching on nearly every beat -- the one thing that
+# makes this feature affordable. Only the coarse visual bucket belongs in the
+# key: night really does look different from noon, "moments pass" does not.
+_TIME_BUCKETS = (
+    ("night", ("night", "midnight", "small hours", "after dark", "nocturn")),
+    ("evening", ("evening", "dusk", "sunset", "twilight", "nightfall")),
+    ("morning", ("morning", "dawn", "sunrise", "daybreak", "first light")),
+    ("day", ("noon", "midday", "afternoon", "daylight", "daytime")),
+)
+
+
+def time_bucket(value):
+    """Coarse time-of-day for cache keying and prompting, or '' if the text
+    says nothing about the light."""
+    text = str(value or "").casefold()
+    for bucket, words in _TIME_BUCKETS:
+        if any(word in text for word in words):
+            return bucket
+    return ""
 
 
 def _room_of_player(scene, player_name):
@@ -69,7 +93,7 @@ def visual_signature(scene, room_id, style=None):
         "room": room_id,
         "name": room.get("name") or "",
         "desc": room.get("desc") or "",
-        "time": scene.get("time") or "",
+        "time": time_bucket(scene.get("time")),
         "location": scene.get("location") or "",
         "style": style or {},
     }
@@ -172,8 +196,9 @@ def room_projection(scene, room_id):
     # closet still reads "Back Alley, City". A wrong one-line location would
     # render a starship cupboard as a city alley, and the room description
     # already says "standard starship deck plating", so it earns nothing.
-    if scene.get("time"):
-        out["time"] = scene["time"]
+    bucket = time_bucket(scene.get("time"))
+    if bucket:
+        out["time"] = bucket
     # Adjacency as pure layout: which way the room opens, never who is through
     # the door.
     exits = []
@@ -307,3 +332,98 @@ def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None):
         "time": scene.get("time") or "",
         "location": scene.get("location") or "",
     }
+
+
+# --- prompt composition and generation ------------------------------------
+#
+# Both stages are OPTIONAL and out of band. Nothing here is ever called from
+# the turn pipeline: a slow image, a failed prompt or a provider outage must
+# never sit between the player and their prose.
+
+# Style words that keep a backdrop reading as a BACKDROP: an establishing shot
+# of an empty place, not a dramatic composition competing with the text laid
+# over it.
+_BACKDROP_STYLE = (
+    "wide establishing shot of an empty room, no people, no figures, "
+    "no text or lettering, environment concept art, muted contrast, "
+    "nothing in sharp focus in the centre foreground"
+)
+
+
+def compose_prompt(place, style=None, flavour=""):
+    """A deterministic image prompt from the whitelisted place projection.
+
+    Used as-is when no `backdrop_prompt` model is configured, and as the input
+    to that agent when one is. Deterministic on purpose: the feature must work,
+    and be testable, with no extra model call at all.
+    """
+    parts = []
+    if place.get("name"):
+        parts.append(str(place["name"]))
+    if place.get("desc"):
+        parts.append(str(place["desc"]))
+    if place.get("overlays"):
+        parts.append(", ".join(str(o) for o in place["overlays"]))
+    if place.get("time"):
+        parts.append("time: %s" % place["time"])
+    if flavour:
+        parts.append(flavour)
+    for key in ("genre", "tone"):
+        if (style or {}).get(key):
+            parts.append("%s: %s" % (key, style[key]))
+    parts.append(_BACKDROP_STYLE)
+    if (style or {}).get("avoid"):
+        parts.append("avoid: %s" % style["avoid"])
+    return " | ".join(p for p in parts if p)
+
+
+def refine_prompt(draft, place):
+    """Optionally rewrite the deterministic draft with the `backdrop_prompt`
+    model. Returns the draft unchanged if no model is configured or the call
+    fails -- this is a nicety, never a dependency."""
+    try:
+        from providers import resolve_role_candidates
+        resolve_role_candidates("backdrop_prompt")
+    except Exception:
+        return draft
+    try:
+        from agents.common import _agent_json
+        from prompts import get_prompt
+        out = _agent_json("backdrop_prompt", "backdrop_prompt",
+                          get_prompt("backdrop_prompt"),
+                          {"place": place, "draft": draft}, temperature=0.6)
+        refined = str((out or {}).get("prompt") or "").strip()
+        return refined or draft
+    except Exception:
+        return draft
+
+
+def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
+                      force=False):
+    """Produce (or serve from cache) the backdrop for a turn.
+
+    Returns {path, signature, room, prompt, cached}. The prompt is handed to
+    the image generator automatically -- composing and generating are one
+    operation from the caller's point of view.
+    """
+    from providers import generate_image
+
+    req = build_backdrop_request(chat_id, turn_idx, player_name, style)
+    if not req:
+        return None
+    if req["cached"] and not force:
+        return {"path": req["cached"], "signature": req["signature"],
+                "room": req["room_name"], "prompt": None, "cached": True}
+
+    prompt = refine_prompt(
+        compose_prompt(req["place"], style, req["flavour"]), req["place"])
+    data = generate_image(prompt)
+
+    path = backdrop_path(chat_id, req["signature"])
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".part"
+    with open(tmp, "wb") as fh:
+        fh.write(data)
+    os.replace(tmp, path)          # atomic: a reader never sees a half image
+    return {"path": path, "signature": req["signature"],
+            "room": req["room_name"], "prompt": prompt, "cached": False}
