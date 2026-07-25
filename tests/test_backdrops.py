@@ -183,9 +183,11 @@ def test_notes_are_excluded_because_they_carry_people():
     assert "Hinami" not in repr(out)
 
 
-def test_stale_global_location_is_excluded():
-    """Also from live data: the Enterprise's janitor closet still reported
-    location "Back Alley, City". A wrong one-line label would render a
+def test_global_location_is_excluded():
+    """Not an engine bug: scene.location tracks relocation correctly since
+    TR-3. But backdrops also render HISTORICAL turns when scrolling back, and
+    pre-TR-3 checkpoints carry a stale label -- the Enterprise's janitor closet
+    still reads "Back Alley, City". A wrong one-line label would render a
     starship cupboard as a city alley, and the room desc already carries the
     setting."""
     from backdrops import room_projection
