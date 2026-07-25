@@ -39,6 +39,11 @@ function applySceneMood(text) {
 // since the old DOM nodes it observes get thrown away with M.innerHTML="".
 let _moodObserver = null;
 
+// Also drives the scene backdrop (backdrops.js): the picture behind the
+// transcript should be the room of whatever beat the reader is actually
+// looking at, which is the same question this observer already answers --
+// so it stays one observer and one notion of "the current turn" rather than
+// two that can disagree while scrolling.
 function observeSceneMood(msgsEl, turnEntries) {
   if (_moodObserver) {
     _moodObserver.disconnect();
@@ -52,6 +57,7 @@ function observeSceneMood(msgsEl, turnEntries) {
   // rather than read fresh each time.
   const ratios = new Map();
   const proseByEl = new Map(turnEntries.map(e => [e.el, e.prose]));
+  const turnIdByEl = new Map(turnEntries.map(e => [e.el, e.turnId]));
 
   _moodObserver = new IntersectionObserver(entries => {
     for (const entry of entries) {
@@ -61,7 +67,16 @@ function observeSceneMood(msgsEl, turnEntries) {
     for (const [el, ratio] of ratios) {
       if (ratio > bestRatio) { bestRatio = ratio; bestEl = el; }
     }
-    if (bestEl) applySceneMood(proseByEl.get(bestEl));
+    if (bestEl) {
+      applySceneMood(proseByEl.get(bestEl));
+      // Guarded because backdrops.js is an experimental extra: if it fails to
+      // load (or a browser is holding a cached index.html without its script
+      // tag), a missing function here would throw inside the observer and
+      // take the transcript's own mood/scroll behaviour down with it.
+      if (typeof backdropOnVisibleTurn === "function") {
+        backdropOnVisibleTurn(turnIdByEl.get(bestEl));
+      }
+    }
   }, { root: msgsEl, threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] });
 
   for (const { el } of turnEntries) _moodObserver.observe(el);
@@ -118,6 +133,7 @@ function renderChat() {
   M.innerHTML = "";
   updateChatScopedButtons();
   renderFrameBar();
+  if (typeof backdropResetForRender === "function") backdropResetForRender();
 
   if (!S.chat) {
     $("#chatname").textContent = "No story selected";
@@ -213,7 +229,7 @@ function renderChat() {
 
     d.append(btns);
     M.append(d);
-    turnEntries.push({ el: d, prose: t.prose || "" });
+    turnEntries.push({ el: d, prose: t.prose || "", turnId: t.id });
   }
 
   M.scrollTop = M.scrollHeight;

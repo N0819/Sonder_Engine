@@ -227,3 +227,147 @@ def test_real_time_of_day_still_changes_the_picture():
     night = visual_signature(sc, "ten_forward")
     sc["time"] = "high noon"
     assert visual_signature(sc, "ten_forward") != night
+
+
+# --- paying only once ------------------------------------------------------
+
+def test_concurrent_requests_for_one_room_generate_one_image(tmp_path, monkeypatch):
+    """The same signature is very easy to ask for twice at once -- two turns in
+    the same room scroll into view together, a second tab is open, the reader
+    scrolls back. Each duplicate is a real image generation with a real price,
+    so the second caller must WAIT for the first and then take the cache hit.
+    """
+    import threading
+    import time
+
+    import backdrops as bd
+
+    monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
+    monkeypatch.setattr(bd, "build_backdrop_request", lambda *a, **k: {
+        "signature": "a" * 24, "cached": None, "room_name": "Ten Forward",
+        "place": {"name": "Ten Forward"}, "flavour": "",
+    })
+    monkeypatch.setattr(bd, "refine_prompt", lambda draft, place: draft)
+
+    calls = []
+    barrier = threading.Barrier(2, timeout=5)
+
+    def fake_generate_image(prompt, *a, **k):
+        calls.append(prompt)
+        # Slow enough that the second thread is provably waiting on the lock
+        # rather than merely arriving after the first one finished.
+        time.sleep(0.15)
+        return b"\x89PNG fake"
+
+    monkeypatch.setattr(__import__("providers"), "generate_image",
+                        fake_generate_image)
+
+    results = []
+
+    def run():
+        barrier.wait()                      # both threads arrive together
+        results.append(bd.generate_backdrop(7, 0))
+
+    threads = [threading.Thread(target=run) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+
+    assert len(calls) == 1, "paid for the same picture twice"
+    assert len(results) == 2
+    assert {r["cached"] for r in results} == {False, True}
+    assert (tmp_path / "7" / ("a" * 24 + ".png")).read_bytes() == b"\x89PNG fake"
+
+
+def test_no_half_written_image_is_ever_visible(tmp_path, monkeypatch):
+    """Readers hit the PNG route while generation is in flight; a partially
+    written file would be served as a corrupt image."""
+    import backdrops as bd
+
+    monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
+    monkeypatch.setattr(bd, "build_backdrop_request", lambda *a, **k: {
+        "signature": "b" * 24, "cached": None, "room_name": "Corridor",
+        "place": {"name": "Corridor"}, "flavour": "",
+    })
+    monkeypatch.setattr(bd, "refine_prompt", lambda draft, place: draft)
+
+    seen = []
+
+    def fake_generate_image(prompt, *a, **k):
+        # Mid-generation: nothing readable may exist under the final name.
+        seen.append(bd.cached_backdrop(9, "b" * 24))
+        return b"\x89PNG fake"
+
+    monkeypatch.setattr(__import__("providers"), "generate_image",
+                        fake_generate_image)
+
+    bd.generate_backdrop(9, 0)
+    assert seen == [None]
+    assert bd.cached_backdrop(9, "b" * 24)
+
+
+# --- occupants written into rooms[].desc -----------------------------------
+#
+# The whitelist assumed `desc` was pure architecture. Dry-running chat 34
+# through the finished routes proved it is not: mapping writes populations into
+# it exactly where narrative prose would name a character.
+
+_TEN_FORWARD = (
+    "The ship's main lounge and social hub, located at the forward edge of "
+    "Deck 10. A long curved bank of panoramic windows wraps around the forward "
+    "section. Crew members and civilians gather here during off-duty hours, "
+    "conversations murmuring at various tables."
+)
+
+
+def test_occupants_in_a_room_desc_never_reach_the_prompt():
+    from backdrops import room_projection
+    scene = {"rooms": {"ten_forward": {"name": "Ten Forward",
+                                       "desc": _TEN_FORWARD}}}
+    desc = room_projection(scene, "ten_forward")["desc"]
+    assert "Crew members" not in desc and "civilians" not in desc
+    assert "conversations murmuring" not in desc
+    # ...and the room itself survives, or the strip would have cost more than
+    # it saved.
+    assert "panoramic windows" in desc
+
+
+def test_a_desc_that_is_nothing_but_occupants_yields_no_desc():
+    """No raw-text fallback: an empty description is a thinner prompt, which
+    is the acceptable failure. Handing the occupants back is not."""
+    from backdrops import room_projection
+    scene = {"rooms": {"mess": {"name": "Mess Hall",
+                                "desc": "Crew members gather here."}}}
+    projection = room_projection(scene, "mess")
+    assert "desc" not in projection
+    assert projection["name"] == "Mess Hall"
+
+
+def test_architecture_that_merely_mentions_a_people_word_survives():
+    """Both of these are real strings from the same chat, and both are things
+    to DRAW -- which is why the filter matches "crew members" and not "crew"."""
+    from backdrops import _setting_only
+    for line in (
+        "Along the north and south walls, several standard doors lead to crew "
+        "quarters, labs, and utility spaces.",
+        "The LCARS display panel reads 'En Route to Deck 14' in soft amber "
+        "text while lines of crew registration data scroll rapidly across it.",
+    ):
+        assert _setting_only(line) == line
+
+
+def test_writing_people_into_a_room_desc_is_not_a_new_picture():
+    """The cache key hashes the PROJECTED description, so a room does not
+    regenerate because its occupants were written into or out of the text --
+    a change the backdrop cannot show, since it never depicts them."""
+    empty = {"rooms": {"ten_forward": {
+        "name": "Ten Forward",
+        "desc": "The ship's main lounge. A long curved bank of panoramic "
+                "windows wraps around the forward section."}}}
+    crowded = {"rooms": {"ten_forward": {
+        "name": "Ten Forward",
+        "desc": empty["rooms"]["ten_forward"]["desc"]
+                + " Crew members and civilians gather here during off-duty hours."}}}
+    assert (visual_signature(empty, "ten_forward")
+            == visual_signature(crowded, "ten_forward"))

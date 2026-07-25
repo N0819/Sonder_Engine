@@ -587,6 +587,117 @@ def image_model():
 DEFAULT_IMAGE_SIZE = "1536x1024"   # 3:2
 
 
+# The listing lives one path segment ABOVE the OpenAI-compatible base: the
+# stored base_url is https://nano-gpt.com/api/v1 (where generation happens) but
+# the catalogue is at https://nano-gpt.com/api/models/image. Appending to the
+# base, the way list_models() does, would 404.
+IMAGE_MODELS_PATH = "/models/image"
+
+
+def image_models_url(base):
+    base = (base or "").rstrip("/")
+    if base.endswith("/v1"):
+        base = base[:-3].rstrip("/")
+    return base + IMAGE_MODELS_PATH
+
+
+# The catalogue arrives NESTED, and one level of unwrapping is not enough:
+# nano-gpt answers {"models": {"image": {"<model id>": {...}}}, "meta": {...}}.
+# Stopping at "models" yields a single entry called "image" -- a picker with
+# one nonsense row in it, which is exactly what shipped first.
+_IMAGE_LIST_WRAPPERS = ("data", "models", "image_models", "image")
+
+
+def _image_entries(payload):
+    """Normalise a provider's image catalogue into an iterable of (id, meta).
+
+    Tolerant on purpose: this is one vendor-specific endpoint with no shared
+    spec behind it, so it may come back as a list of strings, a list of
+    objects, {"data": [...]}, or an id-keyed map nested a couple of levels
+    down. Unwrapping is bounded and stops as soon as the dict stops looking
+    like an envelope -- real model ids ("fal-ai/boogu-image") never collide
+    with the wrapper names.
+    """
+    for _ in range(len(_IMAGE_LIST_WRAPPERS)):
+        if not isinstance(payload, dict):
+            break
+        for key in _IMAGE_LIST_WRAPPERS:
+            inner = payload.get(key)
+            if isinstance(inner, (list, dict)):
+                payload = inner
+                break
+        else:
+            break
+    if isinstance(payload, dict):
+        return [(str(k), v if isinstance(v, dict) else {})
+                for k, v in payload.items()]
+    out = []
+    for entry in (payload or []):
+        if isinstance(entry, dict):
+            mid = entry.get("id") or entry.get("model") or entry.get("name")
+            if mid:
+                out.append((str(mid), entry))
+        elif entry:
+            out.append((str(entry), {}))
+    return out
+
+
+def _image_model_entry(mid, meta):
+    """One catalogue row: {id, badge, included, ctx, sizes}.
+
+    `sizes` matters more than it looks. Half these models do not take a
+    WxH string at all -- they take named resolutions ("square_hd",
+    "landscape_16_9") -- so a picker that offers no sizes is a picker that
+    lets you save a model which then fails at generation time.
+    """
+    subscription = meta.get("subscription")
+    if isinstance(subscription, dict):
+        included = bool(subscription.get("included"))
+    else:
+        included = bool(subscription)
+    prices = [v for v in (meta.get("cost") or {}).values()
+              if isinstance(v, (int, float))] if isinstance(meta.get("cost"), dict) else []
+    if included:
+        badge = "included in subscription"
+    elif prices:
+        # %g, not a fixed 3 decimals: these prices run from $0.003 to $0.25,
+        # and %.3f rounds $0.0075 down to "$0.007" -- quoting a price lower
+        # than the one charged.
+        badge = "from $%.4g" % min(prices)
+    else:
+        badge = "image"
+    sizes = [str(r.get("value")) for r in (meta.get("resolutions") or [])
+             if isinstance(r, dict) and r.get("value")]
+    return {"id": mid, "badge": badge, "included": included, "ctx": None,
+            "sizes": sizes}
+
+
+def list_image_models(prov):
+    """Image-generation models offered by `prov`, as catalogue rows.
+
+    Only nano-gpt publishes a separate image catalogue; for every other
+    provider the ordinary model list is the honest answer (OpenAI's, for
+    instance, contains gpt-image-1 and dall-e-3 alongside the chat models),
+    and the picker is a search box, so an unfiltered list costs nothing.
+    """
+    if prov["kind"] != "nanogpt":
+        return list_models(prov)
+    url = image_models_url(_prov_field(prov, "base_url"))
+    r = _session().get(url, headers=_headers(prov), timeout=REQUEST_TIMEOUT)
+    r.raise_for_status()
+    out = []
+    for mid, meta in _image_entries(r.json()):
+        # A backdrop is generated from text alone. Roughly a fifth of this
+        # catalogue is image-to-image (edit) models, which require an input
+        # image and can only fail here -- listing them is a trap, not a
+        # choice. "both" and an absent label are kept.
+        if str(meta.get("iconLabel") or "") == "image-to-image":
+            continue
+        out.append(_image_model_entry(mid, meta))
+    out.sort(key=lambda x: x["id"])
+    return out
+
+
 def generate_image(prompt, size=None, timeout=180):
     """Generate one image, returning raw bytes. Raises on failure.
 

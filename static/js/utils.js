@@ -2,6 +2,9 @@
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const S = {
   boot: null, tab: "chats", chatId: null, chat: null, busy: false, models: {},
+  // Image-generation catalogues are a separate listing on the one provider
+  // that publishes one, so they cache separately from chat models.
+  imageModels: {},
   nsfw: false, tasks: new Map(), taskSeq: 0, modalToken: 0, memoryCharacter: null,
   // Which frame (diegetic era) this browser tab is currently viewing and
   // will post new turns into -- null means the present, the implicit
