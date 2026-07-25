@@ -97,9 +97,9 @@ two different registers, and nothing in the system notices.
 The insight worth building on: **continuity is not interiority.** Most of what
 makes a person feel real across encounters is consistency of *surface* — how
 they talk, what they call you, the thing they always complain about. That can be
-delivered by deterministic replay of their own public record, at zero
-information-barrier cost. Interiority stays behind the promotion wall where it
-belongs.
+delivered from their own public record, at no information-barrier cost.
+Interiority stays behind the promotion wall where it belongs. §3 builds the
+whole design on this line.
 
 ### 2.3 They have no place
 
@@ -142,30 +142,170 @@ empty until the director happens to invent someone.
 
 ---
 
-## 3. The theory: three jobs, currently one mechanism
+## 3. The design: short-context furniture with a rolling digest
 
-One stage is being asked to do three different things with three different cost
-models, gating shapes, and info-barrier profiles:
+The shape below supersedes an earlier draft of this document that proposed
+per-presence reaction calls plus a separate ambient stage. The core idea —
+**give each background presence a bounded rolling summary of what it heard and
+said, and let ONE call voice the whole room** — is both cheaper and better, and
+it collapses two proposed stages into one.
 
-| | job | trigger | cost shape | status |
-|---|---|---|---|---|
-| **A** | **Response** — an extra answers when engaged | player/character salience | 1 call per engaged presence | exists, works |
-| **B** | **Ambient life** — the room talks to itself | *absence* of player salience + cadence | 1 call per beat, N voices | missing |
-| **C** | **Continuity** — the same extra is recognizably the same person | free, deterministic | 0 calls | missing |
+### 3.1 The tier this creates
 
-Separating them is the whole proposal. In particular B is gated by the *inverse*
-of A's gate — it should fire on the quiet turns, which are exactly the turns
-where A costs nothing today.
+The engine currently has two tiers of mind: **amnesiac extra** (no memory, one
+stateless beat, `agents/background.py`) and **promoted character** (sheet,
+`memories` rows, mind-models, relationships, consolidation). Nothing in between.
+That gap is why extras read as furniture and why promotion feels abrupt.
 
----
+The digest is the missing middle tier: **continuity without interiority.** A
+presence accumulates a bounded prose summary of its own perceptual slice — what
+it heard, what it said — and nothing else. No mind-models, no relationship
+tracking, no salience/confidence structure, no `memories` rows, no consolidation
+scheduler. One short string per presence.
 
-## 4. Proposals
+### 3.2 The cardinal rule: voice batched, write unbatched
 
-Ordered cheapest-first, and each is independently shippable.
+The risk of running N presences through one LLM is really two risks with very
+different blast radii:
 
-### P1 — `place` block in the payload (theming, ~30 lines, no schema change)
+| | what leaks | cost |
+|---|---|---|
+| **Transient** | presence B's *spoken line* is colored by presence A's digest | one bad line, this turn, gone next turn |
+| **Persistent** | the shared call also authors the digest updates, so the leak is written to storage | compounds forever |
 
-Add to `_react_one`'s payload:
+Therefore:
+
+- **Voicing is batched.** One call per turn per ambient scope, holding every
+  presence in that scope. Accept transient contamination — see §3.3 for why it
+  is small.
+- **Writing is never batched.** A digest is extended by appending
+  `_beat_for_presence(name)` output — already concealment-filtered and
+  hear-level-filtered, deterministic, LLM-free. Periodic compaction runs
+  **per presence**, one presence per call.
+
+Storage never sees a shared context window. That single rule is the difference
+between an acceptable tier relaxation and a slow poison.
+
+### 3.3 Why batched voicing is safer than it sounds
+
+Presences in one room have **nearly identical information sets by
+construction** — they heard the same beat. The leak surface is proportional to
+the *divergence* between their digests, not to digest size. Divergence has
+exactly four sources:
+
+| source | handled by |
+|---|---|
+| different rooms | **partition rule**: batch only presences inside the same `spatial.ambient_scope` |
+| concealed lines | `_beat_for_presence` already drops them before they can be appended |
+| unhearable lines | `_beat_for_presence`'s `hear_level` check, same |
+| different arrival turns | *residual* — see below |
+
+The partition rule is the important one, and it is cheap: group presences by
+ambient scope, one call per group. In practice the player is in one place, so
+this is one call.
+
+The residual is arrival-time divergence — the regular who has been there since
+turn 1 versus the one who walked in at turn 15 — and the honest answer is that
+this is a **tier-appropriate** leak. A barfly knowing the tavern's gossip is
+approximately correct barfly behaviour. The engine's information discipline
+should be tiered by what a breach costs: a promoted character leaking a secret
+is fatal to the premise; furniture leaking ambient common knowledge is not.
+
+What stays **absolute at every tier**: a concealed line never enters any digest,
+and never reaches any voicing call. That floor is enforced deterministically,
+before the model sees anything, by the filter that already exists.
+
+### 3.4 One stage, not two
+
+Once voicing is batched, **reaction and ambient chatter stop being separate
+problems.** The earlier draft split them only because per-presence calls made
+ambient life cost N calls; batching removes that pressure.
+
+A single `scene_life` stage, replacing `background_react`:
+
+```
+payload = {
+  "place":  { room_name, room_desc, location, ambient_location, time,
+              genre, style: {genre, tone, avoid} },       # see §3.7
+  "beat":   { resolved_event, player_declaration },       # existing filters
+  "cast":   [ { name, role_hint, station_room, digest,
+                addressed_by, present_since, last_spoke } , ... ],
+  "variant_seed": nonce,
+}
+->  { entries: [ { speaker, quote?, action?, addressed_to?, volume } ] }   # 0..N
+```
+
+Some entries answer the player; some are two presences talking to each other.
+That second kind is impossible in the current architecture — reactors are
+generated blind to one another (§2.4) — and it is the single most recognizable
+signature of an inhabited room.
+
+Deterministic post-validation, mirroring what `_react_one` already does:
+
+- `speaker` must be a name in this call's group, else drop the entry;
+- an entry whose `addressed_to` is not the player is **ambient** — drop it if it
+  names the player or persona in its quote;
+- force `visibility: "overt"`, clamp `volume`, cap total entries (2–3);
+- validate and drop entries **individually**, never fail the whole stage on one
+  malformed entry.
+
+Merge exactly where `background_react` merges today (`agents/perception.py`), so
+hear-level scoping, concealment and `_ordered_beat_events` keep working
+unchanged.
+
+### 3.5 Digest lifecycle
+
+**Append (every turn, free).** For each presence in scope, append
+`_beat_for_presence(name)` output plus its own authored line to a raw ring
+buffer on the presence record:
+
+```
+"digest":  "compacted prose, capped ~600 chars",
+"recent":  [ {turn, text}, ... ],     # raw tail, max k entries
+"digest_through_turn": idx,
+```
+
+**Compact (rare, one call per presence).** When `recent` exceeds k, fold
+`digest + recent` into a new digest and clear the tail. Mirror
+`memory.consolidate_character_memory`'s contract rather than inventing one: it
+already implements `previous_summary` + only-what-is-new-since-`end_turn_idx`,
+which exists precisely to stop payloads growing without bound across a long
+chat. Summary-of-summary rot is real but bounded here, because the digest is
+capped, the presence is shallow, and the raw tail is always uncompacted.
+
+**Freeze while unobserved.** Digests tick only while the presence is inside the
+player's ambient scope. A barkeep in a tavern the player left three days ago
+does not accumulate — the digest freezes and thaws on return. Cheap, and
+diegetically fine: nothing is being simulated off-screen anyway.
+
+**Prune.** A seeded presence that has never spoken and has not been in scope for
+N turns is dropped, or the presence dict grows without bound.
+
+### 3.6 Promotion gets better, not blurrier
+
+The obvious objection — "if furniture has a digest, what does promotion mean?" —
+inverts on inspection. `promote_background_character(cid, name, sheet=None,
+memory_seeds=None)` **already accepts seeds**. Today
+`auto_promote_background_characters` mints a near-blank sheet at exactly the
+moment a presence became interesting enough to matter. With digests, the digest
+*is* the seed material: furniture that earns a mind arrives with a history
+instead of amnesia.
+
+Promotion therefore stays the same boundary it always was — the point at which
+someone gains **interiority** (psychology, mind-models, relationships,
+perception as a real observer). The digest is surface continuity only, and
+crossing the line converts it rather than duplicating it.
+
+**Guard the threshold.** Digest-fed ambient chatter must not accrue
+`dialogue_turns` (`AUTO_PROMOTE_DIALOGUE_THRESHOLD = 3` — three turns of
+barfly noise would clear it). Ambient entries increment a separate
+`ambient_turns` counter excluded from both promotion thresholds. Speaking **to
+the player** is what earns a mind.
+
+### 3.7 The `place` block (do this first, independently)
+
+Regardless of everything above, the payload's only location context today is
+`station_room` — a bare room id — plus 160 characters of `role_hint`. Add:
 
 ```python
 "place": {
@@ -179,164 +319,84 @@ Add to `_react_one`'s payload:
 }
 ```
 
-Every field is objective self-locating information the presence trivially
-possesses — you know what room you are standing in. Reuse
-`perception._ambient_location_for` rather than reading `scene.location` raw, so
-the nesting rules (an enclosed room does not receive the outer location's
-ambience) hold identically to how they hold for real characters.
+Every field is objective self-locating knowledge — you know what room you are
+standing in. Reuse `perception._ambient_location_for` rather than reading
+`scene.location` raw, so nesting rules hold identically to how they hold for
+real characters. Only `genre`/`tone`/`avoid` from the style guide;
+`director_notes`/`mapping_notes` are instructions to other stages, not to a
+person in a room.
 
-Only `genre`/`tone`/`avoid` from the style guide — `director_notes` and
-`mapping_notes` are instructions to other stages, not to a person in a room.
+This is ~30 lines, needs no schema or pipeline change, and is the entire
+location-theming lever. Ship it before building the digest.
 
-Prompt change: tell the reactor its line should sound like it belongs to *this*
-place at *this* hour.
+---
 
-**This alone converts existing reactions from generic to location-themed.**
+## 4. Follow-ons
 
-### P2 — Self-continuity by replay (`last_lines`)
+Worth building only after §3 proves the channel reads well — they exist to feed
+it.
 
-Extend the presence record, harvested deterministically at commit from what was
-already committed:
+**Location-themed population at mapping time.** Let the mapping stage emit
+`ambient_presences: [{name, role_hint, station_room}]` (0–3) when it mints a
+room. Commit tracks them with `seeded: true` and empty `dialogue_turns` so they
+do not auto-qualify to react. Mapping already receives the style guide and
+fiction model, so theming is free: a tavern gets a barkeep and a regular, a
+morgue gets a night attendant, a bridge gets an ensign at ops. Requires the
+pruning rule from §3.5. Note this is the one genuinely new information surface
+in this document — a seeded presence is a *fact about the world* mapping
+invented, so it must commit through the normal scene/entity path, not be written
+straight into `background_presences` behind commit's back.
 
-```
-"last_lines": [{"turn": idx, "quote": "..."}]   # ring buffer, max 2, own quotes only
-"player_exchanges": {"addressed_by_player": int, "answered": int}
-```
+**The chorus presence.** The hard-cap comment in `background_react` already
+states the principle: *"beyond this a crowd is a chorus."* Make it an entity
+kind — `aggregate: true` renders unattributed collective reaction ("someone at
+the back laughs"), no name, no promotion path, no per-member tracking, one
+digest for the whole crowd. Mapping seeds one for any room it calls crowded.
 
-Replay `last_lines` into the payload as *"the last things you yourself said out
-loud"*. This is not memory: it is the presence's own public record, already
-rendered to the player, replayed back. No perception filter is needed because
-they said it.
+---
 
-`player_exchanges` is a counter tuple in the same category as the existing
-`dialogue_turns` — objective interaction history, not a relationship model. It
-lets the prompt say "the player has spoken to you four times tonight" without
-anyone modelling how the barkeep *feels* about that.
+## 5. Remaining risks
 
-Also: keep `first_role_hint` immutable alongside the currently-overwritten
-`sketch.role_hint`, so a presence's original identity is not drifted away by
-each new director description.
-
-### P3 — The `ambient_beat` stage (the actual feature)
-
-A new optional stage, placed after `background_react` and before
-`perception_outcome` so its lines ride the same merge path.
-
-**Gate** (deterministic, LLM-free, in `commit.py` next to the existing one):
-
-- fires only when the beat is **quiet** — no `flow_addressed`, no owed reply, no
-  `reaction_loop` and no `interaction_loop` ran this turn;
-- requires ≥1 tracked presence whose `station_room` is inside
-  `spatial.ambient_scope(sc, player_room)` and who did not speak this beat
-  (otherwise the lines are generated and then dropped by perception — wasted
-  call);
-- fires on a **cadence**: a pure function of `(chat_id, turn_idx)` — e.g. a hash
-  mod k, with k from `background_config`. Purity matters: a rerun or reroll must
-  not flip fire/no-fire, or step/variant replay desyncs.
-
-**Call shape**: **one** call producing up to N (default 2) short lines from
-*named, distinct* presences. This is the fix for §2.4 — a single call can author
-an exchange, which N blind calls structurally cannot. It is also the fix for the
-cost objection: ambient life costs one call on quiet turns, not N.
-
-**The load-bearing constraint**: an ambient line is *not addressed to the
-player*. Enforce deterministically after the call, not by prompt alone:
-
-- drop any entry whose `intended_target` resolves to the player/persona;
-- drop any entry whose quote names the player or persona;
-- force `visibility: "overt"`, `volume ∈ {"quiet", "normal"}`, speaker forced to
-  the gate-picked name (same discipline as `_react_one`).
-
-This is what separates ambient life from "another channel for NPCs to talk at
-the protagonist." Without it, P3 degenerates into P0 with extra steps.
-
-**Merge**: identical to `background_react` — append to the dialogue log at the
-`agents/perception.py` merge site. Hear-level scoping, concealment and
-`_ordered_beat_events` then apply unchanged, and an ambient line spoken in the
-tavern correctly fails to reach the player in the cellar.
-
-**Narrator contract**: ambient lines are **texture, not beats**. The narrator
-prompt needs an explicit clause that these may be compressed, rendered as
+**Narrator dilution.** Ambient entries are *texture, not beats.* The narrator
+prompt needs an explicit clause that they may be compressed, rendered as
 overheard fragments, or folded into a sentence of atmosphere — never dramatized
-as the turn's event. Without this clause, every quiet turn inflates into a
-tavern set-piece and the pacing dies.
+as the turn's event. Suppress the ambient half of `scene_life` entirely on
+high-tension beats (a contested reaction ran, a weapon came out). Without this,
+every quiet turn inflates into a set-piece and pacing dies.
 
-### P4 — Location-themed population at mapping time
+**Rerun / variant determinism.** `scene_life` must be a real `steps`/`variants`
+row like every other stage, and any cadence gating must be a pure function of
+`(chat_id, turn_idx)` — no wall clock, no RNG — or rerun-from-stage and reroll
+silently change whether the room was alive. Digest appends happen at commit,
+inside the turn transaction, so a rolled-back turn does not leave a half-written
+digest.
 
-When the mapping stage mints a new room, let it optionally emit:
+**Digest as a leak vector.** The content is not the danger; the **provenance**
+is. Appending `_beat_for_presence` output is safe by construction. Appending
+`resolved_event` raw, or any other observer's perception view, is not — the
+first is authored from the omniscient objective frame, which is exactly what
+`_beat_for_presence` exists to filter. This invariant deserves a test.
 
-```
-"ambient_presences": [{"name", "role_hint", "station_room"}]   # 0–3
-```
-
-Commit tracks these into `background_presences` with `seeded: true` and empty
-`dialogue_turns` (so they do *not* auto-qualify for reaction — see §2.1's gate
-table, where `dialogue_turns` non-empty is itself a qualifier).
-
-Mapping already receives the style guide and the fiction model, so theming is
-free and consistent with the room it just invented: a tavern gets a barkeep and
-a regular, a morgue gets a night attendant, a bridge gets an ensign at ops.
-
-**Pruning is mandatory.** Seeded presences that have never spoken and whose
-`last_turn` is older than N turns should be dropped at commit, or the presence
-dict grows without bound over a long chat and every entry is a promotion
-candidate.
-
-### P5 — The chorus presence
-
-The hard-cap comment in `background_react` already states the principle: *"beyond
-this a crowd is a chorus."* Make it a real entity kind.
-
-A presence flagged `aggregate: true` renders unattributed collective reaction —
-"someone at the back laughs", "the line behind you starts complaining" — with no
-name, no promotion path, and no per-member tracking. One call represents fifty
-people. Mapping seeds one for any room it describes as crowded.
+**Cost.** One call per turn per occupied ambient scope, plus a rare compaction
+call per presence. Compare to today: zero on quiet turns, one per picked
+presence otherwise. The gate should still skip `scene_life` entirely when the
+scope holds no presences, so empty rooms stay free.
 
 ---
 
-## 5. Risks, and how each is contained
+## 6. Sequencing
 
-**Promotion pollution.** Ambient chatter must not accrue `dialogue_turns`, or a
-barfly who says three unrelated things auto-promotes into a full character with
-a sheet and memory (`AUTO_PROMOTE_DIALOGUE_THRESHOLD = 3` — three turns of
-ambient noise clears it). Record ambient lines under a separate `ambient_turns`
-counter that is *excluded* from both promotion thresholds. Speaking **to the
-player** is what should earn a mind.
-
-**Narrator dilution.** See the narrator contract in P3. Additionally cap ambient
-lines at 2 per turn and suppress the stage entirely on any turn where the
-director's beat is high-stakes (a contested reaction ran, someone drew a weapon).
-Ambient life is a low-tension-only feature.
-
-**Rerun / variant determinism.** The new stage must be a real `steps`/`variants`
-row like every other stage, and its cadence gate must be a pure function of
-`(chat_id, turn_idx)` with no wall-clock and no RNG, or rerun-from-stage and
-reroll silently change whether the room was alive.
-
-**Cost.** One extra call on quiet turns only — and quiet turns are exactly the
-turns where `background_react` currently costs nothing, so the marginal spend
-lands where there is budget. The gate's "is anyone actually in ambient scope"
-check exists specifically to avoid paying for lines perception will discard.
-
-**Information barriers.** P1's `place` block and P2's `last_lines` are both
-strictly self-knowledge (your own room, your own past words) and introduce no
-new leak surface. P3's output rides the existing merge path, so it is filtered
-by the same perception machinery as everything else. The one genuinely new
-surface is P4: a mapping-seeded presence is a *fact about the world* the mapping
-stage invented, and must be committed through the normal scene/entity path
-rather than written straight into `background_presences` behind commit's back.
-
----
-
-## 6. Suggested sequencing
-
-1. **P1** (`place` block) — smallest diff, immediate qualitative win, no schema
-   or pipeline change. Do this first and evaluate before building anything else.
-2. **P2** (`last_lines` replay) — small commit-side harvest plus one payload
-   field.
-3. **P3** (`ambient_beat`) — the real feature. New stage, new prompt, new
-   schema entry, deterministic gate, narrator clause, and the anti-addressing
-   post-validation. Needs its own tests mirroring `tests/test_background_react.py`
-   and `tests/test_background_beat_filter.py`.
-4. **P4 / P5** (seeded population, chorus) — only worth building once P3 proves
-   the ambient channel reads well, because they exist to feed it.
+1. **`place` block** (§3.7) — smallest diff, immediate qualitative win, no
+   schema or pipeline change. Evaluate before building anything else.
+2. **Digest storage** (§3.5, append + freeze + prune) — deterministic, LLM-free,
+   no behavioural change yet. Land it and let digests accumulate in real play so
+   step 3 has material to test against.
+3. **Per-presence compaction** (§3.5) — mirror
+   `memory.consolidate_character_memory`'s incremental contract.
+4. **`scene_life`** (§3.4) — the batched stage replacing `background_react`:
+   new prompt, new schema entry, partition rule, post-validation, narrator
+   clause. Needs tests mirroring `tests/test_background_react.py` and
+   `tests/test_background_beat_filter.py`, plus a new one for the §5
+   provenance invariant and one asserting ambient entries never accrue
+   `dialogue_turns`.
+5. **Follow-ons** (§4).
