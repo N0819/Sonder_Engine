@@ -1030,30 +1030,42 @@ function renderFullApiSettings(b) {
           el("div", { style: "margin-top:6px" }, el("b", {}, "Lower it"), " to hard-cap what a single call can cost, or when you're on a small local model whose output limit is well under the default."),
           el("div", { style: "margin-top:6px" }, "Values outside " + motBounds.min + "–" + motBounds.max + " are pulled into range on save."))));
 
-    // Reasoning effort — applied to every role, for models that expose it
-    // (OpenAI o-series, OpenRouter's reasoning block, GLM/DeepSeek thinking
-    // variants on aggregators that pass it through). Blank = model default.
-    const efforts = S.boot.reasoning_efforts || ["minimal", "low", "medium", "high"];
-    const effortSel = el("select", {},
-      [el("option", { value: "" }, "(model default)")].concat(
-        efforts.map(e => el("option",
-          { value: e, ...(S.boot.reasoning_effort === e ? { selected: "" } : {}) }, e))));
-    b.append(el("h4", {}, "Reasoning effort"),
-      el("div", { class: "row", style: "margin:6px 0" },
-        el("span", { class: "small" }, "Effort (all roles)"),
-        effortSel,
-        el("button", {
-          onclick: async () => {
-            const r = await api("PUT", "/api/reasoning_effort", { value: effortSel.value });
-            await boot();
-            toast(r.value
-              ? "Reasoning effort: " + r.value + "." : "Reasoning effort cleared — model default.", "ok");
-          },
-        }, "Save")),
+    // Reasoning effort — PER ROLE, for models that expose it (OpenAI o-series,
+    // OpenRouter's reasoning block, GLM/DeepSeek thinking variants on aggregators
+    // that pass it through). Each role: (default) / off / minimal / low / medium
+    // / high. A role left at default follows the 'default' role, then the model.
+    const effLevels = S.boot.reasoning_effort_levels || ["off", "minimal", "low", "medium", "high"];
+    const effMap = { ...(S.boot.reasoning_effort || {}) };
+    const effRoles = S.boot.roles || Object.keys(effMap);
+    const effSelects = {};
+    const effRow = (role) => {
+      const sel = el("select", { style: "min-width:130px" },
+        [el("option", { value: "" }, role === "default" ? "(model default)" : "(follow default)")]
+          .concat(effLevels.map(l => el("option",
+            { value: l, ...(effMap[role] === l ? { selected: "" } : {}) }, l))));
+      effSelects[role] = sel;
+      return el("tr", {},
+        el("td", { style: "padding-right:10px" }, el("span", { class: "small" }, role)),
+        el("td", {}, sel));
+    };
+    b.append(el("h4", {}, "Reasoning effort (per role)"),
       el("div", { class: "small dim" },
-        "How hard reasoning-capable models think before answering, applied to every role. ",
-        el("b", {}, "Lower"), " is faster and cheaper (good for a thinking model that's slow on mechanical stages); ",
-        el("b", {}, "higher"), " spends more on the hard stages. Sent only to models that understand it — others ignore it. Blank leaves it to the model."));
+        "How hard reasoning-capable models think, ", el("b", {}, "set separately for each role"),
+        ". ", el("b", {}, "off"), " disables reasoning; ", el("b", {}, "low"),
+        " is faster/cheaper for mechanical stages (perception, mapping, utility); higher for the hard ones (director, narrator, major characters). A role on ",
+        el("i", {}, "(follow default)"), " uses the default role's setting; that on ",
+        el("i", {}, "(model default)"), " sends nothing. Ignored by models that don't support it."),
+      el("table", { style: "margin:8px 0;border-collapse:collapse" }, effRoles.map(effRow)),
+      el("div", { class: "row" },
+        el("button", { class: "primary", onclick: async () => {
+          const efforts = {};
+          for (const role of effRoles) { const v = effSelects[role].value; if (v) efforts[role] = v; }
+          const r = await api("PUT", "/api/reasoning_effort", { efforts });
+          await boot();
+          const n = Object.keys(r.reasoning_effort || {}).length;
+          toast(n ? ("Reasoning effort saved for " + n + " role(s).") : "Reasoning effort cleared — all model default.", "ok");
+        } }, "Save reasoning effort"),
+        el("button", { onclick: () => { for (const role of effRoles) effSelects[role].value = ""; } }, "Clear all")));
 
     // OpenRouter upstream routing. One OpenRouter model id is served by
     // several upstreams (Anthropic direct, Bedrock, Azure, Vertex, third-party

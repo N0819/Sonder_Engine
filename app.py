@@ -15,7 +15,7 @@ from providers import (
     resolve_role, list_models, provider, agent_models,
     openrouter_routing, normalize_openrouter_routing, list_openrouter_endpoints,
     max_output_tokens, _coerce_max_output_tokens,
-    reasoning_effort, _coerce_reasoning_effort, REASONING_EFFORTS,
+    reasoning_efforts, _coerce_reasoning_effort, REASONING_EFFORTS,
     MAX_OUTPUT_TOKENS_DEFAULT, MAX_OUTPUT_TOKENS_MIN, MAX_OUTPUT_TOKENS_MAX,
     DEFAULT_BASES, ROLES, SAMPLER_KEYS, DEFAULT_SAMPLERS, Aborted,
 )
@@ -847,8 +847,8 @@ def bootstrap():
         "memory_provenance": MEMORY_PROVENANCE,
         "agent_models": json.loads(get_setting("agent_models") or "{}"),
         "max_output_tokens": max_output_tokens(),
-        "reasoning_effort": reasoning_effort(),
-        "reasoning_efforts": list(REASONING_EFFORTS),
+        "reasoning_effort": reasoning_efforts(),
+        "reasoning_effort_levels": list(REASONING_EFFORTS),
         "openrouter_routing": openrouter_routing(),
         "max_output_tokens_bounds": {
             "default": MAX_OUTPUT_TOKENS_DEFAULT,
@@ -900,12 +900,28 @@ def get_openrouter_endpoints(provider_id: int, model: str):
 
 @app.put("/api/reasoning_effort")
 def put_reasoning_effort(body: dict = Body(...)):
-    """Reasoning effort applied to every role that exposes it. Coerced rather
-    than rejected: it rides on every request, and an unrecognized value must
-    degrade to 'unset' (model default), not break generation. Empty clears it."""
-    value = _coerce_reasoning_effort(body.get("value"))
-    set_setting("reasoning_effort", value)
-    return {"ok": True, "value": value}
+    """PER-ROLE reasoning effort, {role: level}. A role set to 'off' disables
+    reasoning; 'minimal'/'low'/'medium'/'high' set the level; anything else (or
+    absent) is unset -> model default, with a role falling back to the 'default'
+    role. Coerced rather than rejected -- it rides on every request, so a bad
+    value must degrade to unset, not break generation. Accepts either the full
+    map, or a single {role, value} to update one role."""
+    if "role" in body and "value" in body:  # single-role update
+        current = reasoning_efforts()
+        lvl = _coerce_reasoning_effort(body.get("value"))
+        if lvl:
+            current[str(body["role"])] = lvl
+        else:
+            current.pop(str(body["role"]), None)
+        cleaned = current
+    else:  # full map
+        cleaned = {}
+        for role, level in (body.get("efforts") or body).items():
+            lvl = _coerce_reasoning_effort(level)
+            if lvl:
+                cleaned[str(role)] = lvl
+    set_setting("reasoning_effort", json.dumps(cleaned))
+    return {"ok": True, "reasoning_effort": cleaned}
 
 @app.put("/api/max_output_tokens")
 def put_max_output_tokens(body: dict = Body(...)):
