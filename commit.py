@@ -1016,6 +1016,47 @@ def _refresh_relocated_location(sc, prev_scene, diff, ctx):
         sc["location"] = new_loc
 
 
+def prune_dangling_exits(sc):
+    """Drop room exits whose target room does not exist. Returns warnings.
+
+    The merge already drops edges pointing at rooms it just REMOVED, but never
+    checked that an edge's target exists in the first place, so a model naming
+    a room it never defined committed a permanent broken exit. Found live in
+    "The Doctor — Hinami": the janitor closet carried an exit to
+    `enterprise_corridor` while only `enterprise_corridor_deck10` and
+    `_deck14` existed.
+
+    A dangling exit is not cosmetic. spatial.py treats `adjacent` as the
+    authority on what leaves a room, so the exit is offered to the Director and
+    the narrator as real, movement through it resolves against a room with no
+    description or position, and pathing counts a neighbour that cannot be
+    reached. Dropping is the conservative repair: the edge described a place
+    the world never had.
+    """
+    warnings = []
+    rooms = sc.get("rooms")
+    if not isinstance(rooms, dict):
+        return warnings
+    for rid, room in rooms.items():
+        if not isinstance(room, dict) or not isinstance(room.get("adjacent"), list):
+            continue
+        kept, dropped = [], []
+        for edge in room["adjacent"]:
+            if not isinstance(edge, dict):
+                continue
+            target = edge.get("to")
+            if target in rooms:
+                kept.append(edge)
+            else:
+                dropped.append(str(target))
+        if dropped:
+            room["adjacent"] = kept
+            warnings.append(
+                "scene: dropped exit(s) from %s to undefined room(s) %s"
+                % (rid, ", ".join(sorted(set(dropped)))))
+    return warnings
+
+
 def prepare_scene_commit(ctx):
     """Build the exact post-turn scene without mutating durable state.
 
@@ -1232,6 +1273,9 @@ def prepare_scene_commit(ctx):
         _finalize_destruction_news(
             destruction, cid, ctx.turn.frame_id, ctx.turn,
             float(base_clock.get("elapsed_seconds") or 0.0))
+
+    for _msg in prune_dangling_exits(sc):
+        ctx.warnings.append(_msg)
 
     return {
         "scene": sc, "clock": clock,
@@ -1545,8 +1589,25 @@ def _resolve_roster_name(value, roster):
 
 # ---- Background-presence tracking (promotion candidates) ----
 
+# Defaults, not fixed law. How many lines a bystander must speak before the
+# engine offers to give them a mind is an authorial pacing choice: a talky
+# tavern wants a high bar, a two-hander wants a low one. Overridable per chat
+# via the `promotion_thresholds` world key (see scene.promotion_config).
 BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD = 2
 BACKGROUND_PROMOTION_MENTION_THRESHOLD = 4
+
+
+def promotion_thresholds(chat_id):
+    """Per-chat promotion thresholds, falling back to the module defaults."""
+    try:
+        from scene import promotion_config
+        return promotion_config(chat_id)
+    except Exception:
+        return {
+            "dialogue": BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
+            "mention": BACKGROUND_PROMOTION_MENTION_THRESHOLD,
+            "auto_dialogue": AUTO_PROMOTE_DIALOGUE_THRESHOLD,
+        }
 
 _BACKGROUND_NAME_TITLE_WORDS = {
     "dr", "mr", "mrs", "ms", "the", "a", "an", "captain", "commander",
@@ -2067,11 +2128,12 @@ def pick_background_reactors(ctx, dr_output, cap=1):
 
 def promotable_background_presences(chat_id):
     presences = wget(chat_id, "background_presences", {})
+    limits = promotion_thresholds(chat_id)
     out = []
     for name, record in presences.items():
         promotable = (
-            len(record.get("dialogue_turns") or []) >= BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD
-            or len(record.get("mention_turns") or []) >= BACKGROUND_PROMOTION_MENTION_THRESHOLD
+            len(record.get("dialogue_turns") or []) >= limits["dialogue"]
+            or len(record.get("mention_turns") or []) >= limits["mention"]
         )
         out.append({
             "name": name,
@@ -2211,6 +2273,7 @@ def auto_promote_background_characters(ctx):
     promotable = {
         r["name"] for r in promotable_background_presences(cid) if r["promotable"]
     }
+    _auto_dialogue_min = promotion_thresholds(cid)["auto_dialogue"]
     selected = {
         str(n).casefold()
         for n in ((ctx.get("background_react") or {}).get("selected") or [])
@@ -2222,7 +2285,7 @@ def auto_promote_background_characters(ctx):
         if name not in promotable:
             continue
         dialogue_turns = record.get("dialogue_turns") or []
-        if len(dialogue_turns) < AUTO_PROMOTE_DIALOGUE_THRESHOLD:
+        if len(dialogue_turns) < _auto_dialogue_min:
             continue
         # "Present/addressed this beat": their record was touched this turn
         # (spoke / mentioned), the gate picked them, a character's address
