@@ -393,8 +393,7 @@ def scene_life(ctx, nonce, level, cfg):
     payload = {
         "place": place,
         "beat": {
-            "resolved_event": re.sub(
-                r"\s{2,}", " ", str(dr.get("resolved_event") or "")).strip(),
+            "resolved_event": _redacted_resolved_event(dr),
             "player_declaration": _filtered_player_declaration(ctx),
             "events": events,
             "present_characters": [
@@ -498,6 +497,28 @@ def _mint_blurbs(ctx, managed, place):
         minted[canon] = {k: str(b.get(k) or "").strip()[:160]
                          for k in ("manner", "trait", "tell", "look")}
     return minted
+
+
+def _redacted_resolved_event(dr):
+    """resolved_event with every concealed quote body stripped.
+
+    Admission control (§3.11 layer 1) covered dialogue_log but NOT the
+    Director's own prose, which is authored from the omniscient objective frame
+    and can narrate a whispered line's content verbatim. The per-presence path
+    has always guarded this (_beat_for_presence redacts the same bodies as a
+    backstop); the manager path passed the prose raw, so a concealed line the
+    Director restated in narration would have reached the manager's context
+    despite never appearing in its dialogue_log. Found by live play, not by the
+    tests -- they only exercised dialogue_log.
+    """
+    resolved = str(dr.get("resolved_event") or "")
+    for d in (dr.get("dialogue_log") or []):
+        if str(d.get("visibility") or "").casefold() != "concealed":
+            continue
+        body = _quote_body(str(d.get("exact_quote") or ""))
+        if body:
+            resolved = resolved.replace(body, "")
+    return re.sub(r"\s{2,}", " ", resolved).strip()
 
 
 def _withheld_bodies(dr):
