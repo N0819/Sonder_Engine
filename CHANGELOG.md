@@ -1,5 +1,92 @@
 # Changelog
 
+## alpha4.1 — The room you are standing in, as a picture
+
+Scene backdrops become a feature of the app rather than something drivable only
+from a Python shell: a generated image of the room the player is in, rendered
+behind the transcript.
+
+The rule that shapes it is the same information discipline as everything else
+here. The prompt is built from a **whitelisted spatial projection** — room
+name, description, light, exits, damage — and never from perception prose, so
+occupants are absent by construction rather than filtered out afterwards. A
+backdrop therefore depicts the room **empty, always**, which also makes
+per-room caching correct: a place is not a different picture because someone
+walked into it.
+
+### Added
+- **Backdrop API** (`app.py`). `GET /api/turns/{id}/backdrop` resolves the room
+  and the cache signature and never generates — a read has to stay free, since
+  the frontend asks for whichever beat the reader is looking at. `POST` on the
+  same path generates; concurrent callers wanting one signature wait on a
+  per-signature lock and take the cache hit rather than paying twice.
+  `GET /api/chats/{id}/backdrop/{sig}.png` serves the bytes, content-addressed
+  and immutable.
+
+  All of it under `/api/`, so the existing access-control middleware makes it
+  host-only for free. A `StaticFiles` mount would have put an enumerable dump
+  of every room in every story *outside* that middleware entirely — the paths
+  are predictable, and anything not under `/api/` is waved straight through.
+- **The chat backdrop** (`static/js/backdrops.js`). Piggybacks on the
+  scene-mood `IntersectionObserver` rather than adding a second one, so the
+  picture follows whichever beat is on screen and scrolling back through the
+  log walks back through its rooms. Two layers cross-fade, and the image is
+  decoded before the fade starts so it is never a fade to a blank layer. The
+  scrim over the picture is fixed; the panel behind the prose is derived from
+  the image's own Rec. 709 luma in the band the text column occupies, so a
+  bright render pays for its legibility locally instead of dimming everything.
+- **Image-model settings** (⚙ API › Scene backdrops). Image generation is a
+  different API surface from chat completion, so it gets its own setting rather
+  than an `agent_models` role. Off by default — every new room costs a
+  generation — but already-generated rooms still show with it off, because
+  those are free.
+
+### Fixed
+- **Scene mood was restyling the application** (two distinct causes, both
+  reported from live use). `body[data-mood]` swapped `--acc`/`--acc2`, so a
+  keyword read of the prose repainted sidebar buttons, the tab underline, focus
+  rings and the modal header. Removing that was not enough: the chrome panels
+  were ~.9 alpha over a `backdrop-filter` blur and went on sampling the tint
+  underneath them. Surfaces sitting directly over the page background are now
+  opaque, and the tint moved off a full-viewport layer onto `#msgs` itself — so
+  "mood colours the story area only" is structural rather than a rule someone
+  has to remember.
+- **Occupants reached the image prompt through `rooms[].desc`.** The whitelist
+  assumed that field was architecture. Dry-running a live 44-turn chat says
+  otherwise: mapping writes populations into it where prose would name a
+  character — *"Crew members and civilians gather here during off-duty hours,
+  conversations murmuring at various tables."* It is now people-stripped on the
+  way out, and the cache key hashes the **stripped** text, so writing someone
+  into or out of a description is not a new picture. The filter matches "crew
+  members" and not "crew" deliberately: the same chat's corridor reads "doors
+  lead to crew quarters" and its turbolift scrolls "crew registration data",
+  and both are things to draw.
+- **A generated image was thrown away instead of shown.** The paint was gated
+  on a sequence number that every scroll tick bumps, and generation takes tens
+  of seconds — so an image was requested, paid for, written to disk, and never
+  displayed. It now gates on whether that *picture* is still wanted, which is
+  the right identity anyway: consecutive turns in a room share a signature.
+- **A painted image was still invisible.** The layer sat at `z-index:-2` as a
+  sibling of `#app`, on the reasoning that a negative stack level paints above
+  the page background and below the app. Devtools showed the background-image
+  and the `.on` class with nothing on screen. Replaced with an ordinary layer
+  at `z-index: 0` and `#app` lifted to `1` — no negative levels anywhere.
+- **The nano-gpt image catalogue listed nothing searchable.** The response is
+  nested two levels (`{"models": {"image": {…}}}`) and stopping one short
+  yielded a single row literally named "image". Fixed; the 44 image-to-image
+  models are also dropped, since a backdrop is generated from text alone and an
+  edit model can only fail at generation time. Rows now carry a price and the
+  model's own resolutions — sizes are per-model and not always `WxH`
+  (`landscape_16_9`, and `1024*1024` with an asterisk), and offering none is
+  how you save a model that then fails.
+
+### Changed
+- **Scene life is visible in the pipeline UI.** The stage is named after the
+  path it will actually take — "Scene life · manager (ambient|full)" vs
+  "Background · presence reaction" — and the sub-agents that run *inside* it
+  (`blurb_mint`, `scene_life`, `backdrop_prompt`) are named too, so a stage
+  that spends a whole extra call no longer looks stuck.
+
 ## alpha4.0.4 — A ship's computer is a voice, not a bystander
 
 Findings from auditing a 39-turn live chat ("The Doctor — Hinami ⎇14 ⎇17 ⎇16 ⎇23").
