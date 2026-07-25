@@ -715,6 +715,117 @@ other. `full` buys that single-beat coherence and pays the tagged-divergence
 risk for it. That is a real authorial tradeoff, which is why it belongs in a
 setting rather than in a decision made here.
 
+### 3.11 The I/O contract: structured perception in, attributed conduct out
+
+#### Perception is two layers, and only one of them is a guarantee
+
+§3.10's group filter and per-character perception structure are not alternatives
+— they compose, and it matters which one carries the guarantee:
+
+1. **Admission control (deterministic, hard).** Decides what enters the context
+   *at all*. A whisper between two other parties, a line concealed from every
+   managed presence, the player's concealed sequence elements — these never
+   appear, so no prompt discipline is protecting them. This layer is the
+   guarantee.
+2. **Per-character annotation (structural, model-honoured).** Within admitted
+   content, marks *which* managed characters received *what*. This layer is
+   fidelity, not safety: if the model ignores it, the failure is one extra
+   knowing something mildly early, never a leaked secret — because the secret
+   was never admitted in step 1.
+
+Keeping the roles distinct is what lets the annotation be rich without the
+safety story depending on it.
+
+#### Use all three hear levels — `fragment` is the interesting one
+
+`spatial.hear_level` already returns **`full` / `fragment` / `none`**, and the
+current code throws away the middle: `_beat_for_presence` keeps only what is
+audible, and `_character_address_of` requires `full` outright (reasonably — a
+fragment cannot be coherently replied to *by a single reactor asked for one
+line*).
+
+Under a structured per-character input, a fragment stops being a problem and
+becomes material:
+
+```
+"events": [
+  { "speaker": "Player", "quote": "...", "audience": {
+       "Mira":  "full",
+       "Tomas": "fragment",     # caught a name and a tone, not the sentence
+       "Old Hen": "none" } } ]
+```
+
+An extra who *half*-heard something and reacts to the half — mishears a name,
+catches the anger but not the words, asks the person next to them what was said
+— is more lifelike than one who either knows everything said in the room or
+nothing. This is the kind of texture the per-presence architecture could not
+express and a scene manager can.
+
+Note this annotation is computed **deterministically** from `hear_level` /
+`spatial_rel` / concealment metadata. It is not a perception LLM call per
+presence — that expense is precisely what the group call exists to avoid.
+
+#### Output: attributed conduct, one entry per acting character
+
+```
+{ "entries": [
+    { "name": "Tomas",
+      "speech": { "quote": "...", "volume": "normal",
+                  "intended_target": "Mira", "tone": "..." },   # optional
+      "action": "wipes the same glass again" }                  # optional
+  ] }                                                            # 0..N entries
+```
+
+Validation before anything is used: `name` must be in the managed set (drop the
+entry otherwise, individually — never fail the whole stage on one bad entry);
+force `visibility: "overt"`; clamp `volume`; apply §3.4's rule that an ambient
+entry may not target the player; cap total entries.
+
+#### The append is a routing operation, not an authoring one
+
+This is the part that resolves the apparent conflict with §3.2's "write
+unbatched" rule — and the resolution is better than the rule.
+
+The batched call never authors digest prose. It emits **structurally attributed
+entries**, and deterministic commit code routes each one to its own presence's
+profile: entry `name` selects the record, the quote appends to that presence's
+raw tail as an own-utterance, counters update per §3.6. No shared-context
+summary is ever written to storage, because the model was never asked to write a
+summary at all. §3.2 stands unchanged; this just satisfies it by a cleaner
+route than "one compaction call per presence."
+
+Two conditions make the append safe:
+
+- **Validate before append, not just before render.** §3.3.1's verbatim floor —
+  string-matching output against withheld quote bodies — must run *ahead of the
+  write*. A contaminated line that is merely rendered costs one turn; the same
+  line appended to a profile is re-read every subsequent turn and survives every
+  future compaction. This is the single most important ordering constraint in
+  the design.
+- **At `ambient` (§3.10) it is provably safe.** The group context holds only
+  common knowledge, so a contaminated line cannot be produced, so the append
+  cannot poison anything. The level structure carries through to storage safety,
+  not just speech safety.
+
+#### The new risk this creates: a self-feeding loop
+
+Appending manager output to profiles that the manager reads next turn closes a
+feedback loop. The manager gives Tomas one bitter line on turn 3, reads "Tomas
+said something bitter" on turn 4, and escalates; by turn 20 Tomas is a
+caricature of a mood he was never authored to have. Self-feeding summaries drift
+toward their own most recent extreme, and nothing in the loop pulls back.
+
+The **frozen blurb (§3.8) is the anchor**, and this is the strongest argument
+for its immutability. It never moves, so it is the one thing in the payload
+still describing who this person actually is rather than what they most recently
+happened to do. Two consequences for implementation:
+
+- compaction must be instructed to preserve the blurb's register, not the recent
+  emotional trend — the digest summarizes *events*, the blurb owns *manner*;
+- if drift shows up in play anyway, the cheap corrective is to cap how much
+  recent material reaches the manager (a short tail plus the frozen blurb) long
+  before reaching for anything cleverer.
+
 ---
 
 ## 4. Follow-ons
@@ -796,8 +907,10 @@ scope holds no presences, so empty rooms stay free.
    group filter, post-validation, and narrator clause; tests mirroring
    `tests/test_background_react.py` and `tests/test_background_beat_filter.py`;
    plus new ones for the §5 provenance invariant, for ambient entries never
-   accruing `dialogue_turns`, and for the group filter withholding every
-   whisper and every line directed at a non-managed party.
+   accruing `dialogue_turns`, for the group filter withholding every whisper and
+   every line directed at a non-managed party, and for §3.11's ordering
+   constraint — that the verbatim floor runs *before* the profile append, not
+   only before rendering.
 7. **Interim filler** (§3.9) — last, deliberately. It is the only fabricating
    component, and it is worth building only once the derived layers work, so
    that its output is visibly distinguishable from theirs in real play. Needs a
