@@ -761,6 +761,29 @@ class BackgroundReactOutput(BaseModel):
     dialogue_log_entry: Optional[DialogueLogEntry] = None
     action: str = ""
 
+class SceneLifeEntry(BaseModel):
+    """One managed presence's conduct for this beat, attributed by name so the
+    commit-side append is a ROUTING operation rather than an authoring one
+    (docs/BACKGROUND_LIFE_DESIGN.md §3.11)."""
+    name: str
+    speech: Optional[DialogueLogEntry] = None
+    action: str = ""
+
+class SceneLifeOutput(BaseModel):
+    entries: list[SceneLifeEntry] = Field(default_factory=list)
+
+class BlurbMintEntry(BaseModel):
+    """A frozen personality blurb (§3.8). Surface only -- manner, a standing
+    concern, a repeatable tic -- never private goals or beliefs about others."""
+    name: str
+    manner: str = ""
+    trait: str = ""
+    tell: str = ""
+    look: str = ""
+
+class BlurbMintOutput(BaseModel):
+    blurbs: list[BlurbMintEntry] = Field(default_factory=list)
+
 class StateDiff(BaseModel):
     positions: dict[str, str] = Field(default_factory=dict)
     rooms: dict[str, RoomDef] = Field(default_factory=dict)
@@ -1090,6 +1113,8 @@ SCHEMA_MAP = {
     "perception": PerceptionOutput,
     "mapping_commit": MappingCommit,
     "background_react": BackgroundReactOutput,
+    "scene_life": SceneLifeOutput,
+    "blurb_mint": BlurbMintOutput,
 }
 
 def _coerce_int_list(value):
@@ -1629,6 +1654,36 @@ OUTPUT_EXAMPLES = {
             "tone": "gruff",
         },
         "action": "wipes down the counter",
+    },
+    "scene_life": {
+        "entries": [
+            {
+                "name": "Hettie Crawe",
+                "speech": {
+                    "exact_quote": "Coin first. I've heard the songs.",
+                    "volume": "normal",
+                    "intended_target": "Bran",
+                    "tone": "flat",
+                },
+                "action": "sets the tankard down harder than needed",
+            },
+            {
+                "name": "Old Sarn",
+                "speech": None,
+                "action": "turns a little on his stool to watch",
+            },
+        ],
+    },
+    "blurb_mint": {
+        "blurbs": [
+            {
+                "name": "Hettie Crawe",
+                "manner": "short sentences, never says please, prices everything",
+                "trait": "convinced adventurers always leave without paying",
+                "tell": "wipes the same clean spot on the bar",
+                "look": "forearms like a smith's, grey braid pinned up",
+            },
+        ],
     },
     "greeting_interpret": {
         "location": "a dim tavern",

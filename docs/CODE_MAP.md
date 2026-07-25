@@ -8,7 +8,7 @@
 |---|---:|---|---|
 | `affect.py` | 1203 |  | `theory_of_mind` |
 | `agents/__init__.py` | 86 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
-| `agents/background.py` | 250 |  | `agents.common`, `commit`, `db`, `prompts`, `schemas`, `spatial` |
+| `agents/background.py` | 605 |  | `agents.common`, `commit`, `db`, `prompts`, `schemas`, `spatial` |
 | `agents/character.py` | 429 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/common.py` | 3014 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/director.py` | 2595 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
@@ -22,7 +22,7 @@
 | `authored_events.py` | 124 |  | `db` |
 | `character_schema.py` | 639 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
 | `checkpoints.py` | 516 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
-| `commit.py` | 3625 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `spatial`, `spatial_frames`, `theory_of_mind` |
+| `commit.py` | 3679 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `spatial`, `spatial_frames`, `theory_of_mind` |
 | `db.py` | 1245 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 193 |  | `db` |
 | `greetings.py` | 252 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
@@ -35,10 +35,10 @@
 | `paradox.py` | 486 |  | `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 2039 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 2100 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1502 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
-| `scene.py` | 747 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
-| `schemas.py` | 1836 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `scene.py` | 762 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
+| `schemas.py` | 1891 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 1507 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | — |
 | `spatial_frames.py` | 875 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `theory_of_mind.py` | 288 |  | — |
@@ -63,12 +63,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_react_one()` | 196 | 55 lines |
+| `scene_life()` | 366 | 88 lines |
+| `_react_one()` | 551 | 55 lines |
+| `background_react()` | 141 | 49 lines |
+| `_mint_blurbs()` | 456 | 45 lines |
+| `managed_presences()` | 268 | 40 lines |
 | `_beat_for_presence()` | 88 | 35 lines |
-| `background_react()` | 141 | 32 lines |
+| `_audience_map()` | 310 | 32 lines |
 | `_filtered_player_declaration()` | 59 | 27 lines |
-| `_present_others()` | 175 | 19 lines |
-| `_result()` | 125 | 14 lines |
 
 ### `agents/character.py`
 
@@ -225,14 +227,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 2893 | 405 lines |
+| `prepare_memory_commit()` | 2947 | 405 lines |
 | `prepare_scene_commit()` | 1019 | 231 lines |
-| `track_background_presences()` | 1663 | 169 lines |
+| `track_background_presences()` | 1663 | 173 lines |
 | `_prepare_destruction()` | 417 | 158 lines |
-| `prepare_mapping_commit()` | 2296 | 132 lines |
+| `prepare_mapping_commit()` | 2350 | 132 lines |
 | `commit_world_entities()` | 1381 | 123 lines |
-| `commit_mapping()` | 2430 | 120 lines |
-| `commit_world_pressure()` | 2728 | 115 lines |
+| `commit_mapping()` | 2484 | 120 lines |
+| `commit_world_pressure()` | 2782 | 115 lines |
 
 ### `db.py`
 
@@ -360,10 +362,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 2030 | 10 lines |
-| `presets()` | 2021 | 2 lines |
-| `active_preset()` | 2024 | 2 lines |
-| `nsfw_enabled()` | 2027 | 2 lines |
+| `get_prompt()` | 2091 | 10 lines |
+| `presets()` | 2082 | 2 lines |
+| `active_preset()` | 2085 | 2 lines |
+| `nsfw_enabled()` | 2088 | 2 lines |
 
 ### `providers.py`
 
@@ -382,7 +384,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `private_knowledge_for()` | 704 | 44 lines |
+| `private_knowledge_for()` | 719 | 44 lines |
 | `recent_events()` | 385 | 36 lines |
 | `active_disguises()` | 190 | 31 lines |
 | `director_context()` | 422 | 29 lines |
@@ -395,14 +397,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 1253 | 193 lines |
-| `semantic_output_errors()` | 1707 | 76 lines |
-| `validate_llm_output_strict()` | 1784 | 53 lines |
+| `preprocess_llm_output()` | 1278 | 193 lines |
+| `semantic_output_errors()` | 1762 | 76 lines |
+| `validate_llm_output_strict()` | 1839 | 53 lines |
 | `_coerce_str_list()` | 12 | 33 lines |
-| `_coerce_considered_responses()` | 1104 | 32 lines |
-| `validate_llm_output()` | 1447 | 29 lines |
-| `_coerce_conditions()` | 1167 | 27 lines |
-| `_hoist_misplaced_entity_siblings()` | 1209 | 21 lines |
+| `_coerce_considered_responses()` | 1129 | 32 lines |
+| `validate_llm_output()` | 1472 | 29 lines |
+| `_coerce_conditions()` | 1192 | 27 lines |
+| `_hoist_misplaced_entity_siblings()` | 1234 | 21 lines |
 
 ### `spatial.py`
 

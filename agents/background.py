@@ -142,9 +142,26 @@ def background_react(ctx, nonce):
     dr = ctx.get("director_resolve") or {}
     try:
         from scene import background_config
-        cap = int(background_config(ctx.chat.id).get("max_reactors", 1))
+        cfg = background_config(ctx.chat.id)
     except Exception:
-        cap = 1
+        cfg = {}
+    level = str(cfg.get("scene_life") or "off").strip().casefold()
+    if level in ("ambient", "full"):
+        # Scene-manager path (docs/BACKGROUND_LIFE_DESIGN.md §3.10-§3.12). It
+        # returns the SAME _result() shape as the per-presence path, so every
+        # downstream merge (perception.py, narration.py, commit.py's
+        # _background_fired_reactions) works unchanged.
+        out = scene_life(ctx, nonce, level, cfg)
+        if out["fired"] or level == "ambient":
+            # At `ambient` a directed line is deliberately withheld from the
+            # manager, so fall through to the per-presence path when the
+            # manager stayed silent -- that is exactly the case background_react
+            # already handles correctly.
+            if out["fired"]:
+                return out
+        else:
+            return out
+    cap = int(cfg.get("max_reactors", 1) or 1)
     cap = max(1, min(3, cap))  # hard ceiling; beyond this a crowd is a chorus
     names = pick_background_reactors(ctx, dr, cap=cap)
     if not names:
@@ -170,6 +187,344 @@ def background_react(ctx, nonce):
         if entry:
             reactions.append(entry)
     return _result(names, reactions)
+
+
+# ---------------------------------------------------------------------------
+# Scene manager (docs/BACKGROUND_LIFE_DESIGN.md §3.10-§3.12)
+# ---------------------------------------------------------------------------
+
+def _place_block(ctx, room_id):
+    """Objective self-locating knowledge for the managed location (§3.7). Every
+    field is something anyone standing in the room trivially has."""
+    sc = wget(ctx.chat.id, "scene", {}) or {}
+    room = ((sc.get("rooms") or {}).get(room_id) or {}) if room_id else {}
+    block = {
+        "room_id": room_id or "",
+        "room_name": room.get("name") or room_id or "",
+        "room_desc": (room.get("desc") or "")[:400],
+        "location": sc.get("location") or "",
+        "time": sc.get("time") or "",
+    }
+    try:
+        from agents.perception import _ambient_location_for
+        block["ambient_location"] = _ambient_location_for(sc, room_id) if room_id else ""
+    except Exception:
+        block["ambient_location"] = ""
+    try:
+        from scene import fiction_model, style_guide
+        block["genre"] = (fiction_model(ctx.chat.id).get("genre") or {}).get("primary") or ""
+        sg = style_guide(ctx.chat.id) or {}
+        block["style"] = {k: sg[k] for k in ("genre", "tone", "avoid") if sg.get(k)}
+    except Exception:
+        pass
+    return block
+
+
+def _name_to_entity_id(sc):
+    """Display name -> scene entity id. Scene positions are keyed by the opaque
+    entity id ("barkeep") while background presences are tracked by the display
+    name ("The Barkeep"), so a direct _room_of(name) lookup misses almost every
+    presence. commit.track_background_presences already folds the other
+    direction for the same reason."""
+    out = {}
+    for eid, edef in ((sc.get("entities") or {}).items()):
+        if not isinstance(edef, dict):
+            continue
+        nm = str(edef.get("name") or "").strip()
+        if nm:
+            out[nm.casefold()] = eid
+    return out
+
+
+def _presence_room(sc, name, rec, name_ids=None):
+    """Best room for a tracked presence: its own position, its entity id's
+    position, or the sketch's station room."""
+    room = _room_of(sc, name)
+    if room:
+        return room
+    ids = name_ids if name_ids is not None else _name_to_entity_id(sc)
+    eid = ids.get(str(name).strip().casefold())
+    if eid:
+        room = (sc.get("positions") or {}).get(eid) or _room_of(sc, eid)
+        if room:
+            return room
+    return (rec.get("sketch") or {}).get("station_room")
+
+
+def _player_room(ctx, sc):
+    try:
+        from scene import persona_of, persona_name
+        pers = persona_of(ctx.chat)
+        pname = pers.get("name") or persona_name(pers) if isinstance(pers, dict) else None
+        if pname:
+            r = _room_of(sc, pname)
+            if r:
+                return r
+    except Exception:
+        pass
+    return sc.get("player_room") or None
+
+
+def managed_presences(ctx, cap):
+    """The manager's roster: every tracked presence standing inside the
+    player's ambient scope, most recently active first, capped.
+
+    Deliberately NOT pick_background_reactors: that gate is salience-based
+    (§2.1 -- every condition mirrors the player), which is exactly what makes
+    extras feel reactive rather than alive. The manager is handed the room's
+    populace and decides for itself who, if anyone, acts.
+    """
+    cid = ctx.chat.id
+    sc = wget(cid, "scene", {}) or {}
+    presences = wget(cid, "background_presences", {}) or {}
+    if not presences:
+        return [], None
+    roster = {n.casefold() for n in _known_name_roster(ctx.chat, ctx.cast)}
+    roster |= {(e.get("name") or "").casefold() for e in (ctx.extra_players or [])}
+
+    p_room = _player_room(ctx, sc)
+    scope = None
+    if p_room:
+        try:
+            from spatial import ambient_scope
+            scope, _ = ambient_scope(sc, p_room)
+            scope = set(scope or [])
+        except Exception:
+            scope = None
+
+    name_ids = _name_to_entity_id(sc)
+    out = []
+    for name, rec in presences.items():
+        if name.casefold() in roster:
+            continue
+        room = _presence_room(sc, name, rec, name_ids)
+        if scope is not None and room and room not in scope:
+            continue
+        if scope is not None and not room:
+            continue  # unplaced presence: cannot prove co-presence, leave out
+        out.append((rec.get("last_turn") or -1, name, rec, room))
+    out.sort(reverse=True)
+    return out[:max(1, int(cap or 1))], p_room
+
+
+def _audience_map(sc, entry, managed, level):
+    """Deterministic per-presence perception annotation (§3.11 layer 2).
+
+    Returns None when the event must not be ADMITTED to the manager's context
+    at all (§3.11 layer 1 -- the hard guarantee): a globally concealed line, a
+    line concealed from every managed presence, or -- at `ambient` -- any line
+    directed at one managed presence, which is divergent content by definition
+    and is left to the per-presence path instead.
+    """
+    if str(entry.get("visibility") or "").casefold() == "concealed":
+        return None
+    speaker = str(entry.get("speaker") or "").strip()
+    sp_room = _room_of(sc, speaker)
+    volume = entry.get("volume") or "normal"
+    conceal = [str(c) for c in (entry.get("conceal_from") or [])]
+
+    audience = {}
+    for _, name, _rec, room in managed:
+        if any(_background_name_mentioned(name, c) for c in conceal):
+            audience[name] = "none"
+            continue
+        if sp_room and room:
+            lvl = hear_level(spatial_rel(sc, sp_room, room), volume)
+        else:
+            lvl = "full"  # co-presence assumption, same as _beat_for_presence
+        audience[name] = lvl
+    if not any(v != "none" for v in audience.values()):
+        return None
+    if level == "ambient" and len(set(audience.values())) > 1:
+        # Divergent perception is precisely what `ambient` refuses to hold.
+        return None
+    return audience
+
+
+def _manager_events(ctx, dr, sc, managed, level):
+    """Admitted events with per-presence audience tags. The hard filter runs
+    here, before the model sees anything."""
+    events = []
+    for d in (dr.get("dialogue_log") or []):
+        quote = str(d.get("exact_quote") or "").strip()
+        if not quote:
+            continue
+        aud = _audience_map(sc, d, managed, level)
+        if aud is None:
+            continue
+        events.append({
+            "speaker": str(d.get("speaker") or "").strip(),
+            "quote": quote,
+            "volume": d.get("volume") or "normal",
+            "intended_target": d.get("intended_target") or "",
+            "tone": d.get("tone") or "",
+            "audience": aud,
+        })
+    return events
+
+
+def scene_life(ctx, nonce, level, cfg):
+    """One batched call voicing a whole location's background populace."""
+    dr = ctx.get("director_resolve") or ctx.get("director_establish") or {}
+    cap = int(cfg.get("max_managed", 6) or 6)
+    managed, p_room = managed_presences(ctx, cap)
+    if not managed:
+        return _result([], [])
+
+    sc = wget(ctx.chat.id, "scene", {}) or {}
+    names = [n for _, n, _r, _rm in managed]
+    events = _manager_events(ctx, dr, sc, managed, level)
+
+    place = _place_block(ctx, p_room)
+    minted = _mint_blurbs(ctx, managed, place)
+
+    cast = []
+    for _, name, rec, room in managed:
+        blurb = minted.get(name) or rec.get("blurb") or {}
+        cast.append({
+            "name": name,
+            "blurb": {k: blurb.get(k, "") for k in ("manner", "trait", "tell", "look")},
+            "role_hint": (rec.get("sketch") or {}).get("role_hint", ""),
+            "room": room or "",
+            "present_since_turn": rec.get("first_turn"),
+            "recent": [r.get("text", "") for r in (rec.get("recent") or [])][-3:],
+        })
+
+    payload = {
+        "place": place,
+        "beat": {
+            "resolved_event": re.sub(
+                r"\s{2,}", " ", str(dr.get("resolved_event") or "")).strip(),
+            "player_declaration": _filtered_player_declaration(ctx),
+            "events": events,
+            "present_characters": [
+                p for p in _present_others(ctx) if p not in names],
+        },
+        "cast": cast,
+        "variant_seed": nonce,
+    }
+
+    out = _agent_json("character_bg", "scene_life", get_prompt("scene_life"),
+                      payload, temperature=0.85)
+    out, warnings = validate_llm_output("scene_life", out)
+    ctx.warnings.extend(warnings)
+
+    # Deterministic post-validation (§3.11). Entries are dropped individually;
+    # one malformed entry never fails the stage.
+    allowed = {n.casefold(): n for n in names}
+    withheld = _withheld_bodies(dr)
+    reactions, seen = [], set()
+    for e in (out.get("entries") or []):
+        if not isinstance(e, dict):
+            continue
+        canon = allowed.get(str(e.get("name") or "").strip().casefold())
+        if not canon or canon in seen:
+            continue  # not a managed presence, or already acted this beat
+        speech = e.get("speech") if isinstance(e.get("speech"), dict) else None
+        action = str(e.get("action") or "").strip()
+        quote = str((speech or {}).get("exact_quote") or "").strip()
+        if not quote and not action:
+            continue
+        # The verbatim floor (§3.3.1): a line reproducing withheld content is
+        # dropped BEFORE it can be rendered or appended to a profile.
+        if quote and _reproduces_withheld(quote, withheld):
+            ctx.warnings.append(
+                "scene_life: dropped %s -- reproduced withheld content" % canon)
+            continue
+        seen.add(canon)
+        entry = None
+        if quote:
+            entry = {
+                "speaker": canon,
+                "exact_quote": quote,
+                "volume": (speech or {}).get("volume") or "normal",
+                "intended_target": (speech or {}).get("intended_target") or None,
+                "tone": (speech or {}).get("tone") or "",
+                "visibility": "overt",
+                "conceal_from": [],
+            }
+        reactions.append({"name": canon, "dialogue_log_entry": entry,
+                          "action": action})
+    # Downstream merge paths key off dialogue_log_entry; an action-only entry
+    # still rides through as a reaction so commit/narration can use it.
+    res = _result(names, reactions)
+    if minted:
+        res["blurbs"] = minted  # persisted by commit.track_background_presences
+    return res
+
+
+def _mint_blurbs(ctx, managed, place):
+    """One batched call giving a blurb to every managed presence that lacks
+    one (§3.8). Batching is safe here and follows from §3.2 rather than
+    excepting it: a blurb contains no perceptual content, so there is nothing
+    to cross-contaminate. Returned to the caller and persisted by commit --
+    this stage writes nothing itself.
+    """
+    need = [(name, rec) for _, name, rec, _room in managed if not rec.get("blurb")]
+    if not need:
+        return {}
+    existing = []
+    for _, name, rec, _room in managed:
+        b = rec.get("blurb")
+        if b:
+            existing.append({"name": name, **{k: b.get(k, "")
+                                              for k in ("manner", "trait")}})
+    payload = {
+        "place": place,
+        "people": [
+            {"name": name,
+             "known": (rec.get("sketch") or {}).get("role_hint", "")}
+            for name, rec in need
+        ],
+        "already_written": existing,
+        "variant_seed": ctx.turn.idx,
+    }
+    try:
+        out = _agent_json("character_bg", "blurb_mint", get_prompt("blurb_mint"),
+                          payload, temperature=0.9)
+        out, warnings = validate_llm_output("blurb_mint", out)
+        ctx.warnings.extend(warnings)
+    except Exception as exc:  # a blurb is colour, never load-bearing
+        ctx.warnings.append("blurb_mint failed: %s" % exc)
+        return {}
+    wanted = {n.casefold(): n for n, _ in need}
+    minted = {}
+    for b in (out.get("blurbs") or []):
+        if not isinstance(b, dict):
+            continue
+        canon = wanted.get(str(b.get("name") or "").strip().casefold())
+        if not canon:
+            continue
+        minted[canon] = {k: str(b.get(k) or "").strip()[:160]
+                         for k in ("manner", "trait", "tell", "look")}
+    return minted
+
+
+def _withheld_bodies(dr):
+    """Exact quote bodies the engine deliberately withheld this beat."""
+    bodies = []
+    for d in (dr.get("dialogue_log") or []):
+        if str(d.get("visibility") or "").casefold() != "concealed":
+            continue
+        body = _quote_body(str(d.get("exact_quote") or ""))
+        if body and len(body) >= 12:
+            bodies.append(body.casefold())
+    return bodies
+
+
+def _reproduces_withheld(quote, withheld):
+    q = _quote_body(quote).casefold()
+    if not q:
+        return False
+    for body in withheld:
+        if body in q or q in body:
+            return True
+        # A distinctive run of the withheld line surfacing verbatim.
+        words = body.split()
+        for i in range(0, max(0, len(words) - 5)):
+            if " ".join(words[i:i + 6]) in q:
+                return True
+    return False
 
 
 def _present_others(ctx):

@@ -593,8 +593,23 @@ def background_config(chat_id):
     single-winner behavior; raise to stage ensemble beats). Hard-capped at 3 in
     background_react: past that, a crowd is better represented as one chorus
     presence than as several individually-voiced extras.
+
+    `scene_life` selects the scene-manager path (docs/BACKGROUND_LIFE_DESIGN.md
+    §3.10) and is OFF by default -- this relaxes an information rule and its
+    value is a matter of taste, so it is opt-in per chat:
+
+      "off"     -- historical per-presence background_react only.
+      "ambient" -- one batched manager call whose context holds ONLY what every
+                   managed presence legitimately shares; a line directed at one
+                   of them is withheld and falls through to background_react.
+                   Cross-contamination is impossible, not mitigated.
+      "full"    -- the manager also receives directed lines, tagged inline with
+                   their audience. Buys single-beat coherence, accepts the
+                   tagged-divergence risk.
+
+    `max_managed` bounds how many presences one manager call may hold.
     """
-    config = {"max_reactors": 1}
+    config = {"max_reactors": 1, "scene_life": "off", "max_managed": 6}
     stored = wget(chat_id, "background_config", None) or {}
     config.update(stored)
     return config
