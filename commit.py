@@ -1793,6 +1793,15 @@ def track_background_presences(ctx, nonce):
     _persist_blurbs(br, presences)
     _append_manager_conduct(br, presences, turn_idx)
 
+    # Lore a background presence asserted this beat enters as a CLAIM, never as
+    # fact -- the Director ratifies it, contradicts it, or lets it expire
+    # (background_claims.py). Same treatment the Player Authority Contract
+    # already gives a player's claim about another character.
+    from background_claims import record_claims, settle_claims
+    record_claims(cid, turn_idx, (br or {}).get("claims"))
+    settle_claims(cid, turn_idx, str(res.get("resolved_event") or ""),
+                  ((res.get("state_diff") or {}).get("ratified_claims") or []))
+
     resolved_event = str(res.get("resolved_event") or "")
     for name, record in presences.items():
         if name in candidates:
