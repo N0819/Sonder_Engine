@@ -68,7 +68,8 @@ from memory import (
     dump_character_memories, import_character_memories,
 )
 from scene import persona_of, get_scene
-from backdrops import build_backdrop_request, generate_backdrop, cached_backdrop
+from backdrops import (build_backdrop_request, request_backdrop, cached_backdrop,
+                       backdrop_status, backdrop_error)
 
 # ---- App setup ----
 # No CORS middleware: the frontend is always served same-origin from this
@@ -3811,45 +3812,47 @@ def turn_backdrop(tid: int):
         # anyone, say. Not an error: there is simply nothing to depict.
         return {"enabled": enabled, "configured": configured, "room": None,
                 "signature": None, "ready": False, "url": None}
+    status = backdrop_status(cid, req["signature"])
     return {
         "enabled": enabled,
         "configured": configured,
         "room": req["room_name"],
         "signature": req["signature"],
         "ready": bool(req["cached"]),
+        # 'ready' | 'pending' | 'error' | 'absent'. Pending is why this route
+        # is worth polling: it is how a caller waits for an image without
+        # anything holding a connection open for the length of a generation.
+        "status": status,
+        "error": backdrop_error(req["signature"]) if status == "error" else None,
         "url": _backdrop_url(cid, req["signature"]) if req["cached"] else None,
     }
 
 
 @app.post("/api/turns/{tid}/backdrop")
 def turn_backdrop_generate(tid: int, body: dict = Body(default={})):
-    """Generate this turn's backdrop, or return the cached one.
+    """Ask for this turn's backdrop. Returns immediately.
 
-    A plain sync def, so FastAPI runs the (tens of seconds) image call in its
-    threadpool exactly like every other slow route here. Concurrent callers
-    asking for the same signature are deduplicated inside generate_backdrop --
-    the second one waits and then takes the cache hit rather than paying
-    twice.
+    Deliberately does NOT wait for the image. Generation runs tens of seconds
+    and can reach the provider's three-minute timeout; blocking here would hold
+    a server worker that whole time for a picture nobody is waiting on -- the
+    prose is already on screen. The caller gets 'ready' or 'pending' and polls
+    the GET. Two callers wanting the same signature share one worker.
     """
     turn = _backdrop_turn(tid)
     cid = turn["chat_id"]
     if not image_model():
         raise HTTPException(
             503, "No image model configured — pick one under ⚙ API › Scene backdrops.")
-    try:
-        out = generate_backdrop(cid, turn["idx"], _backdrop_player(cid),
-                                style_guide(cid), force=bool(body.get("force")))
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(502, f"Backdrop generation failed: {exc}") from exc
+    out = request_backdrop(cid, turn["idx"], _backdrop_player(cid),
+                           style_guide(cid), force=bool(body.get("force")))
     if not out:
         raise HTTPException(409, "This turn has no room to depict yet.")
+    ready = out["status"] == "ready"
     return {"enabled": get_setting("backdrops_enabled") == "1",
             "configured": True,
             "room": out["room"], "signature": out["signature"],
-            "ready": True, "cached": out["cached"],
-            "url": _backdrop_url(cid, out["signature"])}
+            "status": out["status"], "ready": ready,
+            "url": _backdrop_url(cid, out["signature"]) if ready else None}
 
 
 @app.get("/api/chats/{cid}/backdrop/{signature}.png")
