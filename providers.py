@@ -236,11 +236,50 @@ def _anthropic_system(system):
 # An Anthropic model reached through an OpenAI-compatible aggregator still
 # needs an explicit cache breakpoint -- the caching is Anthropic's, not the
 # aggregator's, so the plain-string system message every other provider takes
-# produces no breakpoint and nothing ever caches. OpenRouter passes a
+# produces no breakpoint and nothing ever caches. An aggregator passes a
 # content-part array's cache_control through to Anthropic verbatim, so the
-# marked form is how a Claude-via-OpenRouter caller gets the same ~90%
+# marked form is how a Claude-via-aggregator caller gets the same ~90%
 # cached-prefix discount as a direct kind="anthropic" caller.
-_CACHE_PASSTHROUGH_KINDS = ("openrouter",)
+#
+# This stays an ALLOWLIST rather than becoming allow-by-default. Reshaping the
+# system message into a content-part array is only safe where the aggregator is
+# known to forward an unrecognized `cache_control` key rather than reject it,
+# and a rejected request fails the turn -- a worse outcome than an uncached one.
+#
+# What WAS wrong is that the list was hardcoded to ("openrouter",), so the same
+# Claude model reached through nanogpt -- the provider this engine is actually
+# configured with -- silently reprocessed its whole system prompt on every call,
+# with no way to fix it short of editing this file. The list is now extensible
+# from settings, so a provider that supports caching can be opted in without a
+# code change, and one that turns out to be strict can be opted back out.
+_CACHE_PASSTHROUGH_KINDS = ("openrouter", "nanogpt")
+
+
+def _setting_name_set(key):
+    """A comma-separated setting as a set of casefolded provider names/kinds."""
+    try:
+        raw = get_setting(key) or ""
+    except Exception:
+        return frozenset()
+    return frozenset(part.strip().casefold()
+                     for part in str(raw).split(",") if part.strip())
+
+
+def _cache_passthrough_allowed(prov):
+    """Whether this provider may receive a cache-marked system message.
+
+    `prompt_cache_allow` opts additional providers in by name or kind;
+    `prompt_cache_deny` opts any provider back out and wins over both the
+    allowlist and the built-in kinds. FICTION_ENGINE_PROMPT_CACHE=0 remains the
+    all-providers kill switch.
+    """
+    kind = str(_prov_field(prov, "kind") or "").strip().casefold()
+    name = str(_prov_field(prov, "name") or "").strip().casefold()
+    if {kind, name} & _setting_name_set("prompt_cache_deny"):
+        return False
+    if kind in _CACHE_PASSTHROUGH_KINDS:
+        return True
+    return bool({kind, name} & _setting_name_set("prompt_cache_allow"))
 
 
 def _prov_field(prov, key, default=None):
@@ -266,8 +305,8 @@ def _openai_system_message(system, prov, model):
     a cache-passthrough aggregator get the cache-marked content-part form;
     everyone else gets the plain string they expect."""
     if (PROMPT_CACHE_ENABLED and system
-            and _prov_field(prov, "kind") in _CACHE_PASSTHROUGH_KINDS
-            and _model_is_anthropic(model)):
+            and _model_is_anthropic(model)
+            and _cache_passthrough_allowed(prov)):
         return {"role": "system",
                 "content": [{"type": "text", "text": system,
                              "cache_control": {"type": "ephemeral"}}]}

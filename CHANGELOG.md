@@ -1,5 +1,39 @@
 # Changelog
 
+## alpha4.0.3 — Prompt caching reaches the provider you actually use
+
+### Fixed
+- **A Claude model behind nanogpt never cached its system prompt**
+  (`providers.py`). An Anthropic model reached through an OpenAI-compatible
+  aggregator needs an explicit `cache_control` breakpoint — the caching is
+  Anthropic's, not the aggregator's, so the plain-string system message every
+  other provider takes produces no breakpoint at all. That marking was gated on
+  a hardcoded `("openrouter",)` allowlist, so the same model through **nanogpt**
+  — the provider this engine is configured with — reprocessed its entire system
+  prompt on every single call, with no fix short of editing the file.
+
+  nanogpt joins the built-in list, and the list is now extensible from settings:
+  `prompt_cache_allow` opts a provider in by name or kind, `prompt_cache_deny`
+  opts one back out and wins over both. `FICTION_ENGINE_PROMPT_CACHE=0` remains
+  the all-providers kill switch.
+
+  It stays an **allowlist** deliberately. Allow-by-default was tried and
+  reverted: a provider that *rejects* an unrecognized `cache_control` key fails
+  the turn, which is a worse outcome than simply not caching.
+
+### Notes
+- **Caching is not Anthropic-only.** Anthropic models are the only ones needing
+  an explicit breakpoint; every other provider (GLM, GPT, DeepSeek …) does
+  automatic prefix caching with no opt-in, and the engine already reads the
+  result from `prompt_tokens_details.cached_tokens`. Live runs on
+  nanogpt + `glm-latest` show it working — e.g. a perception call with 5,791
+  system tokens served 3,423 from cache.
+- **Only the barebones prompt is cached, never the turn's input.** Just the
+  static per-role instruction from `get_prompt(role)` is ever marked; the
+  per-turn payload goes as a plain string on both dialects. Marking volatile
+  input would write a fresh cache entry every turn and never read one back.
+  Now covered by tests so it cannot regress silently.
+
 ## alpha4.0.2 — An entity's key already names it
 
 ### Fixed
