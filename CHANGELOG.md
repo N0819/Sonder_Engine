@@ -1,5 +1,67 @@
 # Changelog
 
+## alpha4.0.4 — A ship's computer is a voice, not a bystander
+
+Findings from auditing a 39-turn live chat ("The Doctor — Hinami ⎇14 ⎇17 ⎇16 ⎇23").
+
+**On cost, since that audit started as a billing question:** the engine is not
+the cost source. 43 interaction-loop rounds across 38 turns (~1.1/turn),
+`background_react` fired on 1 of 38, zero warnings, a 15.6KB scene with 8 rooms
+and 9 entities. ~350 LLM calls for the whole chat. A provider reporting 23M
+tokens for ~3 turns works out to ~850k per request — impossible for a single
+inference, and consistent with upstream fan-out from a `multi-agent` model that
+every role was pointed at via one `default` entry.
+
+### Added
+- **Bodiless voices** (`schemas.py`, `scene.py`, `commit.py`,
+  `agents/perception.py`, `prompts.py`). A ship's computer, station AI or
+  building PA is a voice with no body and no room. Live play had the Enterprise
+  computer as `kind=agent` **positioned in `enterprise_ten_forward`**, so the
+  engine believed the ship's AI existed in one room; walk to Deck 14 and it was
+  not present. The alternative was not expressible either — `USS Enterprise D`
+  carried `interior_rooms=[]` and every Enterprise room had
+  `parent_entity=None`, so there was no containment to scope ubiquity against.
+
+  Rather than build vessel-scoped presence, such an entity is exempt from
+  position entirely: `SceneEntityDef.ubiquitous`, plus a narrow
+  `UBIQUITOUS_KINDS` so a model that omits the flag but names the kind still
+  gets it right. The Director voices them directly (new BODILESS VOICES clause),
+  they are never tracked as background presences, and perception treats them as
+  present everywhere.
+
+  That last part was nearly a silent failure: `spatial_rel(None, room)` yields
+  `barrier='unknown'`, so `hear_level` returns `none`. Without the exemption the
+  Director could voice the ship's computer and **no perceiver would hear a
+  word**. A test documents the trap directly.
+- **Promotion thresholds are per-chat authorial config**
+  (`scene.promotion_config`, world key `promotion_thresholds`): `dialogue`,
+  `mention`, `auto_dialogue`, clamped 1–50, defaulting to the previous
+  constants. How many lines a bystander must speak before the engine offers it a
+  mind is pacing, not law.
+
+### Fixed
+- **Exits could point at rooms that do not exist**
+  (`commit.prune_dangling_exits`). The merge dropped edges to rooms it had just
+  *removed* but never checked that an edge's target existed at all, so a model
+  naming a room it never defined committed a permanent broken exit — found live,
+  a janitor closet with an exit to `enterprise_corridor` while only `_deck10`
+  and `_deck14` existed. Not cosmetic: `spatial.py` treats `adjacent` as the
+  authority on what leaves a room, so it was offered as a real exit and pathing
+  counted an unreachable neighbour. Now dropped with a warning.
+- **Opaque entity ids produced garbage display names** (`schemas.py`), a
+  weakness in alpha4.0.2's own fix. That release derives a name from the entity
+  key; live scenes key some entities as hex (`10ae6b6a11324780`), which would
+  have become the player-visible name `10Ae6B6A11324780` *and* a lookup key.
+  Opaque ids now derive nothing and fall back to the kind ("Vehicle", "Object")
+  — still valid, so the turn survives, but honest.
+
+### Not fixed (recorded, deliberately)
+- Two one-way exits in that chat (`turbolift_car → corridor_deck10`,
+  `tardis_console_room → janitor_closet`). Auto-adding reciprocals would invent
+  world facts, and a one-way passage is legitimate fiction.
+- Ship-AI *character cards* — an entity with real interiority scoped to a
+  vessel — remain deferred. That needs vessels to actually claim their rooms.
+
 ## alpha4.0.3 — Prompt caching reaches the provider you actually use
 
 ### Fixed
