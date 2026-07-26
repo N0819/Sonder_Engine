@@ -1,5 +1,59 @@
 # Changelog
 
+## alpha4.5 — Seen but not reached
+
+### Added
+- **Windows. They did not exist.** A barrier answered exactly one question —
+  can a body pass — and every consumer reused that answer for sight as well.
+  So there was no way to say *you can see it and cannot reach it*. Anything
+  glassy had to degrade to `wall` (the normalizer's fallback for anything it
+  does not recognize, so fully opaque) or be lied about as `open`. A cell with
+  a barred door, an observation port, a shopfront, a porthole: none of them
+  could be expressed, and this was an oversight for ordinary rooms long before
+  it was one for containers.
+
+  `window` and `bars` now exist, and the three questions a barrier answers are
+  kept apart, because they genuinely differ:
+
+  | | passage | sight | sound |
+  |---|---|---|---|
+  | `open`, `open_door` | yes | yes | yes |
+  | `window` | no | **yes** | no |
+  | `bars` | no | **yes** | **yes** |
+  | `closed_door`, `wall` | no | no | no |
+
+  Glass stops sound as well as bodies; a cage does not. Both are normalized
+  from the vocabulary a model actually reaches for — glass, pane, porthole,
+  viewport, one-way mirror; bars, cage, grate, grille, portcullis, lattice.
+
+- **Containers are places, and see-through ones are seen through.** A container
+  big enough to be inside is a room with `parent_entity`, which the engine has
+  supported for vehicles all along — its own comment already named "a carried
+  container" as a case. What was missing was what a *closed* one lets through.
+  An entity now carries `enclosure`: `opaque` (the default and the old
+  behaviour), `transparent`, or `barred`, and the derived doorway becomes a
+  window or bars instead of a closed door.
+
+  So a body sealed in a glass jar is visible to the room and can see out, and
+  neither can reach the other — with no special case anywhere, because sight is
+  decided in exactly one place (`has_visual`) and it now consults the sight set.
+  A lid is also read from `state.hatch` directly, not only from a transit blob:
+  a jar has a lid and no journey.
+
+- **Nobody perceives the inside of what they are carrying.** An interior room
+  attached to a carried or portable entity is no longer part of the surrounding
+  room's view, so a character standing in a hall stops perpetually perceiving
+  the inside of their own bag. Keyed on the carrier relation rather than on any
+  notion of smallness: a ship's hold you are walking through stays ordinary
+  scenery, because nobody is carrying the ship, and the same crate becomes
+  invisible the moment someone picks it up.
+
+  Looking in is an act with a result, not something a character simply always
+  knew. The split that makes this coherent: you do not take in the inside of a
+  carried thing as a *place*, but a body visible through its wall is still a
+  body you can see — so the occupant of a carried glass jar is perceived, while
+  the jar's interior is not scenery.
+
 ## alpha4.4.2 — Size, and being carried
 
 ### Added
