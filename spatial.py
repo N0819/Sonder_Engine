@@ -857,6 +857,424 @@ def normalize_scene_stations(scene: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# SCALE -- how big each body currently is, relative to its own baseline.
+#
+# A shrink or a growth is live physical state, so it lives in the scene blob
+# with positions, stations and contacts rather than in a condition row: the
+# things that must react to it (what can be reached, lifted, held, or gripped
+# at all) are scene-level questions, and keeping them in one place is what
+# stops the two accounts drifting.
+#
+# Absent means 1.0, so a scene that never mentions size behaves exactly as
+# before -- the same fail-open the awareness gate uses.
+_MIN_SCALE = 0.001            # a body reduced past this is a speck, not a body
+_MAX_SCALE = 1000.0
+# A change smaller than this is a growth spurt, not a reconfiguration: it does
+# not break holds. Beyond it, the geometry that made a contact true is gone.
+_SCALE_CONTACT_BREAK = 1.25
+_MAX_SCALES = 40
+
+# Ordered small -> large. The boundary is the RATIO to baseline, and the label
+# is what a prompt and a narrator can actually use.
+_SIZE_TIERS = (
+    # 'tiny' shares its boundary with fits_in_other_hand below, so the label
+    # and the capability agree: tiny IS "small enough to be held in a hand".
+    (0.15, "tiny"),
+    (0.5, "small"),
+    (2.0, "comparable"),
+    (20.0, "large"),
+    (float("inf"), "huge"),
+)
+
+
+def clamp_scale(value):
+    """A usable scale factor, or None when the value says nothing.
+
+    Junk degrades to None (treated as baseline) rather than to a number, so a
+    malformed declaration can never silently shrink someone.
+    """
+    try:
+        factor = float(value)
+    except (TypeError, ValueError):
+        return None
+    if factor != factor or factor in (float("inf"), float("-inf")):
+        return None
+    if factor <= 0:
+        return None
+    return max(_MIN_SCALE, min(factor, _MAX_SCALE))
+
+
+def scale_of(scene: dict, name: str) -> float:
+    """`name`'s current size relative to its own baseline. 1.0 when unstated."""
+    scales = (scene or {}).get("scales") or {}
+    if not isinstance(scales, dict):
+        return 1.0
+    return clamp_scale(_ci_get(scales, name)) or 1.0
+
+
+def size_tier(factor) -> str:
+    factor = clamp_scale(factor) or 1.0
+    for bound, label in _SIZE_TIERS:
+        if factor < bound:
+            return label
+    return "huge"
+
+
+def normalize_scene_scales(scene: dict) -> dict:
+    """Scale hygiene, run at merge.
+
+    Clamps what is there and removes anything back at baseline, so "restored to
+    normal" is expressed by setting 1.0 and leaves no residue behind.
+
+    Deliberately NOT pruned by position, unlike contacts. A contact genuinely
+    requires two bodies in one room; a size does not. Someone shrunk who steps
+    offscreen for a scene is still shrunk when they return, and dropping the
+    entry would silently restore them.
+    """
+    scales = scene.get("scales")
+    if not isinstance(scales, dict):
+        if scales is not None:
+            scene["scales"] = {}
+        return scene
+
+    cleaned = {}
+    for name, raw in scales.items():
+        label = str(name or "").strip()
+        if not label:
+            continue
+        factor = clamp_scale(raw)
+        if factor is None or factor == 1.0:
+            continue
+        cleaned[label] = factor
+
+    # Bounded so a runaway model cannot grow this without limit; a scene with
+    # more than this many transformed bodies at once has other problems.
+    if len(cleaned) > _MAX_SCALES:
+        cleaned = dict(list(cleaned.items())[-_MAX_SCALES:])
+
+    scene["scales"] = cleaned
+    return scene
+
+
+def scale_ratio(scene: dict, a: str, b: str) -> float:
+    """How many times bigger `a` currently is than `b`."""
+    other = scale_of(scene, b)
+    return scale_of(scene, a) / other if other else 1.0
+
+
+def size_relation(scene: dict, a: str, b: str) -> dict:
+    """What `a`'s size permits against `b`, as deterministic ground truth.
+
+    The Director owns whether an act succeeds; this only reports the geometry
+    it should reason from, so "she is too small to reach the latch now" comes
+    from a number rather than from vibes. Thresholds are deliberately coarse --
+    fiction does not need a physics engine, it needs the difference between
+    'comparable', 'can be picked up', and 'cannot be reached at all'.
+    """
+    ratio = scale_ratio(scene, a, b)
+    return {
+        "actor": a,
+        "other": b,
+        "ratio": round(ratio, 4),
+        "actor_tier": size_tier(scale_of(scene, a)),
+        "other_tier": size_tier(scale_of(scene, b)),
+        # Lifting something roughly your own size is a feat; twice your size is
+        # not happening without leverage the fiction has to supply.
+        "can_lift_other": ratio >= 2.0,
+        "can_be_lifted_by_other": ratio <= 0.5,
+        # Small enough to be carried in one hand rather than hoisted.
+        "fits_in_other_hand": ratio <= 0.15,
+        # A body this much smaller cannot reach past the other's feet unaided,
+        # nor act on anything at their head height.
+        "can_reach_other_upper_body": ratio > 0.25,
+        "can_be_stepped_over_by_other": ratio <= 0.34,
+        # Fine work needs a hand roughly proportionate to what it works on. Too
+        # large and a fingertip is broader than the thing being reached for, so
+        # the act is not clumsy but impossible; too small and there is no
+        # purchase. Precision is the first capability a size gap takes away,
+        # well before reach or lifting.
+        "can_do_fine_work_on_other": 0.25 <= ratio <= 4.0,
+    }
+
+
+def size_facts(scene: dict, observer: str, source_names) -> list:
+    """Plain statements about relative size, for the observer's frame.
+
+    Only emitted when someone is actually off-baseline: a scene of ordinary
+    people generates nothing, exactly as before.
+    """
+    scales = scene.get("scales") or {}
+    if not isinstance(scales, dict) or not scales:
+        return []
+
+    facts = []
+    own = scale_of(scene, observer)
+    if own != 1.0:
+        facts.append(
+            f"You are {size_tier(own)} right now — about "
+            f"{_scale_phrase(own)} your normal size."
+        )
+    for name in source_names or []:
+        if not name or name == observer:
+            continue
+        factor = scale_of(scene, name)
+        if factor == 1.0 and own == 1.0:
+            continue
+        rel = size_relation(scene, observer, name)
+        if 0.75 <= rel["ratio"] <= 1.34:
+            continue  # near enough the same size to need no saying
+        if rel["ratio"] < 1:
+            clause = f"{name} towers over you"
+            if rel["fits_in_other_hand"]:
+                clause = f"{name} could close a hand around you"
+            elif rel["can_be_lifted_by_other"]:
+                clause = f"{name} could pick you up"
+        else:
+            clause = f"you tower over {name}"
+            if rel["ratio"] >= 6.7:
+                clause = f"{name} could fit in your hand"
+            elif rel["can_lift_other"]:
+                clause = f"you could pick {name} up"
+        facts.append(clause + ".")
+    return facts
+
+
+def _scale_phrase(factor):
+    if factor >= 1:
+        return f"{factor:g}x"
+    return f"1/{round(1 / factor):g} of"
+
+
+# ---------------------------------------------------------------------------
+# CONTAINMENT -- being carried, pocketed, jarred, or ridden along.
+#
+# The sibling of scale, and the reason it exists: a body shrunk to a tenth and
+# picked up is not merely "in contact with" the hand holding it. It has stopped
+# being an independently positioned thing. Contact alone left the tiny person
+# free to walk out of the room while sitting in someone's pocket, because
+# nothing tied their position to their container's.
+#
+# So a contained body's position is DERIVED, every merge, from whatever holds
+# it -- transitively, so a person in a jar in a satchel goes where the satchel
+# goes. Getting out is an explicit act the Director declares by releasing the
+# containment, exactly like letting go of a hold; it is never a side effect of
+# writing a position, because "they walked away" and "the Director forgot they
+# were in a pocket" produce the identical diff and only one of them is meant.
+#
+# Interior rooms remain the mechanism for large containers you stand INSIDE (a
+# ship, a building). This is for the other direction: a container that carries
+# you as cargo.
+_MAX_CONTAINED = 40
+CONTAINMENT_MODES = (
+    "held", "carried", "pocket", "container", "riding", "mounted", "worn",
+)
+
+
+def _clean_containment(raw, subject):
+    if isinstance(raw, str):
+        raw = {"in": raw}
+    if not isinstance(raw, dict):
+        return None
+    holder = str(raw.get("in") or raw.get("container") or "").strip()
+    if not holder or holder.casefold() == str(subject or "").strip().casefold():
+        return None
+    mode = str(raw.get("mode") or "").strip().casefold() or "carried"
+    return {"in": holder, "mode": mode}
+
+
+def container_of(scene: dict, name: str):
+    """What is carrying `name`, or None."""
+    contained = (scene or {}).get("contained") or {}
+    if not isinstance(contained, dict):
+        return None
+    record = _ci_get(contained, name)
+    if not isinstance(record, dict):
+        return None
+    return record.get("in") or None
+
+
+def carrier_chain(scene: dict, name: str) -> list:
+    """Every container above `name`, outermost last. Cycle-safe."""
+    chain = []
+    seen = {str(name or "").strip().casefold()}
+    current = container_of(scene, name)
+    while current:
+        key = str(current).strip().casefold()
+        if key in seen:
+            break
+        seen.add(key)
+        chain.append(current)
+        current = container_of(scene, current)
+    return chain
+
+
+def contents_of(scene: dict, container: str) -> list:
+    """Everything `container` is directly carrying."""
+    target = str(container or "").strip().casefold()
+    if not target:
+        return []
+    contained = (scene or {}).get("contained") or {}
+    if not isinstance(contained, dict):
+        return []
+    out = []
+    for name, record in contained.items():
+        if isinstance(record, dict) and \
+                str(record.get("in") or "").strip().casefold() == target:
+            out.append(name)
+    return sorted(out)
+
+
+def normalize_scene_containment(scene: dict) -> dict:
+    """Containment hygiene, run at merge.
+
+    Drops a record whose container has left the scene, and any record that
+    would make a body contain itself directly or through a chain -- a cycle
+    would otherwise make position derivation unresolvable.
+    """
+    contained = scene.get("contained")
+    if not isinstance(contained, dict):
+        if contained is not None:
+            scene["contained"] = {}
+        return scene
+
+    positions = scene.get("positions") or {}
+    entities = scene.get("entities") or {}
+
+    cleaned = {}
+    for name, raw in contained.items():
+        subject = str(name or "").strip()
+        if not subject:
+            continue
+        record = _clean_containment(raw, subject)
+        if record is None:
+            continue
+        holder = record["in"]
+        # The container must be something the scene actually knows about.
+        if _ci_get(positions, holder) is None and holder not in entities \
+                and not _ci_get({k: 1 for k in entities}, holder):
+            continue
+        cleaned[subject] = record
+
+    scene["contained"] = dict(list(cleaned.items())[-_MAX_CONTAINED:])
+
+    # Break cycles: walk each chain and drop the record that closes a loop.
+    for subject in list(scene["contained"]):
+        seen = {subject.strip().casefold()}
+        current = scene["contained"][subject]["in"]
+        while current:
+            key = str(current).strip().casefold()
+            if key in seen:
+                scene["contained"].pop(subject, None)
+                break
+            seen.add(key)
+            record = _ci_get(scene["contained"], current)
+            current = record.get("in") if isinstance(record, dict) else None
+
+    return scene
+
+
+def derive_contained_positions(scene: dict) -> dict:
+    """Put every contained body where its container is.
+
+    This is what makes containment mean something: the position is not the
+    contained body's to set. A tiny person in a pocket goes where the pocket
+    goes and cannot be somewhere else, which is precisely what contact alone
+    could not express.
+    """
+    contained = scene.get("contained")
+    if not isinstance(contained, dict) or not contained:
+        return scene
+    positions = scene.get("positions")
+    if not isinstance(positions, dict):
+        return scene
+
+    for subject in contained:
+        room = None
+        # Resolve against the OUTERMOST carrier, not the nearest one. An
+        # intermediate container's own position is derived too, and may not
+        # have been updated yet this pass -- reading it would hand the innermost
+        # body a stale room while the satchel it is in has already moved.
+        for holder in reversed(carrier_chain(scene, subject)):
+            room = _ci_get(positions, holder)
+            if room is not None:
+                break
+        if room is None:
+            continue
+        # Write under the key already in use, so this never mints a second
+        # spelling of a name that positions already carries.
+        for key in list(positions):
+            if str(key).strip().casefold() == subject.strip().casefold():
+                positions[key] = room
+                break
+        else:
+            positions[subject] = room
+    return scene
+
+
+def containment_broken_by_scale_change(scene: dict, previous_scales) -> list:
+    """Release anyone whose size change makes their container absurd.
+
+    The counterpart of the contact rule, and the reason it matters: someone
+    restored to full height while sitting in a coat pocket is not still in the
+    coat pocket. The engine releases rather than guesses, and the Director
+    re-declares the containment if it still holds.
+    """
+    contained = scene.get("contained")
+    if not isinstance(contained, dict) or not contained:
+        return []
+
+    before = previous_scales if isinstance(previous_scales, dict) else {}
+    now = scene.get("scales") or {}
+
+    changed = set()
+    for name in set(before) | set(now):
+        was = clamp_scale(_ci_get(before, name)) or 1.0
+        current = clamp_scale(_ci_get(now, name)) or 1.0
+        if min(was, current) <= 0:
+            continue
+        if max(was, current) / min(was, current) >= _SCALE_CONTACT_BREAK:
+            changed.add(str(name).strip().casefold())
+
+    if not changed:
+        return []
+
+    released = []
+    for subject in list(contained):
+        record = contained.get(subject)
+        holder = record.get("in") if isinstance(record, dict) else None
+        if subject.strip().casefold() in changed or \
+                str(holder or "").strip().casefold() in changed:
+            contained.pop(subject, None)
+            released.append(subject)
+    return sorted(released)
+
+
+def containment_facts(scene: dict, observer: str, source_names) -> list:
+    """What the observer knows about being carried, or carrying."""
+    facts = []
+    holder = container_of(scene, observer)
+    if holder:
+        record = _ci_get(scene.get("contained") or {}, observer) or {}
+        mode = record.get("mode") or "carried"
+        facts.append(
+            f"You are {mode} by {holder} — you go where {holder} goes, and "
+            "cannot leave on your own until you are out."
+        )
+    visible = {str(n) for n in (source_names or []) if n} | {observer}
+    for name in contents_of(scene, observer):
+        record = _ci_get(scene.get("contained") or {}, name) or {}
+        facts.append(f"{name} is {record.get('mode') or 'carried'} by you.")
+    for name in visible:
+        if name == observer:
+            continue
+        inner = [c for c in contents_of(scene, name) if c in visible]
+        for c in inner:
+            record = _ci_get(scene.get("contained") or {}, c) or {}
+            facts.append(f"{c} is {record.get('mode') or 'carried'} by {name}.")
+    return facts
+
+
+# ---------------------------------------------------------------------------
 # BODY POSITION TRACKING -- who is in contact with whom, and where.
 #
 # Contact used to live as prose inside an entity's own `state`: a single
@@ -1101,6 +1519,58 @@ def contacts_from_entity_state(scene: dict) -> dict:
     return scene
 
 
+def contacts_broken_by_scale_change(scene: dict, previous_scales) -> list:
+    """Drop every contact involving a body that just changed size.
+
+    A hold is a fact about two bodies at the sizes they were. Shrink the held
+    person to a tenth and "his hand grips her wrist" is not a smaller version
+    of itself -- the wrist is no longer where the hand is, and whether anything
+    equivalent is still possible is a question only the Director can answer.
+    So the engine cancels rather than rescales: the grip is released, and the
+    Director re-establishes whatever the new geometry actually permits.
+
+    This is the same discipline movement already follows -- a contact that the
+    physical situation no longer supports does not survive on inertia -- and it
+    is why a size change cannot leave a phantom grip behind.
+
+    Returns the names whose contacts were cancelled, for the caller to report.
+    """
+    contacts = scene.get("contacts")
+    if not isinstance(contacts, list) or not contacts:
+        return []
+
+    before = previous_scales if isinstance(previous_scales, dict) else {}
+    now = scene.get("scales") or {}
+
+    changed = set()
+    for name in set(before) | set(now):
+        was = clamp_scale(_ci_get(before, name)) or 1.0
+        current = clamp_scale(_ci_get(now, name)) or 1.0
+        if was <= 0 or current <= 0:
+            continue
+        shift = max(was, current) / min(was, current)
+        if shift >= _SCALE_CONTACT_BREAK:
+            changed.add(str(name).strip().casefold())
+
+    if not changed:
+        return []
+
+    kept = []
+    for contact in contacts:
+        if not isinstance(contact, dict):
+            continue
+        pair = {
+            str(contact.get("actor") or "").strip().casefold(),
+            str(contact.get("target") or "").strip().casefold(),
+        }
+        if pair & changed:
+            continue
+        kept.append(contact)
+
+    scene["contacts"] = kept
+    return sorted(changed)
+
+
 def normalize_scene_contacts(scene: dict) -> dict:
     """Contact hygiene, run at merge -- the sibling of normalize_scene_stations.
 
@@ -1307,6 +1777,15 @@ def spatial_facts(scene: dict, observer: str, source_names) -> list:
     # to know -- the leak this engine exists to prevent. Being held by a
     # stranger therefore yields no line here rather than a named one; the
     # perception view still reports the hold in the observer's own terms.
+    # Relative size, when anyone is off their baseline. This is the fact that
+    # silently invalidates everything else -- reach, lifting, whether a hold is
+    # even possible -- so it is stated before the contacts below it.
+    facts.extend(size_facts(scene, observer, source_names))
+    # Being carried is a harder constraint than any of the above: it decides
+    # where you are at all, so the narrator is told before it describes anyone
+    # walking anywhere.
+    facts.extend(containment_facts(scene, observer, source_names))
+
     visible = {str(n) for n in (source_names or []) if n} | {observer}
     for contact in (scene.get("contacts") or []):
         if not isinstance(contact, dict):
@@ -2098,6 +2577,60 @@ def merge_scene_with_diff(
     # ask whether contact tracking is "on" for this scene is a reader that will
     # eventually forget to.
     merged.setdefault("contacts", [])
+
+    # Scale FIRST, and the contacts it invalidates with it -- before this
+    # beat's contact ops, not after. A size change cancels the holds that were
+    # standing when it happened; the Director is then expected to re-establish
+    # whatever the new geometry allows IN THE SAME BEAT, and those ops must
+    # survive. Cancelling after them would wipe exactly the correct behaviour.
+    incoming_scales = diff.get("scales")
+    previous_scales = dict(merged.get("scales") or {})
+    if isinstance(incoming_scales, dict) and incoming_scales:
+        scales = dict(previous_scales)
+        for name, raw in incoming_scales.items():
+            label = str(name or "").strip()
+            if not label:
+                continue
+            factor = clamp_scale(raw)
+            # An explicit 1.0 (or an unusable value) means "back to normal";
+            # normalize_scene_scales drops it, which is the same thing.
+            scales[label] = factor if factor is not None else 1.0
+        merged["scales"] = scales
+    merged.setdefault("scales", {})
+    normalize_scene_scales(merged)
+    # The return value is for callers/tests; nothing is stashed in the scene,
+    # which is saved verbatim and must not accumulate scratch keys.
+    contacts_broken_by_scale_change(merged, previous_scales)
+
+    # Containment. Declared as {subject: {"in": holder, "mode": ...}}, with a
+    # null/empty value releasing -- the same shape positions uses, because a
+    # body is in exactly one container at a time.
+    merged.setdefault("contained", {})
+    # A size change releases containment for the same reason it breaks a hold:
+    # someone restored to full height is not still in the coat pocket. Runs
+    # BEFORE this beat's own containment declarations, so a Director that
+    # re-declares the arrangement as the thing it now is keeps it -- the same
+    # ordering the contact cancellation needs, and for the same reason.
+    containment_broken_by_scale_change(merged, previous_scales)
+    incoming_contained = diff.get("containment")
+    if isinstance(incoming_contained, dict):
+        for subject, raw in incoming_contained.items():
+            label = str(subject or "").strip()
+            if not label:
+                continue
+            record = _clean_containment(raw, label) if raw else None
+            if record is None:
+                # Released: out of the pocket, off the shoulder, out of the jar.
+                for key in [k for k in merged["contained"]
+                            if str(k).strip().casefold() == label.casefold()]:
+                    merged["contained"].pop(key, None)
+            else:
+                merged["contained"][label] = record
+    normalize_scene_containment(merged)
+    # Derived LAST among position writes: whatever else this beat did to
+    # positions, a carried body ends up where its carrier is.
+    derive_contained_positions(merged)
+
     apply_contact_ops(merged, diff.get("contact_ops"))
     normalize_scene_contacts(merged)
     return merged

@@ -815,6 +815,15 @@ class StateDiff(BaseModel):
     # whatever positions no longer permit. {op: add|remove|clear, actor,
     # actor_part, target, target_part, manner}.
     contact_ops: list[dict] = Field(default_factory=list)
+    # Scale: {name: factor} relative to that body's own baseline. 1.0 (or
+    # omission) is normal size; the engine cancels contacts on a body whose
+    # size changed, since a hold is a fact about two bodies at the sizes they
+    # were (spatial.contacts_broken_by_scale_change).
+    scales: dict[str, float] = Field(default_factory=dict)
+    # Containment: {subject: {"in": holder, "mode": ...}}, or a null value to
+    # release. A contained body's position is DERIVED from its container's
+    # (spatial.derive_contained_positions), so it cannot be somewhere else.
+    containment: dict[str, Optional[dict]] = Field(default_factory=dict)
     overlays: dict[str, list] = Field(default_factory=dict)
     attire: dict[str, dict] = Field(default_factory=dict)
     cast_changes: list[dict] = Field(default_factory=list)
@@ -1250,7 +1259,8 @@ _STATE_DIFF_DICT_FIELDS = (
 
 _STATE_DIFF_SIBLING_FIELDS = (
     "remove_entities", "remove_rooms", "remove_adjacent", "conditions",
-    "inventory_ops", "contact_ops", "overlays", "attire", "cast_changes",
+    "inventory_ops", "contact_ops", "scales", "containment", "overlays",
+    "attire", "cast_changes",
     "world_facts", "introductions", "time", "claim_dispositions",
 )
 
