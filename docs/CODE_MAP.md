@@ -33,11 +33,11 @@
 | `llm_quality.py` | 263 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `mechanics.py` | 270 |  | `spatial`, `spatial_frames` |
-| `memory.py` | 2095 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `prompts`, `providers` |
+| `memory.py` | 2104 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `prompts`, `providers` |
 | `paradox.py` | 486 |  | `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 2160 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 2169 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1730 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 830 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 2005 | Pydantic output contracts and semantic validation for agent payloads. | — |
@@ -357,13 +357,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `search_memories()` | 1089 | 103 lines |
-| `consolidate_character_memory()` | 1289 | 80 lines |
-| `restore_lorebook()` | 1683 | 79 lines |
+| `consolidate_character_memory()` | 1298 | 80 lines |
+| `restore_lorebook()` | 1692 | 79 lines |
 | `monitoring_subtree()` | 530 | 78 lines |
 | `resolve_lorebook_graph()` | 342 | 76 lines |
 | `lorebook_manifest()` | 464 | 65 lines |
-| `duplicate_lorebook_tree_for_chat()` | 1825 | 58 lines |
-| `prepare_chat_memory_restore()` | 1435 | 48 lines |
+| `duplicate_lorebook_tree_for_chat()` | 1834 | 58 lines |
+| `prepare_chat_memory_restore()` | 1444 | 48 lines |
 
 ### `paradox.py`
 
@@ -390,10 +390,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 2151 | 10 lines |
-| `presets()` | 2142 | 2 lines |
-| `active_preset()` | 2145 | 2 lines |
-| `nsfw_enabled()` | 2148 | 2 lines |
+| `get_prompt()` | 2160 | 10 lines |
+| `presets()` | 2151 | 2 lines |
+| `active_preset()` | 2154 | 2 lines |
+| `nsfw_enabled()` | 2157 | 2 lines |
 
 ### `providers.py`
 
