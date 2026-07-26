@@ -1,5 +1,47 @@
 # Changelog
 
+## alpha4.4.1 — One contact, one place
+
+### Changed
+- **Contact left in entity state is lifted out of it.** The prose shape that
+  predates contact tracking — a whole-body `target` with a `proximity` word, and
+  in practice a drift of invented keys naming the other body
+  (`leaning_against: "tamamo"`, `tails_wrapped_around: "Tamamo"`,
+  `squished_against: "tamamo_side"`) — is a real physical fact written in the
+  wrong place, where nothing prunes it when the two walk apart. Those
+  assertions are now converted to contacts and **removed** from the state, so
+  one contact has exactly one record. That also backfills a save written before
+  contacts existed: the assertions become real contacts and immediately obey the
+  same positional hygiene as everything else, so a hold left over from an old
+  beat ends the moment the two are no longer in the same room.
+
+  Conversion is deliberately narrow, because inventing a hold is worse than
+  missing one — a contact becomes ground truth the narrator is told. Only a key
+  whose *name* carries a contact verb and whose *value* names a co-located
+  person converts, and the shape often yields the anatomy for free
+  (`tails_wrapped_around` → the tails, wrapping; `squished_against:
+  "tamamo_side"` → against Tamamo's side). Adjacency words are not contact:
+  `alongside` and `beside` are neither converted nor touched. Nearness is not
+  contact either — `proximity: "close_on_bed"` stays proximity, which stations
+  already model. Structurally load-bearing state (`transit`, `link`, `phase`,
+  `hatch`, `posture`, `activity`, `held_items`) is never touched, and the
+  free-text `description` paragraph is **not** parsed: regex over prose would
+  manufacture body parts and holds nobody asserted.
+
+  The Director is now also told plainly that contact belongs in `contact_ops`
+  and nowhere else — state describes one body, contact is a relation between
+  two, and a copy living on each body is how the two fall out of step.
+
+- **One hold stated from both sides is one contact.** A contact and its mirror
+  — the same pair with the parts swapped — are the same physical fact, so only
+  one record survives, and re-asserting from the other side updates it rather
+  than creating its twin. Each holding the other's wrist is still two contacts;
+  that is two holds, not one stated twice.
+
+- **`scene.contacts` always exists after a merge**, empty or not. A reader that
+  has to ask whether contact tracking is "on" for a given scene is a reader that
+  will eventually forget to.
+
 ## alpha4.4 — What is touching what
 
 ### Added

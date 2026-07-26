@@ -37,11 +37,11 @@
 | `paradox.py` | 486 |  | `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 2288 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 2295 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1802 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 848 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 2011 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 1950 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas` |
+| `spatial.py` | 2148 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas` |
 | `spatial_frames.py` | 875 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `theory_of_mind.py` | 288 |  | — |
 | `updates.py` | 254 |  | — |
@@ -390,10 +390,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 2279 | 10 lines |
-| `presets()` | 2270 | 2 lines |
-| `active_preset()` | 2273 | 2 lines |
-| `nsfw_enabled()` | 2276 | 2 lines |
+| `get_prompt()` | 2286 | 10 lines |
+| `presets()` | 2277 | 2 lines |
+| `active_preset()` | 2280 | 2 lines |
+| `nsfw_enabled()` | 2283 | 2 lines |
 
 ### `providers.py`
 
@@ -438,14 +438,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 1764 | 142 lines |
-| `apply_transit_dock_edges()` | 1460 | 137 lines |
-| `visible_adjacent_rooms()` | 1133 | 113 lines |
+| `merge_scene_with_diff()` | 1955 | 149 lines |
+| `apply_transit_dock_edges()` | 1651 | 137 lines |
+| `visible_adjacent_rooms()` | 1324 | 113 lines |
+| `contacts_from_entity_state()` | 1002 | 100 lines |
 | `egocentric_frame()` | 542 | 80 lines |
+| `apply_contact_ops()` | 1151 | 75 lines |
 | `normalize_scene_bearings()` | 215 | 74 lines |
-| `apply_contact_ops()` | 967 | 68 lines |
-| `_dedup_duplicate_entity_keys()` | 1704 | 58 lines |
-| `spatial_facts()` | 1076 | 55 lines |
+| `_dedup_duplicate_entity_keys()` | 1895 | 58 lines |
 
 ### `spatial_frames.py`
 

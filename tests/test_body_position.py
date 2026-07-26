@@ -348,6 +348,207 @@ class TestHygieneIsSafe:
         assert isinstance(scene["contacts"], list)
 
 
+class TestMirroredAssertions:
+    """One physical contact stated from both sides is still one contact. Both
+    bodies describing the same hold is exactly how the old per-entity shape
+    produced two records that drifted."""
+
+    def test_the_same_hold_from_both_sides_is_one_record(self):
+        scene = merge_scene_with_diff(_scene(), {"contact_ops": [
+            {"op": "add", "actor": "Lilaeve Voss", "actor_part": "hand",
+             "target": "Hinami", "target_part": "wrist", "manner": "grip"},
+            {"op": "add", "actor": "Hinami", "actor_part": "wrist",
+             "target": "Lilaeve Voss", "target_part": "hand", "manner": "grip"},
+        ]})
+        assert len(scene["contacts"]) == 1
+
+    def test_the_mirror_updates_the_record_rather_than_twinning_it(self):
+        scene = merge_scene_with_diff(_scene(), {"contact_ops": [
+            {"op": "add", "actor": "Lilaeve Voss", "actor_part": "hand",
+             "target": "Hinami", "target_part": "wrist", "manner": "rest"}]})
+        scene = merge_scene_with_diff(scene, {"contact_ops": [
+            {"op": "add", "actor": "Hinami", "actor_part": "wrist",
+             "target": "Lilaeve Voss", "target_part": "hand", "manner": "grip"}]})
+
+        assert len(scene["contacts"]) == 1
+        assert scene["contacts"][0]["manner"] == "grip"
+
+    def test_different_parts_are_different_contacts_not_mirrors(self):
+        scene = merge_scene_with_diff(_scene(), {"contact_ops": [
+            {"op": "add", "actor": "Lilaeve Voss", "actor_part": "hand",
+             "target": "Hinami", "target_part": "wrist", "manner": "grip"},
+            {"op": "add", "actor": "Hinami", "actor_part": "hand",
+             "target": "Lilaeve Voss", "target_part": "wrist", "manner": "grip"},
+        ]})
+        # Each holding the other's wrist is two holds, not one stated twice.
+        assert len(scene["contacts"]) == 2
+
+
+class TestLiftingContactOutOfEntityState:
+    """Contact the Director wrote into an entity's own state -- the shape that
+    predates contact_ops, and the one a model still reaches for. It is lifted
+    into contacts and REMOVED from the state, so one contact has one record.
+
+    Every fixture here is a verbatim shape taken from live chats.
+    """
+
+    def _lift(self, entities, positions=None):
+        scene = _scene(
+            positions=positions or {"Hinami": "bedroom", "Tamamo": "bedroom"},
+            entities=entities,
+        )
+        return merge_scene_with_diff(scene, {})
+
+    def test_the_documented_old_shape_converts(self):
+        """`target` plus a proximity that means contact."""
+        scene = self._lift({"Lilaeve Voss": {
+            "name": "Lilaeve Voss",
+            "state": {"proximity": "pressed_fully_against", "target": "Hinami",
+                      "posture": "grinding_with_full_contact"}}},
+            positions={"Hinami": "bedroom", "Lilaeve Voss": "bedroom"})
+
+        assert len(scene["contacts"]) == 1
+        assert scene["contacts"][0]["actor"] == "Lilaeve Voss"
+        assert scene["contacts"][0]["manner"] == "press"
+
+    def test_mere_nearness_does_not_become_contact(self):
+        """`close_on_bed` is proximity, not contact -- stations model that.
+        Inventing a hold is worse than missing one: contact becomes ground
+        truth the narrator is told."""
+        scene = self._lift({"Lilaeve Voss": {
+            "name": "Lilaeve Voss",
+            "state": {"proximity": "close_on_bed", "target": "Hinami",
+                      "posture": "leaning_in"}}},
+            positions={"Hinami": "bedroom", "Lilaeve Voss": "bedroom"})
+
+        assert scene["contacts"] == []
+
+    def test_an_invented_key_naming_a_person_converts(self):
+        scene = self._lift({"hinami": {
+            "name": "Hinami", "state": {"leaning_against": "tamamo"}}})
+
+        assert len(scene["contacts"]) == 1
+        assert scene["contacts"][0] == {
+            "actor": "Hinami", "actor_part": "", "target": "Tamamo",
+            "target_part": "", "manner": "lean"}
+
+    def test_the_key_name_yields_the_body_part(self):
+        scene = self._lift({"hinami": {
+            "name": "Hinami", "state": {"tails_wrapped_around": "Tamamo"}}})
+
+        contact = scene["contacts"][0]
+        assert contact["actor_part"] == "tails"
+        assert contact["manner"] == "wrap"
+
+    def test_the_value_can_carry_the_targets_part(self):
+        """`squished_against: "tamamo_side"` is Tamamo's side."""
+        scene = self._lift({"hinami": {
+            "name": "Hinami", "state": {"squished_against": "tamamo_side"}}})
+
+        contact = scene["contacts"][0]
+        assert contact["target"] == "Tamamo"
+        assert contact["target_part"] == "side"
+        assert contact["manner"] == "press"
+
+    def test_adjacency_words_are_left_completely_alone(self):
+        """`alongside`/`beside` are not contact. Not converted, not stripped."""
+        scene = self._lift({"hinami": {
+            "name": "Hinami", "state": {"alongside": "Tamamo",
+                                        "beside": "Tamamo"}}})
+
+        assert scene["contacts"] == []
+        assert scene["entities"]["hinami"]["state"]["alongside"] == "Tamamo"
+
+    def test_a_converted_key_is_removed_from_the_state(self):
+        scene = self._lift({"hinami": {
+            "name": "Hinami", "state": {"posture": "curled_up",
+                                        "leaning_against": "tamamo"}}})
+
+        state = scene["entities"]["hinami"]["state"]
+        assert "leaning_against" not in state       # one truth, not two
+        assert state["posture"] == "curled_up"      # not contact; untouched
+
+    def test_a_value_naming_nobody_is_left_alone(self):
+        scene = self._lift({"hinami": {
+            "name": "Hinami",
+            "state": {"contact": "bodies_aligned_in_warmth"}}})
+
+        assert scene["contacts"] == []
+        assert "contact" in scene["entities"]["hinami"]["state"]
+
+    @pytest.mark.parametrize("key", [
+        "transit", "link", "phase", "hatch", "posture", "activity",
+        "held_items", "zone", "destination_room", "route_room",
+    ])
+    def test_structurally_load_bearing_keys_are_never_touched(self, key):
+        """Movement, portals and perception's own backstop read these."""
+        scene = self._lift({"hinami": {
+            "name": "Hinami", "state": {key: "Tamamo"}}})
+
+        assert key in scene["entities"]["hinami"]["state"]
+
+    def test_lifted_contact_then_obeys_the_same_hygiene(self):
+        scene = self._lift({"hinami": {
+            "name": "Hinami", "state": {"leaning_against": "tamamo"}}})
+        assert scene["contacts"]
+
+        # Walking away ends it, exactly like a contact recorded by an op.
+        scene = merge_scene_with_diff(scene, {"positions": {"Hinami": "hall"}})
+        assert scene["contacts"] == []
+
+    def test_a_contact_across_two_rooms_is_never_lifted(self):
+        scene = self._lift(
+            {"hinami": {"name": "Hinami", "state": {"leaning_against": "tamamo"}}},
+            positions={"Hinami": "bedroom", "Tamamo": "hall"})
+        assert scene["contacts"] == []
+
+    def test_both_bodies_describing_the_hold_yields_one_contact(self):
+        scene = self._lift({
+            "hinami": {"name": "Hinami", "state": {"held_by": "Tamamo"}},
+            "Tamamo": {"name": "Tamamo", "state": {"holding": "Hinami"}},
+        })
+        assert len(scene["contacts"]) == 1
+
+    def test_the_live_chat_40_state_lifts_cleanly(self):
+        """Verbatim from the live scene that prompted this."""
+        scene = self._lift({
+            "hinami": {"name": "Hinami", "kind": "kitsune", "state": {
+                "posture": "curled_up_in_nest_eyes_closed",
+                "leaning_against": "tamamo",
+                "contact": "bodies_aligned_in_warmth",
+                "squished_against": "tamamo_side",
+                "alongside": "Tamamo",
+                "tails_wrapped_around": "Tamamo"}},
+            "Tamamo": {"name": "Tamamo", "kind": "kitsune", "state": {
+                "posture": "reclining_in_nest_embracing_hinami",
+                "beside": "Hinami"}},
+        })
+
+        manners = {c["manner"] for c in scene["contacts"]}
+        assert manners == {"lean", "press", "wrap"}
+        # The narrator can now be told, in order, what is actually touching.
+        assert all(c["target"] == "Tamamo" for c in scene["contacts"])
+
+    def test_an_entity_with_no_position_is_skipped(self):
+        scene = self._lift({"ghost": {
+            "name": "Ghost", "state": {"leaning_against": "tamamo"}}})
+        assert scene["contacts"] == []
+
+    def test_a_state_that_is_not_a_dict_is_tolerated(self):
+        scene = self._lift({"hinami": {"name": "Hinami", "state": "prose"}})
+        assert scene["contacts"] == []
+
+    def test_prose_is_not_parsed_for_contact(self):
+        """A description paragraph is left as the descriptive text it is.
+        Regex over prose would manufacture holds nobody asserted."""
+        scene = self._lift({"hinami": {
+            "name": "Hinami",
+            "state": {"description": "her hand resting on Tamamo's shoulder"}}})
+
+        assert scene["contacts"] == []
+        assert "description" in scene["entities"]["hinami"]["state"]
+
+
 class TestSchema:
     def test_contact_ops_survive_state_diff_validation(self):
         from schemas import StateDiff
