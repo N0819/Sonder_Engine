@@ -1,5 +1,129 @@
 # Changelog
 
+## alpha4.3.1 — Interrupted is not lost
+
+### Added
+- **A cast member can be moved to another room.** The Cast tab now shows which
+  room each participant is standing in and lets you put them somewhere else,
+  including inside a vehicle or building interior (labelled with what it is
+  inside, so "Console Room" reads as "The TARDIS › Console Room") and including
+  nowhere at all, which is offscreen. The player's own position is shown for
+  orientation but not editable here: where the protagonist stands is the
+  story's business, not an authoring dropdown's.
+
+  It is an authoring edit and deliberately silent — like the world and attire
+  editors, it changes state and narrates nothing. Adding or dismissing a
+  character queues an arrival or departure beat for the narrator; a relocation
+  queues nothing, so if the move should be seen, write it.
+
+  Positions are only ever read from and written to the scene blob, which is the
+  single runtime source of truth for who is standing where. Two things are
+  therefore refused rather than trusted: a room id that is not in the scene
+  (a position naming a room that does not exist puts someone nowhere that
+  perception, adjacency, or the narrator can reason about), and any edit while
+  a pipeline is running, which reads and rewrites positions throughout a turn.
+  The write also lands on the spelling the scene already uses for that person
+  rather than adding a second one — `spatial.room_of` matches names loosely, so
+  two keys for one character would put them in two rooms at once for every
+  reader that walks positions to find a room's occupants.
+
+- **An interrupted lorebook-tree generation can be picked up where it
+  stopped.** Generating a tree was one blocking request wrapped around one
+  model call, and nothing was written down until the user applied the finished
+  plan — so every way a long call can end badly ended the same way: with
+  nothing. A dropped stream, a provider that ran out of retries, a closed tab,
+  a refresh, a restarted server. Even *success* was fragile: the plan existed
+  only in the HTTP response, so a tab closed one second early discarded work
+  that had already been paid for in full.
+
+  A run is now many recorded units instead of one unrecorded one. A cheap
+  structure call settles the books, the links, and an outline of the entries;
+  each following call writes one batch of those entries. Every completed unit
+  is persisted to `lore_gen_jobs` the moment it lands, which is what gives
+  recovery something to recover: resuming re-runs only the units that never
+  finished, and the generator tab offers it on open — the plan lives in the
+  job row, not in the browser.
+
+  The distinction the recovery turns on is *why* a run stopped, because the two
+  answers deserve opposite behaviour. Transport failure (a dropped connection,
+  an exhausted retry budget, an abort) means the provider is unavailable right
+  now, so the run stops immediately rather than marching the remaining batches
+  into the same wall — every finished batch is kept and handed back as a
+  reviewable partial plan. Unusable *output* from one batch is a content
+  problem, not an outage: that batch alone is marked failed and the run carries
+  on, so one bad response costs one batch instead of the other twelve. Either
+  way a resume retries exactly the stubs that are not yet done.
+
+  A run abandoned by a dead process is detected exactly, not by a timeout: each
+  job carries the token of the process that started it, so a `running` row
+  stamped by any other process is a crash by definition. Two consequences fall
+  out of the same design. Splitting the call also gives each entry a real share
+  of the output budget, which forty rich entries squeezed into a single
+  8000-token response never had. And a run whose plan finished generating but
+  whose response never reached the browser is now the cheapest recovery of all:
+  the work is done, only the delivery was lost, and restoring it costs no model
+  call at all.
+
+  Nothing here writes lore. The plan is still provisional until it is applied,
+  and applying it retires the run.
+- **Lorebook generation can be given longer than 300 seconds.** The provider
+  read timeout is sized for pipeline turns, which must not hang a player
+  mid-scene — but a slow local model can still be producing a batch of entries
+  when it expires, and cutting the connection there fails a response that was
+  on its way. That failure is indistinguishable, from the outside, from the
+  network dropping: it retries, exhausts its budget, and ends the run.
+
+  The generator now has a **Model timeout (s)** field (30s–1h) that raises the
+  read timeout for its own calls, leaving every other call in the engine on the
+  default — nobody else pays for one long authoring pass. The value is stored
+  with the request, so each later batch and each later resume inherits it, and
+  a resume may raise it further than the attempt that ran out of it. Since a
+  read timeout is itself one of the interruptions above, "generation timed out"
+  and "resume with more time, keeping what already finished" are now the same
+  gesture. Editing the field is what opts into overriding a recovered run's
+  allowance; leaving it alone never quietly lowers one.
+
+### Fixed
+- **A story's lorebook tree shows the story's lorebooks.** Opening a book in a
+  chat's workspace showed a fraction of that chat's tree, and for a chat whose
+  canon book had no children it showed exactly one book — the one you clicked.
+  The books were not missing; the browser was asking the wrong question.
+
+  It built its tree from the chat payload's `lorebooks`, which is
+  `chat_lorebook_ids()`: the *retrieval* graph, resolved outward from canon plus
+  attachments through parents, children and links. That is the right question
+  for "what lore may this chat draw on" and the wrong one for "what does this
+  chat have," because a book that hangs off nothing is reachable from nothing.
+  Every chat in the live database held such books — `TARDIS`, `Shelter
+  Elevator`, `Japan`, two stray `Kansai Region`s — chat-owned, `parent_id`
+  NULL, never attached, and so absent from the tree that was supposed to list
+  them. The workspace now asks about ownership, via a new
+  `GET /api/chats/{id}/lorebooks`, which cannot orphan anything; it also
+  replaces a per-book request fan-out with one call.
+
+  Retrieval scoping is deliberately untouched — making these books *visible*
+  is a browser question, making them *readable* would put lore into play that
+  was not in play before. So the tree says which is which: a book nothing
+  reaches is badged **unreachable**, with the explanation that its entries can
+  never reach the story and that dragging it onto a parent connects it. That
+  state was previously not merely unshown but unsayable.
+
+  The generator's apply path was one live source of these orphans: a planned
+  book whose parent could not be resolved was written with no parent at all.
+  `commit.py` already refuses to do that ("keeps the tree rooted under canon --
+  never an unreachable orphan"); `apply_lorebook_plan` now follows the same
+  rule, rooting under the book the plan was generated for, and an entry whose
+  book reference does not resolve is filed there too rather than silently
+  dropped. Existing orphans stay as they are — they are yours to place, and the
+  tree can finally show you where they are.
+
+- **An unstarted chat can be asked about its scene.** `scene.get_scene` read
+  `(chat or {}).get("scenario")`, which raises `AttributeError` on a
+  `sqlite3.Row` — and the app's scene-reading routes pass the row straight from
+  `q()`. It only fired on the no-scene path, so asking a chat that had not
+  opened yet about its attire returned a 500 rather than an empty scene. Found
+  while adding relocation, which reads the scene the same way.
+
 ## alpha4.3 — A goal can be spent as well as impossible
 
 ### Fixed

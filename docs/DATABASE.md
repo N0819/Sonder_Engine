@@ -5,10 +5,11 @@ The engine uses SQLite. The schema is defined in `db.py`; access is intentionall
 ## Resource tables
 
 - `characters`, `personas`: reusable versioned JSON sheets plus original source payloads.
-- `lorebooks`, `lore_entries`: canon containers and entries.
+- `lorebooks`, `lore_entries`: canon containers and entries. Two different questions get asked of this table and must not be confused: **ownership** (`chat_id`, what a chat has — what the workspace browser lists via `GET /api/chats/{cid}/lorebooks`) and **reachability** (`memory.chat_lorebook_ids`, what lore retrieval may read — resolved outward from canon plus `chat_lorebooks` attachments through parents/children/links). A chat-owned book with `parent_id` NULL and no attachment row is owned but unreachable: it exists, it is editable, and the pipeline can never read it.
 - `lorebook_links`: typed relationships between books.
 - `chat_lorebooks`: attachments between chats and reusable or chat-owned books.
 - `providers`, `settings`: local model/provider configuration and prompt/runtime settings.
+- `lore_gen_jobs`: resumable lorebook-tree generation runs (`importers.generate_lorebook_plan` / `resume_lorebook_plan`). A run is one structure model call plus one call per batch of outlined entries, and each completed unit is written here so an interruption (dropped stream, exhausted provider retries, closed tab, restarted server) costs one unit instead of the whole run. `status` is `running|interrupted|failed|ready|applied|cancelled`; `owner` is a per-process token, so a `running` row from any other process is a crash and reclassifies as an interruption with no staleness timeout. `params` holds the whole request (brief, mode, depth, entry target, flags, and the raised read `timeout`), so a resume reproduces it without the client. Authoring scratch state only — deliberately **not** exported, checkpointed, or branch-remapped, since no lore exists until the plan is applied; rows are pruned to the newest `LORE_GEN_KEEP_PER_BOOK` per book and cascade with the book.
 
 ## Runtime fiction tables
 

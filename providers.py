@@ -16,7 +16,14 @@ _RETRYABLE_NETWORK = (
     httpx.TimeoutException, httpx.NetworkError,
     _req_exc.ConnectionError, _req_exc.Timeout, _req_exc.ChunkedEncodingError,
 )
+
+# Public alias for callers OUTSIDE the retry loop that must tell "the network
+# dropped" apart from "the model answered badly" -- resumable lorebook-tree
+# generation uses it to decide whether a stopped run is a mere interruption
+# (stop and offer resume) or unusable output (record it and carry on).
+TRANSIENT_NETWORK_ERRORS = _RETRYABLE_NETWORK
 import contextvars
+from contextlib import contextmanager
 from typing import Optional, Callable, Any
 from dataclasses import dataclass
 
@@ -55,6 +62,71 @@ HTTPX_TIMEOUT = httpx.Timeout(
     write=60.0,
     pool=30.0,
 )
+
+# Read timeout for model requests made inside a `request_timeout(...)` block;
+# None means "use the 300s default above". The default is sized for pipeline
+# turns, which must not hang a player mid-scene -- but a long authoring call
+# (a lorebook-tree structure pass, or a batch of entries on a slow local
+# model) can legitimately still be producing tokens at 300s, and severing it
+# there fails a response that was on its way. Callers that know they are doing
+# long work raise it for themselves rather than everyone paying for it.
+read_timeout_override = contextvars.ContextVar(
+    "read_timeout_override",
+    default=None,
+)
+
+# 30s floor stops a typo (or a 0) from making every request fail instantly;
+# the hour ceiling stops one from wedging a worker thread indefinitely.
+READ_TIMEOUT_MIN = 30.0
+READ_TIMEOUT_MAX = 3600.0
+
+
+def clamp_read_timeout(seconds):
+    """The usable read timeout for `seconds`, or None if it means 'default'."""
+    try:
+        value = float(seconds or 0)
+    except (TypeError, ValueError):
+        return None
+    if value <= 0:
+        return None
+    return max(READ_TIMEOUT_MIN, min(value, READ_TIMEOUT_MAX))
+
+
+@contextmanager
+def request_timeout(seconds):
+    """Raise the read timeout for model requests made inside this block.
+
+    Falsy/unparseable values are a no-op, so callers can pass an unvalidated
+    setting straight through. Reset in `finally` for the same reason
+    token_sink/cancel_event are: a contextvar left set would leak the override
+    into whatever ran next on this thread.
+    """
+    value = clamp_read_timeout(seconds)
+    if value is None:
+        yield
+        return
+
+    token = read_timeout_override.set(value)
+    try:
+        yield
+    finally:
+        read_timeout_override.reset(token)
+
+
+def _request_timeout():
+    """(connect, read) for `requests`, honoring an active override."""
+    override = read_timeout_override.get()
+    if override is None:
+        return REQUEST_TIMEOUT
+    return (REQUEST_TIMEOUT[0], override)
+
+
+def _httpx_timeout():
+    """The httpx equivalent, so the async path honors the same override."""
+    override = read_timeout_override.get()
+    if override is None:
+        return HTTPX_TIMEOUT
+    return httpx.Timeout(connect=30.0, read=override, write=60.0, pool=30.0)
 
 class Aborted(RuntimeError):
     pass
@@ -937,7 +1009,7 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
     usage = None
     t0 = time.time()
     _check_cancel()
-    with _session().post(url, headers=headers, json=body, stream=True, timeout=REQUEST_TIMEOUT) as r:
+    with _session().post(url, headers=headers, json=body, stream=True, timeout=_request_timeout()) as r:
         if r.status_code >= 400:
             raise LLMError(f"HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
         for raw in r.iter_lines():
@@ -981,7 +1053,7 @@ def _sse_anthropic(base, headers, body, sink, role=None, model=None):
     usage = None
     t0 = time.time()
     _check_cancel()
-    with _session().post(base + "/v1/messages", headers=headers, json=body, stream=True, timeout=REQUEST_TIMEOUT) as r:
+    with _session().post(base + "/v1/messages", headers=headers, json=body, stream=True, timeout=_request_timeout()) as r:
         if r.status_code >= 400:
             raise LLMError(f"HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
         for raw in r.iter_lines():
@@ -1227,7 +1299,7 @@ def _chat_complete_once(
             base + "/v1/messages",
             headers=h,
             json=body,
-            timeout=REQUEST_TIMEOUT,
+            timeout=_request_timeout(),
         )
 
         if response.status_code >= 400:
@@ -1320,7 +1392,7 @@ def _chat_complete_once(
         url,
         headers=headers,
         json=body,
-        timeout=REQUEST_TIMEOUT,
+        timeout=_request_timeout(),
     )
 
     if response.status_code == 400:
@@ -1332,7 +1404,7 @@ def _chat_complete_once(
             url,
             headers=headers,
             json=fallback_body,
-            timeout=REQUEST_TIMEOUT,
+            timeout=_request_timeout(),
         )
 
     if response.status_code >= 400:
@@ -1355,7 +1427,7 @@ def _chat_complete_once(
         retry_body = dict(body)
         retry_body.pop("response_format", None)
         alt = _session().post(url, headers=headers, json=retry_body,
-                              timeout=REQUEST_TIMEOUT)
+                              timeout=_request_timeout())
         if alt.status_code < 400:
             parsed = alt.json()
             content = parsed["choices"][0]["message"]["content"]
@@ -1475,7 +1547,7 @@ async def _chat_complete_async_once(
         for k in ANTHROPIC_SAMPLERS:
             if k in merged:
                 body[k] = merged[k]
-        async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=_httpx_timeout()) as client:
             if sink:
                 return await _sse_anthropic_async(base, h, dict(body), sink, client, role=role, model=model)
             _t0 = time.time()
@@ -1493,7 +1565,7 @@ async def _chat_complete_async_once(
     if json_mode:
         body["response_format"] = {"type": "json_object"}
 
-    async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=_httpx_timeout()) as client:
         if sink:
             try:
                 return await _sse_openai_async(base + "/chat/completions", _headers(prov), dict(body), sink, client, role=role, model=model)

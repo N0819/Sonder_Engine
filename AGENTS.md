@@ -33,10 +33,14 @@ python tools/project_check.py
 | Narration | `agents/narration.py` (`narrator`) | narrator prompt in `prompts.py`, output validation |
 | Persistence or rollback | `commit.py`, `checkpoints.py` | `db.py`, `memory.py`, restore tests |
 | Deterministic mechanics (timed arrivals, expiry, dock edges, zone/carry inference, news latency) | `mechanics.py` (`mechanics_sweep`) | `commit.py` (`commit_transit_sweep`), `spatial.py`, `spatial_frames.py`, `tests/test_mechanics_sweep.py` |
+| Authoring edits to live positions (GM relocation) | `app.py` (`GET /api/chats/{cid}/positions`, `PUT /api/chats/{cid}/characters/{ch}/position`) | `scene.get_scene`/`spatial.room_of`, `static/js/settings.js` cast tab, `tests/test_char_relocation.py` — writes only `scene.positions`, requires an idle chat, validates room ids, and queues no narrator beat |
 | Room identity/dedup/retirement, destruction (single-book + region cascades) | `commit.py` (room registry + destruction blocks) | `db.py` (`room_registry`), `checkpoints.py`, `app.py` remaps, registry/destruction tests |
 | Lore retrieval or hierarchy | `memory.py`, `agents/mapping.py` | `app.py`, lore tests |
+| Which lorebooks a chat *has* (browsing/editing) | `app.py` (`GET /api/chats/{cid}/lorebooks`) | `static/js/lorebooks.js` workspace tree, `tests/test_lore_tree_browser.py` — ownership, NOT `chat_lorebook_ids()`: that resolves reachability for retrieval and cannot see a book nothing hangs off |
+| Lorebook-tree generation (authoring, not pipeline) | `importers.py` (`generate_lorebook_plan`, `resume_lorebook_plan`, `apply_lorebook_plan`) | `generator_lorebook*` prompts, `db.py` (`lore_gen_jobs`), `app.py` job routes, `static/js/lorebooks.js` generator tab, `tests/test_lore_gen_resume.py` |
 | Character/persona format | `character_schema.py` | `importers.py`, editor UI, schema tests |
 | Provider behavior | `providers.py` | `app.py` provider routes, `prompt_cache.py` |
+| Per-call request timeout | `providers.py` (`request_timeout`, `clamp_read_timeout`, `_request_timeout`/`_httpx_timeout`) | the caller's own knob (e.g. the lorebook generator's `timeout` param); `REQUEST_TIMEOUT`/`HTTPX_TIMEOUT` stay the pipeline default |
 | API behavior | `app.py` | matching file in `static/js/` |
 | Browser UI | `static/index.html`, `static/js/`, CSS | matching API route in `app.py` |
 | Database shape | `db.py` | migrations, snapshot/export/restore code, tests |

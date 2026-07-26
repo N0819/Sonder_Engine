@@ -410,6 +410,23 @@
   margin: 9px 0;
 }
 
+/* An interrupted generation run offering itself for resume. Reads as an
+   alert rather than another panel -- it is unfinished work, not content. */
+.lore-gen-recovery {
+  border-color: #6b5b2f;
+  background: rgba(74, 60, 24, .28);
+}
+
+.lore-gen-recovery .row {
+  margin-top: 9px;
+}
+
+/* The incomplete-plan note spans the whole stat grid instead of squeezing
+   into one 90px column. */
+.lore-plan-summary .full {
+  grid-column: 1 / -1;
+}
+
 .lore-plan-stat {
   padding: 9px;
   border: 1px solid #34425a;

@@ -147,13 +147,28 @@ def persona_of(chat):
         "private_history": [],
     })
 
+def _chat_field(chat, field):
+    """One accessor for a chat passed as either a dict or a sqlite3.Row.
+
+    Row has no .get, so `(chat or {}).get(field)` raised AttributeError on the
+    no-scene path for every caller that passed the row straight from `q()` --
+    which is what the app's own scene-reading routes do.
+    """
+    if chat is None:
+        return None
+    try:
+        return chat[field]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
 def get_scene(chat_id, chat=None):
     sc = wget(chat_id, "scene")
     if not sc:
         sc = {
             "location": "an unspecified place",
             "time": "now",
-            "description": (chat or {}).get("scenario") or "",
+            "description": _chat_field(chat, "scenario") or "",
             "rooms": {},
             "entities": {},
             "positions": {},

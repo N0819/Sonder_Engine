@@ -5,7 +5,10 @@ from memory import (
     add_lore, LORE_CATEGORIES, LOREBOOK_TYPES, LOREBOOK_LINK_TYPES,
     KNOWLEDGE_TAGS, KNOWLEDGE_RANGES, add_lorebook_link,
 )
-from providers import chat_complete, token_sink, embed_texts
+from providers import (
+    chat_complete, token_sink, embed_texts, request_timeout,
+    clamp_read_timeout,
+)
 from prompts import get_prompt
 from character_schema import (
     CHARACTER_SCHEMA,
@@ -1075,53 +1078,305 @@ def reinterpret_lorebook(lid):
 
     return len(redone)
 
-def generate_lorebook_plan(lorebook_id, brief, mode="expand_tree", depth=2,
-                           entry_target=40, allow_new_books=True,
-                           allow_links=True, allow_updates=True,
-                           preserve_locked=True):
-    from db import q
-    from memory import lorebook_manifest, lorebook_descendants
+# ===================== RESUMABLE LOREBOOK-TREE GENERATION =====================
+# Generating a lorebook tree is many model calls, not one: a cheap "structure"
+# call that decides the books, links and an outline of the entries, then one
+# call per batch of outlined entries. Every one of those calls can be lost to a
+# dropped stream, an exhausted provider retry budget, a closed browser tab, or
+# a server restart -- and before this, losing any of them lost ALL of them.
+#
+# Each completed unit of work is now written to lore_gen_jobs the moment it
+# lands, so recovery has something to recover: resuming re-runs only the units
+# that never finished. Nothing here writes lore -- the plan stays provisional
+# until the user applies it, which is still the only path that touches
+# lorebooks/lore_entries.
 
-    book = q(
-        "SELECT * FROM lorebooks WHERE id=?",
-        (lorebook_id,),
+# Stamped on every job this process starts. A 'running' row carrying a
+# DIFFERENT token was orphaned when that process died, which is an
+# interruption -- detected exactly, with no staleness timeout to tune.
+_GEN_OWNER = uuid.uuid4().hex
+
+# Statuses worth telling the user about when they reopen the generator.
+# 'ready' is included deliberately: a run whose plan finished generating but
+# whose HTTP response never reached the browser is the cheapest recovery of
+# all -- the work is done, only the delivery was lost.
+LORE_GEN_RECOVERABLE = ("running", "interrupted", "failed", "ready")
+
+# Outlined entries expanded per model call. Small enough that one lost call
+# costs little and each entry gets a real share of the output budget; large
+# enough that a 40-entry tree is ~7 calls rather than 40.
+LORE_GEN_ENTRY_BATCH = 6
+
+# Newest runs kept per book; older rows are pruned when a run starts.
+LORE_GEN_KEEP_PER_BOOK = 5
+
+
+class LoreGenError(RuntimeError):
+    """A generation run stopped without producing a usable plan.
+
+    `interrupted` distinguishes "the network/provider dropped out" from "the
+    model returned something unusable" -- the caller shows a different message
+    for each, but both name a job_id that resume can pick up, because resuming
+    re-runs from the first incomplete unit either way.
+    """
+
+    def __init__(self, message, job_id=None, interrupted=False):
+        super().__init__(message)
+        self.job_id = job_id
+        self.interrupted = interrupted
+
+
+def _is_interruption(exc):
+    """True when a run stopped on transport, not on content.
+
+    chat_complete has already exhausted its own retry budget by the time
+    anything reaches us, so a transient error surfacing here means the
+    provider or the connection is genuinely unavailable right now -- stop and
+    offer a resume rather than marching the remaining batches into the same
+    wall.
+    """
+    from providers import (
+        Aborted, LLMError, DEFAULT_RETRY, TRANSIENT_NETWORK_ERRORS,
+    )
+
+    if isinstance(exc, (Aborted, TRANSIENT_NETWORK_ERRORS)):
+        return True
+    if isinstance(exc, LLMError):
+        return bool(exc.retryable) or exc.status_code in DEFAULT_RETRY.retryable_status
+    return False
+
+
+def _jdict(text, default=None):
+    try:
+        value = json.loads(text or "")
+    except Exception:
+        return {} if default is None else default
+    return value if isinstance(value, dict) else ({} if default is None else default)
+
+
+def _chunked(items, size):
+    return [items[i:i + size] for i in range(0, len(items), size)]
+
+
+def _empty_plan():
+    return {"analysis": {}, "book_ops": [], "link_ops": [], "entry_ops": []}
+
+
+def _plan_shape(plan):
+    """Every op list present, whatever a stored row happens to hold.
+
+    A resumed run reads its plan back out of the database, so the run loop
+    must never be the thing that discovers a missing key.
+    """
+    plan = plan if isinstance(plan, dict) else {}
+    if not isinstance(plan.get("analysis"), dict):
+        plan["analysis"] = {}
+    for key in ("book_ops", "link_ops", "entry_ops"):
+        if not isinstance(plan.get(key), list):
+            plan[key] = []
+    return plan
+
+
+# ---- job store ------------------------------------------------------------
+
+def _gen_job_row(job_id):
+    return q("SELECT * FROM lore_gen_jobs WHERE id=?", (job_id,), one=True)
+
+
+def _gen_save(job_id, plan=None, progress=None, **fields):
+    if plan is not None:
+        fields["plan"] = json.dumps(plan, ensure_ascii=False)
+    if progress is not None:
+        fields["progress"] = json.dumps(progress, ensure_ascii=False)
+    fields["updated"] = time.time()
+
+    assignments = ", ".join(f"{name}=?" for name in fields)
+    qi(
+        f"UPDATE lore_gen_jobs SET {assignments} WHERE id=?",
+        (*fields.values(), job_id),
+    )
+
+
+def _gen_job_create(lorebook_id, params):
+    now = time.time()
+    job_id = qi(
+        "INSERT INTO lore_gen_jobs(lorebook_id,status,stage,params,plan,"
+        "progress,error,owner,attempts,created,updated) "
+        "VALUES(?,'running','structure',?,'{}','{}','',?,1,?,?)",
+        (
+            lorebook_id,
+            json.dumps(params, ensure_ascii=False),
+            _GEN_OWNER,
+            now,
+            now,
+        ),
+    )
+    # Only the newest few runs per book are ever offered for recovery, so the
+    # rest are dead weight. Pruning on create (rather than on a timer) keeps
+    # this to one statement on a path that is already doing model calls.
+    qi(
+        "DELETE FROM lore_gen_jobs WHERE lorebook_id=? AND id NOT IN "
+        "(SELECT id FROM lore_gen_jobs WHERE lorebook_id=? "
+        "ORDER BY id DESC LIMIT ?)",
+        (lorebook_id, lorebook_id, LORE_GEN_KEEP_PER_BOOK),
+    )
+    return job_id
+
+
+def _gen_reap_orphans(lorebook_id=None):
+    """Reclassify runs abandoned by a dead process as interruptions.
+
+    A 'running' row can only be genuinely live if this process is the one
+    running it; anything else is a crash or restart, and the user should be
+    offered the resume rather than staring at a spinner that owns nothing.
+    """
+    sql = "SELECT id FROM lore_gen_jobs WHERE status='running' AND owner<>?"
+    args = [_GEN_OWNER]
+    if lorebook_id is not None:
+        sql += " AND lorebook_id=?"
+        args.append(lorebook_id)
+
+    for row in q(sql, tuple(args)):
+        _gen_save(
+            row["id"],
+            status="interrupted",
+            error="Interrupted: the server stopped while this generation was running.",
+        )
+
+
+def _gen_job_public(row):
+    """The job as the API and UI see it: decoded, with derived counts."""
+    plan = _plan_shape(_jdict(row["plan"], _empty_plan()))
+    progress = _jdict(row["progress"])
+    outline = progress.get("outline") or []
+    done = sum(1 for stub in outline if stub.get("state") == "done")
+    status = row["status"]
+
+    return {
+        "id": row["id"],
+        "lorebook_id": row["lorebook_id"],
+        "status": status,
+        "stage": row["stage"],
+        "params": _jdict(row["params"]),
+        "plan": plan,
+        "error": row["error"] or "",
+        "attempts": row["attempts"],
+        "created": row["created"],
+        "updated": row["updated"],
+        "entries_total": len(outline),
+        "entries_done": done,
+        "entries_remaining": len(outline) - done,
+        "stage_errors": progress.get("stage_errors") or [],
+        # Work remains that a resume would continue rather than duplicate.
+        "resumable": status in ("interrupted", "failed"),
+        # The plan is finished and merely needs handing back to the client.
+        "restorable": status == "ready",
+        "running": status == "running" and row["owner"] == _GEN_OWNER,
+    }
+
+
+def lore_gen_job(job_id):
+    row = _gen_job_row(job_id)
+    return _gen_job_public(row) if row else None
+
+
+def recoverable_lore_gen_job(lorebook_id):
+    """The newest run for this book that the user could still recover, or None."""
+    _gen_reap_orphans(lorebook_id)
+    placeholders = ",".join("?" for _ in LORE_GEN_RECOVERABLE)
+    row = q(
+        f"SELECT * FROM lore_gen_jobs WHERE lorebook_id=? AND status IN "
+        f"({placeholders}) ORDER BY id DESC LIMIT 1",
+        (lorebook_id, *LORE_GEN_RECOVERABLE),
         one=True,
     )
-    if not book:
-        raise ValueError("Lorebook not found")
+    return _gen_job_public(row) if row else None
 
-    # Gather context: book summaries, category counts, titles/keys
-    book_ids = lorebook_descendants(lorebook_id)
-    if not book_ids:
-        book_ids = [lorebook_id]
-    
+
+def cancel_lore_gen_job(job_id):
+    row = _gen_job_row(job_id)
+    if not row:
+        raise ValueError("Generation job not found")
+    _gen_save(job_id, status="cancelled")
+    return True
+
+
+def mark_lore_gen_job_applied(job_id):
+    """Applying a plan retires its job -- it must not resurface as recoverable
+    work once its entries are real lore."""
+    row = _gen_job_row(job_id)
+    if not row:
+        return False
+    _gen_save(job_id, status="applied")
+    return True
+
+
+def _gen_result(job_id):
+    """What the API hands back: the plan, carrying its job under `_job`.
+
+    Keeping the plan itself as the top-level shape is deliberate -- the
+    preview/apply path already consumes exactly that, and only the recovery UI
+    needs the job block.
+    """
+    job = _gen_job_public(_gen_job_row(job_id))
+    plan = job.pop("plan")
+    plan["_job"] = job
+    return plan
+
+
+def _gen_record_failure(job_id, exc, plan, progress):
+    interrupted = _is_interruption(exc)
+    message = str(exc) or exc.__class__.__name__
+    _gen_save(
+        job_id,
+        status="interrupted" if interrupted else "failed",
+        error=(("Interrupted: " if interrupted else "") + message)[:2000],
+        plan=plan,
+        progress=progress,
+    )
+    return interrupted
+
+
+# ---- shared generation context -------------------------------------------
+
+def _lore_gen_context(lorebook_id):
+    """Book/entry context for a generation run.
+
+    Rebuilt from the database on every call, including on resume: the job
+    stores the REQUEST, never this, so a resumed run sees the tree as it is
+    now rather than as it was when the run first started.
+    """
+    from memory import lorebook_descendants
+
+    book_ids = lorebook_descendants(lorebook_id) or [lorebook_id]
+
     books_ctx = []
     category_counts = {}
-    existing_titles = set()
+    existing_titles = []
     existing_entries = []
-    
+
     for bid in book_ids:
         lb = q("SELECT * FROM lorebooks WHERE id=?", (bid,), one=True)
         if not lb:
             continue
         entries = q(
-            "SELECT keys, content, category, title, canon_locked FROM lore_entries WHERE lorebook_id=?",
+            "SELECT keys, content, category, title, canon_locked "
+            "FROM lore_entries WHERE lorebook_id=?",
             (bid,),
         )
-        n = len(entries)
         books_ctx.append({
             "id": bid,
             "name": lb["name"],
             "book_type": lb["book_type"],
             "summary": lb["summary"],
-            "entry_count": n,
+            "entry_count": len(entries),
             "parent_id": lb["parent_id"],
         })
         for e in entries:
             cat = e["category"] or "other"
             category_counts[cat] = category_counts.get(cat, 0) + 1
             if e["title"]:
-                existing_titles.add(e["title"])
+                existing_titles.append(e["title"])
             existing_entries.append({
                 "book_id": bid,
                 "keys": e["keys"],
@@ -1130,39 +1385,161 @@ def generate_lorebook_plan(lorebook_id, brief, mode="expand_tree", depth=2,
                 "content": e["content"],
                 "locked": bool(e["canon_locked"]),
             })
-    
-    # For large books, only send full content for a sample
+
+    # For large trees, only the first slice carries full content; the rest go
+    # as titles/keys so the prompt stays a sane size.
     if len(existing_entries) > 50:
-        # Send full content for first 20, titles+keys for rest
-        full_entries = existing_entries[:20]
-        summary_entries = [
+        digest = existing_entries[:20] + [
             {"book_id": e["book_id"], "keys": e["keys"], "title": e["title"],
              "category": e["category"], "locked": e["locked"]}
             for e in existing_entries[20:]
         ]
-        existing_context = full_entries + summary_entries
     else:
-        existing_context = existing_entries
+        digest = existing_entries
 
-    payload = {
-        "request": brief or "Create useful lore entries.",
-        "mode": mode,
-        "depth": depth,
-        "entry_target": entry_target,
-        "allow_new_books": allow_new_books,
-        "allow_links": allow_links,
-        "allow_updates": allow_updates,
-        "preserve_locked": preserve_locked,
+    return {
         "selected_book_id": lorebook_id,
         "books": books_ctx,
         "category_counts": category_counts,
-        "existing_entries": existing_context,
+        "existing_entries": digest,
+        "existing_titles": existing_titles,
+    }
+
+
+def _normalize_entry_ops(parsed, default_book_id):
+    """Finished entry ops out of whatever shape the model used.
+
+    Handles both the documented entry_ops list and the flat `entries` list
+    looser responses return, so a model that answers the structure call with
+    complete entries (or a custom prompt preset predating staged generation)
+    still produces a usable plan.
+    """
+    ops = [
+        op for op in (parsed.get("entry_ops") or [])
+        if isinstance(op, dict) and str(op.get("content") or "").strip()
+    ]
+    if ops:
+        return ops
+
+    return [
+        {
+            "op": "create",
+            "book_id": default_book_id,
+            "keys": e.get("keys", ""),
+            "content": e.get("content", ""),
+            "category": e.get("category", "other"),
+            "title": e.get("title"),
+            "knowledge_tag": e.get("knowledge_tag"),
+            "knowledge_range": e.get("knowledge_range"),
+            "knowledge_locations": e.get("knowledge_locations", []),
+        }
+        for e in (parsed.get("entries") or [])
+        if isinstance(e, dict) and str(e.get("content") or "").strip()
+    ]
+
+
+def _normalize_book_id(value, valid_temp_ids, default_book_id):
+    """A stub/op book reference resolved to an int id or a real temp_id.
+
+    An unresolvable reference falls back to the selected book rather than
+    dropping the entry: misfiling one entry is recoverable by hand, silently
+    losing a generated entry is not.
+    """
+    if isinstance(value, bool):
+        return default_book_id
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if text in valid_temp_ids:
+            return text
+        try:
+            return int(text)
+        except ValueError:
+            return default_book_id
+    return default_book_id
+
+
+def _normalize_outline(raw_outline, plan, params, default_book_id):
+    """Model outline stubs -> the resumable unit-of-work list.
+
+    Each stub carries a stable `index` (how a batch's entries are matched back
+    to their stub) and a `state` that is the entire resume mechanism: only
+    stubs that are not yet 'done' are ever regenerated.
+    """
+    valid_temp_ids = {
+        str(op.get("temp_id")) for op in plan["book_ops"] if op.get("temp_id")
+    }
+    try:
+        target = int(params.get("entry_target") or 40)
+    except (TypeError, ValueError):
+        target = 40
+    # A runaway outline would otherwise commit the run to hundreds of calls.
+    cap = max(1, min(target * 2, 200))
+
+    outline = []
+    seen = set()
+
+    for stub in (raw_outline or []):
+        if not isinstance(stub, dict):
+            continue
+        title = str(stub.get("title") or stub.get("keys") or "").strip()
+        if not title:
+            continue
+        dedupe_key = title.lower()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+
+        category = stub.get("category")
+        item = {
+            "index": len(outline),
+            "book_id": _normalize_book_id(
+                stub.get("book_id"), valid_temp_ids, default_book_id
+            ),
+            "title": title,
+            "keys": str(stub.get("keys") or "").strip(),
+            "category": category if category in LORE_CATEGORIES else "other",
+            "focus": str(stub.get("focus") or "").strip(),
+            "op": "update" if stub.get("op") == "update" and stub.get("id") else "create",
+            "state": "pending",
+        }
+        if item["op"] == "update":
+            item["id"] = stub.get("id")
+
+        outline.append(item)
+        if len(outline) >= cap:
+            break
+
+    return outline
+
+
+# ---- stage 1: structure ---------------------------------------------------
+
+def _lore_gen_structure(params, ctx):
+    payload = {
+        "request": params.get("brief") or "Create useful lore entries.",
+        # The stage key is what switches the generator prompt into outline
+        # mode. A model (or an older custom preset) that ignores it and
+        # returns finished entry_ops is handled below, not treated as failure.
+        "stage": "structure",
+        "mode": params.get("mode", "expand_tree"),
+        "depth": params.get("depth", 2),
+        "entry_target": params.get("entry_target", 40),
+        "allow_new_books": params.get("allow_new_books", True),
+        "allow_links": params.get("allow_links", True),
+        "allow_updates": params.get("allow_updates", True),
+        "preserve_locked": params.get("preserve_locked", True),
+        "selected_book_id": ctx["selected_book_id"],
+        "books": ctx["books"],
+        "category_counts": ctx["category_counts"],
+        "existing_entries": ctx["existing_entries"],
         "link_types": LOREBOOK_LINK_TYPES,
         "lore_categories": LORE_CATEGORIES,
         "lorebook_types": LOREBOOK_TYPES,
     }
 
-    with _silent_provider_stream():
+    with _silent_provider_stream(), request_timeout(params.get("timeout")):
         raw = chat_complete(
             "utility",
             get_prompt("generator_lorebook"),
@@ -1175,46 +1552,398 @@ def generate_lorebook_plan(lorebook_id, brief, mode="expand_tree", depth=2,
     if not parsed:
         raise RuntimeError(
             "Lore generator returned no usable plan.\n"
-            f"Raw output:\n{raw[:800]}"
+            f"Raw output:\n{(raw or '')[:800]}"
+        )
+
+    plan = {
+        "analysis": parsed.get("analysis") if isinstance(parsed.get("analysis"), dict) else {},
+        "book_ops": [op for op in (parsed.get("book_ops") or []) if isinstance(op, dict)],
+        "link_ops": [op for op in (parsed.get("link_ops") or []) if isinstance(op, dict)],
+        "entry_ops": [],
+    }
+
+    direct = _normalize_entry_ops(parsed, ctx["selected_book_id"])
+    if direct:
+        # One-call run: the entries are already written, so there is nothing
+        # to batch and nothing left that an interruption could cost.
+        plan["entry_ops"] = direct
+        return plan, []
+
+    outline = _normalize_outline(
+        parsed.get("entry_outline"), plan, params, ctx["selected_book_id"]
+    )
+    if not outline and not plan["book_ops"] and not plan["link_ops"]:
+        # Parseable but empty in every dimension -- proposing nothing at all is
+        # a failed generation, not a plan, and marking it 'ready' would present
+        # an empty result as a finished one.
+        raise RuntimeError(
+            "Lore generator proposed no books, links, or entries.\n"
+            f"Raw output:\n{(raw or '')[:800]}"
+        )
+
+    return plan, outline
+
+
+# ---- stage 2: entry batches ----------------------------------------------
+
+def _lore_gen_entry_batch(params, ctx, plan, batch):
+    written = [
+        str(op.get("title") or op.get("keys") or "").strip()
+        for op in plan["entry_ops"]
+    ]
+    payload = {
+        "request": params.get("brief") or "Create useful lore entries.",
+        "mode": params.get("mode", "expand_tree"),
+        "selected_book_id": ctx["selected_book_id"],
+        # Books planned by the structure call are listed alongside real ones:
+        # a stub can be filed into a book that does not exist yet.
+        "books": ctx["books"] + [
+            {
+                "temp_id": op.get("temp_id"),
+                "name": op.get("name"),
+                "book_type": op.get("book_type"),
+                "summary": op.get("summary"),
+                "parent_id": op.get("parent_id"),
+                "planned": True,
+            }
+            for op in plan["book_ops"]
+        ],
+        "existing_entries": ctx["existing_entries"],
+        "already_written_titles": (
+            ctx["existing_titles"][:80] + [t for t in written if t][-80:]
+        ),
+        "batch": [
+            {
+                "outline_index": stub["index"],
+                "book_id": stub["book_id"],
+                "title": stub["title"],
+                "keys": stub.get("keys", ""),
+                "category": stub.get("category", "other"),
+                "focus": stub.get("focus", ""),
+                "op": stub.get("op", "create"),
+                **({"id": stub["id"]} if stub.get("id") else {}),
+            }
+            for stub in batch
+        ],
+        "lore_categories": LORE_CATEGORIES,
+        "knowledge_tags": KNOWLEDGE_TAGS,
+        "knowledge_ranges": KNOWLEDGE_RANGES,
+    }
+
+    with _silent_provider_stream(), request_timeout(params.get("timeout")):
+        raw = chat_complete(
+            "utility",
+            get_prompt("generator_lorebook_entries"),
+            json.dumps(payload, ensure_ascii=False),
+            temperature=0.7,
+            # Budgeted per stub rather than flat, for the same reason
+            # _reinterpret_entries does it: a flat ceiling truncates the JSON
+            # and costs the whole batch.
+            max_tokens=max(3000, 1200 * len(batch)),
         )
 
     parsed = _jparse(raw)
     if not parsed:
         raise RuntimeError(
-            "Lore generator returned no usable plan.\n"
-            f"Raw output:\n{raw[:800]}"
+            "model returned unparseable JSON (first 300 chars: "
+            f"{(raw or '')[:300]!r})"
         )
 
-    # Normalize: if the LLM returned flat entries instead of
-    # structured entry_ops, convert them so the plan preview
-    # and apply_lorebook_plan can process them.
-    flat_entries = parsed.get("entries")
-    if isinstance(flat_entries, list) and flat_entries:
-        existing_ops = parsed.get("entry_ops")
-        if not isinstance(existing_ops, list) or not existing_ops:
-            parsed["entry_ops"] = [
-                {
-                    "op": "create",
-                    "book_id": lorebook_id,
-                    "keys": e.get("keys", ""),
-                    "content": e.get("content", ""),
-                    "category": e.get("category", "other"),
-                    "title": e.get("title"),
-                    "knowledge_tag": e.get("knowledge_tag"),
-                    "knowledge_range": e.get("knowledge_range"),
-                    "knowledge_locations": e.get("knowledge_locations", []),
-                }
-                for e in flat_entries
-                if isinstance(e, dict) and e.get("content")
-            ]
-            parsed.pop("entries", None)
+    ops = _normalize_entry_ops(parsed, ctx["selected_book_id"])
+    if not ops:
+        raise RuntimeError(
+            "model returned no usable entries (first 300 chars: "
+            f"{(raw or '')[:300]!r})"
+        )
 
-    return parsed
+    # Re-anchor every op onto its stub. The stub -- not the model's echo -- is
+    # the authority on which book an entry belongs to and whether it updates
+    # an existing entry, so a model that drops outline_index or rewrites
+    # book_id cannot misfile lore or turn an update into a duplicate.
+    by_index = {stub["index"]: stub for stub in batch}
+    anchored = []
+    covered = set()
 
-def apply_lorebook_plan(plan, chat_id=None):
+    for op in ops[:len(batch)]:
+        stub = by_index.get(op.get("outline_index"))
+        if stub is None or stub["index"] in covered:
+            # No usable echo, or an echo pointing at a stub already written.
+            # Fall back to the next unwritten stub rather than letting one
+            # index claim the whole batch and duplicate a single subject.
+            stub = next(
+                (item for item in batch if item["index"] not in covered),
+                None,
+            )
+            if stub is None:
+                break
+
+        covered.add(stub["index"])
+        op = dict(op)
+        op.pop("outline_index", None)
+        op["book_id"] = stub["book_id"]
+
+        if stub.get("op") == "update" and stub.get("id"):
+            op["op"] = "update"
+            op["id"] = stub["id"]
+        else:
+            op["op"] = "create"
+            op.pop("id", None)
+
+        if not str(op.get("title") or "").strip():
+            op["title"] = stub["title"]
+        if not str(op.get("keys") or "").strip():
+            op["keys"] = stub.get("keys") or stub["title"]
+        if op.get("category") not in LORE_CATEGORIES:
+            op["category"] = (
+                stub["category"] if stub.get("category") in LORE_CATEGORIES
+                else guess_category(op.get("keys", ""), op.get("content", ""))
+            )
+
+        anchored.append(op)
+
+    # `covered` is what the caller marks done. A short response therefore
+    # leaves the stubs it skipped pending instead of silently dropping them.
+    return anchored, covered
+
+
+# ---- the run loop --------------------------------------------------------
+
+def _run_lore_gen_job(job_id):
+    row = _gen_job_row(job_id)
+    params = _jdict(row["params"])
+    plan = _plan_shape(_jdict(row["plan"], _empty_plan()))
+    progress = _jdict(row["progress"])
+    # Scoped to THIS attempt: the durable record of what is left to do is the
+    # outline's own stub states, so carrying a previous attempt's complaints
+    # forward would keep reporting failures a resume has already fixed.
+    progress["stage_errors"] = []
+
+    ctx = _lore_gen_context(row["lorebook_id"])
+
+    if row["stage"] == "structure":
+        try:
+            plan, outline = _lore_gen_structure(params, ctx)
+        except Exception as exc:
+            # Nothing usable exists yet, so there is no partial plan to hand
+            # back. The job still holds the request, so a resume re-runs
+            # exactly this call without the user retyping anything.
+            interrupted = _gen_record_failure(job_id, exc, plan, progress)
+            raise LoreGenError(
+                (
+                    "Lorebook generation was interrupted before any of the "
+                    f"plan was written: {exc}"
+                    if interrupted else
+                    f"Lorebook generation failed while planning the tree: {exc}"
+                ),
+                job_id=job_id,
+                interrupted=interrupted,
+            ) from exc
+
+        progress["outline"] = outline
+        _gen_save(job_id, stage="entries", plan=plan, progress=progress)
+
+    outline = progress.get("outline") or []
+    # 'failed' stubs are picked up here too, which is what makes a resume
+    # retry the batches that produced unusable output.
+    pending = [stub for stub in outline if stub.get("state") != "done"]
+
+    for batch in _chunked(pending, LORE_GEN_ENTRY_BATCH):
+        try:
+            ops, covered = _lore_gen_entry_batch(params, ctx, plan, batch)
+        except Exception as exc:
+            if _is_interruption(exc):
+                # The provider or the connection is down. Stop -- every batch
+                # already written stays written, and the remaining stubs are
+                # left pending for a resume.
+                _gen_record_failure(job_id, exc, plan, progress)
+                if plan["entry_ops"] or plan["book_ops"]:
+                    # There IS a usable partial plan: hand it back so it can
+                    # be reviewed, applied, or resumed, instead of throwing
+                    # away work the user already paid for.
+                    return _gen_result(job_id)
+                raise LoreGenError(
+                    "Lorebook generation was interrupted before any entries "
+                    f"were written: {exc}",
+                    job_id=job_id,
+                    interrupted=True,
+                ) from exc
+
+            # Unusable output for THIS batch only. One bad batch must not
+            # cost the other twelve, so record it and carry on; the resume
+            # retries just these stubs.
+            for stub in batch:
+                stub["state"] = "failed"
+            progress["stage_errors"].append(
+                f"{len(batch)} entries starting at #{batch[0]['index'] + 1}: {exc}"[:500]
+            )
+            _gen_save(job_id, plan=plan, progress=progress)
+            continue
+
+        plan["entry_ops"].extend(ops)
+        for stub in batch:
+            stub["state"] = "done" if stub["index"] in covered else "failed"
+
+        # A response shorter than its batch is a partial batch, not a
+        # complete one: the stubs it skipped stay retriable.
+        skipped = len(batch) - len(covered)
+        if skipped > 0:
+            progress["stage_errors"].append(
+                f"{skipped} of {len(batch)} entries starting at "
+                f"#{batch[0]['index'] + 1} were not returned by the model"
+            )
+
+        # Persisted per batch: this line is what makes the next interruption
+        # cost one batch instead of the whole run.
+        _gen_save(job_id, plan=plan, progress=progress)
+
+    failed = [stub for stub in outline if stub.get("state") != "done"]
+    if failed:
+        _gen_save(
+            job_id,
+            status="interrupted",
+            stage="entries",
+            error=(
+                f"{len(failed)} of {len(outline)} entries could not be "
+                "generated. Resume to retry just those."
+            ),
+            plan=plan,
+            progress=progress,
+        )
+    else:
+        _gen_save(
+            job_id,
+            status="ready",
+            stage="done",
+            error="",
+            plan=plan,
+            progress=progress,
+        )
+
+    return _gen_result(job_id)
+
+
+def generate_lorebook_plan(lorebook_id, brief, mode="expand_tree", depth=2,
+                           entry_target=40, allow_new_books=True,
+                           allow_links=True, allow_updates=True,
+                           preserve_locked=True, timeout=None):
+    """Plan a lorebook-tree expansion. Writes nothing but its own job row.
+
+    Returns the plan dict (analysis/book_ops/link_ops/entry_ops) with the
+    generation job under `_job`. Raises LoreGenError -- naming a job that can
+    be resumed -- only when the run produced no usable plan at all.
+
+    `timeout` raises the per-call read timeout above the 300s default, for slow
+    local models that are still producing tokens when it expires. It is stored
+    with the request, so a resume runs under the same allowance.
+    """
+    if not q("SELECT id FROM lorebooks WHERE id=?", (lorebook_id,), one=True):
+        raise ValueError("Lorebook not found")
+
+    job_id = _gen_job_create(lorebook_id, {
+        "brief": brief or "",
+        "mode": mode,
+        "depth": depth,
+        "entry_target": entry_target,
+        "allow_new_books": allow_new_books,
+        "allow_links": allow_links,
+        "allow_updates": allow_updates,
+        "preserve_locked": preserve_locked,
+        "timeout": clamp_read_timeout(timeout),
+    })
+    return _run_lore_gen_job(job_id)
+
+
+def resume_lorebook_plan(job_id, timeout=None):
+    """Continue a stopped run from its first incomplete unit of work.
+
+    Completed structure and completed entry batches are never regenerated. A
+    run that already reached 'ready' is simply handed back -- its plan was
+    generated and only the delivery was lost.
+
+    `timeout` raises the read timeout for the remaining work. A read timeout is
+    itself one of the interruptions this recovers from, so the retry has to be
+    able to give the model longer than the attempt that just ran out of it.
+    """
+    row = _gen_job_row(job_id)
+    if not row:
+        raise ValueError("Generation job not found")
+    if row["status"] in ("applied", "cancelled"):
+        raise ValueError(
+            f"That generation was already {row['status']} and cannot be resumed."
+        )
+    if row["status"] == "running" and row["owner"] == _GEN_OWNER:
+        raise ValueError("That generation is still running.")
+    if not q("SELECT id FROM lorebooks WHERE id=?", (row["lorebook_id"],), one=True):
+        raise ValueError("The lorebook this generation targeted no longer exists.")
+
+    if row["status"] == "ready":
+        return _gen_result(job_id)
+
+    fields = {
+        "status": "running",
+        "owner": _GEN_OWNER,
+        "error": "",
+        "attempts": int(row["attempts"] or 0) + 1,
+    }
+
+    raised = clamp_read_timeout(timeout)
+    if raised is not None:
+        # Persisted, not just applied: every later batch and every later
+        # resume of this run inherits the longer allowance.
+        params = _jdict(row["params"])
+        params["timeout"] = raised
+        fields["params"] = json.dumps(params, ensure_ascii=False)
+
+    _gen_save(job_id, **fields)
+    return _run_lore_gen_job(job_id)
+
+def _plan_parent_id(raw_parent, created_books, root_id, chat_id):
+    """Where a planned book actually hangs.
+
+    `commit.py`'s `_apply_mapping_book_ops` already refuses to leave a new book
+    unreachable ("keeps the tree rooted under canon -- never an unreachable
+    orphan"); this is the same rule for the generator's apply path, which did
+    not have it. A chat-owned book with parent_id NULL and no chat_lorebooks
+    row is reachable from nothing: lore retrieval walks out from canon plus
+    attachments, so the book's entries can never reach play, and an
+    ownership-blind browser could not even show it.
+
+    Resolution order: a temp_id created by this same plan, then a real existing
+    book, then the book the plan was generated for, then the chat's canon.
+    """
+    if isinstance(raw_parent, str):
+        resolved = created_books.get(raw_parent)
+        if resolved:
+            return resolved
+    elif isinstance(raw_parent, int) and not isinstance(raw_parent, bool):
+        if q("SELECT id FROM lorebooks WHERE id=?", (raw_parent,), one=True):
+            return raw_parent
+
+    if root_id:
+        return root_id
+
+    if chat_id:
+        chat = q(
+            "SELECT lorebook_id FROM chats WHERE id=?", (chat_id,), one=True,
+        )
+        if chat and chat["lorebook_id"]:
+            return chat["lorebook_id"]
+
+    # A library book with no parent is a legitimate root; only a CHAT-owned
+    # book needs somewhere to hang, and by here it has nowhere to hang from.
+    return None
+
+
+def apply_lorebook_plan(plan, chat_id=None, root_id=None):
+    """Write an approved plan.
+
+    `root_id` is the lorebook the plan was generated for: it is where books and
+    entries land when their own reference cannot be resolved, so nothing is
+    created unreachable and no entry is silently dropped.
+    """
     from memory import add_lore, update_lore, add_lorebook_link
     from db import q, qi
-    
+
     created_books = {}
     created_entries = []
     created_links = []
@@ -1223,12 +1952,10 @@ def apply_lorebook_plan(plan, chat_id=None):
     for book_op in plan.get("book_ops", []):
         if book_op.get("op") != "create":
             continue
-        parent_id = book_op.get("parent_id")
-        if isinstance(parent_id, str) and parent_id in created_books:
-            parent_id = created_books[parent_id]
-        elif isinstance(parent_id, str):
-            parent_id = None
-        
+        parent_id = _plan_parent_id(
+            book_op.get("parent_id"), created_books, root_id, chat_id
+        )
+
         bid = qi(
             "INSERT INTO lorebooks(name,chat_id,book_type,summary,parent_id,inheritance_mode,sort_order) VALUES(?,?,?,?,?,?,?)",
             (
@@ -1250,10 +1977,16 @@ def apply_lorebook_plan(plan, chat_id=None):
             book_id = created_books[book_id]
         elif isinstance(book_id, str):
             book_id = None
-        
+
+        # An unresolvable book reference used to drop the entry on the floor.
+        # File it in the book the plan was generated for instead: misfiled is
+        # fixable by hand, silently discarded is not.
+        if not book_id:
+            book_id = root_id
+
         if not book_id:
             continue
-        
+
         if entry_op.get("op") == "update" and entry_op.get("id"):
             entry_id = entry_op["id"]
             update_lore(
