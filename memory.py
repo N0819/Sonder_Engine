@@ -1274,6 +1274,15 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     recalled = [m for m in recalled if m["id"] not in recent_ids]
     return {
         "working_memory": {
+            # A citable id for the PRESENT beat. Without one, the only ids in
+            # this payload belong to memory rows -- and recent_memory_buffer
+            # deliberately excludes the current turn (audit #10), so every
+            # real event_id here is from an EARLIER turn. A character asked to
+            # cite evidence could therefore only ever cite the past, and did:
+            # across one 61-turn chat, observations_used cited a previous
+            # turn 15 times and the current beat zero times, which is why the
+            # character kept answering the line before the one just spoken.
+            "event_id": "current",
             "current_perception": current_view or "",
             "current_mood": active_state.get("mood") or "neutral",
             "current_goal": active_state.get("goal") or "",

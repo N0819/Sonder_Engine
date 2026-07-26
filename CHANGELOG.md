@@ -1,5 +1,25 @@
 # Changelog
 
+## alpha4.2.1 — A mind can cite the present
+
+### Fixed
+- **A character answers the line just spoken to it, not the one before.** In a
+  live 61-turn chat the Doctor kept replying a beat late: on the turn the
+  player asked "Why are you looking at me like that, you brought me here?", his
+  considered responses were about asking what she meant by "future is weird" —
+  the previous turn's line — and the observation he cited resolved to a
+  `memories` row stamped with the previous turn's index. The cause was
+  structural rather than a stale read. `observations_used` asks the character
+  to cite an `event_id`; the only ids in its payload belong to memory rows, and
+  `recent_memory_buffer` deliberately excludes the current turn — a mind must
+  not see how the turn it is deciding turned out. So the present beat arrived
+  as an uncitable prose string while the past arrived with ids attached, and
+  the model reached for what it could cite. Across that one chat: 15 citations
+  of a previous turn, zero of the current one, ever, and the effect grew as
+  memories accumulated. The present beat now carries a citable id of its own
+  and the prompt says to lead with it, with the reason attached. The exclusion
+  is unchanged — it was never the bug.
+
 ## alpha4.2 — Themes
 
 Appearance becomes a real system rather than one hard-coded palette, and the
