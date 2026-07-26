@@ -136,3 +136,124 @@ def test_entities_sharing_a_name_keep_their_ids():
 def test_a_nameless_entity_keeps_its_id():
     scene = {"entities": {"41b518dc08c3436f": {"name": "", "kind": "object"}}}
     assert set(_perceptible_entities(scene)) == {"41b518dc08c3436f"}
+
+
+# ---------------------------------------------------------------------------
+# 4. ENTITY RECORDS keyed two ways -- the same leak as (1), on the dict that
+#    says what each body is doing and what it is in contact with.
+#
+#    Found auditing a live chat: one character held TWO entity records --
+#    `char_62aa02c0...`, frozen at the beat it was created, and her display
+#    name, rewritten every beat since. Both claimed to describe her, so "who is
+#    in contact with whom" had two contradictory answers at once, one of them
+#    arbitrarily old, and every reader that walks entities saw one person twice.
+#
+#    Unlike attire, `state` must NOT merge: a wardrobe accumulates, but posture
+#    and contact describe a single instant, so folding a stale snapshot into a
+#    fresh one is what manufactures the contradiction.
+# ---------------------------------------------------------------------------
+
+def _split_scene():
+    """One character under both her uid and her display name."""
+    return {"entities": {
+        "char_62aa02c0": {
+            "name": "Lilaeve Voss", "kind": "succubus",
+            "state": {"posture": "leaning_in", "target": "Hinami",
+                      "proximity": "close_on_bed"}},
+        "Lilaeve Voss": {
+            "name": "Lilaeve Voss", "kind": "succubus",
+            "state": {"posture": "arms_around", "target": "Hinami",
+                      "proximity": "pressed_fully_against"}},
+    }, "positions": {"Lilaeve Voss": "bedroom", "Hinami": "bedroom"}}
+
+
+def test_one_body_ends_up_with_one_entity_record():
+    merged = merge_scene_with_diff(_split_scene(), {})
+    assert set(merged["entities"]) == {"Lilaeve Voss"}
+
+
+def test_the_display_name_is_the_surviving_key():
+    """The convention every reader uses, matching the positions dedup."""
+    merged = merge_scene_with_diff(_split_scene(), {})
+    assert "char_62aa02c0" not in merged["entities"]
+    assert merged["entities"]["Lilaeve Voss"]["name"] == "Lilaeve Voss"
+
+
+def test_the_stale_snapshot_does_not_survive_the_collapse():
+    """The whole point: contact state describes one instant. Merging the two
+    records field-by-field would keep the frozen record's posture alive."""
+    merged = merge_scene_with_diff(_split_scene(), {})
+    state = merged["entities"]["Lilaeve Voss"]["state"]
+
+    assert state["posture"] == "arms_around"
+    assert "leaning_in" not in json.dumps(merged["entities"])
+
+
+def test_the_beat_that_just_wrote_wins():
+    """When the diff writes the id-keyed record, its content is the fresh one
+    -- but it still lands under the display name."""
+    scene = _split_scene()
+    diff = {"entities": {"char_62aa02c0": {
+        "name": "Lilaeve Voss", "kind": "succubus",
+        "state": {"posture": "stepping_back", "proximity": "arm's_length"}}}}
+
+    merged = merge_scene_with_diff(scene, diff)
+
+    assert set(merged["entities"]) == {"Lilaeve Voss"}
+    assert merged["entities"]["Lilaeve Voss"]["state"]["posture"] == "stepping_back"
+
+
+def test_structural_facts_are_rescued_from_the_discarded_record():
+    """Collapsing must never drop a vehicle's interior rooms or an entity's
+    aliases -- those are durable facts, not a snapshot of now."""
+    scene = {"entities": {
+        "tardis_uid": {"name": "The TARDIS", "kind": "vehicle",
+                       "interior_rooms": ["console_room"],
+                       "aliases": ["box"], "state": {"phase": "docked"}},
+        "The TARDIS": {"name": "The TARDIS", "kind": "vehicle",
+                       "state": {"phase": "in_transit"}},
+    }}
+
+    entity = merge_scene_with_diff(scene, {})["entities"]["The TARDIS"]
+
+    assert entity["interior_rooms"] == ["console_room"]
+    assert entity["aliases"] == ["box"]
+    assert entity["state"]["phase"] == "in_transit"   # still the fresh snapshot
+
+
+def test_a_lone_id_keyed_entity_is_untouched():
+    """An object with no display-name twin is not a duplicate."""
+    scene = {"entities": {
+        "dropped_knife": {"name": "Knife", "kind": "object", "state": {}}}}
+    assert set(merge_scene_with_diff(scene, {})["entities"]) == {"dropped_knife"}
+
+
+def test_two_different_entities_sharing_no_name_are_untouched():
+    scene = {"entities": {
+        "lamp_a": {"name": "Lamp", "kind": "object"},
+        "anvil": {"name": "Anvil", "kind": "object"}}}
+    assert set(merge_scene_with_diff(scene, {})["entities"]) == {"lamp_a", "anvil"}
+
+
+def test_an_entity_already_keyed_by_its_name_is_untouched():
+    scene = {"entities": {"Lamp": {"name": "Lamp", "kind": "object"}}}
+    assert set(merge_scene_with_diff(scene, {})["entities"]) == {"Lamp"}
+
+
+def test_a_nameless_record_is_not_collapsed():
+    scene = {"entities": {
+        "41b518dc": {"name": "", "kind": "object", "state": {"x": 1}}}}
+    assert set(merge_scene_with_diff(scene, {})["entities"]) == {"41b518dc"}
+
+
+def test_positions_stay_consistent_with_the_collapsed_entity():
+    merged = merge_scene_with_diff(_split_scene(), {})
+    assert merged["positions"]["Lilaeve Voss"] == "bedroom"
+    assert set(merged["entities"]) <= set(merged["positions"]) | {"Hinami"}
+
+
+def test_perception_sees_the_person_once():
+    """The reader-facing consequence: one body, projected once."""
+    merged = merge_scene_with_diff(_split_scene(), {})
+    projected = _perceptible_entities(merged)
+    assert [k for k in projected if "Lilaeve" in k] == ["Lilaeve Voss"]

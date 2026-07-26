@@ -1,5 +1,36 @@
 # Changelog
 
+## alpha4.3.3 — One body, one record
+
+### Fixed
+- **One body, one entity record.** A character could end up recorded twice in
+  the scene at once — once under `identity.uid` and once under their display
+  name — because the Director keys entities with whichever handle it reaches
+  for, and nothing collapsed the two. Both records claimed to describe the same
+  person, each carrying its own posture, proximity and contact, and the older
+  one simply froze at the beat it was created while the other went on being
+  rewritten. So "who is in contact with whom" had two contradictory answers
+  simultaneously, one of them arbitrarily stale, and every reader that walks
+  entities — perception, narration, the character agents — saw one person
+  standing there twice.
+
+  This is the third instance of one bug, and the first two are already fixed in
+  the same way. `positions` survived it because readers try every key and
+  duplicates collapse (`_dedup_duplicate_position_keys`); `attire` was healed
+  after a character rendered as wearing nothing while her clothing state still
+  described the coat she had on (`_heal_attire_identity_keys`). `entities` had
+  neither guard, and it is the record that says what each body is doing.
+
+  Duplicates now collapse at the scene merge, onto the display-name key every
+  reader already uses. One deliberate difference from the attire heal: `state`
+  is **not** merged field-by-field. A wardrobe accumulates, but posture and
+  contact describe a single instant, so folding a stale snapshot into a fresh
+  one is precisely what manufactures the contradiction — the record the beat
+  just wrote wins whole. Only durable structural facts (kind, aliases, a
+  vehicle's `interior_rooms`) are rescued from the discarded record, so
+  collapsing can never orphan an interior. Existing saves heal on their next
+  committed turn.
+
 ## alpha4.3.2 — Closing your eyes is not leaving the scene
 
 ### Fixed
