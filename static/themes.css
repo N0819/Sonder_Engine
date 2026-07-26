@@ -195,6 +195,51 @@
   --prose-font: Georgia, "Palatino Linotype", serif;
   --top-shadow: 0 10px 30px rgba(0, 0, 0, .42);
   --side-shadow: 12px 0 30px rgba(0, 0, 0, .38);
+
+  /* --- paper ---------------------------------------------------------
+     One sheet, defined once, used by every surface that reads as a page
+     (see "every menu is a page" below). It started as a bright cream --
+     #f2e6cb down to #e6d5b3 -- which is the colour of NEW paper under a
+     flash: against a dark room that reads as a lightbox rather than as
+     something lying on the table, and it is what a dialog opening at night
+     puts straight into your eyes.
+     This is old stock instead: same hue, roughly half the luminance of that
+     first cream. Two passes of darkening got here, the first not being
+     enough -- the test is not "is it still light" but "does the dialog stop
+     being the brightest thing on the screen", and the wood around it is very
+     dark, so paper has a long way it can come down and still read as paper.
+     Ink stays where it was, so contrast against the sheet is ~6.5:1 for body
+     text -- comfortably past 4.5:1, and BETTER than the original bright
+     cream managed, because that one was so light it had nowhere to go. */
+  --paper-face: linear-gradient(178deg, #c6ba9e, #b6a88a);
+  /* The laid lines of the sheet -- what stops a flat fill reading as a
+     coloured rectangle. Kept faint; they are texture, not ruling. */
+  --paper-laid: repeating-linear-gradient(0deg,
+                  rgba(88, 64, 34, .07) 0 1px, transparent 1px 5px);
+  /* The page curving down into the gutter at each edge. This is the layer
+     that makes a panel read as a leaf of a book rather than as a card. */
+  --paper-edge: linear-gradient(90deg,
+                  rgba(80, 53, 26, .22), transparent 5%,
+                  transparent 95%, rgba(80, 53, 26, .22));
+  --paper-ink: #3b2a17;
+  --paper-ink-dim: #4a391e;
+  --paper-rubric: #7a3212;   /* the red a scribe reserved for headings */
+  --paper-rule: rgba(96, 66, 30, .38);
+  /* --- book covers ---------------------------------------------------
+     The same five leathers the sidebar shelves cycle through. A dialog is
+     bound in the cover of the book you opened it from -- components.js
+     resolves that from the clicked row and writes data-cover on #modalbox,
+     because the leather of a list row three panels away is not something a
+     stylesheet can see from the dialog. Dialogs with no book behind them
+     (the toolbar's windows) hash their title to a cover instead, so each one
+     is consistently its own volume rather than changing binding per opening.
+     Only the top of each leather gradient is used: it is the lit face of the
+     spine, and so the part you actually recognise the book by. */
+  --book-cover-1: #4e2320;   /* oxblood */
+  --book-cover-2: #2b3a2b;   /* forest */
+  --book-cover-3: #4f3e20;   /* ochre */
+  --book-cover-4: #26303f;   /* slate blue */
+  --book-cover-5: #43291a;   /* calf brown */
 }
 
 /* LCARS is not a dark theme with round corners -- it is a specific and quite
@@ -523,7 +568,7 @@ body.has-backdrop .prose {
 /* No two boards are cut from the same stretch of plank. Each variant samples
    the photo and the crack figure at a different offset; seven of them over a
    list is enough that a repeat never lands beside its twin. Position only --
-   the layers themselves are shared, so this costs no extra image decoding. */
+   the layers themselves are shared, so this costs no extra image decoding.
    The two grain passes are shifted independently as well, so rows do not
    merely show the same grain at a different crack offset. */
 :root[data-theme="tavern"] .item:nth-child(7n+1) { background-position: -6px -3px, -41px -9px, -88px -12px, -14px -3px, -40px -9px, 0 0, -12px -18px; }
@@ -558,10 +603,11 @@ body.has-backdrop .prose {
   box-shadow: inset 0 1px 0 rgba(255, 206, 138, .14),
               inset 0 -1px 0 rgba(0, 0, 0, .34);
 }
+/* #modalbox is deliberately NOT in this list: it is a page now, not a lit
+   wooden panel, and a warm inner glow on paper reads as a stain. */
 :root[data-theme="tavern"] #side,
 :root[data-theme="tavern"] #top,
-:root[data-theme="tavern"] #composer,
-:root[data-theme="tavern"] #modalbox {
+:root[data-theme="tavern"] #composer {
   box-shadow: inset 0 0 60px rgba(255, 168, 74, .07);
 }
 :root[data-theme="tavern"] #side { border-right: 2px solid #7d5730; }
@@ -690,112 +736,329 @@ body.has-backdrop .prose {
   border-color: rgba(226, 183, 106, .28);
 }
 
-/* --- the lorebook editor is an open book ------------------------------
-   The workspace is already three panels side by side, which is the shape of
-   an open book with a margin column -- so this restyles what is there rather
-   than adding markup. The trick that makes it affordable: lorebooks.css is
-   almost entirely token-driven, so REBINDING the tokens inside a page
-   re-tints its inputs, badges, rules and hovers at once. Only the handful of
-   values hardcoded for a dark panel need overriding by hand, below. */
-:root[data-theme="tavern"] .lore-workspace {
-  /* The binding: pages are inset into a leather board, and they meet at a
-     gutter rather than floating apart with a gap between them. */
-  gap: 0;
-  padding: 14px;
-  border-radius: 6px 10px 10px 6px;
+/* --- the other three tabs are shelves too ------------------------------
+   Stories, Characters and Personas were planks while Lore was books, which
+   made the shelf read as one tab's private conceit rather than as what the
+   sidebar IS. They are all bound volumes now: a story is a book, a character
+   is a book, a persona is a book.
+   The binding vocabulary is deliberately identical to .lore-side-row above --
+   same bands, same gilt rules, same fore-edge shading, same five leathers --
+   so switching tabs changes what is on the shelf, not what furniture you are
+   looking at. What differs is only what the markup gives us: these rows are
+   flat (no nesting) and carry action buttons, which the lore rows do not.
+   Scoped through #sidelist so the specificity clears the .item board rules
+   above without needing !important, and so .item elsewhere -- inside a
+   dialog, in the cast list -- keeps whatever its own surface is. */
+:root[data-theme="tavern"] #sidelist .story-item,
+:root[data-theme="tavern"] #sidelist .library-item {
+  /* Books on a shelf touch; a 3px gap read as a list again. */
+  margin-bottom: 0;
+  position: relative;
+  /* Bound edge on the left, fore-edge on the right. */
+  border-radius: 2px 6px 6px 2px;
+  border-color: rgba(0, 0, 0, .52);
   background:
-    linear-gradient(180deg, rgba(58, 30, 26, .96), rgba(38, 19, 16, .98)),
-    url("/static/assets/theme-textures/tavern-wood.png") center/220px 220px repeat;
-  box-shadow: inset 0 1px 0 rgba(255, 206, 138, .12),
-              inset 0 0 0 1px rgba(0, 0, 0, .5),
-              0 14px 34px rgba(0, 0, 0, .5);
+    /* Raised bands across the spine. */
+    repeating-linear-gradient(90deg,
+      transparent 0 44px, rgba(0, 0, 0, .16) 44px 46px,
+      rgba(255, 226, 170, .05) 46px 47px, transparent 47px 96px),
+    /* Gilt rules top and bottom, the way a bound spine is tooled. */
+    linear-gradient(180deg,
+      rgba(226, 183, 106, .3) 0 1px, transparent 1px calc(100% - 1px),
+      rgba(226, 183, 106, .2) calc(100% - 1px) 100%),
+    var(--book-leather);
+  /* Rounded away from the light on the fore-edge, catching it on the bound
+     edge: the shading is what gives a flat row the thickness of a book. */
+  box-shadow: inset -4px 0 6px rgba(0, 0, 0, .34),
+              inset 2px 0 0 rgba(255, 214, 150, .1),
+              0 1px 0 rgba(0, 0, 0, .5);
+  color: #f4e2c1;
 }
+/* The same five leathers on the same five-cycle as the Lore shelf. */
+:root[data-theme="tavern"] #sidelist .story-item,
+:root[data-theme="tavern"] #sidelist .library-item { --book-leather: linear-gradient(180deg, #4e2320, #331715); }
+:root[data-theme="tavern"] #sidelist .item:nth-child(5n+2) { --book-leather: linear-gradient(180deg, #2b3a2b, #1b241c); }
+:root[data-theme="tavern"] #sidelist .item:nth-child(5n+3) { --book-leather: linear-gradient(180deg, #4f3e20, #342714); }
+:root[data-theme="tavern"] #sidelist .item:nth-child(5n+4) { --book-leather: linear-gradient(180deg, #26303f, #18202b); }
+:root[data-theme="tavern"] #sidelist .item:nth-child(5n+5) { --book-leather: linear-gradient(180deg, #43291a, #2c1a11); }
+:root[data-theme="tavern"] #sidelist .story-item:hover,
+:root[data-theme="tavern"] #sidelist .library-item:hover {
+  border-color: rgba(0, 0, 0, .52);
+  box-shadow: inset 0 0 0 999px rgba(255, 196, 110, .06),
+              inset -4px 0 6px rgba(0, 0, 0, .34),
+              inset 2px 0 0 rgba(255, 214, 150, .14),
+              0 1px 0 rgba(0, 0, 0, .5);
+}
+/* The open book is pulled off the shelf: brighter, shifted proud of the
+   others, and casting onto its neighbours. */
+:root[data-theme="tavern"] #sidelist .story-item.on,
+:root[data-theme="tavern"] #sidelist .library-item.on {
+  border-color: var(--acc);
+  transform: translateX(3px);
+  box-shadow: inset 0 0 0 999px rgba(255, 196, 110, .12),
+              inset 2px 0 0 rgba(255, 224, 170, .22),
+              -3px 0 8px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .5);
+}
+/* The shelf board the stack stands on. It hangs off the last book rather
+   than off #sidelist, because #sidelist is also where the Lore tab renders
+   its own tree -- and that tree already carries a shelf of its own, so a
+   second one on the container would double it up on that one tab. It spans
+   the row rather than the container for the same reason the Lore shelf does
+   (that one is a border on .lore-side-tree): #sidelist scrolls, and an
+   absolutely positioned child reaching past its padding box is how you get a
+   horizontal scrollbar in a 286px sidebar. */
+:root[data-theme="tavern"] #sidelist .story-item:last-child::after,
+:root[data-theme="tavern"] #sidelist .library-item:last-child::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: #3f2916;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, .42), 0 8px 12px rgba(0, 0, 0, .34);
+}
+/* Room under the last book for that board and its shadow. */
+:root[data-theme="tavern"] #sidelist { padding-bottom: 24px; }
+/* Ink tooled into leather. */
+:root[data-theme="tavern"] #sidelist .story-item .item-label,
+:root[data-theme="tavern"] #sidelist .library-item .item-label {
+  font-family: Georgia, "Palatino Linotype", serif;
+  letter-spacing: .015em;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .55);
+}
+/* Rename/export/delete are tooling on the spine, not planks nailed to it:
+   no board of their own until the pointer is on them. */
+:root[data-theme="tavern"] #sidelist .item .icon-button {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: #e6cda2;
+}
+:root[data-theme="tavern"] #sidelist .item .icon-button:hover:not(:disabled) {
+  background: rgba(255, 214, 150, .13);
+  border-color: rgba(226, 183, 106, .42);
+  color: #ffe6bb;
+}
+:root[data-theme="tavern"] #sidelist .item .icon-button.danger { color: #efaa99; }
+
+/* --- every menu is a page ---------------------------------------------
+   The room is wood; the things you READ in it are paper. Every dialog in
+   the app is #modalbox -- story setup, the character and persona editors,
+   cast, world state, attire, dialogue, style, backdrops, appearance, API,
+   prompts, memory, and the lorebook editor -- so binding the page treatment
+   to that one element makes the whole menu system one open book, without a
+   per-dialog rule anywhere.
+   The trick that makes it affordable: styles.css and lorebooks.css are
+   almost entirely token-driven, so REBINDING the tokens on the page
+   re-tints its inputs, buttons, cards, badges, chips, rules and hovers at
+   once. Rebinding the --bg ramp as well catches the second tier -- inset
+   code blocks, dropdown panels, toolbars -- which read --bg directly on the
+   assumption that it is dark. Only the handful of values hardcoded for a
+   dark panel need restating by hand, at the end. */
+:root[data-theme="tavern"] #modalbox {
+  /* One sheet across the whole dialog, head included: giving the header its
+     own paper background restarted the gradient at the seam and put a band
+     across the top of the page. #modalhead and #modalbody are transparent
+     below, so what shows through both is a single continuous leaf. */
+  background: var(--paper-edge), var(--paper-laid), var(--paper-face);
+  /* The cover the page is bound into. 5px because a book's boards stand
+     proud of its leaves -- at 3px this read as a coloured outline rather
+     than as an edge with thickness. The fallback is the oxblood so a dialog
+     opened before any cover is resolved is still bound in something. */
+  border: 5px solid var(--book-cover, var(--book-cover-1));
+  color: var(--paper-ink);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .6),
+              0 26px 60px rgba(0, 0, 0, .58),
+              /* Gilt tooling on the inside of the board, and the page
+                 sitting down into it. */
+              inset 0 0 0 1px rgba(226, 183, 106, .22),
+              inset 0 2px 6px rgba(58, 38, 18, .22),
+              inset 0 0 44px rgba(120, 88, 46, .1);
+}
+:root[data-theme="tavern"] #modalbox[data-cover="1"] { --book-cover: var(--book-cover-1); }
+:root[data-theme="tavern"] #modalbox[data-cover="2"] { --book-cover: var(--book-cover-2); }
+:root[data-theme="tavern"] #modalbox[data-cover="3"] { --book-cover: var(--book-cover-3); }
+:root[data-theme="tavern"] #modalbox[data-cover="4"] { --book-cover: var(--book-cover-4); }
+:root[data-theme="tavern"] #modalbox[data-cover="5"] { --book-cover: var(--book-cover-5); }
 :root[data-theme="tavern"] .lore-panel {
-  /* Aged paper. The two ruled lines are the laid lines of the sheet, and the
-     gradient at each edge is the page curving down into the gutter -- that
-     shading is the whole reason it reads as a spread and not as three cards. */
+  /* A column of the same spread, not a card ON it: only the fold shading,
+     so the sheet underneath carries through unbroken. */
   border: none;
   border-radius: 0;
-  background:
-    linear-gradient(90deg, rgba(92, 62, 32, .22), transparent 5%,
-                    transparent 95%, rgba(92, 62, 32, .22)),
-    repeating-linear-gradient(0deg, rgba(120, 92, 54, .05) 0 1px, transparent 1px 5px),
-    linear-gradient(178deg, #f2e6cb, #e6d5b3);
-  box-shadow: inset 0 0 34px rgba(139, 105, 60, .16);
-
-  /* Ink on paper, for everything inside that reads a token. */
-  --fg: #402d19;
-  --dim: #7d6647;
-  --bd: #cbb489;
-  --acc: #9a4a1e;          /* rubric: the red a scribe reserved for headings */
-  --acc2: #6b4a2b;
-  --card-bg: rgba(255, 251, 240, .66);
-  --card-border: #d3bd94;
-  --card-surface: linear-gradient(180deg, rgba(255, 251, 240, .7), rgba(248, 240, 222, .7));
-  --hover-bg: rgba(122, 84, 38, .09);
-  --selected-bg: linear-gradient(90deg, rgba(154, 74, 30, .16), rgba(255, 251, 240, .5));
-  --panel-border: #c6ae82;
-  --strong-border: #a98d5f;
-  --chip-bg: rgba(122, 84, 38, .12);
-  --chip-fg: #5a4529;
-  --badge-bg: rgba(122, 84, 38, .13);
-  --input-bg: #fbf5e6;
-  --input-fg: #3a2917;
-  --input-border: #c2a877;
-  --input-surface: linear-gradient(180deg, #fdf8ec, #f6eeda);
-  --button-bg: linear-gradient(180deg, #e9dcbe, #ddcca6);
-  --button-hover-bg: linear-gradient(180deg, #f3e8cd, #e5d6b3);
-  --focus-ring: rgba(154, 74, 30, .22);
+  background: var(--paper-edge);
+  box-shadow: none;
 }
-/* The gutter: the two facing pages are shaded toward the fold between them. */
-:root[data-theme="tavern"] .lore-panel + .lore-panel {
-  border-left: 1px solid rgba(92, 62, 32, .3);
+/* Ink on paper, for everything inside that reads a token. Set on both scopes
+   because .lore-panel needs them even though it always sits inside a modal --
+   the panels are the one place the page is subdivided. */
+:root[data-theme="tavern"] #modalbox,
+:root[data-theme="tavern"] .lore-panel {
+  --fg: var(--paper-ink);
+  --dim: var(--paper-ink-dim);
+  --bd: #9c8862;
+  --acc: var(--paper-rubric);
+  --acc2: #63431f;
+  --accent-ink: #fdf3e0;
+  /* The dark ramp, restated as paper. Everything that insets or recesses
+     against the page -- .step pre, .memory-preview, .lore-plan-json,
+     .dd-panel, .dd-opt:hover, .toolbar, .memory-add -- reads one of these
+     rather than a token of its own, so four declarations do the work of a
+     dozen hand-written overrides. Darker than the sheet, not lighter: an
+     inset on paper is a shadow, not a highlight. */
+  --bg: #ab9d80;
+  --bg2: #b3a58a;
+  --bg3: #bcae94;
+  --bg4: #c5b79e;
+  /* --chrome-bg is declared at :root as `var(--bg2)`, which SUBSTITUTES
+     there -- what inherits down is the dark value already resolved, not a
+     live reference -- so rebinding --bg2 alone leaves .lore-entry-toolbar a
+     dark bar lying across the page. Derived tokens have to be restated. */
+  --chrome-bg: #b3a58a;
+  --raised-bg: #bcae94;
+  --raised-bg-2: #c5b79e;
+  --card-bg: rgba(222, 213, 190, .5);
+  --card-border: #a08b63;
+  --card-surface: linear-gradient(180deg, rgba(226, 217, 195, .55), rgba(215, 205, 180, .55));
+  --hover-bg: rgba(104, 70, 30, .11);
+  --selected-bg: linear-gradient(90deg, rgba(122, 50, 18, .22), rgba(228, 219, 197, .4));
+  --panel-border: #93794f;
+  --strong-border: #806842;
+  --chip-bg: rgba(104, 70, 30, .14);
+  --chip-fg: #4e3b23;
+  --badge-bg: rgba(104, 70, 30, .13);
+  --input-bg: #cbbfa2;
+  --input-fg: #2e2010;
+  --input-border: #8f7749;
+  --input-surface: linear-gradient(180deg, #cfc3a6, #c5b898);
+  --button-bg: linear-gradient(180deg, #b8aa8c, #a99b7c);
+  --button-hover-bg: linear-gradient(180deg, #c6b897, #b6a887);
+  --button-primary-bg: linear-gradient(180deg, #a54e26, #833a16);
+  --button-primary-hover-bg: linear-gradient(180deg, #bb5c2e, #95441b);
+  --focus-ring: rgba(122, 50, 18, .28);
+  --toolbar-bg: rgba(104, 70, 30, .1);
 }
-/* A page header is a ruled heading, not a filled title bar. */
+/* A heading on a page is ruled, not a filled title bar. The dialog's rule is
+   tinted toward its own cover, so the binding is present ON the page and not
+   only around its edge. */
+:root[data-theme="tavern"] #modalhead,
 :root[data-theme="tavern"] .lore-panel-head {
-  border-bottom: 1px solid rgba(122, 84, 38, .34);
   background: transparent;
+  border-bottom: 1px solid var(--paper-rule);
 }
+:root[data-theme="tavern"] #modalhead {
+  border-bottom-color: color-mix(in srgb,
+    var(--book-cover, var(--book-cover-1)) 45%, var(--paper-rule));
+}
+:root[data-theme="tavern"] #modaltitle,
+:root[data-theme="tavern"] #modalbox .section-title,
 :root[data-theme="tavern"] .lore-panel-title {
   font-family: Georgia, "Palatino Linotype", serif;
   font-variant: small-caps;
   letter-spacing: .04em;
-  color: #6b3a17;
+  color: #5b2f0c;
+  text-shadow: none;
 }
-/* Hand-set text, and buttons that read as small paper controls. */
-:root[data-theme="tavern"] .lore-panel-body { color: #402d19; }
-:root[data-theme="tavern"] .lore-panel button { color: #4a3419; border-color: #c2a877; }
-:root[data-theme="tavern"] .lore-panel input,
-:root[data-theme="tavern"] .lore-panel select,
-:root[data-theme="tavern"] .lore-panel textarea {
-  color: #3a2917;
+/* Hand-set text, and controls that read as small paper things rather than
+   as the lit brass fittings the wooden chrome uses. */
+:root[data-theme="tavern"] #modalbody,
+:root[data-theme="tavern"] .lore-panel-body { color: var(--paper-ink); }
+:root[data-theme="tavern"] #modalbox button,
+:root[data-theme="tavern"] .lore-panel button {
+  color: #402d15;
+  border-color: #8f7749;
+  box-shadow: inset 0 1px 0 rgba(255, 250, 236, .34),
+              0 1px 1px rgba(74, 50, 24, .2);
 }
-/* The values lorebooks.css hardcodes for a DARK panel -- light greys, blues
-   and lilacs -- are the only things token rebinding cannot reach. On paper
-   they are invisible, so each is restated in ink. */
-:root[data-theme="tavern"] .lore-panel .lore-tree-name { color: #3d2b17; }
-:root[data-theme="tavern"] .lore-panel .lore-tree-handle { color: #9b8259; }
-:root[data-theme="tavern"] .lore-panel .lore-tree-row:hover { border-color: #c2a877; }
-:root[data-theme="tavern"] .lore-panel .lore-relation-direction,
-:root[data-theme="tavern"] .lore-panel .lore-graph-edge .arrow { color: #7a5a2e; }
-:root[data-theme="tavern"] .lore-panel .lore-graph-edge .line { background: #b79f74; }
-:root[data-theme="tavern"] .lore-panel .lore-inspector-tabs button.on {
-  background: rgba(154, 74, 30, .1);
+:root[data-theme="tavern"] #modalbox button.primary,
+:root[data-theme="tavern"] .lore-panel button.primary { color: var(--accent-ink); }
+:root[data-theme="tavern"] #modalbox button.ghost {
+  border-color: transparent;
+  box-shadow: none;
 }
-:root[data-theme="tavern"] .lore-panel .lore-plan-stat strong { color: #6b3a17; }
-/* A card ON a page is a pasted-in slip, not a plank. The board rule above
+:root[data-theme="tavern"] #modalbox input,
+:root[data-theme="tavern"] #modalbox select,
+:root[data-theme="tavern"] #modalbox textarea {
+  color: var(--input-fg);
+  box-shadow: inset 0 1px 2px rgba(74, 50, 24, .2);
+}
+/* The values styles.css and lorebooks.css hardcode for a DARK panel -- light
+   greys, blues, lilacs and pastel status colours -- are the only things token
+   rebinding cannot reach. On paper they are invisible, so each is restated in
+   ink. Scoped to #modalbox so the same class outside a dialog is untouched. */
+:root[data-theme="tavern"] #modalbox .badge.ok { border-color: #5c7a3e; color: #2f4a18; }
+:root[data-theme="tavern"] #modalbox .badge.warn { border-color: #8f7330; color: #5a4310; }
+:root[data-theme="tavern"] #modalbox .badge.err { border-color: #94543f; color: #72281c; }
+:root[data-theme="tavern"] #modalbox button.danger { border-color: #94543f; color: #72281c; }
+/* .danger.primary is a FILLED red button, so it keeps its white ink -- both
+   the paper-button rule and the .danger rule above would otherwise put brown
+   text on it. */
+:root[data-theme="tavern"] #modalbox button.danger.primary { color: #fff; }
+/* border-color is a shorthand for all four sides, so restating it here also
+   wipes the accent border-top-color that IS the spinner. Put it back. */
+:root[data-theme="tavern"] #modalbox .spinner {
+  border-color: rgba(58, 41, 22, .22);
+  border-top-color: var(--acc);
+}
+:root[data-theme="tavern"] #modalbox .memory-turn-group { color: var(--paper-ink-dim); }
+:root[data-theme="tavern"] #modalbox .memory-score { color: #6b5a33; }
+:root[data-theme="tavern"] #modalbox .memory-summary { border-color: #93794f; }
+:root[data-theme="tavern"] #modalbox .memory-preview { border-color: #93794f; }
+:root[data-theme="tavern"] #modalbox .memory-add { border-color: #93794f; }
+:root[data-theme="tavern"] #modalbox .retrieval-reason {
+  border-color: #8d7350;
+  color: #63431f;
+}
+:root[data-theme="tavern"] #modalbox .lore-tree-name { color: #3d2b17; }
+:root[data-theme="tavern"] #modalbox .lore-tree-handle { color: #866d42; }
+:root[data-theme="tavern"] #modalbox .lore-tree-row:hover { border-color: #8f7749; }
+:root[data-theme="tavern"] #modalbox .lore-relation-direction,
+:root[data-theme="tavern"] #modalbox .lore-graph-edge .arrow { color: #7a5a2e; }
+:root[data-theme="tavern"] #modalbox .lore-graph-edge .line { background: #947c52; }
+/* The active tab's rubric would otherwise be overwritten by the paper-button
+   ink rule above, which is a more specific selector than lorebooks.css's. */
+:root[data-theme="tavern"] #modalbox .lore-inspector-tabs button.on {
+  background: rgba(122, 50, 18, .12);
+  color: #5b2f0c;
+  border-bottom-color: var(--paper-rubric);
+}
+:root[data-theme="tavern"] #modalbox .lore-plan-stat strong { color: #5b2f0c; }
+/* A card ON a page is a pasted-in slip, not a plank. The board rule far above
    sets background-image directly rather than through a token, so rebinding
    --card-surface cannot reach it -- the layers have to be cleared by hand or
    a wooden board sits in the middle of the paper. */
-:root[data-theme="tavern"] .lore-panel .card,
-:root[data-theme="tavern"] .lore-panel .item {
+:root[data-theme="tavern"] #modalbox .card,
+:root[data-theme="tavern"] #modalbox .item {
   background-image: none;
   background: var(--card-surface);
   border-color: var(--card-border);
   border-radius: 5px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5),
-              0 1px 2px rgba(122, 84, 38, .16);
-  color: #402d19;
+  box-shadow: inset 0 1px 0 rgba(255, 252, 242, .32),
+              0 1px 2px rgba(104, 70, 30, .18);
+  color: var(--paper-ink);
+}
+/* .toolbar and .memory-add mix a dark --bg into transparency, which now
+   resolves against paper -- but their own alpha was tuned for a dark panel
+   and lands almost invisible. Restated as a warm wash of the right weight. */
+:root[data-theme="tavern"] #modalbox .toolbar,
+:root[data-theme="tavern"] #modalbox .memory-add {
+  background: var(--toolbar-bg);
+}
+
+/* --- the lorebook editor is the widest page ---------------------------
+   The workspace is three panels side by side, which is the shape of an open
+   spread -- so it keeps the gutter geometry and drops the leather board it
+   used to carry. The dialog around it IS the binding now; a second board
+   inside it put a wooden frame between the cover and the pages. */
+:root[data-theme="tavern"] .lore-workspace {
+  gap: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+/* The gutter: facing pages are divided by the fold, not by a gap. */
+:root[data-theme="tavern"] .lore-panel + .lore-panel {
+  border-left: 1px solid rgba(92, 62, 32, .3);
 }
 
 /* --- hearth flicker ---------------------------------------------------
@@ -979,6 +1242,74 @@ body.has-backdrop .prose {
 :root[data-theme="lcars"] .toast button.ghost:hover {
   background: var(--warn);
   color: #000;
+}
+
+/* A badge in this theme is a filled block -- --badge-bg is the LCARS orange --
+   but .badge takes its ink from --dim, a muted lilac-grey picked for a dark
+   panel. Grey on orange lands around 1.9:1 and was the least readable text
+   anywhere in the interface. Every filled block in LCARS carries black ink,
+   and badges are not an exception; the status variants then have to recolour
+   the BLOCK rather than the text, because their pastel greens and pinks were
+   chosen to glow on near-black and do nothing on orange. */
+:root[data-theme="lcars"] .badge { color: #000; border-color: #000; }
+:root[data-theme="lcars"] .badge.ok { background: var(--ok); color: #000; border-color: #000; }
+:root[data-theme="lcars"] .badge.warn { background: var(--warn); color: #000; border-color: #000; }
+:root[data-theme="lcars"] .badge.err { background: var(--err); color: #000; border-color: #000; }
+
+/* The inspector tab strip -- the row across the top of the cast, persona and
+   lorebook windows, and of the lorebook editor's panels -- is a dark-theme
+   idiom: transparent buttons with a coloured underline under the active one.
+   In LCARS that collided with the black ink every button carries, so the
+   strip was black text on a transparent strip over a black panel: a row of
+   controls you could only find by hovering. Selectors in this theme are
+   pills, so these become pills, in the same blue/orange the sidebar's tabs
+   already use. */
+:root[data-theme="lcars"] .lore-inspector-tabs {
+  gap: 4px;
+  padding: 7px 9px;
+  border-bottom: none;
+}
+:root[data-theme="lcars"] .lore-inspector-tabs button {
+  background: var(--lcars-blue);
+  color: #000;
+  border: none;
+  border-radius: 999px;
+}
+:root[data-theme="lcars"] .lore-inspector-tabs button.on {
+  background: var(--acc);
+  color: #000;
+  border: none;
+}
+:root[data-theme="lcars"] .lore-inspector-tabs button:hover {
+  background: var(--warn);
+  color: #000;
+}
+
+/* --selected-bg in this theme is SOLID LCARS orange, and a selected lore row
+   draws two lines over it: the name in near-white and the subtitle in --dim
+   grey, both chosen for a near-black row. On orange they land around 2:1 and
+   1.9:1 -- the selected entry, the one you are working on, was the hardest
+   thing in the editor to read. A filled block takes black ink in LCARS, so
+   the whole row does: name, subtitle, drag handle and toggle alike.
+   The sidebar's tree has the same rule behind it (.lore-side-row.on shares
+   --selected-bg) and so is fixed in the same breath. */
+:root[data-theme="lcars"] .lore-tree-row.selected,
+:root[data-theme="lcars"] .lore-side-row.on { color: #000; }
+:root[data-theme="lcars"] .lore-tree-row.selected .lore-tree-name,
+:root[data-theme="lcars"] .lore-tree-row.selected .lore-tree-subtitle,
+:root[data-theme="lcars"] .lore-tree-row.selected .lore-tree-handle,
+:root[data-theme="lcars"] .lore-side-row.on .lore-side-name,
+:root[data-theme="lcars"] .lore-side-row.on .lore-side-toggle,
+:root[data-theme="lcars"] .lore-side-row.on .lore-side-meta {
+  color: #000;
+}
+/* A badge riding in a selected row is an orange pill ON orange -- invisible.
+   Inverted: the block goes black and the ink takes the orange. */
+:root[data-theme="lcars"] .lore-tree-row.selected .badge,
+:root[data-theme="lcars"] .lore-side-row.on .badge {
+  background: #000;
+  color: var(--acc);
+  border-color: #000;
 }
 
 /* Bevelled like a cut block: a lit top edge, a shadowed bottom one, and a

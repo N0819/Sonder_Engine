@@ -26,6 +26,44 @@ function el(tag, attrs = {}, ...kids) {
 // can restore them instead of just hiding the whole dialog.
 if (!S.modalStack) S.modalStack = [];
 
+// ---- Book covers ----
+// Purely decorative, and only the tavern theme draws it: that theme binds
+// every dialog as a book, and a dialog opened from a row in the sidebar is
+// bound in THAT row's leather. The choice has to be made here rather than in
+// CSS because the interesting input -- which list row you clicked -- is not
+// something a stylesheet can see from #modalbox. Every other theme simply
+// ignores the attribute.
+const BOOK_COVERS = 5;
+let pendingCover = null;
+
+function coverOfRow(target) {
+  const row = target?.closest?.("#sidelist .item, .lore-side-node");
+  if (!row || !row.parentElement) return null;
+  // Has to agree with themes.css, which cycles the leathers on :nth-child --
+  // and that counts EVERY sibling, including a leading .empty-state, not
+  // just the rows. Index from the parent's children for the same reason.
+  const i = [...row.parentElement.children].indexOf(row);
+  return i < 0 ? null : (i % BOOK_COVERS) + 1;
+}
+
+// Capture phase, so this runs before the row's own handler opens anything.
+// A click that is not on a book clears the pending cover rather than leaving
+// it set: without that, a dialog opened from the toolbar would inherit
+// whichever book happened to have been clicked last, possibly minutes ago.
+document.addEventListener("click", event => {
+  pendingCover = coverOfRow(event.target);
+}, true);
+
+// Dialogs with no book behind them still need a cover, and it has to be the
+// SAME cover every time that dialog opens -- one that changed per opening
+// would read as a rendering fault rather than as a bound volume. The title
+// is the only stable identity a dialog has here, so hash it.
+function coverOfTitle(title) {
+  let h = 0;
+  for (let i = 0; i < title.length; i++) h = (h * 31 + title.charCodeAt(i)) % 1000003;
+  return (h % BOOK_COVERS) + 1;
+}
+
 function modal(title, build, opts = {}) {
   const body = $("#modalbody");
   const box = $("#modalbox");
@@ -34,11 +72,16 @@ function modal(title, build, opts = {}) {
       title: $("#modaltitle").textContent,
       nodes: [...body.childNodes],
       wide: box.classList.contains("wide"),
+      cover: box.dataset.cover,
     });
   }
   S.modalToken++;
   $("#modaltitle").textContent = title;
   box.classList.toggle("wide", !!opts.wide);
+  // Consumed, not left standing: the next dialog is only this book's if it
+  // was this book that was clicked.
+  box.dataset.cover = pendingCover || coverOfTitle(title);
+  pendingCover = null;
   body.innerHTML = "";
   build(body);
   $("#modal").classList.remove("hidden");
@@ -56,6 +99,9 @@ function closeModal() {
     body.innerHTML = "";
     for (const node of prev.nodes) body.append(node);
     $("#modalbox").classList.toggle("wide", prev.wide);
+    // The cover belongs to the dialog, so it unwinds with it -- otherwise
+    // closing a confirm re-showed the parent bound in the confirm's cover.
+    $("#modalbox").dataset.cover = prev.cover || "";
     return;
   }
   $("#modal").classList.add("hidden");

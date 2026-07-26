@@ -79,7 +79,7 @@ what it legitimately earned, and a filter decides what crosses.**
 ## Status at a glance
 
 Conformance against the founding architecture, verified against source at
-alpha4.2.1.
+alpha4.2.2.
 
 | Founding commitment | Status | Evidence / gap |
 |---|---|---|
@@ -449,8 +449,12 @@ is the point: a silent retcon is the failure mode.
 
 ### 7. Reactivation negotiation
 
+Design note: [`docs/OFFSCREEN_LIFE_DESIGN.md`](docs/OFFSCREEN_LIFE_DESIGN.md).
+
 The largest unbuilt subsystem, and the one that makes a large cast feel alive
-rather than merely stored. Mapping proposes gap-history plus delta-summary; the
+rather than merely stored. It decomposes: gap-history plus delta-summary is the
+valuable 80% and is the same generator as roadmap #10; the negotiation protocol
+is the hard, novel half and can trail behind it. Mapping proposes the gap; the
 character may refuse on integrity grounds only; refusals are capped and tagged
 (identity-violation counts half, preference counts full); on exhaustion the last
 proposal becomes canon. *Conservative defaults, costly exceptions.*
@@ -467,9 +471,14 @@ directly addresses the "coming back after a week" experience.
 
 ### 10. Richer off-screen life
 
+Design note: [`docs/OFFSCREEN_LIFE_DESIGN.md`](docs/OFFSCREEN_LIFE_DESIGN.md).
+
 Deterministic scheduling exists; what is missing is the world visibly having
-moved while you were away. Standing intentions with triggers, seeded and logged,
-so the trap in the empty room is enforced while its author is dormant.
+moved while you were away. Most of the cast needs no tick at all — the gap is
+generated at re-contact, so cost stays `O(re-contact)`. The exception is the
+character advancing a plan whose consequences the player meets *before* meeting
+them: you cannot lose a race that was never run. `BehaviorController` already
+exists in `schemas.py`, unconsumed, and is exactly that opt-in ladder.
 
 ### Further ideas, less certain
 
