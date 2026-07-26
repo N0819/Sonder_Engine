@@ -1,11 +1,24 @@
 # Changelog
 
-## alpha4.2 — The corridor stops going on forever
+## alpha4.2 — Themes
 
-Findings from auditing a 93-turn live chat ("Elevator Adventure ⎇41"), where
-the player spent twenty consecutive turns walking forward down a condemned
-passage and kept arriving somewhere they had already been — in character:
-"Does this corridor go on forever?", "How long is this hallway............".
+Appearance becomes a real system rather than one hard-coded palette, and the
+themes that existed as colour schemes become places: a tavern with a fire in
+the corner, a console, quarried stone.
+
+This release absorbs two versions that were never tagged. `alpha4.1.2` and
+`alpha4.1.3` were an outside proposal (ChatGPT) for the appearance pass; the
+interface fixes in them were worth having and are kept below, but most of the
+theme work has been replaced rather than built on — the textures were present
+in the file and invisible on screen, and two of the themes have been withdrawn
+outright. Nothing shipped under those numbers, so their entries are folded in
+here instead of standing as releases of their own.
+
+Shipping alongside it: the findings from auditing a 93-turn live chat
+("Elevator Adventure ⎇41"), where the player spent twenty consecutive turns
+walking forward down a condemned passage and kept arriving somewhere they had
+already been — in character: "Does this corridor go on forever?", "How long is
+this hallway............".
 
 ### Fixed
 - **A partial entity diff no longer erases the rest of the entity.**
@@ -111,6 +124,26 @@ passage and kept arriving somewhere they had already been — in character:
   rather than duplicated in JS. Send no longer stretches into a slab as the
   box grows.
 
+- **The close button in an LCARS window is visible again.** LCARS has no ghost
+  control — a block is filled or it is not there — and that collided with two
+  rules that are each correct alone: `button.ghost` zeroes the background, and
+  the theme sets black ink on every button. The result was a black glyph on a
+  transparent black panel, legible only as the gap where something should be.
+  Every dismiss control in a window is now a filled pill in the theme's own
+  dismiss colour, with the black ink it already wanted.
+
+- **An AI-reinterpreted import no longer lets the model name the character's
+  key.** `identity.uid` is not decoration: `scene.py` falls back to it for the
+  scene *entity id*, and character matching keys off it as one of a character's
+  forms. The reinterpret path took whatever the model wrote there, and live
+  models write the character's own name — GLM returns `"tamamo"` — so every
+  import of the same card produced the same uid. Two characters, one scene
+  entity: one position, one set of clothes, one owner of the memories, with
+  nothing reporting a conflict. Sheets a model reconstructed now get a freshly
+  minted uid, on both the character and persona paths. Re-importing this app's
+  own export still round-trips its uid exactly, since that path never went
+  through the model in the first place.
+
 ### Changed
 - **The Scroll and Daylight themes were withdrawn**, along with the parchment
   texture. A regression test keeps them from returning by halves.
@@ -170,7 +203,29 @@ passage and kept arriving somewhere they had already been — in character:
   neighbours and casts onto them. No new markup: `.lore-side-*` exists only in
   this tab, so nothing else picks up book styling.
 
+- **The lorebook editor is an open book in Tavern.** The workspace is already
+  three panels side by side, which is the shape of an open book with a margin
+  column, so this restyles what is there rather than adding markup: the pages
+  are inset into a leather board, meet at a gutter instead of floating apart,
+  and each is shaded at its edges so it curves down into the fold. Headings are
+  ruled small-caps rather than filled title bars, and the accent inside a page
+  becomes rubric red — the colour a scribe reserved for headings — since
+  candle-brass on cream is not a legible ink. What made this affordable is that
+  `lorebooks.css` is almost entirely token-driven, so *rebinding* the tokens on
+  the page re-tints its inputs, badges, rules and hovers in one place; only the
+  values that file hardcodes for a dark panel had to be restated. Cards on a
+  page needed clearing by hand, because the Tavern board rule sets
+  `background-image` directly rather than through a token, and a wooden plank
+  was sitting in the middle of the paper.
+
 ### Added
+- **Browser-local themes** under the 🎨 Appearance control: Sonder, Tavern,
+  LCARS, Stone, and Ink. The choice is restored before the stylesheet paints,
+  so a saved light theme does not flash dark on startup, and it carries through
+  the sign-in and guest pages. (Scroll and Daylight were proposed in the
+  withdrawn pass and are not shipping — see the Changed section.)
+- **Independent story-text sizing** (compact through extra large), which scales
+  the fiction transcript without inflating every editor and toolbar control.
 - **A branch reads the source story's scene backdrops instead of redrawing
   them.** Backdrops are cached per chat and keyed by a signature over the
   room and its visible state — and a branch inherits the entire scene graph,
@@ -187,55 +242,26 @@ passage and kept arriving somewhere they had already been — in character:
   import deliberately drops the lineage, since a raw chat id names one
   directory in the database it was written in and someone else's in any other.
 
-## alpha4.1.3 — Themes get material, and the composer stands out
-
-A follow-up to the first appearance pass: several themes looked good as colour
-palettes but still felt flat, and in some of them the player composer did not
-separate strongly enough from the surrounding chrome. This pass fixes both.
-
-### Improved
-- **Player input contrast is now deliberately stronger across themes.** The
-  composer and the textarea use separate surface tokens, darker or lighter
-  borders per theme, clearer placeholder text, and a more obvious raised field
-  so the place you type reads as an active control instead of another panel.
-- **Themed surfaces now use material textures instead of mostly flat fills**
-  where that makes aesthetic sense. Tavern uses wood grain, Scroll uses a
-  parchment texture, Stone uses a slate texture, and LCARS gets a subtle
-  console-panel grain rather than a plain dark slab.
-- **Theme copy was updated to match the more tactile look.**
-
-### Added
-- **Texture assets** under `static/assets/theme-textures/`, with regression
-  coverage so the themed surfaces and contrast tokens remain part of the UI
-  contract instead of an incidental visual tweak.
-
-## alpha4.1.2 — The interface gets dressed too
-
-This pass focuses on the part of the engine a reader touches every turn. The
-existing Sonder look remains the default, but appearance is now a real system
-instead of one hard-coded palette.
-
-### Added
-- **Browser-local themes** under the new 🎨 Appearance control: Sonder, Tavern,
-  Scroll, LCARS, Stone, Ink, and Daylight. Theme choice is restored before the
-  stylesheet paints, so saved light themes do not flash dark during startup.
-  The same saved appearance carries through the sign-in and guest pages.
-- **Independent story-text sizing** (compact through extra large). This changes
-  the fiction transcript without inflating every editor and toolbar control.
-
-### Improved
-- **Story, character, and persona rows now reserve a fixed action column.** A
-  one-letter title and a paragraph-length title place Rename, Export, and Delete
-  in exactly the same position; long names ellipsize instead of shoving or
-  wrapping controls. Rows are also keyboard-openable and their icon buttons now
-  have explicit accessible labels.
+### Improved (kept from the withdrawn 4.1.2/4.1.3 pass)
+- **Player input contrast is deliberately stronger across themes.** The
+  composer and the textarea use separate surface tokens, per-theme borders,
+  clearer placeholder text, and a visibly raised field, so the place you type
+  reads as an active control rather than one more panel.
 - **The header is structurally responsive.** The story title stays anchored
-  while only the tool strip scrolls, rather than allowing the entire header to
-  drift offscreen. The technical-detail toggle becomes a proper icon control on
+  while only the tool strip scrolls, instead of the whole header drifting
+  offscreen. The technical-detail toggle becomes a proper icon control on
   phones, and story tools keep usable touch targets.
 - **Composer and sidebar actions are easier to hit.** Send is visually primary,
-  Stop is destructive, side-footer actions share available width, and the
+  Stop is destructive, side-footer actions share the available width, and the
   composer no longer lets its textarea squeeze the action buttons.
+- **Rows are keyboard-openable** and their icon buttons carry explicit
+  accessible labels. (The fixed action column those rows introduced is gone —
+  see the wrapping-row entry above, which replaced it.)
+- **Texture assets** live under `static/assets/theme-textures/`, with the
+  regression coverage that keeps themed surfaces and contrast tokens part of
+  the UI contract instead of an incidental visual tweak. (The textures
+  themselves were re-tuned here: at the original 95–97% opaque washes they were
+  present in the file and invisible on screen.)
 
 ## alpha4.1.1 — Backdrops stop holding the door
 

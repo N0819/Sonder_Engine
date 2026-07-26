@@ -690,6 +690,114 @@ body.has-backdrop .prose {
   border-color: rgba(226, 183, 106, .28);
 }
 
+/* --- the lorebook editor is an open book ------------------------------
+   The workspace is already three panels side by side, which is the shape of
+   an open book with a margin column -- so this restyles what is there rather
+   than adding markup. The trick that makes it affordable: lorebooks.css is
+   almost entirely token-driven, so REBINDING the tokens inside a page
+   re-tints its inputs, badges, rules and hovers at once. Only the handful of
+   values hardcoded for a dark panel need overriding by hand, below. */
+:root[data-theme="tavern"] .lore-workspace {
+  /* The binding: pages are inset into a leather board, and they meet at a
+     gutter rather than floating apart with a gap between them. */
+  gap: 0;
+  padding: 14px;
+  border-radius: 6px 10px 10px 6px;
+  background:
+    linear-gradient(180deg, rgba(58, 30, 26, .96), rgba(38, 19, 16, .98)),
+    url("/static/assets/theme-textures/tavern-wood.png") center/220px 220px repeat;
+  box-shadow: inset 0 1px 0 rgba(255, 206, 138, .12),
+              inset 0 0 0 1px rgba(0, 0, 0, .5),
+              0 14px 34px rgba(0, 0, 0, .5);
+}
+:root[data-theme="tavern"] .lore-panel {
+  /* Aged paper. The two ruled lines are the laid lines of the sheet, and the
+     gradient at each edge is the page curving down into the gutter -- that
+     shading is the whole reason it reads as a spread and not as three cards. */
+  border: none;
+  border-radius: 0;
+  background:
+    linear-gradient(90deg, rgba(92, 62, 32, .22), transparent 5%,
+                    transparent 95%, rgba(92, 62, 32, .22)),
+    repeating-linear-gradient(0deg, rgba(120, 92, 54, .05) 0 1px, transparent 1px 5px),
+    linear-gradient(178deg, #f2e6cb, #e6d5b3);
+  box-shadow: inset 0 0 34px rgba(139, 105, 60, .16);
+
+  /* Ink on paper, for everything inside that reads a token. */
+  --fg: #402d19;
+  --dim: #7d6647;
+  --bd: #cbb489;
+  --acc: #9a4a1e;          /* rubric: the red a scribe reserved for headings */
+  --acc2: #6b4a2b;
+  --card-bg: rgba(255, 251, 240, .66);
+  --card-border: #d3bd94;
+  --card-surface: linear-gradient(180deg, rgba(255, 251, 240, .7), rgba(248, 240, 222, .7));
+  --hover-bg: rgba(122, 84, 38, .09);
+  --selected-bg: linear-gradient(90deg, rgba(154, 74, 30, .16), rgba(255, 251, 240, .5));
+  --panel-border: #c6ae82;
+  --strong-border: #a98d5f;
+  --chip-bg: rgba(122, 84, 38, .12);
+  --chip-fg: #5a4529;
+  --badge-bg: rgba(122, 84, 38, .13);
+  --input-bg: #fbf5e6;
+  --input-fg: #3a2917;
+  --input-border: #c2a877;
+  --input-surface: linear-gradient(180deg, #fdf8ec, #f6eeda);
+  --button-bg: linear-gradient(180deg, #e9dcbe, #ddcca6);
+  --button-hover-bg: linear-gradient(180deg, #f3e8cd, #e5d6b3);
+  --focus-ring: rgba(154, 74, 30, .22);
+}
+/* The gutter: the two facing pages are shaded toward the fold between them. */
+:root[data-theme="tavern"] .lore-panel + .lore-panel {
+  border-left: 1px solid rgba(92, 62, 32, .3);
+}
+/* A page header is a ruled heading, not a filled title bar. */
+:root[data-theme="tavern"] .lore-panel-head {
+  border-bottom: 1px solid rgba(122, 84, 38, .34);
+  background: transparent;
+}
+:root[data-theme="tavern"] .lore-panel-title {
+  font-family: Georgia, "Palatino Linotype", serif;
+  font-variant: small-caps;
+  letter-spacing: .04em;
+  color: #6b3a17;
+}
+/* Hand-set text, and buttons that read as small paper controls. */
+:root[data-theme="tavern"] .lore-panel-body { color: #402d19; }
+:root[data-theme="tavern"] .lore-panel button { color: #4a3419; border-color: #c2a877; }
+:root[data-theme="tavern"] .lore-panel input,
+:root[data-theme="tavern"] .lore-panel select,
+:root[data-theme="tavern"] .lore-panel textarea {
+  color: #3a2917;
+}
+/* The values lorebooks.css hardcodes for a DARK panel -- light greys, blues
+   and lilacs -- are the only things token rebinding cannot reach. On paper
+   they are invisible, so each is restated in ink. */
+:root[data-theme="tavern"] .lore-panel .lore-tree-name { color: #3d2b17; }
+:root[data-theme="tavern"] .lore-panel .lore-tree-handle { color: #9b8259; }
+:root[data-theme="tavern"] .lore-panel .lore-tree-row:hover { border-color: #c2a877; }
+:root[data-theme="tavern"] .lore-panel .lore-relation-direction,
+:root[data-theme="tavern"] .lore-panel .lore-graph-edge .arrow { color: #7a5a2e; }
+:root[data-theme="tavern"] .lore-panel .lore-graph-edge .line { background: #b79f74; }
+:root[data-theme="tavern"] .lore-panel .lore-inspector-tabs button.on {
+  background: rgba(154, 74, 30, .1);
+}
+:root[data-theme="tavern"] .lore-panel .lore-plan-stat strong { color: #6b3a17; }
+/* A card ON a page is a pasted-in slip, not a plank. The board rule above
+   sets background-image directly rather than through a token, so rebinding
+   --card-surface cannot reach it -- the layers have to be cleared by hand or
+   a wooden board sits in the middle of the paper. */
+:root[data-theme="tavern"] .lore-panel .card,
+:root[data-theme="tavern"] .lore-panel .item {
+  background-image: none;
+  background: var(--card-surface);
+  border-color: var(--card-border);
+  border-radius: 5px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5),
+              0 1px 2px rgba(122, 84, 38, .16);
+  color: #402d19;
+}
+
 /* --- hearth flicker ---------------------------------------------------
    The steady light lives in --page-background; this is only the part that
    MOVES, so what animates is one compositor-friendly opacity on one fixed
@@ -849,6 +957,28 @@ body.has-backdrop .prose {
 :root[data-theme="lcars"] .card,
 :root[data-theme="lcars"] #modalbox {
   border-left: 8px solid var(--acc2);
+}
+/* LCARS has no ghost control: a block is filled or it is not there. That
+   collided badly here -- `button.ghost` zeroes the background, and this theme
+   sets black ink on every button, so a window's close control was a BLACK
+   GLYPH ON A TRANSPARENT BLACK PANEL. It was legible only as the gap where
+   something should be. Every dismiss control in a window becomes a filled
+   pill in the theme's own dismiss colour, with the black ink it already
+   wanted. */
+:root[data-theme="lcars"] #modalx,
+:root[data-theme="lcars"] #modalbox button.ghost,
+:root[data-theme="lcars"] .toast button.ghost {
+  background: var(--err);
+  color: #000;
+  border-radius: 999px;
+  padding-inline: 13px;
+  font-weight: 700;
+}
+:root[data-theme="lcars"] #modalx:hover,
+:root[data-theme="lcars"] #modalbox button.ghost:hover,
+:root[data-theme="lcars"] .toast button.ghost:hover {
+  background: var(--warn);
+  color: #000;
 }
 
 /* Bevelled like a cut block: a lit top edge, a shadowed bottom one, and a

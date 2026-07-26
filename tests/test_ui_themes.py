@@ -276,3 +276,38 @@ def test_tavern_lore_tab_is_a_bookshelf():
     # Scoped to the Lore tab by construction -- .lore-side-* exists nowhere
     # else -- so no other list picks up book styling.
     assert ".lore-side-row" in styles and "#sidelist .item { --book-leather" not in styles
+
+
+def test_tavern_lorebook_editor_is_an_open_book():
+    """The workspace is already three panels side by side, which is the shape
+    of an open book. The affordable part is that lorebooks.css is nearly all
+    token-driven, so rebinding tokens on the page re-tints its inputs, badges
+    and rules at once."""
+    styles = (STATIC / "themes.css").read_text(encoding="utf-8")
+
+    ws = _tavern_rule(styles, ':root[data-theme="tavern"] .lore-workspace {')
+    assert "gap: 0;" in ws               # pages meet at a gutter, not a gap
+
+    page = _tavern_rule(styles, ':root[data-theme="tavern"] .lore-panel {')
+    # Ink on paper, rebound so everything inside inherits it.
+    for token in ("--fg:", "--dim:", "--bd:", "--input-bg:", "--card-bg:"):
+        assert token in page, token
+
+    # The board rule sets background-image directly rather than through a
+    # token, so a card on a page has to clear those layers by hand or a wooden
+    # plank sits in the middle of the paper.
+    card = _tavern_rule(styles, ':root[data-theme="tavern"] .lore-panel .card,')
+    assert "background-image: none;" in card
+
+
+def test_lcars_dismiss_controls_are_filled_blocks():
+    """LCARS has no ghost control. `button.ghost` zeroes the background and
+    this theme sets black ink on every button, so a window's close control was
+    a black glyph on a transparent black panel -- legible only as the gap where
+    something should be."""
+    styles = (STATIC / "themes.css").read_text(encoding="utf-8")
+    rule = _tavern_rule(styles, ':root[data-theme="lcars"] #modalx,')
+
+    assert "background: var(--err);" in rule   # filled, in the dismiss colour
+    assert "color: #000;" in rule              # the black ink LCARS wants
+    assert "border-radius: 999px;" in rule     # a pill, like every other block

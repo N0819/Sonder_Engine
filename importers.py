@@ -13,6 +13,7 @@ from character_schema import (
     character_name,
     default_character_data,
     default_persona_data,
+    new_uid,
     normalize_character_data,
     normalize_persona_data,
     persona_name,
@@ -480,6 +481,16 @@ def import_character(payload, reinterpret=False):
                         "Character reinterpretation returned no object"
                     )
                 sheet = normalize_character_data(parsed)
+                # The model does not get to name the engine's key for this
+                # character. identity.uid IS the scene entity id (scene.py's
+                # entity_id falls back to it) and one of the forms character
+                # matching keys off, so a model-authored value -- GLM returns
+                # the character's own name, "tamamo" -- makes every import of
+                # that card THE SAME ENTITY: two characters sharing one
+                # position, one set of clothes, one owner of the memories.
+                # A native re-import keeps its uid (that path is above and
+                # untouched); anything a model reconstructed gets a fresh one.
+                sheet["identity"]["uid"] = new_uid("char")
             except Exception as exc:
                 raise RuntimeError(
                     f"AI character reinterpretation failed: {exc}"
@@ -604,6 +615,9 @@ def import_persona(payload, reinterpret=False):
                         "Persona reinterpretation returned no object"
                     )
                 sheet = normalize_persona_data(parsed)
+                # Same as the character path above: a reconstructed sheet does
+                # not carry a model-chosen identity key.
+                sheet["identity"]["uid"] = new_uid("persona")
             except Exception as exc:
                 raise RuntimeError(
                     f"AI persona reinterpretation failed: {exc}"
