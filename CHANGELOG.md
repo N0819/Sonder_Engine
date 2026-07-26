@@ -1,5 +1,45 @@
 # Changelog
 
+## alpha4.3.2 — Closing your eyes is not leaving the scene
+
+### Fixed
+- **Closing your eyes is not leaving the scene.** In a live chat the player
+  wrote "You breath softly as you close your eyes wrapping your arms around
+  her", curled against her mother in a nest, and the Director recorded an
+  `awareness` condition on the **player** at level `asleep`, cause "settling
+  into rest and protective affection after arrival". `asleep` is one of the
+  gated levels, so the next beat would have opened her own view with "You are
+  under, below waking." — no room, no sight, no speech, and no action — until
+  the Director chose to end it. The player had asked for a cuddle.
+
+  The prompt was the mechanism. Its AWARENESS rule listed "falls asleep" in the
+  same breath as knocked out, sedated and drugged under, with an unconditional
+  MUST and a warning that an omitted condition is a bug — pressure in one
+  direction and no threshold in the other. Sleep now carries the same bar as a
+  knockout, stated as what the level actually does: the mind is gone from the
+  scene, so record it only once the character can no longer respond to what is
+  said around them. Resting, lying down, closing the eyes, breathing slowly,
+  leaning on someone, being drowsy or tired, or starting to drift are named as
+  *not* non-awake states — a scene can be still, dark and half-dreaming with
+  everyone in it fully awake.
+
+  Underneath it, a deterministic floor, because this cost more than a lost beat:
+  the engine already scans prose for a knockout the diff *forgot*, and it now
+  also drops a gated level the diff imposed on the **player** with nothing in
+  the beat to support it — no sleep or knockout language in their own input, in
+  the resolved prose, or in anything spoken. The player alone is protected, for
+  the asymmetry: a spurious non-awake NPC costs one beat of silence, while for
+  the player it removes both their view of the story and their next move, which
+  is the Director overriding declared player conduct in its strongest form.
+  Waking (`active:0`) is never touched — dropping that would strand them under
+  forever — and `dazed`, which does not gate, is left to the Director.
+
+- **"Pass out" is now caught by the consciousness floor.** The cue pattern used
+  `passes?\s+out`, which matches "passe" and "passes" but never bare "pass" —
+  so second-person prose ("the blow makes you pass out") escaped the scan whose
+  entire job is catching an unrecorded knockout. Same flaw in "black out" and
+  "go limp". Found while adding the guard above, which had inherited it.
+
 ## alpha4.3.1 — Interrupted is not lost
 
 ### Added
