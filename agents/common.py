@@ -285,6 +285,61 @@ def _contextual_rooms(sc, cast, *extra_room_ids, hops=1):
             centers.add(extra)
     return nearby_rooms(sc, centers, hops=hops)
 
+# Entity fields that exist so CODE can resolve a reference, not because an
+# observer could perceive them. See _perceptible_entities.
+_ENTITY_LOOKUP_ONLY_FIELDS = ("aliases",)
+
+
+def _perceptible_entities(sc):
+    """The entities dict to serialize into a PERCEPTION payload.
+
+    Perception is handed the objective entity table so it can describe what
+    is present -- but an entity carries two kinds of string. Its `name` and
+    `description` are what an observer standing there could actually take
+    in. Its `aliases` and its dict KEY are lookup handles, written for
+    commit.track_background_presences and background._name_to_entity_id to
+    match against, and an observer has no way to acquire that vocabulary.
+
+    Handing both to the model let the vocabulary leak. Observed live
+    (Elevator Adventure branch 41, turn 91): entity `tardis_001`, display
+    name "Blue Police Box", aliases ["tardis", "box", "police box"]. Dr.
+    Moon's own view came back "The TARDIS looms behind her, still wheezing
+    as its temporal engines wind down" -- a word she has never heard, in
+    the same sentence where the man himself was correctly anonymized as
+    "the lean energetic man" (identities are scrubbed by
+    _scrub_unknown_identities; object vocabulary was not).
+
+    So the lookup handles do not go in: entities are keyed by display name
+    where that is unambiguous, and aliases are dropped. A character who
+    legitimately knows what the thing is knows it from their own sheet and
+    memory -- which is where that knowledge belongs.
+    """
+    entities = (sc or {}).get("entities") or {}
+    if not isinstance(entities, dict):
+        return entities
+
+    by_name = {}
+    for eid, ent in entities.items():
+        if isinstance(ent, dict):
+            name = str(ent.get("name") or "").strip()
+            if name:
+                by_name.setdefault(name.casefold(), []).append(eid)
+
+    projected = {}
+    for eid, ent in entities.items():
+        if not isinstance(ent, dict):
+            projected[eid] = ent
+            continue
+        name = str(ent.get("name") or "").strip()
+        # Keep the id when the name is missing or shared, so two entities
+        # never collapse into one payload entry.
+        key = name if name and len(by_name.get(name.casefold(), ())) == 1 \
+            else eid
+        projected[key] = {k: v for k, v in ent.items()
+                          if k not in _ENTITY_LOOKUP_ONLY_FIELDS}
+    return projected
+
+
 def _char_known_tags(sheet):
     config = character_knowledge_config(sheet)
     tags = [tag for tag in ("common", "scholarly", "esoteric") if config.get(tag)]

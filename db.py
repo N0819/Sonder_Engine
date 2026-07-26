@@ -64,7 +64,7 @@ def parse_scoped_world_key(key):
     return key, None
 
 DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -199,6 +199,16 @@ CREATE TABLE IF NOT EXISTS chats(
     persona_id INTEGER REFERENCES personas(id) ON DELETE SET NULL,
     lorebook_id INTEGER REFERENCES lorebooks(id) ON DELETE SET NULL,
     scenario TEXT NOT NULL DEFAULT '',
+    -- Chat ids this chat was branched out of, nearest ancestor first. Read
+    -- ONLY by backdrops.py, to find already-generated room images in the
+    -- chat this one split from instead of paying to redraw a room the
+    -- player already saw. Deliberately a denormalized id list rather than a
+    -- parent_chat_id foreign key: the backdrop files are named by raw chat
+    -- id and outlive the chat row (chat_del deletes rows, not pictures), so
+    -- a lineage that survives an ancestor's deletion keeps finding them
+    -- where a cascaded-null parent pointer would lose them. Ids are local to
+    -- one database, so import must not carry them across -- see chat_import.
+    branched_from TEXT NOT NULL DEFAULT '[]',
     created REAL NOT NULL
 );
 
@@ -981,6 +991,15 @@ MIGRATIONS = [
         "ALTER TABLE scheduled_events_new RENAME TO scheduled_events",
         "CREATE INDEX IF NOT EXISTS idx_scheduled_events_due "
         "ON scheduled_events(chat_id, status, due_at)",
+    ],
+    # v16 -> v17
+    [
+        # Branch lineage, so a branched chat can find its ancestors' already
+        # generated backdrops. Existing chats migrate to '[]': their branch
+        # points are only recorded in the "name ⎇idx" label, which is a
+        # display string and not a reliable id, so backfilling would be
+        # guesswork. They simply keep generating as before.
+        "ALTER TABLE chats ADD COLUMN branched_from TEXT NOT NULL DEFAULT '[]'",
     ],
 ]
 

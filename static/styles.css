@@ -3,7 +3,7 @@
 --ok:#79c99e;--bd:#283247;--shadow:0 18px 48px rgba(0,0,0,.42);
 --soft-shadow:0 7px 20px rgba(0,0,0,.22)}
 *{box-sizing:border-box}
-body{margin:0;font:14px/1.45 system-ui,sans-serif;
+body{margin:0;font:14px/1.45 var(--ui-font,system-ui,sans-serif);
 background:radial-gradient(circle at 72% -10%,rgba(82,105,175,.15),transparent 34%),
 radial-gradient(circle at 10% 95%,rgba(108,73,166,.11),transparent 30%),var(--bg);
 color:var(--fg);height:100vh;height:100dvh;overflow:hidden;position:relative}
@@ -147,25 +147,54 @@ border-bottom:2px solid transparent;padding:8px 2px;font-size:12px}
 #tabs button.on{border-bottom-color:var(--acc);color:var(--acc)}
 #sidelist{flex:1;overflow:auto;padding:9px}
 .item{padding:7px 9px;border-radius:6px;cursor:pointer;display:flex;
-justify-content:space-between;gap:6px;align-items:center;min-height:42px;
+gap:6px;align-items:center;min-height:42px;min-width:0;
 margin-bottom:3px;border:1px solid transparent}
 .item:hover{border-color:var(--bd);background:rgba(34,43,61,.78)}
+.item:focus-visible{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 18%,transparent)}
+.item-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* A long title used to be ellipsized to protect the action column, which kept
+   the buttons in one place but made the name unreadable -- the thing you are
+   actually trying to pick. The row wraps instead: the label keeps a legible
+   measure and takes as many lines as it needs, and when that leaves no room
+   beside it the whole Rename/Export/Delete group drops to its own line
+   together, still right-aligned and still in the same order. Short names are
+   unaffected and keep the single-row layout. */
+.story-item,.library-item{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+/* flex-basis:auto is doing the work: the label's hypothetical width is its
+   MAX-CONTENT (the title on one line), which is what flexbox line-breaking
+   measures. A short title fits beside the buttons and the row stays single.
+   A long one does not, so the action group is pushed to its own line whole --
+   and the label, now alone on its line, grows to the full width and wraps
+   there. No JS, no width probe, and no wrap for names that never needed it. */
+.story-item .item-label,.library-item .item-label{
+flex:1 1 auto;min-width:0;overflow:visible;text-overflow:clip;
+white-space:normal;overflow-wrap:anywhere}
+.item-actions{display:flex;flex:0 0 auto;align-items:center;justify-content:flex-end;gap:3px;white-space:nowrap;margin-left:auto}
+.icon-button{display:inline-flex;align-items:center;justify-content:center;min-width:30px;padding-inline:7px}
+.story-action{width:30px;min-width:30px;padding:0;opacity:.62}
+.story-item:hover .story-action,.story-item:focus-within .story-action,.story-item.on .story-action,.library-item:hover .story-action,.library-item:focus-within .story-action{opacity:1}
 .item.on{background:linear-gradient(90deg,color-mix(in srgb,var(--acc) 32%,transparent),rgba(34,43,61,.8));
 outline:none;border-color:color-mix(in srgb,var(--acc) 55%,var(--bd))}
 #sideactions{padding:10px;border-top:1px solid var(--bd);display:flex;
 gap:6px;flex-wrap:wrap;background:rgba(11,14,20,.32)}
+#sideactions>button{flex:1 1 112px}
 #main{flex:1;display:flex;flex-direction:column;min-width:0}
 /* Desktop-only collapse of the left sidebar (stories/characters/personas/
    lore). Scoped to >680px so it never fights the mobile drawer below, which
    uses position:fixed + the .open class instead. */
 @media(min-width:681px){#side.collapsed{display:none}}
-#top{display:flex;gap:6px;align-items:center;padding:8px 12px;
+#top{display:flex;gap:8px;align-items:center;padding:8px 12px;
 border-bottom:1px solid var(--bd);background:var(--bg2);
 box-shadow:0 8px 28px rgba(0,0,0,.12);z-index:3;
-min-height:50px}
-#chatname{font-weight:600;margin-right:6px;max-width:280px;overflow:hidden;
+min-height:50px;min-width:0}
+#top-context{display:flex;align-items:center;gap:7px;min-width:90px;max-width:min(43vw,520px);overflow:hidden}
+#chatname{font-weight:600;min-width:0;max-width:280px;overflow:hidden;
 text-overflow:ellipsis;white-space:nowrap}
-#framebar{display:flex;gap:4px;margin-right:8px;flex-wrap:wrap}
+#framebar{display:flex;min-width:0;gap:4px;overflow-x:auto;scrollbar-width:none}
+#framebar::-webkit-scrollbar{display:none}
+#topactions{display:flex;align-items:center;gap:6px;min-width:0;margin-left:auto;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;padding-bottom:1px}
+#topactions>button{flex:0 0 auto}
+#framebar{margin-right:2px}
 .frame-pill{padding:3px 10px;border:1px solid var(--bd);border-radius:999px;
 font-size:12px;background:transparent;color:var(--fg);opacity:.7}
 .frame-pill:hover{opacity:1}
@@ -179,18 +208,24 @@ flex-direction:column;gap:12px;scroll-behavior:smooth;
    re-evaluation. */
 background-color:var(--mood-tint,transparent);transition:background-color 1.8s ease}
 .turn{max-width:720px;margin:0 auto;width:100%;animation:fade-slide .2s ease both}
+/* What the player wrote is fiction too -- it reads in sequence with the prose
+   it provoked, so it takes the reading face and the reading size rather than
+   staying pinned at 13px system-ui while the story around it scales. Held a
+   step below the narration so the turn still reads as narration-with-an-echo
+   rather than two competing voices. */
 .pin{background:linear-gradient(110deg,rgba(60,91,141,.17),rgba(31,40,57,.78));
 border:1px solid var(--bd);border-radius:8px;padding:8px 12px;
 white-space:pre-wrap;color:#bcd3ff;box-shadow:var(--soft-shadow);
-font-size:13px;opacity:.92}
+font-family:var(--prose-font,Charter,"Iowan Old Style","Palatino Linotype",Georgia,serif);
+font-size:calc(var(--prose-size,17px) * .88);line-height:1.55;opacity:.92}
 /* The actual fiction, previously rendered at the same size/weight/font
    as UI chrome (14.5px system-ui in a pre-wrap div) -- a serif reading
    face, a real paragraph measure, and more line-height are the highest-
    impact, lowest-risk change available: nothing else in the app matters
    if the prose itself doesn't look considered. */
 .prose{padding:8px 2px 10px;white-space:pre-wrap;
-font-family:Charter,"Iowan Old Style","Palatino Linotype",Georgia,serif;
-font-size:17px;line-height:1.7;max-width:65ch}
+font-family:var(--prose-font,Charter,"Iowan Old Style","Palatino Linotype",Georgia,serif);
+font-size:var(--prose-size,17px);line-height:1.7;max-width:65ch}
 .turn.stale .prose{opacity:.55}
 .tbtns{display:flex;gap:4px;justify-content:flex-end;margin-top:2px;
 opacity:.3;transition:opacity .15s ease}
@@ -198,7 +233,7 @@ opacity:.3;transition:opacity .15s ease}
 .tbtns button{padding:1px 7px;font-size:12px;opacity:.75}
 /* Opacity-on-hover has no touch equivalent -- without this, the turn's
    controls would be unreachable on any device without a mouse. */
-@media(hover:none){.tbtns{opacity:.75}}
+@media(hover:none){.tbtns{opacity:.75}.story-action{opacity:1}}
 #live{max-height:220px;overflow:auto;background:var(--bg2);
 border-top:1px solid var(--bd);padding:6px 12px;font-size:12px}
 #live .lk{color:var(--acc);font-weight:600}
@@ -207,11 +242,33 @@ border-top:1px solid var(--bd);padding:6px 12px;font-size:12px}
 border-top:1px solid var(--bd);background:var(--bg2);font-size:13px;
 color:var(--fg)}
 #turnstatus-elapsed{margin-left:auto}
+/* The composer shares the story's measure. The transcript is capped at 65ch
+   (.prose) while the composer ran the full window width, so what you typed and
+   what you read were two different column widths sitting directly above one
+   another. `--composer-measure` is 65ch of the PROSE face plus the send/stop
+   column, so the text field itself lines up with the prose above it. */
 #composer{display:flex;gap:8px;padding:10px 12px;
 border-top:1px solid var(--bd);background:var(--bg2);
 box-shadow:0 -10px 30px rgba(0,0,0,.13)}
-#input{flex:1;min-height:56px;max-height:220px;border-color:#34415a;
-background:#0f141e;resize:none}
+/* Same column as .turn: max-width 720px, centred. Matching THAT (rather than
+   .prose's 65ch) is what makes the two line up on screen, because the prose
+   is itself left-aligned inside this centred column -- so both share a left
+   edge and a right edge regardless of prose size. */
+#composer-inner{display:flex;gap:8px;width:100%;max-width:720px;
+margin-inline:auto}
+/* Grows with what you type, up to a share of the window rather than a fixed
+   220px -- at 21px story text that flat cap was barely four lines, and a long
+   turn is exactly when seeing what you wrote matters. resizeComposer() reads
+   this value, so it is the only place the ceiling is set. */
+#input{flex:1;min-width:0;min-height:56px;max-height:min(46vh,440px);
+border-color:#34415a;background:#0f141e;resize:none;
+/* Story text sizing drives the composer too: typing at 13px into a story
+   rendered at 21px made the composer feel like a separate, lesser app. */
+font-family:var(--prose-font,Charter,"Iowan Old Style","Palatino Linotype",Georgia,serif);
+font-size:var(--prose-size,17px);line-height:1.55}
+/* Sit at the bottom of the composer rather than stretching: once the input
+   grows to several lines, a Send button stretched to match becomes a slab. */
+#send,#stop{align-self:flex-end;min-width:74px;min-height:56px}
 #drawer{width:min(480px,42vw);border-left:1px solid var(--bd);
 background:var(--bg2);overflow:auto;padding:10px;
 box-shadow:-14px 0 36px rgba(0,0,0,.2)}
@@ -248,7 +305,8 @@ table.grid td{padding:3px 4px;vertical-align:middle}
 details{margin:6px 0;border:1px solid var(--bd);border-radius:8px;padding:6px 10px}
 details summary{cursor:pointer;color:var(--dim);font-weight:600}
 details[open] summary{margin-bottom:6px;color:var(--fg)}
-label.tgl{display:flex;gap:4px;align-items:center;font-size:12px;color:var(--dim)}
+label.tgl{display:flex;gap:5px;align-items:center;flex:0 0 auto;font-size:12px;color:var(--dim);cursor:pointer;user-select:none}
+label.tgl input{margin:0}
 .ff{margin:4px 0}
 .ff>label{display:block;color:var(--dim);font-size:12px;margin-bottom:2px}
 .dd-panel{position:absolute;background:var(--bg3);border:1px solid var(--acc);
@@ -353,7 +411,9 @@ border-radius:10px;background:rgba(25,32,46,.42)}
      between here and 680px (body has overflow:hidden), clipping the
      right-hand icon buttons entirely -- move the header's own scroll
      out of the narrower breakpoint below so that dead zone closes. */
-  #top{overflow-x:auto}
+  #top{overflow:hidden}
+  #top-context{max-width:36vw}
+  #topactions{overflow-x:auto}
   #top button{flex:0 0 auto}
 }
 @media(max-width:680px){
@@ -366,17 +426,25 @@ border-radius:10px;background:rgba(25,32,46,.42)}
   #side.open::after{content:"";position:fixed;inset:0 0 0 min(290px,86vw);
     background:rgba(0,0,0,.4);z-index:-1}
   #b-menu{display:inline-flex}
+  #top{padding-inline:8px;gap:6px}
+  #top-context{max-width:132px;flex:0 1 132px}
   #chatname{max-width:120px}
-  /* Visual hint that the button row scrolls -- without it there's no
-     touch-device affordance (no visible scrollbar) suggesting the rest
-     of the header's buttons exist offscreen to the right. */
-  #top{mask-image:linear-gradient(to right,#000 calc(100% - 24px),transparent);
-    -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 24px),transparent)}
+  #framebar{display:none}
+  /* Keep the story title anchored while only the tool strip scrolls. */
+  #topactions{mask-image:linear-gradient(to right,#000 calc(100% - 22px),transparent);
+    -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 22px),transparent)}
   /* "show technical detail" reads fine on a wide header but consumes the
      whole first screenful on a phone before any icon button is reachable
      -- keep the checkbox (still directly usable) but hide its label. */
-  #top label.tgl{gap:0}
-  #top label.tgl > :not(input){display:none}
+  #top label.tgl{position:relative;min-width:32px;min-height:32px;justify-content:center;gap:0;border:1px solid var(--bd);border-radius:var(--control-radius,6px);background:var(--button-bg)}
+  #top label.tgl > span{display:none}
+  #top label.tgl input{position:absolute;opacity:0;pointer-events:none}
+  #top label.tgl::after{content:"▤";font-size:15px;color:var(--dim)}
+  #top label.tgl:has(input:checked){border-color:var(--acc);box-shadow:0 0 0 2px color-mix(in srgb,var(--acc) 18%,transparent)}
+  #top label.tgl:has(input:checked)::after{color:var(--acc)}
+  .story-action{width:38px;min-width:38px;min-height:38px;opacity:1}
+  #send,#stop{min-width:64px}
+  #composer{padding:8px;gap:6px}
   #modalbox,#modalbox.wide{width:98vw;max-height:96vh}
   .memory-fields{grid-template-columns:1fr}
   .memory-fields .full{grid-column:auto}

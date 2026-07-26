@@ -354,6 +354,24 @@ REINT_CHAR_SYS = (
  "and ordinary expression. Values include priority. The self_model "
  "reflects how the character understands themselves. Coping describes "
  "typical behavior under stress.\n\n"
+ # Mirrors generator_character/promote_character in prompts.py. Those two
+ # were given this guidance and this template slot; the import path was
+ # not (it keeps its own schema prompt here), so every imported character
+ # arrived with an empty drive and no standing goals -- i.e. permanently
+ # reactive, with nothing to say about it.
+ "DRIVE is the deepest thing this character lives for -- REQUIRED and "
+ "load-bearing: the engine derives the character's proactive wants from "
+ "it every beat, so a blank drive makes the character passive. essence = "
+ "the core they protect/pursue (concrete, not a platitude); expression = "
+ "how it shows in behavior, INCLUDING their initiative; taboo = the line "
+ "they will not cross. Infer it from the card -- its description, "
+ "personality, scenario and example dialogue all evidence what this "
+ "character wants. Make expression drive ACTION, not just restraint.\n\n"
+ "STANDING GOALS (initial_state.goals) are the character's durable "
+ "objectives -- REQUIRED, 1-3 concrete goals with priority. These are "
+ "what the character proactively pursues turn to turn; without them the "
+ "character only ever reacts to others. Make them active and specific to "
+ "who they are.\n\n"
  "Abilities use honest levels: novice, competent, expert, master, with "
  "scope, limits, and notes. Do not inflate.\n\n"
  "private_history entries include fact_id, content, about_entity, and "
@@ -371,7 +389,9 @@ REINT_CHAR_SYS = (
  "\"hair\":\"\",\"eyes\":\"\",\"distinctive_features\":[]},"
  "\"latent\":[{\"capability\":\"\",\"visible_when\":\"\","
  "\"limits\":\"\"}]},"
- "\"psychology\":{\"traits\":[{\"name\":\"\",\"strength\":0.5,"
+ "\"psychology\":{\"drive\":{\"essence\":\"\",\"expression\":\"\","
+ "\"taboo\":\"\"},"
+ "\"traits\":[{\"name\":\"\",\"strength\":0.5,"
  "\"expression\":\"\"}],"
  "\"values\":[{\"name\":\"\",\"priority\":0.5}],"
  "\"self_model\":{\"summary\":\"\",\"protected_beliefs\":[],"
@@ -439,11 +459,20 @@ def import_character(payload, reinterpret=False):
     elif reinterpret:
         with _silent_provider_stream():
             try:
+                payload_json = json.dumps(source_payload, ensure_ascii=False)
+                # Scale the budget off the card's own volume, the same way
+                # _reinterpret_entries does for lorebook batches. A flat 5000
+                # was fine for a terse card and silently truncating for a long
+                # one -- and a truncated sheet does not fail loudly, because
+                # _jparse's brace repair turns it into a parseable object with
+                # the tail nested in the wrong place (see
+                # character_schema.repair_character_shape).
+                max_tokens = max(5000, int(len(payload_json) / 2))
                 raw = chat_complete(
                     "utility",
                     REINT_CHAR_SYS,
-                    json.dumps(source_payload, ensure_ascii=False),
-                    max_tokens=5000,
+                    payload_json,
+                    max_tokens=max_tokens,
                 )
                 parsed = _jparse(raw)
                 if not parsed:
@@ -496,6 +525,34 @@ def import_character(payload, reinterpret=False):
         )
 
     return cid, sheet
+
+
+def character_import_warnings(sheet):
+    """What is missing from an imported sheet that will make the character
+    read as passive, as a list of human-readable strings.
+
+    psychology.drive is where every proactive want comes from (prompts.py's
+    WANTS AND GOALS rule) and initial_state.goals are the durable objectives
+    on top of it. A card that supplies neither imports cleanly and then only
+    ever reacts -- which looks like a dull character rather than a missing
+    field, so it has to be said out loud at import time. The heuristic
+    (LLM-free) path cannot invent either one by construction.
+    """
+    warnings = []
+    psychology = sheet.get("psychology") or {}
+    drive = psychology.get("drive") or {}
+    if not str(drive.get("essence") or "").strip():
+        warnings.append(
+            "No drive was authored for this character, so they will react "
+            "rather than pursue anything. Add psychology.drive in the "
+            "character editor, or re-import with AI reinterpretation."
+        )
+    if not (sheet.get("initial_state") or {}).get("goals"):
+        warnings.append(
+            "No standing goals were authored, so this character has nothing "
+            "they are trying to achieve between beats."
+        )
+    return warnings
 
 def recover_greetings_from_source(char_id):
     """Backfill opening.greetings for an already-imported character from its

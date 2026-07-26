@@ -1332,6 +1332,28 @@ def _entity_name_from_key(key) -> str:
     return " ".join(w if w.isupper() else w.capitalize() for w in words)
 
 
+def is_derived_entity_name(key, name, kind=None) -> bool:
+    """Would `_fill_entity_names` have invented exactly this name for `key`?
+
+    The recovery below is a repair for a MISSING name, but it is indis-
+    tinguishable downstream from a name the model actually chose -- and a
+    scene merge cannot tell "the Director renamed this" from "the Director
+    sent a state-only diff and validation filled the blank". Live
+    (Elevator Adventure branch 41): a pose-only update to `the_doctor_10`
+    came back named "The Doctor 10" and overwrote "The Doctor", and
+    `tardis_001` overwrote "Blue Police Box" with "Tardis 001". Exposed so
+    spatial._merge_entity can refuse a placeholder that would replace a
+    real name; an explicit rename to some OTHER string still wins.
+    """
+    text = str(name or "").strip()
+    if not text:
+        return False
+    candidates = {_entity_name_from_key(key),
+                  str(kind or "").strip().title(),
+                  "Object"}
+    return text in {c for c in candidates if c}
+
+
 def _fill_entity_names(container) -> None:
     """Give every entity def in `container['entities']` a name, in place."""
     if not isinstance(container, dict):

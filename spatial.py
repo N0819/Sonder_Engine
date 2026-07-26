@@ -5,6 +5,8 @@ import copy
 import re
 from typing import Optional
 
+from schemas import is_derived_entity_name
+
 _BARRIER_ALIASES = {
     "": "wall",
     "none": "open",
@@ -217,7 +219,16 @@ def normalize_scene_bearings(scene: dict) -> dict:
     missing reciprocal; on a CONTRADICTION drop BOTH sides -- never guess which
     was right. Global loop-consistency is deliberately NOT enforced: only
     per-edge-pair reciprocity, the only consistency an observer standing in a
-    room can ever actually test through its doorways."""
+    room can ever actually test through its doorways.
+
+    One room claiming TWO neighbors on the same bearing is inside that scope:
+    an observer standing there and walking west can only arrive in one place.
+    Observed live (Elevator Adventure branch 41) -- west_deep_passage held
+    `dir: "w"` to both west_lower_descent and west_functional_chamber, so
+    egocentric_frame offered two different rooms as "ahead". Same policy as a
+    contradicting reciprocal: drop the bearing from every colliding edge (and
+    its reciprocal, so the next pass cannot re-derive it) and keep the
+    doorways. An unbearing'd exit is merely unplaced; a wrong one is a lie."""
     if not isinstance(scene, dict):
         return scene
     rooms = scene.get("rooms") or {}
@@ -255,6 +266,24 @@ def normalize_scene_bearings(scene: dict) -> dict:
                 back["dir"] = opposite_bearing(fwd_dir)
             elif back_dir and not fwd_dir:
                 edge["dir"] = opposite_bearing(back_dir)
+
+    # Same-bearing collisions, resolved after reciprocity so a bearing this
+    # pass just filled in is judged too.
+    for a_id, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        by_bearing: dict[str, list] = {}
+        for edge in room.get("adjacent") or []:
+            if isinstance(edge, dict) and edge.get("dir"):
+                by_bearing.setdefault(edge["dir"], []).append(edge)
+        for colliding in by_bearing.values():
+            if len(colliding) < 2:
+                continue
+            for edge in colliding:
+                edge.pop("dir", None)
+                back = _find_edge(rooms.get(edge.get("to")), a_id)
+                if back is not None:
+                    back.pop("dir", None)
 
     return scene
 
@@ -975,7 +1004,16 @@ def visible_adjacent_rooms(
 
     return visible
 
-def _merge_room(existing: dict, incoming: dict) -> dict:
+def is_derived_room_name(room_id, name) -> bool:
+    """Is `name` just the room id spelled out -- the placeholder the
+    staged-lore materializers in commit.py and agents/director.py use when a
+    room has to exist before anyone has named it? Such a name must never
+    displace an authored one (see _merge_room)."""
+    text = str(name or "").strip()
+    return bool(text) and text == str(room_id or "").replace("_", " ").title()
+
+
+def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
     """Merge an incoming room redeclaration into an already-known room.
 
     A director/mapping model redeclaring a room to add or change one
@@ -991,8 +1029,12 @@ def _merge_room(existing: dict, incoming: dict) -> dict:
     merged_room = dict(existing)
 
     for field in ("name", "desc", "notes", "parent_entity"):
-        if incoming.get(field):
-            merged_room[field] = incoming[field]
+        if not incoming.get(field):
+            continue
+        if field == "name" and existing.get("name") \
+                and is_derived_room_name(room_id, incoming[field]):
+            continue  # an id slug never overwrites a name someone authored
+        merged_room[field] = incoming[field]
 
     existing_edges = {
         edge.get("to"): dict(edge)
@@ -1012,6 +1054,77 @@ def _merge_room(existing: dict, incoming: dict) -> dict:
         merged_room[key] = value
 
     return merged_room
+
+# Every SceneEntityDef field whose schema default is indistinguishable from
+# "the model did not mention this". A diff carrying one of these cannot be
+# read as an erasure -- see _merge_entity.
+_ENTITY_DEFAULT_FIELDS = {
+    "kind": "object",
+    "description": "",
+    "aliases": [],
+    "portable": False,
+    "container": False,
+    "interior_rooms": [],
+    "ubiquitous": False,
+}
+
+
+def _merge_entity(entity_id, existing: dict, incoming: dict) -> dict:
+    """Merge an incoming entity redeclaration into an already-known entity.
+
+    The exact sibling of _merge_room, and for the same reason: a Director
+    updating one entity's pose has no way to echo back the description,
+    aliases and interior rooms it did not touch. `entities.update(diff)`
+    replaced the whole record instead -- and because validation fills every
+    absent field with a schema default first, the replacement looked
+    complete. Observed live (Elevator Adventure branch 41) on a pose-only
+    diff: "Blue Police Box" (kind vehicle, container, interior_rooms
+    ["tardis_interior_001"]) became "Tardis 001", kind object, no interior;
+    the registered character "The Doctor" became an object named "The
+    Doctor 10". Both then read back corrupted on every later turn.
+
+    So a schema DEFAULT is treated as silence, never as an erasure, and a
+    name the validator derived from the key cannot displace a real one.
+    Deliberate changes still land: any non-default value wins, and
+    genuinely clearing a field goes through remove_entities, not silence.
+    """
+    merged = dict(existing)
+
+    incoming_name = str(incoming.get("name") or "").strip()
+    existing_name = str(existing.get("name") or "").strip()
+    if incoming_name and not (
+        existing_name
+        and is_derived_entity_name(entity_id, incoming_name,
+                                   incoming.get("kind"))
+    ):
+        merged["name"] = incoming_name
+
+    for field, default in _ENTITY_DEFAULT_FIELDS.items():
+        if field not in incoming:
+            continue
+        value = incoming[field]
+        if value == default and existing.get(field, default) != default:
+            continue  # silence, not an erasure
+        merged[field] = value
+
+    # `state` is the live, per-beat half of an entity and is the field a
+    # partial diff most often carries alone: merge key-wise so a pose
+    # update keeps the transit//link state the same entity depends on.
+    incoming_state = incoming.get("state")
+    if isinstance(incoming_state, dict):
+        state = dict(existing.get("state") or {})
+        state.update(incoming_state)
+        merged["state"] = state
+    elif "state" in incoming:
+        merged["state"] = incoming_state
+
+    for key, value in incoming.items():
+        if key == "name" or key == "state" or key in _ENTITY_DEFAULT_FIELDS:
+            continue
+        merged[key] = value
+
+    return merged
+
 
 def _dedupe_adjacent(edges):
     """Collapse adjacency edges that target the same room, keeping the LAST
@@ -1368,13 +1481,20 @@ def merge_scene_with_diff(
                 continue
             existing_room = merged["rooms"].get(room_id)
             merged["rooms"][room_id] = (
-                _merge_room(existing_room, incoming_room)
+                _merge_room(existing_room, incoming_room, room_id)
                 if isinstance(existing_room, dict)
                 else incoming_room
             )
 
     if isinstance(incoming_entities, dict):
-        merged["entities"].update(incoming_entities)
+        for entity_id, incoming_entity in incoming_entities.items():
+            existing_entity = merged["entities"].get(entity_id)
+            merged["entities"][entity_id] = (
+                _merge_entity(entity_id, existing_entity, incoming_entity)
+                if isinstance(existing_entity, dict)
+                and isinstance(incoming_entity, dict)
+                else incoming_entity
+            )
 
     if isinstance(incoming_positions, dict):
         merged["positions"].update(incoming_positions)

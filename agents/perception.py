@@ -109,6 +109,7 @@ from .common import (
     _append_micro_view,
     _append_once,
     _contextual_rooms,
+    _perceptible_entities,
     _dedupe_view_sentences,
     _ensure_environment,
     _fallback_perception_views,
@@ -531,7 +532,7 @@ def perception_establish(ctx, nonce):
 
     payload = {
         "scene": {"location": sc.get("location"), "time": sc.get("time"),
-                  "rooms": sc.get("rooms"), "entities": sc.get("entities")},
+                  "rooms": sc.get("rooms"), "entities": _perceptible_entities(sc)},
         "declared_act": declared,
         "perceivers": awake_perceivers,
         "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
@@ -725,7 +726,7 @@ def perception_act(ctx, nonce):
     payload = {
         "scene": {"location": sc.get("location"), "time": sc.get("time"),
                   "rooms": _contextual_rooms(sc, ctx.cast, p_room),
-                  "entities": sc.get("entities")},
+                  "entities": _perceptible_entities(sc)},
         "declared_act": action_onset,
         "perceivers": awake_perceivers,
         "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
@@ -1129,7 +1130,7 @@ def perception_outcome(ctx, nonce):
         "concealed_actions": concealed,
         "scene": {"location": sc.get("location"), "time": sc.get("time"),
                   "rooms": _contextual_rooms(sc, ctx.cast, p_room),
-                  "entities": sc.get("entities")},
+                  "entities": _perceptible_entities(sc)},
         "perceivers": awake_perceivers,
         "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
         "output_reminder": (

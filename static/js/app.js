@@ -104,20 +104,23 @@ function renderChatSidebar(list, actions) {
   }
 
   for (const chat of S.boot.chats) {
-    list.append(el(
+    const storyName = el("span", {
+      class: "item-label",
+      title: chat.name,
+    }, chat.name);
+    const storyActions = el(
       "div",
       {
-        class: "item" + (chat.id === S.chatId ? " on" : ""),
-        onclick: () => openChat(chat.id)
+        class: "item-actions",
+        role: "group",
+        "aria-label": `Actions for ${chat.name}`,
       },
-      el("span", {}, chat.name),
-      el(
-        "div",
-        { class: "row" },
         el(
           "button",
           {
+            class: "icon-button story-action",
             title: "Rename",
+            "aria-label": `Rename ${chat.name}`,
             onclick: async event => {
               event.stopPropagation();
               const name = await promptModal("Rename story:", chat.name);
@@ -128,7 +131,7 @@ function renderChatSidebar(list, actions) {
               if (S.chat && S.chatId === chat.id) {
                 S.chat.chat.name = trimmed;
                 const header = document.getElementById("chatname");
-                if (header) header.textContent = trimmed;
+                if (header) { header.textContent = trimmed; header.title = trimmed; }
               }
               await boot();
             }
@@ -138,7 +141,9 @@ function renderChatSidebar(list, actions) {
         el(
           "button",
           {
+            class: "icon-button story-action",
             title: "Export",
+            "aria-label": `Export ${chat.name}`,
             onclick: event => {
               event.stopPropagation();
               exportChat(chat.id);
@@ -149,7 +154,9 @@ function renderChatSidebar(list, actions) {
         el(
           "button",
           {
+            class: "icon-button story-action danger",
             title: "Delete",
+            "aria-label": `Delete ${chat.name}`,
             onclick: async event => {
               event.stopPropagation();
 
@@ -170,7 +177,26 @@ function renderChatSidebar(list, actions) {
           },
           "✕"
         )
-      )
+      );
+
+    list.append(el(
+      "div",
+      {
+        class: "item story-item" + (chat.id === S.chatId ? " on" : ""),
+        tabindex: "0",
+        "aria-label": `Open ${chat.name}`,
+        "aria-current": chat.id === S.chatId ? "true" : "false",
+        onclick: () => openChat(chat.id),
+        onkeydown: event => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openChat(chat.id);
+          }
+        },
+      },
+      storyName,
+      storyActions
     ));
   }
 
@@ -432,17 +458,28 @@ function renderCharacterSidebar(list, actions) {
     list.append(el(
       "div",
       {
-        class: "item",
-        onclick: () => charEditor(character)
+        class: "item library-item",
+        tabindex: "0",
+        "aria-label": `Edit ${character.name}`,
+        onclick: () => charEditor(character),
+        onkeydown: event => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            charEditor(character);
+          }
+        },
       },
-      el("span", {}, character.name),
+      el("span", { class: "item-label", title: character.name }, character.name),
       el(
         "div",
-        { class: "row" },
+        { class: "item-actions", role: "group", "aria-label": `Actions for ${character.name}` },
         el(
           "button",
           {
+            class: "icon-button story-action",
             title: "Export",
+            "aria-label": `Export ${character.name}`,
             onclick: event => {
               event.stopPropagation();
               exportCharacter(character.id);
@@ -453,7 +490,9 @@ function renderCharacterSidebar(list, actions) {
         el(
           "button",
           {
+            class: "icon-button story-action danger",
             title: "Delete",
+            "aria-label": `Delete ${character.name}`,
             onclick: async event => {
               event.stopPropagation();
 
@@ -498,17 +537,28 @@ function renderPersonaSidebar(list, actions) {
     list.append(el(
       "div",
       {
-        class: "item",
-        onclick: () => personaEditor(persona)
+        class: "item library-item",
+        tabindex: "0",
+        "aria-label": `Edit ${persona.name}`,
+        onclick: () => personaEditor(persona),
+        onkeydown: event => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            personaEditor(persona);
+          }
+        },
       },
-      el("span", {}, persona.name),
+      el("span", { class: "item-label", title: persona.name }, persona.name),
       el(
         "div",
-        { class: "row" },
+        { class: "item-actions", role: "group", "aria-label": `Actions for ${persona.name}` },
         el(
           "button",
           {
+            class: "icon-button story-action",
             title: "Export",
+            "aria-label": `Export ${persona.name}`,
             onclick: event => {
               event.stopPropagation();
               exportPersona(persona.id);
@@ -519,7 +569,9 @@ function renderPersonaSidebar(list, actions) {
         el(
           "button",
           {
+            class: "icon-button story-action danger",
             title: "Delete",
+            "aria-label": `Delete ${persona.name}`,
             onclick: async event => {
               event.stopPropagation();
 
@@ -569,7 +621,7 @@ function renderLegacyLoreSidebar(list, actions) {
       },
       el(
         "span",
-        {},
+        { class: "item-label", title: book.name },
         book.name,
         " ",
         el(
@@ -638,10 +690,19 @@ async function toggleNSFW() {
 function resizeComposer() {
   const input = $("#input");
   input.style.height = "auto";
-  input.style.height = Math.min(input.scrollHeight, 220) + "px";
+  // The ceiling lives in CSS (#input's max-height) rather than being repeated
+  // here -- it is viewport-relative now, and two copies of the same number
+  // drift the moment one of them is tuned.
+  const max = parseFloat(getComputedStyle(input).maxHeight);
+  input.style.height =
+    Math.min(input.scrollHeight, Number.isFinite(max) ? max : 220) + "px";
 }
 
 $("#input").addEventListener("input", resizeComposer);
+// Story text sizing drives the composer's font, so the height it needs for
+// the same text changes with it. Without this the box keeps the height it
+// computed at the old size until you next type.
+window.addEventListener("sonder-prose-size-change", resizeComposer);
 
 $("#input").addEventListener("keydown", event => {
   if (

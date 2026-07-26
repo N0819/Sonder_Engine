@@ -4,8 +4,10 @@
 <meta charset="utf-8">
 <title>Sonder Engine</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/static/js/theme-init.js"></script>
 <link rel="stylesheet" href="/static/styles.css">
 <link rel="stylesheet" href="/static/lorebooks.css">
+<link rel="stylesheet" href="/static/themes.css">
 </head>
 <body>
 <div id="app">
@@ -22,31 +24,36 @@
 
   <main id="main">
     <header id="top">
-      <button id="b-menu" title="Toggle sidebar">☰</button>
-      <span id="chatname">No story selected</span>
-      <span id="framebar"></span>
+      <button id="b-menu" class="icon-button" title="Toggle sidebar" aria-label="Toggle sidebar">☰</button>
+      <div id="top-context">
+        <span id="chatname" title="Current story">No story selected</span>
+        <span id="framebar"></span>
+      </div>
       <label
         class="tgl"
         title="Shows a detailed technical log of every internal stage as a turn runs, including raw model output. Off by default for a cleaner view — the story plays out exactly the same either way."
       >
         <input type="checkbox" id="streamtgl">
-        show technical detail
+        <span>technical detail</span>
       </label>
-      <span class="spacer"></span>
-      <button id="b-world" title="World state">🌍</button>
-      <button id="b-cast" title="Cast, persona & lorebooks">👥</button>
-      <button id="b-attire" title="Attire">👕</button>
-      <button id="b-dlg" title="Dialogue config">💬</button>
-      <button id="b-style" title="Genre &amp; style">🎭</button>
-      <button id="b-backdrop" title="Scene backdrops">🖼</button>
-      <button id="b-api" title="API connections">⚙ API</button>
-      <button id="b-update" title="Check for updates from GitHub">⬆ Update</button>
-      <button id="b-prompts" title="Prompts">📝</button>
-      <button
-        id="b-nsfw"
-        class="nsfw-btn"
-        title="Toggle uncensored adult content"
-      >NSFW: OFF</button>
+      <div id="topactions" aria-label="Story tools">
+        <button id="b-world" class="icon-button" title="World state" aria-label="World state">🌍</button>
+        <button id="b-cast" class="icon-button" title="Cast, persona and lorebooks" aria-label="Cast, persona and lorebooks">👥</button>
+        <button id="b-attire" class="icon-button" title="Attire" aria-label="Attire">👕</button>
+        <button id="b-dlg" class="icon-button" title="Dialogue configuration" aria-label="Dialogue configuration">💬</button>
+        <button id="b-style" class="icon-button" title="Genre and style" aria-label="Genre and style">🎭</button>
+        <button id="b-backdrop" class="icon-button" title="Scene backdrops" aria-label="Scene backdrops">🖼</button>
+        <button id="b-theme" class="icon-button" title="Appearance and themes" aria-label="Appearance and themes">🎨</button>
+        <button id="b-api" title="API connections" aria-label="API connections">⚙ API</button>
+        <button id="b-update" title="Check for updates from GitHub" aria-label="Check for updates">⬆ Update</button>
+        <button id="b-prompts" class="icon-button" title="Prompts" aria-label="Prompts">📝</button>
+        <button
+          id="b-nsfw"
+          class="nsfw-btn"
+          title="Toggle uncensored adult content"
+          aria-label="Toggle uncensored adult content"
+        >NSFW: OFF</button>
+      </div>
     </header>
 
     <div id="msgs">
@@ -64,12 +71,18 @@
     <div id="live" class="hidden"></div>
 
     <div id="composer">
-      <textarea
-        id="input"
-        placeholder="Act, speak, or leave empty to establish the scene… (Ctrl+Enter to send)"
-      ></textarea>
-      <button id="send">Send ➤</button>
-      <button id="stop" class="hidden">■ Stop</button>
+      <!-- The inner wrapper carries the measure so the field lines up with
+           the prose column above it; #composer stays full-bleed so its top
+           border and background still span the window. -->
+      <div id="composer-inner">
+        <textarea
+          id="input"
+          aria-label="Story input"
+          placeholder="Act, speak, or leave empty to establish the scene… (Ctrl+Enter to send)"
+        ></textarea>
+        <button id="send" class="primary">Send ➤</button>
+        <button id="stop" class="danger hidden">■ Stop</button>
+      </div>
     </div>
   </main>
 
@@ -80,7 +93,7 @@
   <div id="modalbox">
     <div id="modalhead">
       <span id="modaltitle"></span>
-      <button id="modalx">✕</button>
+      <button id="modalx" class="icon-button ghost" title="Close" aria-label="Close dialog">✕</button>
     </div>
     <div id="modalbody"></div>
   </div>
@@ -105,6 +118,7 @@
 <script src="/static/js/backdrops.js"></script>
 <script src="/static/js/chat.js"></script>
 <script src="/static/js/settings.js"></script>
+<script src="/static/js/themes.js"></script>
 <script src="/static/js/app.js"></script>
 </body>
 </html>

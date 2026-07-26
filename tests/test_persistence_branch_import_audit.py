@@ -334,3 +334,47 @@ def test_fixed_point_create_rejects_a_foreign_chats_frame(temp_db):
     with pytest.raises(HTTPException) as exc:
         app.fixed_points_create(chat_b, {"entity_id": "e", "label": "L", "frame_id": foreign})
     assert exc.value.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Branch lineage -- so a branch can find the source chat's scene backdrops
+# ---------------------------------------------------------------------------
+
+def test_branch_records_its_source_chat(temp_db):
+    """A branch inherits the source's whole scene graph, so the rooms it opens
+    in are the rooms the source already paid to draw. Recording the ancestry
+    is what lets backdrops.py read those images where they lie instead of
+    regenerating the inheritance room by room."""
+    import backdrops
+
+    chat_id = _make_chat(temp_db, "Elevator Adventure")
+    tid = _make_turn(temp_db, chat_id, idx=0)
+    ensure_checkpoint(chat_id, 0)
+
+    ncid = app.turn_branch(tid)["id"]
+    assert backdrops.branch_lineage(ncid) == [chat_id]
+
+    # Transitive: branching the branch keeps reaching the original, which is
+    # where the pictures actually are.
+    ntid = temp_db.q("SELECT id FROM turns WHERE chat_id=? AND idx=0",
+                     (ncid,), one=True)["id"]
+    third = app.turn_branch(ntid)["id"]
+    assert backdrops.branch_lineage(third) == [ncid, chat_id]
+
+
+def test_a_fresh_chat_inherits_no_backdrops(temp_db):
+    """Reuse follows the branch lineage and nothing else."""
+    import backdrops
+    assert backdrops.branch_lineage(_make_chat(temp_db, "New story")) == []
+
+
+def test_import_does_not_carry_branch_lineage(temp_db):
+    """The lineage holds raw chat ids, which name a directory of backdrops in
+    the database they were written in and an unrelated chat's in any other."""
+    import backdrops
+
+    chat_id = _make_chat(temp_db, "Elevator Adventure")
+    temp_db.qi("UPDATE chats SET branched_from=? WHERE id=?", ("[41]", chat_id))
+    export = app.chat_export(chat_id)
+    imported = app.chat_import({"data": export})
+    assert backdrops.branch_lineage(imported["id"]) == []

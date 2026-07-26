@@ -1,5 +1,242 @@
 # Changelog
 
+## alpha4.2 — The corridor stops going on forever
+
+Findings from auditing a 93-turn live chat ("Elevator Adventure ⎇41"), where
+the player spent twenty consecutive turns walking forward down a condemned
+passage and kept arriving somewhere they had already been — in character:
+"Does this corridor go on forever?", "How long is this hallway............".
+
+### Fixed
+- **A partial entity diff no longer erases the rest of the entity.**
+  `merge_scene_with_diff` replaced `scene.entities` wholesale where rooms got
+  `_merge_room`, and validation had already filled every absent field with a
+  schema default — so a Director pose-only update looked like a complete
+  record. A vehicle with an interior became a nameless object, and a
+  registered character became "The Doctor 10", kind `object`, on the turn
+  after it was committed correctly. Entities now merge field-aware: a schema
+  default is silence, never an erasure, and a name the validator derived from
+  the dict key cannot displace one someone authored. Deliberate changes still
+  land; clearing goes through `remove_entities`, as before.
+- **Walking forward no longer walks you backward.** The room graph is
+  undirected, so "keep going" and "turn back" name the same two doorways, and
+  `director_interpret` was never shown the mover's heading. It now gets
+  `player.exits` (ahead / behind / came_from, derived from the same
+  `egocentric_frame` perception already uses) plus a prompt rule to match.
+  Tightening the deterministic backstop was tried and reverted: it validates
+  reachability only, but requiring corroboration for a multi-room walk breaks
+  the contract `test_director_movement_routes.py` pins, where a legitimate
+  three-hop walk through open doorways must commit or the narrator describes
+  arriving while the position never moves. Direction is enforced by giving the
+  Director the heading, not by rejecting reachable destinations.
+- **A room can no longer offer two different neighbours on one bearing.**
+  Adjacency deduped by target but not by direction, so one room held `dir: "w"`
+  to two rooms and "ahead" was ambiguous. Colliding bearings are dropped from
+  both edges and their reciprocals, keeping the doorways — the same policy a
+  contradicting reciprocal already had.
+- **Perception no longer receives object lookup vocabulary.** Entity `aliases`
+  and dict keys exist for `_name_to_entity_id` to match against; an observer
+  has no way to acquire them. A character's own view named a thing "the
+  TARDIS" — a word she had never heard — in the same sentence where the man
+  himself was correctly anonymized as "the lean energetic man", because
+  identity scrubbing covers cast and never covered objects. The perception
+  payload now carries only what an observer could take in.
+- **Attire is keyed one way per character.** A character answers to several
+  scene keys (display name, `identity.uid`, aliases) and the Director used
+  whichever it reached for; every reader looks under the display name alone.
+  One character held her clothes under her uid and an empty `wearing` list
+  under her name, rendering as dressed in nothing while her clothing state
+  still read "lab coat ripped at the hem". Records now merge onto the display
+  name — which heals existing saves — and incoming keys are canonicalized.
+  Positions already had both halves of this fix; attire had neither.
+- **A room id no longer overwrites the room's name.** The staged-lore
+  materializers name a new room after its id as a placeholder, and re-ran for
+  rooms that already existed — so an authored "Branching Junction" became
+  "Site17 Deep Shelter Branching Junction" as the player-visible label. They
+  now only materialize genuinely new rooms, and `_merge_room` refuses an id
+  slug that would replace an authored name.
+- **`scene.description` refreshes on relocation.** It was only ever written
+  from `director_establish`, i.e. once on the opening turn, and still
+  described the surface elevator bay 92 turns later. Nothing reads it back
+  today, so this was latent — but it is the sibling of the DW-1 `location`
+  fix and now shares its trigger.
+- **Reader settings survive a reroll or a branch.** NPC autonomy, prose
+  pacing, background life and the style guide live in the chat-scoped `world`
+  table — which is exactly what checkpoints snapshot and what restore wipes
+  and re-inserts. Turning a dial and rerolling that same turn sprang it back,
+  because the checkpoint predated the change; branching took the settings as
+  of the branch point for the same reason. They are not turn-scoped facts, so
+  restore now carries the live values across and branching overlays the
+  source's current ones. Only keys that already exist are preserved, so a
+  fresh chat still inherits from the snapshot. The list is deliberately
+  narrow: ordinary world state is still rolled back.
+- **Imported characters get a drive.** `psychology.drive` is Tier-1 of the
+  goal hierarchy — every proactive want derives from it, so a blank one makes
+  a character purely reactive. The generator and promotion prompts were given
+  the "REQUIRED and load-bearing" guidance; the import path keeps its own copy
+  of the schema prompt and never was, so every imported character arrived
+  passive. It now asks for a drive and standing goals, an import that still
+  lacks them says so instead of failing quietly, and the reinterpret call
+  sizes its token budget off the card's volume the way the lorebook path
+  already did.
+- **A truncated character import no longer hollows out the sheet.** A model
+  response missing one closing brace is repaired by `_jparse` into an object
+  that parses but nests every remaining section under whichever one was left
+  open; `_deep_defaults` then keeps those as unknown keys and backfills the
+  real slots with defaults. The result was a character whose pronouns,
+  aliases, voice, five abilities, whole history, three standing goals and
+  first message sat inert one level down while the engine read an empty
+  sheet — silently. `normalize_character_data` now lifts misplaced sections
+  back out, preferring whichever copy actually carries content, and folds a
+  flat identity back into `identity`. It runs on read, so damaged sheets heal
+  without a migration. Legacy sheets also normalize with a drive slot.
+
+- **A long story or character name stays readable.** Rows ellipsized the title
+  to protect a fixed action column, so the very thing you were choosing from
+  was the part that got cut. The row wraps now: a long name takes the lines it
+  needs and the whole Rename/Export/Delete group drops below it together,
+  still right-aligned and in the same order. Short names keep the single-row
+  layout — `flex-basis:auto` makes the drop conditional, since flexbox breaks
+  lines on max-content width, so no JS width probe is involved.
+- **The composer shares the story's column and its text size.** The transcript
+  was capped at 720px while the composer ran the full window width, so what
+  you typed and what you read were different widths stacked on each other; and
+  the story-text-size control never reached the input, so you could be typing
+  at 13px into a story rendered at 21px. The input now uses the prose face at
+  `--prose-size` and sits in the same centred column as the turns. Prior
+  player inputs in the transcript scale with it too — what the player wrote is
+  fiction, and it was staying at 13px system-ui while the story around it grew.
+  The input's growth ceiling is now a share of the window rather than a flat
+  220px (barely four lines at the largest story size), and it is read from CSS
+  rather than duplicated in JS. Send no longer stretches into a slab as the
+  box grows.
+
+### Changed
+- **The Scroll and Daylight themes were withdrawn**, along with the parchment
+  texture. A regression test keeps them from returning by halves.
+- **LCARS was rebuilt around the actual design language.** It had become a
+  dark theme wearing an 18px/5px opposite-corner radius on every control,
+  which reads as scattered diagonal lines rather than a console. It is now
+  flat colour on true black — no gradients, no texture — with the canonical
+  palette, black ink on every colour block, full-pill controls, an elbowed
+  frame whose spine turns the corner under the header, colour-cycled control
+  banks, and condensed wide-tracked uppercase type. The sidebar keeps a black
+  gutter so its contents clear the spine rather than butting against it, and
+  the tab strip stacks two-by-two — four condensed uppercase labels do not fit
+  a quarter of a 286px sidebar, and clipping a navigation label to keep one
+  row is the wrong trade.
+- **Tavern and Stone actually look like their names now.** Both were dark
+  neutrals with a tint, and both carried a texture that was present in the
+  file and invisible on screen — a 512px tile under a 95–97% opaque wash. The
+  washes come down to roughly half, the tiles tighten so the figure repeats
+  often enough to read at sidebar width, and each gets a crisp CSS grain layer
+  over the photo, since the source images are too soft to carry it alone.
+  Tavern becomes a *lit interior*: surfaces well clear of black, a hearth glow
+  falling across the room, brass fittings and worn-round corners. Stone
+  becomes quarried granite: mid-tones raised to real grey, near-square cut
+  corners, borders darkened into mortar joints, chiselled small-caps headings,
+  and a single warm torch accent to make the grey read as cold.
+- **Tavern is a room with a fire in it, not a brown interface.** Four things
+  were wrong at once and each was hiding the next. The list rows were
+  transparent over the sidebar's own wood, so a single grain ran unbroken
+  through the whole list and slid *underneath* the rows as they scrolled —
+  which reads as a hole in the panel rather than as an object sitting on it;
+  rows and cards are now opaque boards with their own face, eased corners and
+  a lit top edge, and each samples the plank, the grain and the splits at a
+  different offset, so no two boards on screen are cut alike. The grain
+  itself was one evenly spaced repeat — every line parallel, the same weight,
+  the same distance apart, which is the one thing wood never is — and is now
+  two passes on opposed bearings with irregular spacing, so lines converge and
+  separate across the width, with knots on the panelling at intervals that
+  share no factor with the plank tile. Splits run on three different bearings
+  and enter from different edges; a single set of parallel verticals read as
+  panel seams dividing a row rather than as damage in one board. And the light
+  was an even wash across the top, which is a tint rather than a source: there
+  is now one hearth high in the left corner, every surface graded by its own
+  distance from it, and a slow irregular flicker on the part that moves — one
+  compositor-friendly opacity on one fixed layer, frozen (not removed) under
+  `prefers-reduced-motion`. The sidebar footer gives up its own surface: its
+  separate graded background restarted the sidebar's falloff at the seam, so
+  the light stepped down abruptly where the wall should have continued to the
+  floor.
+- **The Lore tab in Tavern is a bookshelf.** Every other tab lists things that
+  live in the story; the Lore tab lists *books*, and the tree it already
+  renders is the same shape as the furniture — a book with children is a book
+  with a shelf under it. So the rows become bound spines: bound edge left,
+  fore-edge right, raised cords under the leather, a tooled gilt rule top and
+  bottom, and five muted leathers on a cycle so a shelf is not one colour
+  repeated. Books touch rather than sitting in a list with gaps, the nesting
+  rail becomes the shelf upright, and the open book is pulled proud of its
+  neighbours and casts onto them. No new markup: `.lore-side-*` exists only in
+  this tab, so nothing else picks up book styling.
+
+### Added
+- **A branch reads the source story's scene backdrops instead of redrawing
+  them.** Backdrops are cached per chat and keyed by a signature over the
+  room and its visible state — and a branch inherits the entire scene graph,
+  so its rooms hash identically. Only the storage directory differed, so
+  every branch used to regenerate its whole inheritance one room at a time, at
+  full price. A branch now records its ancestry and reads those files where
+  they lie. Nothing is copied: a branch still costs no bytes, which is the
+  point of branching, and a story branched a dozen times would otherwise hold
+  a dozen copies of the same corridor. The ancestry is a plain id list rather
+  than a `parent_chat_id` foreign key because deleting a chat removes its rows
+  and leaves its pictures on disk — a cascade-nulled pointer would lose files
+  that are still there. Reuse follows the lineage and nothing else: an
+  unrelated story that hashes a room the same way still draws its own, and
+  import deliberately drops the lineage, since a raw chat id names one
+  directory in the database it was written in and someone else's in any other.
+
+## alpha4.1.3 — Themes get material, and the composer stands out
+
+A follow-up to the first appearance pass: several themes looked good as colour
+palettes but still felt flat, and in some of them the player composer did not
+separate strongly enough from the surrounding chrome. This pass fixes both.
+
+### Improved
+- **Player input contrast is now deliberately stronger across themes.** The
+  composer and the textarea use separate surface tokens, darker or lighter
+  borders per theme, clearer placeholder text, and a more obvious raised field
+  so the place you type reads as an active control instead of another panel.
+- **Themed surfaces now use material textures instead of mostly flat fills**
+  where that makes aesthetic sense. Tavern uses wood grain, Scroll uses a
+  parchment texture, Stone uses a slate texture, and LCARS gets a subtle
+  console-panel grain rather than a plain dark slab.
+- **Theme copy was updated to match the more tactile look.**
+
+### Added
+- **Texture assets** under `static/assets/theme-textures/`, with regression
+  coverage so the themed surfaces and contrast tokens remain part of the UI
+  contract instead of an incidental visual tweak.
+
+## alpha4.1.2 — The interface gets dressed too
+
+This pass focuses on the part of the engine a reader touches every turn. The
+existing Sonder look remains the default, but appearance is now a real system
+instead of one hard-coded palette.
+
+### Added
+- **Browser-local themes** under the new 🎨 Appearance control: Sonder, Tavern,
+  Scroll, LCARS, Stone, Ink, and Daylight. Theme choice is restored before the
+  stylesheet paints, so saved light themes do not flash dark during startup.
+  The same saved appearance carries through the sign-in and guest pages.
+- **Independent story-text sizing** (compact through extra large). This changes
+  the fiction transcript without inflating every editor and toolbar control.
+
+### Improved
+- **Story, character, and persona rows now reserve a fixed action column.** A
+  one-letter title and a paragraph-length title place Rename, Export, and Delete
+  in exactly the same position; long names ellipsize instead of shoving or
+  wrapping controls. Rows are also keyboard-openable and their icon buttons now
+  have explicit accessible labels.
+- **The header is structurally responsive.** The story title stays anchored
+  while only the tool strip scrolls, rather than allowing the entire header to
+  drift offscreen. The technical-detail toggle becomes a proper icon control on
+  phones, and story tools keep usable touch targets.
+- **Composer and sidebar actions are easier to hit.** Send is visually primary,
+  Stop is destructive, side-footer actions share available width, and the
+  composer no longer lets its textarea squeeze the action buttons.
+
 ## alpha4.1.1 — Backdrops stop holding the door
 
 Two follow-ups to alpha4.1, both rescued from a parallel implementation of the
