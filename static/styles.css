@@ -297,6 +297,10 @@ align-items:center;min-height:20px}
 .badge.ok{border-color:#365e50;color:#9fe2bc}
 .badge.warn{border-color:#67582f;color:#f1ce75}
 .badge.err{border-color:#71414c;color:#ffadb5}
+/* Where a cast member is standing. Capped so a long room name ("TARDIS ›
+   Secondary Console Room") cannot push the row's buttons off the card. */
+.cast-location{display:inline-flex;align-items:center;min-width:0}
+.cast-room-select{max-width:210px;font-size:12px}
 .chip{display:inline-flex;align-items:center;padding:2px 8px;margin:2px 3px 2px 0;
 border:1px solid #34425a;border-radius:999px;background:#1a2433;
 color:#b7c5dc;font-size:11px}

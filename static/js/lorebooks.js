@@ -462,36 +462,18 @@ async function loadLoreWorkspaceData(selectedId) {
     candidates = (S.boot.lorebooks || [])
       .map(normalizeLoreBook);
   } else {
-    let chatData = S.chat;
-
-    if (
-      !chatData
-      || Number(chatData.chat?.id) !== selectedBook.chat_id
-    ) {
-      chatData = await api(
-        "GET",
-`/api/chats/${selectedBook.chat_id}`
-      );
-    }
-
-    const ids = new Set(
-      (chatData.lorebooks || []).map(book => Number(book.id))
-    );
-    ids.add(selectedBook.id);
-
-    const detailResponses = await Promise.all(
-      [...ids].map(async id => {
-        try {
-          return await api("GET",`/api/lorebooks/${id}`);
-        } catch (error) {
-          return null;
-        }
-      })
+    // Ownership, not reachability. This used to read the chat payload's
+    // `lorebooks`, which is the RETRIEVAL graph (canon + attachments, walked
+    // through parents/children/links) -- so a book the chat owns but that
+    // hangs off nothing was missing from the tree entirely, and a story whose
+    // canon had no children opened as a single lonely book. One request also
+    // replaces the per-book fan-out this used to do.
+    const owned = await api(
+      "GET",
+`/api/chats/${selectedBook.chat_id}/lorebooks`
     );
 
-    candidates = detailResponses
-      .filter(Boolean)
-      .map(item => normalizeLoreBook(item.book));
+    candidates = (owned.lorebooks || []).map(normalizeLoreBook);
   }
 
   if (!candidates.some(book => book.id === selectedBook.id)) {
@@ -1047,6 +1029,23 @@ function renderWorkspaceTree(state, container) {
         { class: "lore-tree-badges" },
         book.canon
           ? el("span", { class: "badge warn" }, "canon")
+          : null,
+        // A book the chat owns but that nothing reaches: no parent in the
+        // tree and not attached, so lore retrieval never walks to it and its
+        // entries can never reach play. Visible and fixable now (drag it onto
+        // a parent) instead of silently inert.
+        book.retrievable === false
+          ? el(
+              "span",
+              {
+                class: "badge",
+                title:
+                  "Unreachable: not attached to this chat and not under a "
+                  + "book that is, so lore retrieval never reads it. Drag it "
+                  + "onto a parent book to connect it."
+              },
+              "unreachable"
+            )
           : null,
         el(
           "span",
@@ -2829,6 +2828,27 @@ function renderLoreGenerator(state, container) {
     }
   );
 
+  // Raises the per-call read timeout above the 300s default. A slow local
+  // model can still be producing tokens when the default expires, and that
+  // shows up as an interruption -- so this is also what a resume needs in
+  // order to be given longer than the attempt that just ran out.
+  const timeoutInput = el(
+    "input",
+    {
+      type: "number",
+      min: "30",
+      max: "3600",
+      step: "30",
+      value: String(state.genTimeout || 300),
+      // Recorded on the state so the recovery banner's Resume can offer the
+      // same allowance. Only an edit counts: an untouched field must not
+      // quietly lower the timeout a recovered run was already running under.
+      oninput: () => {
+        state.genTimeout = Number(timeoutInput.value || 300);
+      }
+    }
+  );
+
   const newBooksInput = el(
     "input",
     { type: "checkbox", checked: "" }
@@ -2850,6 +2870,7 @@ function renderLoreGenerator(state, container) {
   );
 
   const planArea = el("div");
+  const recoveryArea = el("div");
 
   const controls = el(
     "div",
@@ -2858,6 +2879,7 @@ function renderLoreGenerator(state, container) {
     loreField("Mode", modeSelect),
     loreField("Tree depth", depthInput),
     loreField("Target entries", targetInput),
+    loreField("Model timeout (s)", timeoutInput),
     el(
       "div",
       {},
@@ -2912,22 +2934,35 @@ function renderLoreGenerator(state, container) {
                   allow_links: linksInput.checked,
                   allow_updates: updatesInput.checked,
                   preserve_locked:
-                    preserveLockedInput.checked
+                    preserveLockedInput.checked,
+                  timeout:
+                    Number(timeoutInput.value || 300)
                 }
               ),
               {
                 closeModal: false,
                 onSuccess: plan => {
-                  state.plan = normalizeGeneratorPlan(plan);
-                  renderLorePlanPreview(
+                  adoptGeneratorPlan(
                     state,
+                    plan,
+                    planArea,
+                    recoveryArea
+                  );
+                },
+                successMessage: plan =>
+                  generatorPlanMessage(plan),
+                errorPrefix:
+                  "Lorebook planning failed",
+                onError: () => {
+                  // The run left a job row behind holding the request and
+                  // whatever stage completed, so surface the resume offer
+                  // rather than leaving the failure as a dead end.
+                  refreshLoreGenRecovery(
+                    state,
+                    recoveryArea,
                     planArea
                   );
                 },
-                successMessage:
-                  "Lorebook plan generated.",
-                errorPrefix:
-                  "Lorebook planning failed",
                 onFinally: () => {
                   if (button.isConnected) {
                     button.disabled = false;
@@ -2945,11 +2980,15 @@ function renderLoreGenerator(state, container) {
   );
 
   container.append(
+    recoveryArea,
     controls,
     el(
       "div",
       { class: "small dim", style: "margin-top:8px" },
-      "Nothing is written until you review and apply the plan."
+      "Nothing is written until you review and apply the plan. Progress is "
+      + "saved as each batch of entries finishes, so an interrupted run can "
+      + "be resumed here rather than started over — including after closing "
+      + "this window. Raise the timeout for slow local models."
     ),
     planArea
   );
@@ -2957,6 +2996,196 @@ function renderLoreGenerator(state, container) {
   if (state.plan) {
     renderLorePlanPreview(state, planArea);
   }
+
+  refreshLoreGenRecovery(state, recoveryArea, planArea);
+}
+
+// ---- Interrupted-generation recovery ---------------------------------------
+// Generating a tree is many model calls, and the server records each completed
+// one in a job row. That row -- not this tab's memory -- is what survives a
+// closed tab, a dropped connection, or a restarted server, so the generator
+// asks about it every time it opens.
+
+function adoptGeneratorPlan(state, plan, planArea, recoveryArea) {
+  state.plan = normalizeGeneratorPlan(plan);
+  renderLorePlanPreview(state, planArea);
+  refreshLoreGenRecovery(state, recoveryArea, planArea);
+}
+
+function generatorPlanMessage(plan) {
+  const job = plan?._job;
+  const entries = plan?.entry_ops?.length || 0;
+
+  if (job?.status === "interrupted") {
+    return (
+      `Generation stopped early — ${entries} entries planned so far. `
+      + "Resume to finish the rest."
+    );
+  }
+
+  return `Lorebook plan generated (${entries} entries).`;
+}
+
+function loreGenAgo(epochSeconds) {
+  const seconds = Math.max(
+    0,
+    Math.round(Date.now() / 1000 - (Number(epochSeconds) || 0))
+  );
+
+  if (seconds < 90) {
+    return "moments ago";
+  }
+  if (seconds < 5400) {
+    return `${Math.round(seconds / 60)} minutes ago`;
+  }
+  if (seconds < 172800) {
+    return `${Math.round(seconds / 3600)} hours ago`;
+  }
+
+  return `${Math.round(seconds / 86400)} days ago`;
+}
+
+async function refreshLoreGenRecovery(state, container, planArea) {
+  container.innerHTML = "";
+
+  let job;
+  try {
+    const response = await api(
+      "GET",
+      `/api/lorebooks/${state.selected.id}/generate_job`
+    );
+    job = response.job;
+  } catch (error) {
+    // Recovery is an offer, not a requirement -- a failed lookup must not
+    // break the generator tab itself.
+    return;
+  }
+
+  if (!job || !container.isConnected) {
+    return;
+  }
+
+  // Already showing this job's own plan, and there is nothing left to do
+  // with it: no banner.
+  if (job.restorable && state.plan?._job?.id === job.id) {
+    return;
+  }
+
+  const progress = job.entries_total
+    ? `${job.entries_done} of ${job.entries_total} entries generated. `
+    : "";
+
+  if (job.running) {
+    container.append(el(
+      "div",
+      { class: "card lore-gen-recovery" },
+      el("div", { class: "section-title" }, "Generation in progress"),
+      el(
+        "div",
+        { class: "small dim" },
+        `Started ${loreGenAgo(job.created)} on the server. ${progress}`
+        + "It keeps running even if you close this window."
+      ),
+      el(
+        "div",
+        { class: "row" },
+        el(
+          "button",
+          {
+            onclick: event => buttonTask(
+              event.currentTarget,
+              "Checking…",
+              () => refreshLoreGenRecovery(state, container, planArea)
+            )
+          },
+          "Check progress"
+        )
+      )
+    ));
+    return;
+  }
+
+  if (!job.restorable && !job.resumable) {
+    return;
+  }
+
+  const heading = job.restorable
+    ? "A finished plan was never applied"
+    : "A generation run stopped before finishing";
+
+  const detail = job.restorable
+    ? `Generated ${loreGenAgo(job.updated)}. ${progress}`
+      + "Nothing was written to your lorebook."
+    : `Stopped ${loreGenAgo(job.updated)}. ${progress}`
+      + (job.error || "")
+      + " Resuming keeps everything already generated and re-runs only the rest.";
+
+  const actions = el("div", { class: "row" });
+
+  actions.append(el(
+    "button",
+    {
+      class: "primary",
+      onclick: event => buttonTask(
+        event.currentTarget,
+        job.restorable ? "Restoring…" : "Resuming…",
+        async () => {
+          const plan = await api(
+            "POST",
+            `/api/lore_gen_jobs/${job.id}/resume`,
+            // Omitted unless the generator's timeout field was edited: the
+            // run otherwise keeps whatever allowance it was started with.
+            { timeout: state.genTimeout }
+          );
+          adoptGeneratorPlan(state, plan, planArea, container);
+          toast(generatorPlanMessage(plan), "ok");
+        }
+      )
+    },
+    job.restorable ? "Restore plan" : "Resume generation"
+  ));
+
+  actions.append(el(
+    "button",
+    {
+      onclick: event => buttonTask(
+        event.currentTarget,
+        "Discarding…",
+        async () => {
+          await api("DELETE", `/api/lore_gen_jobs/${job.id}`);
+          if (state.plan?._job?.id === job.id) {
+            state.plan = null;
+            planArea.innerHTML = "";
+          }
+          await refreshLoreGenRecovery(state, container, planArea);
+        }
+      )
+    },
+    "Discard"
+  ));
+
+  const card = el(
+    "div",
+    { class: "card lore-gen-recovery" },
+    el("div", { class: "section-title" }, heading),
+    el("div", { class: "small dim" }, detail),
+    actions
+  );
+
+  if (job.stage_errors?.length) {
+    card.append(el(
+      "details",
+      { class: "small dim" },
+      el(
+        "summary",
+        {},
+        `${job.stage_errors.length} batches returned unusable output`
+      ),
+      el("pre", { class: "lore-plan-json" }, job.stage_errors.join("\n"))
+    ));
+  }
+
+  container.append(card);
 }
 
 function normalizeGeneratorPlan(plan) {
@@ -3013,6 +3242,19 @@ function renderLorePlanPreview(state, container) {
       allOps.filter(operation => operation._accepted).length
     )
   );
+
+  // A partial plan is still a usable plan: say plainly that it is incomplete
+  // rather than letting it look like the whole intended tree.
+  if (plan._job?.status === "interrupted" && plan._job.entries_remaining > 0) {
+    summary.append(el(
+      "div",
+      { class: "small dim full" },
+      `Incomplete: ${plan._job.entries_remaining} of `
+      + `${plan._job.entries_total} planned entries were not generated. `
+      + "Resume first to finish the rest — applying this plan retires the "
+      + "run, and the missing entries would then need a fresh generation."
+    ));
+  }
 
   const analysisCard = el(
     "details",
@@ -3120,7 +3362,9 @@ function renderLorePlanPreview(state, container) {
             const result = await api(
               "POST",
 `/api/lorebooks/${state.selected.id}/apply_plan`,
-              { plan: accepted }
+              // job_id retires the generation run: once its entries are real
+              // lore, it must stop being offered as recoverable work.
+              { plan: accepted, job_id: plan._job?.id }
             );
 
             toast(
@@ -3310,7 +3554,9 @@ function stripPlanUIFields(value) {
     const result = {};
 
     for (const [key, item] of Object.entries(value)) {
-      if (key === "_accepted") {
+      // _accepted is preview bookkeeping; _job is the generation job the plan
+      // arrived on. Neither is part of the plan the server applies.
+      if (key === "_accepted" || key === "_job") {
         continue;
       }
 

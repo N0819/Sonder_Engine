@@ -1017,7 +1017,11 @@ from memory import (
     get_lorebook_links, restore_lorebook_links,
     LOREBOOK_LINK_TYPES,
 )
-from importers import generate_lorebook_plan, apply_lorebook_plan
+from importers import (
+    generate_lorebook_plan, apply_lorebook_plan, resume_lorebook_plan,
+    recoverable_lore_gen_job, lore_gen_job, cancel_lore_gen_job,
+    mark_lore_gen_job_applied, LoreGenError,
+)
 
 @app.post("/api/lorebooks/{lid}/move")
 def lorebook_move(lid: int, body: dict = Body(...)):
@@ -1036,6 +1040,61 @@ def lorebook_reorder(lid: int, body: dict = Body(...)):
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"ok": True}
+
+@app.get("/api/chats/{cid}/lorebooks")
+def chat_lorebooks_owned(cid: int):
+    """Every lorebook this chat OWNS, plus the library books attached to it.
+
+    Deliberately not `chat_lorebook_ids()`. That answers the retrieval
+    question -- "which books may this chat draw lore from" -- by resolving
+    outward from canon plus attachments through parents, children and links.
+    A book the chat owns that hangs off nothing (parent_id NULL and no
+    chat_lorebooks row) is unreachable by that walk, so the browser built on
+    it could not show the book at all: a story whose canon had no children
+    rendered as a single book, with its vehicle/location books missing
+    entirely. Ownership is the right question for an editor, and unlike
+    reachability it cannot orphan anything.
+
+    `retrievable` reports the other question honestly per book, because a book
+    that is visible here but unreachable is a book the pipeline will never
+    draw lore from -- worth seeing rather than guessing at.
+    """
+    chat = q("SELECT id, lorebook_id FROM chats WHERE id=?", (cid,), one=True)
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+
+    canon = chat["lorebook_id"]
+    attachments = {
+        r["lorebook_id"]: bool(r["enabled"])
+        for r in q(
+            "SELECT lorebook_id, enabled FROM chat_lorebooks WHERE chat_id=?",
+            (cid,),
+        )
+    }
+    retrievable = set(chat_lorebook_ids(cid, enabled_only=False))
+
+    rows = q(
+        "SELECT lb.*, ("
+        " SELECT COUNT(*) FROM lore_entries le WHERE le.lorebook_id = lb.id"
+        ") AS entry_count "
+        "FROM lorebooks lb "
+        "WHERE lb.chat_id = ? "
+        "   OR lb.id IN (SELECT lorebook_id FROM chat_lorebooks WHERE chat_id = ?) "
+        "   OR lb.id = ? "
+        "ORDER BY lb.parent_id IS NULL DESC, lb.sort_order, lb.id",
+        (cid, cid, canon),
+    )
+
+    books = []
+    for lb in rows:
+        book = dict(lb)
+        book["canon"] = lb["id"] == canon
+        book["attached"] = lb["id"] in attachments
+        book["enabled"] = attachments.get(lb["id"], True)
+        book["retrievable"] = lb["id"] in retrievable
+        books.append(book)
+
+    return {"lorebooks": books}
 
 @app.get("/api/lorebooks/{lid}/links")
 def lorebook_links_get(lid: int):
@@ -1088,10 +1147,54 @@ def lorebook_generate_plan(lid: int, body: dict = Body(default={})):
             allow_links=body.get("allow_links", True),
             allow_updates=body.get("allow_updates", True),
             preserve_locked=body.get("preserve_locked", True),
+            timeout=body.get("timeout"),
         )
+    except LoreGenError as exc:
+        # The run produced nothing usable, but its job row survives with the
+        # request and any completed stage, so point the client at the resume
+        # instead of just reporting a dead end.
+        raise HTTPException(502, f"Lore generation failed: {exc} (resumable)") from exc
     except Exception as exc:
         raise HTTPException(502, f"Lore generation failed: {exc}") from exc
     return plan
+
+@app.get("/api/lorebooks/{lid}/generate_job")
+def lorebook_generate_job(lid: int):
+    """The newest generation run for this book that is still recoverable.
+
+    This is the channel that survives a closed tab or a restarted server: the
+    plan lives in the job row, not in the browser, so reopening the generator
+    can offer to resume or restore it.
+    """
+    _require_lorebook(lid)
+    return {"job": recoverable_lore_gen_job(lid)}
+
+@app.post("/api/lore_gen_jobs/{job_id}/resume")
+def lorebook_generate_resume(job_id: int, body: dict = Body(default={})):
+    job = lore_gen_job(job_id)
+    if not job:
+        raise HTTPException(404, "Generation job not found")
+    _require_lorebook(job["lorebook_id"])
+    try:
+        # A read timeout is one of the interruptions being recovered from, so
+        # the retry may be given longer than the attempt that ran out of it.
+        plan = resume_lorebook_plan(job_id, timeout=body.get("timeout"))
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except LoreGenError as exc:
+        raise HTTPException(502, f"Lore generation failed: {exc} (resumable)") from exc
+    except Exception as exc:
+        raise HTTPException(502, f"Lore generation failed: {exc}") from exc
+    return plan
+
+@app.delete("/api/lore_gen_jobs/{job_id}")
+def lorebook_generate_discard(job_id: int):
+    job = lore_gen_job(job_id)
+    if not job:
+        raise HTTPException(404, "Generation job not found")
+    _require_lorebook(job["lorebook_id"])
+    cancel_lore_gen_job(job_id)
+    return {"ok": True}
 
 @app.post("/api/lorebooks/{lid}/apply_plan")
 def lorebook_apply_plan(lid: int, body: dict = Body(...)):
@@ -1099,12 +1202,25 @@ def lorebook_apply_plan(lid: int, body: dict = Body(...)):
     plan = body.get("plan")
     if not plan:
         raise HTTPException(400, "plan is required")
-    
+
     # Ensure book ops are scoped to this lorebook's chat
     book = q("SELECT chat_id FROM lorebooks WHERE id=?", (lid,), one=True)
     chat_id = book["chat_id"] if book else None
-    
-    result = apply_lorebook_plan(plan, chat_id=chat_id)
+
+    # root_id: books/entries whose own reference does not resolve land under
+    # the book this plan was generated for, rather than becoming unreachable
+    # orphans (or being dropped).
+    result = apply_lorebook_plan(plan, chat_id=chat_id, root_id=lid)
+
+    # An applied plan is no longer recoverable work -- retire its job so the
+    # generator does not offer to resume a run whose entries are now real lore.
+    job_id = body.get("job_id")
+    if job_id:
+        try:
+            mark_lore_gen_job_applied(int(job_id))
+        except (TypeError, ValueError):
+            pass
+
     return {"ok": True, "result": result}
 
 @app.post("/api/lorebooks/import")
@@ -2151,6 +2267,133 @@ def chat_del_char(cid: int, ch: int):
     pend.append({"type": "departure", "who": name})
     wset(cid, "pending", pend)
     return {"ok": True}
+
+@app.get("/api/chats/{cid}/positions")
+def chat_positions_get(cid: int):
+    """Where everyone in this story currently stands, and the rooms available.
+
+    Read from the scene blob, which is the single runtime source of truth for
+    live positions -- not from `world_placements` (decommissioned) or
+    `world_entities` (a derived projection). See docs/DATABASE.md.
+    """
+    from spatial import room_of
+
+    chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+
+    chat = dict(chat)
+    scene = get_scene(cid, chat)
+    rooms = scene.get("rooms") or {}
+
+    room_list = []
+    for rid, data in rooms.items():
+        data = data if isinstance(data, dict) else {}
+        parent = data.get("parent_entity")
+        entity = (scene.get("entities") or {}).get(parent) or {}
+        room_list.append({
+            "id": rid,
+            "name": data.get("name") or rid,
+            # An interior room (a vehicle's cabin, a building's floor) is
+            # labelled with what it is inside, since "Console Room" alone does
+            # not say which ship.
+            "parent_entity": parent,
+            "parent_name": (entity.get("name") or parent) if parent else None,
+        })
+    room_list.sort(key=lambda r: (r["parent_name"] or "", r["name"]))
+
+    characters = []
+    for row in q(
+        "SELECT cc.char_id AS id, cc.status AS status, ch.name AS name "
+        "FROM chat_chars cc JOIN characters ch ON ch.id = cc.char_id "
+        "WHERE cc.chat_id=? ORDER BY ch.name",
+        (cid,),
+    ):
+        characters.append({
+            "id": row["id"],
+            "name": row["name"],
+            "status": row["status"],
+            "room": room_of(scene, row["name"]),
+        })
+
+    # persona_of returns a normalized SHEET (name at identity.name), and falls
+    # back to "The Stranger" when no persona is attached -- which is the name
+    # the pipeline itself uses, so it is the name the scene is keyed by. Shown
+    # read-only: the player's own position is the story's business, not an
+    # authoring dropdown's.
+    player = persona_name(persona_of(chat))
+
+    return {
+        "rooms": room_list,
+        "characters": characters,
+        "persona": {"name": player, "room": room_of(scene, player)},
+        "location": scene.get("location") or "",
+    }
+
+@app.put("/api/chats/{cid}/characters/{ch}/position")
+def chat_char_position_put(cid: int, ch: int, body: dict = Body(...)):
+    """Move a character to another room in the current scene.
+
+    An authoring action, deliberately silent: like the world editor and the
+    attire editor, it edits state and does not narrate. Nothing is queued for
+    the narrator, so if the move should be seen in the fiction, write it.
+
+    Room ids are validated against the scene rather than trusted -- a position
+    naming a room that does not exist would leave the character nowhere that
+    perception, adjacency, or the narrator can reason about. An empty room
+    means offscreen (no position at all), which is a legitimate state.
+    """
+    from spatial import room_of
+
+    chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+
+    char = q("SELECT name FROM characters WHERE id=?", (ch,), one=True)
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not q(
+        "SELECT 1 FROM chat_chars WHERE chat_id=? AND char_id=?", (cid, ch),
+        one=True,
+    ):
+        raise HTTPException(404, "That character is not in this story")
+
+    # The pipeline reads and rewrites positions throughout a turn; editing them
+    # underneath a running one would either corrupt the scene or be silently
+    # overwritten by the commit. Same guard the world editor uses.
+    _require_chat_idle(cid)
+
+    room = str(body.get("room") or "").strip()
+    scene = get_scene(cid, dict(chat))
+    rooms = scene.get("rooms") or {}
+    if room and room not in rooms:
+        raise HTTPException(
+            400,
+            f"No room '{room}' in this scene. "
+            f"Known rooms: {', '.join(sorted(rooms)) or '(none)'}",
+        )
+
+    positions = scene.setdefault("positions", {})
+    name = char["name"]
+
+    # room_of resolves a name case- and punctuation-insensitively, so the key
+    # already in the scene may not be spelled the way the character row is.
+    # Rewrite THAT key rather than adding a second spelling: two keys for one
+    # person puts them in two rooms at once for every reader that walks
+    # positions to find a room's occupants.
+    existing_keys = [
+        key for key in positions
+        if re.sub(r"[^a-z0-9]", "", str(key).lower().strip())
+        == re.sub(r"[^a-z0-9]", "", name.lower().strip())
+    ]
+    for key in existing_keys:
+        positions.pop(key)
+
+    if room:
+        positions[name] = room
+
+    wset(cid, "scene", scene)
+    return {"ok": True, "name": name, "room": room or None}
 
 @app.get("/api/chats/{cid}/characters/{ch}/private_history")
 def ph_get(cid: int, ch: int):

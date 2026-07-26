@@ -280,10 +280,22 @@ function renderCastTab(d, b) {
   );
 
   b.append(el("h4", {}, "Participants"));
+
+  // Filled in by hydrateCastLocations once the scene has been read: the room
+  // list lives in the scene blob, not in the chat payload this tab renders
+  // from, so the row is drawn first and the control dropped in after.
+  const locationSlots = new Map();
+  const sceneSlot = el("div", { class: "small dim" });
+  b.append(sceneSlot);
+
   for (const p of d.participants) {
+    const locationSlot = el("span", { class: "cast-location" });
+    locationSlots.set(p.id, locationSlot);
+
     b.append(el("div", { class: "card row" },
       el("b", {}, p.name),
       el("span", { class: "badge" }, p.status),
+      locationSlot,
       el("span", { class: "spacer" }),
       el("button", {
         onclick: async () => {
@@ -341,6 +353,126 @@ function renderCastTab(d, b) {
   }
 
   b.append(renderBackgroundPresencesPanel());
+
+  hydrateCastLocations(locationSlots, sceneSlot);
+}
+
+// ---- Character relocation --------------------------------------------------
+// Moving someone is an authoring edit, not a story beat: it changes the scene
+// and narrates nothing, exactly like the world and attire editors. The scene
+// blob is the only source of truth for live positions, so this reads and
+// writes there and nowhere else.
+
+async function hydrateCastLocations(slots, sceneSlot) {
+  if (!slots.size || !S.chatId) {
+    return;
+  }
+
+  let data;
+  try {
+    data = await api("GET", `/api/chats/${S.chatId}/positions`);
+  } catch (error) {
+    // Relocation is an addition to this tab, not its purpose -- a failed
+    // lookup must leave the rest of the cast panel working.
+    return;
+  }
+
+  const rooms = data.rooms || [];
+
+  // Where the player stands, for orientation only. Moving the player is the
+  // story's business, not an authoring dropdown's.
+  if (sceneSlot?.isConnected && data.persona) {
+    const here = rooms.find(r => r.id === data.persona.room);
+    sceneSlot.textContent = data.location
+      ? `${data.location} — ${data.persona.name} is `
+        + (here ? `in ${castRoomLabel(here)}.` : "not placed in a room.")
+      : "";
+  }
+
+  for (const [charId, slot] of slots) {
+    if (!slot.isConnected) {
+      continue;
+    }
+
+    slot.innerHTML = "";
+
+    if (!rooms.length) {
+      slot.append(el("span", { class: "small dim" },
+        "no scene yet — nowhere to stand"));
+      continue;
+    }
+
+    const person = (data.characters || [])
+      .find(c => c.id === charId);
+
+    slot.append(castRoomSelect(charId, person, rooms));
+  }
+}
+
+function castRoomLabel(room) {
+  // An interior room is named with what it is inside: "Console Room" alone
+  // does not say which ship.
+  return room.parent_name
+    ? `${room.parent_name} › ${room.name}`
+    : room.name;
+}
+
+function castRoomSelect(charId, person, rooms) {
+  const current = person?.room || "";
+  // The last value the server accepted, which is what a failed move reverts
+  // to -- not the room they were in when this dropdown was built, which goes
+  // stale the moment one move succeeds.
+  let settled = current;
+
+  const select = el("select", {
+    class: "cast-room-select",
+    title: "Which room this character is in"
+  },
+    el("option", {
+      value: "",
+      ...(current ? {} : { selected: "" })
+    }, "— offscreen —"),
+    ...rooms.map(room => el("option", {
+      value: room.id,
+      ...(current === room.id ? { selected: "" } : {})
+    }, castRoomLabel(room)))
+  );
+
+  select.onchange = async () => {
+    const target = select.value;
+    const room = rooms.find(r => r.id === target);
+
+    select.disabled = true;
+    try {
+      await api(
+        "PUT",
+        `/api/chats/${S.chatId}/characters/${charId}/position`,
+        { room: target }
+      );
+
+      if (person) {
+        person.room = target || null;
+      }
+      settled = target;
+
+      toast(
+        target
+          ? `Moved ${person?.name || "character"} to `
+            + `${room ? castRoomLabel(room) : target}.`
+          : `${person?.name || "Character"} is now offscreen.`,
+        "ok"
+      );
+    } catch (error) {
+      // Never leave the dropdown asserting a move the server refused (a
+      // running pipeline, a room that vanished).
+      select.value = settled;
+      toast(error?.message || String(error), "err", 8000);
+    } finally {
+      select.disabled = false;
+    }
+  };
+
+  return select;
 }
 
 function renderLorebooksTab(d, b) {
