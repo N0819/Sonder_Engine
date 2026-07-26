@@ -1,1534 +1,546 @@
-# Sonder Engine Design
+# Sonder Engine — Design
 
-## Multi-Agent Sonder Engine — Current Architecture and Product Philosophy
+## What this document is
 
-**Document status:** Living architecture specification
-**Revision date:** July 21, 2026 (claims re-verified against the implementation on this date)
-**Purpose:** Define the engine’s philosophy, current behavior, invariants, implemented capabilities, known weaknesses, and development priorities.
+The architectural record: what the engine is for, what is actually built, what
+is partly built, what is not built, and what should be built next.
 
-## Product thesis
+**The honesty rule.** The previous edition of this file grew past 1,500 lines
+and drifted far enough from the code that `CLAUDE.md` had to warn readers to
+verify it before trusting it — which made it a liability rather than a
+reference. This edition was written by checking claims against source, and it
+carries a conformance table precisely so drift becomes visible instead of
+buried.
 
-The Sonder Engine produces interactive fiction by maintaining a persistent world, routing information through explicit epistemic boundaries, and allowing independently modeled characters to act from their own perceptions, memories, relationships, knowledge, and beliefs.
+Every "Built" claim below was verified against code, not against another
+document. Where verification was partial, it says so. When you change
+behaviour, change the status row in the same commit; a row that is wrong is
+worse than a row that is missing. The previous edition is in git history.
 
-Story is not generated from a single omniscient conversation context. It emerges from a pipeline that separately determines:
+`AGENTS.md` is the operational guide (edit routing, invariants, workflow).
+`docs/PIPELINE.md` is the stage-by-stage execution reference. `docs/DATABASE.md`
+is the schema and change checklist. This file is the *why*, the status, and the
+roadmap — do not duplicate the other three here.
 
-- What the player declared.
-- What information is relevant to the current situation.
-- What each character could perceive.
-- What each character chooses to do.
-- What objectively happens.
-- What each observer experiences afterward.
-- What the player is told.
-- What persists into world state, memory, and canon.
+---
 
-The engine’s defining goal is:
+## Thesis
 
-> Produce coherent interactive fiction without granting fictional minds access to information they did not legitimately perceive, learn, remember, or infer.
+The engine produces long-form interactive fiction by **simulating people and a
+world honestly, and letting story be the residue rather than the target**. No
+agent is trying to be entertaining.
 
-Epistemic integrity is necessary but not sufficient. The engine also treats causal, identity, temporal, authority, and transactional integrity as parts of coherence: correct information routing cannot rescue a world whose state only half-committed or whose representations disagree.
+One layer computes what objectively happens. One computes what each mind could
+register of it. One predicts what each person does given their psychology. One
+renders the player's slice as prose. Secrets, betrayal, dramatic irony and false
+belief are authored nowhere — they fall out of the simulation the moment the
+bookkeeping is honest enough to make *absence of knowledge* computable.
 
-The engine does not attempt to eliminate omniscience entirely. Objective resolution requires privileged infrastructure. Instead, omniscience is moved outside the fictional world and assigned to narrowly defined systems:
+The north star is **coherence without omniscience, not realism**. Realism is
+expensive and often anti-dramatic. What the engine guarantees is narrower and
+more valuable: a world that holds together *and* contains no mind that knows
+more than it should. That second property is the soil dramatic irony grows in,
+and it is the thing a single context window structurally cannot provide.
 
-- The Director may inspect objective state so it can resolve causality.
-- Mapping may inspect canon so it can maintain world coherence.
-- The user may inspect any layer through director tools.
-- Fictional characters receive only their own legitimate cognitive contexts.
-- The Narrator receives only the player-facing slice required to render prose.
+The player **is** the protagonist. No agent models the player's interior — the
+player's own mind supplies it live, every turn. The engine exists to give that
+mind a believable, causally honest, selectively ignorant world to act in, and to
+hand the player the dials to shape it.
 
-This creates a deliberate asymmetry:
+### The two principles everything else serves
 
-> Infrastructure may know the world. Characters may know only their experience of it.
+1. **Structure over instruction.** Anything you want guaranteed must be
+   *impossible to violate*, not merely instructed against. A prompt cannot
+   un-write its own context.
+2. **Auditability.** Every numeric change should be event-linked, every
+   scheduled effect seeded and logged, every resolution recorded. Silent drift
+   is the failure mode being prevented at every layer.
 
-## Core product principles
+[Structural debt](#structural-debt) is an honest account of where the engine
+currently falls short of principle 1. It is the most useful section here.
 
-### Epistemic separation
+### What it fixes
 
-Objective truth, perception, memory, inference, belief, and narration are different forms of information.
+Three failures recur in single-model storytelling, and they are one bug: a
+single context window where everything is epistemically flat, so the model
+conditions on all of it, because that is the only thing a model can do.
 
-They must not be collapsed into a single context.
+- An NPC references a fact it was never told.
+- An NPC treats the player's private thought as spoken dialogue.
+- An NPC reacts to something that happened while it was not present.
 
-A character may:
+None is a discipline failure a model can be instructed out of, because the
+forbidden information is *in the context*. The fix is to never place the
+forbidden thing in the slot: **each mind runs in its own context containing only
+what it legitimately earned, and a filter decides what crosses.**
 
-- Witness an event.
-- Hear an incomplete report.
-- Recall an old experience.
-- Infer a hidden motive.
-- Believe something false.
-- Revise that belief later.
+---
 
-None of these is equivalent to direct access to objective truth.
+## Status at a glance
 
-### Epistemic least privilege
+Conformance against the founding architecture, verified against source at
+alpha4.2.1.
 
-Every agent receives only the information required for its role whenever practical.
-
-The engine does not rely exclusively on instructions such as “pretend not to know this.” It attempts to prevent unavailable information from entering restricted contexts in the first place.
-
-Privileged agents necessarily receive broad information, but their outputs and persistence authority must be constrained.
-
-### Scoped omniscience
-
-The Director and Mapping agents have extensive access, but different authority.
-
-- The Director owns immediate objective causality.
-- Mapping owns retrieval, world organization, and durable canon proposals.
-- Neither owns a character’s private psychology.
-- Neither directly determines what a character perceives.
-- Neither directly writes player-facing narration.
-- Model output does not persist merely because a model proposed it.
-
-Their power is broad within a clearly defined domain.
-
-### Structure over instruction
-
-Important guarantees should be represented through:
-
-- Information routing.
-- Typed payloads.
-- Restricted contexts.
-- Deterministic spatial checks.
-- Schema validation.
-- Mutation validation.
-- Transactions.
-- Stable event identifiers.
-- Checkpoints.
-- Tests.
-
-Prompts remain important, but prompts are behavioral contracts rather than complete security boundaries.
-
-### Progressive concretization
-
-The engine should establish only as much detail as current evidence requires.
-
-An unexplained sound may remain an unexplained sound. It does not immediately need:
-
-- A named source.
-- A complete history.
-- A hidden faction.
-- A mechanic.
-- A future plot role.
-
-World details become more concrete when supported by:
-
-- Player assertions.
-- Existing canon.
-- Resolved consequences.
-- Direct observation.
-- Necessary spatial generation.
-- Validated world expansion.
-
-### User-level dramatic irony
-
-The user may inspect private NPC experiences, memories, appraisals, and beliefs without granting that information to the player character or other NPCs.
-
-This is not a violation of the firewall. It is a supported director-level perspective.
-
-The interface should distinguish:
-
-- What the user knows.
-- What the player character knows.
-- What each NPC knows.
-- What is objectively true.
-
-A concrete instance of this exists today as a pair of read-only inspector feeds: a dramatic-irony feed surfaces every non-witnessed memory across the cast (heard, told, inferred, read) in one place, and a promise ledger surfaces every promise-category memory in chronological order. Neither claims to detect that a belief is actually false or that a promise was kept or broken — that judgment is deliberately left to whoever is reading, consistent with the firewall the rest of the engine enforces.
-
-### Simulation before rendering
-
-The Narrator does not determine what happened.
-
-Objective resolution occurs before player-facing prose. The Narrator renders the player’s filtered experience and cannot independently create objective events or additional player conduct.
-
-### Characters declare; the world resolves
-
-Character agents determine:
-
-- What they notice in their supplied view.
-- How they appraise it.
-- What they believe.
-- What they attempt.
-- What they say.
-- Whether they remain silent.
-
-They do not determine:
-
-- Whether their action succeeds.
-- What another character does.
-- What another character thinks.
-- What objectively happened.
-- What the player perceives.
-
-### Capture, do not gate
-
-Generativity is preserved, then tracked — the structure is a ledger, not a cage. The model invents freely; deterministic reconciliation ensures what it invents reaches structured state rather than evaporating. Two seams enforce this. The interpret-side seam checks the player's raw declaration against the interpreted output: a place, object, or event the player asserted that the interpretation dropped is captured, or the interpretation is repaired, before it enters causality. The resolve-side seam checks the resolved prose against the structured diff: a persistent physical change the narration asserts but the diff omits is caught by category-aware, alias-aware coverage and repaired by the Director itself, or surfaced as a warning. Neither seam fabricates state from a heuristic — a wrongly invented fact is worse than a stale missing one — and both rely on omission detection rather than an unwinnable enumeration of world-event vocabulary.
-
-### Persistence is earned
-
-Not every agent should maintain a continuous internal history.
-
-- Perception is stateless.
-- The Narrator retains only limited prose context.
-- The Director uses current structured state and a short causal buffer.
-- Mapping maintains durable canon and world organization.
-- Characters maintain continuous private state and memory.
-
-Persistence belongs primarily to systems representing a continuing world or continuing mind.
-
-### Auditability and recoverability
-
-The engine is too complex to trust as an opaque generation call.
-
-Important outputs should be:
-
-- Structured.
-- Stored by step.
-- Versioned through variants.
-- Inspectable.
-- Rerollable.
-- Editable.
-- Event-linked.
-- Recoverable through checkpoints.
-- Marked stale when upstream assumptions change.
-
-The user should be able to determine why a result occurred and where an incorrect assumption entered the pipeline.
-
-## The information model
-
-The engine maintains several related but distinct information layers.
-
-| Layer | Meaning | Primary owner |
+| Founding commitment | Status | Evidence / gap |
 |---|---|---|
-| Objective state | Rooms, entities, positions, conditions, time, resolved events | Director and commit system |
-| Canon | Durable world facts, mechanics, places, histories, and knowledge | Mapping and lorebooks |
-| Perception | Signals physically delivered to one observer | Perception layer |
-| Character memory | What one character remembers experiencing, hearing, learning, or inferring | Character memory system |
-| Character belief | Fallible hypotheses about entities, emotions, goals, traits, and identity | Character mind models |
-| Relationships | Character-specific trust, familiarity, warmth, and fear | Character relationship graph |
-| Player-facing prose | The player’s experience rendered as narrative | Narrator |
-| Pipeline record | Intermediate structured outputs and alternatives | Steps and variants |
-| User director view | Optional inspection of privileged and private layers | User interface |
+| Firewall as plumbing — each mind gets only its perception object | **Built** | `agents/perception.py` emits per-observer views; characters receive their view, never the event stream |
+| Two perception passes per turn (onset, outcome) | **Built** | `perception_act` before resolution, `perception_outcome` after |
+| Player-leads loop; characters declare blind to each other | **Built** | Plan built from `director_interpret.flow`; character steps run in parallel |
+| Memory provenance | **Built, exceeds spec** | Six kinds (`witnessed/heard/told/read/inferred/remembered`) against the specified three, plus `turn_idx`, bound at commit |
+| Action visibility posture | **Built** | `visibility` + `conceal_from` + `targets` on every declaration |
+| Two-store protagonist, never merged | **Built** | `private_voice_setting` appears only in `agents/narration.py` — verified absent from character and perception stages. `shadow_profile` is separate world state |
+| Seeded, logged, replayable dice | **Built** | `director_resolve` uses `random.Random("{chat}:{turn}:{nonce}:{actor}:{attempt}")` and records `seed/roll/modifier/dc/outcome/margin` |
+| Deterministic scheduling | **Built** | `scheduled_events.seed` written as deterministic strings; `stable_event_key` gives rerun idempotency |
+| Per-character temperature | **Built** | `character_temperature(sheet)` passed to the provider call in `agents/character.py` |
+| Narrator exemplar pool, event-amnesiac | **Built** | `exemplars` setting read in `agents/narration.py`; narrator receives the player view, not the event stream |
+| Tiered cognition | **Built** | Model roles (`default`/`director`/`narrator`/`utility`) plus per-character `simulation.tier` |
+| Theory of mind, cached and event-triggered | **Built** | `theory_of_mind.py`; `tom_triggers` on the flow |
+| Checkpoint / rollback | **Built** | `checkpoints.py`; branching depends on it |
+| Consolidation, salience-weighted hybrid retrieval | **Built** | `consolidate_character_memory`; keyword + embedding search in `memory.py` |
+| Commit as sole persistence boundary | **Built** | `commit.py`; one outer transaction, any domain failure rolls the turn back |
+| **Player action absolute** | **Built, then deliberately exceeded** | See [Player authority](#player-authority) — a considered product divergence, not drift |
+| **Event-linked stance axes** | **Partial** | `trigger_event_ids` accepted but **optional**; relationships live in a `world` KV blob with no change log |
+| **Canon lock** | **Partial** | `lore_entries.canon_locked` exists and is settable via the API; no automatic locking rule |
+| **Scene-boundary coherence pass** | **Partial** | Validation and dedup exist throughout commit; the specified retcon protocol is not implemented as such |
+| **Off-screen world ticks** | **Partial** | Deterministic scheduling and an `offscreen_log` exist; the world advancing meaningfully during absence is narrower than specified |
+| **Player authority modes** | **Stub** | `PlayerAuthorityMode` enum exists in `schemas.py` and is **consumed nowhere** |
+| **Predictive staging** | **Not built** | No pre-staging of lore or NPCs for likely-next locations |
+| **Reactivation negotiation** | **Not built** | No gap-history / delta-summary proposal, refusal caps, or "stalemate eats canon" |
+| **Session digest** | **Not built** | No end-of-session synthesis for resume |
 
-Information is allowed to move between these layers only through defined transitions.
+---
 
-```mermaid
-flowchart TD
-    Input[Player input] --> Interpret[Director interpretation]
-    Interpret --> Mapping[Mapping and lore retrieval]
-    Interpret --> ActPerception[Perception of action onset]
-    Mapping --> Resolve[Director resolution]
-    ActPerception --> Reactions[Blind physical reactions]
-    ActPerception --> Interaction[Character interaction]
-    Reactions --> Resolve
-    Interaction --> Resolve
-    Resolve --> Objective[Objective resolved event and state diff]
-    Objective --> OutcomePerception[Perception of outcome]
-    OutcomePerception --> Narrator[Player-facing narration]
-    OutcomePerception --> Memories[Character memories]
-    Narrator --> Commit[Commit and canon review]
-    Memories --> Commit
-    Objective --> Commit
-    Commit --> State[(Persistent state)]
+## The engine as built
+
+### The spine
+
+Information flows one direction, enforced as plumbing rather than prompt:
+
+```
+        ┌──────────── player intent (up) ────────────┐
+        │                                             ▼
+PLAYER → PERCEPTION → CHARACTERS → DIRECTOR → PERCEPTION → NARRATION
+(acts)   (filter the  (react,      (resolve   (filter the   & CHARACTERS
+         player act)  blind to     to one     resolved      (render/remember)
+                      each other)  state)     state)
 ```
 
-## Agent authority model
+**Eyes severed from hand.** Perception flows *down* to the player through the
+narrator; intention flows *up* from the player to the director, never touching
+the narrator. In a single model the narrator is both eyes and hand — it
+describes the world *and* authors what you do — which is why such systems put
+words in your mouth. Here the narrator is downstream of your eyes and has no
+access to your hand. It can make you *feel* anything and *do* nothing. That
+severance is what makes it safe to give the narrator a lush, interpretive voice:
+flavour in the perception channel cannot leak into the action channel.
 
-Every agent is defined by four questions:
+### Turn shape
 
-1. What may it read?
-2. What may it propose?
-3. What may it decide?
-4. What may it persist?
+Exact stage order lives in `docs/PIPELINE.md`. In brief:
 
-| Agent | Reads | Decides | Must not decide |
-|---|---|---|---|
-| Director Establish | Scenario, player persona, cast, physical lore, fiction model | Initial objective scene | Recognition, private psychology, player-facing narration |
-| Director Interpret | Current scene, input, cast, abilities, recent causal context | Meaning of declaration and pipeline flow | Final outcome, NPC decisions, narration |
-| Mapping Stage | Lore graph, current scene, input, scenario, public character context | Relevant lore and proposed expansion | Character psychology, action success, perception |
-| Perception | Objective act or outcome, spatial relations, senses, attention | Which signals reach each observer | Intent, identity without evidence, causality, psychology |
-| Character | Private view, memory, psychology, relationships, legitimate knowledge | That character’s next declaration and hypotheses | Objective success, other minds, hidden truth |
-| Reaction Loop | Per-character action-onset views | Reactive attempts | Reaction success or objective outcome |
-| Interaction Loop | Delivered local views and prior observable micro-beats | Conversational continuation and speaker order | Physical resolution |
-| Director Resolve | Objective scene, player declaration, reactions, character declarations, mechanics, dice | Objective outcome and state diff | Character beliefs, memories, player-facing prose |
-| Background Reactor | Resolved event and a deterministically-gated unregistered presence's own authored sketch | That presence's single one-beat reactive line | Persistent psychology, memory, objective success, promotion |
-| Outcome Perception | Resolved event and observer channels | Per-observer experience of the outcome | Memory interpretation and narration |
-| Narrator | Player view, player declaration, private voice setting, recent prose | Prose expression | Hidden facts, new player conduct, objective resolution |
-| Mapping Commit | Resolved facts, narrator specifics, existing canon | Proposed durable lore operations | Retroactive replacement of the resolved event |
-| Commit Code | Structured outputs and current database state | Whether and how mutations are persisted | Creative invention |
+**Opening turn** — `mapping_stage → director_establish → perception_establish →
+narrator → commit`
 
-## Current turn lifecycle
+**Normal turn** — `director_interpret → mapping_stage|mapping_quick →
+perception_act → [reaction_loop] → [interaction_loop | parallel character:<id>]
+→ director_resolve → background_react → perception_outcome → narrator → commit`
 
-### Opening turn
+Every stage's output is stored as a `steps` row plus an immutable `variants`
+row, with exactly one active variant. That dual representation is what makes
+reroll, rerun-from-stage, manual editing and inspection possible — and it is why
+the engine can be audited at all.
 
-The opening scene uses a specialized establishment pipeline:
+### Ownership
 
-1. Mapping retrieves or generates relevant physical context.
-2. Director Establish creates the objective initial scene.
-3. Perception Establish creates views for the player and present characters.
-4. Narrator renders the player’s opening view.
-5. Commit stores the initial scene, lore, and memories.
+Authority ends sharply. No agent overrules another in-domain.
 
-```mermaid
-flowchart LR
-    Scenario[Scenario and opening seed] --> Mapping[Mapping]
-    Mapping --> Establish[Director Establish]
-    Establish --> Perception[Opening Perception]
-    Perception --> Narrator[Narrator]
-    Narrator --> Commit[Commit]
-```
+| Agent | Owns | Must never |
+|---|---|---|
+| **Director** (`agents/director.py`) | Objective causality: interpreting the declaration, resolving outcomes, the seeded dice | Own character psychology or narration; silently replace the player's declared content |
+| **Perception** (`agents/perception.py`) | What each observer legitimately receives. Stateless by requirement | Invent intent, add meaning, contradict the event stream, or leak hidden state. It may subtract and degrade, never add |
+| **Character agents** (`agents/character.py`, `loops.py`) | The subjective: what I would attempt, what these signals mean to me | Decide their own success — capability is objective and lives in the world record |
+| **Background presence** (`agents/background.py`) | At most one named unregistered presence, one stateless reaction per beat | Hold memory or psychology — that requires promotion to a real character |
+| **Narrator** (`agents/narration.py`) | Sentence-level craft, pacing, the player-facing slice | Originate player conduct or reveal unperceived facts |
+| **Mapping** (`agents/mapping.py`) | Lore routing, retrieval, canon staging | Know character interiority |
+| **`commit.py`** | The sole persistence boundary | Trust model output — it is provisional until deterministic code validates it |
 
-The opening Director may establish:
+**Perception is stateless by requirement, not thrift.** A perception layer with
+memory is a *bug*: remembered context could let last turn's knowledge bleed into
+this turn's seeing, the exact leak it exists to prevent. The cheapest agent is
+cheap *because* it must be amnesiac.
 
-- Rooms.
-- Room adjacency.
-- Doors and barriers.
-- Entities.
-- Vehicles and containers.
-- Interior rooms.
-- Actor positions.
-- Attire.
-- Posture and visible activity.
-- Held objects.
-- Sensory events.
-- Initial simulation time.
-- Fiction scale and causal frame.
+**Character agents are predictors, not role-players.** Role-play optimises "be
+interesting" and volunteers the secret because the reveal is juicy. Prediction
+optimises "be accurate", which means it must be free to be *boring* — to let the
+coward stay hidden and nothing happen. That freedom is what makes the eventual
+drama earned. The cost is that a predictor treats every fact in its context as
+true and load-bearing, so context hygiene is non-negotiable.
 
-Perception then determines which parts of that objective state are available to each observer.
+### Information model
 
-### Normal turn
+The load-bearing primitive is **provenance**. Humans tag a fact at encoding with
+how and when they learned it, and the tag rides along on every later retrieval,
+so the access list maintains itself for free. Models flatten all of that the
+moment it is in the window. Binding `witnessed/heard/told/read/inferred/
+remembered + turn_idx` at commit hand-installs that faculty — so "told to me as
+a secret" and "just true" become structurally different stored objects, and
+belief revision becomes possible.
 
-A normal turn follows this pipeline:
+Memory layers, per character:
 
-1. Director Interpret normalizes the player input.
-2. Mapping performs either quick retrieval or full mapping.
-3. Perception Act filters the player’s action onset.
-4. Reaction Loop runs for contested physical actions when required.
-5. Interaction Loop runs for eligible character responses; when reactors exist but NPC-to-NPC autonomy is disabled, the plan instead runs parallel per-character steps.
-6. Director Resolve collapses declarations into one objective outcome.
-7. Background React gives at most a few deterministically-gated, unregistered background presences one stateless line each — self-skipping and LLM-free on the common case of nothing to react to.
-8. Perception Outcome creates observer-specific result views.
-9. Narrator renders the player’s view; a parallel Narrator Extra step renders the same objective turn for each additional connected player.
-10. Commit updates persistent state.
+| Layer | Nature | Cadence |
+|---|---|---|
+| Stable core | Traits, values, self-image | Rare, logged |
+| Stance / relationships | Trust, warmth, fear per target | Event-triggered (see [Structural debt](#structural-debt)) |
+| Active state | Mood, goal, affect | Every turn; relaxes toward baseline |
+| Episodic | Witnessed events, provenance + salience | On commit; consolidated over time |
+| Summaries | Autobiographical synthesis | Post-commit; reconstructible |
 
-The plan is dynamic. Not every turn requires the same cost.
+`affect.py` implements surface/undercurrent/baseline with exponential decay
+toward baseline — the one legitimate decay. Stance axes must not erode on a
+clock; the grudge does not fade unless something fades it.
 
-- Ordinary turns may use cached lore retrieval.
-- Unknown rooms or mechanics trigger full Mapping.
-- Contestable physical actions trigger reactions.
-- Dialogue may continue through bounded conversational micro-beats.
-- Silence and no-response outcomes are valid.
-- Character call budgets limit autonomous expansion.
+### Persistence and source of truth
+
+When representations disagree, resolve deliberately rather than updating every
+copy blindly:
+
+1. SQLite rows and `world` keys — durable runtime state
+2. Active step variants — the inspectable result of the current turn
+3. `PipelineContext` — in-memory working state for one execution
+4. Pydantic schemas (`schemas.py`) — accepted structured model output
+5. Prompts — desired behaviour, never overriding deterministic validation
+
+**Physical-world authority.** The frame-scoped `world.scene` blob is the sole
+runtime authority for live rooms, positions and entity state. `room_registry` is
+the sole cross-frame ledger of room identity and retirement. `world_entities` is
+a derived projection of the scene commit. `world_placements` and `fiction_*` are
+decommissioned import-compatibility tables.
+
+**Commit is atomic.** Slow provider work (lore and memory embeddings) happens
+*before* the write lock; then all primary turn mutations commit inside one outer
+transaction under a per-turn idempotency lock. Any domain failure rolls the whole
+turn back. Only autobiographical consolidation runs afterward, because it is a
+reconstructible derived cache.
+
+### Cost
+
+Cost scales with **dramatic density, not story length**. Turn 2000 in a quiet
+room with two people costs about what turn 2 in that room costs, because nothing
+conditions on the 1998 turns between except memory stores that are *reduced and
+retrieved against, not replayed*. The hot path is flat; only the backing stores
+grow, and they grow cold.
+
+Every agent runs on a reduction, never a log — and the reduction is both cheaper
+*and* leak-proof, because the context an agent does not need and the context it
+should not have are largely the same context. Statelessness is the default;
+persistence is a privilege earned only by agents modelling a continuous self.
+
+---
 
 ## Player authority
 
-The current engine distinguishes between asserted actions and contestable actions.
+**This is the engine's largest deliberate divergence from the founding
+architecture, and it should be understood as a product decision rather than
+drift.**
 
-### Contestable declaration
+The founding design gives the player authority over *attempts*: the action you
+chose always occurs as chosen, but whether it succeeds belongs to the director,
+and facts about the world belong to mapping. This engine went further. It
+distinguishes:
 
-A contestable declaration initiates an attempt while leaving external effects unresolved.
+- **Contestable declaration** — "I try to take the key", "I lunge toward Mara".
+  The motion begins; reactions and circumstance may alter the result.
+- **Asserted declaration** — "I take the key", "the door collapses", "three
+  hours pass". The effect is treated as *true*, and the director determines its
+  consequences rather than whether it happened.
 
-Examples:
+Assertion authority extends to world facts and time, not just the protagonist's
+body. `flow.authority_claims` and `flow.scheduled_assertions` carry these
+through the pipeline, with narrow carve-outs the director still refuses — most
+importantly, a player claim about **another character's interior** is rerouted
+to that character as an authorial *offer* it may decline, rather than enacted as
+truth. Character agency survives player assertion.
 
-- “I try to take the key.”
-- “I lunge toward Mara.”
-- “I attempt to break the door.”
-- “I aim at the fleeing rider.”
+**Why this is defensible.** The founding document's own closing principle is
+that the engine is *a world, not a warden* — it "has no opinion on how the user
+plays, because having one would mean simulating the taste that is the user's
+whole contribution", and explicitly: *"the user can shackle themselves whenever
+a story wants it — chosen limits make better play than enforced ones."* An
+engine that maximises authorial power by default and offers restriction as an
+opt-in is a direct reading of that principle, not a departure from it.
 
-The declared motion or attempt begins, but reactions and circumstances may alter its result.
+**The cost, stated plainly.** Broad assertion authority weakens the thing the
+architecture is otherwise built to guarantee. If the player can assert that the
+door collapsed, the world's causal integrity is partly the player's
+responsibility rather than the engine's. The firewall still holds — no character
+learns anything illegitimately — but "coherence without omniscience" becomes
+coherence the player can override.
 
-### Asserted declaration
+### Hard mode (planned)
 
-An asserted declaration presents an effect as completed.
+The intended resolution is the mode set already named in `schemas.py`:
 
-Examples:
-
-- “I take the key.”
-- “I stab Mara.”
-- “The door collapses.”
-- “Three hours pass.”
-
-The current authority contract treats asserted effects as true and allows the Director to determine their consequences rather than whether they occurred.
-
-### Required product improvement
-
-This is stronger than the original design’s protagonist-action authority and should become configurable.
-
-The existing schema already anticipates modes such as:
-
--`actor_only`
--`explicit_outcomes`
--`world_author`
-
-The intended future behavior should be:
-
-| Mode | Player controls |
+| Mode | The player controls |
 |---|---|
-| Actor-only | The protagonist’s attempts, speech, and immediate bodily conduct |
-| Explicit outcomes | The protagonist’s declared completed effects |
-| World author | External events, entities, time, and world assertions |
+| `actor_only` | The protagonist's attempts, speech, and immediate bodily conduct. Assertions become *claims* the director adjudicates and may refuse |
+| `explicit_outcomes` | The above, plus declared completed effects on the protagonist's own actions |
+| `world_author` | The above, plus external events, entities, time, and world assertions (**today's behaviour**) |
+
+`PlayerAuthorityMode` exists as an enum and is consumed nowhere; the vocabulary
+is in place and the enforcement is not. Hard mode is `actor_only` with the
+director free to say no.
+
+Two design notes worth settling before building it:
+
+1. **A refused assertion must not silently vanish.** The player wrote it for a
+   reason. The honest behaviours are to translate it into an attempt ("you reach
+   for the key") or to surface the refusal explicitly. Silently dropping player
+   text is the one thing the engine's authority contract has never done, and
+   hard mode must not become the exception.
+2. **Mode is per-chat, not global.** A story is chosen at its start, and the
+   dial belongs beside prose pacing and NPC autonomy. Changing it mid-story is
+   legitimate but should be recorded, since it changes what earlier turns meant.
+
+---
+
+## Beyond the founding design
+
+Subsystems the original architecture never imagined, now load-bearing:
+
+- **Temporal frames and paradox** (`frames.py`, `paradox.py`,
+  `spatial_frames.py`). Alternate eras, travellers, per-frame cast status, fixed
+  points, paradox detection. Most `world` keys are frame-scoped; cross-frame
+  contracts deliberately are not.
+- **Spatial model** (`spatial.py`, `scene.py`). Rooms, adjacency with bearings,
+  egocentric frames (ahead/behind/came_from), barriers, hearing and visibility
+  gating, zones and carry inference.
+- **Deterministic mechanics sweep** (`mechanics.py`). Timed arrivals, expiry,
+  dock edges, news latency — LLM-free, seeded, idempotent.
+- **Scene backdrops** (`backdrops.py`). Generated images of the room, built from
+  a whitelisted spatial projection that structurally excludes occupants. Cached
+  per room-plus-visible-state; a branch reads its ancestors' images in place.
+- **Lorebook hierarchy** (`memory.py`, `agents/mapping.py`). Nested books,
+  inheritance modes, scope by world and location, link graph, canon locking.
+- **Multiplayer and guest access** (`guest_access.py`).
+- **Obligation ledger, background claims, authored events** — bookkeeping that
+  keeps promises and unregistered presences coherent.
+- **Import pipeline** (`importers.py`, `character_schema.py`). External card
+  formats, heuristic and AI-reinterpreted paths, damaged-sheet repair on read.
+- **Appearance system** (`static/themes.css`). Browser-local themes, independent
+  story-text sizing.
+- **Provider layer** (`providers.py`, `prompt_cache.py`, `llm_quality.py`).
+
+---
+
+## Structural debt
+
+The honest account. These are not open bugs; they are places where the engine is
+weaker than its own stated principles.
+
+### 1. The positive guarantee is weaker than the negative one
+
+The firewall is excellent at *keeping the forbidden thing out*. It is much
+weaker at *making the correct thing reachable and preferred*. Both are supposed
+to follow from "structure over instruction"; only the first has really been
+internalised.
+
+Two production failures found in one session, both of this shape:
+
+- **A model authored an engine primary key.** The AI import path accepted
+  `identity.uid` from model output. `scene.py` falls back to that field for the
+  *scene entity id*, so when the model returned the character's own name, every
+  import of one card collided into a single scene entity — two characters
+  sharing one position, one set of clothes, one owner of the memories. Fixed by
+  minting the key in code, which is what structure required from the start.
+- **A character could not cite the present.** `observations_used` *instructed*
+  the character to cite evidence, in a payload where only memory rows carried
+  ids and the current beat was an uncitable prose string. Result: 15 citations
+  of a previous turn and zero of the current one across one 61-turn chat — a
+  character reliably answering the previous line. The firewall worked perfectly;
+  what failed was that the permitted information had no structural affordance
+  while the stale information did.
+
+The second fix is itself half-instruction (a prompt rule plus a sentinel id),
+which by this document's own standard is the losing move. **The structural fix
+is for the current beat to carry a real, first-class event id at declaration
+time, like every other observation.** Until then this is debt, not a fix.
+
+**Rule to apply going forward:** whenever a prompt asks a model to prefer X over
+Y, check whether the payload makes X *harder to reach* than Y. If it does, the
+prompt will lose.
+
+### 2. Stance changes are not auditable
 
-Until these modes are enforced, the product should clearly document that its default behavior grants broad authority to asserted player declarations.
+The founding commitment is that every numeric change is event-linked with a
+logged trigger. Reality: `apply_relationship_updates` accepts
+`trigger_event_ids` but treats them as optional, with explicit handling for "a
+routine trigger-less delta". Relationships live in the `world` KV blob, so there
+is no change log — only the current value plus a `salient_event` string. There
+is no way to answer "why does she distrust him?" from the record.
+
+The founding design also specifies that a normal interaction moves an axis by no
+more than ~0.05; the schema clamps at ±0.2.
+
+### 3. Two import paths of very different quality
+
+The heuristic (non-AI) import derives psychology from the card's `personality`
+field. A v2 card that puts everything in `description` — common — yields a sheet
+with no traits, drive, values, voice, abilities, goals or first message. Measured
+on a real card: 24 populated leaves against 111 for the same card through the AI
+path. Only two of those gaps produce a warning; the rest are silent.
 
-## Physical reactions and conversational interaction
+### 4. Documentation forcing functions are uneven
 
-The current architecture distinguishes urgent physical reactions from ordinary conversational continuation.
+`docs/CODE_MAP.md` is well maintained because `make structure` fails on
+staleness. No equivalent exists for hand-written docs, which is how the previous
+edition of this file drifted. `docs/DATABASE.md` is 60 lines for a schema at
+migration v17 with ~30 tables, while `AGENTS.md` routes every schema change
+through it.
 
-### Physical reaction phase
+---
 
-Physical reactors:
+## Roadmap
 
-- Receive only their filtered view of the action onset.
-- Declare independently.
-- Do not inspect other pending reactions.
-- Produce attempts rather than guaranteed outcomes.
-- Are resolved together by the Director.
+Ordered by value per unit of risk. Items 1–3 repay the debt above.
 
-This preserves blind simultaneous reaction.
+### 1. Give the present beat a real event id
 
-### Interaction phase
+Removes the last instruction-shaped patch from the character path. Declarations
+already mint ids (`turn:<id>:character:<cid>:<n>:action`); the current beat's
+perception should mint one the same way, so `observations_used` cites structure
+rather than obeying a sentence. **Closes debt #1.**
+
+### 2. Make stance auditable
+
+Move relationships out of the KV blob into a `relationship_events` table: one
+row per delta, with target, axis, magnitude, trigger event id and turn. Keep the
+current graph as a derived projection, exactly as `world_entities` is derived
+from the scene. Then make `trigger_event_ids` mandatory and tighten the clamp
+toward the specified ±0.05. Makes "why does she distrust him?" a query, and the
+grudge inspectable rather than merely persistent. **Closes debt #2.**
 
-Conversation is sequential because later speakers can legitimately hear earlier speakers.
-
-The interaction loop:
-
-- Selects an initial speaker.
-- Runs that character from its private view and memory.
-- Deterministically delivers observable speech and action.
-- Selects an eligible next speaker.
-- Stops on a natural boundary.
-
-Stop conditions include:
-
-- A question to the player.
-- A physical act requiring Director resolution.
-- Silence.
-- No eligible respondent.
-- Character-declared completion.
-- Disabled NPC-to-NPC dialogue.
-- Round or call-budget exhaustion.
-
-This modifies the original all-parallel model in a useful way:
-
-> Physical reactions remain blind and simultaneous; conversational micro-beats may be sequential when each later participant genuinely perceived the previous beat.
-
-## Perception and the epistemic firewall
-
-Perception is a stateless signal-filtering layer.
-
-It runs:
-
-- At scene establishment.
-- Before reactions and character decisions.
-- After objective resolution.
-
-Perception receives privileged information because it must filter objective events. It may:
-
-- Deliver a full signal.
-- Deliver a degraded fragment.
-- Remove an unavailable signal.
-- Include local environmental awareness.
-- Apply visual and auditory restrictions.
-- Respect identity knowledge.
-- Respect senses and attention.
-
-It must not:
-
-- Invent intent.
-- Reveal hidden history.
-- Identify an unknown actor without evidence.
-- Convert a raw signal into a correct explanation.
-- Reveal private thoughts.
-- Contradict the objective event.
-- Deliver information across a nonexistent channel.
-
-### Deterministic spatial support
-
-The engine currently enforces important parts of perception through code:
-
-- Room lookup.
-- Same-room detection.
-- Adjacency.
-- Open and closed barriers.
-- Visual access.
-- Speech attenuation.
-- Visible adjacent rooms.
-- Unknown spatial relationships failing closed.
-- Deterministic injection of perceivable dialogue and overt actions.
-
-The current system is best described as:
-
-> Model-rendered perception constrained by deterministic spatial and delivery rules.
-
-It is not yet a formal noninterference proof. Stronger post-generation validation remains a development goal.
-
-## Character cognition
-
-Each active NPC is represented by an independent character process.
-
-A character receives:
-
-- Its identity.
-- Psychology.
-- Voice.
-- Senses.
-- Abilities.
-- Current attire.
-- Its layered interior: effective core drive (possibly rupture-shifted), standing intentions, blended affect, and — only inside an open rupture window — the rupture context and, once the window has stayed open, a forced-resolution instruction; plus a crisis flag and its recent-tell ledger at extreme strain.
-- Its filtered perception.
-- Recent memories.
-- Recalled older memories.
-- Autobiographical summary.
-- Relationships.
-- Existing mind models.
-- Private knowledge.
-- Legitimate world knowledge.
-- Dialogue mode and pacing budget.
-
-A character does not receive the objective event record merely because that record exists.
-
-### Character output
-
-A character may return:
-
-- Direct observations it used.
-- An appraisal.
-- Candidate responses.
-- Speech.
-- Physical action.
-- Silence.
-- Per-beat wants (with the enacted/suppressed distinction), mood/affect, and standing-intention ops.
-- A manifest of physical tells gated per perceiver.
-- A drive shift, but only inside an open rupture window.
-- Mind-model updates.
-- Relationship changes.
-- Interaction-control signals.
-- Salience.
-
-Character actions are declarations. Their success remains a Director decision.
-
-### Character variance
-
-Each character may define:
-
-- Simulation tier.
-- Temperature.
-- Sampler configuration.
-
-Model roles may differ for:
-
-- Background characters.
-- Recurring characters.
-- Major characters.
-
-This controls both cost and behavioral variance.
-
-## Theory of mind and fallible belief
-
-Characters maintain private hypotheses about other entities.
-
-A hypothesis includes:
-
-- Subject.
-- Kind.
-- Claim.
-- Confidence.
-- Evidence.
-- Alternatives.
-- Last update turn.
-
-Confidence is capped by epistemic type.
-
-| Hypothesis type | Maximum confidence |
-|---|---:|
-| Direct physical observation | 1.00 |
-| Explicitly stated fact | 0.90 |
-| Emotion | 0.80 |
-| Immediate goal | 0.65 |
-| Second-order belief | 0.50 |
-| Durable trait | 0.45 |
-| Identity inferred from appearance | 0.35 |
-
-This allows intelligent inference while resisting automatic truth acquisition.
-
-A character may suspect something correctly or incorrectly. Correctness does not grant the belief privileged status; its legitimacy depends on the evidence available to that character.
-
-## Relationships
-
-Relationships are character-specific rather than globally objective.
-
-A relationship may track:
-
-- Trust.
-- Familiarity.
-- Emotional valence.
-- Fear.
-- Last interaction.
-- Salient event.
-- Notes.
-
-Updates are clamped to avoid abrupt changes from routine interactions.
-
-Relationship state should change because of a traceable event, not because time passed silently.
-
-## Character and player schemas
-
-The engine uses versioned schemas for reusable characters and personas.
-
-### Character data
-
-Character sheets include:
-
-- Stable identity and UID.
-- Pronouns and aliases.
-- Model tier and sampling configuration.
-- Senses.
-- Visible appearance.
-- Latent capabilities.
-- Psychology.
-- Values and self-model.
-- Stress behavior.
-- Voice.
-- Baseline social stance.
-- Objective abilities.
-- Public history.
-- Private history.
-- Knowledge access tags.
-- Initial mood and goals.
-- Opening context.
-
-### Persona data
-
-Player personas include:
-
-- Stable identity and UID.
-- Pronouns and aliases.
-- Senses.
-- Visible appearance.
-- Latent capabilities.
-- Objective abilities.
-- Public history.
-- Private history.
-- Narrator-only voice guidance.
-
-The user has no character decision agent. Their actual cognition remains outside the simulation.
-
-### Two-channel protagonist model
-
-The player is represented by two distinct informational channels:
-
-- A public shadow profile derived from observable behavior.
-- A private voice setting available only to the Narrator.
-
-These must never be merged.
-
-What the player does may become observable and enter character memory. Private narration preferences do not become world facts.
-
-### Multiplayer and remote guest access
-
-A chat may have more than one attached human player. Additional personas attach through `chat_personas`; each connected player may submit input for a turn independently of the primary player's request, and an idle connected player who declared nothing this beat still receives a rendered update rather than silence. `agents/runtime.py` adds a parallel `narrator_extra` step whenever a chat has active extra players, giving each additional player their own perceiver and their own player-facing render of the same objective turn. The two-channel protagonist model above still applies per player; no player's private voice setting or shadow profile is shared with another player or with any NPC.
-
-Extra players may join locally or remotely. Remote joining (`guest_access.py`) is deny-by-default: the host creates a one-time username/password account through a first-run setup page (the server console prints only the local `/login` URL, never a credential; passwords are salted-PBKDF2 hashed), and a successful sign-in issues a long-lived, HttpOnly, `SameSite=Strict` session cookie; a guest redeems a single-use, time-limited, rate-limited join code for an HttpOnly, `SameSite=Lax` token scoped to one chat and one persona. A middleware in `app.py` (`access_control`) rejects any `/api/*` request that carries neither a valid host nor guest credential, and a guest credential unlocks only the two endpoints a guest needs — everything else remains host-only. There is no wildcard CORS; the app is served same-origin, and provider credentials are never re-transmitted to the frontend.
-
-## Memory architecture
-
-Each character has a private memory store.
-
-Memory records currently support:
-
-- Episodic experience.
-- Dialogue.
-- Promises.
-- Self-actions.
-- Inferences.
-- Relationships.
-- Persons and places.
-- Semantic information.
-- Intentions and emotions.
-
-Each memory may include:
-
-- Provenance.
-- Turn and event identity.
-- Salience.
-- Confidence.
-- Full content.
-- Gist.
-- Key phrases.
-- Entities.
-- Location.
-- Emotional context.
-- Valence.
-- Arousal.
-- Embeddings.
-- Archive state.
-- Access history.
-
-Supported provenance includes:
-
-- Witnessed.
-- Heard.
-- Told.
-- Read.
-- Inferred.
-- Remembered.
-
-### Memory retrieval
-
-Retrieval combines:
-
-- Semantic similarity.
-- Cue-vector similarity.
-- Full-text search.
-- Exact phrase matches.
-- Entity matches.
-- Location matches.
-- Salience.
-- Confidence.
-- Temporal language.
-- Category-specific weighting.
-- Diversity selection.
-- Nearby chronological episodes.
-
-Memory retrieval is a reduction, not transcript replay.
-
-### Consolidation
-
-After enough turns or unarchived memories, the engine may create an autobiographical summary and archive low-salience old memories.
-
-Important categories such as promises, relationships, and intentions receive stronger retention.
-
-### Current limitation: outcome absorption
-
-The resolved outcome is stored as a character-specific episodic memory, but characters do not currently receive a dedicated post-outcome cognitive pass.
-
-Consequently:
-
-- They remember what they experienced.
-- Their earlier reaction-state updates may be committed.
-- Immediate contradiction-driven belief revision may be delayed until their next character call.
-
-A future outcome-absorption stage should update cognition without producing another action.
-
-## Lore and Mapping
-
-Lore is stored in multiple structured lorebooks rather than one flat prompt.
-
-Lorebooks may be:
-
-- General.
-- World.
-- Knowledge.
-- Location.
-- System.
-- Characters.
-- Events.
-- Vehicle, anchored to a moving entity.
-
-They may have:
-
-- Parent-child structure.
-- World and location scope.
-- Inheritance mode.
-- Sort order.
-- Semantic links.
-- Retrieval weights.
-- Chat-local copies.
-- Stable resource identifiers.
-
-Lore entries may contain:
-
-- Keys.
-- Content.
-- Category.
-- Title.
-- Knowledge tags.
-- Knowledge range.
-- Knowledge locations.
-- Importance.
-- Aliases.
-- Scope.
-- Relations.
-- Source notes.
-- Canon-lock status.
-- Turn of creation.
-
-### Mapping Stage
-
-Full Mapping is used when the turn requires:
-
-- Unknown rooms.
-- Significant named locations.
-- World mechanics.
-- New entities.
-- Movement into unmapped space.
-- Pending arrivals or departures.
-- Meaningful scene graph mutations.
-
-It may propose:
-
-- Relevant books.
-- Relevant lore.
-- New lore stubs.
-- Rooms.
-- Entities.
-- Positions.
-- Removals.
-- NPC suggestions.
-
-Its scene patch is advisory. The Director remains responsible for accepting supported portions during resolution.
-
-### Mapping Quick
-
-Quick Mapping avoids a model call when the existing scene is sufficient.
-
-It performs:
-
-- Lore retrieval.
-- Active-book selection.
-- Cache merging.
-- Deduplication.
-- Minimal empty scene patching.
-
-This reduces cost and latency on routine turns.
-
-### Mapping Commit
-
-After resolution, Mapping Commit may:
-
-- Validate newly introduced specifics.
-- Detect conflicts.
-- Create or update lore.
-- Route facts to appropriate books.
-- Update the player’s public shadow profile.
-- Maintain standing intentions.
-- Validate introductions.
-- Propose off-screen events.
-- Record coherence notes.
-
-Model-generated lore operations are still subject to deterministic database and lock checks.
-
-A vehicle-class (or any anchor-flagged) lorebook follows its anchor entity rather than staying pinned to wherever it started: after each commit, a deterministic `currently_within` presence link is maintained from the book to whichever attached lorebook's location scope matches the entity's current room. This presence edge is deliberately distinct from parent-child containment — the authored hierarchy is never mutated — so lore nested under the book (crew logs, cabin entries) travels with the vehicle through the presence link plus retrieval-graph following, not by rewriting lineage.
-
-## Dynamic scene and world model
-
-The local scene currently tracks:
-
-- Location.
-- Time.
-- Rooms.
-- Room adjacency.
-- Barriers.
-- Entities.
-- Positions.
-- Appearance overlays.
-- Attire.
-
-Rooms may belong to container entities, allowing vehicles, buildings, tents, cabins, elevators, and nested interiors.
-
-Movers are first-class. A container entity carries `state.transit` (phase: docked, sealed, in transit, arriving; hatch: open, closed, locked; optional destination, route, and eta). A container's interior-to-exterior doorway is DERIVED deterministically at commit from the entity's current position and transit state — never stored statically. A mover that seals severs its interior's exterior edge; one that arrives derives a new doorway onto its destination; occupants keep their interior positions and travel with the mover. Nesting composes: a rover inside a dropship resolves as a chain, so a mover loaded onto another mover carries its occupants at every level. Timed journeys schedule an arrival that the mechanics sweep completes on the frame's simulation clock.
-
-Physical-world authority is consolidated. The frame-scoped scene dictionary is the single runtime source of truth for live rooms, adjacency, positions, and entity state. A normalized `room_registry` is the cross-frame ledger of room identity, existence over time, and retirement — a deterministic projection of every scene write. `world_entities` is a derived projection of the same committed diff the scene is merged from. `world_placements`, `fiction_worlds`, `fiction_locations`, and `transit_edges` are decommissioned (retained only for import compatibility); their intended macro-geography and macro-transit roles are absorbed by the lorebook tree and scheduled-event latency. Every scene writer keeps the registry projection in sync, so no second representation can disagree.
-
-## Narration
-
-The Narrator receives:
-
-- The player’s filtered view.
-- The player’s declared sequence.
-- Player-private thought.
-- Narrator-only voice guidance.
-- Recent prose.
-- Style exemplars.
-
-It does not receive:
-
-- Unfiltered objective resolution.
-- Character private state.
-- Other minds.
-- Director dice.
-- Hidden lore not present in the player’s view.
-
-The Narrator may control:
-
-- Voice.
-- Rhythm.
-- Sensory emphasis.
-- Sentence-level pacing.
-- Compression and dramatization.
-
-It may not:
-
-- Add player speech.
-- Add player actions.
-- Reveal hidden events.
-- Rewrite proper nouns.
-- Paraphrase NPC dialogue when an exact quote is present.
-- Repeat the player's own speech as if newly narrated — nor substitute a vague placeholder for it ("I say my piece"); the player's declared action anchors the beat lightly (cause-before-effect ordering) but is rendered as weight and motion, never re-narrated in full or opened with the same "You <verb>…" restatement each beat.
-- Render a distinct declared line more than once, or re-narrate a standing ambient sensation ("the bridge hums") that has not changed.
-- Guess a character's gender from their name: the Narrator is given `cast_pronouns` (each character's canonical subject/object/possessive) and must use them consistently.
-
-A deterministic dialogue-fidelity floor triggers a correction-retry when an audible line is dropped or altered. Some of these rules are prompt-level and reduce rather than eliminate a tic (pronoun consistency, ambient restraint); the deterministic correction-retries that would make them absolute are tracked in `docs/AUDIT_FOLLOWUPS.md`.
-
-Hard specifics coined by the Narrator are surfaced as `new_specifics` for potential canon validation.
-
-## Persistence, variants, and checkpoints
-
-Every pipeline stage is persisted as a step.
-
-Every execution of a step creates a variant. Exactly one variant should be active for each materialized step.
-
-Users may:
-
-- Inspect structured outputs.
-- Reroll the complete turn.
-- Rerun from a selected step.
-- Reroll one step.
-- Edit a step manually.
-- Activate an older variant.
-- Observe downstream stale status.
-
-Changing an upstream stage marks dependent stages stale.
-
-### Checkpoints
-
-Checkpoints currently capture broad shared state:
-
-- World key-value state.
-- Character state and lifecycle status.
-- Per-frame character overlays, frame definitions, and attached personas.
-- Memories.
-- Memory summaries.
-- Lorebooks.
-- Lore entries.
-- Lorebook links.
-- World entities.
-- The room registry (cross-frame room identity and retirement).
-- Conditions.
-- Scheduled events.
-
-The decommissioned import-compatibility tables (placements, fiction worlds, fiction locations) are still round-tripped for legacy blob restore, but they carry no live state.
-
-They support:
-
-- Turn reruns.
-- Turn deletion.
-- Chat branching.
-- State restoration.
-
-Checkpoints are whole-state snapshots rather than independent per-agent checkpoints.
-
-## Temporal frames, paradox, and concurrent play
-
-A **frame** is a diegetic era distinct from `turns.idx` (play order): a flash-forward, a visit to the past, an immortal character's life read at a different point in her own timeline. `NULL` frame everywhere (turns, memories, personas' stations) means "the present" — the chat's original, implicit era — so an ordinary chat that never time-travels never touches this system at all.
-
-Two frames of the same chat can have **genuinely simultaneous, independently running pipelines** — this is not serial "the party jumps through eras together." Mutable per-era state (`scene`, `known`, `simulation_clock`, `relationships:*`) lives at frame-scoped storage keys rather than a single swapped slot, redirected transparently by a per-run contextvar set once from the turn's own frame (never from ambient state, and never inferred from prose — a frame is only ever entered by an explicit request naming it). Idle-checking, turn creation, and pipeline locking are all keyed by `(chat_id, frame_id)`, so one frame's activity never blocks another's.
-
-Extra players (the existing multiplayer system) are **stationed** to a frame; a player stationed in the future is never folded into a turn happening in the past, and vice versa. Recompute (reroll/rerun/resume/step edit/delete) requires both "latest turn of its own frame" and "no other frame has advanced past this point in play order" — checkpoints, memories, and world entities remain chat-global (not frame-sliced), so recompute is refused with a clear reason exactly when it would otherwise silently roll back a different frame's genuinely newer progress, rather than attempting it unsafely.
-
-Character `state`/`status` (mood, stance, active/dormant) *is* frame-scoped: a `chat_char_frames` overlay row holds a per-frame override, falling back to the character's ordinary base row (`chat_chars`) in any frame that has never diverged — the same "ledger + cursor, fallback to base" shape already used for world state and memories. A character can therefore be genuinely calm and active in the present while dormant and terrified in a future frame that already lived through a paradox. Branch, checkpoint snapshot/restore, and whole-chat export/import all clone and remap these overlay rows alongside frame definitions.
-
-**Memory visibility** is the epistemic cursor, not a branching tree: a memory is visible to a character currently portrayed in frame F if it's diegetically at-or-before F, or if that character is a registered *traveler* of F (keeping full continuity of their own memory ledger regardless of era). Ordinary time-displaced encounters that touch no declared fixed point are absorbed into this by default — a character visiting an era before their own conception just forms an ordinary private memory, no different from any other secret. **Existence masking** (`nonexistent_cast` on a frame) is the deterministic backstop for recognition specifically: a masked character can still be perceived and interacted with as a stranger, just not recognized as themselves.
-
-### Paradox
-
-A **fixed point** is a declared predicate (an entity's existence, pinned to an era) that the player/Director have ruled load-bearing. Violating one is detected deterministically at commit time against what actually just committed — never a model's semantic judgment. Ordinary changes to the past that touch no fixed point are the safe default path described above; paradox is the deliberate exception, not the norm.
-
-The consequence of a violated fixed point is pluggable per campaign (`paradox_policy.mode`), not hard-coded to one dramatization:
-
-- `dread` — no mechanical consequence; payload/narrative awareness only, resolved through roleplay.
-- `hazard` — an environmental wound: escalating room consumption riding the scene's own entity/overlay machinery. The recommended default.
-- `toll` — cost localizes to travelers physically in the wound radius: deterministic decay of their own memory confidence for rows from their origin frame.
-- `warden` / `bureau` — a hunting or negotiable entity, spawned as an ordinary scene entity so existing spatial/reaction/resolution code treats it as real.
-
-Severity climbs from the diegetic clock while a paradox is unresolved, with a ceiling (reality forcibly restores the fixed point). Each frame has its own independent paradox slot — two frames playing concurrently can each have their own active paradox at once, detected and escalated completely independently, since world-entity existence has no per-frame partitioning and a violation can in principle be noticed from any frame's commit. **Tick ownership** is strict: only a commit in a paradox's own operative frame may escalate or resolve *that* paradox, since doing so writes into that frame's scene and reads its clock — an unrelated frame's commit leaves every other frame's slot untouched. Resolution never retroactively erases memories (this engine's ledger is append-only by design): witnesses keep what they legitimately perceived, which is also what reproduces the "outside world forgets" effect from fiction — anyone who never witnessed it never had a memory row to begin with.
-
-### Spatial frames
-
-A **spatial frame** (`kind="spatial"`) is a different axis from the past/future/other frames above: two parties simply far apart *right now*, not visiting a different era. It shares its parent's `ordinal` (the same diegetic "now") but records `parent_frame_id` and `split_turn_idx`. Detection is deterministic and zone-based, not distance-based: a room may carry an explicit `zone` field (author-declared by the Director/Mapping only for a genuinely disconnected locale — a second starship, a distant city), and `spatial_frames.py`'s commit-time detector splits the party into a new spatial sibling the moment two human parties are standing in rooms with two different non-empty zones. Ordinary unmapped rooms (`distance:"far"` with no zone) never trigger anything — that would shred normal play. While unmerged, a spatial frame and its parent are **incomparable** rather than ordinally ordered: each side sees only the other's memories formed at-or-before the split, exactly reversed from the usual ordinal rule (which would otherwise make same-ordinal siblings instantly, bidirectionally visible). Cast and personas are partitioned automatically (the away party's characters go dormant back home and active in the new frame, and vice versa); the paradox mechanic is explicitly exempt inside an unmerged spatial frame, since nothing temporal is being altered. Reconvergence is detected the same way (zones matching again) and reconciled deterministically — clock takes the max of the two, `known` unions, conflicting relationship records are kept from the parent with a surfaced warning — after which the ordinal rule resumes and grants full bidirectional visibility, matching a genuine reunion.
-
-### Known limitations
-
-World entities, placements, conditions, scheduled events, and lorebooks remain chat-global, not frame-partitioned — only world key-value state (frame-scoped storage keys), memories (epistemic cursor), and character `state`/`status` (`chat_char_frames` overlay) are frame-scoped today. Branch and whole-chat export/import clone frame definitions and remap frame-scoped references correctly for everything that is frame-aware; they do not attempt to slice the chat-global domains above per frame. Checkpoints do not snapshot the `frames` table or persona stationing, so restoring a checkpoint older than an unmerged spatial split can leave a dangling frame reference — not yet guarded against. Spatial splits in this slice only ever separate extra (multiplayer) personas from the primary player; the primary always stays with the parent frame, and nested splits (a spatial child splitting again) are not supported.
-
-## Provider and model architecture
-
-Different roles may use different models and providers.
-
-Supported roles include:
-
-- Director.
-- Perception.
-- Background character.
-- Mid-tier character.
-- Major character.
-- Narrator.
-- Mapping.
-- Utility.
-- Embeddings.
-
-The provider layer supports:
-
-- OpenAI-compatible APIs.
-- Anthropic.
-- OpenRouter and similar aggregators.
-- Local providers.
-- Per-role model configuration.
-- Per-character sampling.
-- Streaming.
-- Cancellation.
-- Retry with exponential backoff.
-- JSON response mode where supported.
-- Fallback when unsupported sampling parameters are rejected.
-- Embedding-provider fallback.
-- Thread-local HTTP session reuse across calls.
-- Throttled output-guard checking during streaming.
-
-If remote embeddings fail, deterministic local n-gram embeddings keep retrieval operational at reduced quality.
-
-## Fully operational capabilities
-
-The following capabilities are present end to end in the supplied implementation.
-
-### Core pipeline
-
-- Opening-scene establishment pipeline.
-- Dynamic normal-turn planning.
-- Director interpretation.
-- Full and quick Mapping paths.
-- Action-onset perception.
-- Physical reaction loop.
-- Character interaction loop.
-- Objective resolution, including: an **obligation ledger** (world-KV `pending_obligations`) that tracks open narrative debts — demands, promises, announced actions, unanswered questions — and forces each to be discharged or explicitly refused on-page once it ages past its window, so a promised beat can no longer be deferred forever; and **player-fact adjudication** that classifies a player-asserted plot fact (an off-screen death, an unread document's contents, another character's change of heart) as confirmed, contested, or false and lands that verdict on-page this beat rather than leaving it in assertion limbo.
-- Deterministically-gated background-presence reaction (a named, unregistered presence of any non-inert kind — bystander, guard, creature, drone — may get one stateless, one-beat reaction when salient and otherwise unvoiced; no LLM call spent on the common case of nothing to react to).
-- Outcome perception.
-- Player-facing narration.
-- Persistent commit stage.
-- Pipeline completion invariant.
-- Multiple attached player personas per chat with independent per-turn input collection.
-- Parallel narrator/narrator_extra rendering so every connected player, not only the primary player, receives a player-facing render each turn.
-- Remote guest joining via host username/password login sessions, single-use join codes, and scoped guest tokens, gated by deny-by-default API access control.
-
-### Character simulation
-
-- Versioned character and persona schemas.
-- Legacy-schema normalization.
-- Character tiers.
-- Character-specific temperature and samplers.
-- Visible versus latent embodiment.
-- Private and public history.
-- Filtered character contexts.
-- Layered interior (three-tier goal hierarchy): a stable **core drive** (essence / expression / taboo), persistent **standing intentions**, and per-beat **wants** the character forms and drops in the moment, with an enacted/suppressed-want distinction.
-- Blended, appraisal-driven mood: an OCC-style appraisal reads the model's per-beat `goal_impacts`, and the engine deterministically computes affect on canonical valence/arousal axes — a **surface** reaction over a slower **undercurrent** above a character **baseline**, with decay between beats (`affect.py`). The model proposes; the engine floors and reconciles.
-- Calibrated tells: interior state surfaces only as physical cues gated per perceiver, with a per-character recent-tell ledger and an anti-repetition rule so the same cue does not fire every beat.
-- Earned drive rupture with a resolution floor: a sustained strain primer plus a high-impact event opens a rupture window; the window force-escalates the character prompt to a resolution after a few turns and force-closes after a hard cap, so a rupture the engine opens cannot sit in permanent unresolved limbo. A completed shift leaves a scar (`former_drives`) and respects a cooldown; overrides are written to runtime state, never silently onto the sheet.
-- Mind-model hypotheses.
-- Confidence caps.
-- Relationship graphs.
-- Relationship updates.
-- Private knowledge routing.
-- Knowledge-tag filtering.
-- PNG character/persona card import (SillyTavern-style v2/v3 chara cards).
-
-### Background-presence tracking and promotion
-
-- Deterministic, LLM-free tracking of named entities of any non-inert kind (a deny-list of clearly-inert kinds, not a `person`/`npc` allow-list) that the Director keeps writing into the resolved event or dialogue log without a character sheet, a character step, or memory of their own — so a player-declared guard (`kind:"actor"`), monster, robot, or drone is tracked rather than left declared-but-inert, while objects, fixtures, vehicles, and locations stay excluded.
-- Autonomous background→cast promotion: a named presence that keeps carrying scenes (a dialogue-turn threshold, addressed/present this beat) is promoted to a real character automatically at commit — minting an evidence-grounded sheet and starter memories from that entity's own recorded turns *after* the primary transaction, so a promotion can never roll back an otherwise valid turn. Gated behind an `auto_promote` setting (default on); the manual confirm-promotion path shares one code path with the autonomous one.
-- Threshold-based promotion suggestions are also surfaced to the user, and on request the same evidence-grounded draft sheet and starter memories can be reviewed and edited before the character is attached.
-
-### Spatial simulation
-
-- Room-based positioning.
-- Case- and punctuation-tolerant actor lookup.
-- Room adjacency.
-- Open, open-door, closed-door, wall, separated, and unknown relationships.
-- Deterministic visual access.
-- Deterministic hearing attenuation.
-- Visible adjacent-room discovery.
-- Fail-closed handling of unknown spatial relationships.
-- Scene diff merging.
-- Basic containment-cycle validation utilities.
-- Derived interior-to-exterior doorways for movers: transit phase and entity position determine a container's adjacency at commit.
-- Multi-level nested movers with occupant carry.
-- Timed transit arrivals completed by the mechanics sweep on the frame's simulation clock.
-- Deterministic reconciliation of resolved prose and player declarations against the structured diff.
-- Multi-book destructive cascades over the lorebook tree, with retire-not-delete and distance-latency knowledge propagation.
-
-### Memory
-
-- Per-character memories.
-- Provenance.
-- Stable event keys.
-- Batch insertion.
-- Duplicate prevention.
-- Semantic embeddings.
-- Lexical search.
-- Cue embeddings.
-- Exact matching.
-- Temporal weighting.
-- Salience and confidence weighting.
-- Diversity selection.
-- Chronological neighbor expansion.
-- Recent-memory buffers.
-- Autobiographical summaries.
-- Automatic consolidation triggers.
-- Archiving.
-- Memory import, export, editing, and search.
-- Cross-character dramatic-irony feed (every non-witnessed memory — heard, told, inferred, read — across the cast, in one place).
-- Cross-character promise ledger (every promise-category memory, in chronological order).
-
-### Lore
-
-- Multiple lorebooks.
-- Chat-local lorebook duplication.
-- Parent-child lorebook trees.
-- Cycle prevention.
-- Lorebook reordering.
-- Semantic lorebook links.
-- Graph-based book resolution respecting inheritance mode (`inherit`, `isolated`, `reference_only`).
-- Inheritance-mode- and graph-distance-weighted lore search.
-- Vehicle-anchored lorebooks that automatically follow their anchor entity's current room.
-- Lorebook manifests.
-- Semantic and lexical lore retrieval.
-- Knowledge entries.
-- Knowledge tags and local/global ranges.
-- Lore import and reinterpretation.
-- Lore generation.
-- Structured generation plans.
-- Lore editing.
-- Canon locks.
-- Stable entry UIDs.
-- Lore export and restoration.
-- Native full-fidelity JSON round-trip import for characters, personas, and lorebooks exported from this project, bypassing AI reinterpretation.
-
-### Authoring and recovery
-
-- Steps and variants.
-- Active-variant switching.
-- Manual step editing.
-- Full-turn reroll.
-- Rerun from an intermediate stage.
-- Per-step reroll.
-- Downstream stale marking.
-- Turn checkpoints.
-- Turn deletion with restoration.
-- Timeline branching.
-- Chat import and export.
-- ID remapping.
-- Abort requests.
-- Newline-delimited streaming events.
-
-### Temporal frames and paradox
-
-- Diegetic-era declaration distinct from play order.
-- Frame-scoped mutable state (scene, known, relationships, simulation clock) via a per-run contextvar, not a swapped slot.
-- Genuinely concurrent pipelines across frames of the same chat.
-- Per-frame idle-checking, turn creation, and pipeline locking.
-- Persona stationing for cross-frame multiplayer.
-- Frame-aware recompute safety check (frame-latest plus no other frame advanced past it).
-- Memory visibility as an epistemic cursor (native ordinal cutoff, traveler exemption) rather than a branching tree.
-- Existence masking for not-yet-existing cast, independent of accumulated recognition state.
-- Declared fixed points with deterministic, commit-time violation detection.
-- Pluggable paradox consequence modes (dread, hazard, toll, warden, bureau) sharing one severity/escalation substrate.
-- Tick-ownership enforcement (only the paradox's own operative frame may escalate or resolve it).
-- Frame cloning with ID remapping in branch and whole-chat export/import.
-
-### Database and API
-
-- SQLite WAL mode.
-- Foreign-key enforcement.
-- Busy timeout and retry.
-- Reentrant write lock.
-- Nested transactions through savepoints.
-- Full-text search.
-- Schema migrations.
-- FastAPI management surface.
-- Character, persona, lore, memory, chat, and pipeline APIs.
-- Provider configuration.
-- Prompt presets.
-
-## Partially implemented systems
-
-The following systems have meaningful foundations but are not complete end to end.
-
-### Structured world model
-
-Tables and schemas exist for:
-
-- World entities (a derived projection of the scene commit).
-- Room registry (the cross-frame ledger of room identity and retirement).
-- Conditions.
-- Scheduled events.
-- Engagements.
-- Aggregate entities.
-- Components.
-
-Placements, fiction worlds, fiction locations, and transit edges are decommissioned (import-compatibility only); their roles are absorbed by the scene blob, the room registry, and the lorebook tree. The room registry, entity projection, conditions, and scheduled events are consumed and persisted by the commit path; the engagement, aggregate, and component tables remain foundational only.
-
-### Off-screen simulation
-
-Current support includes:
-
-- Dormant cast status.
-- Standing intentions.
-- Mapping-generated off-screen events.
-- Seeded off-screen logs.
-- A deterministic mechanics sweep run at commit on the frame's simulation clock: due scheduled events fire, timed transit arrivals complete, and conditions expire.
-- News propagation with distance-based latency: an objective event (such as a destruction) mints scheduled `news_arrival` events whose delay scales with tree and portal distance, so awareness reaches distant characters only when it legitimately would — delivered through director and perception filters, never by direct injection.
-- World conditions with expiry.
-
-Missing pieces include:
-
-- Local off-screen perception.
-- Character-driven off-screen decisions.
-- Objective local off-screen resolution.
-- Private off-screen memory.
-- Tiered update depth.
-
-### Lifecycle and reactivation
-
-Current support includes active and dormant status, arrival and departure handling, and retire-not-delete for rooms and lorebooks — destroyed or removed structure is retired with the turn that ended it, preserving its history rather than erasing it, so a ruined region remains retrievable.
-
-Autonomous background→cast promotion now fires at commit (see *Background-presence tracking and promotion*). Missing pieces include:
-
-- Automatic downgrading (autonomous promotion is done; the reverse is not).
-- Gap-history generation.
-- Character integrity review.
-- Negotiated reactivation.
-- Refusal budgets.
-- Lifecycle transition snapshots.
-
-### Belief revision
-
-Mind models and inference memories exist, but explicit contradiction processing is incomplete.
-
-A resolved outcome does not currently trigger a dedicated character absorption pass.
-
-### Scene boundaries
-
-Opening scenes are recognized, but scenes are not yet first-class persistent lifecycle objects with explicit opening, closing, participants, consolidation, and coherence status.
-
-### Canon coherence
-
-Mapping Commit performs validation and conflict notes, but there is no complete scene-boundary coherence process with fully recorded resolution provenance.
-
-### Prompt caching and structured metrics
-
-Anthropic prompt caching is live in the provider layer (`providers.py`), wired into both the streaming and non-streaming call paths, and its cached-token counts are recorded through the LLM-call log — so the capability is both integrated and metered. Two loose ends remain: the standalone `prompt_cache.py` helper is orphaned (superseded by the in-provider implementation and safe to remove), and per-turn / per-step cost and cache-hit reporting is not yet surfaced in the pipeline UI.
-
-## Known architectural and implementation weaknesses
-
-### Atomic turn commit is implemented; fault coverage should expand
-
-`commit_all` now separates preparation from mutation. Scene projection, mapping validation, lore embeddings, and character-memory embeddings are prepared before SQLite's write lock. Every primary durable domain then runs under one outer transaction, with nested domain transactions reduced to savepoints. The first failure aborts the sequence and rolls the complete turn back.
-
-Autobiographical summary consolidation remains outside the transaction because it is reconstructible derived state and may require provider calls. Its failure is reported as a warning rather than invalidating primary facts.
-
-The enforced invariant is:
-
-> A turn either commits all primary persistent effects or commits none.
-
-A forced late-failure regression test proves an earlier world write is absent after rollback. Additional domain-by-domain fault injection remains worthwhile.
-
-### Physical sources of truth are consolidated
-
-Immediate world state was previously represented ambiguously across the scene dictionary, normalized entity tables, and vestigial location tables, with no documented authority. This is resolved. The frame-scoped scene dictionary is authoritative for live physical state; `room_registry` is the single cross-frame ledger of room identity and retirement; `world_entities` is a derived projection of the committed diff; `world_placements`, `fiction_worlds`, `fiction_locations`, and `transit_edges` are decommissioned. The authority model is documented in `CLAUDE.md`, `AGENTS.md`, and `docs/DATABASE.md`, and enforced by projecting the registry from every scene write. A characterization suite pins byte-identical spatial-reader and checkpoint/restore behavior across the consolidation.
-
-### Persona accessor inconsistency
-
-Some code paths use normalized accessors while others read legacy top-level fields.
-
-This may omit:
-
-- Player name.
-- Appearance.
-- Abilities.
-- Senses.
-
-All persona access should use schema accessors.
-
-### Reaction results are not unified downstream
-
-Reaction declarations reach Director Resolve, but some later systems inspect only ordinary character results.
-
-This can omit reaction-only behavior from:
-
-- Memory.
-- Deterministic outcome augmentation.
-- Source tracking.
-- Some dialogue and action processing.
-
-### Schema validation is permissive
-
-Validation failures produce warnings and may allow prepared raw output to continue.
-
-Critical state-mutation stages need stronger repair, retry, or rejection policies.
-
-### Perception validation: name-class closed, semantic residual open
-
-Identity leakage is now closed deterministically. A per-observer scrub removes the canonical name of any source an observer has not legitimately identified from the model-rendered view — outside verbatim heard speech — the appearance-derived unknown-actor label is name-stripped, and ambient and location information is scoped by nesting depth so a deeply nested interior cannot perceive an ancestor location. What remains is the semantic residual: species, occupation, relationship, intent, or paraphrased identity a capable model could still imply. That class is not deterministically catchable and would need an auditing pass. Spatial delivery is deterministic; this is not yet a formal noninterference proof.
-
-### Interior rupture and some narration rules are prompt-nudged, not yet deterministic
-
-The drive-rupture window now has a hard floor — it force-escalates the character prompt to a resolution and force-closes after a cap, so it cannot sit in permanent limbo — but the *shift itself* is still emitted by the character model, not forced deterministically: a weaker model can reaffirm the old drive under the forced prompt rather than transform. Likewise, several narration-integrity rules (pronoun consistency via `cast_pronouns`, ambient anti-repetition, one-line-per-turn) are prompt rules that reduce but do not eliminate their tic; the deterministic correction-retries that would make them absolute — plus a settled-facts continuity ledger, routing player-authored NPC acts through the character agent's reaction, and room-boundary scene-truth enforcement — are a resume-ready backlog in `docs/AUDIT_FOLLOWUPS.md` (P1–P7), evidenced by the `demo/enterprise_d_v2/` audit run.
-
-### Migration behavior
-
-Recent migrations (v15, v16) follow the recreate-copy-swap pattern, are idempotent and crash-re-runnable, and were validated against a copy of a real production database — integrity check, row preservation, composite-key repartition — in addition to round-trip checkpoint, export, and import tests. The general principle still holds: fresh-database success does not prove upgrade safety, and every supported version's upgrade path should stay under test.
-
-### Concurrency has mixed scopes
-
-Fresh-turn execution is exclusive per frame, while recompute, branch, import/export, and other global mutations require the entire chat to be idle. Different frames of one chat may therefore execute concurrently by design.
-
-The remaining risk is not an unguarded same-frame pipeline; it is that some durable domains — lorebooks, world entities, placements, conditions, and scheduled events — are still chat-global rather than frame-partitioned. Concurrent frames can prepare against different snapshots and later merge into those shared domains without an explicit version check. Shared-domain writes need either optimistic revisions/conflict detection or a documented deterministic merge policy.
-
-### Cross-frame versus frame-scoped state is a documented design
-
-Schema v14 through v16 partition world entities, conditions, and scheduled events by `(chat_id, id)`, and runtime queries include chat ID, eliminating cross-story collisions. Which state is frame-scoped versus cross-frame is now a deliberate, documented split rather than an accident. The scene blob is frame-scoped — temporal eras legitimately hold different live worlds, so a place destroyed in the present still exists in a past-era frame — while room identity, lorebooks, and scheduled events are cross-frame ledgers by design. The physical-truth consolidation deliberately kept the frame-scoped blob authoritative for live state precisely because making a cross-frame table authoritative would break era semantics.
-
-### API security is local-development oriented
-
-`guest_access.py` and `app.py`'s `access_control` middleware closed the two largest holes: there is no wildcard CORS (the app is same-origin only), every `/api/*` request now requires a valid host or guest credential (deny-by-default), and provider API keys are never re-transmitted to the frontend. Remaining risks include:
-
-- A guest credential is scoped to two endpoints, but an authenticated host request still has unrestricted access to every management API — there is no per-operation authorization for destructive actions.
-- No request-size limits.
-- Imported archives are not validated before being trusted.
-
-The service is safer to expose over a tunnel than before, but it remains a single-owner trust model, not a multi-tenant one, and should not be exposed to untrusted networks without further hardening.
-
-## Development roadmap
-
-The movement-and-space work advances several priorities below: data integrity (Priority 1) is largely delivered by the physical-truth consolidation and room registry; authority and mutation safety (Priority 4) by interpret-side declaration capture and single- and multi-book destruction; first-class movers (Priority 5) by the transit model; and world-model integration (Priority 8) by the consolidation. That work has shipped (alpha2.0, with a follow-up in alpha2.0.1). Since then, further releases have advanced Priorities 3, 4, 6, and 7: alpha3.0 delivered the layered interior and earned drive rupture (Priority 3), the obligation ledger and player-fact adjudication (Priority 4), and autonomous background→cast promotion (Priorities 6–7); alpha3.1 added the drive-rupture resolution floor and a cluster of narration-integrity rules. Scheduled-event and condition ticking (Priority 4) is also delivered via the commit-time mechanics sweep. A full re-prioritization of the list below is still pending; the concrete near-term backlog now lives in `docs/AUDIT_FOLLOWUPS.md`.
-
-### Priority 0 — health and project control
-
-- Freeze major feature expansion temporarily.
-- Establish regular repository and database backups.
-- Maintain a known-good sample database.
-- Require small Git commits.
-- Record architectural decisions.
-- Run tests before accepting model-generated changes.
-- Separate current behavior from planned behavior in documentation.
-
-### Priority 1 — data integrity
-
-- Expand rollback fault injection to every commit domain.
-- Add optimistic revision checks or merge rules for chat-global writes prepared by concurrent frames.
-- Decide which structured-world domains must become frame-scoped.
-- Test checkpoint round trips.
-- Test import/export round trips.
-- Test branching with nested lorebooks and links.
-- Correct and test migrations from every historical version.
-
-### Priority 2 — preserve the epistemic thesis
-
-- Standardize persona and character access through accessors.
-- Unify ordinary character and reaction declarations downstream.
-- Add deterministic validation of perception outputs.
-- Validate unknown identity handling.
-- Add tests proving private thoughts never reach NPC contexts.
-- Add tests proving memories contain only delivered information.
-- Add tests proving wall- and room-based signal restrictions.
-- Record evidence paths for significant character beliefs.
-
-### Priority 3 — complete the cognitive loop
-
-- Add a post-outcome character absorption step.
-- Separate absorption from action generation.
-- Implement contradiction-driven belief revision.
-- Store belief revisions as high-salience memories.
-- Improve testimony provenance with source identity.
-- Add structured confidentiality metadata.
-- Add semantic-memory promotion from recurring episodes.
-- Implement optional active-state relaxation toward baseline.
-- Preserve the rule that stance and relationship axes do not decay silently.
-
-### Priority 4 — authority and mutation safety
-
-- Implement configurable player-authority modes.
-- Add provenance to state-diff operations.
-- Validate asserted claims and claim dispositions deterministically.
-- Validate room and entity references before commit.
-- Execute or explicitly reject every supported inventory operation.
-- Implement scheduled-event and condition ticking.
-- Reject unsupported mutation fields instead of silently ignoring them.
-
-### Priority 5 — first-class scenes
-
-- Add persistent scene identity.
-- Record scene opening and closing turns.
-- Record participants and location scope.
-- Add explicit boundary reasons.
-- Trigger scene-level consolidation.
-- Trigger coherence review.
-- Trigger lifecycle review.
-- Create scene summaries and checkpoints.
-- Support explicit user scene closure.
-
-### Priority 6 — off-screen NPC experience
-
-- Select affected off-screen actors through events rather than ticking everyone.
-- Build actor-local objective context.
-- Run perception before off-screen cognition.
-- Use character agents for private decisions.
-- Use a Director process for objective off-screen resolution.
-- Store private off-screen memories.
-- Propagate information through reports, messages, travel, and sensory channels.
-- Expose private off-screen experiences through an optional user inspector.
-- Keep Mapping responsible for scheduling and coherence, not character psychology.
-
-Suggested simulation levels:
-
-| Tier | Default off-screen behavior |
-|---|---|
-| Background | Frozen unless directly triggered |
-| Mid-tier | Summary intention ticks |
-| Major | Full local beats on meaningful triggers |
-
-### Priority 7 — lifecycle
-
-- Add active, dormant, archived, and retired states.
-- Add explicit promotion and downgrade reasons.
-- Snapshot lifecycle transitions.
-- Generate gap histories for returning characters.
-- Let character integrity checks challenge incompatible gap histories.
-- Implement bounded negotiation.
-- Commit the final accepted reactivation history.
-- Preserve provenance for user edits and administrative overrides.
-
-### Priority 8 — world-model integration
-
-- Decide whether scene state or normalized world tables are authoritative.
-- Implement placements as the canonical containment model if retained.
-- Integrate fiction worlds and locations.
-- Implement transit edges.
-- Integrate persistent conditions.
-- Integrate scheduled events.
-- Add aggregate simulation only when local simulation is stable.
-- Materialize individual entities from aggregates only when locally relevant.
-
-### Priority 9 — observability and efficiency
-
-- Integrate structured turn and step metrics.
-- Record call duration and token usage.
-- Store provider, model, prompt preset, and sampler metadata on variants.
-- Store prompt-version hashes.
-- Surface prompt-cache hit rates and token savings per turn/step (Anthropic prompt caching itself is already integrated in the provider layer).
-- Add call-budget reporting.
-- Add per-role cost estimates.
-- Convert the async pipeline to native async provider calls where useful.
-- Remove completed turn locks from the global registry.
-
-### Priority 10 — deployment security
-
-Credential removal from bootstrap responses, authentication (host username/password login plus guest join codes and tokens), and CORS restriction have shipped (`guest_access.py`, `app.py`'s `access_control`). Remaining:
-
-- Add request-size limits.
-- Validate imported archives.
-- Add authorization for destructive operations — today an authenticated host request can reach every management API without further checks.
-- Document local-only and network deployment modes.
-
-## Required invariant test suite
-
-The engine should test principles rather than attempting to enumerate every possible fictional situation.
-
-### Epistemic invariants
-
-- Private player thought never appears in an NPC payload.
-- Character A never receives Character B’s private memory.
-- An observer behind a wall does not receive normal speech.
-- Unknown spatial relationships produce no ordinary sensory access.
-- Unknown identity remains unknown without evidence.
-- Concealed actions are not delivered to excluded observers.
-- Character memory is derived from that character’s view.
-- Inferences remain marked as inference.
-- Narration does not contain unperceived objective facts.
-
-### Causal invariants
-
-- Character declarations do not determine their own success.
-- Asserted and contestable player actions remain distinct.
-- Every authority claim receives a disposition.
-- Dice are seeded and recorded.
-- Removed occupied rooms are rejected or retained.
-- Every position refers to an existing room.
-- Containment cycles are rejected.
-- Movement into a new room creates or validates that room.
-
-### Persistence invariants
-
-- Failed commit leaves state unchanged.
-- Every planned step has exactly one active variant.
-- Upstream variant changes mark downstream steps stale.
-- Reruns restore the correct checkpoint.
-- Turn deletion restores pre-turn state.
-- A branch cannot mutate its source chat.
-- Stable event keys prevent duplicate memory writes.
-- Import/export preserves resource identity and remaps local IDs.
-- Lorebook trees remain acyclic.
-- Only one mutating pipeline may operate on a chat.
-
-## User-facing director tools
-
-The product should embrace user inspection as a feature.
-
-An NPC cognition inspector may show:
-
-- Filtered perception.
-- Retrieved memories.
-- Observations used.
-- Appraisal.
-- Considered responses.
-- Chosen declaration.
-- Current mood and goal.
-- Mind-model updates.
-- Relationship updates.
-- Confidence and evidence.
-- Private memories created after resolution.
-
-The interface should distinguish three modes.
-
-### Inspect
-
-Read private state without changing causality.
-
-### Edit
-
-Deliberately alter memory, goals, relationships, beliefs, or private history with administrative provenance.
-
-### Possess
-
-Temporarily supply an NPC declaration while leaving objective resolution to the engine.
-
-User inspection must never automatically transfer private information into the player character’s knowledge.
-
-## Documentation structure
-
-The repository should maintain separate documents for philosophy, reality, and plans.
-
-```text
-docs/
-    DESIGN_THESIS.md
-    ARCHITECTURE_CURRENT.md
-    IMPLEMENTATION_STATUS.md
-    INVARIANTS.md
-    ROADMAP.md
-    STATE_AUTHORITY.md
-    SECURITY.md
-    decisions/
-```
-
-Important design changes should receive short decision records, especially:
-
-- Player-authority modes.
-- Sequential dialogue versus blind physical declarations.
-- Whole-state checkpoints versus per-agent rollback.
-- Scene dictionary versus normalized world tables.
-- Character-owned off-screen cognition.
-- Perception validation policy.
-- Commit transaction boundaries.
-
-## Product definition in one breath
-
-The player declares speech, thought, and action; the Director interprets that declaration without replacing it; Mapping retrieves or proposes the world information required for the beat; Perception filters the action onset into separate observer views; characters react from private perception, memory, knowledge, relationships, and fallible beliefs; urgent physical reactions remain blind while legitimate conversation may continue through bounded observable micro-beats; the Director resolves all declarations into one objective event using state, mechanics, abilities, and seeded checks; Perception filters the outcome separately for every mind; the Narrator renders only the player’s slice while character-specific experiences become private memories; Mapping reviews durable facts for canon; deterministic commit code persists validated changes; and the user may inspect every layer without granting omniscience to anyone inside the fiction.
-
-The engine’s identity can be summarized by one rule:
-
-> Every fictional mind must have a legitimate path to what it knows, while privileged infrastructure remains scoped, auditable, reversible, and outside the diegesis.
+### 3. Teach the heuristic import to read `description`
+
+No LLM required: fall back to `description` for `self_model.summary` and voice
+notes when `personality` is empty, and warn specifically when a heuristic import
+lands below a populated-field threshold. **Closes debt #3.**
+
+### 4. Hard mode — enforce `PlayerAuthorityMode`
+
+Wire the existing enum: per-chat setting, adjudication of assertions in
+`director_interpret`, and a refusal path that translates rather than discards
+(see [Player authority](#player-authority)). This is the most interesting item
+on the list, because it is the one that lets the engine's original thesis be
+played *as written* without taking the dial away from anyone who prefers
+otherwise.
+
+### 5. Automatic canon lock
+
+The column exists and is manually settable. Add the specified rule — facts
+on-page past a turn threshold, or referenced multiple times, lock automatically;
+locked wins a conflict. Cheap, and it is what stops long-run lore drift.
+
+### 6. Scene-boundary coherence pass
+
+Established-earlier wins unless the later fact is load-bearing for an active
+thread, in which case the older is retconned *with a logged entry*. The logging
+is the point: a silent retcon is the failure mode.
+
+### 7. Reactivation negotiation
+
+The largest unbuilt subsystem, and the one that makes a large cast feel alive
+rather than merely stored. Mapping proposes gap-history plus delta-summary; the
+character may refuse on integrity grounds only; refusals are capped and tagged
+(identity-violation counts half, preference counts full); on exhaustion the last
+proposal becomes canon. *Conservative defaults, costly exceptions.*
+
+### 8. Predictive staging
+
+Pre-stage lore and plausible NPCs for likely-next locations. Pure latency win,
+no correctness implication, which is why it ranks below the integrity work.
+
+### 9. Session digest
+
+A short end-of-session synthesis that re-anchors on resume. Small, and it
+directly addresses the "coming back after a week" experience.
+
+### 10. Richer off-screen life
+
+Deterministic scheduling exists; what is missing is the world visibly having
+moved while you were away. Standing intentions with triggers, seeded and logged,
+so the trap in the empty room is enforced while its author is dormant.
+
+### Further ideas, less certain
+
+- **A conformance test for this document.** The status table above is prose. A
+  test asserting each "Built" row still resolves to real code — symbol exists,
+  module imports, field present — would make this file self-checking, the way
+  `make structure` keeps `CODE_MAP.md` honest. Highest-leverage idea here: it
+  prevents the exact failure that made this rewrite necessary.
+- **A leak-injection suite.** Deliberately plant a forbidden fact in a
+  character's world record and assert it never surfaces in that character's
+  output across N turns. The firewall is the engine's central claim and is
+  currently protected by construction plus targeted tests.
+- **Salience-driven personal lore.** "This reminds you of a festival you walked,
+  long ago" — fired on genuine resonance, silent otherwise. Fired every beat it
+  is a tic; fired rarely and on-key it reads as soul.
+- **Per-character retrieval depth** as an explicit dial beside tier and
+  temperature — spend deep retrieval only on pivotal beats.
+- **Belief-revision salience.** Provenance makes revision *possible*; making the
+  moment of revision itself high-salience is what lets a betrayal recontextualise
+  forty turns and land as betrayal rather than confusion.
+- **Perception prose bound by the audibility layer.** Live data shows perception
+  narrating "difficult to parse from this distance" while the deterministic layer
+  had already ruled the speech fully audible. The deterministic layer is right;
+  the prose should be constrained by it rather than free to contradict it.
+
+---
+
+## Failure modes
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| NPC says what it shouldn't | Forbidden fact in its context | Structural firewall: each mind gets only its perception object |
+| NPC treats private thought as dialogue | Thought and speech entered the same window | Separate channels: speech → director event; thought → routed nowhere |
+| NPC reacts to something it wasn't present for | Presence was a sentence, not a router rule | Perception routes the beat only to minds that were there |
+| Narrator mentions what the player can't see | Narrator knows more than the player | Deny the narrator everything but the player's perception object |
+| Character answers the *previous* line | Present beat unreachable; only the past was citable | Give the present a first-class id (roadmap #1) |
+| Cast feels lifeless, nobody acts | Variance too low | Raise per-character temperature |
+| A character is spookily prescient | Context leak | Firewall plus strict character context hygiene |
+| World heals — door un-breaks, trap vanishes | Off-screen state dropped | Commit-up plus standing intentions with triggers |
+| Secret-in-a-crowd is common knowledge | Visibility posture missing | Overt/concealed plus target on every declaration |
+| Betrayal reads as confusion | Flat beliefs, no provenance | Provenance tags; revision as high salience |
+| Trust silently erodes | Clock-driven numeric drift | Stance axes event-linked; only mood decays |
+| Two characters share one position and one set of clothes | A model authored an identity key | Mint engine keys in code; never read them from model output |
+| The world cannot tell the player "no" | `world_author` authority by default | Hard mode (roadmap #4) |
+
+---
+
+## Keeping this document honest
+
+1. Change a status row in the same commit that changes the behaviour.
+2. Prefer "Partial" with a precise gap over "Built" with a caveat buried in
+   prose. The gap sentence is the useful part.
+3. When a roadmap item ships, move it into the status table and delete it from
+   the roadmap. Do not leave it in both.
+4. If this file passes roughly 500 lines, something belongs in `AGENTS.md`,
+   `docs/PIPELINE.md` or `docs/DATABASE.md` instead. Length is how the last
+   edition died.
+
+---
+
+## In one breath
+
+The player acts; perception filters the act so the present cast can react blind;
+the director collapses the player's declaration and all reactions into one
+resolved state, dice optional and seeded; perception filters that outcome per
+mind; the narrator renders the player's slice — coloured by a voice-setting only
+it can see — while each character commits a provenance-tagged, perception-
+filtered memory of what it personally registered. The narrator renders
+perception and never authors action, because intent runs straight to the
+director and never through it. Every mind holds only what it earned.
+Statelessness is the default; persistence is reserved for the agents being a
+continuous self. No agent authors the story — it is the residue of honest minds
+under honest causality. Omniscience exists nowhere inside the world, and only in
+the player above it, who may hold as much or as little of it as they choose.
