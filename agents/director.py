@@ -1269,7 +1269,7 @@ def _normalize_diff_shape(sd):
     if not isinstance(sd, dict):
         sd = {}
     for k in ("positions", "rooms", "entities", "overlays", "attire",
-              "conditions"):
+              "conditions", "scales", "containment"):
         if not isinstance(sd.get(k), dict):
             sd[k] = {}
     for k in ("cast_changes", "world_facts", "introductions",

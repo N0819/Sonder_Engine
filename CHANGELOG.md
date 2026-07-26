@@ -1,5 +1,75 @@
 # Changelog
 
+## alpha4.4.2 — Size, and being carried
+
+### Added
+- **Being carried: pockets, jars, shoulders, hands.** The sibling of the size
+  change above, and the reason it had to exist. A body shrunk to a tenth and
+  picked up is not merely *in contact with* the hand holding it — it has
+  stopped being an independently positioned thing. Contact alone left the tiny
+  person free to walk out of the room while sitting in someone's pocket,
+  because nothing tied their position to their container's.
+
+  `state_diff.containment` records it as `{subject: {in: holder, mode: ...}}`,
+  released with a null value, and a contained body's position is then
+  **derived** — transitively, so a person in a jar in a satchel goes where the
+  satchel goes. Writing a position for a carried body does nothing; getting out
+  is an explicit release, because "they climbed out and walked away" and "the
+  Director forgot they were in a pocket" produce the identical diff and only
+  one of them is meant. The Director is told plainly what a carried character
+  cannot do: walk to the door, take something from a shelf, step between two
+  people. What it can do is act on its container and whatever is within reach
+  of it.
+
+  Containment is released automatically when either body changes size — someone
+  restored to full height is not still in a coat pocket — and, like the contact
+  rule, that release runs *before* the beat's own declarations, so re-declaring
+  the arrangement as the thing it now is keeps it. Cycles are refused, since a
+  body inside itself makes position derivation unresolvable.
+
+  Interior rooms remain the mechanism for large containers you stand *inside*
+  (a ship, a building). This is the other direction: a container that carries
+  you as cargo.
+
+- **Shrinking and growing, and what stops being possible afterwards.** A body's
+  size is now tracked as live physical state — `state_diff.scales` as
+  `{name: factor}` relative to that body's own normal size, so 0.1 is a tenth
+  as tall and 8 is eight times. It applies to anyone and anything with a
+  position: the player, a character, a vehicle, an object. Absent means normal,
+  so a scene that never mentions size behaves exactly as it did before.
+
+  **A hold does not survive a size change.** This is the part the engine
+  enforces rather than asks for. A contact is a fact about two bodies at the
+  sizes they were: shrink the held person to a tenth and "his hand grips her
+  wrist" is not a smaller version of itself — the wrist is no longer where the
+  hand is. So every contact involving a resized body is cancelled outright
+  rather than quietly rescaled, and whether anything equivalent is still
+  possible is a question only the Director can answer. It is the same
+  discipline movement already follows: a contact the physical situation no
+  longer supports does not survive on inertia.
+
+  Cancellation happens *before* the beat's own contact ops, so a Director that
+  correctly re-establishes a hold as the thing it now is — a hand that held a
+  wrist now closing around the whole body — keeps it. Holds it does not
+  re-establish stay ended, which is right for every grip the new size has
+  broken. A trivial change does not break anything; a growth spurt is not a
+  reconfiguration.
+
+  Everything else about feasibility is *reported*, not enforced, because the
+  Director owns whether an act succeeds. It is now given the geometry to reason
+  from — the ratio between two bodies, and whether one can reach the other's
+  upper body, lift them, be lifted by them, or be held in a hand — so "too
+  small to reach the latch" comes from a number rather than from vibes. The
+  narrator is told the same, before the contacts it invalidates. The prompt
+  spells out the consequences the model is expected to draw: an attempt the new
+  size makes impossible fails on-page *for that reason*, an attempt it makes
+  trivial simply succeeds, and the world is never silently rescaled to keep an
+  act working.
+
+  Size deliberately does **not** prune by position, unlike contact. A contact
+  genuinely requires two bodies in one room; a size does not, so someone shrunk
+  who steps offscreen for a scene is still shrunk when they return.
+
 ## alpha4.4.1 — One contact, one place
 
 ### Changed

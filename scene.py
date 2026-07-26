@@ -180,6 +180,12 @@ def get_scene(chat_id, chat=None):
     # Body position tracking. A list, not a dict: a contact is a relation and is
     # stored once rather than on either body (spatial.normalize_scene_contacts).
     sc.setdefault("contacts", [])
+    # Scale: {name: factor relative to that body's own baseline}. Absent or 1.0
+    # is normal size, so a scene that never mentions size behaves as before.
+    sc.setdefault("scales", {})
+    # Containment: who is being carried by what. A contained body's position is
+    # derived from its container's, so it cannot walk off on its own.
+    sc.setdefault("contained", {})
     return sc
 
 def appearance_of(name, base, scene):

@@ -536,7 +536,13 @@ def perception_establish(ctx, nonce):
                   # Body position: who is in contact with whom, and
                   # where. A held wrist is something the held person
                   # knows first-hand.
-                  "contacts": sc.get("contacts") or []},
+                  "contacts": sc.get("contacts") or [],
+                  # Size relative to each body's own baseline. Absent means
+                  # normal; a shrunk perceiver sees a different room.
+                  "scales": sc.get("scales") or {},
+                  # Who is being carried by what. A carried body perceives
+                  # from wherever its carrier is.
+                  "contained": sc.get("contained") or {}},
         "declared_act": declared,
         "perceivers": awake_perceivers,
         "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
@@ -734,7 +740,13 @@ def perception_act(ctx, nonce):
                   # Body position: who is in contact with whom, and
                   # where. A held wrist is something the held person
                   # knows first-hand.
-                  "contacts": sc.get("contacts") or []},
+                  "contacts": sc.get("contacts") or [],
+                  # Size relative to each body's own baseline. Absent means
+                  # normal; a shrunk perceiver sees a different room.
+                  "scales": sc.get("scales") or {},
+                  # Who is being carried by what. A carried body perceives
+                  # from wherever its carrier is.
+                  "contained": sc.get("contained") or {}},
         "declared_act": action_onset,
         "perceivers": awake_perceivers,
         "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
@@ -1142,7 +1154,13 @@ def perception_outcome(ctx, nonce):
                   # Body position: who is in contact with whom, and
                   # where. A held wrist is something the held person
                   # knows first-hand.
-                  "contacts": sc.get("contacts") or []},
+                  "contacts": sc.get("contacts") or [],
+                  # Size relative to each body's own baseline. Absent means
+                  # normal; a shrunk perceiver sees a different room.
+                  "scales": sc.get("scales") or {},
+                  # Who is being carried by what. A carried body perceives
+                  # from wherever its carrier is.
+                  "contained": sc.get("contained") or {}},
         "perceivers": awake_perceivers,
         "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
         "output_reminder": (
