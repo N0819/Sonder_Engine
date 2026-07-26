@@ -1,5 +1,47 @@
 # Changelog
 
+## alpha4.4 — What is touching what
+
+### Added
+- **Body position tracking — who is in contact with whom, and where.** Physical
+  contact used to live as prose inside an entity's own state: one whole-body
+  `target`, a `proximity` word, and a free-text paragraph, written by the model
+  and read back by the model with nothing structural in between. It cost four
+  things at once.
+
+  It could not say *where*. One whole-body target meant a hand on a shoulder and
+  a grip on a wrist were the same fact, and holding two people at once was
+  unsayable. It was stored per body, so a single contact became two records free
+  to drift apart. Nothing ever cleared it — the paragraph persisted verbatim
+  until the model happened to rewrite it, so a grip survived the person walking
+  away, and a detail could migrate between beats with no transition and no
+  record of either position. And nothing could query it, so the narrator had
+  only prose to re-read and was free to contradict it.
+
+  A contact is a relation, so it is now stored once, at scene level, in the
+  grain `stations` already established: a list that deterministic hygiene prunes
+  at every merge. The Director maintains it through `state_diff.contact_ops` —
+  `add` with the parts involved (`hand` → `wrist`) and a manner, `remove` for a
+  release, `clear` to let go of everything at once — and each contact carries
+  both body parts, so one person can hold several things, in different ways, at
+  the same time.
+
+  The staleness is fixed structurally rather than by asking the model to
+  remember: **a contact between two people who are no longer in the same room is
+  dropped automatically.** Walking away ends a hold with no op required, the
+  same way a room change already self-heals a stale station anchor. The
+  Director never has to re-assert an unchanged contact, and cannot smuggle in a
+  hold across two rooms, because hygiene runs after the ops either way.
+
+  Contact is also now ground truth the narrator is told rather than left to
+  infer — with both parties gated on being nameable to that observer, exactly
+  like the existing proximity clauses, so a hold by someone unrecognized yields
+  no named line rather than leaking a name the observer has no way to know.
+
+  Useful well beyond the case that prompted it: a grapple, carrying someone,
+  restraints, a hand on a shoulder held through a conversation, a grip on a
+  rope. Existing scenes start empty and gain contacts as they are recorded.
+
 ## alpha4.3.3 — One body, one record
 
 ### Fixed

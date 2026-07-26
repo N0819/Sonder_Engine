@@ -532,7 +532,11 @@ def perception_establish(ctx, nonce):
 
     payload = {
         "scene": {"location": sc.get("location"), "time": sc.get("time"),
-                  "rooms": sc.get("rooms"), "entities": _perceptible_entities(sc)},
+                  "rooms": sc.get("rooms"), "entities": _perceptible_entities(sc),
+                  # Body position: who is in contact with whom, and
+                  # where. A held wrist is something the held person
+                  # knows first-hand.
+                  "contacts": sc.get("contacts") or []},
         "declared_act": declared,
         "perceivers": awake_perceivers,
         "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
@@ -726,7 +730,11 @@ def perception_act(ctx, nonce):
     payload = {
         "scene": {"location": sc.get("location"), "time": sc.get("time"),
                   "rooms": _contextual_rooms(sc, ctx.cast, p_room),
-                  "entities": _perceptible_entities(sc)},
+                  "entities": _perceptible_entities(sc),
+                  # Body position: who is in contact with whom, and
+                  # where. A held wrist is something the held person
+                  # knows first-hand.
+                  "contacts": sc.get("contacts") or []},
         "declared_act": action_onset,
         "perceivers": awake_perceivers,
         "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
@@ -1130,7 +1138,11 @@ def perception_outcome(ctx, nonce):
         "concealed_actions": concealed,
         "scene": {"location": sc.get("location"), "time": sc.get("time"),
                   "rooms": _contextual_rooms(sc, ctx.cast, p_room),
-                  "entities": _perceptible_entities(sc)},
+                  "entities": _perceptible_entities(sc),
+                  # Body position: who is in contact with whom, and
+                  # where. A held wrist is something the held person
+                  # knows first-hand.
+                  "contacts": sc.get("contacts") or []},
         "perceivers": awake_perceivers,
         "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
         "output_reminder": (

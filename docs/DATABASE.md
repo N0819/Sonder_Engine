@@ -19,7 +19,7 @@ The engine uses SQLite. The schema is defined in `db.py`; access is intentionall
 - `steps`, `variants`: inspectable intermediate pipeline outputs and rerolls.
 - `events`: one summarized committed event per turn.
 - `memories`, `memory_summaries`: character-owned experience records and consolidation.
-- `world`: JSON key/value state for the chat, including the current scene and pipeline caches.
+- `world`: JSON key/value state for the chat, including the current scene and pipeline caches. Inside the frame-scoped `scene` blob, `positions` is which room each person is in, `stations` their within-room position, and `contacts` a flat list of who is in physical contact with whom and by which body parts — a relation stored once rather than on either body, pruned at every merge by `spatial.normalize_scene_contacts` (contact between two people not in the same room cannot survive, so movement ends a hold deterministically).
 - `checkpoints`: whole-state restoration blobs keyed by chat and turn index.
 
 ## Structured world tables

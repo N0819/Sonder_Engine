@@ -856,6 +856,223 @@ def normalize_scene_stations(scene: dict) -> dict:
     return scene
 
 
+# ---------------------------------------------------------------------------
+# BODY POSITION TRACKING -- who is in contact with whom, and where.
+#
+# Contact used to live as prose inside an entity's own `state`: a single
+# whole-body `target`, a `proximity` word, and a `description` paragraph
+# ("mouth on throat ..., hips ..., tail coiled around the leg"). Model-written
+# and model-read, with nothing structural in between, which cost four things:
+#
+#   * it could not say WHERE -- one whole-body target, so a hand on a shoulder
+#     and a grip on a wrist were the same fact, and a hold on two different
+#     people at once was unsayable;
+#   * it was stored per entity, so one contact became two records (one on each
+#     body) free to drift apart, and each was overwritten wholesale each beat;
+#   * nothing ever cleared it -- it persisted verbatim until the model happened
+#     to rewrite the paragraph, so a grip survived the person walking away; and
+#   * no reader could query it, so the narrator had only prose to re-read and
+#     was free to contradict it.
+#
+# A contact is a RELATION, so it is stored once, at scene level, in the same
+# grain as `stations` (the within-room sibling of `positions`): a plain list
+# that deterministic hygiene prunes at every merge. Movement clearing contact
+# falls out of that hygiene rather than needing the model to remember -- exactly
+# how a room change already self-heals a stale station anchor.
+_MAX_CONTACTS = 40
+_MAX_CONTACT_PART = 48
+
+# Small controlled vocabulary. Unknown manners are kept (the fiction is wider
+# than any list) but normalized to lowercase so equality holds.
+CONTACT_MANNERS = (
+    "touch", "hold", "grip", "press", "rest", "lean", "wrap", "coil",
+    "straddle", "pin", "carry", "support", "kiss", "bite", "strike",
+)
+
+
+def _contact_text(value, limit=_MAX_CONTACT_PART):
+    return str(value or "").strip()[:limit]
+
+
+def _contact_key(contact):
+    """Identity of a contact for dedup/removal: who, by what, on whom, where.
+    `manner` is deliberately excluded -- a grip that becomes a caress is the
+    same contact changing, not a second one."""
+    return (
+        _contact_text(contact.get("actor")).casefold(),
+        _contact_text(contact.get("actor_part")).casefold(),
+        _contact_text(contact.get("target")).casefold(),
+        _contact_text(contact.get("target_part")).casefold(),
+    )
+
+
+def _clean_contact(raw):
+    """A contact record, or None if it names nobody on one side."""
+    if not isinstance(raw, dict):
+        return None
+    actor = _contact_text(raw.get("actor"), 120)
+    target = _contact_text(raw.get("target"), 120)
+    if not actor or not target:
+        return None
+    if actor.casefold() == target.casefold():
+        return None  # a body is always in contact with itself; not a fact
+    manner = _contact_text(raw.get("manner")).casefold() or "touch"
+    return {
+        "actor": actor,
+        "actor_part": _contact_text(raw.get("actor_part")),
+        "target": target,
+        "target_part": _contact_text(raw.get("target_part")),
+        "manner": manner,
+    }
+
+
+def normalize_scene_contacts(scene: dict) -> dict:
+    """Contact hygiene, run at merge -- the sibling of normalize_scene_stations.
+
+    Drops a contact naming someone with no position (they are not in the
+    scene), and any contact between two people who are not in the SAME room:
+    you cannot hold someone you are not standing next to. That single rule is
+    what makes walking away clear contact deterministically, with no separate
+    inferer and nothing for the Director to remember -- the stale record simply
+    fails its membership test the moment a position changes.
+
+    Deduped on (actor, actor_part, target, target_part) keeping the LAST
+    occurrence, so re-asserting a contact updates its manner rather than
+    stacking a second copy.
+    """
+    contacts = scene.get("contacts")
+    if not isinstance(contacts, list):
+        if contacts is not None:
+            scene["contacts"] = []
+        return scene
+
+    positions = scene.get("positions") or {}
+    kept = {}
+    for raw in contacts:
+        contact = _clean_contact(raw)
+        if contact is None:
+            continue
+        actor_room = _ci_get(positions, contact["actor"])
+        target_room = _ci_get(positions, contact["target"])
+        if actor_room is None or target_room is None:
+            continue
+        if actor_room != target_room:
+            continue
+        kept[_contact_key(contact)] = contact
+
+    scene["contacts"] = list(kept.values())[-_MAX_CONTACTS:]
+    return scene
+
+
+def apply_contact_ops(scene: dict, ops) -> dict:
+    """Apply state_diff.contact_ops to scene.contacts.
+
+    add     -- upsert by (actor, actor_part, target, target_part)
+    remove  -- drop matching contacts; parts omitted means "any contact
+               between these two", so ending a hold does not require the
+               Director to recall exactly which parts it recorded
+    clear   -- with `actor`, every contact that person is part of (on either
+               side); bare, the whole list
+
+    Hygiene still runs afterwards, so an op naming someone in another room
+    cannot smuggle in an impossible contact.
+    """
+    if not isinstance(ops, list) or not ops:
+        return scene
+
+    contacts = scene.get("contacts")
+    if not isinstance(contacts, list):
+        contacts = []
+    current = {_contact_key(c): c for c in
+               (_clean_contact(r) for r in contacts) if c is not None}
+
+    for raw in ops:
+        if not isinstance(raw, dict):
+            continue
+        op = str(raw.get("op") or "add").strip().casefold()
+
+        if op == "clear":
+            who = _contact_text(raw.get("actor"), 120).casefold()
+            if not who:
+                current = {}
+                continue
+            current = {
+                key: c for key, c in current.items()
+                if who not in (c["actor"].casefold(), c["target"].casefold())
+            }
+            continue
+
+        if op == "remove":
+            actor = _contact_text(raw.get("actor"), 120).casefold()
+            target = _contact_text(raw.get("target"), 120).casefold()
+            actor_part = _contact_text(raw.get("actor_part")).casefold()
+            target_part = _contact_text(raw.get("target_part")).casefold()
+            if not actor or not target:
+                continue
+            survivors = {}
+            for key, c in current.items():
+                pair = {c["actor"].casefold(), c["target"].casefold()}
+                # Contact is physically symmetric, so a removal naming the two
+                # in either order ends it.
+                if pair != {actor, target}:
+                    survivors[key] = c
+                    continue
+                if actor_part and c["actor_part"].casefold() != actor_part:
+                    survivors[key] = c
+                    continue
+                if target_part and c["target_part"].casefold() != target_part:
+                    survivors[key] = c
+                    continue
+            current = survivors
+            continue
+
+        contact = _clean_contact(raw)
+        if contact is not None:
+            current[_contact_key(contact)] = contact
+
+    scene["contacts"] = list(current.values())[-_MAX_CONTACTS:]
+    return scene
+
+
+def contacts_of(scene: dict, name: str) -> list:
+    """Every contact `name` is part of, on either side.
+
+    The reader that did not exist before: "what is touching Hinami" was only
+    answerable by re-reading a prose paragraph and hoping.
+    """
+    target = str(name or "").strip().casefold()
+    if not target:
+        return []
+    out = []
+    for contact in (scene.get("contacts") or []):
+        if not isinstance(contact, dict):
+            continue
+        if target in (str(contact.get("actor") or "").strip().casefold(),
+                      str(contact.get("target") or "").strip().casefold()):
+            out.append(contact)
+    return out
+
+
+def contact_phrase(contact: dict, *, subject_first=True) -> str:
+    """One contact as a plain clause: 'Lilaeve's hand grips Hinami's waist'."""
+    if not isinstance(contact, dict):
+        return ""
+    actor = str(contact.get("actor") or "").strip()
+    target = str(contact.get("target") or "").strip()
+    if not actor or not target:
+        return ""
+    manner = str(contact.get("manner") or "touch").strip() or "touch"
+    actor_part = str(contact.get("actor_part") or "").strip()
+    target_part = str(contact.get("target_part") or "").strip()
+
+    left = f"{actor}'s {actor_part}" if actor_part else actor
+    right = f"{target}'s {target_part}" if target_part else target
+    if not subject_first:
+        return f"{right} is under {left} ({manner})"
+    return f"{left} {manner}s {right}" if not manner.endswith("s") \
+        else f"{left} {manner} {right}"
+
+
 def spatial_facts(scene: dict, observer: str, source_names) -> list:
     """Deterministic, authoritative one-line spatial statements for a beat, from
     the observer's frame -- GROUND TRUTH a weak narrator must not contradict
@@ -887,6 +1104,29 @@ def spatial_facts(scene: dict, observer: str, source_names) -> list:
             if side:
                 clause += f", on your {side}"
         facts.append(clause + ".")
+
+    # Body position: contact is objective, and it is the fact a narrator most
+    # easily contradicts -- describing hands that let go a beat ago, or a hold
+    # that was never recorded.
+    #
+    # BOTH parties must be nameable to this observer, exactly like the
+    # proximity clauses above, which only ever iterate source_names. These
+    # lines carry canonical names, so a contact involving someone the observer
+    # does not recognize would hand the narrator a name the observer has no way
+    # to know -- the leak this engine exists to prevent. Being held by a
+    # stranger therefore yields no line here rather than a named one; the
+    # perception view still reports the hold in the observer's own terms.
+    visible = {str(n) for n in (source_names or []) if n} | {observer}
+    for contact in (scene.get("contacts") or []):
+        if not isinstance(contact, dict):
+            continue
+        actor = str(contact.get("actor") or "").strip()
+        target = str(contact.get("target") or "").strip()
+        if actor not in visible or target not in visible:
+            continue
+        phrase = contact_phrase(contact)
+        if phrase:
+            facts.append(phrase + ".")
     return facts
 
 
@@ -1655,6 +1895,13 @@ def merge_scene_with_diff(
     # room move) and symmetrize proximity. Runs after positions are final.
     if merged.get("stations"):
         normalize_scene_stations(merged)
+    # Body position tracking: apply this beat's contact ops, then prune every
+    # contact that positions no longer permit. Runs LAST, after positions are
+    # final, which is what makes walking away end a hold with nothing for the
+    # Director to remember.
+    if diff.get("contact_ops") or merged.get("contacts"):
+        apply_contact_ops(merged, diff.get("contact_ops"))
+        normalize_scene_contacts(merged)
     return merged
 
 def normalize_room_id(name: str) -> str:

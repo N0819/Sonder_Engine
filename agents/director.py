@@ -1274,7 +1274,7 @@ def _normalize_diff_shape(sd):
             sd[k] = {}
     for k in ("cast_changes", "world_facts", "introductions",
               "remove_entities", "remove_rooms", "remove_adjacent",
-              "inventory_ops", "claim_dispositions"):
+              "inventory_ops", "contact_ops", "claim_dispositions"):
         if not isinstance(sd.get(k), list):
             sd[k] = []
     sd.setdefault("time", None)
