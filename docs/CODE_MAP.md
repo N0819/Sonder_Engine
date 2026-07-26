@@ -41,7 +41,7 @@
 | `providers.py` | 1802 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 845 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 2005 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 1627 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas` |
+| `spatial.py` | 1703 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas` |
 | `spatial_frames.py` | 875 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `theory_of_mind.py` | 288 |  | — |
 | `updates.py` | 254 |  | — |
@@ -439,13 +439,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `apply_transit_dock_edges()` | 1220 | 137 lines |
-| `merge_scene_with_diff()` | 1455 | 128 lines |
+| `merge_scene_with_diff()` | 1524 | 135 lines |
 | `visible_adjacent_rooms()` | 893 | 113 lines |
 | `egocentric_frame()` | 542 | 80 lines |
 | `normalize_scene_bearings()` | 215 | 74 lines |
+| `_dedup_duplicate_entity_keys()` | 1464 | 58 lines |
 | `_merge_entity()` | 1072 | 55 lines |
 | `passable_route_exists()` | 365 | 53 lines |
-| `hear_level()` | 419 | 53 lines |
 
 ### `spatial_frames.py`
 

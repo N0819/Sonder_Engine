@@ -1452,6 +1452,75 @@ def _dedup_duplicate_position_keys(positions, entities, incoming_positions=None)
     return positions
 
 
+# Durable structural facts about an entity, as opposed to `state`, which is a
+# snapshot of right now. When two records for one entity are collapsed these
+# survive from whichever record has them; `state` never merges (see below).
+_ENTITY_STRUCTURAL_FIELDS = (
+    "kind", "subtype", "name", "description", "aliases", "interior_rooms",
+    "portable", "container", "ubiquitous", "parent_entity",
+)
+
+
+def _dedup_duplicate_entity_keys(entities, incoming_entities=None):
+    """Collapse an entity recorded under BOTH its id and its display name.
+
+    The third instance of one bug. A character legitimately answers to several
+    scene keys -- display name, identity.uid, aliases (see
+    agents.common.character_scene_keys) -- and the Director keys with whichever
+    it reaches for. `positions` survived that because readers try every key and
+    duplicates collapse (_dedup_duplicate_position_keys); `attire` was healed
+    after a character rendered as wearing nothing while her clothing state still
+    described her coat (commit._heal_attire_identity_keys). `entities` had
+    neither, and it is the record that says what each body is doing and what it
+    is in contact with.
+
+    Observed live: one character held two entity records -- `char_62aa02c0...`
+    frozen at the beat it was created, and `Lilaeve Voss` written every beat
+    since. Both claimed to describe her, so "who is in contact with whom" had
+    two contradictory answers at once, one of them arbitrarily old, and every
+    reader that walks entities saw the same person twice.
+
+    Unlike attire, `state` is NOT merged: a wardrobe accumulates, but contact
+    and posture describe a single instant, so folding a stale snapshot into a
+    fresh one is what manufactures the contradiction. The fresh record's state
+    wins whole. Only the structural fields above are rescued from the loser, so
+    collapsing can never drop a vehicle's interior_rooms or an entity's aliases.
+    """
+    if not isinstance(entities, dict):
+        return entities
+    incoming = incoming_entities if isinstance(incoming_entities, dict) else {}
+
+    for eid, ent in list(entities.items()):
+        if not isinstance(ent, dict):
+            continue
+        name = str(ent.get("name") or "").strip()
+        if not name or name == eid or name not in entities:
+            continue
+        twin = entities.get(name)
+        if not isinstance(twin, dict) or twin is ent:
+            continue
+
+        # The display name is the surviving KEY either way (the convention every
+        # reader uses); which record's content survives depends on which one
+        # this diff just wrote.
+        if eid in incoming and name not in incoming:
+            winner, loser = ent, twin
+        else:
+            winner, loser = twin, ent
+
+        merged = dict(winner)
+        for field in _ENTITY_STRUCTURAL_FIELDS:
+            if field not in merged or merged.get(field) in (None, "", [], {}):
+                if loser.get(field) not in (None, "", [], {}):
+                    merged[field] = loser[field]
+        merged["name"] = name
+
+        entities[name] = merged
+        entities.pop(eid, None)
+
+    return entities
+
+
 def merge_scene_with_diff(
     scene: dict,
     diff: dict | None,
@@ -1495,6 +1564,13 @@ def merge_scene_with_diff(
                 and isinstance(incoming_entity, dict)
                 else incoming_entity
             )
+
+    # An entity keyed by its id in one beat and by its display name in the next
+    # leaves TWO records for one body -- each with its own posture and contact,
+    # one of them frozen at whatever beat it was last written. Collapse before
+    # anything reads them (positions dedup below reads entities, and every
+    # perception/narration reader walks this dict).
+    _dedup_duplicate_entity_keys(merged["entities"], incoming_entities)
 
     if isinstance(incoming_positions, dict):
         merged["positions"].update(incoming_positions)
