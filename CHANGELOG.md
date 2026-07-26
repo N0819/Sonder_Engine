@@ -1,5 +1,84 @@
 # Changelog
 
+## alpha4.3 — A goal can be spent as well as impossible
+
+### Fixed
+- **A character stops asking the question that stopped paying.** In a live
+  chat the Doctor asked Hinami to describe the same "made from nothing"
+  quality of a replicated spanner for eleven consecutive turns, reaching for a
+  new image each time — a book missing its first chapter, a song without its
+  opening bars, an echo that never had a source — while asking for exactly the
+  same thing. By turn 73 the narrator was describing the fault directly: "he
+  keeps reaching for a layer you can't find, and every new metaphor he offers
+  just makes the gap wider."
+
+  The cause was a guard defeated by the behaviour it existed to catch. An
+  intention that goes untouched for 30 turns fades to dormant so it cannot
+  steer forever — but `{op:'progress'}` refreshed `last_progress_turn`
+  unconditionally, including on a goal already at `progress: 1.0` where the
+  value could not move. Grinding a goal every single beat therefore reset the
+  only timer that could ever retire it, so the sweep could fire on a
+  *forgotten* goal and never on a *stuck* one. The Doctor's `i2` sat at
+  `status: active, progress: 1.0` from turn 68 onward, still steering, its
+  clock refreshed by each fruitless attempt. The character agent was not
+  confused about this — turn 71's own appraisal recorded that the reply
+  "supplies no new modal detail despite the reframing", and then logged
+  progress anyway.
+
+  The asymmetry underneath it: `satisfy`, `abandon` and `nonviable` all
+  require on-screen evidence, so a goal is never quietly *dropped* — while
+  keeping one alive was entirely unguarded, so a goal was never *let go*.
+  Progress that cannot move the value is now barren: it leaves the clock
+  alone, never revives a set-aside goal, and after two in a row the goal stops
+  steering and must be satisfied, abandoned, or replaced by one that asks
+  something genuinely different. Rephrasing does not launder it back to active
+  — an `add` that merges into a spent goal revives it only if it had somewhere
+  left to go. Closing a goal still requires evidence; only pursuit past the
+  point of yield is stopped. Replayed against the live chat, `i2` goes dormant
+  at turn 70, three turns before the narrator started apologising for it.
+
+  What made this read as *fixation* rather than as a broken record is that the
+  anti-repetition machinery was working perfectly. `_recent_self_lines` feeds a
+  character its own recent dialogue so it never repeats itself verbatim, and it
+  didn't — it varied the wording every time. Wording variety over a stuck goal
+  is what produces an escalating series of ever-more-elaborate metaphors, which
+  is a worse symptom than plain repetition would have been. The character
+  prompt now names that failure directly: a fresh image over the same request
+  is a loop wearing a disguise.
+- **A goal that stopped steering stops moving the mood too.** The same
+  asymmetry had a second outlet. Appraisal weights each goal-impact by what it
+  serves — 1.0 for the drive, 0.8 for an intention, 0.4 for anything
+  situational — and the 0.8 was awarded to any id present in the character's
+  intentions list, regardless of its status. So a goal the world had sealed
+  off, a goal gone dormant, even one the character had explicitly abandoned,
+  kept hitting affect exactly as hard as a live one for the rest of the story.
+  `test_goal_viability` has asserted since it was written that a blocked goal
+  "no longer steers"; through the prompt it mostly didn't, but the affect maths
+  still paid it in full.
+
+  Weight now goes to goals that are active — or that were touched **this**
+  beat, whatever their new status. That second clause is the whole delicacy of
+  it: satisfy, abandon and nonviable all stamp the turn they fire on, and the
+  beat a goal is achieved, released, or destroyed is the beat it matters most.
+  Muting the payoff at the exact moment it lands would have been a worse fault
+  than the one being fixed. A stall is the deliberate exception — it does not
+  stamp the clock, because arriving at "nothing gained, again" is not a
+  dramatic beat and should not be scored like one.
+
+  What did *not* change: which ids a want may name. Those are validated against
+  the full list, because a beat's wants were formed against the intentions the
+  character saw when the beat started — demoting one because its goal closed
+  mid-beat would punish a mind for a state change it could not have seen, and
+  demotion also culls all but the highest-urgency situational want, which is a
+  side effect far out of proportion. Steering stops on the next beat, through
+  the prompt, where the new status is visible.
+- **A revived goal stops carrying the turn it was blocked on.** Progressing a
+  blocked intention clears the block, but `blocked_turn` outlived it, so an
+  active goal kept a stamp from a state it was no longer in (live: the Doctor's
+  `i2` carried `blocked_turn: 57` while active at turn 71). Nothing read the
+  field, so this was stale data rather than wrong behaviour — cleared with the
+  rest of the block now.
+
 ## alpha4.2.2 — The whole tavern is a library
 
 The tavern's Lore tab was the only place the theme committed to an idea: rows

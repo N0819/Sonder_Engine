@@ -6,7 +6,7 @@
 
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
-| `affect.py` | 1203 |  | `theory_of_mind` |
+| `affect.py` | 1293 |  | `theory_of_mind` |
 | `agents/__init__.py` | 86 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 719 |  | `agents.common`, `background_claims`, `commit`, `db`, `prompts`, `schemas`, `spatial` |
 | `agents/character.py` | 429 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
@@ -24,7 +24,7 @@
 | `background_claims.py` | 287 |  | `db` |
 | `character_schema.py` | 741 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
 | `checkpoints.py` | 562 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
-| `commit.py` | 3878 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `spatial`, `spatial_frames`, `theory_of_mind` |
+| `commit.py` | 3890 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `spatial`, `spatial_frames`, `theory_of_mind` |
 | `db.py` | 1264 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 193 |  | `db` |
 | `greetings.py` | 252 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
@@ -37,7 +37,7 @@
 | `paradox.py` | 486 |  | `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 2169 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 2177 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1730 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 830 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 2005 | Pydantic output contracts and semantic validation for agent payloads. | — |
@@ -52,14 +52,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `resolve_affect()` | 494 | 134 lines |
-| `apply_intent_ops()` | 727 | 120 lines |
-| `validate_drive_shift()` | 986 | 79 lines |
-| `update_drive_strain()` | 867 | 77 lines |
-| `normalize_wants()` | 634 | 72 lines |
-| `ground_tells()` | 1139 | 65 lines |
-| `appraise()` | 367 | 46 lines |
-| `leak_scan()` | 1079 | 44 lines |
+| `resolve_affect()` | 499 | 134 lines |
+| `apply_intent_ops()` | 811 | 126 lines |
+| `validate_drive_shift()` | 1076 | 79 lines |
+| `update_drive_strain()` | 957 | 77 lines |
+| `normalize_wants()` | 639 | 72 lines |
+| `ground_tells()` | 1229 | 65 lines |
+| `appraise()` | 372 | 46 lines |
+| `leak_scan()` | 1169 | 44 lines |
 
 ### `agents/background.py`
 
@@ -255,7 +255,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 3146 | 405 lines |
+| `prepare_memory_commit()` | 3146 | 417 lines |
 | `prepare_scene_commit()` | 1126 | 236 lines |
 | `track_background_presences()` | 1837 | 196 lines |
 | `_prepare_destruction()` | 417 | 158 lines |
@@ -390,10 +390,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 2160 | 10 lines |
-| `presets()` | 2151 | 2 lines |
-| `active_preset()` | 2154 | 2 lines |
-| `nsfw_enabled()` | 2157 | 2 lines |
+| `get_prompt()` | 2168 | 10 lines |
+| `presets()` | 2159 | 2 lines |
+| `active_preset()` | 2162 | 2 lines |
+| `nsfw_enabled()` | 2165 | 2 lines |
 
 ### `providers.py`
 
