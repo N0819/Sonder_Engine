@@ -76,7 +76,7 @@ When several representations disagree, resolve the conflict deliberately rather 
 3. **`PipelineContext`** is the in-memory working state for one execution.
 4. **Pydantic schemas** define accepted structured model output.
 5. **Prompts** describe desired behavior but do not override deterministic validation.
-6. **`Design.md`** describes intended architecture; verify implementation before assuming it is current.
+6. **`Design.md`** describes intended architecture and carries a verified status table; code still wins a disagreement, and the losing row should be corrected rather than left standing.
 
 Physical-world authority (Phase 3a consolidation): the frame-scoped `world.scene` blob is the sole runtime authority for live rooms/positions/entity state; `room_registry` is the sole cross-frame ledger of room identity/retirement; `world_entities` is a derived projection of the scene commit (built from the prepared post-dedup diff); `world_placements` is decommissioned. Every scene writer must keep the registry projection in sync (`commit_scene` does; `world_put` calls `commit.sync_room_registry_with_scene`). See `docs/DATABASE.md`.
 

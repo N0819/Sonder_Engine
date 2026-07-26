@@ -10,7 +10,7 @@ This repo already maintains detailed docs for coding agents. Read them before ma
 2. [`docs/PIPELINE.md`](docs/PIPELINE.md) — exact opening-turn and normal-turn execution flow, stage-by-stage.
 3. [`docs/CODE_MAP.md`](docs/CODE_MAP.md) — generated index of modules, functions, routes, DB tables, and frontend sections. Regenerate with `python tools/generate_code_map.py`; do not hand-edit.
 4. [`docs/DATABASE.md`](docs/DATABASE.md) — schema, write helpers (`q`/`qi`/`qtx`/`transaction`/`wget`/`wset`), and the schema-change checklist.
-5. [`Design.md`](Design.md) — product philosophy, full architecture, known weaknesses, and roadmap. Verify against actual code before trusting it as current.
+5. [`Design.md`](Design.md) — product philosophy, architecture, a verified conformance table (built / partial / not built), structural debt, and roadmap. Its status rows were checked against source; keep them that way by editing the row in the same commit as the behaviour.
 6. [`agents/README.md`](agents/README.md) — how to add a new pipeline stage.
 
 Do not duplicate content from these files in explanations; point to them instead.
