@@ -906,6 +906,12 @@ def _contact_key(contact):
     )
 
 
+def _mirror_key(key):
+    """The same contact stated from the other side: pair and parts swapped."""
+    actor, actor_part, target, target_part = key
+    return (target, target_part, actor, actor_part)
+
+
 def _clean_contact(raw):
     """A contact record, or None if it names nobody on one side."""
     if not isinstance(raw, dict):
@@ -926,6 +932,175 @@ def _clean_contact(raw):
     }
 
 
+# ---- migrating contact out of entity state --------------------------------
+# Before contacts existed, the Director recorded contact inside an entity's own
+# `state`: `target` + `proximity` in the documented shape, and in practice a
+# drift of invented keys naming the other body -- `leaning_against: "tamamo"`,
+# `tails_wrapped_around: "Tamamo"`, `squished_against: "tamamo_side"`. Those
+# assertions are real physical facts written in the wrong place, where nothing
+# prunes them when the two walk apart.
+#
+# They are converted to contacts and REMOVED from the state, so exactly one
+# record of a contact exists. Conversion is deliberately conservative: only a
+# key whose NAME carries a contact verb, whose VALUE names a co-located person,
+# converts. Adjacency words ("beside", "alongside") are not contact and are left
+# untouched -- inventing a hold is worse than missing one, because a contact
+# becomes ground truth the narrator is told.
+#
+# The free-text `description` paragraph is NOT parsed. Regex over prose would
+# manufacture body parts and holds that were never asserted; it stays as the
+# descriptive text it is, and the Director is told to stop putting contact in it.
+
+# Never touched: the engine reads these structurally (movement, portals,
+# perception's own deterministic backstop).
+_PROTECTED_STATE_KEYS = frozenset({
+    "transit", "link", "phase", "hatch", "destination_room", "route_room",
+    "eta_seconds", "posture", "activity", "held_items", "zone", "description",
+    "proximity", "target", "targets", "kind", "name",
+})
+
+# key-name fragment -> manner. Ordered: the first match wins, so "wrapped"
+# beats a bare "on".
+_CONTACT_KEY_MANNERS = (
+    ("coil", "coil"), ("wrap", "wrap"), ("entwin", "wrap"),
+    ("straddl", "straddle"), ("astride", "straddle"), ("mount", "straddle"),
+    ("pin", "pin"), ("carry", "carry"), ("carried", "carry"),
+    ("support", "support"), ("kiss", "kiss"), ("bit", "bite"),
+    ("grip", "grip"), ("grasp", "grip"), ("clutch", "grip"),
+    ("clench", "grip"), ("hold", "hold"), ("held", "hold"),
+    ("embrac", "hold"), ("hug", "hold"), ("cling", "hold"),
+    ("squish", "press"), ("press", "press"), ("flush", "press"),
+    ("lean", "lean"), ("rest", "rest"), ("touch", "touch"),
+    ("contact", "touch"), ("against", "press"), ("_on", "touch"),
+)
+
+# `proximity` values that assert actual contact rather than mere nearness.
+_CONTACT_PROXIMITIES = (
+    "press", "contact", "touch", "flush", "against", "entwin", "on_top",
+    "straddl", "atop",
+)
+
+
+def _manner_from_fragment(text):
+    low = str(text or "").casefold()
+    for fragment, manner in _CONTACT_KEY_MANNERS:
+        if fragment in low:
+            return manner
+    return None
+
+
+def _part_from_key(key, manner_fragment):
+    """The body part a legacy key names, if any: `tails_wrapped_around` -> the
+    part is 'tails'. Only the segment BEFORE the contact verb counts."""
+    low = str(key or "").casefold()
+    index = low.find(manner_fragment)
+    if index <= 0:
+        return ""
+    return low[:index].strip("_ ").replace("_", " ").strip()
+
+
+def contacts_from_entity_state(scene: dict) -> dict:
+    """Lift contact asserted inside entity `state` into scene.contacts.
+
+    Converted keys are removed from the state, so one contact has exactly one
+    record. Runs at merge, which also backfills a save written before contacts
+    existed: the assertions become real contacts and then obey the same
+    positional hygiene as everything else.
+    """
+    entities = scene.get("entities")
+    if not isinstance(entities, dict):
+        return scene
+    positions = scene.get("positions") or {}
+    if not positions:
+        return scene
+
+    # Who can be a contact partner: anyone (or anything) with a position,
+    # matched loosely -- these values are model-written, so "tamamo" must find
+    # "Tamamo". A value may also carry the part it touches: "tamamo_side" is
+    # Tamamo's side, an observed shape. Returns (partner, target_part).
+    normalized_positions = [
+        (name, re.sub(r"[^a-z0-9]", "", str(name).casefold()))
+        for name in positions
+    ]
+
+    def _resolve(value):
+        text = re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
+        if not text:
+            return None, ""
+        for name, slug in normalized_positions:
+            if slug and slug == text:
+                return name, ""
+        # `<person><part>` -- longest name first so "tamamo" cannot win over a
+        # longer name that also starts with it.
+        for name, slug in sorted(normalized_positions,
+                                 key=lambda item: -len(item[1])):
+            if slug and text.startswith(slug) and len(text) > len(slug):
+                remainder = str(value or "").casefold()
+                remainder = re.sub(r"[^a-z0-9]+", " ", remainder).strip()
+                # Drop the name's own words, keep what is left as the part.
+                for word in re.split(r"[^a-z0-9]+", str(name).casefold()):
+                    if word:
+                        remainder = remainder.replace(word, " ", 1)
+                part = " ".join(remainder.split())[:_MAX_CONTACT_PART]
+                if part.startswith("s "):     # "tamamo's side"
+                    part = part[2:].strip()
+                return name, part
+        return None, ""
+
+    derived = []
+    for eid, entity in entities.items():
+        if not isinstance(entity, dict):
+            continue
+        state = entity.get("state")
+        if not isinstance(state, dict) or not state:
+            continue
+        actor = str(entity.get("name") or eid).strip()
+        if not actor or _ci_get(positions, actor) is None:
+            continue
+
+        # The documented old shape: one whole-body target plus a proximity
+        # word. Only a proximity that means CONTACT converts -- "close_on_bed"
+        # is nearness, and stations already model that.
+        proximity = str(state.get("proximity") or "").casefold()
+        target_name, target_part = _resolve(state.get("target"))
+        if target_name and any(p in proximity for p in _CONTACT_PROXIMITIES):
+            derived.append({
+                "actor": actor, "actor_part": "", "target": target_name,
+                "target_part": target_part,
+                "manner": _manner_from_fragment(proximity) or "press",
+            })
+
+        # The invented keys: a contact verb in the NAME, a person in the VALUE.
+        for key in list(state.keys()):
+            if key in _PROTECTED_STATE_KEYS:
+                continue
+            value = state.get(key)
+            if not isinstance(value, str):
+                continue
+            partner, partner_part = _resolve(value)
+            if partner is None or partner == actor:
+                continue
+            manner = None
+            fragment = ""
+            for frag, mapped in _CONTACT_KEY_MANNERS:
+                if frag in str(key).casefold():
+                    manner, fragment = mapped, frag
+                    break
+            if manner is None:
+                continue  # not a contact assertion: leave it exactly as it is
+            derived.append({
+                "actor": actor,
+                "actor_part": _part_from_key(key, fragment),
+                "target": partner, "target_part": partner_part,
+                "manner": manner,
+            })
+            state.pop(key, None)
+
+    if derived:
+        scene["contacts"] = list(scene.get("contacts") or []) + derived
+    return scene
+
+
 def normalize_scene_contacts(scene: dict) -> dict:
     """Contact hygiene, run at merge -- the sibling of normalize_scene_stations.
 
@@ -939,6 +1114,12 @@ def normalize_scene_contacts(scene: dict) -> dict:
     Deduped on (actor, actor_part, target, target_part) keeping the LAST
     occurrence, so re-asserting a contact updates its manner rather than
     stacking a second copy.
+
+    A MIRROR -- the same pair with the parts swapped -- is one physical contact
+    stated from the other side, and only one record survives it. Both bodies
+    describing the same hold is precisely how the old per-entity shape produced
+    two records that drifted, and legacy extraction can surface it too when
+    each entity's state named the other.
     """
     contacts = scene.get("contacts")
     if not isinstance(contacts, list):
@@ -958,7 +1139,10 @@ def normalize_scene_contacts(scene: dict) -> dict:
             continue
         if actor_room != target_room:
             continue
-        kept[_contact_key(contact)] = contact
+        key = _contact_key(contact)
+        if _mirror_key(key) in kept:
+            continue  # already recorded from the other side
+        kept[key] = contact
 
     scene["contacts"] = list(kept.values())[-_MAX_CONTACTS:]
     return scene
@@ -1028,7 +1212,14 @@ def apply_contact_ops(scene: dict, ops) -> dict:
 
         contact = _clean_contact(raw)
         if contact is not None:
-            current[_contact_key(contact)] = contact
+            key = _contact_key(contact)
+            mirror = _mirror_key(key)
+            # Re-asserting from the other side updates the contact already on
+            # record rather than creating its twin.
+            if mirror in current and key not in current:
+                current[mirror] = {**current[mirror], "manner": contact["manner"]}
+            else:
+                current[key] = contact
 
     scene["contacts"] = list(current.values())[-_MAX_CONTACTS:]
     return scene
@@ -1899,9 +2090,16 @@ def merge_scene_with_diff(
     # contact that positions no longer permit. Runs LAST, after positions are
     # final, which is what makes walking away end a hold with nothing for the
     # Director to remember.
-    if diff.get("contact_ops") or merged.get("contacts"):
-        apply_contact_ops(merged, diff.get("contact_ops"))
-        normalize_scene_contacts(merged)
+    # Lift any contact the Director wrote into an entity's own state (the shape
+    # that predates contacts, and the one a model still reaches for) before the
+    # ops, so both paths land in one place and one truth survives.
+    contacts_from_entity_state(merged)
+    # The key always exists after a merge, empty or not: a reader that has to
+    # ask whether contact tracking is "on" for this scene is a reader that will
+    # eventually forget to.
+    merged.setdefault("contacts", [])
+    apply_contact_ops(merged, diff.get("contact_ops"))
+    normalize_scene_contacts(merged)
     return merged
 
 def normalize_room_id(name: str) -> str:
