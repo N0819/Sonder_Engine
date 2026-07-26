@@ -6,6 +6,7 @@
 - [`DATABASE.md`](DATABASE.md): persistence and schema-change guide.
 - [`CODE_MAP.md`](CODE_MAP.md): generated structural index.
 - [`ARCHITECTURE_AUDIT_2026-07-19.md`](ARCHITECTURE_AUDIT_2026-07-19.md): system audit, applied corrections, premise gaps, and prioritized roadmap.
+- [`OFFSCREEN_LIFE_DESIGN.md`](OFFSCREEN_LIFE_DESIGN.md): design note — off-screen life, reactivation, and villain ticks as one mechanism at three cadences (`Design.md` roadmap 7 and 10).
 - [`RESEARCH.md`](RESEARCH.md): sourced bibliography — research the code cites (belief revision, RRF/MMR, Novikov) and the established work the architecture maps onto.
 - [`../Design.md`](../Design.md): full product philosophy, current architecture, weaknesses, and roadmap.
 

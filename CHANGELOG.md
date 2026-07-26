@@ -1,5 +1,74 @@
 # Changelog
 
+## alpha4.2.2 — The whole tavern is a library
+
+The tavern's Lore tab was the only place the theme committed to an idea: rows
+became bound books on a shelf, and the lorebook editor became an open spread.
+Everything around it stayed generic wood. That gap read as one tab's private
+conceit rather than as what the interface is, so the idea now runs the length
+of the theme — and the paper it is printed on stops being a lightbox.
+
+### Improved
+- **Stories, Characters and Personas are shelves too.** The three other sidebar
+  tabs were planks while Lore was books. They now carry the same binding
+  vocabulary the Lore shelf already had — raised spine bands, gilt tooling,
+  fore-edge shading, the same five leathers on the same cycle — so switching
+  tabs changes what is on the shelf rather than what furniture you are looking
+  at. The selected row pulls proud of the stack the way an opened book does,
+  and rename/export/delete become tooling on the spine instead of small planks
+  nailed to it. No markup changed; the shelf board hangs off the last row
+  rather than the container, because the container is also where the Lore tab
+  renders a tree that already has a shelf of its own.
+- **Every menu is a page.** The open-book treatment was scoped to the lorebook
+  editor. It now binds to `#modalbox`, which is every dialog in the app —
+  story setup, the character and persona editors, cast, world state, attire,
+  dialogue, style, backdrops, appearance, API, prompts, memory — so the menu
+  system is one book with no per-dialog rule anywhere. This is affordable
+  because `styles.css` and `lorebooks.css` are almost entirely token-driven:
+  rebinding tokens on the page re-tints inputs, buttons, cards, badges, chips
+  and hovers at once, and rebinding the `--bg` ramp catches the second tier
+  (inset code blocks, dropdown panels, toolbars) that reads `--bg` directly on
+  the assumption that it is dark. The lorebook editor dropped the leather board
+  it used to carry inside itself: the dialog is the binding now, and a second
+  board put a wooden frame between the cover and the pages.
+- **A dialog is bound in the cover of the book you opened it from.** Clicking a
+  character, persona or lorebook binds its window in that row's leather;
+  windows opened from the toolbar hash their title to a cover instead, so each
+  is consistently its own volume rather than changing binding per opening. The
+  choice is made in `components.js` because which list row you clicked is not
+  something a stylesheet can see from `#modalbox`; it writes `data-cover`, and
+  every other theme ignores it.
+
+### Fixed
+- **Paper stopped being the brightest thing on the screen.** The sheet was
+  `#f2e6cb` down to `#e6d5b3` — the colour of new paper under a flash. Against
+  a room this dark that reads as a lightbox rather than as something lying on
+  the table, and a dialog opening at night put it straight into your eyes. It
+  is old stock now, same hue at roughly half the luminance. The ink did not
+  move, so contrast went **up**: ~6.5:1 for body text against the sheet, where
+  the original cream was too light to have anywhere to go. A test asserts the
+  luminance ceiling and the contrast floor, because "still looks like paper" is
+  exactly the judgement that drifts back upward one tweak at a time.
+- **LCARS: black ink on the filled blocks that were carrying dark-theme text.**
+  Three surfaces in that theme are solid LCARS orange, and each drew text
+  chosen for a near-black row. Badges took `--dim` grey (~1.9:1). A selected
+  lore row — the entry you are working on, and so the hardest thing in the
+  editor to read — drew its name in near-white and its subtitle in grey over
+  the same orange. Every filled block takes black ink now, and the status
+  badges recolour the block rather than the text, since their pastel greens and
+  pinks were tuned to glow on near-black and do nothing on orange.
+- **LCARS: the inspector tab strip is visible again.** The tabs across the
+  cast, persona and lorebook windows are transparent buttons with a coloured
+  underline — a dark-theme idiom that collided with the black ink every LCARS
+  button carries, leaving black text on a transparent strip over a black panel.
+  You could only find the tabs by hovering. They are pills now, in the same
+  blue and orange the sidebar tabs already use.
+- **A stray `*/` was eating a plank variant.** A comment in the tavern board
+  section closed early and left two lines of prose at the top level, which CSS
+  error recovery swallows by consuming up to and including the next rule — so
+  the first of the seven per-row grain offsets never applied, and every seventh
+  list row showed the same grain at the same offset as its neighbour.
+
 ## alpha4.2.1 — A mind can cite the present
 
 ### Fixed

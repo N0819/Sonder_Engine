@@ -273,31 +273,160 @@ def test_tavern_lore_tab_is_a_bookshelf():
                 for ln in styles.splitlines() if "--book-leather:" in ln}
     assert len(leathers) >= 5
 
-    # Scoped to the Lore tab by construction -- .lore-side-* exists nowhere
-    # else -- so no other list picks up book styling.
-    assert ".lore-side-row" in styles and "#sidelist .item { --book-leather" not in styles
 
-
-def test_tavern_lorebook_editor_is_an_open_book():
-    """The workspace is already three panels side by side, which is the shape
-    of an open book. The affordable part is that lorebooks.css is nearly all
-    token-driven, so rebinding tokens on the page re-tints its inputs, badges
-    and rules at once."""
+def test_tavern_every_sidebar_tab_is_a_shelf():
+    """Stories, Characters and Personas were planks while Lore was books, which
+    made the shelf read as one tab's private conceit rather than as what the
+    sidebar is. The binding vocabulary is deliberately the same on all four, so
+    switching tabs changes what is on the shelf, not the furniture."""
     styles = (STATIC / "themes.css").read_text(encoding="utf-8")
 
-    ws = _tavern_rule(styles, ':root[data-theme="tavern"] .lore-workspace {')
-    assert "gap: 0;" in ws               # pages meet at a gutter, not a gap
+    rows = _tavern_rule(
+        styles, ':root[data-theme="tavern"] #sidelist .library-item {')
+    assert "--book-leather" in rows
+    assert "border-radius: 2px 6px 6px 2px;" in rows   # bound edge / fore-edge
+    assert "margin-bottom: 0;" in rows                 # books on a shelf touch
 
-    page = _tavern_rule(styles, ':root[data-theme="tavern"] .lore-panel {')
-    # Ink on paper, rebound so everything inside inherits it.
-    for token in ("--fg:", "--dim:", "--bd:", "--input-bg:", "--card-bg:"):
-        assert token in page, token
+    # The same five leathers as the Lore shelf, not a second palette that
+    # happens to look similar.
+    def leathers(marker):
+        return {ln.split("--book-leather:")[1].strip()
+                for ln in styles.splitlines()
+                if "--book-leather:" in ln and marker in ln}
+
+    shelf = leathers("#sidelist")
+    lore = leathers(".lore-side")
+    assert len(shelf) >= 4 and shelf <= lore | shelf and lore <= shelf | lore
+    assert shelf == lore, (shelf ^ lore)
+
+    # Scoped through #sidelist, so an .item inside a dialog -- where the
+    # surface is paper, not a shelf -- does not pick a leather up.
+    assert ":root[data-theme=\"tavern\"] .item { --book-leather" not in styles
+
+
+def _srgb_luminance(hex_colour):
+    parts = [int(hex_colour[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    parts = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+             for c in parts]
+    return 0.2126 * parts[0] + 0.7152 * parts[1] + 0.0722 * parts[2]
+
+
+def _contrast(a, b):
+    la, lb = _srgb_luminance(a), _srgb_luminance(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_tavern_paper_is_not_a_lightbox():
+    """The sheet began as #f2e6cb -- the colour of NEW paper under a flash.
+    Against a room this dark that is the brightest thing on the screen by a
+    wide margin, and a dialog opening at night puts it straight into your eyes.
+    Old stock is the same hue at far lower luminance and still reads as paper;
+    the test is the luminance, because 'still looks like paper' is exactly the
+    judgement that drifts back upward one tweak at a time."""
+    styles = (STATIC / "themes.css").read_text(encoding="utf-8")
+    block = styles[styles.index(':root[data-theme="tavern"] {'):]
+    block = block[:block.index("\n}")]
+
+    face = block[block.index("--paper-face:"):]
+    face = face[:face.index(";")]
+    tones = [t for t in face.split() if t.startswith("#")]
+    tones = [t.rstrip(",)") for t in tones]
+    assert len(tones) == 2, face
+
+    # The original pair sat at ~.79 and ~.68 relative luminance. Anything in
+    # that neighbourhood is the glare this was twice asked to fix.
+    for tone in tones:
+        assert _srgb_luminance(tone) < 0.55, (tone, _srgb_luminance(tone))
+
+    # Darkening the sheet is only safe because the ink stayed put, which means
+    # contrast went UP rather than down. Hold that: body ink and the secondary
+    # ink both clear 4.5:1 against the darker of the two tones.
+    ink = block[block.index("--paper-ink:"):]
+    ink = ink[ink.index("#"):][:7]
+    dim = block[block.index("--paper-ink-dim:"):]
+    dim = dim[dim.index("#"):][:7]
+    darkest = min(tones, key=_srgb_luminance)
+    assert _contrast(ink, darkest) >= 4.5, _contrast(ink, darkest)
+    assert _contrast(dim, darkest) >= 4.4, _contrast(dim, darkest)
+
+
+def test_tavern_every_menu_is_a_page():
+    """The room is wood; the things you READ in it are paper. Every dialog in
+    the app is #modalbox, so the page treatment binds to that one element and
+    the whole menu system becomes one open book with no per-dialog rule.
+    The affordable part is that styles.css and lorebooks.css are nearly all
+    token-driven: rebinding tokens on the page re-tints its inputs, buttons,
+    cards, badges and rules at once."""
+    styles = (STATIC / "themes.css").read_text(encoding="utf-8")
+
+    page = _tavern_rule(styles, ':root[data-theme="tavern"] #modalbox {')
+    assert "--paper-face" in page          # one continuous sheet
+    assert "--book-cover" in page          # bound into a cover
+
+    # Ink on paper, rebound so everything inside inherits it -- and the --bg
+    # ramp with it, because the second tier (inset code blocks, dropdown
+    # panels, toolbars) reads --bg directly assuming it is dark.
+    tokens = _tavern_rule(styles, ':root[data-theme="tavern"] .lore-panel {')
+    for token in ("--fg:", "--dim:", "--bd:", "--input-bg:", "--card-bg:",
+                  "--bg:", "--bg3:", "--chrome-bg:"):
+        assert token in tokens, token
+
+    # --chrome-bg is declared at :root as var(--bg2), which SUBSTITUTES there;
+    # what inherits down is the dark value already resolved, so rebinding
+    # --bg2 alone leaves a dark bar lying across the page.
+    assert "--chrome-bg: var(" not in tokens
 
     # The board rule sets background-image directly rather than through a
     # token, so a card on a page has to clear those layers by hand or a wooden
     # plank sits in the middle of the paper.
-    card = _tavern_rule(styles, ':root[data-theme="tavern"] .lore-panel .card,')
+    card = _tavern_rule(styles, ':root[data-theme="tavern"] #modalbox .card,')
     assert "background-image: none;" in card
+
+    # The lit-panel glow belongs to wood. On paper it reads as a stain.
+    glow = _tavern_rule(styles, ':root[data-theme="tavern"] #composer {')
+    assert "inset 0 0 60px rgba(255, 168, 74, .07)" in glow
+    head = styles[:styles.index("inset 0 0 60px rgba(255, 168, 74, .07)")]
+    assert '#modalbox {\n  box-shadow: inset 0 0 60px' not in head
+
+
+def test_tavern_dialogs_are_bound_in_book_covers():
+    """A dialog opened from a row in the sidebar is bound in that row's
+    leather. The choice cannot be made in CSS -- which list row you clicked is
+    not something a stylesheet can see from #modalbox -- so components.js
+    resolves it and writes data-cover, and every other theme ignores it."""
+    styles = (STATIC / "themes.css").read_text(encoding="utf-8")
+    source = (STATIC / "js" / "components.js").read_text(encoding="utf-8")
+
+    for n in range(1, 6):
+        assert f"--book-cover-{n}:" in styles
+        assert f'#modalbox[data-cover="{n}"]' in styles
+
+    assert "box.dataset.cover" in source
+    # The cycle length has to agree with the stylesheet's five leathers.
+    assert "const BOOK_COVERS = 5;" in source
+    # Consumed on use: a dialog opened from the toolbar must not inherit
+    # whichever book happened to be clicked last, possibly minutes ago.
+    assert "pendingCover = null;" in source
+    # And the cover unwinds with the modal stack, or closing a confirm
+    # re-shows its parent bound in the confirm's cover.
+    assert "cover: box.dataset.cover," in source
+
+
+def test_tavern_lorebook_editor_has_no_board_of_its_own():
+    """The workspace is three panels side by side, which is the shape of an
+    open spread -- but the dialog around it is the binding now. A second
+    leather board inside it put a wooden frame between the cover and the
+    pages."""
+    styles = (STATIC / "themes.css").read_text(encoding="utf-8")
+
+    ws = _tavern_rule(styles, ':root[data-theme="tavern"] .lore-workspace {')
+    assert "gap: 0;" in ws               # pages meet at a gutter, not a gap
+    assert "background: none;" in ws
+    assert "tavern-wood.png" not in ws
+
+    page = _tavern_rule(styles, ':root[data-theme="tavern"] .lore-panel {')
+    assert "--paper-edge" in page        # the fold, and nothing else
 
 
 def test_lcars_dismiss_controls_are_filled_blocks():
@@ -311,3 +440,53 @@ def test_lcars_dismiss_controls_are_filled_blocks():
     assert "background: var(--err);" in rule   # filled, in the dismiss colour
     assert "color: #000;" in rule              # the black ink LCARS wants
     assert "border-radius: 999px;" in rule     # a pill, like every other block
+
+
+def test_lcars_filled_blocks_never_carry_dark_theme_ink():
+    """Three surfaces in this theme are solid LCARS orange -- badges
+    (--badge-bg), selected lore rows (--selected-bg) and the active inspector
+    tab -- and each drew text picked for a NEAR-BLACK row: --dim grey, or the
+    lore tree's near-white name. Grey on orange lands around 1.9:1, which made
+    the selected entry the hardest thing in the editor to read. A filled block
+    takes black ink here, without exception."""
+    styles = (STATIC / "themes.css").read_text(encoding="utf-8")
+
+    badge = _tavern_rule(styles, ':root[data-theme="lcars"] .badge {')
+    assert "color: #000;" in badge
+
+    # The status variants then have to recolour the BLOCK: their pastel greens
+    # and pinks were chosen to glow on near-black and do nothing on orange.
+    for variant in ("ok", "warn", "err"):
+        rule = _tavern_rule(styles, f':root[data-theme="lcars"] .badge.{variant} {{')
+        assert "background: var(--" in rule and "color: #000;" in rule
+
+    # The whole selected row, not just its first line: name, subtitle, handle
+    # and toggle were all light-on-dark colours.
+    selected = _tavern_rule(
+        styles, ':root[data-theme="lcars"] .lore-tree-row.selected .lore-tree-name,')
+    assert "color: #000;" in selected
+    assert ".lore-tree-subtitle," in styles and ".lore-tree-handle," in styles
+
+    # A badge riding in a selected row is an orange pill ON orange. Inverted.
+    inverted = _tavern_rule(
+        styles, ':root[data-theme="lcars"] .lore-tree-row.selected .badge,')
+    assert "background: #000;" in inverted and "color: var(--acc);" in inverted
+
+
+def test_lcars_inspector_tabs_are_pills():
+    """The tab strip across the cast, persona and lorebook windows is a
+    dark-theme idiom: transparent buttons with a coloured underline. Against
+    the black ink every LCARS button carries, that was black text on a
+    transparent strip over a black panel -- a row of controls you could only
+    find by hovering."""
+    styles = (STATIC / "themes.css").read_text(encoding="utf-8")
+
+    tab = _tavern_rule(
+        styles, ':root[data-theme="lcars"] .lore-inspector-tabs button {')
+    assert "background: var(--lcars-blue);" in tab
+    assert "border-radius: 999px;" in tab
+    assert "color: #000;" in tab
+
+    on = _tavern_rule(
+        styles, ':root[data-theme="lcars"] .lore-inspector-tabs button.on {')
+    assert "background: var(--acc);" in on and "color: #000;" in on
