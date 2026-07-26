@@ -25,6 +25,8 @@ C. A model response missing one closing brace is repaired by `_jparse` into
 
 from __future__ import annotations
 
+import json
+
 from character_schema import (default_character_data, effective_drive,
                               normalize_character_data, repair_character_shape)
 from importers import REINT_CHAR_SYS, character_import_warnings
@@ -140,3 +142,50 @@ def test_legacy_sheets_normalize_with_a_drive_slot():
     sheet = normalize_character_data(legacy)
     assert "drive" in sheet["psychology"]
     assert effective_drive(sheet["psychology"], {})["essence"] == ""
+
+
+# ---------------------------------------------------------------------------
+# The model does not get to name the engine's key for the character
+# ---------------------------------------------------------------------------
+
+def _card(name="Tamamo"):
+    return {"spec": "chara_card_v2", "spec_version": "2.0",
+            "data": {"name": name, "description": "An ancient kitsune.",
+                     "personality": "", "scenario": "", "first_mes": ""}}
+
+
+def test_a_reinterpreted_import_never_takes_the_models_uid(temp_db, monkeypatch):
+    """identity.uid IS the scene entity id (scene.py falls back to it) and one
+    of the forms character matching keys off. Live models return the
+    character's own name for it -- GLM answers "tamamo" -- so two imports of
+    one card became THE SAME ENTITY: two characters sharing one position, one
+    set of clothes, one owner of the memories."""
+    import importers
+
+    sheet = {"identity": {"uid": "tamamo", "name": "Tamamo"},
+             "psychology": {"drive": {"essence": "Guard the seal",
+                                      "expression": "Stands watch", "taboo": "Never leaves"}},
+             "initial_state": {"goals": [{"goal": "Hold the seal", "priority": 0.9}]}}
+    monkeypatch.setattr(importers, "chat_complete",
+                        lambda *a, **k: json.dumps(sheet))
+
+    first = importers.import_character(_card(), reinterpret=True)[1]
+    second = importers.import_character(_card(), reinterpret=True)[1]
+
+    for got in (first, second):
+        assert got["identity"]["uid"] != "tamamo"
+        assert got["identity"]["uid"].startswith("char_")
+    assert first["identity"]["uid"] != second["identity"]["uid"]
+
+
+def test_a_native_reimport_still_round_trips_its_own_uid(temp_db):
+    """The fix is scoped to sheets a model reconstructed. Re-importing this
+    app's own export must keep the identity it exported, or every round trip
+    would fork the character."""
+    import importers
+    from character_schema import default_character_data
+
+    native = default_character_data("Tamamo")
+    native["identity"]["uid"] = "char_deadbeefdeadbeefdeadbeefdeadbeef"
+    _, sheet = importers.import_character({"sheet": native}, reinterpret=True)
+    assert sheet["identity"]["uid"] == "char_deadbeefdeadbeefdeadbeefdeadbeef"

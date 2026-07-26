@@ -29,7 +29,7 @@
 | `frames.py` | 193 |  | `db` |
 | `greetings.py` | 252 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
 | `guest_access.py` | 303 |  | `db` |
-| `importers.py` | 1375 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `memory`, `prompts`, `providers` |
+| `importers.py` | 1389 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `memory`, `prompts`, `providers` |
 | `llm_quality.py` | 263 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `mechanics.py` | 270 |  | `spatial`, `spatial_frames` |
@@ -316,14 +316,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `generate_lorebook_plan()` | 1064 | 135 lines |
-| `import_lorebook()` | 913 | 115 lines |
-| `apply_lorebook_plan()` | 1200 | 111 lines |
-| `import_character()` | 447 | 81 lines |
-| `generate_lore_entries()` | 1311 | 65 lines |
-| `_reinterpret_entries()` | 851 | 61 lines |
-| `_jparse()` | 35 | 59 lines |
-| `import_persona()` | 583 | 56 lines |
+| `generate_lorebook_plan()` | 1078 | 135 lines |
+| `import_lorebook()` | 927 | 115 lines |
+| `apply_lorebook_plan()` | 1214 | 111 lines |
+| `import_character()` | 448 | 91 lines |
+| `generate_lore_entries()` | 1325 | 65 lines |
+| `_reinterpret_entries()` | 865 | 61 lines |
+| `_jparse()` | 36 | 59 lines |
+| `import_persona()` | 594 | 59 lines |
 
 ### `llm_quality.py`
 
