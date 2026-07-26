@@ -21,7 +21,9 @@ from memory import lorebook_manifest
 from paradox import paradox_visible_to
 from prompts import get_prompt
 from scene import (
+    NON_AWAKE_GATED,
     _ability_mod,
+    _normalize_awareness_level,
     appearance_of,
     cast_scene_context,
     director_context,
@@ -922,12 +924,15 @@ def _untracked_restraint_subjects(resolved_event, dialogue_log, conditions,
 _UNCONSCIOUSNESS_CUE = re.compile(
     r"\b(?:"
     r"unconscious|out\s+cold|"
-    r"knocked\s+(?:out|unconscious|senseless)|"
-    r"blacks?\s+out|blacked\s+out|"
-    r"passes?\s+out|passed\s+out|"
-    r"faints|fainted|"
-    r"loses\s+consciousness|lost\s+consciousness|"
-    r"goes\s+limp|slumps?\s+unconscious|"
+    r"knocked?\s+(?:out|unconscious|senseless)|"
+    # "pass out" / "black out" bare-infinitive forms were missed: `passes?`
+    # matches "passe"/"passes" but never "pass", so second-person prose ("the
+    # blow makes you pass out") escaped the floor entirely.
+    r"black(?:s|ed)?\s+out|"
+    r"pass(?:es|ed)?\s+out|"
+    r"faints?|fainted|"
+    r"los(?:e|es|t|ing)\s+consciousness|"
+    r"go(?:es)?\s+limp|went\s+limp|slumps?\s+unconscious|"
     r"sedated|put\s+under"
     r")\b"
 )
@@ -954,6 +959,105 @@ def _sentence_break_positions(low):
                 continue
         breaks.append(m.start())
     return breaks
+
+
+# The other direction of the consciousness floor above. That one catches a
+# knockout the diff FORGOT; this catches a mind the diff took away on nothing.
+# Observed live (chat 40 'Hmmm', turn 8): the player wrote "You breath softly as
+# you close your eyes wrapping your arms around her", resting against another
+# character, and the Director recorded awareness level 'asleep' on the PLAYER
+# with cause "settling into rest and protective affection after arrival". Since
+# 'asleep' is in NON_AWAKE_GATED the player's own next view became "You are
+# under, below waking." -- the scene taken away from them for closing their eyes
+# in a cuddle, and only endable by the Director choosing to end it.
+#
+# The asymmetry that justifies a floor here: for an NPC a spurious non-awake
+# level costs one beat of silence, but for the PLAYER it removes both their view
+# of the story and their next move, which is the Director overriding declared
+# player conduct (AGENTS.md's information/agency boundary) in its strongest
+# form. So the player alone is protected, and only against a level that GATES
+# ('dazed' is untouched -- present but degraded). Support is read generously and
+# from anywhere in the beat, because a false drop must be rarer than the false
+# imposition it prevents.
+_SLEEP_CUE = re.compile(
+    r"\b(?:"
+    r"asleep|sleeps?|sleeping|"
+    r"slumber\w*|"
+    r"dozes?|dozing|dozed|"
+    r"nods?\s+off|nodded\s+off|"
+    r"drifts?\s+off|drifted\s+off|drifting\s+off|"
+    r"drops?\s+off|dropped\s+off|"
+    r"pass(?:es|ed)?\s+into\s+sleep|"
+    r"go(?:es)?\s+to\s+sleep|went\s+to\s+sleep|going\s+to\s+sleep|"
+    r"knocked?\s+out|out\s+cold|unconscious|"
+    r"black(?:s|ed)?\s+out|"
+    r"pass(?:es|ed)?\s+out|faints?|fainted|"
+    r"los(?:e|es|t|ing)\s+consciousness|"
+    r"sedated|drugged|put\s+under"
+    r")\b"
+)
+
+
+def _awareness_support_in_beat(player_input, resolved_event, dialogue_log):
+    """Did anything in this beat actually put the player under?
+
+    Deliberately not subject-attributed, unlike the omission scan: this decides
+    whether to KEEP the Director's judgement, so it errs toward keeping. Any
+    sleep/knockout language anywhere in the player's own declaration or in the
+    beat's prose is enough. What it excludes is the case that went wrong -- a
+    beat where nobody said anything about going under at all.
+    """
+    texts = [str(player_input or ""), str(resolved_event or "")]
+    for entry in (dialogue_log or []):
+        if isinstance(entry, dict) and entry.get("exact_quote"):
+            texts.append(str(entry["exact_quote"]))
+
+    return any(_SLEEP_CUE.search(text.casefold()) for text in texts if text)
+
+
+def _unsupported_player_awareness(conditions, player_name, player_input,
+                                  resolved_event, dialogue_log):
+    """Condition keys that gate the PLAYER's mind on no stated basis.
+
+    Returns [(key, level)] for awareness conditions that are ACTIVE, name the
+    player as subject, sit at a gated level, and have nothing in the beat
+    supporting them. An ending condition (active:0) is never touched -- that is
+    the player WAKING, which must always be allowed through.
+    """
+    if not player_name:
+        return []
+    if _awareness_support_in_beat(player_input, resolved_event, dialogue_log):
+        return []
+
+    target = re.sub(r"[^a-z0-9]", "", str(player_name).casefold())
+    if not target:
+        return []
+
+    unsupported = []
+    for key, cond_value in (conditions or {}).items():
+        cond_list = cond_value if isinstance(cond_value, list) else [cond_value]
+        for cond in cond_list:
+            if not isinstance(cond, dict) or cond.get("kind") != "awareness":
+                continue
+            try:
+                if not int(cond.get("active", 1)):
+                    continue  # waking -- always allowed
+            except (TypeError, ValueError):
+                pass
+            subject = re.sub(
+                r"[^a-z0-9]", "",
+                str(cond.get("subject_id") or "").casefold(),
+            )
+            if subject != target:
+                continue
+            level = _normalize_awareness_level(
+                (cond.get("state") or {}).get("level")
+            )
+            if level in NON_AWAKE_GATED:
+                unsupported.append((key, level))
+                break
+
+    return unsupported
 
 
 def _untracked_unconsciousness_subjects(resolved_event, dialogue_log, conditions,
@@ -1688,6 +1792,22 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
     dialogue_log = out.get("dialogue_log") or []
 
     # ---- Tier 0: deterministic floor -------------------------------------
+    # Runs BEFORE the omission scans below so they read the corrected diff. The
+    # two cannot fight: this only drops a gated level that no cue supports, and
+    # the unconsciousness scan only fires where a cue exists.
+    _pers = persona_of(ctx.chat)
+    player_name = _pers.get("name") or persona_name(_pers)
+    for key, level in _unsupported_player_awareness(
+            sd.get("conditions") or {}, player_name, ctx.input,
+            resolved_event, dialogue_log):
+        (sd.get("conditions") or {}).pop(key, None)
+        ctx.add_warning(
+            f"Dropped awareness '{level}' on the player ({player_name}): "
+            "nothing in the beat or in the player's own input put them under, "
+            "and a gated level would have taken away their view and their next "
+            "move."
+        )
+
     signals = _strip_blank_diff_placeholders(sd)
     for name in _untracked_restraint_subjects(
             resolved_event, dialogue_log, sd.get("conditions") or {},
