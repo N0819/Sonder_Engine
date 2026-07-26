@@ -1,0 +1,967 @@
+/* -------------------------------------------------------------------------
+   Appearance themes
+   -------------------------------------------------------------------------
+   The base stylesheet remains the source of layout truth. This file is loaded
+   last and maps that layout onto named visual systems. Keeping visual tokens
+   here prevents a theme from becoming a fork of the entire interface. */
+
+:root {
+  --ui-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --prose-font: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --prose-size: 17px;
+  --page-background:
+    radial-gradient(circle at 72% -10%, rgba(82, 105, 175, .15), transparent 34%),
+    radial-gradient(circle at 10% 95%, rgba(108, 73, 166, .11), transparent 30%),
+    var(--bg);
+  --chrome-bg: var(--bg2);
+  --raised-bg: var(--bg3);
+  --raised-bg-2: var(--bg4);
+  --input-bg: #0f141e;
+  --card-bg: rgba(19, 25, 37, .74);
+  --hover-bg: rgba(34, 43, 61, .78);
+  --selected-bg: linear-gradient(90deg, color-mix(in srgb, var(--acc) 32%, transparent), rgba(34, 43, 61, .8));
+  --button-bg: linear-gradient(180deg, var(--bg4), var(--bg3));
+  --button-hover-bg: linear-gradient(180deg, #29354a, #20293a);
+  --button-primary-bg: linear-gradient(180deg, var(--acc), color-mix(in srgb, var(--acc) 70%, #0b0e14));
+  --button-primary-hover-bg: linear-gradient(180deg, color-mix(in srgb, var(--acc) 80%, #fff), var(--acc));
+  --accent-ink: #fff;
+  --panel-border: #34415a;
+  --card-border: #2d384e;
+  --strong-border: #3b4b68;
+  --pin-bg: linear-gradient(110deg, rgba(60, 91, 141, .17), rgba(31, 40, 57, .78));
+  --pin-fg: #bcd3ff;
+  --prose-fg: var(--fg);
+  --modal-scrim: rgba(3, 5, 9, .93);
+  --toast-bg: #141b28;
+  --chip-bg: #1a2433;
+  --chip-fg: #b7c5dc;
+  --badge-bg: #1d2635;
+  --reading-panel-bg: rgba(9, 12, 19, var(--bd-panel, .89));
+  --reading-panel-fg: #f4f6fb;
+  --control-radius: 6px;
+  --card-radius: 8px;
+  --panel-radius: 14px;
+  --tab-radius: 7px 7px 0 0;
+  --ui-letter-spacing: normal;
+  --focus-ring: color-mix(in srgb, var(--acc) 24%, transparent);
+  --chrome-surface: linear-gradient(180deg, rgba(18, 23, 34, .97), rgba(18, 23, 34, .97));
+  --composer-surface: linear-gradient(180deg, rgba(16, 21, 31, .98), rgba(12, 17, 25, .98));
+  --card-surface: linear-gradient(180deg, rgba(19, 25, 37, .82), rgba(19, 25, 37, .82));
+  --input-surface: linear-gradient(180deg, rgba(10, 14, 21, .99), rgba(14, 19, 30, .99));
+  --input-fg: var(--fg);
+  --input-border: #496181;
+  --top-shadow: 0 8px 28px rgba(0, 0, 0, .12);
+  --side-shadow: 10px 0 28px rgba(0, 0, 0, .12);
+}
+
+:root[data-prose-size="15"] { --prose-size: 15px; }
+:root[data-prose-size="17"] { --prose-size: 17px; }
+:root[data-prose-size="19"] { --prose-size: 19px; }
+:root[data-prose-size="21"] { --prose-size: 21px; }
+
+/* Tavern was a brown-black room: the wood texture existed but sat under a
+   95-97% opaque wash, so nothing of the grain reached the eye and the whole
+   thing read as "dark, slightly warm". A tavern is a LIT interior -- you are
+   inside, by the fire, and the light is coming from somewhere in the room.
+   So: raise the surfaces well clear of black, let the grain actually show
+   through, and put the candle where it can be seen. */
+:root[data-theme="tavern"] {
+  --bg: #1a1009;
+  --bg2: #2b1c11;
+  --bg3: #3b2717;
+  --bg4: #4d341f;
+  --fg: #f7e8cd;
+  --dim: #c6ab86;
+  --acc: #e0a44f;          /* candle-brass */
+  --acc2: #b85f36;         /* copper */
+  --warn: #e8bd63;
+  --err: #e07a6c;
+  --ok: #9cc47f;
+  --bd: #6b4a2b;
+  --page-background:
+    /* The hearth is high in the LEFT corner and the room falls away from it
+       into the dark. A single corner source with a long falloff is what makes
+       light read as coming from somewhere; the previous even wash across the
+       top read as a tint on the whole page instead. The far corner is pushed
+       down rather than left alone, so there is somewhere for the light to
+       fall off TO -- that contrast is the mood, not the brightness. */
+    radial-gradient(ellipse 58% 52% at 2% -6%, rgba(255, 176, 84, .34), transparent 64%),
+    radial-gradient(ellipse 120% 90% at -10% 6%, rgba(190, 104, 44, .17), transparent 72%),
+    radial-gradient(ellipse 76% 66% at 104% 104%, rgba(0, 0, 0, .5), transparent 66%),
+    linear-gradient(148deg, #241509, #100903 74%);
+  --input-bg: #22150c;
+  --card-bg: rgba(59, 39, 23, .82);
+  --hover-bg: rgba(96, 63, 36, .6);
+  --selected-bg: linear-gradient(90deg, rgba(224, 164, 79, .34), rgba(72, 46, 27, .88));
+  /* Controls are small boards too, so they carry the plank rather than a
+     flat brown gradient. Opaque: a control that lets the wall show through
+     is a hole in the furniture. */
+  --button-bg: linear-gradient(180deg, rgba(85, 56, 31, .93), rgba(58, 37, 21, .96)),
+               url("/static/assets/theme-textures/tavern-wood.png") center/130px 130px repeat;
+  --button-hover-bg: linear-gradient(180deg, rgba(109, 72, 38, .92), rgba(74, 48, 26, .95)),
+                     url("/static/assets/theme-textures/tavern-wood.png") center/130px 130px repeat;
+  /* --- boards -------------------------------------------------------
+     A cut board, not a window onto the wall behind it. The rows were
+     transparent over the sidebar's wood, so one continuous grain ran
+     straight through the whole list and slid underneath the rows as they
+     scrolled -- which reads as a hole in the panel rather than as an
+     object sitting on it. Each board now owns its face. */
+  --board-face:
+    linear-gradient(180deg, rgba(110, 73, 42, .94), rgba(78, 51, 30, .96)),
+    url("/static/assets/theme-textures/tavern-wood.png");
+  /* Grain, in two passes. A single evenly spaced repeat reads as a comb --
+     the lines are all parallel, all the same weight, and all the same
+     distance apart, which is the one thing wood never is. So: irregular
+     stops inside each period (lines of different weight, unevenly spaced),
+     and two passes at slightly OPPOSED angles with periods that do not
+     divide into each other. The two drift in and out of phase across the
+     width, so the lines converge and separate instead of marching. */
+  --board-grain-a:
+    repeating-linear-gradient(0.7deg,
+      rgba(26, 13, 4, .32) 0 1px, transparent 1px 7px,
+      rgba(26, 13, 4, .16) 7px 8px, transparent 8px 13px,
+      rgba(26, 13, 4, .38) 13px 14px, transparent 14px 25px,
+      rgba(26, 13, 4, .13) 25px 26px, transparent 26px 34px,
+      rgba(26, 13, 4, .27) 34px 35px, transparent 35px 45px,
+      rgba(26, 13, 4, .19) 45px 46px, transparent 46px 59px,
+      rgba(26, 13, 4, .35) 59px 60px, transparent 60px 71px,
+      rgba(26, 13, 4, .14) 71px 72px, transparent 72px 89px,
+      rgba(26, 13, 4, .24) 89px 90px, transparent 90px 97px);
+  --board-grain-b:
+    repeating-linear-gradient(-1.1deg,
+      rgba(28, 15, 5, .21) 0 1px, transparent 1px 11px,
+      rgba(28, 15, 5, .11) 11px 12px, transparent 12px 29px,
+      rgba(28, 15, 5, .26) 29px 30px, transparent 30px 43px,
+      rgba(28, 15, 5, .1) 43px 44px, transparent 44px 68px);
+  /* Splits run at whatever angle the timber split at, entering from one edge
+     and leaving by another -- three layers on clearly different bearings
+     rather than one set of parallel verticals, which read as panel seams
+     dividing the row rather than as damage in a single board. Each is a
+     fixed figure the rows sample at different offsets, so no two visible
+     boards are cracked the same way. */
+  --board-crack-a:
+    linear-gradient(72deg,
+      transparent 0 40px, rgba(18, 8, 2, .26) 42px, transparent 44px 168px,
+      rgba(18, 8, 2, .15) 170px, transparent 172px 260px);
+  --board-crack-b:
+    linear-gradient(107deg,
+      transparent 0 66px, rgba(18, 8, 2, .21) 68px, transparent 70px 200px);
+  --board-crack-c:
+    linear-gradient(148deg,
+      transparent 0 28px, rgba(18, 8, 2, .17) 30px, transparent 32px 122px,
+      rgba(18, 8, 2, .11) 124px, transparent 126px 340px);
+  --button-primary-bg: linear-gradient(180deg, #e3aa5c, #a2632c);
+  --button-primary-hover-bg: linear-gradient(180deg, #f3c481, #b97434);
+  --panel-border: #7d5730;
+  --card-border: #614326;
+  --strong-border: #9a6f3f;
+  /* ~.5 rather than .95-.97: at anything heavier the grain is present in
+     the file and invisible on screen, which is the same as not having it.
+     The panelling sits deliberately DARK -- it is the unlit end of the room,
+     and the per-element light grade below is what lifts the parts of it that
+     are near the hearth. Grading a surface that already reads as lit has
+     nowhere to go. */
+  /* Panelling. Same two-pass irregular grain as the boards, plus knots --
+     a wall has the area to show them, where a 42px list row does not. The
+     knots are what break the last of the regularity: an eye reading a large
+     flat surface finds the repeat immediately unless something interrupts
+     it at an interval that is not the tile's. */
+  --chrome-surface: var(--board-grain-a), var(--board-grain-b), var(--wood-knots), linear-gradient(180deg, rgba(35, 22, 13, .62), rgba(24, 15, 9, .7)), url("/static/assets/theme-textures/tavern-wood.png") center/190px 190px repeat;
+  --composer-surface: var(--board-grain-a), var(--board-grain-b), var(--wood-knots), linear-gradient(180deg, rgba(42, 27, 16, .64), rgba(29, 18, 11, .72)), url("/static/assets/theme-textures/tavern-wood.png") center/190px 190px repeat;
+  --card-surface: var(--board-grain-a), var(--board-grain-b), linear-gradient(180deg, rgba(59, 39, 23, .48), rgba(45, 29, 17, .56)), url("/static/assets/theme-textures/tavern-wood.png") center/190px 190px repeat;
+  /* Knots, at intervals that share no factor with the 190px plank tile, so
+     they never line up into a grid of their own. */
+  --wood-knots:
+    radial-gradient(ellipse 15px 6px at 18% 23%, rgba(22, 11, 3, .5), transparent 72%) 0 0/437px 611px repeat,
+    radial-gradient(ellipse 9px 4px at 71% 66%, rgba(22, 11, 3, .4), transparent 74%) 0 0/331px 479px repeat;
+  --input-surface: linear-gradient(180deg, rgba(30, 19, 11, .9), rgba(38, 25, 15, .9)), url("/static/assets/theme-textures/tavern-wood.png") center/320px 320px repeat;
+  --input-fg: #f8ecd6;
+  --input-border: #a97c49;
+  --pin-bg: linear-gradient(110deg, rgba(184, 112, 53, .3), rgba(62, 40, 24, .9));
+  --pin-fg: #f6d29c;
+  --modal-scrim: rgba(20, 12, 6, .93);
+  --toast-bg: #33200f;
+  --chip-bg: #462d1a;
+  --chip-fg: #f0d3a6;
+  --badge-bg: #432915;
+  --prose-fg: #f7e9d0;
+  --reading-panel-bg: rgba(28, 17, 9, var(--bd-panel, .88));
+  --reading-panel-fg: #f8ead1;
+  /* Turned wood and worn edges, not machined ones. */
+  --control-radius: 7px;
+  --card-radius: 9px;
+  --panel-radius: 12px;
+  --tab-radius: 9px 9px 0 0;
+  --prose-font: Georgia, "Palatino Linotype", serif;
+  --top-shadow: 0 10px 30px rgba(0, 0, 0, .42);
+  --side-shadow: 12px 0 30px rgba(0, 0, 0, .38);
+}
+
+/* LCARS is not a dark theme with round corners -- it is a specific and quite
+   strict system, and the previous pass got the vocabulary wrong: every
+   control carried the same 18px/5px opposite-corner radius, which reads as
+   scattered diagonal lines rather than a console. The real language is:
+
+     * FLAT colour. No gradients, no texture, no bevels. A block is one
+       solid fill on black, and black gutters do the separating.
+     * The canonical palette -- orange, lilac, tan, salmon, blue, gold --
+       against true black, with BLACK text on every colour block.
+     * Pills and elbows. Controls are full pills (999px); panels round only
+       the corners that face the interior, so the frame reads as one bent
+       bar rather than four independent boxes.
+     * Condensed uppercase type, wide-tracked, right-aligned in the frame. */
+:root[data-theme="lcars"] {
+  --bg: #000;
+  --bg2: #000;
+  --bg3: #1a1a1a;
+  --bg4: #242424;
+  --fg: #ffcc99;          /* tan: LCARS body text */
+  --dim: #9a8ba0;
+  --acc: #f90;            /* the LCARS orange */
+  --acc2: #99f;           /* periwinkle */
+  --warn: #fc0;           /* gold */
+  --err: #c66;            /* salmon */
+  --ok: #9c9;
+  --bd: #000;
+  --lcars-lilac: #c9c;
+  --lcars-blue: #9cf;
+  --page-background: #000;
+  --input-bg: #000;
+  --card-bg: #14141a;
+  --hover-bg: rgba(255, 153, 0, .22);
+  --selected-bg: var(--acc);
+  --button-bg: #96f;
+  --button-hover-bg: #f90;
+  --button-primary-bg: #f90;
+  --button-primary-hover-bg: #fc0;
+  --accent-ink: #000;
+  --panel-border: #000;
+  --card-border: #2b2b33;
+  --strong-border: #f90;
+  /* Flat black surfaces: the colour lives in the frame bars, not the fill. */
+  --chrome-surface: #000;
+  --composer-surface: #000;
+  --card-surface: #14141a;
+  --input-surface: #000;
+  --input-fg: #ffcc99;
+  --input-border: #f90;
+  --pin-bg: #99f;
+  --pin-fg: #000;
+  --prose-fg: #ffcc99;
+  --modal-scrim: rgba(0, 0, 0, .93);
+  --toast-bg: #99f;
+  --chip-bg: #c9c;
+  --chip-fg: #000;
+  --badge-bg: #f90;
+  --reading-panel-bg: rgba(0, 0, 0, var(--bd-panel, .92));
+  --reading-panel-fg: #ffcc99;
+  /* Pills, not opposite-corner wedges. */
+  --control-radius: 999px;
+  --card-radius: 0 0 0 22px;
+  --panel-radius: 0 0 0 28px;
+  --tab-radius: 999px 999px 0 0;
+  --ui-font: "Antonio", "Oswald", "Roboto Condensed", "Arial Narrow",
+             "Helvetica Neue", sans-serif;
+  --ui-letter-spacing: .08em;
+  --top-shadow: none;
+  --side-shadow: none;
+  --focus-ring: rgba(255, 153, 0, .45);
+}
+
+/* Stone read as charcoal: near-black, smooth, and only nominally grey. Rock
+   is LIGHTER than that and its whole character is surface -- you can see what
+   it is made of. So the mid-tones come up to quarried-granite grey, the slate
+   texture is allowed through, corners go nearly square (stone is cut, not
+   moulded), and the borders darken into mortar joints between blocks. The
+   single warm accent is torchlight, which is what makes the grey read as
+   cold. */
+:root[data-theme="stone"] {
+  --bg: #202426;
+  --bg2: #2b3033;
+  --bg3: #383e42;
+  --bg4: #464d51;
+  --fg: #eceae4;
+  --dim: #b0b5b6;
+  --acc: #d0ae6f;          /* torchlight, the one warm thing */
+  --acc2: #8c999b;
+  --warn: #d8b25c;
+  --err: #d9807a;
+  --ok: #93b48e;
+  --bd: #191d1f;            /* mortar: the joint is DARKER than the block */
+  --page-background:
+    radial-gradient(ellipse 60% 45% at 22% -6%, rgba(255, 255, 255, .07), transparent 60%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, .015) 0 2px, transparent 2px 9px),
+    linear-gradient(180deg, #23282a, #191d1f);
+  --input-bg: #1e2224;
+  --card-bg: rgba(56, 62, 66, .82);
+  --hover-bg: rgba(90, 99, 103, .55);
+  --selected-bg: linear-gradient(90deg, rgba(208, 174, 111, .3), rgba(64, 71, 75, .88));
+  --button-bg: linear-gradient(180deg, #4a5155, #363c3f);
+  --button-hover-bg: linear-gradient(180deg, #5c6468, #414749);
+  --button-primary-bg: linear-gradient(180deg, #d0ae6f, #8a6f42);
+  --button-primary-hover-bg: linear-gradient(180deg, #e3c68e, #a5854f);
+  --accent-ink: #1a150c;
+  --panel-border: #14181a;
+  --card-border: #202528;
+  --strong-border: #0f1213;
+  /* ~.55 rather than .95-.98: you should be able to see the slate. */
+  --chrome-surface: repeating-linear-gradient(118deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 6px), linear-gradient(180deg, rgba(43, 48, 51, .55), rgba(33, 37, 40, .6)), url("/static/assets/theme-textures/stone-slate.png") center/210px 210px repeat;
+  --composer-surface: repeating-linear-gradient(118deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 6px), linear-gradient(180deg, rgba(50, 56, 60, .58), rgba(38, 43, 46, .62)), url("/static/assets/theme-textures/stone-slate.png") center/210px 210px repeat;
+  --card-surface: repeating-linear-gradient(118deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 6px), linear-gradient(180deg, rgba(56, 62, 66, .5), rgba(44, 49, 52, .58)), url("/static/assets/theme-textures/stone-slate.png") center/210px 210px repeat;
+  --input-surface: linear-gradient(180deg, rgba(30, 34, 36, .88), rgba(38, 43, 46, .88)), url("/static/assets/theme-textures/stone-slate.png") center/340px 340px repeat;
+  --input-fg: #eeece5;
+  --input-border: #6f7679;
+  --pin-bg: linear-gradient(110deg, rgba(208, 174, 111, .16), rgba(52, 58, 61, .88));
+  --pin-fg: #e8d6ac;
+  --modal-scrim: rgba(10, 12, 13, .93);
+  --toast-bg: #2e3437;
+  --chip-bg: #434a4e;
+  --chip-fg: #e2e0da;
+  --badge-bg: #3b4245;
+  --prose-fg: #edebe5;
+  --reading-panel-bg: rgba(22, 26, 28, var(--bd-panel, .9));
+  --reading-panel-fg: #efede7;
+  /* Cut, not moulded. */
+  --control-radius: 2px;
+  --card-radius: 2px;
+  --panel-radius: 3px;
+  --tab-radius: 2px 2px 0 0;
+  --top-shadow: 0 8px 26px rgba(0, 0, 0, .5);
+  --side-shadow: 10px 0 26px rgba(0, 0, 0, .45);
+}
+
+:root[data-theme="ink"] {
+  --bg: #030405;
+  --bg2: #090b0d;
+  --bg3: #111417;
+  --bg4: #1b1f23;
+  --fg: #edf2f6;
+  --dim: #8f9aa3;
+  --acc: #d9e6f2;
+  --acc2: #7fa6c9;
+  --warn: #d7b76c;
+  --err: #e37b84;
+  --ok: #82c6a1;
+  --bd: #2b3238;
+  --page-background: #030405;
+  --input-bg: #06080a;
+  --card-bg: rgba(16, 19, 22, .9);
+  --hover-bg: rgba(217, 230, 242, .08);
+  --selected-bg: linear-gradient(90deg, rgba(217, 230, 242, .18), rgba(18, 21, 24, .94));
+  --button-bg: linear-gradient(180deg, #1c2024, #101316);
+  --button-hover-bg: linear-gradient(180deg, #282e33, #171b1f);
+  --button-primary-bg: linear-gradient(180deg, #e1edf7, #91aabd);
+  --button-primary-hover-bg: linear-gradient(180deg, #fff, #b3c8d8);
+  --accent-ink: #0b1115;
+  --panel-border: #3b444c;
+  --card-border: #262d33;
+  --strong-border: #4b5862;
+  --chrome-surface: linear-gradient(180deg, rgba(9, 11, 13, .98), rgba(5, 6, 8, .99));
+  --composer-surface: linear-gradient(180deg, rgba(12, 14, 16, .99), rgba(7, 9, 11, .99));
+  --card-surface: linear-gradient(180deg, rgba(16, 19, 22, .92), rgba(11, 13, 15, .95));
+  --input-surface: linear-gradient(180deg, rgba(2, 4, 6, .99), rgba(8, 10, 13, .99));
+  --input-fg: #edf2f6;
+  --input-border: #88a7c0;
+  --pin-bg: linear-gradient(110deg, rgba(127, 166, 201, .12), rgba(13, 16, 19, .92));
+  --pin-fg: #cfdfec;
+  --modal-scrim: rgba(0, 0, 0, .96);
+  --toast-bg: #0d1013;
+  --chip-bg: #171c20;
+  --chip-fg: #d5e0e8;
+  --badge-bg: #171b1f;
+  --control-radius: 4px;
+  --card-radius: 5px;
+  --panel-radius: 7px;
+  --top-shadow: none;
+  --side-shadow: none;
+}
+
+/* Shared token application. */
+body {
+  font-family: var(--ui-font);
+  letter-spacing: var(--ui-letter-spacing);
+  background: var(--page-background);
+}
+
+#side, #top, #drawer, #turnstatus, #live, #activity, #modalbox, header {
+  background: var(--chrome-surface);
+}
+#composer {
+  background: var(--composer-surface);
+}
+
+#side { box-shadow: var(--side-shadow); }
+#top { box-shadow: var(--top-shadow); }
+
+button {
+  border-radius: var(--control-radius);
+  background: var(--button-bg);
+}
+button:hover:not(:disabled) { background: var(--button-hover-bg); }
+button.primary {
+  background: var(--button-primary-bg);
+  color: var(--accent-ink);
+}
+button.primary:hover:not(:disabled) { background: var(--button-primary-hover-bg); }
+
+input, select, textarea {
+  background: var(--input-surface);
+  color: var(--input-fg);
+  border-color: var(--input-border);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 1px 2px rgba(0,0,0,.08);
+}
+input::placeholder, textarea::placeholder {
+  color: color-mix(in srgb, var(--input-fg) 56%, transparent);
+  opacity: .95;
+}
+input:focus, select:focus, textarea:focus, button:focus-visible {
+  box-shadow: 0 0 0 3px var(--focus-ring), inset 0 1px 0 rgba(255,255,255,.05);
+}
+
+#input {
+  background: var(--input-surface);
+  color: var(--input-fg);
+  border-color: var(--input-border);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 10px 18px rgba(0,0,0,.12);
+}
+.item:hover, .lore-side-row:hover, .lore-tree-row:hover { background: var(--hover-bg); }
+.item.on { background: var(--selected-bg); }
+#sideactions { background: color-mix(in srgb, var(--bg) 32%, transparent); }
+#composer {
+  border-top-color: color-mix(in srgb, var(--panel-border) 84%, transparent);
+}
+#send {
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--acc) 18%, transparent);
+}
+.pin { background: var(--pin-bg); color: var(--pin-fg); }
+.prose {
+  color: var(--prose-fg);
+  font-family: var(--prose-font);
+  font-size: var(--prose-size);
+}
+body.has-backdrop .prose {
+  background: var(--reading-panel-bg);
+  color: var(--reading-panel-fg);
+}
+
+#modal { background: var(--modal-scrim); }
+#modalbox { border-color: var(--panel-border); border-radius: var(--panel-radius); }
+#modalhead { background: linear-gradient(90deg, color-mix(in srgb, var(--acc) 16%, transparent), transparent 55%), var(--chrome-bg); }
+.card, .lore-panel {
+  background: var(--card-surface);
+  border-color: var(--card-border);
+  border-radius: var(--card-radius);
+}
+.card:hover { border-color: var(--strong-border); }
+.badge { background: var(--badge-bg); border-color: var(--panel-border); }
+.chip { background: var(--chip-bg); color: var(--chip-fg); border-color: var(--panel-border); }
+.toast { background: var(--toast-bg); border-color: var(--panel-border); }
+.toolbar, .memory-add { background: color-mix(in srgb, var(--bg) 34%, transparent); }
+.step pre, .memory-preview, .lore-plan-json { background: var(--bg); }
+.memory-summary { background: linear-gradient(145deg, color-mix(in srgb, var(--acc) 13%, transparent), var(--card-bg)); }
+.memory-summary-text, .memory-preview pre, .activity-row { color: color-mix(in srgb, var(--fg) 80%, var(--dim)); }
+.lore-panel-head { background: linear-gradient(90deg, color-mix(in srgb, var(--acc) 16%, transparent), var(--card-bg)); }
+.lore-entry-toolbar { background: color-mix(in srgb, var(--chrome-bg) 96%, transparent); }
+.lore-side-row.on, .lore-tree-row.selected {
+  border-color: color-mix(in srgb, var(--acc) 62%, var(--bd));
+  background: var(--selected-bg);
+}
+.lore-tree-name, .section-title, #activity-head { color: color-mix(in srgb, var(--fg) 92%, var(--acc)); }
+.lore-tree-children, .lore-side-children { border-left-color: var(--bd); }
+.lore-graph-edge, .lore-plan-stat { background: var(--card-bg); border-color: var(--card-border); }
+.lore-graph-center { border-color: color-mix(in srgb, var(--acc) 60%, var(--bd)); background: color-mix(in srgb, var(--acc) 13%, var(--card-bg)); }
+.lore-plan-stat strong { color: color-mix(in srgb, var(--fg) 84%, var(--acc)); }
+
+/* Theme-specific character. These are deliberate structural accents, not just
+   recolours, while retaining the same controls and navigation. */
+:root[data-theme="tavern"] #top,
+:root[data-theme="tavern"] #composer {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+}
+:root[data-theme="tavern"] #chatname,
+:root[data-theme="tavern"] #modaltitle,
+:root[data-theme="tavern"] .section-title {
+  font-family: Georgia, "Palatino Linotype", serif;
+  letter-spacing: .025em;
+  color: #f0c78a;
+}
+/* Brass fittings on wood: a warm lit top edge and a soft inner glow, as if
+   the candle is catching the panel. */
+:root[data-theme="tavern"] button,
+:root[data-theme="tavern"] .card,
+:root[data-theme="tavern"] .item {
+  box-shadow: inset 0 1px 0 rgba(255, 208, 140, .12),
+              inset 0 -1px 0 rgba(0, 0, 0, .32);
+}
+
+/* --- boards ----------------------------------------------------------
+   List rows and cards are planks laid on the panelling: opaque face, cut
+   corners rather than soft ones, a lit top edge and a shadowed bottom one
+   so the board has thickness. */
+:root[data-theme="tavern"] .item,
+:root[data-theme="tavern"] .card {
+  background-image: var(--board-crack-a), var(--board-crack-b),
+                    var(--board-crack-c), var(--board-grain-a),
+                    var(--board-grain-b), var(--board-face);
+  /* SEVEN layers -- --board-face is itself two (face gradient, plank photo) --
+     so every list below carries seven entries in this order: crack A, crack B,
+     crack C, grain A, grain B, face, photo. They have to stay in step; a short
+     list is repeated cyclically rather than rejected, so a missing entry
+     silently mis-sizes a layer instead of failing visibly. */
+  background-size: 260px 100%, 200px 100%, 340px 100%, auto, auto, auto, 150px 150px;
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat, repeat, no-repeat, repeat;
+  background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
+  border-color: #5b3d21;
+  /* Eased rather than square. A sawn board is not machined, but it is not a
+     rounded UI card either -- this is the smallest radius that stops the
+     corner reading as a hard right angle. */
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 rgba(255, 206, 138, .16),
+              inset 0 -2px 0 rgba(0, 0, 0, .34),
+              0 2px 3px rgba(0, 0, 0, .38);
+}
+/* No two boards are cut from the same stretch of plank. Each variant samples
+   the photo and the crack figure at a different offset; seven of them over a
+   list is enough that a repeat never lands beside its twin. Position only --
+   the layers themselves are shared, so this costs no extra image decoding. */
+   The two grain passes are shifted independently as well, so rows do not
+   merely show the same grain at a different crack offset. */
+:root[data-theme="tavern"] .item:nth-child(7n+1) { background-position: -6px -3px, -41px -9px, -88px -12px, -14px -3px, -40px -9px, 0 0, -12px -18px; }
+:root[data-theme="tavern"] .item:nth-child(7n+2) { background-position: -88px -17px, -133px -4px, -19px -31px, -63px -37px, -7px -52px, 0 0, -71px -47px; }
+:root[data-theme="tavern"] .item:nth-child(7n+3) { background-position: -151px -8px, -72px -22px, -204px -5px, -31px -68px, -95px -21px, 0 0, -119px -6px; }
+:root[data-theme="tavern"] .item:nth-child(7n+4) { background-position: -39px -25px, -176px -14px, -131px -27px, -77px -12px, -52px -60px, 0 0, -34px -93px; }
+:root[data-theme="tavern"] .item:nth-child(7n+5) { background-position: -213px -11px, -24px -30px, -267px -19px, -5px -84px, -113px -34px, 0 0, -96px -61px; }
+:root[data-theme="tavern"] .item:nth-child(7n+6) { background-position: -117px -20px, -108px -7px, -46px -35px, -49px -25px, -23px -47px, 0 0, -8px -132px; }
+:root[data-theme="tavern"] .item:nth-child(7n+7) { background-position: -244px -5px, -159px -26px, -311px -9px, -90px -55px, -68px -14px, 0 0, -142px -29px; }
+/* Hover and selection have to stay opaque or the board turns back into a
+   window: they tint the FACE rather than replacing the background. */
+:root[data-theme="tavern"] .item:hover {
+  border-color: #8a5f33;
+  box-shadow: inset 0 0 0 999px rgba(255, 176, 84, .07),
+              inset 0 1px 0 rgba(255, 214, 150, .2),
+              inset 0 -2px 0 rgba(0, 0, 0, .34),
+              0 3px 5px rgba(0, 0, 0, .42);
+}
+:root[data-theme="tavern"] .item.on,
+:root[data-theme="tavern"] .item.active,
+:root[data-theme="tavern"] .item[aria-selected="true"] {
+  border-color: var(--acc);
+  box-shadow: inset 0 0 0 999px rgba(224, 164, 79, .16),
+              inset 0 1px 0 rgba(255, 220, 160, .24),
+              inset 0 -2px 0 rgba(0, 0, 0, .36),
+              0 3px 6px rgba(0, 0, 0, .44);
+}
+/* Tabs are boards nailed to the top of the panel: square-cut, and the
+   selected one sits proud of the others. */
+:root[data-theme="tavern"] #tabs button {
+  border-radius: 6px 6px 0 0;
+  box-shadow: inset 0 1px 0 rgba(255, 206, 138, .14),
+              inset 0 -1px 0 rgba(0, 0, 0, .34);
+}
+:root[data-theme="tavern"] #side,
+:root[data-theme="tavern"] #top,
+:root[data-theme="tavern"] #composer,
+:root[data-theme="tavern"] #modalbox {
+  box-shadow: inset 0 0 60px rgba(255, 168, 74, .07);
+}
+:root[data-theme="tavern"] #side { border-right: 2px solid #7d5730; }
+:root[data-theme="tavern"] #top { border-bottom: 2px solid #7d5730; }
+
+/* --- light falls off across the panelling -----------------------------
+   One source, high in the top-left corner, so every surface is graded by
+   its own distance from it rather than being uniformly lit: the sidebar
+   brightens toward its top, the header toward its left, and the composer --
+   the far bottom of the room -- stays dark throughout. This is what stops
+   the wood reading as a flat repeating texture; it is the same panelling
+   everywhere, and only the light on it changes.
+   Each rule prepends ONE gradient layer to the existing surface token, so
+   the grain and the plank photo underneath are untouched. */
+:root[data-theme="tavern"] #side {
+  background:
+    linear-gradient(178deg,
+      rgba(255, 190, 104, .13) 0%, rgba(255, 176, 88, .04) 18%,
+      rgba(0, 0, 0, 0) 34%, rgba(0, 0, 0, .3) 74%, rgba(0, 0, 0, .5) 100%),
+    var(--chrome-surface);
+}
+:root[data-theme="tavern"] #top {
+  background:
+    linear-gradient(92deg,
+      rgba(255, 194, 110, .15) 0%, rgba(255, 178, 90, .05) 22%,
+      rgba(0, 0, 0, 0) 44%, rgba(0, 0, 0, .24) 84%, rgba(0, 0, 0, .38) 100%),
+    var(--chrome-surface);
+}
+/* The far bottom of the room: no spill at all, only the falloff. The
+   composer separates from the transcript on its border and its raised input,
+   not on being brighter than its surroundings. */
+:root[data-theme="tavern"] #composer {
+  background:
+    linear-gradient(74deg, rgba(0, 0, 0, .3) 0%, rgba(0, 0, 0, .5) 100%),
+    var(--composer-surface);
+}
+/* The sidebar footer takes NO surface of its own. It is the same wall, at the
+   bottom of the same falloff -- giving it its own graded background restarted
+   that gradient at the footer's top edge, so the light stepped down abruptly
+   at the seam instead of continuing to the floor. A real ledge reads on its
+   shadow and its lit lip, which is what is left here. */
+:root[data-theme="tavern"] #sideactions {
+  background: transparent;
+  border-top-color: #5b3d21;
+  box-shadow: inset 0 1px 0 rgba(255, 206, 138, .1),
+              0 -6px 14px rgba(0, 0, 0, .28);
+}
+
+/* --- the Lore tab is a bookshelf --------------------------------------
+   Every other tab lists things that live in the story; the Lore tab lists
+   BOOKS, and in a tavern they are on a shelf. The tree structure already
+   matches the furniture -- a book with children is a book with a shelf under
+   it -- so this is a restyle of the existing rows and nesting, not new markup.
+   `.lore-side-tree` and `.lore-side-children` only exist inside this tab, so
+   no other list is touched by it. */
+:root[data-theme="tavern"] .lore-side-tree {
+  /* Books on a shelf touch. The 2px gap read as a list again. */
+  gap: 0;
+  padding-bottom: 10px;
+  /* The shelf board itself, with its own shadow falling onto whatever is
+     below -- this is what makes the row above it read as standing ON
+     something rather than floating. */
+  border-bottom: 4px solid #3f2916;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, .42), 0 8px 12px rgba(0, 0, 0, .34);
+}
+:root[data-theme="tavern"] .lore-side-row {
+  /* Bound edge on the left, fore-edge on the right. */
+  border-radius: 2px 6px 6px 2px;
+  border-color: rgba(0, 0, 0, .52);
+  background:
+    /* Raised bands across the spine. */
+    repeating-linear-gradient(90deg,
+      transparent 0 44px, rgba(0, 0, 0, .16) 44px 46px,
+      rgba(255, 226, 170, .05) 46px 47px, transparent 47px 96px),
+    /* Gilt rules top and bottom, the way a bound spine is tooled. */
+    linear-gradient(180deg,
+      rgba(226, 183, 106, .3) 0 1px, transparent 1px calc(100% - 1px),
+      rgba(226, 183, 106, .2) calc(100% - 1px) 100%),
+    var(--book-leather);
+  /* Rounded away from the light on the fore-edge, catching it on the bound
+     edge: the shading is what gives a flat row the thickness of a book. */
+  box-shadow: inset -4px 0 6px rgba(0, 0, 0, .34),
+              inset 2px 0 0 rgba(255, 214, 150, .1),
+              0 1px 0 rgba(0, 0, 0, .5);
+  color: #f4e2c1;
+}
+/* Bindings are dyed in batches, not one colour per library. Five leathers on
+   a cycle that does not divide evenly into any common shelf length, so a
+   repeat rarely lands next to its twin. */
+:root[data-theme="tavern"] .lore-side-row { --book-leather: linear-gradient(180deg, #4e2320, #331715); }
+:root[data-theme="tavern"] .lore-side-node:nth-child(5n+2) > .lore-side-row { --book-leather: linear-gradient(180deg, #2b3a2b, #1b241c); }
+:root[data-theme="tavern"] .lore-side-node:nth-child(5n+3) > .lore-side-row { --book-leather: linear-gradient(180deg, #4f3e20, #342714); }
+:root[data-theme="tavern"] .lore-side-node:nth-child(5n+4) > .lore-side-row { --book-leather: linear-gradient(180deg, #26303f, #18202b); }
+:root[data-theme="tavern"] .lore-side-node:nth-child(5n+5) > .lore-side-row { --book-leather: linear-gradient(180deg, #43291a, #2c1a11); }
+/* The open book is pulled off the shelf: brighter, shifted proud of the
+   others, and casting onto its neighbours. */
+:root[data-theme="tavern"] .lore-side-row.on {
+  border-color: var(--acc);
+  transform: translateX(3px);
+  box-shadow: inset 0 0 0 999px rgba(255, 196, 110, .12),
+              inset 2px 0 0 rgba(255, 224, 170, .22),
+              -3px 0 8px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .5);
+}
+:root[data-theme="tavern"] .lore-side-row:hover {
+  box-shadow: inset 0 0 0 999px rgba(255, 196, 110, .06),
+              inset -4px 0 6px rgba(0, 0, 0, .34),
+              inset 2px 0 0 rgba(255, 214, 150, .14),
+              0 1px 0 rgba(0, 0, 0, .5);
+}
+/* Nested books sit on a lower shelf, so the nesting rail becomes its upright. */
+:root[data-theme="tavern"] .lore-side-children {
+  margin-left: 11px;
+  padding-left: 7px;
+  border-left: 3px solid #4c3119;
+}
+/* Ink tooled into leather, not interface text on a panel. */
+:root[data-theme="tavern"] .lore-side-toggle { color: #e8cfa4; }
+:root[data-theme="tavern"] .lore-side-name {
+  font-family: Georgia, "Palatino Linotype", serif;
+  letter-spacing: .015em;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .55);
+}
+:root[data-theme="tavern"] .lore-side-meta .badge {
+  background: rgba(0, 0, 0, .34);
+  color: #ecd5a6;
+  border-color: rgba(226, 183, 106, .28);
+}
+
+/* --- hearth flicker ---------------------------------------------------
+   The steady light lives in --page-background; this is only the part that
+   MOVES, so what animates is one compositor-friendly opacity on one fixed
+   layer rather than a repaint of the page's gradient stack.
+   z-index -1 puts it above the canvas background and below every control,
+   which is also why it disappears under a scene backdrop (#scene-backdrop is
+   a fixed sibling at z-index 0) -- a photograph of the room is already
+   doing the lighting, and a hearth flickering over it would fight it. */
+:root[data-theme="tavern"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse 52% 46% at 1% -8%,
+                              rgba(255, 168, 74, .16), transparent 62%);
+  animation: tavern-hearth 7.3s ease-in-out infinite;
+}
+@keyframes tavern-hearth {
+  /* A flame is not a sine wave: mostly steady, with irregular dips of
+     unequal depth. The range stays inside ~12% on purpose -- wider reads as
+     a failing monitor, and this sits behind text people are reading. */
+  0%, 100% { opacity: 1 }
+  11% { opacity: .95 }
+  19% { opacity: 1 }
+  34% { opacity: .88 }
+  39% { opacity: .98 }
+  53% { opacity: .92 }
+  58% { opacity: 1 }
+  74% { opacity: .9 }
+  81% { opacity: .97 }
+  92% { opacity: .93 }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Frozen at full, not removed: the layer is part of the lighting, and
+     only its movement is the accessibility problem. */
+  :root[data-theme="tavern"] body::before { animation: none }
+}
+
+/* --- LCARS frame ------------------------------------------------------
+   The console frame is a single bent bar: a thick colour spine down the
+   left that turns the corner under the header. The elbow is what makes it
+   read as LCARS rather than as a sidebar with a coloured border, so the
+   sidebar owns the spine and rounds only its inward corners. */
+:root[data-theme="lcars"] #side {
+  border-right: 18px solid var(--acc);
+  border-radius: 0 0 0 28px;
+  background: #000;
+}
+/* Black gutter between the sidebar's contents and the orange spine. Without
+   it the last tab (Lore) butts straight up against the bar and reads as
+   overlapping it -- and a gutter is the LCARS separator anyway: blocks are
+   divided by black, never by touching. */
+:root[data-theme="lcars"] #tabs,
+:root[data-theme="lcars"] #sidelist,
+:root[data-theme="lcars"] #sideactions {
+  padding-right: 12px;
+}
+:root[data-theme="lcars"] #tabs { gap: 4px; }
+:root[data-theme="lcars"] #top {
+  border-bottom: 14px solid var(--lcars-lilac);
+  border-radius: 0 0 0 22px;
+  background: #000;
+}
+:root[data-theme="lcars"] #composer {
+  border-top: 14px solid var(--acc2);
+  border-radius: 0 22px 0 0;
+  background: #000;
+}
+/* A 999px radius on a button as tall as the composer makes a disc. Widen it
+   so Send reads as an LCARS lozenge instead. */
+:root[data-theme="lcars"] #send,
+:root[data-theme="lcars"] #stop {
+  min-width: 118px;
+}
+
+/* Block type: condensed, uppercase, wide-tracked. */
+:root[data-theme="lcars"] #tabs button,
+:root[data-theme="lcars"] #topactions button,
+:root[data-theme="lcars"] .section-title,
+:root[data-theme="lcars"] .badge,
+:root[data-theme="lcars"] #chatname,
+:root[data-theme="lcars"] #modaltitle,
+:root[data-theme="lcars"] button {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+/* Controls are solid pills with BLACK text -- the LCARS button is a lozenge
+   of colour, never an outlined dark box. */
+:root[data-theme="lcars"] button {
+  border: none;
+  color: #000;
+  padding-inline: 14px;
+}
+:root[data-theme="lcars"] button:hover { color: #000; }
+/* The tab strip has to fit four labels across a 286px sidebar minus an 18px
+   spine. Uppercase + .08em tracking + the 14px pill padding above overflowed
+   it and clipped "LORE" against the spine, so the strip opts out of both and
+   is allowed to shrink. */
+/* Two rows of two rather than four across: "CHARACTERS" and "PERSONAS" set in
+   condensed uppercase simply do not fit a quarter of a 286px sidebar, and
+   clipping the label of a navigation control to preserve a single row is the
+   wrong trade. Stacked blocks are the native LCARS arrangement anyway. */
+:root[data-theme="lcars"] #tabs {
+  flex-wrap: wrap;
+}
+:root[data-theme="lcars"] #tabs button {
+  background: var(--lcars-blue);
+  color: #000;
+  border: none;
+  flex: 1 1 44%;
+  min-width: 0;
+  padding-inline: 6px;
+  font-size: 12px;
+  border-radius: 999px;
+}
+:root[data-theme="lcars"] #tabs button.on {
+  background: var(--acc);
+  color: #000;
+}
+/* The stock LCARS trick: a run of controls cycles through the palette so
+   the strip reads as a console bank instead of a row of identical keys. */
+:root[data-theme="lcars"] #topactions button:nth-child(4n + 1) { background: var(--acc); }
+:root[data-theme="lcars"] #topactions button:nth-child(4n + 2) { background: var(--acc2); }
+:root[data-theme="lcars"] #topactions button:nth-child(4n + 3) { background: var(--lcars-lilac); }
+:root[data-theme="lcars"] #topactions button:nth-child(4n)     { background: var(--err); }
+:root[data-theme="lcars"] #topactions button:hover,
+:root[data-theme="lcars"] #tabs button:hover { background: var(--warn); }
+
+/* Section headings sit as tan text in the black frame, right-aligned into
+   the spine the way console labels do. */
+:root[data-theme="lcars"] .section-title {
+  color: var(--acc);
+  text-align: right;
+  padding-right: 10px;
+}
+
+/* Selected story: a full colour bar, not a hairline. */
+:root[data-theme="lcars"] .story-item.on::before {
+  content: "";
+  width: 14px;
+  align-self: stretch;
+  border-radius: 999px;
+  background: var(--acc);
+  margin: -3px 4px -3px -4px;
+}
+:root[data-theme="lcars"] .story-item.on {
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+}
+:root[data-theme="lcars"] .story-item.on,
+:root[data-theme="lcars"] .item.on {
+  background: rgba(255, 153, 0, .16);
+  color: var(--acc);
+}
+:root[data-theme="lcars"] .card,
+:root[data-theme="lcars"] #modalbox {
+  border-left: 8px solid var(--acc2);
+}
+
+/* Bevelled like a cut block: a lit top edge, a shadowed bottom one, and a
+   hard mortar line around it. */
+:root[data-theme="stone"] button,
+:root[data-theme="stone"] .card,
+:root[data-theme="stone"] .item {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 -2px 0 rgba(0,0,0,.42);
+}
+:root[data-theme="stone"] #side,
+:root[data-theme="stone"] #top,
+:root[data-theme="stone"] #composer,
+:root[data-theme="stone"] #modalbox {
+  border-color: #14181a;
+  border-width: 2px;
+}
+/* Engraved, not printed: chiselled capitals cut into the face. */
+:root[data-theme="stone"] #chatname,
+:root[data-theme="stone"] #modaltitle,
+:root[data-theme="stone"] .section-title {
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  font-weight: 700;
+  color: #d7d4cc;
+  text-shadow: 0 1px 0 rgba(0,0,0,.75), 0 -1px 0 rgba(255,255,255,.07);
+}
+:root[data-theme="stone"] #top,
+:root[data-theme="stone"] #composer {
+  border-color: #62696a;
+}
+
+:root[data-theme="ink"] * { text-shadow: none !important; }
+:root[data-theme="ink"] #tabs button.on { border-bottom-width: 1px; }
+
+/* Appearance settings. */
+.appearance-intro {
+  max-width: 72ch;
+  margin: 0 0 10px;
+  color: var(--dim);
+}
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(225px, 1fr));
+  gap: 10px;
+}
+.theme-choice {
+  min-width: 0;
+  min-height: 154px;
+  display: grid;
+  grid-template-rows: 82px auto auto;
+  align-items: stretch;
+  gap: 8px;
+  padding: 9px;
+  text-align: left;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+}
+.theme-choice:hover:not(:disabled) { background: var(--hover-bg); }
+.theme-choice.selected {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+.theme-choice-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.theme-choice-copy strong { font-size: 14px; }
+.theme-selected-badge { justify-self: start; }
+.theme-choice.selected .theme-selected-badge {
+  color: var(--acc);
+  border-color: color-mix(in srgb, var(--acc) 58%, var(--bd));
+}
+.theme-preview {
+  display: grid;
+  grid-template-columns: 26% 1fr;
+  overflow: hidden;
+  border: 1px solid rgba(127, 127, 127, .34);
+  border-radius: calc(var(--card-radius) + 1px);
+  box-shadow: 0 5px 14px rgba(0,0,0,.18);
+}
+.theme-preview-side { display: flex; flex-direction: column; gap: 6px; padding: 10px 6px; }
+.theme-preview-side span { height: 6px; border-radius: 5px; background: rgba(255,255,255,.22); }
+.theme-preview-main { display: flex; min-width: 0; flex-direction: column; gap: 9px; padding: 9px; }
+.theme-preview-top { display: flex; justify-content: flex-end; gap: 5px; }
+.theme-preview-top span { width: 17px; height: 8px; border-radius: 5px; }
+.theme-preview-lines { display: flex; flex: 1; flex-direction: column; justify-content: center; gap: 5px; }
+.theme-preview-lines i { width: 78%; height: 4px; border-radius: 4px; background: rgba(127,127,127,.48); }
+.theme-preview-lines i:nth-child(2) { width: 92%; }
+.theme-preview-lines i:nth-child(3) { width: 61%; }
+.theme-preview-composer { height: 13px; border: 1px solid; border-radius: 4px; }
+.appearance-reading-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 4px;
+  border-top: 1px solid var(--bd);
+}
+.segmented-control { display: flex; flex-wrap: wrap; gap: 4px; }
+.segmented-control button.on {
+  color: var(--accent-ink);
+  border-color: var(--acc);
+  background: var(--button-primary-bg);
+}
+.appearance-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--bd);
+}
+
+@media (max-width: 680px) {
+  .theme-grid { grid-template-columns: 1fr; }
+  .appearance-reading-row { align-items: stretch; flex-direction: column; }
+  .segmented-control button { flex: 1 1 120px; }
+}

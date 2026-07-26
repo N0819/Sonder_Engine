@@ -383,6 +383,47 @@ def insert_world_tables(chat_id, b, delete_first=False):
             fl.get("parent_location_id"), fl.get("kind", "location"),
             fl["name"], fl.get("payload", "{}")))
 
+# World keys that are the READER's settings, not the fiction's state. They
+# live in `world` because it is the chat-scoped KV store, but they answer to
+# the person at the keyboard rather than to anything that happened in the
+# story -- see _preserved_settings.
+PRESERVED_SETTING_KEYS = (
+    "dialogue_config",     # NPC autonomy, prose pacing, line budgets
+    "background_config",   # background life / scene-manager dials
+    "style_guide",         # genre, tone, register
+    "narration_person",    # first/second/third person
+    "paradox_policy",
+    "background_presences",
+)
+
+
+def _preserved_settings(chat_id):
+    """The current values of the reader's settings, to carry across a restore.
+
+    restore_state wipes `world` and re-inserts the snapshot, which rolled
+    every one of these back to whatever it was when the checkpoint was
+    taken. Turn a dial and reroll that same turn and the dial sprang back --
+    the checkpoint predates the change, so the change was never in it. The
+    settings are not turn-scoped facts; nothing in the fiction depends on
+    which pacing you prefer, and a reroll is supposed to re-run the beat,
+    not undo your preferences.
+
+    Only keys that currently EXIST are preserved. A fresh chat (branch,
+    import) has none, so it still inherits the source's settings from the
+    snapshot -- which is the behavior branching wants.
+    """
+    preserved = {}
+    for key in PRESERVED_SETTING_KEYS:
+        row = q("SELECT value FROM world WHERE chat_id=? AND key=?",
+                (chat_id, key), one=True)
+        if row is not None:
+            try:
+                preserved[key] = json.loads(row["value"])
+            except (TypeError, ValueError):
+                continue
+    return preserved
+
+
 def _restore_checkpoint_body(chat_id, r):
     b = json.loads(r["blob"])
     # Any embedding work (only needed for legacy blobs that predate
@@ -397,9 +438,14 @@ def _restore_checkpoint_body(chat_id, r):
     # statements meant a crash mid-way left world state restored but
     # memories/entities half-gone. Now any failure rolls the entire
     # restore back and the chat stays exactly as it was.
+    # Read before the wipe, written after it: the reader's settings are not
+    # part of the beat being rolled back.
+    preserved = _preserved_settings(chat_id)
     with transaction():
         qi("DELETE FROM world WHERE chat_id=?", (chat_id,))
         for k, v in (b.get("world") or {}).items():
+            wset(chat_id, k, v)
+        for k, v in preserved.items():
             wset(chat_id, k, v)
         for cidk, st in (b.get("chars") or {}).items():
             if isinstance(st, dict) and "status" in st and "state" in st:

@@ -371,3 +371,147 @@ def test_writing_people_into_a_room_desc_is_not_a_new_picture():
                 + " Crew members and civilians gather here during off-duty hours."}}}
     assert (visual_signature(empty, "ten_forward")
             == visual_signature(crowded, "ten_forward"))
+
+
+# --- branch lineage --------------------------------------------------------
+#
+# A branch inherits the source chat's whole scene graph, so the rooms it opens
+# in are the rooms the source already paid to draw: same room id, same
+# description, therefore the same signature. Only the storage directory
+# differed, keyed by chat id, so every branch used to redraw its entire
+# inheritance one room at a time. It now reads the ancestor's files IN PLACE
+# -- never copying them, because a story branched a dozen times would
+# otherwise hold a dozen copies of the same corridor.
+
+def _chat(temp_db, name, lineage="[]"):
+    import time as _time
+    return temp_db.qi(
+        "INSERT INTO chats(name,scenario,branched_from,created) VALUES(?,?,?,?)",
+        (name, "", lineage, _time.time()))
+
+
+def _write_backdrop(tmp_path, chat_id, signature, data=b"\x89PNG source"):
+    d = tmp_path / str(chat_id)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / ("%s.png" % signature)).write_bytes(data)
+    return d / ("%s.png" % signature)
+
+
+def test_a_branch_reads_the_source_chats_backdrops(temp_db, tmp_path, monkeypatch):
+    import backdrops as bd
+    monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
+
+    src = _chat(temp_db, "Elevator Adventure")
+    branch = _chat(temp_db, "Elevator Adventure ⎇41", "[%d]" % src)
+    sig = "c" * 24
+    original = _write_backdrop(tmp_path, src, sig)
+
+    assert bd.cached_backdrop(branch, sig) == str(original)
+
+
+def test_an_inherited_backdrop_is_not_copied_into_the_branch(temp_db, tmp_path,
+                                                             monkeypatch):
+    """The point of the feature is that a branch costs no bytes. Reading the
+    ancestor's file in place is what keeps it that way -- copying would turn
+    every branch into a full second set of images."""
+    import backdrops as bd
+    monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
+
+    src = _chat(temp_db, "Elevator Adventure")
+    branch = _chat(temp_db, "Elevator Adventure ⎇41", "[%d]" % src)
+    sig = "c" * 24
+    _write_backdrop(tmp_path, src, sig)
+
+    bd.cached_backdrop(branch, sig)
+    assert not (tmp_path / str(branch)).exists(), "branch duplicated the image"
+
+
+def test_a_branch_of_a_branch_still_reaches_the_original(temp_db, tmp_path,
+                                                         monkeypatch):
+    """Rerolling repeatedly from the same story is the normal way this engine
+    is used, so lineage has to be transitive -- the picture lives in the
+    original chat and the third branch has never met it directly."""
+    import backdrops as bd
+    monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
+
+    first = _chat(temp_db, "Elevator Adventure")
+    second = _chat(temp_db, "⎇41", "[%d]" % first)
+    third = _chat(temp_db, "⎇12", "[%d,%d]" % (second, first))
+    sig = "d" * 24
+    original = _write_backdrop(tmp_path, first, sig)
+
+    assert bd.cached_backdrop(third, sig) == str(original)
+
+
+def test_an_unrelated_chat_sees_none_of_them(temp_db, tmp_path, monkeypatch):
+    """Reuse follows the branch lineage and nothing else: a different story
+    that happens to hash a room the same way still draws its own."""
+    import backdrops as bd
+    monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
+
+    src = _chat(temp_db, "Elevator Adventure")
+    other = _chat(temp_db, "A different story")
+    sig = "e" * 24
+    _write_backdrop(tmp_path, src, sig)
+
+    assert bd.cached_backdrop(other, sig) is None
+
+
+def test_inherited_backdrops_survive_the_source_chats_deletion(temp_db, tmp_path,
+                                                               monkeypatch):
+    """Why the lineage is a denormalized id list and not a parent_chat_id
+    foreign key. Deleting a chat removes its rows and leaves its pictures on
+    disk, so a cascade-nulled pointer would lose files that are still there."""
+    import backdrops as bd
+    monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
+
+    src = _chat(temp_db, "Elevator Adventure")
+    branch = _chat(temp_db, "Elevator Adventure ⎇41", "[%d]" % src)
+    sig = "f" * 24
+    original = _write_backdrop(tmp_path, src, sig)
+
+    temp_db.qi("DELETE FROM chats WHERE id=?", (src,))
+    assert bd.cached_backdrop(branch, sig) == str(original)
+
+
+def test_a_branchs_own_backdrop_wins_over_the_inherited_one(temp_db, tmp_path,
+                                                            monkeypatch):
+    """Regenerating in a branch must not reach back and repaint the source."""
+    import backdrops as bd
+    monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
+
+    src = _chat(temp_db, "Elevator Adventure")
+    branch = _chat(temp_db, "Elevator Adventure ⎇41", "[%d]" % src)
+    sig = "0" * 24
+    _write_backdrop(tmp_path, src, sig, b"\x89PNG source")
+    own = _write_backdrop(tmp_path, branch, sig, b"\x89PNG redrawn")
+
+    assert bd.cached_backdrop(branch, sig) == str(own)
+
+
+def test_a_damaged_lineage_degrades_to_generating(temp_db, tmp_path, monkeypatch):
+    """A hand-edited or truncated value must not take the chat's backdrops
+    down with it -- worst case is the pre-lineage behaviour."""
+    import backdrops as bd
+    monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
+
+    src = _chat(temp_db, "Elevator Adventure")
+    sig = "1" * 24
+    _write_backdrop(tmp_path, src, sig)
+
+    for broken in ("{not json", '"a string"', "[null]", '["../../etc"]', ""):
+        chat = _chat(temp_db, "branch", broken)
+        assert bd.cached_backdrop(chat, sig) is None
+        assert bd.branch_lineage(chat) == []
+
+
+def test_a_chat_is_never_its_own_ancestor(temp_db, tmp_path, monkeypatch):
+    """A self-reference would make the lineage walk re-stat the directory the
+    lookup just missed on; a cycle between two chats would do it forever."""
+    import backdrops as bd
+    monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
+
+    chat = _chat(temp_db, "Elevator Adventure")
+    temp_db.qi("UPDATE chats SET branched_from=? WHERE id=?",
+               ("[%d,%d]" % (chat, chat), chat))
+    assert bd.branch_lineage(chat) == []

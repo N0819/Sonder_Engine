@@ -137,6 +137,7 @@ function renderChat() {
 
   if (!S.chat) {
     $("#chatname").textContent = "No story selected";
+    $("#chatname").title = "No story selected";
     const ready = hasDefaultModel();
     M.append(el("div", { class: "empty-state", style: "margin:auto;max-width:440px" },
       el("div", { style: "font-size:15px;margin-bottom:14px" },
@@ -159,6 +160,7 @@ function renderChat() {
   }
 
   $("#chatname").textContent = S.chat.chat.name;
+  $("#chatname").title = S.chat.chat.name;
 
   // Frame-filtered: each frame is its own independent thread with its
   // own turn history -- see S.currentFrameId. A frameless chat (the

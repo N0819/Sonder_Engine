@@ -311,6 +311,98 @@ def _coerce_appearance(target_dict: dict) -> dict:
     visible.setdefault("distinctive_features", [])
     return target_dict
 
+CHARACTER_SECTIONS = (
+    "identity", "simulation", "embodiment", "psychology",
+    "social", "competence", "knowledge", "initial_state", "opening",
+)
+_IDENTITY_FIELDS = ("uid", "name", "aliases", "pronouns")
+# Values the schema skeleton carries when nobody filled the field in. An
+# identity holding one of these is empty in every sense that matters, so a
+# real value recovered from top level must win over it.
+_IDENTITY_PLACEHOLDERS = {
+    "name": "Unnamed",
+    "aliases": [],
+    "pronouns": {"subject": "they", "object": "them", "possessive": "their"},
+}
+
+
+def _content_weight(value) -> int:
+    """How much actual content a subtree carries -- non-empty strings, non-zero
+    numbers, populated lists. Used to tell the schema SKELETON a model emitted
+    before it lost its place ({"abilities": []}) from the real section it
+    emitted afterwards ({"abilities": [five of them]})."""
+    if isinstance(value, dict):
+        return sum(_content_weight(v) for v in value.values())
+    if isinstance(value, list):
+        return sum(_content_weight(v) for v in value)
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, str):
+        return 1 if value.strip() else 0
+    if isinstance(value, (int, float)):
+        return 1 if value else 0
+    return 0
+
+
+def repair_character_shape(value: dict) -> dict:
+    """Lift canonical sections that landed INSIDE another section, and fold a
+    flat identity back into `identity`.
+
+    An imported card is reinterpreted by a model, and a response missing one
+    closing brace is repaired by importers._jparse into something that parses
+    but nests the remaining sections under whichever one was left open.
+    `_deep_defaults` then keeps those unknown keys verbatim and backfills the
+    real slots with defaults -- so the sheet the engine reads is hollow while
+    the content sits inert one level down. Nothing raised and nothing warned.
+
+    Observed live on an imported character whose pronouns, aliases, voice,
+    five abilities, whole history, three standing goals and first message
+    were all parked under `psychology`, leaving her they/them, unskilled,
+    goalless and silent. The content was never lost, only misplaced.
+
+    Runs inside normalize_character_data, so it repairs on READ: existing
+    damaged sheets heal without a migration.
+    """
+    if not isinstance(value, dict):
+        return value
+    value = dict(value)
+
+    for host in CHARACTER_SECTIONS:
+        section = value.get(host)
+        if not isinstance(section, dict):
+            continue
+        misplaced = [k for k in CHARACTER_SECTIONS
+                     if k != host and isinstance(section.get(k), dict)]
+        if not misplaced:
+            continue
+        section = dict(section)
+        for key in misplaced:
+            lifted = section.pop(key)
+            # Whichever copy actually carries content wins. The top-level one
+            # is usually the skeleton the model emitted before it lost its
+            # place, so "already present" is not the same as authoritative.
+            if _content_weight(lifted) > _content_weight(value.get(key)):
+                value[key] = lifted
+        value[host] = section
+
+    # A model that drops the `identity` wrapper puts name/pronouns/aliases/uid
+    # at top level, where only `name` was ever rescued.
+    identity = dict(value.get("identity") or {})
+    recovered = False
+    for field in _IDENTITY_FIELDS:
+        if field not in value:
+            continue
+        current = identity.get(field)
+        if not current or current == _IDENTITY_PLACEHOLDERS.get(field):
+            if _content_weight(value[field]) >= _content_weight(current):
+                identity[field] = value[field]
+                recovered = True
+    if recovered:
+        value["identity"] = identity
+
+    return value
+
+
 def normalize_character_data(value: dict) -> dict:
     if not isinstance(value, dict):
         value = {}
@@ -322,6 +414,11 @@ def normalize_character_data(value: dict) -> dict:
         "identity", "simulation", "embodiment", "psychology",
         "social", "competence", "initial_state",
     )):
+        # Only NATIVE sheets are repaired. A legacy sheet keeps `name` at top
+        # level legitimately, and folding that into a synthesized `identity`
+        # would make it look native to the branch test above and route it
+        # away from the legacy conversion below.
+        value = repair_character_shape(value)
         name = (value.get("identity") or {}).get("name") or value.get("name") or "Unnamed"
         result = _deep_defaults(default_character_data(name), value)
         _coerce_latent(result)
@@ -364,6 +461,11 @@ def normalize_character_data(value: dict) -> dict:
             "latent": copy.deepcopy(value.get("latent_capabilities") or []),
         },
         "psychology": {
+            # Present but empty, matching default_character_data. Omitting the
+            # slot entirely left legacy sheets with a psychology that had no
+            # drive key at all -- effective_drive() tolerates it, but nothing
+            # downstream could then fill one in.
+            "drive": {"essence": "", "expression": "", "taboo": ""},
             "traits": _legacy_traits(core),
             "values": _legacy_values(core),
             "self_model": {

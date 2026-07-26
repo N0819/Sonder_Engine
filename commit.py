@@ -1014,6 +1014,17 @@ def _refresh_relocated_location(sc, prev_scene, diff, ctx):
         or str((rooms.get(player_room) or {}).get("name") or "").strip()
     if new_loc and new_loc != cur_loc:
         sc["location"] = new_loc
+    # scene.description is the label's prose sibling and was only ever written
+    # from director_establish -- i.e. once, on the opening turn, and then never
+    # again. Live (Elevator Adventure branch 41) it still described the surface
+    # elevator bay 92 turns later, with the party in a sub-basement chamber.
+    # Nothing reads it back today, so this is a latent staleness rather than an
+    # observed leak, but it is exactly what DW-1 fixed for `location` and the
+    # same trigger applies.
+    new_desc = str(diff.get("description") or "").strip() \
+        or str((rooms.get(player_room) or {}).get("desc") or "").strip()
+    if new_desc:
+        sc["description"] = new_desc
 
 
 def prune_dangling_exits(sc):
@@ -1055,6 +1066,61 @@ def prune_dangling_exits(sc):
                 "scene: dropped exit(s) from %s to undefined room(s) %s"
                 % (rid, ", ".join(sorted(set(dropped)))))
     return warnings
+
+
+def _heal_attire_identity_keys(sc, cast):
+    """Collapse scene.attire onto one key per character, and return the
+    function that canonicalizes an incoming key.
+
+    A character legitimately answers to several scene keys -- display name,
+    identity.uid, aliases (agents.common.character_scene_keys) -- and the
+    Director keys attire with whichever it reaches for. Positions survived
+    that because readers try every key (character_room) and duplicates get
+    collapsed (spatial._dedup_duplicate_position_keys); attire got neither,
+    and every reader (scene.appearance_of, agents/character.py) looks under
+    the display NAME alone. Observed live (Elevator Adventure branch 41):
+    Dr. Moon held two records -- `char_f0ef86a7...` with her lab coat,
+    shirt, trousers and loafers, and `Dr. Moon` with `wearing: []` -- so
+    she rendered as wearing nothing while her clothing STATE still read
+    "lab coat ripped at the hem".
+
+    Merging (rather than preferring one) is what makes this heal an
+    existing save: whichever record holds the clothes keeps them.
+    """
+    from agents.common import character_scene_keys
+
+    alias_to_canonical = {}
+    for row in cast or []:
+        try:
+            keys = character_scene_keys(json.loads(row["sheet"]))
+        except Exception:
+            continue
+        if not keys:
+            continue
+        for key in keys[1:]:
+            alias_to_canonical[key.casefold()] = keys[0]
+
+    def canonical(name):
+        return alias_to_canonical.get(str(name or "").strip().casefold(), name)
+
+    attire = sc.get("attire")
+    if isinstance(attire, dict):
+        for key in [k for k in attire if canonical(k) != k]:
+            record = attire.pop(key)
+            if not isinstance(record, dict):
+                continue
+            target = attire.setdefault(canonical(key),
+                                       {"wearing": [], "state": []})
+            if not isinstance(target, dict):
+                continue
+            for field in ("wearing", "state"):
+                merged = list(target.get(field) or [])
+                for item in record.get(field) or []:
+                    if item not in merged:
+                        merged.append(item)
+                target[field] = merged
+
+    return canonical
 
 
 def prepare_scene_commit(ctx):
@@ -1196,7 +1262,9 @@ def prepare_scene_commit(ctx):
         sc["overlays"][k] = cur[-6:]
 
     att = sc.setdefault("attire", {})
+    canonical_attire_key = _heal_attire_identity_keys(sc, ctx.cast)
     for name, d in (diff.get("attire") or {}).items():
+        name = canonical_attire_key(name)
         if not isinstance(d, dict):
             continue
         cur = att.setdefault(name, {"wearing": [], "state": []})

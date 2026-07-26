@@ -131,3 +131,51 @@ def test_in_venue_room_move_with_a_named_departed_room_still_refreshes(monkeypat
           "positions": {"Commander Reyes": "ready_room"}, "location": "Bridge"}
     commit._refresh_relocated_location(sc, prev, {}, ctx)
     assert sc["location"] == "Ready Room"
+
+
+# ---- scene.description: the label's prose sibling, frozen since turn 0 ----
+
+def test_description_refreshes_with_the_location(monkeypatch):
+    """scene.description was only ever written from director_establish --
+    i.e. once, on the opening turn. Live (Elevator Adventure branch 41) it
+    still described the surface elevator bay 92 turns later, with the party
+    in a sub-basement chamber. It follows the same trigger as the label."""
+    ctx = _ctx(monkeypatch)
+    prev = {"rooms": {"bay": {"name": "Elevator Bay", "desc": "A quiet bay."}},
+            "location": "Elevator Bay",
+            "description": "A quiet elevator bay, two steady blue lights."}
+    sc = {"rooms": {"bay": {"name": "Elevator Bay", "desc": "A quiet bay."},
+                    "chamber": {"name": "West Chamber",
+                                "desc": "A low, sealed concrete chamber."}},
+          "positions": {"Ellie Marsh": "chamber"},
+          "location": "Elevator Bay",
+          "description": "A quiet elevator bay, two steady blue lights."}
+    commit._refresh_relocated_location(sc, prev, {}, ctx)
+    assert sc["location"] == "West Chamber"
+    assert sc["description"] == "A low, sealed concrete chamber."
+
+
+def test_director_named_description_is_preferred(monkeypatch):
+    ctx = _ctx(monkeypatch)
+    prev = {"rooms": {"bay": {"name": "Elevator Bay"}}, "location": "Elevator Bay",
+            "description": "A quiet elevator bay."}
+    sc = {"rooms": {"bay": {"name": "Elevator Bay"},
+                    "chamber": {"name": "West Chamber", "desc": "Sealed concrete."}},
+          "positions": {"Ellie Marsh": "chamber"}, "location": "Elevator Bay",
+          "description": "A quiet elevator bay."}
+    commit._refresh_relocated_location(
+        sc, prev, {"description": "Deep beneath Site-17."}, ctx)
+    assert sc["description"] == "Deep beneath Site-17."
+
+
+def test_description_is_untouched_without_a_relocation(monkeypatch):
+    ctx = _ctx(monkeypatch)
+    prev = {"rooms": {"bar": {"name": "Bar", "desc": "A bar."},
+                      "kitchen": {"name": "Kitchen", "desc": "A kitchen."}},
+            "location": "The Old Anchor", "description": "A dockside pub."}
+    sc = {"rooms": {"bar": {"name": "Bar", "desc": "A bar."},
+                    "kitchen": {"name": "Kitchen", "desc": "A kitchen."}},
+          "positions": {"Ellie Marsh": "kitchen"},
+          "location": "The Old Anchor", "description": "A dockside pub."}
+    commit._refresh_relocated_location(sc, prev, {}, ctx)
+    assert sc["description"] == "A dockside pub."

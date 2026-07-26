@@ -20,7 +20,9 @@ from providers import (
     DEFAULT_BASES, ROLES, SAMPLER_KEYS, DEFAULT_SAMPLERS, Aborted,
 )
 from pipeline_context import PipelineContext, ChatData, TurnData
-from checkpoints import ensure_checkpoint, restore_checkpoint, snapshot_state, refresh_checkpoint, insert_world_tables
+from checkpoints import (ensure_checkpoint, restore_checkpoint, snapshot_state,
+                         refresh_checkpoint, insert_world_tables,
+                         PRESERVED_SETTING_KEYS)
 from frames import create_frame, get_frame, list_frames
 import paradox
 import greetings
@@ -45,7 +47,7 @@ from importers import (
     import_character, import_persona, import_lorebook,
     generate_character, generate_persona, generate_lore_entries,
     reinterpret_lorebook, resolve_import_card, draft_promoted_character,
-    recover_greetings_from_source,
+    recover_greetings_from_source, character_import_warnings,
 )
 from commit import (commit_all, promotable_background_presences,
                     promote_background_character,
@@ -1243,7 +1245,8 @@ def char_import(body: dict = Body(...)):
     except Exception as exc:
         raise HTTPException(502 if reinterpret else 400, f"Character import failed: {exc}") from exc
     _ensure_resource_uid("characters", cid, "char")
-    return {"id": cid, "sheet": sheet}
+    return {"id": cid, "sheet": sheet,
+            "warnings": character_import_warnings(sheet)}
 
 @app.post("/api/characters/{cid}/start")
 def character_start_story(cid: int, body: dict = Body(default={})):
@@ -2629,6 +2632,10 @@ def chat_import(body: dict = Body(...)):
                 existing = q("SELECT id FROM personas WHERE id=?", (old_persona_id,), one=True)
                 persona_id = existing["id"] if existing else None
 
+        # branched_from is deliberately NOT carried over, so it defaults to
+        # '[]': it holds raw chat ids, which name a directory of backdrops in
+        # the database they were written in and an unrelated chat's in any
+        # other. An imported chat starts with no inherited pictures.
         new_chat_id = qtx(
             "INSERT INTO chats(name,persona_id,scenario,created) "
             "VALUES(?,?,?,?)",
@@ -3169,10 +3176,27 @@ def turn_branch(tid: int):
     # Mirror chat_import: every insert from the new chats row through the
     # final checkpoint commits atomically, so a mid-branch failure cannot
     # leave a visible half-built chat behind.
+    # The branch inherits the source's scene, so the rooms it starts in are
+    # the rooms the source already has backdrops for. Recording the source
+    # (and everything the source itself branched from, so a branch of a
+    # branch still reaches the original) lets backdrops.py read those images
+    # where they lie instead of redrawing the inheritance room by room.
+    # Nearest ancestor first: the closest chat is the likeliest to hold the
+    # picture, and a shorter walk is a cheaper miss.
+    try:
+        lineage = json.loads(src.get("branched_from") or "[]")
+        if not isinstance(lineage, list):
+            lineage = []
+    except (ValueError, TypeError):
+        lineage = []
+    lineage = json.dumps([cid] + [a for a in lineage if a != cid][:63])
+
     with transaction():
         ncid = qtx(
-            "INSERT INTO chats(name,persona_id,scenario,created) VALUES(?,?,?,?)",
-            (f"{src['name']} ⎇{idx}", src["persona_id"], src["scenario"], time.time())
+            "INSERT INTO chats(name,persona_id,scenario,branched_from,created) "
+            "VALUES(?,?,?,?,?)",
+            (f"{src['name']} ⎇{idx}", src["persona_id"], src["scenario"],
+             lineage, time.time())
         )
 
         # Clone every declared frame (chat-wide declarations, not turn-scoped
@@ -3385,6 +3409,17 @@ def turn_branch(tid: int):
 
         # Restore world state (deep-copy so blob stays untouched for checkpoints)
         world = json.loads(json.dumps(blob.get("world") or {}))
+        # `blob` is the checkpoint at the branch point, so every value in it is
+        # as of that turn -- correct for the fiction, wrong for the reader's
+        # settings. Turn NPC autonomy up at turn 60, branch from turn 20, and
+        # the branch opened with the old dial because the change postdates the
+        # checkpoint. Overlay the source chat's CURRENT settings; they are not
+        # turn-scoped facts. (Same reasoning as checkpoints._preserved_settings,
+        # which keeps them across a reroll.)
+        for _skey in PRESERVED_SETTING_KEYS:
+            _live = wget(cid, _skey, None)
+            if _live is not None:
+                world[_skey] = _live
         # Retired-concept cleanup: current_frame_id/frame_bundle:* were written
         # by the old whole-chat frame-swap mechanism (replaced by frame-scoped
         # storage keys -- see db.py's active_frame_id). Harmless no-ops unless

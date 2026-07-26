@@ -38,7 +38,9 @@ from scene import (
 from providers import Aborted
 from schemas import validate_llm_output
 from spatial import (
+    _merge_entity,
     _merge_room,
+    egocentric_frame,
     merge_scene_with_diff,
     passable_route_exists,
     room_of,
@@ -202,6 +204,39 @@ def director_establish(ctx, nonce):
     out["dialogue_log"] = []
     return out
 
+def _egocentric_exits(sc, observer):
+    """Which exits lie AHEAD of this mover, and which are the way they came.
+
+    director_interpret picks movement.to_room from the scene's room graph,
+    but the graph is undirected: standing in a corridor, "keep walking
+    forward" and "turn back" name the same two doorways. Without the
+    observer's heading the choice is a coin flip, and live (Elevator
+    Adventure branch 41) it came up tails for twenty consecutive turns --
+    the player walked forward every beat and was shuffled between four
+    rooms, at one point sent four rooms BACKWARD on "You keep inching
+    forwards with her". The engine already derives this frame for
+    perception (spatial.egocentric_frame); the Director was simply never
+    shown it. Empty buckets are omitted so an unoriented mover (scene
+    open, fresh teleport) asserts no direction at all.
+    """
+    try:
+        frame = egocentric_frame(sc, observer) or {}
+    except Exception:
+        return None
+    summary = {}
+    for bucket in ("ahead", "behind", "left", "right", "aside",
+                   "above", "below", "unclassified"):
+        rooms = [str(edge.get("to")) for edge in (frame.get(bucket) or [])
+                 if isinstance(edge, dict) and edge.get("to")]
+        if rooms:
+            summary[bucket] = rooms
+    came_from = ((sc.get("orientation") or {}).get(observer) or {}).get(
+        "came_from")
+    if came_from:
+        summary["came_from"] = came_from
+    return summary or None
+
+
 def director_interpret(ctx, nonce):
     chat = ctx.chat
     sc = get_scene(chat["id"], chat)
@@ -262,6 +297,9 @@ def director_interpret(ctx, nonce):
                 pers.get("appearance") or persona_appearance(pers), sc),
             "abilities": persona_abilities(pers),
             "public_shadow_profile": raw_shadow[:1200],
+            # Heading, so "forward" and "back" name different doorways.
+            "exits": _egocentric_exits(
+                sc, pers.get("name") or persona_name(pers)),
         },
         "present_characters": cast_info,
         "world_books": world_books,
@@ -1257,10 +1295,20 @@ def _merge_repair_into_diff(sd, patch):
             continue
         existing = sd["rooms"].get(room_id)
         sd["rooms"][room_id] = (
-            _merge_room(existing, incoming)
+            _merge_room(existing, incoming, room_id)
             if isinstance(existing, dict) else incoming
         )
-    for field in ("entities", "attire", "overlays"):
+    # Entities merge field-aware for the same reason rooms merge edge-aware:
+    # both sides here are partial, so an absent field is silence rather than
+    # an erasure (see spatial._merge_entity).
+    for key, incoming in (patch.get("entities") or {}).items():
+        existing = sd["entities"].get(key)
+        sd["entities"][key] = (
+            _merge_entity(key, existing, incoming)
+            if isinstance(existing, dict) and isinstance(incoming, dict)
+            else incoming
+        )
+    for field in ("attire", "overlays"):
         for key, incoming in (patch.get(field) or {}).items():
             sd[field][key] = incoming
     for key, incoming in (patch.get("conditions") or {}).items():
@@ -2327,7 +2375,14 @@ def director_resolve(ctx, nonce):
     for entry in staged:
         if entry.get("category") == "layout" and entry.get("content"):
             room_id = target_room or (entry.get("keys") or "").split(",")[0].strip().replace(" ", "_")
-            if room_id and room_id not in sd["rooms"]:
+            # Only MATERIALIZE a room that does not exist yet. Testing the
+            # diff alone re-created rooms already in the scene, and the
+            # placeholder name below then overwrote the authored one through
+            # _merge_room -- live (Elevator Adventure branch 41) mapping's
+            # "Branching Junction" became "Site17 Deep Shelter Branching
+            # Junction", the id slug, as the player-visible location label.
+            if room_id and room_id not in sd["rooms"] \
+                    and room_id not in (sc.get("rooms") or {}):
                 prev_room = subject_prev_room
                 adj = []
                 if prev_room:

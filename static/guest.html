@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>Sonder Engine — Join a Story</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/static/js/theme-init.js"></script>
 <!-- Shares the host app's actual stylesheet (tokens, .turn/.pin/.prose,
      button variants) rather than a hand-rolled parallel palette -- a
      guest's first-ever impression of the app used to share nothing
@@ -12,12 +13,13 @@
      defaults to a gray gradient. Only guest-page-specific layout
      (the join screen, the composer bar) is defined locally below. -->
 <link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/themes.css">
 <style>
   body { display: flex; flex-direction: column; }
   header {
     padding: 14px 18px; border-bottom: 1px solid var(--bd);
     display: flex; align-items: center; gap: 10px; min-height: 50px;
-    background: rgba(18,23,34,.9); backdrop-filter: blur(14px);
+    background: var(--chrome-bg);
   }
   header h1 { font-size: 16px; margin: 0; font-weight: 650; }
   header .sub { color: var(--dim); font-size: 13px; }

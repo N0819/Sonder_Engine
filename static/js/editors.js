@@ -484,7 +484,13 @@ function importModal(kind) {
             : kind === "persona" ? { card: fileContent, reinterpret: re.checked }
               : { book: fileContent, reinterpret: re.checked, book_type: typeSel.value, summary: sumIn.value };
           backgroundTask("Importing " + kind, () => api("POST", endpoint, payload),
-            { onSuccess: async r => { await boot(); if (kind === "lorebook" && r?.id) await loreModal(r.id) },
+            { onSuccess: async r => {
+              await boot();
+              if (kind === "lorebook" && r?.id) await loreModal(r.id);
+              // A card with no drive imports cleanly and then reads as a dull
+              // character rather than an unfilled field. Say so.
+              for (const warning of (r?.warnings || [])) toast(warning, "warn");
+            },
              successMessage: kind.charAt(0).toUpperCase() + kind.slice(1) + " imported.",
              errorPrefix: kind.charAt(0).toUpperCase() + kind.slice(1) + " import failed" });
         } }, "Import")));

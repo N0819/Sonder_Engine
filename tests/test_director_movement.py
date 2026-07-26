@@ -237,3 +237,4 @@ def test_perception_outcome_reflects_committed_move_not_stale_onset_cache(
     perception.perception_outcome(ctx, nonce=0)
 
     assert ctx["_player_room"] == "lamp_room"
+

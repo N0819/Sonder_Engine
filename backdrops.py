@@ -138,10 +138,64 @@ def backdrop_path(chat_id, signature):
     return os.path.join(BACKDROP_DIR, str(chat_id), "%s.png" % signature)
 
 
+# How many ancestors deep a lookup will walk. A miss costs one os.path.exists
+# per generation, which is nothing, but the list is written by branching and
+# read here forever, so it gets a ceiling rather than trusting it to stay short.
+_LINEAGE_LIMIT = 64
+
+
+def branch_lineage(chat_id):
+    """Chat ids this chat was branched out of, nearest ancestor first.
+
+    A branch inherits the whole scene graph, so its early rooms are pixel-for-
+    pixel the rooms the source chat already paid to draw -- same room id, same
+    description, same signature. Only the storage path differed, so every
+    branch used to redraw its inheritance from scratch.
+    """
+    try:
+        row = q("SELECT branched_from FROM chats WHERE id=?", (chat_id,),
+                one=True)
+    except Exception:
+        # A caller with no chats row (tests, a chat deleted mid-request) gets
+        # its own directory only, which is the pre-lineage behaviour.
+        return []
+    if not row:
+        return []
+    try:
+        ids = json.loads(row["branched_from"] or "[]")
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(ids, list):
+        return []
+    out = []
+    for cid in ids[:_LINEAGE_LIMIT]:
+        try:
+            cid = int(cid)
+        except (TypeError, ValueError):
+            continue
+        # A chat is never its own ancestor, and a repeated id would only
+        # re-stat a directory that already missed.
+        if cid != int(chat_id) and cid not in out:
+            out.append(cid)
+    return out
+
+
 def cached_backdrop(chat_id, signature):
-    """The path to an already-generated backdrop, or None."""
+    """The path to an already-generated backdrop, or None.
+
+    Looks in this chat's own directory first, then walks the branch lineage.
+    An ancestor's file is READ IN PLACE and never copied forward: a branch is
+    cheap precisely because it adds no bytes, and a story branched a dozen
+    times would otherwise carry a dozen copies of the same corridor.
+    """
     path = backdrop_path(chat_id, signature)
-    return path if os.path.exists(path) else None
+    if os.path.exists(path):
+        return path
+    for ancestor in branch_lineage(chat_id):
+        inherited = backdrop_path(ancestor, signature)
+        if os.path.exists(inherited):
+            return inherited
+    return None
 
 
 # --- prompt construction ---------------------------------------------------
