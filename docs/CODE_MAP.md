@@ -37,11 +37,11 @@
 | `paradox.py` | 486 |  | `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 2350 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 2364 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1802 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 854 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 2021 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 2681 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas` |
+| `spatial.py` | 2800 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas` |
 | `spatial_frames.py` | 875 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `theory_of_mind.py` | 288 |  | — |
 | `updates.py` | 254 |  | — |
@@ -390,10 +390,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 2341 | 10 lines |
-| `presets()` | 2332 | 2 lines |
-| `active_preset()` | 2335 | 2 lines |
-| `nsfw_enabled()` | 2338 | 2 lines |
+| `get_prompt()` | 2355 | 10 lines |
+| `presets()` | 2346 | 2 lines |
+| `active_preset()` | 2349 | 2 lines |
+| `nsfw_enabled()` | 2352 | 2 lines |
 
 ### `providers.py`
 
@@ -438,14 +438,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 2434 | 203 lines |
-| `apply_transit_dock_edges()` | 2130 | 137 lines |
-| `visible_adjacent_rooms()` | 1803 | 113 lines |
-| `contacts_from_entity_state()` | 1420 | 100 lines |
-| `egocentric_frame()` | 542 | 80 lines |
-| `apply_contact_ops()` | 1621 | 75 lines |
-| `normalize_scene_bearings()` | 215 | 74 lines |
-| `spatial_facts()` | 1737 | 64 lines |
+| `merge_scene_with_diff()` | 2553 | 203 lines |
+| `apply_transit_dock_edges()` | 2234 | 152 lines |
+| `visible_adjacent_rooms()` | 1889 | 110 lines |
+| `contacts_from_entity_state()` | 1468 | 100 lines |
+| `egocentric_frame()` | 590 | 80 lines |
+| `apply_contact_ops()` | 1669 | 75 lines |
+| `normalize_scene_bearings()` | 259 | 74 lines |
+| `spatial_facts()` | 1785 | 64 lines |
 
 ### `spatial_frames.py`
 

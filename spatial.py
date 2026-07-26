@@ -48,16 +48,60 @@ _BARRIER_ALIASES = {
     "bolted door": "wall",
     "solid_wall": "wall",
     "solid wall": "wall",
+    # See-through but not passable. Genuinely missing until now: every glassy
+    # thing had to degrade to `wall` (opaque, the normalizer's fallback for
+    # anything unrecognized) or be lied about as `open`. A room with a window
+    # onto the street, an observation port, a sealed glass container -- none of
+    # them could be expressed.
+    "window": "window",
+    "glass": "window",
+    "glass_door": "window",
+    "glass door": "window",
+    "glass_wall": "window",
+    "glass wall": "window",
+    "pane": "window",
+    "windowpane": "window",
+    "porthole": "window",
+    "viewport": "window",
+    "view_port": "window",
+    "observation_window": "window",
+    "one_way_mirror": "window",
+    "transparent": "window",
+    "sealed_glass": "window",
+    # See-through AND sound-through: a cage, a grille, a barred door. Distinct
+    # from glass, which stops sound as well as bodies.
+    "bars": "bars",
+    "barred": "bars",
+    "barred_door": "bars",
+    "barred door": "bars",
+    "cage": "bars",
+    "cage_door": "bars",
+    "grate": "bars",
+    "grating": "bars",
+    "grille": "bars",
+    "grill": "bars",
+    "mesh": "bars",
+    "lattice": "bars",
+    "portcullis": "bars",
+    "railing": "bars",
 }
 
 _VALID_BARRIERS = {
     "open",
     "open_door",
     "closed_door",
+    # Sight passes, bodies do not. `window` also stops sound; `bars` does not.
+    "window",
+    "bars",
     "wall",
     "separated",
     "unknown",
 }
+
+# The three questions a barrier answers, kept apart because they genuinely
+# differ. Conflating them is what left the engine with no way to say "you can
+# see it but you cannot reach it".
+_SIGHT_BARRIERS = {"open", "open_door", "window", "bars"}
 
 def normalize_barrier(value: str | None) -> str:
     """Normalize model-generated barrier names into engine vocabulary."""
@@ -303,13 +347,17 @@ def room_of(scene: dict, name: str) -> Optional[str]:
     return None
 
 def has_visual(rel: dict) -> bool:
+    """Can these two see each other at all.
+
+    The one place sight is decided, which is why see-through barriers land
+    here: a body sealed in a glass container is visible to the room, and sees
+    the room back. Passage and audibility are answered elsewhere and stay
+    unchanged -- being seen through glass is not being reachable through it.
+    """
     if rel.get("same_room"):
         return True
 
-    return normalize_barrier(rel.get("barrier")) in {
-        "open",
-        "open_door",
-    }
+    return normalize_barrier(rel.get("barrier")) in _SIGHT_BARRIERS
 
 def spatial_rel(
     scene: dict,
@@ -1800,6 +1848,44 @@ def spatial_facts(scene: dict, observer: str, source_names) -> list:
     return facts
 
 
+def _is_carried_interior(scene, room_id):
+    """Is `room_id` the inside of something a body is carrying.
+
+    You do not take in the inside of a bag, a case, a jar or a pocket as part
+    of taking in the room it is being carried through -- looking in is an act,
+    not ambience. Without this, every interior attached to a carried entity was
+    permanently in its owner's field of view, so a character stood there
+    perpetually perceiving the inside of their own belongings.
+
+    Deliberately keyed on the CARRIER relation (or portability), not on any
+    notion of smallness: a ship's hold you are walking through is an interior
+    too, and it stays visible because nobody is carrying the ship.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    room = rooms.get(room_id)
+    if not isinstance(room, dict):
+        return False
+    parent = room.get("parent_entity")
+    if not parent:
+        return False
+
+    entities = (scene or {}).get("entities") or {}
+    entity = entities.get(parent)
+    if not isinstance(entity, dict):
+        entity = next(
+            (e for e in entities.values()
+             if isinstance(e, dict)
+             and str(e.get("name") or "").strip().casefold()
+             == str(parent).strip().casefold()),
+            {},
+        )
+    if entity.get("portable"):
+        return True
+    # Carried right now, by a hand or inside another container.
+    return container_of(scene, parent) is not None or \
+        container_of(scene, str(entity.get("name") or "")) is not None
+
+
 def visible_adjacent_rooms(
     scene: dict,
     room_id: str,
@@ -1829,13 +1915,12 @@ def visible_adjacent_rooms(
             edge.get("barrier")
         )
 
-        if barrier not in (
-            "open",
-            "open_door",
-        ):
+        if barrier not in _SIGHT_BARRIERS:
             continue
 
         adjacent_id = edge.get("to")
+        if _is_carried_interior(scene, adjacent_id):
+            continue
 
         if (
             not adjacent_id
@@ -1886,10 +1971,8 @@ def visible_adjacent_rooms(
 
             if (
                 edge.get("to") != room_id
-                or barrier not in (
-                    "open",
-                    "open_door",
-                )
+                or barrier not in _SIGHT_BARRIERS
+                or _is_carried_interior(scene, other_id)
             ):
                 continue
 
@@ -2097,6 +2180,27 @@ def _transit_state(entity) -> Optional[dict]:
     transit = state.get("transit") if isinstance(state, dict) else None
     return transit if isinstance(transit, dict) else None
 
+# What an entity's enclosure is MADE of, which decides what a closed one still
+# lets through. `enclosure` sits beside portable/container as a structural fact:
+# a glass case and a strongbox are both closed, and only one of them is opaque.
+CONTAINER_ENCLOSURES = ("opaque", "transparent", "barred")
+
+
+def _closed_enclosure_barrier(ent):
+    """The doorway barrier for a CLOSED entity interior.
+
+    Opaque is the default and the old behaviour. Transparent yields a window --
+    a body sealed inside is visible to the room and can see out, without being
+    reachable. Barred yields bars, which also carries sound.
+    """
+    enclosure = str((ent or {}).get("enclosure") or "").strip().casefold()
+    if enclosure == "transparent":
+        return "window"
+    if enclosure == "barred":
+        return "bars"
+    return "closed_door"
+
+
 def _link_state(entity) -> Optional[dict]:
     """entity.state.link if present and well-formed: a traversable link
     (portal, gate, wormhole) {rooms: [a, b], phase: open|closed} that, when
@@ -2197,11 +2301,25 @@ def apply_transit_dock_edges(scene: dict) -> bool:
         transit = _transit_state(ent)
         exterior = _entity_exterior_room(scene, eid, ent)
 
-        hatch = str((transit or {}).get("hatch") or "open").casefold()
+        # A container is not "in transit" -- a jar with a lid has a hatch and
+        # no journey -- so the lid is read from state.hatch as well as from a
+        # transit blob. Transit wins when both are present, since a vehicle
+        # sealing for a journey is the stronger statement.
+        entity_state = ent.get("state") if isinstance(ent.get("state"), dict) else {}
+        hatch = str(
+            (transit or {}).get("hatch")
+            or entity_state.get("hatch")
+            or "open"
+        ).casefold()
         phase = str((transit or {}).get("phase") or "docked").casefold()
         # (target, barrier); barrier None = preserve whatever was authored.
-        if transit is None:
+        if transit is None and not entity_state.get("hatch"):
             target, barrier = exterior, None
+        elif transit is None:
+            # A static container: the lid alone decides the doorway.
+            target = exterior
+            barrier = (_closed_enclosure_barrier(ent)
+                       if hatch in ("closed", "locked") else "open_door")
         elif phase in _TRANSIT_CLOSED_PHASES:
             target = str(transit.get("route_room") or "") or None
             barrier = "closed_door"
@@ -2210,7 +2328,8 @@ def apply_transit_dock_edges(scene: dict) -> bool:
             barrier = "closed_door"
         else:  # docked, or an unrecognized phase read conservatively as docked
             target = exterior
-            barrier = "closed_door" if hatch in ("closed", "locked") else "open_door"
+            barrier = (_closed_enclosure_barrier(ent)
+                       if hatch in ("closed", "locked") else "open_door")
 
         # No authoritative exterior at all (entity has no recorded position)
         # outside an explicitly closed phase: there is nothing to derive the
@@ -2277,7 +2396,7 @@ def apply_transit_dock_edges(scene: dict) -> bool:
 # not color the inside of a sealed elevator).
 # ---------------------------------------------------------------------------
 
-_AMBIENT_BARRIERS = {"open", "open_door"}
+_AMBIENT_BARRIERS = {"open", "open_door", "bars"}
 
 def containment_chain(scene: dict, room_id: str) -> list:
     """Rooms from room_id outward through entity containment: the room
