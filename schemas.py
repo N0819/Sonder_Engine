@@ -809,6 +809,12 @@ class StateDiff(BaseModel):
     remove_adjacent: list[dict] = Field(default_factory=list)
     conditions: dict[str, list[dict]] = Field(default_factory=dict)
     inventory_ops: list[dict] = Field(default_factory=list)
+    # Body position tracking. Contact is a RELATION, so it is not stored on
+    # either body: these ops maintain the scene-level `contacts` list
+    # (spatial.apply_contact_ops), and spatial.normalize_scene_contacts prunes
+    # whatever positions no longer permit. {op: add|remove|clear, actor,
+    # actor_part, target, target_part, manner}.
+    contact_ops: list[dict] = Field(default_factory=list)
     overlays: dict[str, list] = Field(default_factory=dict)
     attire: dict[str, dict] = Field(default_factory=dict)
     cast_changes: list[dict] = Field(default_factory=list)
@@ -1244,8 +1250,8 @@ _STATE_DIFF_DICT_FIELDS = (
 
 _STATE_DIFF_SIBLING_FIELDS = (
     "remove_entities", "remove_rooms", "remove_adjacent", "conditions",
-    "inventory_ops", "overlays", "attire", "cast_changes", "world_facts",
-    "introductions", "time", "claim_dispositions",
+    "inventory_ops", "contact_ops", "overlays", "attire", "cast_changes",
+    "world_facts", "introductions", "time", "claim_dispositions",
 )
 
 _SCENE_PATCH_SIBLING_FIELDS = (

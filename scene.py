@@ -177,6 +177,9 @@ def get_scene(chat_id, chat=None):
         }
     for k in ("rooms", "entities", "positions", "overlays", "attire", "orientation"):
         sc.setdefault(k, {})
+    # Body position tracking. A list, not a dict: a contact is a relation and is
+    # stored once rather than on either body (spatial.normalize_scene_contacts).
+    sc.setdefault("contacts", [])
     return sc
 
 def appearance_of(name, base, scene):

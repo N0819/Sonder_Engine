@@ -33,6 +33,7 @@ python tools/project_check.py
 | Narration | `agents/narration.py` (`narrator`) | narrator prompt in `prompts.py`, output validation |
 | Persistence or rollback | `commit.py`, `checkpoints.py` | `db.py`, `memory.py`, restore tests |
 | Deterministic mechanics (timed arrivals, expiry, dock edges, zone/carry inference, news latency) | `mechanics.py` (`mechanics_sweep`) | `commit.py` (`commit_transit_sweep`), `spatial.py`, `spatial_frames.py`, `tests/test_mechanics_sweep.py` |
+| Body position / contact (who is touching whom, and where) | `spatial.py` (`apply_contact_ops`, `normalize_scene_contacts`, `contacts_of`) | `schemas.py` (`StateDiff.contact_ops`), director prompt, `agents/perception.py` payloads, `spatial_facts`, `tests/test_body_position.py` — a contact is a RELATION stored once in `scene.contacts`, never on either body; positions prune it |
 | Authoring edits to live positions (GM relocation) | `app.py` (`GET /api/chats/{cid}/positions`, `PUT /api/chats/{cid}/characters/{ch}/position`) | `scene.get_scene`/`spatial.room_of`, `static/js/settings.js` cast tab, `tests/test_char_relocation.py` — writes only `scene.positions`, requires an idle chat, validates room ids, and queues no narrator beat |
 | Room identity/dedup/retirement, destruction (single-book + region cascades) | `commit.py` (room registry + destruction blocks) | `db.py` (`room_registry`), `checkpoints.py`, `app.py` remaps, registry/destruction tests |
 | Lore retrieval or hierarchy | `memory.py`, `agents/mapping.py` | `app.py`, lore tests |
