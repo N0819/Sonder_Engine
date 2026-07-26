@@ -79,7 +79,7 @@ what it legitimately earned, and a filter decides what crosses.**
 ## Status at a glance
 
 Conformance against the founding architecture, verified against source at
-alpha4.2.2.
+alpha4.3.
 
 | Founding commitment | Status | Evidence / gap |
 |---|---|---|

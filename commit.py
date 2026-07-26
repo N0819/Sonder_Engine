@@ -3327,8 +3327,20 @@ def prepare_memory_commit(ctx, *, scene=None):
                 for w in _iwarn:
                     ctx.add_warning(f"{cname}: intention -- {w}")
                 valid_ids = {str(i.get("id")) for i in intentions if isinstance(i, dict)}
+                # Two different questions, two different sets. valid_ids asks
+                # "is this a real id" -- what normalize_wants needs, and it
+                # stays the full list deliberately: the wants for THIS beat were
+                # formed against the intentions the character saw at the START
+                # of it, so demoting one because its goal closed mid-beat would
+                # punish the character for a state change it could not have
+                # seen (and demotion to 'situational' culls all but the highest,
+                # so the side effect is out of proportion to the fix). Steering
+                # stops through the next beat's prompt, where the new status is
+                # visible. _steering asks the narrower question -- does this
+                # goal still weigh as a goal when scoring mood.
+                _steering = affect.steering_intent_ids(intentions, turn.idx)
 
-                def _priority(serves, _ids=valid_ids, _intents=intentions):
+                def _priority(serves, _ids=_steering, _intents=intentions):
                     # Models emit serves as "intention:<id-or-text>"; resolve
                     # it to the bare id so a goal-serving impact scores at
                     # intention priority, not the situational default.

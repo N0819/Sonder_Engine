@@ -71,6 +71,11 @@ _INTENT_SIMILARITY = 0.4
 _INTENT_EVIDENCE_WINDOW = 3
 _INTENT_DORMANT_AFTER = 30
 _INTENT_PROGRESS_STEP = 0.2
+# Consecutive attempts at FULL progress -- the beat spent on a goal that has
+# nothing left to give -- before it stops steering. Two, not more: one barren
+# attempt is a straggler, two in a row is a loop, and every further beat is a
+# character visibly stuck.
+_INTENT_STALL_AFTER = 2
 _LEAK_SIMILARITY = 0.5
 
 # ---- Drive-rupture tunables ----
@@ -724,6 +729,85 @@ def _find_intent(intentions, intent_id):
             return intent
     return None
 
+def _revive_intent(target):
+    """Engagement revives a set-aside goal. A blocked goal progressed again is
+    being routed around, so the block and its bookkeeping clear with it --
+    otherwise `blocked_turn` outlives the block and an active goal carries the
+    turn index of a state it is no longer in."""
+    target["status"] = "active"
+    for key in ("blocked_why", "blocked_turn", "stalled_turn"):
+        target.pop(key, None)
+
+def _advance_intent(target, turn_idx, warnings):
+    """Apply one step of forward progress, returning True if it actually moved.
+
+    A goal already at the ceiling cannot advance: the beat was spent on it and
+    gained nothing. Recording that as progress is what let a character grind
+    one goal turn after turn -- `last_progress_turn` was refreshed by the very
+    act of grinding, so the dormancy sweep below could only ever fire on a
+    FORGOTTEN goal, never on a stuck one, and the guard meant to stop a goal
+    steering forever was defeated by exactly the behaviour it existed to catch.
+
+    Barren attempts leave the clock alone and never revive a set-aside goal.
+    After _INTENT_STALL_AFTER of them the goal stops steering: at full progress
+    with nothing left to gain it must be satisfied, abandoned, or replaced by a
+    goal that asks something genuinely different. Closing a goal still needs
+    evidence -- this only stops one being pursued past the point of yield.
+    """
+    before = _clamp01(_float_or(target.get("progress")))
+    after = _clamp01(before + _INTENT_PROGRESS_STEP)
+    if after > before:
+        target["progress"] = after
+        target["last_progress_turn"] = turn_idx
+        target.pop("barren_attempts", None)
+        return True
+
+    barren = int(_float_or(target.get("barren_attempts"))) + 1
+    target["barren_attempts"] = barren
+    if barren >= _INTENT_STALL_AFTER and target.get("status") == "active":
+        target["status"] = "dormant"
+        target["stalled_turn"] = turn_idx
+        warnings.append(
+            f"intent {target.get('id')!r} stalled: {barren} attempts at full "
+            "progress with nothing gained -- satisfy, abandon or re-route it")
+    else:
+        warnings.append(
+            f"intent {target.get('id')!r}: already at full progress, "
+            "nothing gained this beat")
+    return False
+
+def steering_intent_ids(intentions, turn_idx):
+    """The ids that still weigh as GOALS when scoring this beat's appraisal.
+
+    A goal that has stopped steering must stop moving the character's mood at
+    full goal priority. Membership of the intentions list only answers "is this
+    a real id"; scoring every real id at intention priority meant a goal the
+    world had closed, or one gone dormant, kept hitting as hard as a live one
+    for the rest of the story.
+
+    An intent still steers when it is active, OR when it was touched THIS beat
+    whatever its new status. The second clause matters more than it looks: the
+    closing ops all stamp `last_progress_turn` with the current turn, and the
+    beat a goal is satisfied, abandoned, or sealed off by the world is the beat
+    it matters MOST. Dropping those to situational weight would mute every
+    payoff and every collapse at the exact moment it lands -- a worse fault
+    than the one this fixes. A stall is the deliberate exception: it does not
+    stamp the clock, because arriving at "nothing gained, again" is not a
+    dramatic beat and should not be scored like one.
+    """
+    out = set()
+    for intent in intentions or []:
+        if not isinstance(intent, dict):
+            continue
+        try:
+            touched = int(_float_or(intent.get("last_progress_turn"), -1)) >= int(
+                _float_or(turn_idx))
+        except (TypeError, ValueError):
+            touched = False
+        if intent.get("status") == "active" or touched:
+            out.add(str(intent.get("id")))
+    return out
+
 def apply_intent_ops(intentions, ops, turn_idx, evidence_ok):
     """Apply a turn's intention operations under deterministic guards.
 
@@ -731,10 +815,12 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok):
     near-duplicate (claim_similarity >= 0.4) of an existing intent becomes
     a `progress` on it; `satisfy`/`abandon` within 3 turns of formation
     require `evidence_ok(op)` (goals should not evaporate the beat after
-    they form without on-screen cause); `progress`/`block` bump
-    last_progress_turn and move progress up/down within [0, 1]; anything
-    active but untouched for more than 30 turns goes dormant. New ids are
-    assigned i<max+1> deterministically. Returns (intentions, warnings).
+    they form without on-screen cause); `progress`/`block` move progress
+    up/down within [0, 1] and bump last_progress_turn -- except that a
+    `progress` on a goal already at the ceiling gains nothing, so it does not
+    touch the clock and counts toward a stall instead (see _advance_intent);
+    anything active but untouched for more than 30 turns goes dormant. New ids
+    are assigned i<max+1> deterministically. Returns (intentions, warnings).
     """
     result = [dict(i) for i in (intentions or []) if isinstance(i, dict)]
     warnings: list[str] = []
@@ -759,10 +845,10 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok):
                 if sim > best_sim:
                     match, best_sim = intent, sim
             if match is not None and best_sim >= _INTENT_SIMILARITY:
-                match["progress"] = _clamp01(
-                    _float_or(match.get("progress")) + _INTENT_PROGRESS_STEP)
-                match["last_progress_turn"] = turn_idx
-                match["status"] = "active"
+                # Rephrasing is not a way around a spent goal: the restatement
+                # revives it only if it had somewhere left to go.
+                if _advance_intent(match, turn_idx, warnings):
+                    _revive_intent(match)
                 continue
             active = sum(1 for i in result if i.get("status") == "active")
             if active >= _INTENT_CAP:
@@ -786,14 +872,18 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok):
             continue
 
         if kind in ("progress", "block"):
-            step = _INTENT_PROGRESS_STEP if kind == "progress" else -_INTENT_PROGRESS_STEP
-            target["progress"] = _clamp01(_float_or(target.get("progress")) + step)
-            target["last_progress_turn"] = turn_idx
-            if target.get("status") in ("dormant", "blocked"):
-                # engagement revives a set-aside goal; a blocked goal that is
-                # progressed again is being routed around, so clear the block.
-                target["status"] = "active"
-                target.pop("blocked_why", None)
+            if kind == "block":
+                # The world pushing back IS engagement: it moves the goal (down)
+                # and re-opens room above it, so the barren count starts over.
+                target["progress"] = _clamp01(
+                    _float_or(target.get("progress")) - _INTENT_PROGRESS_STEP)
+                target["last_progress_turn"] = turn_idx
+                target.pop("barren_attempts", None)
+                moved = True
+            else:
+                moved = _advance_intent(target, turn_idx, warnings)
+            if moved and target.get("status") in ("dormant", "blocked"):
+                _revive_intent(target)
         elif kind == "nonviable":
             # The world has CLOSED this goal this beat (route sealed, target
             # destroyed, tool lost). Guarded like satisfy/abandon: the op must
