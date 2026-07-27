@@ -34,6 +34,7 @@ import os
 import affect
 from spatial import (
     ambient_scope,
+    containment_conceals,
     crossing_visible_from,
     egocentric_frame,
     entity_arc,
@@ -706,6 +707,11 @@ def perception_act(ctx, nonce):
         # Floors sight at `shapes`; it never grants more than the light allows.
         if crossing_visible_from(sc, r, p_name):
             rel = {**rel, "crossing": True}
+        # A carried body's position derives to its carrier's, so an enclosed
+        # actor reads as `same_room` with everyone around the carrier -- which
+        # answers sight before barrier or light is consulted.
+        if containment_conceals(sc, character_name(sh), p_name):
+            rel = {**rel, "concealed": True}
         rdata = (sc.get("rooms") or {}).get(r) if r else None
 
         perceivers.append({

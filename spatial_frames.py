@@ -37,8 +37,9 @@ from db import q, qi, transaction, wget, wget_for_frame, wset, wset_for_frame
 from frames import create_frame, get_frame
 from paradox import get_paradox
 from scene import active_cast, persona_of, set_char_state, set_char_status
-from spatial import (THRESHOLD_CROSSING_BEATS, anchor_bearing_of, has_visual,
-                     room_of, rooms_adjacent, spatial_rel, travel_bearing)
+from spatial import (THRESHOLD_CROSSING_BEATS, _hiding_holders,
+                     anchor_bearing_of, has_visual, room_of, rooms_adjacent,
+                     spatial_rel, travel_bearing)
 
 NOT_A_ZONE = None
 
@@ -408,6 +409,19 @@ def infer_threshold_crossings(chat_id, frame_id, prev_scene, new_scene,
                 and rooms_adjacent(new_scene, old_r, new_r)
                 and not has_visual(spatial_rel(new_scene, old_r, new_r))):
             crossings[name] = {"from": old_r, "to": new_r,
+                               "beats": THRESHOLD_CROSSING_BEATS}
+            changed = True
+            continue
+
+        # The other way a body goes out of sight without changing rooms: being
+        # put inside something, or climbing out of it. The room does not change
+        # -- a carried body's position is its carrier's -- so the step above
+        # cannot see this happen, and without it a body being enclosed would
+        # blink out exactly as one crossing a doorway used to.
+        was_hidden = bool(_hiding_holders(prev_scene, name))
+        now_hidden = bool(_hiding_holders(new_scene, name))
+        if new_r and was_hidden != now_hidden:
+            crossings[name] = {"from": new_r, "to": new_r,
                                "beats": THRESHOLD_CROSSING_BEATS}
             changed = True
             continue

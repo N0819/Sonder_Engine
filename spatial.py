@@ -593,6 +593,13 @@ def sight_level(rel: dict) -> str:
     it lasts.
     """
     crossing = bool(rel.get("crossing"))
+    # `concealed` is about a BODY being inside something rather than about the
+    # rooms, and it outranks both barrier and light: a body in a closed bag is
+    # not seen because the bag is shut, however bright the room and however
+    # open the doorway. Only a crossing survives it -- being put in or climbing
+    # out is watched.
+    if rel.get("concealed"):
+        return "shapes" if crossing else "none"
     if not _sight_line(rel):
         return "shapes" if crossing else "none"
     level = _LIGHT_SIGHT.get(normalize_light(rel.get("light")), "full")
@@ -669,6 +676,11 @@ def spatial_rel_between(scene: dict, observer: str, target: str) -> dict:
                            room_of(scene, target)))
     if crossing_visible_from(scene, room_of(scene, observer), target):
         rel["crossing"] = True
+    # A carried body's position derives to its carrier's, so a body enclosed in
+    # something standing right here reads as `same_room` -- which answers sight
+    # before barriers or light are consulted at all.
+    if containment_conceals(scene, observer, target):
+        rel["concealed"] = True
     return rel
 
 
@@ -681,6 +693,8 @@ def visual_level_between(scene: dict, observer: str, target: str) -> str:
     """
     rel = spatial_rel(scene, room_of(scene, observer), room_of(scene, target))
     crossing = crossing_visible_from(scene, room_of(scene, observer), target)
+    if containment_conceals(scene, observer, target):
+        return "shapes" if crossing else "none"
     if not _sight_line(rel):
         # Still going through: a shape in the doorway, not yet gone.
         return "shapes" if crossing else "none"
@@ -1600,6 +1614,80 @@ def contents_of(scene: dict, container: str) -> list:
                 str(record.get("in") or "").strip().casefold() == target:
             out.append(name)
     return sorted(out)
+
+
+# Being carried in the open and being carried INSIDE something are not the same
+# fact, and nothing in the containment record distinguished them: a body in a
+# pocket and a body in an open palm were equally visible to the room, because a
+# carried body's position derives to its carrier's room and `same_room` answers
+# sight before anything else gets a say. Interior rooms have had `enclosure` to
+# settle this for a while; the carry path had no equivalent at all.
+#
+# These five are the documented ways a body is carried IN VIEW. Everything else
+# -- the enclosed half of the vocabulary, or a mode the Director reached outside
+# it to name -- puts the body inside something. Unknown reads as enclosed on
+# purpose: the open cases are exactly this list, so a mode the engine cannot
+# vouch for must not be the one that grants sight. Under-sharing is the safe
+# failure for an engine whose whole promise is that nothing is known unless it
+# was legitimately perceived. An ABSENT mode still defaults to "carried" in
+# _clean_containment, so the ordinary carry keeps behaving exactly as before.
+_OPEN_CONTAINMENT_MODES = frozenset({
+    "held", "carried", "riding", "mounted", "worn",
+})
+
+
+def containment_hides(mode) -> bool:
+    """Does being carried this way put a body out of the room's sight."""
+    return str(mode or "").strip().casefold() not in _OPEN_CONTAINMENT_MODES
+
+
+def _hiding_holders(scene: dict, name: str) -> list:
+    """Holders that conceal `name`, innermost first. Cycle-safe."""
+    contained = (scene or {}).get("contained") or {}
+    if not isinstance(contained, dict):
+        return []
+    out = []
+    current = name
+    seen = {str(name or "").strip().casefold()}
+    while True:
+        record = _ci_get(contained, current)
+        if not isinstance(record, dict):
+            break
+        holder = record.get("in")
+        if not holder:
+            break
+        key = str(holder).strip().casefold()
+        if key in seen:
+            break
+        seen.add(key)
+        if containment_hides(record.get("mode")):
+            out.append(holder)
+        current = holder
+    return out
+
+
+def _innermost_hiding_holder(scene: dict, name: str):
+    """The nearest enclosure `name` is shut inside, or None if in the open."""
+    holders = _hiding_holders(scene, name)
+    return str(holders[0]).strip().casefold() if holders else None
+
+
+def containment_conceals(scene: dict, observer: str, target: str) -> bool:
+    """Is sight between these two blocked by an enclosure around either.
+
+    Sight needs both parties on the SAME side of every closed thing, so the
+    test is that their nearest enclosure matches. Being shut inside something
+    blocks the view out exactly as it blocks the view in -- a body in a closed
+    bag can no more watch the room than the room can watch it, and that
+    direction is the easier one to forget.
+
+    The holder itself is not exempt. Something carried inside a body is not
+    seen BY that body either: the holder is not inside its own enclosure, so
+    the two do not match, and what it has instead of sight is touch. Two
+    bodies inside the same enclosure do match, and see each other normally.
+    """
+    return (_innermost_hiding_holder(scene, observer)
+            != _innermost_hiding_holder(scene, target))
 
 
 def normalize_scene_containment(scene: dict) -> dict:
@@ -2652,6 +2740,63 @@ def _transit_state(entity) -> Optional[dict]:
 CONTAINER_ENCLOSURES = ("opaque", "transparent", "barred", "membrane")
 
 
+def _is_body_entity(scene: dict, eid: str, ent: dict) -> bool:
+    """Is this entity a body rather than a vehicle, room-sized object or box.
+
+    Asked of the scene alone so the dock-edge derivation stays a pure function.
+    Bodies are the things that WEAR something and the things that have a SIZE
+    relative to their own baseline; a lift car, a ship and a crate have
+    neither. Checked across every scene on disk when this was written, the
+    split was exact: every vehicle/structure/container interior scored false
+    on both, and every body scored true on `attire`.
+
+    `container: true` is deliberately NOT the test -- it is absent on plenty of
+    real vehicles, so it misclassifies them as bodies.
+    """
+    keys = [eid]
+    if isinstance(ent, dict):
+        keys.append(ent.get("name"))
+        keys.extend(ent.get("aliases") or [])
+    for source in ("attire", "scales"):
+        table = scene.get(source) or {}
+        if not isinstance(table, dict):
+            continue
+        for key in keys:
+            key = str(key or "").strip()
+            if key and _ci_get(table, key) is not None:
+                return True
+    return False
+
+
+def infer_body_enclosures(scene: dict) -> bool:
+    """Default a BODY's interior to an opaque way in. Idempotent; mutates.
+
+    The `membrane` enclosure only helps if something declares it, and the
+    Director does not reliably do so -- observed live, on a fresh interior
+    authored after the prompt asked for it. Relying on a model to remember a
+    safety property every time is the wrong shape for this engine: flesh is
+    opaque whether or not anyone remembered to say so.
+
+    So an interior belonging to a body defaults to `membrane` when nothing was
+    declared. An explicit `enclosure` always wins -- including `transparent`,
+    so a deliberately see-through case stays authorable -- and vehicles,
+    cabins and containers are untouched, keeping their see-through open
+    doorway.
+    """
+    entities = scene.get("entities") or {}
+    changed = False
+    for eid, ent in entities.items():
+        if not isinstance(ent, dict) or not ent.get("interior_rooms"):
+            continue
+        if str(ent.get("enclosure") or "").strip():
+            continue                      # authored: never override
+        if not _is_body_entity(scene, eid, ent):
+            continue
+        ent["enclosure"] = "membrane"
+        changed = True
+    return changed
+
+
 def _open_enclosure_barrier(ent):
     """The doorway barrier for an OPEN entity interior.
 
@@ -3156,6 +3301,11 @@ def merge_scene_with_diff(
         if room_id in occupied_rooms:
             continue
         merged["rooms"].pop(room_id, None)
+
+    # A body's interior is opaque whether or not anyone declared it so. Runs
+    # BEFORE the dock-edge rewrite, which reads `enclosure` to pick the
+    # doorway's barrier.
+    infer_body_enclosures(merged)
 
     # Derived dock/portal edges are a function of the merged scene, not an
     # authored fact -- recompute them here so every consumer of a merge
