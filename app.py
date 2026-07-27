@@ -32,6 +32,7 @@ from agents import (
 )
 from character_schema import (
     character_export_document,
+    character_initial_outfit,
     character_name,
     default_character_data,
     default_persona_data,
@@ -39,6 +40,7 @@ from character_schema import (
     normalize_character_data,
     normalize_persona_data,
     persona_export_document,
+    persona_initial_outfit,
     persona_name,
 )
 from scene import (background_config, dialogue_config, interaction_limits,
@@ -70,7 +72,9 @@ from memory import (
     dramatic_irony_feed, promise_ledger,
     dump_character_memories, import_character_memories,
 )
-from scene import persona_of, get_scene, chat_character_sheet
+from scene import (
+    persona_of, get_scene, chat_character_sheet, seed_initial_attire,
+)
 from backdrops import (build_backdrop_request, request_backdrop, cached_backdrop,
                        backdrop_status, backdrop_error)
 from auth_routes import (
@@ -1815,10 +1819,29 @@ def chat_edit(cid: int, body: dict = Body(...)):
     if not row:
         raise HTTPException(404, "Chat not found")
     cur = dict(row)
+    persona_changed = (
+        "persona_id" in body and body.get("persona_id") != cur.get("persona_id")
+    )
+    if persona_changed:
+        _require_chat_idle(cid)
     for k in ("name", "persona_id", "scenario"):
         if k in body: cur[k] = body[k]
-    qi("UPDATE chats SET name=?,persona_id=?,scenario=? WHERE id=?",
-       (cur["name"], cur["persona_id"], cur["scenario"], cid))
+    with transaction():
+        qi("UPDATE chats SET name=?,persona_id=?,scenario=? WHERE id=?",
+           (cur["name"], cur["persona_id"], cur["scenario"], cid))
+        if persona_changed and cur["persona_id"] is not None:
+            prow = q(
+                "SELECT sheet FROM personas WHERE id=?",
+                (cur["persona_id"],), one=True,
+            )
+            existing_scene = wget(cid, "scene", None)
+            if prow and isinstance(existing_scene, dict):
+                sheet = normalize_persona_data(json.loads(prow["sheet"] or "{}"))
+                if seed_initial_attire(
+                    existing_scene, persona_name(sheet),
+                    persona_initial_outfit(sheet),
+                ):
+                    wset(cid, "scene", existing_scene)
     return {"ok": True}
 
 @app.post("/api/chats/{cid}/lorebooks")
@@ -2025,7 +2048,8 @@ def chat_add_char(cid: int, body: dict = Body(...)):
     ch = body.get("char_id")
     if ch is None:
         raise HTTPException(400, "char_id required")
-    if not q("SELECT 1 FROM characters WHERE id=?", (ch,), one=True):
+    char_row = q("SELECT sheet FROM characters WHERE id=?", (ch,), one=True)
+    if not char_row:
         raise HTTPException(404, "Character not found")
     ex = q("SELECT * FROM chat_chars WHERE chat_id=? AND char_id=?", (cid, ch), one=True)
     if ex:
@@ -2034,7 +2058,15 @@ def chat_add_char(cid: int, body: dict = Body(...)):
         qi("INSERT INTO chat_chars(chat_id,char_id,status) VALUES(?,?, 'active')", (cid, ch))
     scene_exists = wget(cid, "scene", None) is not None
     if scene_exists:
-        name = q("SELECT name FROM characters WHERE id=?", (ch,), one=True)["name"]
+        sheet = normalize_character_data(json.loads(char_row["sheet"] or "{}"))
+        name = character_name(sheet)
+        if not ex:
+            scene = get_scene(cid, dict(q(
+                "SELECT * FROM chats WHERE id=?", (cid,), one=True)))
+            if seed_initial_attire(
+                scene, name, character_initial_outfit(sheet),
+            ):
+                wset(cid, "scene", scene)
         pend = wget(cid, "pending", [])
         pend.append({"type": "arrival", "who": name, "returning": bool(ex)})
         wset(cid, "pending", pend)
@@ -2164,11 +2196,21 @@ def chat_add_persona(cid: int, body: dict = Body(...)):
     additive multiplayer support). Mirrors chat_add_char's pattern.
     """
     pid = body["persona_id"]
+    persona_row = q("SELECT sheet FROM personas WHERE id=?", (pid,), one=True)
+    if not persona_row:
+        raise HTTPException(404, "Persona not found")
     ex = q("SELECT * FROM chat_personas WHERE chat_id=? AND persona_id=?", (cid, pid), one=True)
     if ex:
         qi("UPDATE chat_personas SET status='active' WHERE chat_id=? AND persona_id=?", (cid, pid))
     else:
         qi("INSERT INTO chat_personas(chat_id,persona_id,status) VALUES(?,?,'active')", (cid, pid))
+    existing_scene = wget(cid, "scene", None)
+    if not ex and isinstance(existing_scene, dict):
+        sheet = normalize_persona_data(json.loads(persona_row["sheet"] or "{}"))
+        if seed_initial_attire(
+            existing_scene, persona_name(sheet), persona_initial_outfit(sheet),
+        ):
+            wset(cid, "scene", existing_scene)
     return {"ok": True}
 
 @app.delete("/api/chats/{cid}/personas/{pid}")

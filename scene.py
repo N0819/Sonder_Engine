@@ -10,6 +10,7 @@ _UNSET = object()
 from character_schema import (
     character_abilities,
     character_appearance,
+    character_initial_outfit,
     character_initial_active_state,
     character_initial_stance,
     character_name,
@@ -20,6 +21,7 @@ from character_schema import (
     normalize_persona_data,
     persona_abilities,
     persona_appearance,
+    persona_initial_outfit,
     persona_name,
     persona_private_history,
     persona_public_history,
@@ -47,6 +49,58 @@ def sanitize_attire_items(items):
         if text not in result:
             result.append(text)
     return result
+
+
+def seed_initial_attire(scene, name, outfit):
+    """Seed one body's authored starting clothes without resetting live state."""
+    if not isinstance(scene, dict) or not str(name or "").strip():
+        return False
+    attire = scene.setdefault("attire", {})
+    if name in attire:
+        return False
+    outfit = outfit if isinstance(outfit, dict) else {}
+    wearing = sanitize_attire_items(outfit.get("wearing") or [])
+    state = [
+        str(item).strip() for item in (outfit.get("state") or [])
+        if str(item or "").strip()
+    ]
+    if not wearing and not state:
+        return False
+    attire[name] = {"wearing": wearing, "state": state}
+    return True
+
+
+def _seed_scene_initial_attire(chat_id, scene, chat=None):
+    """Seed initial outfits exactly when a scene is first materialized."""
+    chat_row = None
+    if chat is not None:
+        chat_row = {
+            key: _chat_field(chat, key)
+            for key in (
+                "id", "name", "persona_id", "lorebook_id", "scenario",
+                "created",
+            )
+        }
+    if chat_row is None:
+        row = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
+        chat_row = dict(row) if row else {}
+
+    persona = persona_of(chat_row)
+    seed_initial_attire(
+        scene, persona_name(persona), persona_initial_outfit(persona))
+    for row in active_cast(chat_id):
+        sheet = json.loads(row["sheet"])
+        seed_initial_attire(
+            scene, character_name(sheet), character_initial_outfit(sheet))
+    for row in q(
+        "SELECT p.sheet FROM chat_personas cp "
+        "JOIN personas p ON p.id=cp.persona_id "
+        "WHERE cp.chat_id=? AND cp.status='active'",
+        (chat_id,),
+    ):
+        sheet = json.loads(row["sheet"] or "{}")
+        seed_initial_attire(
+            scene, persona_name(sheet), persona_initial_outfit(sheet))
 
 def active_cast(chat_id, frame_id=None):
     """frame_id=None (present) reads chat_chars directly, unchanged. A
@@ -186,6 +240,7 @@ def _chat_field(chat, field):
 
 def get_scene(chat_id, chat=None):
     sc = wget(chat_id, "scene")
+    created = not sc
     if not sc:
         sc = {
             "location": "an unspecified place",
@@ -210,6 +265,8 @@ def get_scene(chat_id, chat=None):
     sc.setdefault("contained", {})
     # `vitals` is deliberately NOT defaulted: its absence is what tells the
     # engine survival tracking is off for this story (survival.py).
+    if created:
+        _seed_scene_initial_attire(chat_id, sc, chat)
     return sc
 
 def appearance_of(name, base, scene):
@@ -923,6 +980,7 @@ def cast_scene_context(cast_rows):
             "name": character_name(sheet),
             "aliases": identity.get("aliases") or [],
             "appearance": character_appearance(sheet),
+            "initial_outfit": character_initial_outfit(sheet),
             "senses": senses_as_text(character_senses(sheet)),
             "abilities": character_abilities(sheet),
             "public_history": character_public_history(sheet),

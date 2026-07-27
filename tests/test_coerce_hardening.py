@@ -137,13 +137,15 @@ def test_background_react_output_example_present():
     assert ex and ex.get("dialogue_log_entry", {}).get("exact_quote")
 
 
-def test_latent_string_and_custom_summary_extras_preserved():
+def test_latent_string_and_custom_summary_separates_outfit():
     from character_schema import normalize_character_data
     sheet = {"identity": {"name": "Merc"}, "embodiment": {
         "visible": {"summary": "A scarred mercenary."},
         "hair": "silver", "clothing": "red cloak", "latent": ["telepathy", {"capability": "x"}]}}
     norm = normalize_character_data(sheet)
     summ = norm["embodiment"]["visible"]["summary"]
-    assert "scarred mercenary" in summ and "silver" in summ and "red cloak" in summ
+    assert "scarred mercenary" in summ and "silver" in summ
+    assert "red cloak" not in summ
+    assert norm["initial_outfit"]["wearing"] == ["red cloak"]
     caps = [l.get("capability") for l in norm["embodiment"]["latent"]]
     assert "telepathy" in caps and "x" in caps

@@ -1,0 +1,283 @@
+"""Authored initial outfits seed mutable story attire without becoming anatomy."""
+
+from __future__ import annotations
+
+import json
+import time
+
+import app
+from character_schema import (
+    default_character_data,
+    default_persona_data,
+)
+from importers import (
+    REINT_CHAR_SYS,
+    REINT_PERSONA_SYS,
+    heuristic_character_sheet,
+    import_persona,
+)
+from pipeline_context import ChatData, PipelineContext, TurnData
+from scene import get_scene
+
+
+def test_heuristic_character_import_separates_labeled_outfit():
+    sheet = heuristic_character_sheet({
+        "name": "Iris",
+        "description": (
+            "Tall and broad-shouldered, with silver hair.\n"
+            "Outfit: a charcoal coat; scuffed leather boots"
+        ),
+        "personality": "Reserved, observant",
+    })
+
+    assert sheet["initial_outfit"]["wearing"] == [
+        "a charcoal coat", "scuffed leather boots",
+    ]
+    appearance = sheet["embodiment"]["visible"]["summary"]
+    assert "silver hair" in appearance
+    assert "charcoal coat" not in appearance
+    assert "boots" not in appearance
+
+
+def test_heuristic_persona_import_separates_direct_outfit(temp_db):
+    _, sheet = import_persona({
+        "name": "Nia",
+        "description": "Compact, dark-eyed, with a dimple in one cheek.",
+        "outfit": ["a linen shirt", "weathered trousers"],
+    })
+
+    assert sheet["initial_outfit"]["wearing"] == [
+        "a linen shirt", "weathered trousers",
+    ]
+    assert "linen shirt" not in sheet["embodiment"]["visible"]["summary"]
+
+
+def test_generators_and_ai_importers_require_body_outfit_separation():
+    from prompts import DEFAULT_PROMPTS
+
+    texts = {
+        "character generator": DEFAULT_PROMPTS["generator_character"],
+        "persona generator": DEFAULT_PROMPTS["generator_persona"],
+        "promotion generator": DEFAULT_PROMPTS["promote_character"],
+        "character importer": REINT_CHAR_SYS,
+        "persona importer": REINT_PERSONA_SYS,
+    }
+    for label, text in texts.items():
+        assert "initial_outfit" in text, label
+        assert "BODY" in text or "body" in text, label
+        assert "clothing" in text or "garment" in text, label
+        assert "appearance summary" in text, label
+
+
+def test_establishment_outfits_are_authoritative_without_private_card_leaks(
+    temp_db, monkeypatch,
+):
+    import agents.director as director
+
+    persona = default_persona_data("Nia")
+    persona["initial_outfit"]["wearing"] = ["a linen shirt"]
+    persona["knowledge"]["private_history"] = [
+        {"content": "PERSONA_PRIVATE_MARKER"},
+    ]
+    persona_id = temp_db.qi(
+        "INSERT INTO personas(name,sheet,source,resource_uid) VALUES(?,?,?,?)",
+        ("Nia", json.dumps(persona), "{}", persona["identity"]["uid"]),
+    )
+    character = default_character_data("Iris")
+    character["initial_outfit"] = {
+        "wearing": ["a charcoal coat"], "state": ["rain-damp"],
+    }
+    character["knowledge"]["private_history"] = [
+        {"content": "CHARACTER_PRIVATE_MARKER"},
+    ]
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        (
+            "Iris", json.dumps(character), "{}", time.time(),
+            character["identity"]["uid"],
+        ),
+    )
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,persona_id,scenario,created) VALUES(?,?,?,?)",
+        ("Rain", persona_id, "", time.time()),
+    )
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+        (chat_id, char_id, "active", "{}"),
+    )
+    cast = temp_db.q(
+        "SELECT ch.id,ch.name,COALESCE(cc.sheet,ch.sheet) AS sheet,"
+        "ch.source,ch.created,ch.resource_uid,cc.state AS cstate,cc.status "
+        "FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
+        "WHERE cc.chat_id=?",
+        (chat_id,),
+    )
+    turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (chat_id, 0, "", time.time()),
+    )
+    ctx = PipelineContext(
+        chat=ChatData(
+            id=chat_id, name="Rain", persona_id=persona_id,
+            lorebook_id=None, scenario="", created=time.time(),
+        ),
+        turn=TurnData(
+            id=turn_id, chat_id=chat_id, idx=0, player_input="",
+            created=time.time(),
+        ),
+        cast=cast,
+        input="",
+    )
+    captured = {}
+
+    def fake_agent_json(role, step_key, system, payload, **kwargs):
+        captured.update(payload)
+        return {
+            "location": "room",
+            "positions": {},
+            "rooms": {},
+            "entities": {},
+            "attire": {
+                "Nia": {"wearing": ["invented dress"], "state": []},
+                "Iris": {"wearing": ["invented uniform"], "state": []},
+            },
+        }
+
+    monkeypatch.setattr(director, "_agent_json", fake_agent_json)
+    monkeypatch.setattr(
+        director, "validate_llm_output", lambda step, value: (value, []),
+    )
+    result = director.director_establish(ctx, nonce=0)
+
+    assert captured["player"]["initial_outfit"] == persona["initial_outfit"]
+    assert captured["present_characters"][0]["initial_outfit"] == \
+        character["initial_outfit"]
+    payload_text = json.dumps(captured)
+    assert "PERSONA_PRIVATE_MARKER" not in payload_text
+    assert "CHARACTER_PRIVATE_MARKER" not in payload_text
+    assert result["attire"]["Nia"] == persona["initial_outfit"]
+    assert result["attire"]["Iris"] == character["initial_outfit"]
+
+
+def test_new_scene_seeds_character_and_persona_initial_outfits(temp_db):
+    persona = default_persona_data("Nia")
+    persona["initial_outfit"] = {
+        "wearing": ["a linen shirt", "weathered trousers"],
+        "state": ["rain-damp"],
+    }
+    persona_id = temp_db.qi(
+        "INSERT INTO personas(name,sheet,source,resource_uid) VALUES(?,?,?,?)",
+        ("Nia", json.dumps(persona), "{}", persona["identity"]["uid"]),
+    )
+    character = default_character_data("Iris")
+    character["initial_outfit"] = {
+        "wearing": ["a charcoal coat", "scuffed boots"],
+        "state": [],
+    }
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        (
+            "Iris", json.dumps(character), "{}", time.time(),
+            character["identity"]["uid"],
+        ),
+    )
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,persona_id,scenario,created) VALUES(?,?,?,?)",
+        ("Rain", persona_id, "", time.time()),
+    )
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+        (chat_id, char_id, "active", "{}"),
+    )
+
+    scene = get_scene(chat_id, dict(temp_db.q(
+        "SELECT * FROM chats WHERE id=?", (chat_id,), one=True,
+    )))
+
+    assert scene["attire"]["Nia"] == persona["initial_outfit"]
+    assert scene["attire"]["Iris"] == character["initial_outfit"]
+
+
+def test_initial_outfit_never_resets_existing_live_attire(temp_db):
+    character = default_character_data("Iris")
+    character["initial_outfit"]["wearing"] = ["a charcoal coat"]
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        (
+            "Iris", json.dumps(character), "{}", time.time(),
+            character["identity"]["uid"],
+        ),
+    )
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Wardrobe", "", time.time()),
+    )
+    live_scene = {
+        "location": "room", "time": "now", "description": "",
+        "rooms": {}, "entities": {}, "positions": {}, "overlays": {},
+        "attire": {
+            "Iris": {
+                "wearing": ["borrowed coveralls"],
+                "state": ["oil-stained"],
+            },
+        },
+    }
+    temp_db.wset(chat_id, "scene", live_scene)
+
+    app.chat_add_char(chat_id, {"char_id": char_id})
+    assert temp_db.wget(chat_id, "scene")["attire"]["Iris"] == {
+        "wearing": ["borrowed coveralls"],
+        "state": ["oil-stained"],
+    }
+
+
+def test_first_attachment_to_existing_story_seeds_outfit(temp_db):
+    character = default_character_data("Iris")
+    character["initial_outfit"]["wearing"] = ["a charcoal coat"]
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        (
+            "Iris", json.dumps(character), "{}", time.time(),
+            character["identity"]["uid"],
+        ),
+    )
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Wardrobe", "", time.time()),
+    )
+    temp_db.wset(chat_id, "scene", {
+        "location": "room", "time": "now", "description": "",
+        "rooms": {}, "entities": {}, "positions": {}, "overlays": {},
+        "attire": {},
+    })
+
+    app.chat_add_char(chat_id, {"char_id": char_id})
+
+    assert temp_db.wget(chat_id, "scene")["attire"]["Iris"] == {
+        "wearing": ["a charcoal coat"],
+        "state": [],
+    }
+
+
+def test_card_editors_place_initial_outfit_near_identity():
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parents[1] / "static/js/editors.js"
+    ).read_text(encoding="utf-8")
+
+    assert source.count("Initial outfit — clothing only") == 2
+    assert source.count("Body appearance — stable visible features") == 2
+    assert source.count("initial_outfit: {") >= 4
+
+
+def test_director_establishment_respects_initial_outfit_separation():
+    from prompts import DEFAULT_PROMPTS
+
+    text = DEFAULT_PROMPTS["director_establish"]
+    assert "initial_outfit is authoritative" in text
+    assert "Never infer clothing" in text

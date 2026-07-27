@@ -81,6 +81,12 @@ Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` lo
   `characters.sheet`. Keep that configuration separate from `chat_chars.state`,
   preserve it in archives/branches, and never permit a card edit to rekey the
   in-story identity name or uid.
+- Character and persona cards keep three physical domains distinct:
+  `embodiment.visible.summary` is stable body appearance,
+  `initial_outfit` is authored starting clothing, and `scene.attire` is the
+  mutable story ledger. `scene.seed_initial_attire` seeds a non-empty outfit
+  once at scene creation or first attachment/promotion; no card read or edit
+  may overwrite clothing already changed in the story.
 - Avoid broad rewrites of `agents/runtime.py`, `app.py`, or `memory.py` without dedicated tests — these are orchestration seams affecting reruns, variants, streaming, and commits.
 - Psychology changes must preserve the information firewall: a character may
   receive its own interoception/body state and its final scrubbed observations,

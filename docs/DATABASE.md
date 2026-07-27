@@ -4,7 +4,10 @@ The engine uses SQLite. The schema is defined in `db.py`; access is intentionall
 
 ## Resource tables
 
-- `characters`, `personas`: reusable versioned JSON sheets plus original source payloads.
+- `characters`, `personas`: reusable versioned JSON sheets plus original source
+  payloads. Their top-level `initial_outfit` is authored starting clothing,
+  distinct from stable body appearance in `embodiment.visible` and from the
+  mutable story ledger in `world.scene.attire`.
 - `lorebooks`, `lore_entries`: canon containers and entries. Two different questions get asked of this table and must not be confused: **ownership** (`chat_id`, what a chat has — what the workspace browser lists via `GET /api/chats/{cid}/lorebooks`) and **reachability** (`memory.chat_lorebook_ids`, what lore retrieval may read — resolved outward from canon plus `chat_lorebooks` attachments through parents/children/links). A chat-owned book with `parent_id` NULL and no attachment row is owned but unreachable: it exists, it is editable, and the pipeline can never read it.
 - `lorebook_links`: typed relationships between books.
 - `chat_lorebooks`: attachments between chats and reusable or chat-owned books.
@@ -25,7 +28,7 @@ The engine uses SQLite. The schema is defined in `db.py`; access is intentionall
 - `steps`, `variants`: inspectable intermediate pipeline outputs and rerolls.
 - `events`: one summarized committed event per turn.
 - `memories`, `memory_summaries`: character-owned experience records and consolidation.
-- `world`: JSON key/value state for the chat, including the current scene and pipeline caches. Inside the frame-scoped `scene` blob, `positions` is which room each person is in, `stations` their within-room position, `scales` each body's size relative to its own baseline (absent = normal; not pruned by position, since a size is not a co-location), `contained` who is being carried by what (a contained body's position is derived from its carrier's, transitively), and `contacts` a flat list of who is in physical contact with whom and by which body parts — a relation stored once rather than on either body, pruned at every merge by `spatial.normalize_scene_contacts` (contact between two people not in the same room cannot survive, so movement ends a hold deterministically).
+- `world`: JSON key/value state for the chat, including the current scene and pipeline caches. Inside the frame-scoped `scene` blob, `positions` is which room each person is in, `stations` their within-room position, `scales` each body's size relative to its own baseline (absent = normal; not pruned by position, since a size is not a co-location), `contained` who is being carried by what (a contained body's position is derived from its carrier's, transitively), and `contacts` a flat list of who is in physical contact with whom and by which body parts — a relation stored once rather than on either body, pruned at every merge by `spatial.normalize_scene_contacts` (contact between two people not in the same room cannot survive, so movement ends a hold deterministically). `attire` is the live per-story clothing state: a card's `initial_outfit` may seed a missing entry at scene creation or first attachment/promotion, but must never reset an entry already changed by story events.
 - `checkpoints`: whole-state restoration blobs keyed by chat and turn index.
 
 ## Structured world tables

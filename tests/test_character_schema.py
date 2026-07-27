@@ -10,7 +10,7 @@ from character_schema import (
 )
 
 
-def test_v3_psychology_defaults_and_v2_migration():
+def test_v4_psychology_and_outfit_defaults_migrate_v2():
     normalized = normalize_character_data({
         "schema": CHARACTER_SCHEMA,
         "version": 2,
@@ -23,7 +23,7 @@ def test_v3_psychology_defaults_and_v2_migration():
         },
     })
 
-    assert CHARACTER_VERSION == 3
+    assert CHARACTER_VERSION == 4
     assert normalized["psychology"]["traits"][0]["strength"] == 1.0
     assert normalized["psychology"]["traits"][0]["activation_cues"] == []
     assert normalized["psychology"]["values"][0]["priority"] == 0.0
@@ -31,6 +31,7 @@ def test_v3_psychology_defaults_and_v2_migration():
     assert normalized["psychology"]["learning"]["associations"] == []
     assert normalized["embodiment"]["interoception"]["pleasure_sensitivity"] == 0.5
     assert normalized["initial_state"]["hedonic"]["pain"] == 0.0
+    assert normalized["initial_outfit"] == {"wearing": [], "state": []}
 
 def test_default_character_is_agnostic():
     sheet = default_character_data("Test")
@@ -117,6 +118,34 @@ def test_native_persona_defaults_missing_fields():
     assert normalized["identity"]["name"] == "Partial Player"
     assert normalized["competence"]["abilities"] == []
     assert normalized["narration"]["voice_setting"] == ""
+    assert normalized["initial_outfit"] == {"wearing": [], "state": []}
+
+
+def test_native_adjacent_clothing_moves_out_of_body_appearance():
+    character = normalize_character_data({
+        "identity": {"name": "Dressed"},
+        "embodiment": {
+            "visible": {"summary": "Tall, freckled, with copper hair."},
+            "clothing": "a green coat; mud-streaked boots",
+        },
+    })
+    persona = normalize_persona_data({
+        "identity": {"name": "Player"},
+        "narration": {},
+        "embodiment": {
+            "visible": {"summary": "Short, with a shaved head."},
+            "outfit": ["a blue shirt", "black trousers"],
+        },
+    })
+
+    assert character["initial_outfit"]["wearing"] == [
+        "a green coat", "mud-streaked boots",
+    ]
+    assert "coat" not in character["embodiment"]["visible"]["summary"]
+    assert persona["initial_outfit"]["wearing"] == [
+        "a blue shirt", "black trousers",
+    ]
+    assert "shirt" not in persona["embodiment"]["visible"]["summary"]
 
 def test_native_private_history_coerces_bare_strings():
     # private_knowledge_for (scene.py) only accepts dict entries with a

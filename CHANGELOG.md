@@ -4,6 +4,15 @@
 
 ### Added
 
+- **Authored initial outfits with mutable story continuity.** Character and
+  persona cards now place an initial outfit near identity while keeping stable
+  body appearance explicitly clothing-free. Generators, AI importers, and
+  heuristic imports preserve that split. Starting clothing seeds the live
+  scene ledger once—at establishment, first attachment, or promotion—so later
+  outfit changes remain story state and card edits cannot reset them. The
+  Director receives only the public outfit projection; adversarial regression
+  coverage verifies private card material does not enter that path.
+
 - **Per-story character-card editing.** The Cast panel can open the full
   character editor for an attached participant and save a story-local card.
   The reusable library character and every other story remain unchanged, while

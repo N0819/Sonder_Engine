@@ -9,10 +9,12 @@ import re
 from character_schema import (
     character_abilities,
     character_appearance,
+    character_initial_outfit,
     character_name,
     character_public_history,
     persona_abilities,
     persona_appearance,
+    persona_initial_outfit,
     persona_name,
     persona_public_history,
 )
@@ -146,14 +148,24 @@ def director_establish(ctx, nonce):
     fm = fiction_model(chat.id)
 
     cast = cast_scene_context(ctx.cast)
+    player_name = pers.get("name") or persona_name(pers)
+    initial_attire = {
+        player_name: persona_initial_outfit(pers),
+        **{
+            member["name"]: member["initial_outfit"]
+            for member in cast
+            if member.get("name")
+        },
+    }
 
     payload = {
         "scenario": chat.get("scenario"),
         **({"style_guide": style_guide(chat["id"])}
            if style_guide(chat["id"]) else {}),
         "player": {
-            "name": pers.get("name") or persona_name(pers),
+            "name": player_name,
             "appearance": persona_appearance(pers),
+            "initial_outfit": persona_initial_outfit(pers),
             "senses": senses_of(pers),
             "abilities": persona_abilities(pers),
             "public_history": persona_public_history(pers),
@@ -184,6 +196,21 @@ def director_establish(ctx, nonce):
         if not isinstance(state, dict):
             continue
         state["wearing"] = sanitize_attire_items(state.get("wearing"))
+    # A non-empty authored initial outfit is objective starting state, not a
+    # styling suggestion. Restore that narrow public projection after model
+    # output so establishment cannot replace it by inferring clothes from body
+    # appearance. Empty cards still permit scenario-grounded inference.
+    for entity, state in initial_attire.items():
+        if not isinstance(state, dict):
+            continue
+        wearing = sanitize_attire_items(state.get("wearing") or [])
+        condition = [
+            str(item).strip() for item in (state.get("state") or [])
+            if str(item or "").strip()
+        ]
+        if wearing or condition:
+            attire[entity] = {"wearing": wearing, "state": condition}
+    out["attire"] = attire
 
     out.setdefault("entities", {})
     out.setdefault("sensory_events", [])
@@ -198,7 +225,7 @@ def director_establish(ctx, nonce):
         # a 'character:<id>' scheme, or a snake-case variant of the player name.
         "positions": canonicalize_positions(
             out.get("positions") if isinstance(out.get("positions"), dict) else {},
-            ctx.cast, player_name=(pers.get("name") or persona_name(pers))),
+            ctx.cast, player_name=player_name),
         "remove_entities": [],
         "remove_rooms": [],
         "attire": out.get("attire") if isinstance(out.get("attire"), dict) else {},

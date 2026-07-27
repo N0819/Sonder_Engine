@@ -35,6 +35,14 @@ Routes attached lorebooks, retrieves relevant canon, and stages information need
 
 Creates the initial objective scene and actor state. This is privileged objective setup, not player-facing prose.
 
+Character and persona cards expose only their public `initial_outfit`
+projection to establishment. A non-empty outfit is authoritative and is copied
+into objective attire after model output; private history and psychology are
+not added to this information path. Stable body appearance never supplies
+clothing. `scene.seed_initial_attire` also seeds this state deterministically
+when a scene first materializes or a participant first joins an existing scene,
+but never replaces an existing `scene.attire` entry.
+
 ### `perception_establish`
 
 Builds the player’s opening view from the established scene and spatial/perceptual constraints.

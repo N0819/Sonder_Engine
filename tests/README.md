@@ -28,3 +28,7 @@ non-destructive legacy-card completion, and the perception/self-knowledge tests
 attack the new information paths with hidden-intent and other-body markers.
 `test_chat_character_cards` covers per-story card isolation, live-state
 preservation, identity-key rejection, UI wiring, and portable archive fidelity.
+`test_initial_outfit` covers schema/import separation from body appearance,
+character/persona editor wiring, one-time seeding into live attire, first
+attachment behavior, authoritative establishment, and the private-card
+information firewall on that new payload.
