@@ -15,7 +15,7 @@
 | `agents/loops.py` | 538 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 196 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 765 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/perception.py` | 1482 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
+| `agents/perception.py` | 1488 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 965 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 72 | Step and active-variant persistence helpers. | `db` |
 | `app.py` | 4228 | FastAPI application, resource CRUD, import/export, turn control, and streaming endpoints. | `agents`, `backdrops`, `character_schema`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `survival`, `updates` |
@@ -37,12 +37,12 @@
 | `paradox.py` | 486 |  | `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 2416 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 2421 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1802 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 949 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 2048 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 3315 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas` |
-| `spatial_frames.py` | 951 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
+| `spatial.py` | 3465 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas` |
+| `spatial_frames.py` | 965 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `survival.py` | 311 |  | `db` |
 | `theory_of_mind.py` | 288 |  | — |
 | `updates.py` | 254 |  | — |
@@ -144,14 +144,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `perception_outcome()` | 922 | 561 lines |
-| `perception_act()` | 606 | 315 lines |
-| `perception_establish()` | 442 | 163 lines |
-| `_delivered_manifest()` | 289 | 50 lines |
-| `_subject_disguise_context()` | 341 | 38 lines |
-| `_observer_facing_sequence()` | 408 | 32 lines |
-| `_dialogue_hear_level()` | 68 | 29 lines |
-| `_observed_pronouns()` | 189 | 25 lines |
+| `perception_outcome()` | 928 | 561 lines |
+| `perception_act()` | 607 | 320 lines |
+| `perception_establish()` | 443 | 163 lines |
+| `_delivered_manifest()` | 290 | 50 lines |
+| `_subject_disguise_context()` | 342 | 38 lines |
+| `_observer_facing_sequence()` | 409 | 32 lines |
+| `_dialogue_hear_level()` | 69 | 29 lines |
+| `_observed_pronouns()` | 190 | 25 lines |
 
 ### `agents/runtime.py`
 
@@ -391,10 +391,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 2407 | 10 lines |
-| `presets()` | 2398 | 2 lines |
-| `active_preset()` | 2401 | 2 lines |
-| `nsfw_enabled()` | 2404 | 2 lines |
+| `get_prompt()` | 2412 | 10 lines |
+| `presets()` | 2403 | 2 lines |
+| `active_preset()` | 2406 | 2 lines |
+| `nsfw_enabled()` | 2409 | 2 lines |
 
 ### `providers.py`
 
@@ -439,27 +439,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 3050 | 221 lines |
-| `apply_transit_dock_edges()` | 2714 | 165 lines |
-| `visible_adjacent_rooms()` | 2338 | 110 lines |
-| `contacts_from_entity_state()` | 1898 | 100 lines |
-| `hear_level()` | 865 | 85 lines |
-| `spatial_facts()` | 2215 | 83 lines |
-| `egocentric_frame()` | 1020 | 80 lines |
-| `apply_contact_ops()` | 2099 | 75 lines |
+| `merge_scene_with_diff()` | 3195 | 226 lines |
+| `apply_transit_dock_edges()` | 2859 | 165 lines |
+| `visible_adjacent_rooms()` | 2426 | 110 lines |
+| `contacts_from_entity_state()` | 1986 | 100 lines |
+| `hear_level()` | 879 | 85 lines |
+| `spatial_facts()` | 2303 | 83 lines |
+| `egocentric_frame()` | 1034 | 80 lines |
+| `apply_contact_ops()` | 2187 | 75 lines |
 
 ### `spatial_frames.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `perform_split()` | 681 | 94 lines |
-| `infer_companion_carry()` | 232 | 92 lines |
-| `infer_vehicle_zones()` | 145 | 85 lines |
-| `infer_threshold_crossings()` | 368 | 73 lines |
-| `infer_focus()` | 443 | 72 lines |
-| `perform_merge()` | 853 | 69 lines |
-| `infer_facing()` | 517 | 59 lines |
-| `detect_split()` | 635 | 44 lines |
+| `perform_split()` | 695 | 94 lines |
+| `infer_companion_carry()` | 233 | 92 lines |
+| `infer_threshold_crossings()` | 369 | 86 lines |
+| `infer_vehicle_zones()` | 146 | 85 lines |
+| `infer_focus()` | 457 | 72 lines |
+| `perform_merge()` | 867 | 69 lines |
+| `infer_facing()` | 531 | 59 lines |
+| `detect_split()` | 649 | 44 lines |
 
 ### `survival.py`
 
