@@ -1524,9 +1524,54 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
         diff = res.get("state_diff") or {}
     turn_id = ctx.turn.id
 
+    # S3-A8: Build the set of actors who were concealed during this beat.
+    # An entity state blob that references a concealed actor leaks their
+    # presence/position to anyone who later reads the entity state.  The
+    # entity's position/state is only updated when overtly perceived.
+    _concealed_actors = set()
+    res = ctx.director_resolve or ctx.director_establish or {}
+    for d in (res.get("dialogue_log") or []):
+        if str(d.get("visibility") or "").casefold() == "concealed":
+            _concealed_actors.add(str(d.get("speaker") or "").casefold())
+    # Also check the director_interpret for concealed player actions.
+    interp = ctx.director_interpret or {}
+    try:
+        from scene import persona_of as _persona_of
+        _p_name = (_persona_of(chat) or {}).get("name") or ""
+    except Exception:
+        _p_name = ""
+    for a in (interp.get("actions") or
+              ([interp["action"]] if interp.get("action") else [])):
+        if isinstance(a, dict) and a.get("visibility") == "concealed":
+            _concealed_actors.add(str(_p_name).casefold())
+    # Check character results for concealed actions.
+    for _cid, _result in (ctx.character_results or {}).items():
+        if not isinstance(_result, dict):
+            continue
+        for a in (_result.get("actions") or _result.get("sequence") or []):
+            if isinstance(a, dict) and a.get("visibility") == "concealed":
+                _cname = _result.get("name") or ""
+                if _cname:
+                    _concealed_actors.add(str(_cname).casefold())
+
+    def _entity_references_concealed(entity_def):
+        """True if the entity_def's state blob mentions a concealed actor."""
+        if not _concealed_actors or not isinstance(entity_def, dict):
+            return False
+        # Check the entity's state sub-dict for concealed actor names.
+        state = entity_def.get("state") or {}
+        blob = json.dumps(entity_def, ensure_ascii=False).casefold()
+        return any(name in blob for name in _concealed_actors)
+
     with transaction() as c:
         for entity_id, entity_def in (diff.get("entities") or {}).items():
             if not isinstance(entity_def, dict):
+                continue
+            # S3-A8: skip entity state blobs that reference concealed actors.
+            if _entity_references_concealed(entity_def):
+                ctx.add_warning(
+                    f"entity {entity_id}: state blob references a concealed "
+                    f"actor; withholding update until overtly perceived")
                 continue
             existing = q("SELECT entity_id FROM world_entities WHERE entity_id=? AND chat_id=?",
                          (entity_id, cid), one=True)

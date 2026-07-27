@@ -622,6 +622,74 @@ def recent_events(chat_id, n=5, frame_id=_UNSET):
 
     return results
 
+
+def recent_events_for_observer(chat_id, observer_name, n=5, frame_id=_UNSET):
+    """Recent narrative beats with per-observer concealed-action redaction
+    (Pattern 4).
+
+    The stored events row is omniscient (for the author/audit trail), but
+    what's LOADED into character context must be per-observer redacted:
+    a concealed action that the observer wasn't party to is stripped
+    from the event text before it enters their context.  Mirrors
+    ``agents/perception.py:_redact_concealed_from_event`` but operates
+    on the stored event row's structured fields rather than the live
+    beat's ``concealed`` list.
+
+    Returns a list of redacted summary strings, like ``recent_events``
+    but with concealed content withheld per-observer.
+    """
+    fid = active_frame_id.get() if frame_id is _UNSET else frame_id
+    rows = q(
+        "SELECT e.content FROM events e "
+        "LEFT JOIN turns t ON t.id=e.turn_id "
+        "WHERE e.chat_id=? AND (e.turn_id IS NULL OR t.frame_id IS ?) "
+        "ORDER BY e.id DESC LIMIT ?",
+        (chat_id, fid, n),
+    )
+    observer_cf = str(observer_name or "").casefold()
+    results = []
+
+    for row in reversed(rows):
+        try:
+            payload = json.loads(row["content"])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        event_text = str(payload.get("event") or payload.get("summary") or "")
+        dlog = payload.get("dialogue_log") or []
+        # Build the concealed-actor list for this observer: any entry
+        # with visibility:"concealed" that is concealed FROM this
+        # observer (or globally concealed via empty conceal_from).
+        concealed_for_observer = []
+        for d in dlog:
+            if not isinstance(d, dict):
+                continue
+            if str(d.get("visibility") or "").casefold() != "concealed":
+                continue
+            cf = [str(c).casefold() for c in (d.get("conceal_from") or [])]
+            if not cf or observer_cf in cf:
+                concealed_for_observer.append({
+                    "actor": d.get("speaker", ""),
+                    "attempt": d.get("exact_quote", ""),
+                    "conceal_from": d.get("conceal_from") or [],
+                })
+        # Apply redaction: if any concealed entries apply to this
+        # observer, redact the event text.
+        if concealed_for_observer:
+            # Import lazily to avoid a circular dependency.
+            try:
+                from agents.perception import _redact_concealed_from_event
+                event_text = _redact_concealed_from_event(
+                    event_text, concealed_for_observer)
+            except Exception:
+                event_text = "[Some parts of the event are not perceptible to you.]"
+        summary = str(payload.get("summary") or event_text or "").strip()
+        if summary:
+            results.append(summary)
+
+    return results
+
 def director_context(chat_id, n=5, frame_id=_UNSET):
     """Recent turns for the Director/mapping's own context. Frame-
     filtered exactly like recent_events above -- a concurrently-played
