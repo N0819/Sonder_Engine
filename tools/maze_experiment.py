@@ -160,15 +160,22 @@ def scene_rooms(walls):
 # --- the runner --------------------------------------------------------------
 
 def character_sheet(name="Vesk"):
-    """Authored so repetition does not extinguish the drive.
+    """Authored so repetition does not extinguish the drive -- and so nothing
+    ELSE competes with walking.
 
-    A character asked to do the same thing five times will, correctly, get
-    sick of it -- psychology_runtime models exactly that, and a drive that
-    strains to rupture would end the experiment early with the character
-    refusing, which measures the motivation model rather than navigation. The
-    sheet therefore makes repetition the POINT: the goal is not "reach the
-    shrine" (satisfied once) but "learn this maze until it can be walked
-    without hesitation", which each run advances rather than exhausts.
+    Getting this wrong is easy and it invalidates the run. The first version
+    gave him "notice and remember what makes each chamber different" as a goal
+    and framed circuits as "a devotion, not a chore", to stop repetition
+    exhausting the drive. He complied exactly: he stopped and studied every
+    room for two to five beats before moving one, narrating his mental map
+    settling into place. Every room he entered was on the optimal path -- the
+    navigation was fine and the experiment was measuring the character sheet.
+
+    So: the durable motivation stays (a goal satisfied once would strain toward
+    rupture by run three, and then we would be measuring the motivation model),
+    but the reward is now attached to ARRIVING and to walking the route
+    fluently, never to studying it in place. Learning the maze is framed as
+    something that happens BY walking it, which is also what is true.
     """
     from character_schema import default_character_data, normalize_character_data
     sheet = default_character_data(name)
@@ -176,128 +183,28 @@ def character_sheet(name="Vesk"):
         "subject": "he", "object": "him", "possessive": "his"}
     sheet["knowledge"] = dict(sheet.get("knowledge") or {})
     sheet["knowledge"]["public_history"] = (
-        f"{name} is a pilgrim-cartographer. He has taken a vow to learn the "
-        "shrine-maze by heart, and walks it again and again on purpose: each "
-        "circuit is a devotion, not a chore. He is patient, methodical, and "
-        "takes a quiet satisfaction in recognising a chamber he has seen "
-        "before and knowing which way it leads."
+        f"{name} is a courier who runs the shrine-maze daily. Speed is the "
+        "whole of his craft and he is proud of it: he keeps moving, takes the "
+        "turn he judges best without stopping to deliberate, and treats "
+        "standing still in a corridor as the one real failure. He has run it "
+        "often enough to trust that the route comes back to him in his feet "
+        "rather than by studying the walls."
     )
     sheet["psychology"] = dict(sheet.get("psychology") or {})
     sheet["psychology"]["traits"] = [
-        "methodical", "patient", "quietly stubborn", "attentive to detail",
+        "brisk", "decisive", "impatient with standing still", "sure-footed",
     ]
-    sheet["psychology"]["values"] = [
-        "a task finished properly", "knowing a place truly",
-    ]
+    sheet["psychology"]["values"] = ["a fast clean run", "never breaking stride"]
     sheet["initial_state"] = dict(sheet.get("initial_state") or {})
     sheet["initial_state"]["goals"] = [
-        "Reach the shrine at the far corner of the maze.",
-        "Learn the maze well enough to walk it without hesitation.",
-        "Notice and remember what makes each chamber different from the others.",
+        {"goal": "Reach the shrine at the far corner as fast as possible.",
+         "priority": 0.9},
+        {"goal": "Keep moving: every single beat, step through one doorway. "
+                 "Never stand still to study a room, never deliberate in "
+                 "place.", "priority": 0.95},
+        {"goal": "Beat your own best time on this run.", "priority": 0.6},
     ]
     return normalize_character_data(sheet)
-
-
-# Model routing and provider credentials live in the settings table, so a fresh
-# scratch DB has no model for any role and a live run dies on the first call
-# with "No model configured for role ...". These are carried over; the
-# host_pw/host_secret rows are deliberately NOT (no server runs here, and there
-# is no reason for a throwaway experiment DB to hold auth material).
-_SETTINGS_TO_CARRY = (
-    "agent_models", "openrouter_routing", "active_preset", "prompt_presets",
-    "reasoning_effort", "max_output_tokens", "nsfw_enabled",
-)
-
-
-def carry_model_config(source_db, db_path):
-    """Copy the model config from the real DB into the scratch DB.
-
-    Two halves, and BOTH are needed. `settings.agent_models` says which model
-    each role uses; the `providers` table holds the connections those models
-    resolve through. Carrying only the first gets you past "No model configured
-    for role X" straight into "No USABLE model configured for role X", because
-    every candidate resolves to a provider that is not there.
-
-    This does put the source DB's API keys into the scratch file. That file is a
-    throwaway under the system temp dir and is never committed, but it is worth
-    knowing it is there -- pass --settings-from '' to opt out and configure the
-    scratch DB some other way.
-    """
-    import sqlite3
-    if not source_db or not os.path.exists(source_db):
-        print(f"  ! no source DB at {source_db!r}; a live run will have no "
-              f"model configured")
-        return 0, 0
-    src = sqlite3.connect(f"file:{source_db}?mode=ro", uri=True)
-    src.row_factory = sqlite3.Row
-    from db import qi
-    n_set = 0
-    for row in src.execute("SELECT key,value FROM settings"):
-        if row["key"] not in _SETTINGS_TO_CARRY:
-            continue
-        qi("INSERT INTO settings(key,value) VALUES(?,?) "
-           "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-           (row["key"], row["value"]))
-        n_set += 1
-    n_prov = 0
-    for row in src.execute("SELECT * FROM providers"):
-        qi("INSERT INTO providers(id,name,kind,base_url,api_key,enabled) "
-           "VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
-           "name=excluded.name, kind=excluded.kind, base_url=excluded.base_url, "
-           "api_key=excluded.api_key, enabled=excluded.enabled",
-           (row["id"], row["name"], row["kind"], row["base_url"],
-            row["api_key"], row["enabled"]))
-        n_prov += 1
-    src.close()
-    return n_set, n_prov
-
-
-def ablate_affordances():
-    """Put the character back on the pre-change payload.
-
-    Two things go: the visited/unvisited marking on each exit, and the
-    location cue on recall. Everything else -- prompts, stages, models -- is
-    untouched, so a difference between the arms is attributable to these.
-    """
-    import agents.character as ch
-    import memory as mem
-    ch._annotate_known_exits = lambda digest, scene, visited: digest
-    _search = mem.search_memories
-
-    def _no_place_cue(*a, **kw):
-        kw["here"] = None
-        return _search(*a, **kw)
-    mem.search_memories = _no_place_cue
-    # build_character_memory_context resolved search_memories at import time.
-    import memory
-    memory.search_memories = _no_place_cue
-
-
-def force_single_model(spec):
-    """Point every configured role at one model.
-
-    Roles are normally a MIX -- in the source config here, director on grok,
-    perception on glm, character on minimax -- which is right for play and
-    wrong for an experiment: if the character navigates badly you cannot tell
-    whether that is the character model, the director resolving its moves, or
-    the perception model describing the room. Holding the model constant makes
-    the result attributable.
-    """
-    import json as _json
-    from db import q, qi
-    provider_id, _, model = str(spec).partition(":")
-    if not model:
-        raise SystemExit("--model must be '<provider_id>:<model>'")
-    row = q("SELECT value FROM settings WHERE key='agent_models'", one=True)
-    cfg = _json.loads(row["value"]) if row and row["value"] else {}
-    forced = {"provider": int(provider_id), "model": model, "fallbacks": []}
-    for role in list(cfg):
-        cfg[role] = dict(forced)
-    cfg["default"] = dict(forced)
-    qi("INSERT INTO settings(key,value) VALUES('agent_models',?) "
-       "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-       (_json.dumps(cfg),))
-    return model
 
 
 def setup(db_path, walls, source_db=None, model=None):
@@ -420,7 +327,8 @@ _scripted_here = [_rid(START)]
 
 
 def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
-             verbose, rng=None, show_grid=False, optimal_path=()):
+             verbose, rng=None, show_grid=False, optimal_path=(),
+             collect_trace=False):
     """One traversal. Returns the ordered list of rooms occupied."""
     import db as _db
     from db import qi, wget, wset
@@ -430,6 +338,7 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
 
     visited = [position_of(chat_id, name)]
     stalls = []
+    trace = [] if collect_trace else None
     for step in range(max_steps):
         idx = turn_base + step
         turn_id = qi(
@@ -491,7 +400,7 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
             break
     if stalls:
         print(f"    ({len(stalls)} stalled beats this run)")
-    return visited
+    return visited, (trace or [])
 
 
 def render_grid(walls, here, seen, path=()):
@@ -538,12 +447,17 @@ def metrics(visited, optimal):
     return {
         "steps": len(visited) - 1,
         "moves": len(moves),
+        # Beats spent without changing room. High means the character is
+        # deliberating or observing rather than navigating -- a motivation
+        # property, not a navigation one, and the two must not be summed.
+        "idle_beats": (len(visited) - 1) - len(moves),
         "unique": len(seen),
         "backtracks": backtracks,
         "reversals": reversals,
         "reached": visited[-1] == _rid(GOAL),
         "optimal": optimal,
-        "excess": (len(visited) - 1) - optimal if visited[-1] == _rid(GOAL) else None,
+        # Excess is over MOVES: the honest navigation score.
+        "excess": len(moves) - optimal if visited[-1] == _rid(GOAL) else None,
     }
 
 
@@ -614,35 +528,39 @@ def main():
     for run in range(1, args.runs + 1):
         reset_position(chat_id, name)
         print(f"\n  run {run}/{args.runs}")
-        visited = run_once(chat_id, char_id, name, walls, agent=args.agent,
-                           max_steps=args.max_steps, turn_base=turn_base,
-                           verbose=args.verbose, rng=rng,
-                           show_grid=args.grid,
-                           optimal_path=shortest_path(walls))
+        visited, trace = run_once(
+            chat_id, char_id, name, walls, agent=args.agent,
+            max_steps=args.max_steps, turn_base=turn_base,
+            verbose=args.verbose, rng=rng, show_grid=args.grid,
+            optimal_path=shortest_path(walls),
+            collect_trace=bool(args.out))
         turn_base += len(visited)
         m = metrics(visited, optimal)
         rows.append(m)
         if args.out:
             with open(args.out, "a", encoding="utf-8") as fh:
-                fh.write(json.dumps({"run": run, "visited": visited, **m}) + "\n")
+                fh.write(json.dumps(
+                    {"run": run, "visited": visited, "trace": trace, **m}) + "\n")
                 fh.flush()
-        print(f"    steps={m['steps']} unique={m['unique']} "
+        print(f"    beats={m['steps']} moves={m['moves']} "
+              f"idle={m['idle_beats']} unique={m['unique']} "
               f"backtracks={m['backtracks']} reversals={m['reversals']} "
               f"reached={m['reached']} excess={m['excess']}")
 
     print("\n" + "=" * 68)
-    print(f"{'run':>4} {'steps':>6} {'unique':>7} {'backtrack':>10} "
-          f"{'reversal':>9} {'reached':>8} {'excess':>7}")
+    print(f"{'run':>4} {'beats':>6} {'moves':>6} {'idle':>5} {'unique':>7} "
+          f"{'backtrack':>10} {'reversal':>9} {'reached':>8} {'excess':>7}")
     for i, m in enumerate(rows, 1):
-        print(f"{i:>4} {m['steps']:>6} {m['unique']:>7} {m['backtracks']:>10} "
-              f"{m['reversals']:>9} {str(m['reached']):>8} "
+        print(f"{i:>4} {m['steps']:>6} {m['moves']:>6} {m['idle_beats']:>5} "
+              f"{m['unique']:>7} {m['backtracks']:>10} {m['reversals']:>9} "
+              f"{str(m['reached']):>8} "
               f"{'-' if m['excess'] is None else m['excess']:>7}")
     reached = [m for m in rows if m["reached"]]
     print("-" * 68)
     print(f"optimal = {optimal} moves. Reached goal {len(reached)}/{len(rows)}.")
     if len(reached) >= 2:
-        first, last = reached[0]["steps"], reached[-1]["steps"]
-        print(f"first successful run {first} steps -> last {last} steps "
+        first, last = reached[0]["moves"], reached[-1]["moves"]
+        print(f"first successful run {first} moves -> last {last} moves "
               f"({'improved' if last < first else 'no improvement'}).")
     return 0
 
