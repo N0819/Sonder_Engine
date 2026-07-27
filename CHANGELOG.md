@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v5.0 — A way through that is not a way to look through
+
 ### Added
 - **A way through that is not a way to look through.** The barrier vocabulary
   could say "you can see it but you cannot reach it" — that is what `window`
