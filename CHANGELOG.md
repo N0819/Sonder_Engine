@@ -43,6 +43,14 @@
   `guest_access.py`. This is the first extracted FastAPI ownership seam from
   the application monolith and preserves the existing HTTP contract.
 
+- **Chat archives and orientation math now have explicit ownership seams.**
+  The 900-line portable archive workflow now lives behind typed request and
+  document boundaries in `chat_archive.py`, with its shared remap operations
+  injected explicitly and its two routes registered by `app.py`. Bearing math
+  and reciprocal-edge normalization moved to the dependency-free
+  `spatial_orientation.py`; `spatial.py` re-exports the established public
+  functions so existing callers keep the same contract.
+
 ### Fixed
 
 - **Host setup could leave a permanently incomplete account.**
