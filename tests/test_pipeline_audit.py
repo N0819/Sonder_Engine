@@ -353,16 +353,18 @@ class TestPerceptionOutcomeMultiplayerSources:
                                    "state_diff": {}}
 
         seen = {}
+        all_perceivers = []
 
         def fake_agent_json(role, step_key, system, payload, **kw):
             seen["payload"] = payload
+            all_perceivers.extend(payload.get("perceivers") or [])
             return {"views": {}}
 
         monkeypatch.setattr(perception, "_agent_json", fake_agent_json)
 
         perception.perception_outcome(ctx, 0)
 
-        perceivers = {p["id"]: p for p in seen["payload"]["perceivers"]}
+        perceivers = {p["id"]: p for p in all_perceivers}
         # The primary player's perceiver was previously built before any
         # extra player entered `sources`.
         player_spatial = perceivers["player"]["spatial_to_sources"]

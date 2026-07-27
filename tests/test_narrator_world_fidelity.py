@@ -306,9 +306,11 @@ def test_position_delta_payload_reports_unmoved_and_moved(temp_db):
     payload2, facts2, _ = _position_delta_payload(
         ctx2, {"id": ctx2.chat.id}, "Player", "bridge", {"Mara"},
         {"Mara": {"appearance": "", "aliases": []}})
-    assert payload2["Mara"]["moved"] is True
-    assert payload2["Mara"]["prev_room"] == "Bridge"
-    assert facts2[0]["room_id"] == "ready_room"
+    # S3-A4: Mara LEFT the player's room (bridge -> ready_room).  The
+    # player has not perceived her destination, so she must not appear in
+    # the position delta payload with her new room name.
+    assert "Mara" not in payload2
+    assert facts2 == []
 
 
 def test_ordered_beat_events_order_and_view_filter(temp_db):

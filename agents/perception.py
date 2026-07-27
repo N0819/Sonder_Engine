@@ -2049,6 +2049,14 @@ def perception_outcome(ctx, nonce):
             d_speaker = d.get("speaker", "?")
             if d_speaker == p["name"]:
                 continue
+            # Concealed dialogue must not reach a perceiver it is
+            # concealed from -- mirroring the onset-pass gate.  A line
+            # with visibility:'concealed' and no conceal_from list is
+            # concealed from everyone except the speaker.
+            if d.get("visibility") == "concealed":
+                cf = [str(c).casefold() for c in (d.get("conceal_from") or [])]
+                if not cf or p["name"].casefold() in cf:
+                    continue
             rel = spatial.get(d_speaker)
             if rel is None:
                 sp_room = d.get("speaker_room") or room_of(sc, d_speaker)
