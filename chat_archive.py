@@ -632,14 +632,31 @@ class ChatArchiveService:
                         f"Chat archive references character {old_char_id} "
                         f"but does not embed it",
                     )
+                override_sheet = participant.get("sheet")
+                if override_sheet is not None:
+                    try:
+                        if isinstance(override_sheet, str):
+                            override_sheet = json.loads(override_sheet)
+                        if not isinstance(override_sheet, dict):
+                            raise ValueError("card override is not an object")
+                        override_sheet = json.dumps(
+                            normalize_character_data(override_sheet),
+                            ensure_ascii=False,
+                        )
+                    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+                        raise HTTPException(
+                            400,
+                            f"Invalid story card for character {old_char_id}",
+                        ) from exc
                 qtx(
-                    "INSERT INTO chat_chars(chat_id,char_id,status,state) "
-                    "VALUES(?,?,?,?)",
+                    "INSERT INTO chat_chars(chat_id,char_id,status,state,sheet) "
+                    "VALUES(?,?,?,?,?)",
                     (
                         new_chat_id,
                         new_char_id,
                         participant.get("status", "active"),
                         participant.get("state", "{}"),
+                        override_sheet,
                     ),
                 )
 

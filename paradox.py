@@ -55,8 +55,10 @@ here -- flagged in Design.md rather than half-built.
 
 from __future__ import annotations
 
+import json
 import time as _time
 
+from character_schema import character_name
 from db import active_frame_id, q, qi, transaction, wget, wset
 from frames import get_frame
 
@@ -294,9 +296,10 @@ def _apply_toll(chat_id, state, policy):
     if not travelers:
         return
     name_to_id = {
-        r["name"]: r["char_id"]
+        character_name(json.loads(r["sheet"])): r["char_id"]
         for r in q(
-            "SELECT ch.id AS char_id, ch.name FROM chat_chars cc "
+            "SELECT ch.id AS char_id,COALESCE(cc.sheet,ch.sheet) AS sheet "
+            "FROM chat_chars cc "
             "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
             (chat_id,),
         )

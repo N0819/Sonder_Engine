@@ -14,7 +14,13 @@ The engine uses SQLite. The schema is defined in `db.py`; access is intentionall
 ## Runtime fiction tables
 
 - `chats`: root interactive-fiction session.
-- `chat_chars`: cast membership, active/dormant status, and mutable character state.
+- `chat_chars`: cast membership, active/dormant status, mutable character
+  `state`, and an optional per-story authored `sheet`. A NULL sheet follows the
+  reusable `characters.sheet`; a populated sheet overrides it only for that
+  story. Never fold the two JSON domains together: card edits may change
+  psychology/voice/history/configuration, while current mood, stress, learned
+  beliefs, memories, relationships, and bodily condition remain live state.
+  `scene.active_cast` is the main effective-sheet read boundary.
 - `turns`: player declarations in sequence.
 - `steps`, `variants`: inspectable intermediate pipeline outputs and rerolls.
 - `events`: one summarized committed event per turn.
@@ -55,6 +61,11 @@ A durable field or table change is incomplete until all applicable paths are upd
 6. Branch/clone ID remapping in `app.py` when IDs are embedded.
 7. Cleanup behavior under foreign keys.
 8. Regression tests using the temporary database fixture.
+
+Per-story card overrides are preserved by portable chat archives and branches.
+They are intentionally not rolled back by turn checkpoints: like other explicit
+authoring configuration, editing a card is not an event inside the beat being
+rerolled.
 
 ## Runtime database selection
 

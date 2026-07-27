@@ -1483,9 +1483,10 @@ def commit_cast_changes(ctx, nonce):
     res = ctx.director_resolve or {}
     diff = res.get("state_diff") or {}
     name2id = {
-        r["name"].lower(): r["id"]
+        character_name(json.loads(r["sheet"])).lower(): r["id"]
         for r in q(
-            "SELECT ch.id, ch.name FROM chat_chars cc "
+            "SELECT ch.id,COALESCE(cc.sheet,ch.sheet) AS sheet "
+            "FROM chat_chars cc "
             "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
             (cid,),
         )
@@ -2294,7 +2295,8 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None):
     # whole time, so treating her as a stranger to everyone else present
     # would be as wrong as it was to treat her as a stranger to the player.
     cast_rows = q(
-        "SELECT ch.sheet FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
+        "SELECT COALESCE(cc.sheet,ch.sheet) AS sheet "
+        "FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
         "WHERE cc.chat_id=? AND cc.status='active' AND ch.id!=?",
         (cid, char_id),
     )
@@ -2603,7 +2605,8 @@ def prepare_mapping_commit(ctx):
     dormant = [
         character_name(json.loads(r["sheet"]))
         for r in q(
-            "SELECT ch.sheet FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
+            "SELECT COALESCE(cc.sheet,ch.sheet) AS sheet "
+            "FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
             "LEFT JOIN chat_char_frames ccf "
             "  ON ccf.chat_id=cc.chat_id AND ccf.char_id=cc.char_id AND ccf.frame_id IS ? "
             "WHERE cc.chat_id=? AND COALESCE(ccf.status, cc.status)='dormant'",

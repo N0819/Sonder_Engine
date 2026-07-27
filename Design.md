@@ -335,6 +335,11 @@ Subsystems the original architecture never imagined, now load-bearing:
 - **Import pipeline** (`importers.py`, `character_schema.py`). External card
   formats, heuristic and AI-reinterpreted paths, damaged-sheet repair on read,
   and a non-destructive v3 psychology gap-filler for older cards.
+- **Per-story character cards** (`chat_chars.sheet`, `scene.active_cast`).
+  Authors can tune an attached character for one story without mutating the
+  reusable library resource or resetting that story's earned interior state.
+  Names/uids stay fixed because they are identity keys throughout scene,
+  recognition, memory, and relationship records.
 - **Portable chat archives** (`chat_archive.py`). Versioned, typed export/import
   with embedded resources, reference remapping, and atomic restoration.
 - **Portable pipeline traces** (`pipeline_trace.py`). Hash-only diagnostics by

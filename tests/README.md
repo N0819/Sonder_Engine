@@ -26,3 +26,5 @@ Character-psychology coverage is split deliberately: `test_psychology_runtime`
 checks bounded state mechanics, `test_character_psychology_fill` checks
 non-destructive legacy-card completion, and the perception/self-knowledge tests
 attack the new information paths with hidden-intent and other-body markers.
+`test_chat_character_cards` covers per-story card isolation, live-state
+preservation, identity-key rejection, UI wiring, and portable archive fidelity.
