@@ -175,17 +175,17 @@ class TestContactsCancelledByASizeChange:
 
     def test_a_contact_between_untouched_bodies_survives(self):
         scene = merge_scene_with_diff(_scene(
-            positions={"Hinami": "hall", "Tamamo": "hall", "Lilaeve": "hall"},
+            positions={"Hinami": "hall", "Tamamo": "hall", "Bramwell": "hall"},
         ), {"contact_ops": [
             _held(),
-            {"op": "add", "actor": "Lilaeve", "target": "Tamamo",
+            {"op": "add", "actor": "Bramwell", "target": "Tamamo",
              "manner": "lean"},
         ]})
         scene = merge_scene_with_diff(scene, {"scales": {"Hinami": 0.1}})
 
         # Only the holds involving the resized body end.
         assert len(scene["contacts"]) == 1
-        assert scene["contacts"][0]["actor"] == "Lilaeve"
+        assert scene["contacts"][0]["actor"] == "Bramwell"
 
     def test_a_trivial_size_change_does_not_break_holds(self):
         """A growth spurt is not a reconfiguration."""

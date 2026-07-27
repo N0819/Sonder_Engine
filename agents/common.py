@@ -1775,6 +1775,41 @@ def _inject_action(view, display, attempt, can_see, event_id=None, delivered=Non
         return view
     return _append_once(view, sentence, marker=sentence)
 
+# `appearance_of` builds a STRUCTURED summary for payload fields -- labelled
+# segments joined by semicolons -- which is right for a field a model reads and
+# wrong for prose. It was being pasted verbatim into perception views, so every
+# view of every turn in a 47-turn chat read:
+#
+#     "You see A tall figure in a grey travelling coat, hood raised.;
+#      clothing state: soaked through, ..."
+#
+# -- a capital mid-sentence, a full stop before a semicolon, and the field
+# labels themselves narrated. Normalizing at the PASTE POINT rather than at the
+# five construction sites keeps one mechanism and leaves the payload form,
+# which is correct, alone.
+_APPEARANCE_LABELS = (
+    ("; wearing:", ", wearing"),
+    ("; clothing state:", ","),
+    ("; currently:", ","),
+)
+
+
+def _appearance_as_prose(appearance):
+    """A structured appearance summary rendered as something a view can hold."""
+    text = str(appearance or "").strip()
+    if not text:
+        return ""
+    for label, replacement in _APPEARANCE_LABELS:
+        text = text.replace(label, replacement)
+    # The base appearance is authored as its own sentence; its terminal stop
+    # and leading capital both fight the clause it is now part of.
+    text = re.sub(r"\.\s*(?=,)", "", text)
+    text = text.rstrip(" .")
+    if text[:1].isupper() and re.match(r"^(a|an|the)\b", text, re.I):
+        text = text[:1].lower() + text[1:]
+    return re.sub(r"\s{2,}", " ", text).strip(" ,")
+
+
 def _inject_visible_actor(
     view,
     *,
@@ -1805,10 +1840,13 @@ def _inject_visible_actor(
     text = re.sub(r"\s{2,}", " ", text).strip()
 
     if appearance:
+        prose = _appearance_as_prose(appearance)
         return _append_once(
             text,
-            f"You see {appearance}.",
-            marker=appearance,
+            f"You see {prose}.",
+            # Marker stays the RAW form: it is what a previous injection would
+            # have left behind, and dedupe must catch those too.
+            marker=prose or appearance,
         )
 
     return _append_once(
@@ -2595,7 +2633,7 @@ def _check_player_person(prose, player_name, narration_person, player_aliases=No
 
     Name-based only, and outside quoted spans: a character ADDRESSING the
     player by name aloud is legitimate dialogue that must survive verbatim,
-    and a third-person descriptor ('the kitsune') cannot be distinguished
+    and a third-person descriptor ('the traveller') cannot be distinguished
     from a reference to someone else without resolving it -- so this scores
     the one signal that is unambiguous.
     """

@@ -1,5 +1,231 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **A way through that is not a way to look through.** The barrier vocabulary
+  could say "you can see it but you cannot reach it" — that is what `window`
+  and `bars` are for — and had no way at all to say the reverse. Every passable
+  barrier was also transparent: `open` and `open_door` were the only two ways
+  to author a doorway a body could use, and both hand everyone on the far side
+  a clear line of sight through it. A curtained doorway, a bead screen, a tent
+  flap, a gasketed hatch — anything pushed through rather than swung open —
+  had to be lied about as an open door, or degrade to `wall`, which nothing
+  passes at all.
+
+  That gap bit hardest on entity interiors, whose exterior doorway is *derived*
+  rather than authored. An interior standing open always derived `open_door`,
+  so **stepping inside an enclosure made a body more exposed than standing in
+  the open** — the room outside got full sight of them the moment they went in.
+  Perception was working correctly on top of a scene graph that said the wall
+  was a window: it asked `has_visual`, got true, and pasted the occupant's
+  appearance into every outside observer's view.
+
+  `membrane` is the missing rung: passable, never see-through, sound muffled
+  rather than stopped — a raised voice crosses it, an ordinary one arrives as a
+  fragment. `enclosure` now describes what an interior lets through in *both*
+  states rather than only when shut, and `membrane` is the one value whose open
+  doorway is still opaque. A lid or a hatch is unchanged: standing open, it
+  genuinely is see-through, so vehicles, cabins and chests derive exactly as
+  before. Closing the sight channel closes the light channel with it — the
+  spill rule that lifts a dark room to `dim` only reaches through a *sight*
+  barrier, so an unlit interior behind a membrane stays dark instead of being
+  lit by the room outside and putting its occupant back on view.
+
+- **Being carried in the open, and being carried inside something.** A carried
+  body has no position of its own — the engine derives it from its carrier's.
+  So a body shut inside a container standing in a room read as `same_room` with
+  everyone else in that room, and `same_room` answers sight before barrier or
+  light is consulted at all. Interior rooms have had `enclosure` to settle this;
+  the carry path had nothing. `mode` recorded *how* something was carried and
+  touched visibility not at all, so a body in a closed bag was exactly as
+  visible as one held in an open palm.
+
+  `held`, `carried`, `riding`, `mounted` and `worn` are carried in view;
+  `pocket`, `container` and `inside` are shut away. A mode outside the
+  vocabulary reads as shut away deliberately — the in-view modes are exactly
+  that list, so a mode the engine cannot vouch for must not be the one that
+  grants sight. An absent mode still defaults to `carried`, so an ordinary
+  carry behaves as it always did.
+
+  **And the rule is symmetric**, which is the half that is easy to forget.
+  Sight needs both parties on the same side of every closed thing, so the test
+  is that their nearest enclosure matches: being shut inside blocks the view
+  *out* as completely as the view in. A holder is not inside its own enclosure,
+  so it does not see its own contents either — what it has instead is touch.
+  Two bodies inside the same enclosure see each other normally, and opaque is
+  not soundproof: what is shut away can still be heard.
+
+  A body's interior also stops depending on anyone remembering to declare it.
+  `enclosure` defaults to `membrane` for a body when nothing was authored,
+  because flesh is opaque whether or not the Director said so, and a safety
+  property is the wrong thing to leave to a model's memory. Bodies are
+  identified by what only bodies have — what they are wearing, and a size
+  relative to their own baseline — which separated every interior on disk
+  correctly: vehicles, ships, lifts and structures on one side, bodies on the
+  other. `container: true` is deliberately not the test; it is absent on plenty
+  of real vehicles and would call them bodies.
+
+- **Crossing a threshold takes longer than a position field does.** A body's
+  room is one value that changes between one beat and the next. Where the
+  boundary is see-through that costs nothing — the room behind watches through
+  the opening either way. Where it is opaque, the body *blinked out of the
+  world*: the beat it stepped through, every observer behind it lost it
+  completely, mid-step, with nothing narrated as having happened.
+
+  A body that has just crossed an opaque boundary is now recorded as still
+  crossing, and stays visible **as a shape** to the room it left for a beat or
+  two before it is gone. Seen going in; not seen once in. It is a floor and
+  never a bonus: it refuses to let someone vanish in the middle of a step, and
+  hands out no detail the light did not already offer. The record is derived at
+  commit from the same before/after positions orientation already reads,
+  counts down while the body stays put, and is dropped the moment it moves
+  again or leaves — so it can only ever describe the crossing itself.
+
+- **Light — the other half of sight.** Sight was decided entirely by barriers:
+  whether something stood between two rooms, and whether you could see through
+  it. Whether there was any light to see *by* did not exist. A pitch-black
+  cellar and a sunlit hall were identical to the engine, which for a system
+  whose whole purpose is to stop a mind knowing what it did not perceive is the
+  largest hole in that promise — darkness is the most ordinary perception gate
+  there is.
+
+  Every room now carries `light`: dark, dim, lit or bright. Absent means lit, so
+  nothing changes for a scene that never mentions it. **In a dark room nobody
+  sees anything** — not the room, not the person standing beside them — which
+  is enforced at `has_visual`, the one place sight is decided, so it holds
+  everywhere at once. Dim is shapes and movement without detail. Light spills:
+  a dark room with an open way through to a lit one is dim rather than pitch
+  black, worked out from the room's own light so only that has to be authored.
+
+  **Carried light travels.** A torch, lantern, candle or screen is an entity
+  with `light_source` set to what it emits, and it lights whatever room it is
+  in — following its bearer for free, since a carried thing already has its
+  holder's position derived onto it. Put it out (`state.lit` false) and the
+  dark comes straight back, which is the whole tension of carrying one.
+
+  **Light is graded, not binary.** `sight_level` mirrors `hear_level`'s shape —
+  none / shapes / full. Dark is nothing at all; dim is movement, outline and
+  bulk but not faces, not detail, not *who*; lit and bright are ordinary sight.
+  So a character in dim light knows someone is there and must not recognize
+  them by sight alone — identification comes from a voice, from already knowing
+  them, from getting closer or bringing light.
+
+  **And local, not room-wide.** A source declares `light_radius`: a pool
+  (`spot` — a hand torch, a candle; the default for anything portable) or the
+  whole space (`room` — a hearth, a ceiling lamp, a bonfire). A pool lights
+  whoever holds it and whoever stands with them, and leaves everyone else in
+  that room a shape in the dark who can see the light without being in it. A
+  torch never silently illuminates the far corner.
+
+  It reaches the backdrops too, painted as the player sees it: a cave crossed
+  with a lit torch renders torchlit, and switching the light off returns it to
+  the dark — which counts as a room change for the cache, or the dark cave
+  would keep serving the lit picture. Intensity shapes the image rather than
+  just its presence, so a candle gives a small pool falling off into deep
+  shadow and a bonfire throws hard light across the space; a hand light in an
+  otherwise dark room says so explicitly, or the model paints an evenly lit
+  room with a torch standing in it.
+
+- **Sound now depends on what the barrier is made of.** A paper shoji screen and
+  an oak door are both `closed_door` — they stop a body and block sight
+  identically — and are nothing alike to listen through. An optional `material`
+  on an adjacency shifts how sound carries without touching sight or passage:
+  paper, curtain and cloth pass a voice almost unhindered; wood is the default;
+  metal, stone and glass take a grade away; soundproofing takes two.
+
+- **Bodily condition, off by default.** Air, stamina, nourishment and injury per
+  body, moved by how much simulation time a beat takes rather than by turns.
+  Off means **absent** — no table, no ticking, nothing in any prompt — because a
+  story that never asked for a hunger clock should not pay for one in state, in
+  tokens, or in the Director's attention. A settings toggle turns it on, and a
+  condition tracker appears in the Cast tab showing every tracked body.
+
+  Air is the one with teeth, and it exists because of containers-as-places:
+  sealing someone in was previously survivable indefinitely. Air depletes only
+  for a body in a sealed enclosure, and fast — glass and bars included, since
+  being seen through something is not breathing through it.
+
+  The switch is **per story**, not per install, and lives in Genre & style with
+  the other standing decisions about a story: one chat can be an ordeal and the
+  next a conversation in a tavern. It survives rewinds and branches on the
+  mechanism that already carries genre and NPC autonomy. The vitals themselves
+  are diegetic and deliberately do not — rewind to before you were starving and
+  you are not starving.
+
+  The tracker is a corner panel rather than a buried tab: bottom-left, so it
+  cannot collide with the activity panel that owns the bottom-right, and built
+  from that panel's own rules so it reads as part of the frame. Player first,
+  then every other tracked body — the Director tracks NPCs too, and a companion
+  who is starving matters to you.
+
+  The switch is **per story**, not per install, and lives in Genre & style
+  where the other standing decisions about a story already are: one chat can be
+  an ordeal and the next a conversation in a tavern. It rides through rewinds
+  and branches on the same mechanism that already carries genre and NPC
+  autonomy (`PRESERVED_SETTING_KEYS`), so rewinding to turn 12 cannot silently
+  switch it off. The vitals themselves are diegetic and deliberately do *not*:
+  they live in the scene blob and roll back with everything else, so rewinding
+  to before you were starving means you are not starving.
+
+  The tracker is a corner panel rather than a buried tab — bottom-left, so it
+  can never collide with the activity panel that owns the bottom-right, and
+  built from that panel's own rules so it reads as part of the frame. It lists
+  the player first and every other tracked body after, because the Director
+  tracks NPCs too: a companion who is starving matters to you.
+
+- **Backdrop prompts say what the eye sees.** Image generators reject on
+  keywords rather than on meaning, and a room description written for prose is
+  full of them: "blood on the walls" is an ordinary thing for a room to have
+  after a fight and an instant refusal from most generators, so a legitimate
+  empty-room backdrop failed on a word. Charged vocabulary is now rewritten
+  into what it actually looks like — dark red staining, dark wet residue, iron
+  cuffs and chain, a heavy wooden frame — which paints the identical picture
+  and is also better image prompting, since generators render colour, texture
+  and form far more reliably than they render abstractions.
+
+  Nouns that can only be a *person* are not patched but dropped with their
+  whole sentence, exactly as a pronoun or a speech verb already was: a sentence
+  about a body has no place in an empty-room prompt, and rewriting the word
+  would have left "The has been removed" behind. Backdrops remain people-free
+  by construction, so what is being described throughout is furniture, surfaces
+  and light. The rewrite runs through `place_desc`, the single definition of
+  what a place looks like, so the prompt and the cache key cannot drift.
+
+- **Authoring edits stopped being discarded by rewinds.** A rewind rolls back
+  the story; it was also rolling back two things the *author* had decided. The
+  persona's private history — edited behind the lock in the Cast tab — reverted
+  on any reroll, so editing your own secrets and then rerunning a turn silently
+  threw the edit away. Declared fixed points went the same way: the paradox
+  *policy* was preserved across a restore while the points themselves were not,
+  so rewinding past the turn one was declared on quietly retracted it. Both now
+  ride through on the same mechanism that already carries genre and NPC
+  autonomy. The story state they shape — the paradoxes those points detect, and
+  everything in the scene — still reverts, which is the entire purpose of a
+  rewind.
+
+### Fixed
+- **Restraint was detected and never enforced.** A tripwire has scanned prose
+  for someone being bound since the omission audit, and asks the Director to
+  record a `restraint` condition. Nothing ever read it, so a character recorded
+  as bound hand and foot could still walk across the room — the state was
+  written, believed by nobody, enforced nowhere. A restraint in force now blocks
+  that body from relocating itself, including one applied in the same beat.
+  Being *carried* while bound is still allowed: that is the restrainer moving
+  them, not them walking off.
+
+- **A shout through prison bars was inaudible.** `window` and `bars` were added
+  to the barrier vocabulary in 4.5 without cases in `hear_level`, so both fell
+  through to silence. Bars now carry a voice as an open door does — the
+  difference between a cage and a cell — and glass carries only a shout, as a
+  fragment.
+
+- **`enclosure` did not survive validation.** The field added in 4.5 was never
+  declared on `SceneEntityDef`, and the schema round-trip drops anything a model
+  does not declare — exactly the trap `RoomDef.zone` carries a comment about. A
+  Director-authored glass case came back opaque. Found while adding `light`,
+  which would have had the identical bug.
+
 ## alpha4.5 — Seen but not reached
 
 ### Added
