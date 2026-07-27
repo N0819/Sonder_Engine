@@ -252,6 +252,27 @@ def carry_model_config(source_db, db_path):
     return n_set, n_prov
 
 
+def ablate_affordances():
+    """Put the character back on the pre-change payload.
+
+    Two things go: the visited/unvisited marking on each exit, and the
+    location cue on recall. Everything else -- prompts, stages, models -- is
+    untouched, so a difference between the arms is attributable to these.
+    """
+    import agents.character as ch
+    import memory as mem
+    ch._annotate_known_exits = lambda digest, scene, visited: digest
+    _search = mem.search_memories
+
+    def _no_place_cue(*a, **kw):
+        kw["here"] = None
+        return _search(*a, **kw)
+    mem.search_memories = _no_place_cue
+    # build_character_memory_context resolved search_memories at import time.
+    import memory
+    memory.search_memories = _no_place_cue
+
+
 def force_single_model(spec):
     """Point every configured role at one model.
 
@@ -543,6 +564,12 @@ def main():
                     help="DB to copy model/provider settings from "
                          "(read-only; never written to)")
     ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--ablate-affordances", action="store_true",
+                    help="disable the visited-exit markers and the "
+                         "location-cued recall, so the SAME model can be run "
+                         "with and without them. A/B by runtime switch rather "
+                         "than by checking out an older commit, so the two "
+                         "arms are otherwise byte-identical.")
     ap.add_argument("--grid", action="store_true",
                     help="print the maze after every step")
     ap.add_argument("--out", default=None,
@@ -578,6 +605,9 @@ def main():
         model=args.model if args.agent == "llm" else None)
     if args.agent == "scripted":
         install_scripted_models(name, walls)
+    if args.ablate_affordances:
+        ablate_affordances()
+        print("  ABLATED: visited-exit markers and location-cued recall off")
     # One stream for the whole experiment, so run 2 is not a replay of run 1.
     rng = random.Random(20260727)
     rows, turn_base = [], 1

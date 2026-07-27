@@ -40,6 +40,11 @@ from spatial_frames import (infer_companion_carry, infer_vehicle_zones,
                             infer_came_from, infer_focus, infer_facing,
                             infer_threshold_crossings)
 
+# How much of a body's own route it carries. Bounded because it rides
+# chat_chars.state, and because a route from four hundred beats ago is not
+# something anyone recalls as a route.
+VISITED_ROOMS_CAP = 60
+
 _COMMIT_LOCKS = weakref.WeakValueDictionary()
 _COMMIT_LOCKS_GUARD = threading.Lock()
 
@@ -3703,6 +3708,26 @@ def prepare_memory_commit(ctx, *, scene=None):
                 except Exception:
                     pass
             st["stance"] = stance
+            # Rooms this body has actually walked through, most recent last.
+            # Knowing you have been somewhere before is the most basic thing
+            # walking through it earns you, and nothing was recording it: the
+            # character payload listed a room's exits with no way to tell the
+            # one you arrived through from one you have never taken, so
+            # preferring the unexplored exit was not something a character
+            # could do -- which reads as backtracking. Their OWN traversal
+            # history, so it crosses no information boundary.
+            # Lazy, like the other agents.common uses in this module: importing
+            # it at module scope would close an import cycle.
+            from agents.common import character_room as _character_room
+            _here_room = _character_room(sc, sh)
+            if _here_room:
+                _visited = [
+                    r for r in (st.get("visited_rooms") or [])
+                    if isinstance(r, str) and r
+                ]
+                if not _visited or _visited[-1] != _here_room:
+                    _visited.append(_here_room)
+                st["visited_rooms"] = _visited[-VISITED_ROOMS_CAP:]
             _mm_updates = own_result.get("mind_model_updates") or []
             # Absorption is read off the state we just settled, so it reflects
             # the body at the END of the beat -- the state the character
