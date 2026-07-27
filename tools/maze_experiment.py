@@ -275,8 +275,40 @@ def ablate_affordances():
     mem.search_memories = _no_place_cue
 
 
-def force_single_model(spec):
-    """Point every configured role at one model.
+def set_reasoning_effort(spec):
+    """Override reasoning effort, as 'role=level,...' or a bare level for all.
+
+    Worth reaching for: perception defaults to "high" in the working config AND
+    now makes one call per observer since the per-observer split, so it is
+    routinely the second-largest latency line in a run -- while what it
+    contributes to a navigation experiment is a room description.
+    """
+    import json as _json
+    from db import q, qi
+    row = q("SELECT value FROM settings WHERE key='reasoning_effort'", one=True)
+    cfg = _json.loads(row["value"]) if row and row["value"] else {}
+    if "=" not in str(spec):
+        cfg = {"default": str(spec)}
+    else:
+        for pair in str(spec).split(","):
+            role, _, level = pair.partition("=")
+            if role.strip() and level.strip():
+                cfg[role.strip()] = level.strip()
+    qi("INSERT INTO settings(key,value) VALUES('reasoning_effort',?) "
+       "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+       (_json.dumps(cfg),))
+    return cfg
+
+
+def force_single_model(spec, roles=None):
+    """Point the named roles at one model (every configured role by default).
+
+    Holding the model constant makes a result attributable -- but forcing ALL
+    roles is usually the wrong trade. In a navigation experiment the character
+    and the director are what is under test; perception only renders the room,
+    and it needs to be constant ACROSS ARMS, not identical to the character's
+    model. Forcing it too moved perception off a fast dedicated provider onto a
+    slower shared one and roughly doubled wall-clock for no experimental gain.
 
     Roles are normally a MIX -- director on grok, perception on glm, character
     on whatever `default` is -- which is right for play and wrong for an
@@ -293,16 +325,19 @@ def force_single_model(spec):
     row = q("SELECT value FROM settings WHERE key='agent_models'", one=True)
     cfg = _json.loads(row["value"]) if row and row["value"] else {}
     forced = {"provider": int(provider_id), "model": model, "fallbacks": []}
-    for role in list(cfg):
+    targets = [r.strip() for r in (roles or []) if r.strip()] or list(cfg)
+    for role in targets:
         cfg[role] = dict(forced)
-    cfg["default"] = dict(forced)
+    if not roles:
+        cfg["default"] = dict(forced)
     qi("INSERT INTO settings(key,value) VALUES('agent_models',?) "
        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
        (_json.dumps(cfg),))
     return model
 
 
-def setup(db_path, walls, source_db=None, model=None):
+def setup(db_path, walls, source_db=None, model=None, model_roles=None,
+          reasoning=None):
     import db
     db.configure(db_path)
     db.init()
@@ -311,7 +346,10 @@ def setup(db_path, walls, source_db=None, model=None):
         print(f"  carried {n_set} settings and {n_prov} provider connections "
               f"from {source_db}")
     if model:
-        print(f"  forced every role to {force_single_model(model)}")
+        which = ", ".join(model_roles) if model_roles else "every role"
+        print(f"  forced {which} to {force_single_model(model, model_roles)}")
+    if reasoning:
+        print(f"  reasoning effort -> {set_reasoning_effort(reasoning)}")
     from db import qi, wset
     from character_schema import character_name
 
@@ -569,6 +607,12 @@ def main():
                          "'<provider_id>:<model>' (e.g. 3:x-ai/grok-4.20). "
                          "Without it each role keeps whatever the source DB "
                          "configured, which is usually a mix.")
+    ap.add_argument("--model-roles", default=None,
+                    help="comma-separated roles for --model. Default is every "
+                         "role, which usually also drags perception off its own "
+                         "faster provider for no experimental gain.")
+    ap.add_argument("--reasoning", default=None,
+                    help="'role=level,...' or a bare level for all")
     ap.add_argument("--settings-from", default="engine.db",
                     help="DB to copy model/provider settings from "
                          "(read-only; never written to)")
@@ -611,7 +655,10 @@ def main():
     chat_id, char_id, name = setup(
         db_path, walls,
         source_db=args.settings_from if args.agent == "llm" else None,
-        model=args.model if args.agent == "llm" else None)
+        model=args.model if args.agent == "llm" else None,
+        model_roles=([r for r in (args.model_roles or "").split(",") if r.strip()]
+                     if args.agent == "llm" else None),
+        reasoning=args.reasoning if args.agent == "llm" else None)
     if args.agent == "scripted":
         install_scripted_models(name, walls)
     if args.ablate_affordances:
