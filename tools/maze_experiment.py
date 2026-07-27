@@ -207,6 +207,101 @@ def character_sheet(name="Vesk"):
     return normalize_character_data(sheet)
 
 
+# Model routing and provider credentials live in settings/providers, so a fresh
+# scratch DB has no model for any role and a live run dies on the first call.
+# host_pw/host_secret are deliberately NOT carried: no server runs here, and a
+# throwaway experiment DB has no business holding auth material.
+_SETTINGS_TO_CARRY = (
+    "agent_models", "openrouter_routing", "active_preset", "prompt_presets",
+    "reasoning_effort", "max_output_tokens", "nsfw_enabled",
+)
+
+
+def carry_model_config(source_db, db_path):
+    """Copy the model config from the real DB into the scratch DB.
+
+    Two halves, and BOTH are needed. `settings.agent_models` says which model
+    each role uses; the `providers` table holds the connections those models
+    resolve through. Carrying only the first gets you past "No model configured
+    for role X" straight into "No USABLE model configured for role X".
+
+    This does put the source DB's API keys into the scratch file -- a throwaway
+    under the system temp dir, never committed, but worth knowing it is there.
+    """
+    import sqlite3
+    if not source_db or not os.path.exists(source_db):
+        print(f"  ! no source DB at {source_db!r}; a live run will have no "
+              f"model configured")
+        return 0, 0
+    src = sqlite3.connect(f"file:{source_db}?mode=ro", uri=True)
+    src.row_factory = sqlite3.Row
+    from db import qi
+    n_set = 0
+    for row in src.execute("SELECT key,value FROM settings"):
+        if row["key"] not in _SETTINGS_TO_CARRY:
+            continue
+        qi("INSERT INTO settings(key,value) VALUES(?,?) "
+           "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+           (row["key"], row["value"]))
+        n_set += 1
+    n_prov = 0
+    for row in src.execute("SELECT * FROM providers"):
+        qi("INSERT INTO providers(id,name,kind,base_url,api_key,enabled) "
+           "VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+           "name=excluded.name, kind=excluded.kind, base_url=excluded.base_url, "
+           "api_key=excluded.api_key, enabled=excluded.enabled",
+           (row["id"], row["name"], row["kind"], row["base_url"],
+            row["api_key"], row["enabled"]))
+        n_prov += 1
+    src.close()
+    return n_set, n_prov
+
+
+def ablate_affordances():
+    """Put the character back on the pre-change payload.
+
+    Two things go: the visited/unvisited marking on each exit, and the location
+    cue on recall. Everything else -- prompts, stages, models -- is untouched,
+    so a difference between the arms is attributable to these.
+    """
+    import agents.character as ch
+    import memory as mem
+    ch._annotate_known_exits = lambda digest, scene, visited: digest
+    _search = mem.search_memories
+
+    def _no_place_cue(*a, **kw):
+        kw["here"] = None
+        return _search(*a, **kw)
+    mem.search_memories = _no_place_cue
+
+
+def force_single_model(spec):
+    """Point every configured role at one model.
+
+    Roles are normally a MIX -- director on grok, perception on glm, character
+    on whatever `default` is -- which is right for play and wrong for an
+    experiment: if the character navigates badly you cannot tell whether that
+    is the character model, the director resolving its moves, or the perception
+    model describing the room. Holding the model constant makes the result
+    attributable.
+    """
+    import json as _json
+    from db import q, qi
+    provider_id, _, model = str(spec).partition(":")
+    if not model:
+        raise SystemExit("--model must be '<provider_id>:<model>'")
+    row = q("SELECT value FROM settings WHERE key='agent_models'", one=True)
+    cfg = _json.loads(row["value"]) if row and row["value"] else {}
+    forced = {"provider": int(provider_id), "model": model, "fallbacks": []}
+    for role in list(cfg):
+        cfg[role] = dict(forced)
+    cfg["default"] = dict(forced)
+    qi("INSERT INTO settings(key,value) VALUES('agent_models',?) "
+       "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+       (_json.dumps(cfg),))
+    return model
+
+
 def setup(db_path, walls, source_db=None, model=None):
     import db
     db.configure(db_path)
