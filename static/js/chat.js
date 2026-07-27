@@ -83,11 +83,21 @@ function observeSceneMood(msgsEl, turnEntries) {
 }
 
 async function openChat(id) {
+  const switching = S.chatId !== id;
   S.chatId = id;
+  // Clear the outgoing story's condition panel BEFORE the awaits below. It
+  // belongs to that story, and leaving it up while the next one loads showed
+  // the previous character's bars against the new story's prose.
+  if (switching) {
+    window.clearVitalsHud?.();
+  }
   S.chat = await api("GET", "/api/chats/" + id);
   S.currentFrameId = null; // always reopen viewing the present
   renderSide();
   renderChat();
+  // Then populate for the story now open -- including the case where it does
+  // not track condition at all and the panel simply stays away.
+  window.refreshVitalsHud?.();
 }
 
 // Purely a client-side filter/view-selector -- see S.currentFrameId's

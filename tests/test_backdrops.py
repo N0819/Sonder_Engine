@@ -15,6 +15,8 @@ These tests pin the two properties that make it safe and affordable:
 
 from __future__ import annotations
 
+import pytest
+
 from backdrops import _setting_only, visual_signature
 
 
@@ -515,3 +517,86 @@ def test_a_chat_is_never_its_own_ancestor(temp_db, tmp_path, monkeypatch):
     temp_db.qi("UPDATE chats SET branched_from=? WHERE id=?",
                ("[%d,%d]" % (chat, chat), chat))
     assert bd.branch_lineage(chat) == []
+
+
+# --- visual register -------------------------------------------------------
+# Image generators reject on keywords, not on meaning. "Blood on the walls" is
+# an ordinary thing for a room to have after a fight and an instant refusal
+# from most generators, so a legitimate empty-room backdrop failed on a word.
+# The fix is to say what the eye SEES -- which is better image prompting
+# anyway, since generators render colour and texture far more reliably than
+# they render abstractions.
+
+from backdrops import place_desc, to_visual_register
+
+
+class TestVisualRegister:
+    def test_the_case_that_prompted_it(self):
+        assert "blood" not in to_visual_register(
+            "Blood on the walls.").casefold()
+        assert "dark red" in to_visual_register("Blood on the walls.")
+
+    @pytest.mark.parametrize("charged,expected", [
+        ("bloodstained", "stained dark red"),
+        ("bloody", "dark red streaked"),
+        ("gore", "dark wet residue"),
+        ("viscera", "dark wet matter"),
+        ("shackles", "iron cuffs and chain"),
+        ("gallows", "heavy wooden frame"),
+        ("syringe", "glass and steel instrument"),
+        ("gruesome", "stark"),
+    ])
+    def test_terms_become_what_they_look_like(self, charged, expected):
+        assert to_visual_register(f"A {charged} thing.") == f"A {expected} thing."
+
+    def test_the_picture_is_preserved_not_erased(self):
+        """The point is a prompt that still paints the same room, not a
+        sanitised one that paints a different room."""
+        out = to_visual_register("The bloodstained altar and gore-streaked floor.")
+        assert "altar" in out and "floor" in out
+        assert "dark red" in out and "dark" in out
+
+    def test_it_is_case_insensitive(self):
+        assert "dark red staining" in to_visual_register("BLOOD everywhere.")
+
+    def test_word_boundaries_are_respected(self):
+        """A bloodwood table is furniture, not an aftermath."""
+        assert to_visual_register("A bloodwood table.") == "A bloodwood table."
+
+    def test_longer_terms_win_over_shorter_ones(self):
+        assert to_visual_register("A blood-soaked rug.") == "A soaked dark red rug."
+
+    def test_ordinary_description_is_untouched(self):
+        text = "Dark oak panelling, a cold hearth, and rain at the window."
+        assert to_visual_register(text) == text
+
+    def test_empty_input(self):
+        assert to_visual_register("") == ""
+        assert to_visual_register(None) == ""
+
+
+class TestBodySentencesAreDropped:
+    """A sentence about a body is a sentence about a person, and belongs in an
+    empty-room prompt no more than 'he leans on the console' does. Patching the
+    word would leave 'The has been removed' behind."""
+
+    @pytest.mark.parametrize("text", [
+        "The corpse has been removed.",
+        "Bodies were found here.",
+        "A cadaver lay on the slab.",
+        "The remains were carried out.",
+    ])
+    def test_dropped_whole(self, text):
+        assert place_desc({"desc": text + " Dark oak panelling."}) \
+            == "Dark oak panelling."
+
+    def test_the_rest_of_the_room_survives(self):
+        out = place_desc({"desc": "The corpse has been removed. "
+                                  "Gore streaks the tiles."})
+        assert "dark wet residue streaks the tiles" in out.casefold()
+
+    def test_it_runs_through_the_cache_key_too(self):
+        """place_desc is the single definition of what the place looks like,
+        used by both the prompt and the signature, so they cannot drift."""
+        room = {"desc": "Blood on the walls."}
+        assert "blood" not in place_desc(room).casefold()

@@ -112,16 +112,24 @@ def _scene():
 
 class TestSpatialReaders:
     def test_spatial_rel_goldens(self):
+        """`material` and `light` joined the relation when barriers gained a
+        material-aware acoustic model and rooms gained illumination. Both are
+        empty/default here, which is the point of pinning them: an ordinary
+        scene must still read exactly as it did."""
         sc = _scene()
         assert spatial_rel(sc, "kitchen", "kitchen") == {
-            "same_room": True, "barrier": "open", "distance": "same"}
+            "same_room": True, "barrier": "open", "distance": "same",
+            "light": "lit"}
         assert spatial_rel(sc, "kitchen", "hallway") == {
-            "same_room": False, "barrier": "open", "distance": "near"}
+            "same_room": False, "barrier": "open", "distance": "near",
+            "material": "", "light": "lit"}
         # Edge declared from one side only resolves in both directions.
         assert spatial_rel(sc, "hallway", "kitchen") == {
-            "same_room": False, "barrier": "open", "distance": "near"}
+            "same_room": False, "barrier": "open", "distance": "near",
+            "material": "", "light": "lit"}
         assert spatial_rel(sc, "kitchen", "cellar") == {
-            "same_room": False, "barrier": "closed_door", "distance": "near"}
+            "same_room": False, "barrier": "closed_door", "distance": "near",
+            "material": "", "light": "lit"}
         # No connecting edge at all.
         assert spatial_rel(sc, "study", "garden") == {
             "same_room": False, "barrier": "separated", "distance": "far"}
@@ -131,7 +139,8 @@ class TestSpatialReaders:
             "note": "no known spatial channel between these entities"}
         # Raw alias barrier ("archway") normalizes to open on read.
         assert spatial_rel(sc, "garden", "kitchen") == {
-            "same_room": False, "barrier": "open", "distance": "near"}
+            "same_room": False, "barrier": "open", "distance": "near",
+            "material": "", "light": "lit"}
 
     def test_room_of_matching_goldens(self):
         sc = _scene()

@@ -56,6 +56,10 @@
       </div>
     </header>
 
+    <!-- Other characters' condition, opt-in: the same panel, stacked directly
+         above yours. -->
+    <div id="vitals-npcs" class="hidden"></div>
+
     <div id="msgs">
       <div class="dim" style="margin:auto">
         Select or create a story to begin.
@@ -71,6 +75,7 @@
     <div id="live" class="hidden"></div>
 
     <div id="composer">
+
       <!-- The inner wrapper carries the measure so the field lines up with
            the prose column above it; #composer stays full-bleed so its top
            border and background still span the window. -->
@@ -84,6 +89,12 @@
         <button id="stop" class="danger hidden">■ Stop</button>
       </div>
     </div>
+
+    <!-- Your own condition: the gutter between the sidebar and the story,
+         resting just above the composer. A SIBLING of #composer, never a
+         child -- as a child it was painted under #composer-inner, and z-index
+         could not reliably win against the stacking contexts inside it. -->
+    <div id="vitals" class="hidden"></div>
   </main>
 
   <aside id="drawer" class="hidden"></aside>

@@ -30,7 +30,8 @@ from theory_of_mind import apply_mind_model_updates
 from paradox import check_and_apply_paradox
 from spatial_frames import detect_and_reconcile as detect_and_reconcile_spatial
 from spatial_frames import (infer_companion_carry, infer_vehicle_zones,
-                            infer_came_from, infer_focus, infer_facing)
+                            infer_came_from, infer_focus, infer_facing,
+                            infer_threshold_crossings)
 
 _COMMIT_LOCKS = weakref.WeakValueDictionary()
 _COMMIT_LOCKS_GUARD = threading.Lock()
@@ -1331,6 +1332,12 @@ def prepare_scene_commit(ctx):
     # disorienting jump); infer_facing runs LAST -- it reads the freshly-set
     # came_from and focus to derive the compass heading left/right depends on.
     infer_came_from(cid, ctx.turn.frame_id, prev_scene, sc, _carry_names)
+    # Reads the same before/after positions as came_from, and for the same
+    # reason: a step through an OPAQUE boundary must be watchable from the room
+    # behind for a beat or two instead of the body vanishing the instant its
+    # position field changes.
+    infer_threshold_crossings(cid, ctx.turn.frame_id, prev_scene, sc,
+                              _carry_names)
     infer_focus(cid, ctx.turn.frame_id, prev_scene, sc,
                 ctx.get("director_resolve") or {}, _carry_names)
     infer_facing(cid, ctx.turn.frame_id, prev_scene, sc, _carry_names)

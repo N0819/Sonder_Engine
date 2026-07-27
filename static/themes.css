@@ -511,7 +511,7 @@ body.has-backdrop .prose {
   border-color: color-mix(in srgb, var(--acc) 62%, var(--bd));
   background: var(--selected-bg);
 }
-.lore-tree-name, .section-title, #activity-head { color: color-mix(in srgb, var(--fg) 92%, var(--acc)); }
+.lore-tree-name, .section-title, #activity-head, #vitals-head { color: color-mix(in srgb, var(--fg) 92%, var(--acc)); }
 .lore-tree-children, .lore-side-children { border-left-color: var(--bd); }
 .lore-graph-edge, .lore-plan-stat { background: var(--card-bg); border-color: var(--card-border); }
 .lore-graph-center { border-color: color-mix(in srgb, var(--acc) 60%, var(--bd)); background: color-mix(in srgb, var(--acc) 13%, var(--card-bg)); }
@@ -1426,3 +1426,134 @@ body.has-backdrop .prose {
   .appearance-reading-row { align-items: stretch; flex-direction: column; }
   .segmented-control button { flex: 1 1 120px; }
 }
+
+
+/* ---- Bodily condition, per theme -----------------------------------------
+   The tracker is the newest piece of chrome and the one most likely to look
+   bolted on, because it sits in the margin beside the story rather than inside
+   a panel that already carries a theme's character. Variables alone were not
+   enough -- correct colours in a shape belonging to no theme still reads as a
+   different application. Each theme therefore states what a meter IS in its
+   own language. */
+
+/* TAVERN: not bars but vessels. Warm glass with the liquid sitting in it, a
+   brass rim and a lit top edge -- the same fittings the cards and buttons
+   already wear, so it reads as another object on the same table. */
+:root[data-theme="tavern"] #vitals-head,
+:root[data-theme="tavern"] #vitals-npcs-head,
+:root[data-theme="tavern"] .vitals-who {
+  font-family: Georgia, "Palatino Linotype", serif;
+  letter-spacing: .03em;
+  color: #f0c78a;
+  text-transform: none;
+  font-size: 12px;
+}
+:root[data-theme="tavern"] .vital-name {
+  font-family: Georgia, "Palatino Linotype", serif;
+  color: #d8b98c;
+}
+:root[data-theme="tavern"] .vital-meter {
+  height: 9px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #170d06, #241609);
+  border: 1px solid #7d5730;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .6),
+              0 1px 0 rgba(255, 208, 140, .1);
+}
+:root[data-theme="tavern"] .vital-fill {
+  border-radius: 4px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28),
+              0 0 7px rgba(255, 180, 90, .3);
+}
+/* Liquid, not paint: a highlight along the top of what is in the glass. */
+:root[data-theme="tavern"] .vital-fill.ok {
+  background: linear-gradient(180deg, #b9d98f, #6f9a55);
+}
+:root[data-theme="tavern"] .vital-fill.warn {
+  background: linear-gradient(180deg, #f3d081, #c08f36);
+}
+:root[data-theme="tavern"] .vital-fill.bad {
+  background: linear-gradient(180deg, #f0968a, #a83f38);
+}
+
+/* LCARS: a panel, not a widget. Square on the side facing the sidebar and
+   heavily rounded away from it, which is the elbow the rest of this theme is
+   built from -- the tracker looks like it broke off the frame rather than
+   like something floating in front of it. */
+:root[data-theme="lcars"] #vitals,
+:root[data-theme="lcars"] #vitals-npcs {
+  background: #000;
+  border-left: 9px solid var(--lcars-lilac);
+  border-radius: 0 22px 22px 0;
+  padding: 9px 13px 10px 11px;
+}
+:root[data-theme="lcars"] #vitals-npcs { border-left-color: var(--lcars-blue); }
+:root[data-theme="lcars"] #vitals-head,
+:root[data-theme="lcars"] #vitals-npcs-head,
+:root[data-theme="lcars"] .vital-name,
+:root[data-theme="lcars"] .vitals-who {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--lcars-blue);
+  opacity: 1;
+}
+:root[data-theme="lcars"] #vitals-head,
+:root[data-theme="lcars"] #vitals-npcs-head { color: var(--acc); }
+/* Segmented readout: LCARS shows quantity in blocks, never a smooth sweep. */
+:root[data-theme="lcars"] .vital-meter {
+  height: 11px;
+  border-radius: 0;
+  border: none;
+  background: #1a1a1a;
+}
+:root[data-theme="lcars"] .vital-fill {
+  border-radius: 0;
+  background-image: repeating-linear-gradient(90deg,
+    rgba(0, 0, 0, .85) 0 2px, transparent 2px 7px);
+}
+:root[data-theme="lcars"] .vital-fill.ok { background-color: var(--lcars-blue); }
+:root[data-theme="lcars"] .vital-fill.warn { background-color: var(--warn); }
+:root[data-theme="lcars"] .vital-fill.bad { background-color: var(--err); }
+:root[data-theme="lcars"] .vitals-body + .vitals-body { border-top-color: #333; }
+:root[data-theme="lcars"] .vitals-body.npc { opacity: 1; }
+
+/* The three non-LCARS themes have no panel behind the meters, so the labels
+   were reading against whatever the backdrop happened to be. A faint plate --
+   not a card, no border, no shadow -- gives them something to sit on without
+   turning marginalia back into chrome. */
+:root[data-theme="tavern"] #vitals,
+:root[data-theme="tavern"] #vitals-npcs,
+:root[data-theme="stone"] #vitals,
+:root[data-theme="stone"] #vitals-npcs,
+:root[data-theme="ink"] #vitals,
+:root[data-theme="ink"] #vitals-npcs {
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  border-radius: 9px;
+  backdrop-filter: blur(3px);
+}
+:root[data-theme="tavern"] #vitals,
+:root[data-theme="tavern"] #vitals-npcs {
+  box-shadow: inset 0 1px 0 rgba(255, 208, 140, .1);
+}
+
+/* STONE: chiselled. A recess cut into the block, the fill sitting flush in it. */
+:root[data-theme="stone"] .vital-meter {
+  height: 8px;
+  border-radius: 1px;
+  background: #1c2022;
+  border: 1px solid #171a1c;
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, .55);
+}
+:root[data-theme="stone"] .vital-fill { border-radius: 0; }
+:root[data-theme="stone"] #vitals-head,
+:root[data-theme="stone"] #vitals-npcs-head { letter-spacing: .12em; }
+
+/* INK: printed. Hairline rules and flat fills, nothing glassy. */
+:root[data-theme="ink"] .vital-meter {
+  height: 5px;
+  border-radius: 0;
+  background: transparent;
+  border: 1px solid var(--bd);
+}
+:root[data-theme="ink"] .vital-fill { border-radius: 0; opacity: .82; }

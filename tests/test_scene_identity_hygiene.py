@@ -143,7 +143,7 @@ def test_a_nameless_entity_keeps_its_id():
 #    says what each body is doing and what it is in contact with.
 #
 #    Found auditing a live chat: one character held TWO entity records --
-#    `char_62aa02c0...`, frozen at the beat it was created, and her display
+#    `char_9f13c0a4...`, frozen at the beat it was created, and her display
 #    name, rewritten every beat since. Both claimed to describe her, so "who is
 #    in contact with whom" had two contradictory answers at once, one of them
 #    arbitrarily old, and every reader that walks entities saw one person twice.
@@ -156,34 +156,34 @@ def test_a_nameless_entity_keeps_its_id():
 def _split_scene():
     """One character under both her uid and her display name."""
     return {"entities": {
-        "char_62aa02c0": {
-            "name": "Lilaeve Voss", "kind": "succubus",
+        "char_9f13c0a4": {
+            "name": "Bramwell", "kind": "object",
             "state": {"posture": "leaning_in", "target": "Hinami",
                       "proximity": "close_on_bed"}},
-        "Lilaeve Voss": {
-            "name": "Lilaeve Voss", "kind": "succubus",
+        "Bramwell": {
+            "name": "Bramwell", "kind": "object",
             "state": {"posture": "arms_around", "target": "Hinami",
                       "proximity": "pressed_fully_against"}},
-    }, "positions": {"Lilaeve Voss": "bedroom", "Hinami": "bedroom"}}
+    }, "positions": {"Bramwell": "bedroom", "Hinami": "bedroom"}}
 
 
 def test_one_body_ends_up_with_one_entity_record():
     merged = merge_scene_with_diff(_split_scene(), {})
-    assert set(merged["entities"]) == {"Lilaeve Voss"}
+    assert set(merged["entities"]) == {"Bramwell"}
 
 
 def test_the_display_name_is_the_surviving_key():
     """The convention every reader uses, matching the positions dedup."""
     merged = merge_scene_with_diff(_split_scene(), {})
-    assert "char_62aa02c0" not in merged["entities"]
-    assert merged["entities"]["Lilaeve Voss"]["name"] == "Lilaeve Voss"
+    assert "char_9f13c0a4" not in merged["entities"]
+    assert merged["entities"]["Bramwell"]["name"] == "Bramwell"
 
 
 def test_the_stale_snapshot_does_not_survive_the_collapse():
     """The whole point: contact state describes one instant. Merging the two
     records field-by-field would keep the frozen record's posture alive."""
     merged = merge_scene_with_diff(_split_scene(), {})
-    state = merged["entities"]["Lilaeve Voss"]["state"]
+    state = merged["entities"]["Bramwell"]["state"]
 
     assert state["posture"] == "arms_around"
     assert "leaning_in" not in json.dumps(merged["entities"])
@@ -193,14 +193,14 @@ def test_the_beat_that_just_wrote_wins():
     """When the diff writes the id-keyed record, its content is the fresh one
     -- but it still lands under the display name."""
     scene = _split_scene()
-    diff = {"entities": {"char_62aa02c0": {
-        "name": "Lilaeve Voss", "kind": "succubus",
+    diff = {"entities": {"char_9f13c0a4": {
+        "name": "Bramwell", "kind": "object",
         "state": {"posture": "stepping_back", "proximity": "arm's_length"}}}}
 
     merged = merge_scene_with_diff(scene, diff)
 
-    assert set(merged["entities"]) == {"Lilaeve Voss"}
-    assert merged["entities"]["Lilaeve Voss"]["state"]["posture"] == "stepping_back"
+    assert set(merged["entities"]) == {"Bramwell"}
+    assert merged["entities"]["Bramwell"]["state"]["posture"] == "stepping_back"
 
 
 def test_structural_facts_are_rescued_from_the_discarded_record():
@@ -248,7 +248,7 @@ def test_a_nameless_record_is_not_collapsed():
 
 def test_positions_stay_consistent_with_the_collapsed_entity():
     merged = merge_scene_with_diff(_split_scene(), {})
-    assert merged["positions"]["Lilaeve Voss"] == "bedroom"
+    assert merged["positions"]["Bramwell"] == "bedroom"
     assert set(merged["entities"]) <= set(merged["positions"]) | {"Hinami"}
 
 
@@ -256,4 +256,4 @@ def test_perception_sees_the_person_once():
     """The reader-facing consequence: one body, projected once."""
     merged = merge_scene_with_diff(_split_scene(), {})
     projected = _perceptible_entities(merged)
-    assert [k for k in projected if "Lilaeve" in k] == ["Lilaeve Voss"]
+    assert [k for k in projected if "Bramwell" in k] == ["Bramwell"]

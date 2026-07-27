@@ -432,6 +432,23 @@ class SceneEntityDef(BaseModel):
     # voiced by the Director, audible wherever the scene is, and never tracked
     # as background presences.
     ubiquitous: bool = False
+    # What an interior lets through: opaque | transparent | barred | membrane
+    # (spatial._closed_enclosure_barrier / _open_enclosure_barrier). The first
+    # three describe the CLOSED state and leave an open one see-through, which
+    # is right for a lid or a hatch. `membrane` is the soft or draped opening
+    # that is opaque in BOTH states -- passable, never see-through -- so an
+    # occupant is concealed by going in rather than exposed by it.
+    # Declared for the same reason RoomDef.zone is -- an undeclared field does
+    # not survive the validation round-trip, so a Director-authored glass case
+    # would silently come back opaque. Absent means opaque, the pre-existing
+    # behaviour.
+    enclosure: Optional[str] = None
+    # What this thing EMITS when lit: dim | lit | bright. A torch, a lantern,
+    # a screen. Switched off with state.lit false. Declared here for the same
+    # reason enclosure is -- an undeclared field does not survive the
+    # validation round-trip, and a lamp that comes back unlit is a character
+    # standing in the dark holding it.
+    light_source: Optional[str] = None
 
 class RoomDef(BaseModel):
     name: str = ""
@@ -448,6 +465,11 @@ class RoomDef(BaseModel):
     # "genuinely disconnected locale" (see spatial_frames.py's module
     # docstring); most rooms should leave this unset.
     zone: Optional[str] = None
+    # How much light there is to see BY: dark | dim | lit | bright. Declared
+    # for the same reason `zone` is -- an undeclared field is dropped by the
+    # validation round-trip, and a room going dark must survive it. Absent
+    # means lit, so nothing changes for a scene that never mentions light.
+    light: Optional[str] = None
 
 class WorldEntity(BaseModel):
     entity_id: str
@@ -824,6 +846,10 @@ class StateDiff(BaseModel):
     # release. A contained body's position is DERIVED from its container's
     # (spatial.derive_contained_positions), so it cannot be somewhere else.
     containment: dict[str, Optional[dict]] = Field(default_factory=dict)
+    # Bodily condition {name: {air|stamina|nourishment|injury: 0..1}}. Only
+    # ever populated when the survival setting is ON; absent otherwise, which
+    # is what keeps the feature free for stories that do not want it.
+    vitals: dict[str, Optional[dict]] = Field(default_factory=dict)
     overlays: dict[str, list] = Field(default_factory=dict)
     attire: dict[str, dict] = Field(default_factory=dict)
     cast_changes: list[dict] = Field(default_factory=list)
@@ -1259,7 +1285,8 @@ _STATE_DIFF_DICT_FIELDS = (
 
 _STATE_DIFF_SIBLING_FIELDS = (
     "remove_entities", "remove_rooms", "remove_adjacent", "conditions",
-    "inventory_ops", "contact_ops", "scales", "containment", "overlays",
+    "inventory_ops", "contact_ops", "scales", "containment", "vitals",
+    "overlays",
     "attire", "cast_changes",
     "world_facts", "introductions", "time", "claim_dispositions",
 )
