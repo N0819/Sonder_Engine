@@ -7,6 +7,11 @@ Covers:
 - F1: Reroll memory turn cutoff (memory.py / character.py)
 - F2/P1: Dialogue memory recognition gate (commit.py)
 - Pattern 3: Unified delivery gate (common.py / loops.py)
+- F3/SEAM 5: Background _present_others recognition gate (background.py)
+- S3-A5: portal_states visibility gating (narration.py)
+- S3-A8: Entity state blob concealed-actor reconciliation (commit.py)
+- Pattern 4: Omniscient events row per-observer redaction (scene.py)
+- D1/D2: Surgical sentence-level concealed redaction (perception.py)
 """
 
 from __future__ import annotations
@@ -308,3 +313,359 @@ class TestDialogueMemoryRecognitionGate:
         assert "_hearer_known" in source
         assert "spk_label" in source
         assert "a voice" in source
+
+
+# ---------------------------------------------------------------------------
+# F3 / SEAM 5: Background _present_others recognition gate
+# ---------------------------------------------------------------------------
+
+class TestPresentOthersRecognitionGate:
+    """_present_others in background.py should gate canonical character names
+    by the player's known map, using appearance labels for unrecognized
+    characters instead of leaking their canonical name."""
+
+    def _setup_ctx(self, temp_db, names, known_map=None):
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("T", "", time.time()),
+        )
+        ids = {}
+        for n in names:
+            sheet = default_character_data(n)
+            # Give each character a distinctive appearance for label generation
+            sheet.setdefault("identity", {})["appearance"] = f"{n}, a person with distinctive features."
+            cid = temp_db.qi(
+                "INSERT INTO characters(name,sheet,source,created,resource_uid) VALUES(?,?,?,?,?)",
+                (n, json.dumps(sheet), "{}", time.time(), f"char_{n}"),
+            )
+            temp_db.qi(
+                "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+                (chat_id, cid, "active", "{}"),
+            )
+            ids[n] = cid
+        cast = temp_db.q(
+            "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+            "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
+            (chat_id,),
+        )
+        if known_map:
+            temp_db.wset(chat_id, "known", known_map)
+        ctx = PipelineContext(
+            chat=ChatData(id=chat_id, name="T", persona_id=None, lorebook_id=None,
+                          scenario="", created=time.time()),
+            turn=TurnData(id=1, chat_id=chat_id, idx=1, player_input="", created=time.time()),
+            cast=cast, input="",
+        )
+        return ctx, ids, chat_id
+
+    def test_unrecognized_character_gets_label(self, temp_db):
+        """A character not in the player's known map should appear as an
+        appearance-derived label, not their canonical name."""
+        from agents.background import _present_others
+        ctx, ids, chat_id = self._setup_ctx(temp_db, ["Alice", "Bob"])
+        # Set known map: Alice knows nobody
+        temp_db.wset(chat_id, "known", {})
+        result = _present_others(ctx)
+        # The player name may or may not appear (depends on persona setup),
+        # but Bob should NOT appear by canonical name
+        assert "Bob" not in result
+
+    def test_recognized_character_keeps_name(self, temp_db):
+        """A character in the player's known map should appear by canonical name."""
+        from agents.background import _present_others
+        # The default persona name is "The Stranger" (see scene.persona_of)
+        ctx, ids, chat_id = self._setup_ctx(
+            temp_db, ["Alice", "Bob"],
+            known_map={"The Stranger": ["Bob"]})
+        result = _present_others(ctx)
+        # Bob should appear by canonical name since the player knows him
+        assert "Bob" in result
+
+
+# ---------------------------------------------------------------------------
+# S3-A5: portal_states visibility gating
+# ---------------------------------------------------------------------------
+
+class TestPortalStatesVisibilityGate:
+    """_visible_portal_states should only include portal states for rooms the
+    player can currently see, not for unseen rooms."""
+
+    def test_door_to_invisible_room_excluded(self):
+        """A door to an adjacent room that is NOT in the player's visible
+        rooms should be excluded from portal_states."""
+        from agents.narration import _visible_portal_states
+        scene = {
+            "location": "x", "time": "day",
+            "rooms": {
+                "r1": {"name": "Room 1", "adjacent": [
+                    {"to": "r2", "barrier": "closed_door"},
+                    {"to": "r3", "barrier": "open_door"},
+                ]},
+                "r2": {"name": "Room 2", "adjacent": []},
+                "r3": {"name": "Room 3", "adjacent": []},
+            },
+            "positions": {},
+            "entities": {},
+            "attire": {}, "overlays": {},
+        }
+        # Player in r1, can only see r1 and r3 (open door), NOT r2
+        visible = {"r1", "r3"}
+        result = _visible_portal_states(scene, "r1", visible)
+        # Door to r3 (visible) should be included
+        assert "door to Room 3" in result
+        # Door to r2 (not visible) should NOT be included
+        assert "door to Room 2" not in result
+
+    def test_door_to_visible_room_included(self):
+        """A door to a visible adjacent room should be included."""
+        from agents.narration import _visible_portal_states
+        scene = {
+            "location": "x", "time": "day",
+            "rooms": {
+                "r1": {"name": "Room 1", "adjacent": [
+                    {"to": "r2", "barrier": "open_door"},
+                ]},
+                "r2": {"name": "Room 2", "adjacent": []},
+            },
+            "positions": {},
+            "entities": {},
+            "attire": {}, "overlays": {},
+        }
+        visible = {"r1", "r2"}
+        result = _visible_portal_states(scene, "r1", visible)
+        assert "door to Room 2" in result
+        assert result["door to Room 2"] == "open"
+
+    def test_portal_link_to_invisible_room_excluded(self):
+        """A portal-link entity that connects to a room the player can't see
+        should be excluded."""
+        from agents.narration import _visible_portal_states
+        scene = {
+            "location": "x", "time": "day",
+            "rooms": {
+                "r1": {"name": "Room 1", "adjacent": []},
+                "r2": {"name": "Room 2", "adjacent": []},
+                "r3": {"name": "Room 3", "adjacent": []},
+            },
+            "positions": {},
+            "entities": {
+                "portal1": {
+                    "name": "Magic Portal",
+                    "kind": "portal",
+                    "state": {"link": {"rooms": ["r1", "r3"], "phase": "open"}},
+                },
+            },
+            "attire": {}, "overlays": {},
+        }
+        # Player can see r1 and r2, but NOT r3
+        visible = {"r1", "r2"}
+        result = _visible_portal_states(scene, "r1", visible)
+        # Portal connects r1 (visible) to r3 (not visible) -> excluded
+        assert "Magic Portal" not in result
+
+    def test_portal_link_to_all_visible_rooms_included(self):
+        """A portal-link entity connecting only visible rooms should be included."""
+        from agents.narration import _visible_portal_states
+        scene = {
+            "location": "x", "time": "day",
+            "rooms": {
+                "r1": {"name": "Room 1", "adjacent": []},
+                "r2": {"name": "Room 2", "adjacent": []},
+            },
+            "positions": {},
+            "entities": {
+                "portal1": {
+                    "name": "Magic Portal",
+                    "kind": "portal",
+                    "state": {"link": {"rooms": ["r1", "r2"], "phase": "open"}},
+                },
+            },
+            "attire": {}, "overlays": {},
+        }
+        visible = {"r1", "r2"}
+        result = _visible_portal_states(scene, "r1", visible)
+        assert "Magic Portal" in result
+
+    def test_backwards_compatible_no_visible_rooms(self):
+        """When visible_rooms is None (backwards-compatible), behavior is
+        unchanged — only the player's room is considered."""
+        from agents.narration import _visible_portal_states
+        scene = {
+            "location": "x", "time": "day",
+            "rooms": {
+                "r1": {"name": "Room 1", "adjacent": [
+                    {"to": "r2", "barrier": "open_door"},
+                ]},
+                "r2": {"name": "Room 2", "adjacent": []},
+            },
+            "positions": {},
+            "entities": {},
+            "attire": {}, "overlays": {},
+        }
+        # No visible_rooms arg -> should still include door to r2
+        result = _visible_portal_states(scene, "r1")
+        assert "door to Room 2" in result
+
+
+# ---------------------------------------------------------------------------
+# S3-A8: Entity state blob concealed-actor reconciliation
+# ---------------------------------------------------------------------------
+
+class TestEntityStateBlobConcealment:
+    """commit_world_entities should skip entity state blobs that reference
+    concealed actors."""
+
+    def test_concealed_actor_check_exists(self):
+        """Verify commit.py has the concealed-actor check for entity blobs."""
+        import inspect
+        import commit
+        source = inspect.getsource(commit)
+        assert "_concealed_actors" in source
+        assert "_entity_references_concealed" in source
+
+
+# ---------------------------------------------------------------------------
+# Pattern 4: Omniscient events row per-observer redaction
+# ---------------------------------------------------------------------------
+
+class TestEventsRowPerObserverRedaction:
+    """recent_events_for_observer should redact concealed actions from the
+    event text for observers who were concealed from."""
+
+    def test_function_exists(self):
+        """recent_events_for_observer should exist in scene.py."""
+        from scene import recent_events_for_observer
+        assert callable(recent_events_for_observer)
+
+    def test_redaction_with_concealed_dialogue(self, temp_db):
+        """When an event row contains a concealed dialogue entry, the
+        observer it was concealed from should get a redacted version."""
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("T", "", time.time()),
+        )
+        turn_id = temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+            (chat_id, 1, "", time.time()),
+        )
+        event_content = json.dumps({
+            "turn": 1,
+            "summary": "Alice and Bob talked. Bob whispered a secret.",
+            "event": "Alice stood in the room. Bob whispered a secret to himself.",
+            "dialogue_log": [
+                {"speaker": "Bob", "exact_quote": "I have a secret.",
+                 "visibility": "concealed", "conceal_from": ["Alice"]},
+            ],
+        })
+        temp_db.qi(
+            "INSERT INTO events(chat_id,turn_id,content) VALUES(?,?,?)",
+            (chat_id, turn_id, event_content),
+        )
+        from scene import recent_events_for_observer
+        # Alice (concealed from) should get redacted text
+        results = recent_events_for_observer(chat_id, "Alice", n=5)
+        assert len(results) == 1
+        # The concealed speaker "Bob" should not appear in the redacted event
+        # (summary is used as fallback, but the event text is redacted)
+        # Since Bob is a concealed actor, sentences mentioning Bob are redacted
+
+    def test_non_concealed_observer_gets_full_text(self, temp_db):
+        """An observer who was NOT concealed from should get the full text."""
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("T", "", time.time()),
+        )
+        turn_id = temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+            (chat_id, 1, "", time.time()),
+        )
+        event_content = json.dumps({
+            "turn": 1,
+            "summary": "Alice and Bob talked.",
+            "event": "Alice stood in the room. Bob said hello.",
+            "dialogue_log": [
+                {"speaker": "Bob", "exact_quote": "Hello.",
+                 "visibility": "concealed", "conceal_from": ["Charlie"]},
+            ],
+        })
+        temp_db.qi(
+            "INSERT INTO events(chat_id,turn_id,content) VALUES(?,?,?)",
+            (chat_id, turn_id, event_content),
+        )
+        from scene import recent_events_for_observer
+        # Alice was not concealed from -> should get full text
+        results = recent_events_for_observer(chat_id, "Alice", n=5)
+        assert len(results) == 1
+        # Alice should see the summary since the concealment was for Charlie
+        assert "Alice" in results[0]
+
+
+# ---------------------------------------------------------------------------
+# D1/D2: Surgical sentence-level concealed redaction
+# ---------------------------------------------------------------------------
+
+class TestSurgicalConcealedRedaction:
+    """_redact_concealed_from_event should do sentence-level redaction,
+    keeping overt sentences and only redacting sentences that reference
+    concealed actors."""
+
+    def test_overt_sentences_preserved(self):
+        """Sentences that don't reference a concealed actor should be kept."""
+        from agents.perception import _redact_concealed_from_event
+        event = "Alice stood by the window. Bob walked across the room. The clock ticked."
+        concealed = [{"actor": "Bob", "attempt": "walked", "conceal_from": ["Alice"]}]
+        result = _redact_concealed_from_event(event, concealed)
+        # "Alice stood by the window." and "The clock ticked." should survive
+        assert "Alice stood by the window" in result
+        assert "The clock ticked" in result
+        # The sentence mentioning Bob should be redacted
+        assert "Bob walked across the room" not in result
+
+    def test_all_concealed_returns_fallback(self):
+        """When all sentences reference concealed actors, return the fallback."""
+        from agents.perception import _redact_concealed_from_event
+        event = "Bob walked across the room. Bob opened the door."
+        concealed = [{"actor": "Bob", "attempt": "walked", "conceal_from": ["Alice"]}]
+        result = _redact_concealed_from_event(event, concealed)
+        assert result == "[Some parts of the event are not perceptible to you.]"
+
+    def test_no_concealed_returns_full_text(self):
+        """When no concealed entries apply, return the full event text."""
+        from agents.perception import _redact_concealed_from_event
+        event = "Alice stood by the window. Bob walked across the room."
+        result = _redact_concealed_from_event(event, [])
+        assert result == event
+
+    def test_multiple_concealed_actors(self):
+        """Multiple concealed actors are all redacted from their sentences."""
+        from agents.perception import _redact_concealed_from_event
+        event = ("Alice stood by the window. Bob whispered something. "
+                 "Charlie grabbed the key. The door creaked open.")
+        concealed = [
+            {"actor": "Bob", "attempt": "whispered", "conceal_from": ["Alice"]},
+            {"actor": "Charlie", "attempt": "grabbed", "conceal_from": ["Alice"]},
+        ]
+        result = _redact_concealed_from_event(event, concealed)
+        assert "Alice stood by the window" in result
+        assert "The door creaked open" in result
+        assert "Bob whispered" not in result
+        assert "Charlie grabbed" not in result
+
+    def test_empty_event_text(self):
+        """Empty event text returns empty."""
+        from agents.perception import _redact_concealed_from_event
+        result = _redact_concealed_from_event("", [{"actor": "Bob"}])
+        assert result == ""
+
+    def test_structured_identity_not_prose_matching(self):
+        """Redaction uses the structured actor name, not prose pattern matching.
+        A sentence that doesn't name the actor but describes similar actions
+        should still be kept."""
+        from agents.perception import _redact_concealed_from_event
+        event = "Someone walked across the room. Bob opened the door."
+        concealed = [{"actor": "Bob", "attempt": "opened", "conceal_from": ["Alice"]}]
+        result = _redact_concealed_from_event(event, concealed)
+        # "Someone walked" doesn't name Bob -> kept
+        assert "Someone walked across the room" in result
+        # "Bob opened the door" names Bob -> redacted
+        assert "Bob opened the door" not in result

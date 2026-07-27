@@ -642,6 +642,15 @@ def _reproduces_withheld(quote, withheld):
 
 
 def _present_others(ctx):
+    """Co-located character names for the background payload, gated by the
+    player's recognition map.  Without this gate the canonical names of
+    characters the player has not met leaked into the background presence's
+    payload (and thence into its authored dialogue, which the player reads) --
+    the same identity-leak class _unknown_actor_label exists to close
+    everywhere else in the pipeline.  An unrecognized character is rendered
+    as their appearance-derived label or "someone" rather than their
+    canonical name, mirroring the recognition gate in
+    agents/loops.py:deterministic_micro_perception."""
     present_others = []
     pers_name = None
     try:
@@ -652,11 +661,30 @@ def _present_others(ctx):
         pass
     if pers_name:
         present_others.append(pers_name)
+    # Player's known map: canonical names they recognize.
+    known_map = {}
+    try:
+        known_map = wget(ctx.chat.id, "known", {}) or {}
+    except Exception:
+        pass
+    player_known = set(known_map.get(pers_name) or []) if pers_name else set()
+    try:
+        from agents.common import _unknown_actor_label
+    except Exception:
+        _unknown_actor_label = lambda name, app=None: "someone"
     for row in ctx.cast:
         try:
             import json as _json
-            from character_schema import character_name
-            present_others.append(character_name(_json.loads(row["sheet"])))
+            from character_schema import character_name, character_appearance
+            sh = _json.loads(row["sheet"])
+            cname = character_name(sh)
+            if cname in player_known or cname == pers_name:
+                present_others.append(cname)
+            else:
+                # Unrecognized: use appearance label or "someone".
+                appearance = character_appearance(sh)
+                label = _unknown_actor_label(cname, appearance)
+                present_others.append(label)
         except Exception:
             continue
     return present_others

@@ -1481,14 +1481,52 @@ def _redact_concealed_from_event(event_text, concealed_for_this_perceiver):
     Structural redaction: instead of trusting the perception LLM to ignore
     concealed actions described in the omniscient resolved_event prose, we
     strip the offending sentences BEFORE the text reaches the payload.
+
+    D1/D2: sentence-level redaction.  Previously the entire paragraph was
+    withheld whenever even one concealed act was present.  Now we split
+    the event text into sentences and redact only those that reference a
+    concealed actor (using the actor's name from the structured
+    ``concealed_for_this_perceiver`` list, not prose matching).  Overt
+    sentences survive.  If no sentences survive, the fallback message is
+    returned.
     """
     if not event_text or not concealed_for_this_perceiver:
         return event_text
-    # Pronouns, paraphrase and sentence splitting make selective prose
-    # subtraction unsound. Withhold the omniscient paragraph whenever even one
-    # concealed act is outside this observer's budget; overt structured
-    # actions/dialogue are re-injected later through physical channel gates.
-    return "[Some parts of the event are not perceptible to you.]"
+
+    # Build the set of concealed actor names (casefolded) from the
+    # structured concealed list -- these are the identities whose actions
+    # must not appear in this observer's event text.
+    concealed_names = set()
+    for entry in concealed_for_this_perceiver:
+        actor = str((entry or {}).get("actor") or "").strip()
+        if actor:
+            concealed_names.add(actor.casefold())
+
+    if not concealed_names:
+        return event_text
+
+    # Split into sentences.  Use the same sentence-splitting regex as the
+    # observation pipeline for consistency.
+    sentences = [s.strip() for s in _SENTENCE_SPLIT.split(event_text) if s.strip()]
+    if not sentences:
+        # No sentence splitting possible (e.g. a single clause); fail closed.
+        return "[Some parts of the event are not perceptible to you.]"
+
+    kept = []
+    for sentence in sentences:
+        folded = sentence.casefold()
+        # Check if this sentence references any concealed actor by name.
+        references_concealed = any(
+            re.search(rf"\b{re.escape(name)}\b", folded)
+            for name in concealed_names
+        )
+        if not references_concealed:
+            kept.append(sentence)
+
+    if not kept:
+        return "[Some parts of the event are not perceptible to you.]"
+
+    return " ".join(kept)
 
 def perception_outcome(ctx, nonce):
     chat = ctx.chat
