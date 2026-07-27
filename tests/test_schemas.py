@@ -79,6 +79,22 @@ def test_director_resolve_conditions_as_list_of_dicts_is_grouped():
         ],
     }
 
+def test_director_resolve_condition_scalar_state_is_safely_normalized():
+    report = validate_llm_output_strict(
+        "director_resolve",
+        {
+            "resolved_event": "Mara falls asleep.",
+            "state_diff": {"conditions": {"sleeping_mara": [{
+                "subject_id": "Mara", "kind": "awareness",
+                "state": "asleep",
+            }]}},
+        },
+    )
+
+    assert report.valid, report.errors
+    condition = report.output["state_diff"]["conditions"]["sleeping_mara"][0]
+    assert condition["state"] == {}
+
 def test_director_resolve_state_diff_dict_fields_as_empty_lists_are_coerced():
     report = validate_llm_output_strict(
         "director_resolve",

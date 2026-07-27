@@ -1942,114 +1942,117 @@ def apply_lorebook_plan(plan, chat_id=None, root_id=None):
     created unreachable and no entry is silently dropped.
     """
     from memory import add_lore, update_lore, add_lorebook_link
-    from db import q, qi
+    from db import q, qi, transaction
 
     created_books = {}
     created_entries = []
     created_links = []
-    
-    # Process book ops
-    for book_op in plan.get("book_ops", []):
-        if book_op.get("op") != "create":
-            continue
-        parent_id = _plan_parent_id(
-            book_op.get("parent_id"), created_books, root_id, chat_id
-        )
 
-        bid = qi(
-            "INSERT INTO lorebooks(name,chat_id,book_type,summary,parent_id,inheritance_mode,sort_order) VALUES(?,?,?,?,?,?,?)",
-            (
-                book_op.get("name", "New book"),
-                chat_id,
-                book_op.get("book_type", "general"),
-                book_op.get("summary", ""),
-                parent_id,
-                book_op.get("inheritance_mode", "inherit"),
-                book_op.get("sort_order", 0),
-            ),
-        )
-        created_books[book_op.get("temp_id", f"book_{bid}")] = bid
-    
-    # Process entry ops
-    for entry_op in plan.get("entry_ops", []):
-        book_id = entry_op.get("book_id") or entry_op.get("book_temp_id")
-        if isinstance(book_id, str) and book_id in created_books:
-            book_id = created_books[book_id]
-        elif isinstance(book_id, str):
-            book_id = None
-
-        # An unresolvable book reference used to drop the entry on the floor.
-        # File it in the book the plan was generated for instead: misfiled is
-        # fixable by hand, silently discarded is not.
-        if not book_id:
-            book_id = root_id
-
-        if not book_id:
-            continue
-
-        if entry_op.get("op") == "update" and entry_op.get("id"):
-            entry_id = entry_op["id"]
-            update_lore(
-                entry_id,
-                entry_op.get("keys", ""),
-                entry_op.get("content", ""),
-                category=entry_op.get("category"),
-                title=entry_op.get("title"),
-                knowledge_tag=entry_op.get("knowledge_tag"),
-                knowledge_range=entry_op.get("knowledge_range"),
-                knowledge_locations=entry_op.get("knowledge_locations"),
-                importance=entry_op.get("importance", 0.5),
-                aliases=entry_op.get("aliases", []),
-                scope=entry_op.get("scope", {}),
-                relations=entry_op.get("relations", {}),
-                source_notes=entry_op.get("source_notes", ""),
+    # Wrap all write operations in a single transaction so the plan is
+    # applied atomically — a crash mid-plan rolls back everything.
+    with transaction():
+        # Process book ops
+        for book_op in plan.get("book_ops", []):
+            if book_op.get("op") != "create":
+                continue
+            parent_id = _plan_parent_id(
+                book_op.get("parent_id"), created_books, root_id, chat_id
             )
-            created_entries.append(entry_id)
-        elif entry_op.get("op") == "create":
-            eid = add_lore(
-                book_id,
-                entry_op.get("keys", ""),
-                entry_op.get("content", ""),
-                category=entry_op.get("category", "other"),
-                title=entry_op.get("title"),
-                knowledge_tag=entry_op.get("knowledge_tag"),
-                knowledge_range=entry_op.get("knowledge_range"),
-                knowledge_locations=entry_op.get("knowledge_locations"),
-                importance=entry_op.get("importance", 0.5),
-                aliases=entry_op.get("aliases", []),
-                scope=entry_op.get("scope", {}),
-                relations=entry_op.get("relations", {}),
-                source_notes=entry_op.get("source_notes", ""),
+
+            bid = qi(
+                "INSERT INTO lorebooks(name,chat_id,book_type,summary,parent_id,inheritance_mode,sort_order) VALUES(?,?,?,?,?,?,?)",
+                (
+                    book_op.get("name", "New book"),
+                    chat_id,
+                    book_op.get("book_type", "general"),
+                    book_op.get("summary", ""),
+                    parent_id,
+                    book_op.get("inheritance_mode", "inherit"),
+                    book_op.get("sort_order", 0),
+                ),
             )
-            created_entries.append(eid)
-    
-    # Process link ops
-    for link_op in plan.get("link_ops", []):
-        source_id = link_op.get("source_id") or link_op.get("source_book_id")
-        target_id = link_op.get("target_id") or link_op.get("target_book_id")
-        
-        if isinstance(source_id, str) and source_id in created_books:
-            source_id = created_books[source_id]
-        if isinstance(target_id, str) and target_id in created_books:
-            target_id = created_books[target_id]
-        
-        if not isinstance(source_id, int) or not isinstance(target_id, int):
-            continue
-        
-        try:
-            lid = add_lorebook_link(
-                source_id, target_id,
-                relation_type=link_op.get("relation_type", "related"),
-                label=link_op.get("label", ""),
-                notes=link_op.get("notes", ""),
-                bidirectional=link_op.get("bidirectional", True),
-                follow_for_retrieval=link_op.get("follow_for_retrieval", True),
-                weight=link_op.get("weight", 0.75),
-            )
-            created_links.append(lid)
-        except Exception:
-            pass
-    
+            created_books[book_op.get("temp_id", f"book_{bid}")] = bid
+
+        # Process entry ops
+        for entry_op in plan.get("entry_ops", []):
+            book_id = entry_op.get("book_id") or entry_op.get("book_temp_id")
+            if isinstance(book_id, str) and book_id in created_books:
+                book_id = created_books[book_id]
+            elif isinstance(book_id, str):
+                book_id = None
+
+            # An unresolvable book reference used to drop the entry on the floor.
+            # File it in the book the plan was generated for instead: misfiled is
+            # fixable by hand, silently discarded is not.
+            if not book_id:
+                book_id = root_id
+
+            if not book_id:
+                continue
+
+            if entry_op.get("op") == "update" and entry_op.get("id"):
+                entry_id = entry_op["id"]
+                update_lore(
+                    entry_id,
+                    entry_op.get("keys", ""),
+                    entry_op.get("content", ""),
+                    category=entry_op.get("category"),
+                    title=entry_op.get("title"),
+                    knowledge_tag=entry_op.get("knowledge_tag"),
+                    knowledge_range=entry_op.get("knowledge_range"),
+                    knowledge_locations=entry_op.get("knowledge_locations"),
+                    importance=entry_op.get("importance", 0.5),
+                    aliases=entry_op.get("aliases", []),
+                    scope=entry_op.get("scope", {}),
+                    relations=entry_op.get("relations", {}),
+                    source_notes=entry_op.get("source_notes", ""),
+                )
+                created_entries.append(entry_id)
+            elif entry_op.get("op") == "create":
+                eid = add_lore(
+                    book_id,
+                    entry_op.get("keys", ""),
+                    entry_op.get("content", ""),
+                    category=entry_op.get("category", "other"),
+                    title=entry_op.get("title"),
+                    knowledge_tag=entry_op.get("knowledge_tag"),
+                    knowledge_range=entry_op.get("knowledge_range"),
+                    knowledge_locations=entry_op.get("knowledge_locations"),
+                    importance=entry_op.get("importance", 0.5),
+                    aliases=entry_op.get("aliases", []),
+                    scope=entry_op.get("scope", {}),
+                    relations=entry_op.get("relations", {}),
+                    source_notes=entry_op.get("source_notes", ""),
+                )
+                created_entries.append(eid)
+
+        # Process link ops
+        for link_op in plan.get("link_ops", []):
+            source_id = link_op.get("source_id") or link_op.get("source_book_id")
+            target_id = link_op.get("target_id") or link_op.get("target_book_id")
+
+            if isinstance(source_id, str) and source_id in created_books:
+                source_id = created_books[source_id]
+            if isinstance(target_id, str) and target_id in created_books:
+                target_id = created_books[target_id]
+
+            if not isinstance(source_id, int) or not isinstance(target_id, int):
+                continue
+
+            try:
+                lid = add_lorebook_link(
+                    source_id, target_id,
+                    relation_type=link_op.get("relation_type", "related"),
+                    label=link_op.get("label", ""),
+                    notes=link_op.get("notes", ""),
+                    bidirectional=link_op.get("bidirectional", True),
+                    follow_for_retrieval=link_op.get("follow_for_retrieval", True),
+                    weight=link_op.get("weight", 0.75),
+                )
+                created_links.append(lid)
+            except Exception:
+                pass
+
     return {
         "books_created": len(created_books),
         "entries_created": len(created_entries),

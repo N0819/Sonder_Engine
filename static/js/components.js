@@ -25,6 +25,11 @@ function el(tag, attrs = {}, ...kids) {
 // silently drop every already-attached event listener) so closeModal()
 // can restore them instead of just hiding the whole dialog.
 if (!S.modalStack) S.modalStack = [];
+// modalToken is a monotonic allocator: an owner id is minted once and never
+// reused. modalOwnerToken is the modal instance currently mounted in the
+// singleton shell; unlike the allocator, it may return to a saved parent when
+// a stacked child closes.
+S.modalOwnerToken = null;
 
 // ---- Book covers ----
 // Purely decorative, and only the tavern theme draws it: that theme binds
@@ -73,9 +78,10 @@ function modal(title, build, opts = {}) {
       nodes: [...body.childNodes],
       wide: box.classList.contains("wide"),
       cover: box.dataset.cover,
+      ownerToken: S.modalOwnerToken,
     });
   }
-  S.modalToken++;
+  S.modalOwnerToken = ++S.modalToken;
   $("#modaltitle").textContent = title;
   box.classList.toggle("wide", !!opts.wide);
   // Consumed, not left standing: the next dialog is only this book's if it
@@ -90,6 +96,21 @@ function modal(title, build, opts = {}) {
     if (opts.autoFocus !== false && f) f.focus();
   });
 }
+
+// Capture ownership of the singleton modal across asynchronous work. A child
+// temporarily invalidates its stacked parent, but closing that child restores
+// the parent's unique owner id along with its live DOM, so the parent's pending
+// work may safely finish. Closed/hidden owners and permanently superseded
+// children still fail this check.
+function modalOwnership(body = $("#modalbody")) {
+  const ownerToken = S.modalOwnerToken;
+  return () => (
+    S.modalOwnerToken === ownerToken
+    && body === $("#modalbody")
+    && !$("#modal").classList.contains("hidden")
+  );
+}
+
 function closeModal() {
   S.modalToken++;
   const body = $("#modalbody");
@@ -102,8 +123,10 @@ function closeModal() {
     // The cover belongs to the dialog, so it unwinds with it -- otherwise
     // closing a confirm re-showed the parent bound in the confirm's cover.
     $("#modalbox").dataset.cover = prev.cover || "";
+    S.modalOwnerToken = prev.ownerToken;
     return;
   }
+  S.modalOwnerToken = null;
   $("#modal").classList.add("hidden");
   $("#modalbox").classList.remove("wide");
   body.innerHTML = "";
@@ -115,6 +138,7 @@ function closeModal() {
 function closeAllModals() {
   S.modalStack.length = 0;
   S.modalToken++;
+  S.modalOwnerToken = null;
   $("#modal").classList.add("hidden");
   $("#modalbox").classList.remove("wide");
   $("#modalbody").innerHTML = "";
@@ -444,13 +468,20 @@ function modelCombobox(providers, cp, cm, onChange, opts) {
   const mwrap = el("div", { style: "position:relative;flex:1" }, minput, dd);
   let models = [];
   let onlyIncluded = false;
+  let loadSeq = 0;
   function emitChange() {
     if (onChange) onChange({ provider: psel.value ? +psel.value : null, model: minput.value || null });
   }
   async function load(pid) {
     if (!pid) { models = []; return }
+    const seq = ++loadSeq;
     dd.innerHTML = ""; dd.style.display = "block"; dd.append(el("div", { class: "dd-opt dim" }, "Loading…"));
-    models = await fetchList(pid); showDD();
+    const loaded = await fetchList(pid);
+    // Provider changes can overlap slow catalogue requests. Only the newest
+    // request for the provider still selected may replace the dropdown.
+    if (seq !== loadSeq || String(psel.value) !== String(pid)) return;
+    models = loaded;
+    showDD();
   }
   function showDD() {
     const q = minput.value.toLowerCase();
@@ -477,7 +508,15 @@ function modelCombobox(providers, cp, cm, onChange, opts) {
       dd.append(o);
     }
   }
-  minput.onfocus = async () => { if (psel.value && !cache[psel.value]) await load(+psel.value); showDD() };
+  minput.onfocus = async () => {
+    if (psel.value && !cache[psel.value]) {
+      // load() renders only if this request still owns the selected provider.
+      // Do not unconditionally reopen the dropdown after a stale load returns.
+      await load(+psel.value);
+    } else {
+      showDD();
+    }
+  };
   minput.oninput = () => { showDD(); emitChange() };
   const onDocClick = e => {
     // Self-remove once this combobox's DOM is detached (modal closed/rebuilt),
@@ -486,7 +525,19 @@ function modelCombobox(providers, cp, cm, onChange, opts) {
     if (!mwrap.contains(e.target)) dd.style.display = "none";
   };
   document.addEventListener("click", onDocClick);
-  psel.onchange = () => { minput.value = ""; if (psel.value) load(+psel.value); emitChange() };
+  psel.onchange = () => {
+    minput.value = "";
+    models = [];
+    if (psel.value) {
+      load(+psel.value);
+    } else {
+      // Clearing the provider also supersedes any catalogue still in flight.
+      loadSeq++;
+      dd.innerHTML = "";
+      dd.style.display = "none";
+    }
+    emitChange();
+  };
   if (cp) load(+cp);
   return { psel, mwrap, minput, read: () => ({ provider: psel.value ? +psel.value : null, model: minput.value || null }) };
 }

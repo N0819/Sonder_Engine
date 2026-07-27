@@ -131,6 +131,9 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 HOST_COOKIE = "fe_host"
 GUEST_COOKIE = "fe_guest"
 HOST_COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # matches guest.HOST_SESSION_TTL
+# Cap password length before PBKDF2 hashing to prevent CPU-exhaustion DoS.
+# 1024 chars is generous for a passphrase while keeping hashing bounded.
+MAX_PASSWORD_LENGTH = 1024
 PUBLIC_API_PATHS = {
     "/api/join", "/api/auth/status", "/api/auth/setup",
     "/api/auth/login", "/api/auth/logout",
@@ -179,6 +182,11 @@ def auth_setup(username: str = Body(""), password: str = Body("")):
         return JSONResponse({"detail": "Username is required"}, status_code=400)
     if not password:
         return JSONResponse({"detail": "Password is required"}, status_code=400)
+    if len(password) > MAX_PASSWORD_LENGTH:
+        return JSONResponse(
+            {"detail": f"Password must be at most {MAX_PASSWORD_LENGTH} characters"},
+            status_code=400,
+        )
     token = guest.create_host_account(username, password)
     if token is None:
         return JSONResponse({"detail": "Account already exists"}, status_code=409)
@@ -189,6 +197,11 @@ def auth_login(username: str = Body(""), password: str = Body("")):
     if guest.login_rate_limited():
         return JSONResponse(
             {"detail": "Too many attempts, wait a minute"}, status_code=429
+        )
+    if len(password) > MAX_PASSWORD_LENGTH:
+        return JSONResponse(
+            {"detail": f"Password must be at most {MAX_PASSWORD_LENGTH} characters"},
+            status_code=400,
         )
     # Generic failure detail: don't reveal whether the username or the
     # password was the wrong half.
@@ -1127,7 +1140,16 @@ def lorebook_link_create(lid: int, body: dict = Body(...)):
 
 @app.put("/api/lorebook_links/{link_id}")
 def lorebook_link_update(link_id: int, body: dict = Body(...)):
-    update_lorebook_link(link_id, **body)
+    update_lorebook_link(
+        link_id,
+        relation_type=body.get("relation_type"),
+        label=body.get("label"),
+        notes=body.get("notes"),
+        bidirectional=body.get("bidirectional"),
+        follow_for_retrieval=body.get("follow_for_retrieval"),
+        weight=body.get("weight"),
+        sort_order=body.get("sort_order"),
+    )
     return {"ok": True}
 
 @app.delete("/api/lorebook_links/{link_id}")
@@ -1853,17 +1875,29 @@ def chat_del(cid: int):
     # A still-running pipeline would keep writing into rows we're deleting
     # (and re-create orphan world rows for the dead chat id).
     _require_chat_idle(cid)
-    for t in q("SELECT id FROM turns WHERE chat_id=?", (cid,)):
-        for s in q("SELECT id FROM steps WHERE turn_id=?", (t["id"],)):
-            qi("DELETE FROM variants WHERE step_id=?", (s["id"],))
-        qi("DELETE FROM steps WHERE turn_id=?", (t["id"],))
-    for tbl in ("turns", "events", "world", "checkpoints", "chat_chars", "chat_lorebooks"):
-        qi(f"DELETE FROM {tbl} WHERE chat_id=?", (cid,))
-    qi("DELETE FROM memory_retrieval_fts WHERE chat_id=?", (str(cid),))
-    qi("DELETE FROM memories WHERE chat_id=?", (cid,))
-    qi("DELETE FROM memory_summaries WHERE chat_id=?", (cid,))
-    qi("DELETE FROM lorebooks WHERE chat_id=?", (cid,))
-    qi("DELETE FROM chats WHERE id=?", (cid,))
+    with transaction():
+        # Cascade through turns → steps → variants (no chat_id on steps/variants)
+        for t in q("SELECT id FROM turns WHERE chat_id=?", (cid,)):
+            for s in q("SELECT id FROM steps WHERE turn_id=?", (t["id"],)):
+                qi("DELETE FROM variants WHERE step_id=?", (s["id"],))
+            qi("DELETE FROM steps WHERE turn_id=?", (t["id"],))
+        # Tables with a direct chat_id foreign key
+        for tbl in (
+            "turns", "events", "world", "checkpoints",
+            "chat_chars", "chat_lorebooks", "chat_personas",
+            "chat_char_frames", "turn_player_inputs", "frames",
+            "guest_grants", "scheduled_events", "room_registry",
+            "world_events", "world_entities", "world_placements",
+            "world_conditions", "fiction_worlds", "fiction_locations",
+            "transit_edges",
+        ):
+            qi(f"DELETE FROM {tbl} WHERE chat_id=?", (cid,))
+        # FTS table stores chat_id as text
+        qi("DELETE FROM memory_retrieval_fts WHERE chat_id=?", (str(cid),))
+        qi("DELETE FROM memories WHERE chat_id=?", (cid,))
+        qi("DELETE FROM memory_summaries WHERE chat_id=?", (cid,))
+        qi("DELETE FROM lorebooks WHERE chat_id=?", (cid,))
+        qi("DELETE FROM chats WHERE id=?", (cid,))
     return {"ok": True}
 
 @app.get("/api/chats/{cid}")
@@ -2287,32 +2321,37 @@ def survival_put(cid: int, body: dict = Body(...)):
     if not chat:
         raise HTTPException(404, "Chat not found")
 
+    # This setting and its seeded scene state are one authoring edit. Do not
+    # let either race an active pipeline, and do not commit the toggles if
+    # seeding the scene fails.
+    _require_chat_idle(cid)
     enabled = bool(body.get("enabled"))
-    set_survival_enabled(cid, enabled)
-    if "show_npcs" in body:
-        set_survival_shows_npcs(cid, bool(body.get("show_npcs")))
+    with transaction():
+        set_survival_enabled(cid, enabled)
+        if "show_npcs" in body:
+            set_survival_shows_npcs(cid, bool(body.get("show_npcs")))
 
-    if enabled:
-        # Seed the bodies this story knows about. Without this, switching the
-        # feature on did nothing visible: the table only came into existence
-        # when the Director wrote a vitals patch, and on a quiet turn it had no
-        # reason to -- so the tracker stayed empty and the tick had nothing to
-        # advance. Existing records are untouched, so re-enabling resumes.
-        _require_chat_idle(cid)
-        chat = dict(chat)
-        scene = get_scene(cid, chat)
-        names = [persona_name(persona_of(chat))]
-        for row in q(
-            "SELECT ch.sheet FROM chat_chars cc JOIN characters ch "
-            "ON ch.id = cc.char_id WHERE cc.chat_id=? AND cc.status='active'",
-            (cid,),
-        ):
-            try:
-                names.append(character_name(json.loads(row["sheet"])))
-            except (TypeError, ValueError):
-                continue
-        seed_vitals(scene, names)
-        wset(cid, "scene", scene)
+        if enabled:
+            # Seed the bodies this story knows about. Without this, switching
+            # the feature on did nothing visible: the table only came into
+            # existence when the Director wrote a vitals patch, and on a quiet
+            # turn it had no reason to -- so the tracker stayed empty and the
+            # tick had nothing to advance. Existing records are untouched, so
+            # re-enabling resumes.
+            chat = dict(chat)
+            scene = get_scene(cid, chat)
+            names = [persona_name(persona_of(chat))]
+            for row in q(
+                "SELECT ch.sheet FROM chat_chars cc JOIN characters ch "
+                "ON ch.id = cc.char_id WHERE cc.chat_id=? AND cc.status='active'",
+                (cid,),
+            ):
+                try:
+                    names.append(character_name(json.loads(row["sheet"])))
+                except (TypeError, ValueError):
+                    continue
+            seed_vitals(scene, names)
+            wset(cid, "scene", scene)
 
     return {"enabled": enabled, "show_npcs": survival_shows_npcs(cid)}
 
@@ -3450,14 +3489,16 @@ def turn_new(cid: int, body: dict = Body(...)):
         # idx allocation is chat-GLOBAL (play order across every frame), so
         # two frames creating turns at nearly the same moment race on
         # computing "current max + 1" -- wrapped in a transaction so the
-        # read-compute-insert is atomic against any other concurrent writer,
-        # not just against itself.
+        # read-compute-checkpoint-insert is atomic against any other concurrent
+        # writer, not just against itself.  The checkpoint must be in this same
+        # transaction: if capturing it fails, no stepless turn may survive to
+        # block the frame's next submission.
         with transaction():
             last = _latest_turn(cid)
             idx = (last["idx"] + 1) if last else 0
+            ensure_checkpoint(cid, idx)
             tid = qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
                      (cid, idx, _player_input(body), time.time(), frame_id))
-        ensure_checkpoint(cid, idx)
     except BaseException:
         # Release the slot we grabbed if row/checkpoint creation failed, so
         # a later request isn't wrongly rejected as "already running".

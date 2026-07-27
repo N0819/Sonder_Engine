@@ -2,6 +2,224 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A curtain was a window.** `_BARRIER_ALIASES` in `spatial.py` mapped
+  "curtain" to `open` — fully transparent, fully passable — before mapping it
+  to `membrane`. Python dicts return the first match, so every curtain variant
+  resolved to the one barrier value that grants full visual sight, the exact
+  opposite of what a curtain does. A curtained doorway rendered as a gap in
+  the wall: sight, sound and passage all ungated, the occupant behind it on
+  full view. The `membrane` mapping existed — it was simply unreachable. Fixed
+  by removing the duplicate `open` entry so all curtain variants resolve to
+  `membrane`, the opaque-but-passable barrier introduced in alpha5.0 for
+  exactly this class of threshold.
+
+- **Scent had no barrier vocabulary.** `spatial.py` carried `_SIGHT_BARRIERS`
+  for sight and `_AMBIENT_BARRIERS` for sound, but no equivalent for scent.
+  Every barrier that stopped eyes and ears let scent through at full strength,
+  so a body sealed inside a membrane enclosure — opaque, muffled, airtight by
+  intent — broadcast its scent to the surrounding room as though the wall was
+  not there. Scent is the channel with the shortest realistic range and the
+  one most obviously blocked by a sealed container, which makes its absence
+  the sharpest gap: the engine modelled what a nose can reach in less detail
+  than what an ear can. Fixed by adding `_SCENT_BARRIERS` following the same
+  pattern as sight and sound, a `scent_level()` function, and a
+  `scent_channel_to_sources` map in perception, so a sealed enclosure
+  attenuates scent the same way it attenuates sound — not perfectly, but
+  deliberately, and never at full strength through a wall that stops
+  everything else.
+
+- **Concealed actions leaked through the resolved event text.**
+  `perception_outcome` in `agents/perception.py` passed the omniscient
+  `resolved_event` to the perception LLM — the same event object that records
+  every action taken, regardless of concealment. The LLM read concealed acts
+  directly and resolved them into perceiver views through the touch channel,
+  producing descriptions of acts the perceiver had no sight of but could
+  "feel" happening. The outcome pass is the second half of perception (the
+  first being the onset pass), and it had no structural gate on concealed
+  content — the onset pass had one, the outcome pass did not. Fixed with
+  `_redact_concealed_from_event()`, which structurally removes concealed
+  action sentences from the event text per-perceiver before the LLM sees it.
+  The redaction is per-source, not global: a concealed act is withheld from
+  perceivers who cannot see it and preserved for those who can, because the
+  same event feeds every perceiver's call.
+
+- **Concealed actions leaked through six onset-pass payload paths.** The onset
+  pass had a gate on `actor_not_visible`, but six separate paths in the payload
+  still carried concealed actions to the LLM: `action_desc`,
+  `observer_sequence`, `observer_action_attempt`, `player_speech`, and the
+  scalar `speech` / `speech_volume` fields. Each was built from the
+  unfiltered action list, so a concealed act appeared in the payload as its
+  own declared description, its sequence position, its attempt outcome, and
+  its spoken content — all the channels a model needs to render the act into
+  prose. The single `actor_not_visible` gate covered one path; the other six
+  walked past it. Fixed by filtering all six paths against the concealment set
+  and adding a `concealed_actions` list to the payload, so the model is told
+  what is withheld rather than being handed it and asked to ignore it.
+
+- **Touch-only perception named the act through the surface.** Even when
+  concealed actions were gated from sight, the perception LLM resolved
+  touch-only sensations into descriptions of what was being done — "fingers
+  working between folds" when the perceiver felt only a tremor through
+  contact. The touch channel is open, high-bandwidth, and carries no
+  information about *what* caused the sensation, only that a sensation
+  occurred. The LLM bridged that gap by inference, turning a pressure change
+  into a named act, which is the layer collapse the engine exists to prevent:
+  perception handing over a conclusion the character agent should be drawing
+  with its own uncertainty. Two fixes, structural and prompt-level. The
+  structural fix is `_surface_translate_event()`, which replaces act-naming
+  sentences for touch-only sources with neutral surface-sensation descriptions
+  — what the skin reports, not what the muscles producing it are doing. The
+  prompt rule `TOUCH-ONLY PERCEPTION IS CAUSE-BLIND` names the boundary
+  directly: touch resolves at the surface and licenses nothing further, the
+  same principle established in alpha5.0.1 but enforced structurally rather
+  than through wording alone.
+
+- **A torch-holder in a dark room could not see across it.**
+  `_source_channels` in `perception.py` used `has_visual(rel)` — a room-level
+  ambient light test — to decide whether a perceiver could see a source. In a
+  dark room, `has_visual` returns false for everyone, so a character holding a
+  lit torch — whose `light_radius` of `spot` lights themselves and anyone
+  standing with them — was blind to someone standing five metres away in the
+  same dark room. The torch illuminates its holder; the holder's sight should
+  reach as far as the torchlight does. The bug was using a room-level query
+  for a per-body property: `has_visual` asks "is there light in this room,"
+  not "is there light where this body is." Fixed by using
+  `visual_level_between()` — the per-body light function added in alpha5.0 —
+  which accounts for carried light sources and local illumination. A
+  fallback to `has_visual` covers the case where the observer's position is
+  untracked, so an entity with no derived position still gets the room-level
+  answer rather than darkness by default.
+
+- **Lorebook plan application was not atomic.** `apply_lorebook_plan` in
+  `importers.py` performed multiple database writes — inserting books,
+  entries, and links — each auto-committing independently. A crash mid-plan
+  left empty books in the database with no entries and no rollback: half a
+  lorebook tree written to disk, the other half lost to the crash, and no way
+  to distinguish the partial state from a complete one. Fixed by wrapping the
+  entire plan in `with transaction()`, so either every book, entry and link
+  is written or none are. A failed apply leaves the database exactly as it
+  was before the call, which is the state the recovery mechanism in alpha4.3.1
+  expects to find.
+
+- **Checkpoint operations had TOCTOU and read-modify-write races.**
+  `ensure_checkpoint` tested existence then inserted in two separate
+  autocommits — a classic time-of-check-to-time-of-use gap where two
+  concurrent turns could both find no checkpoint and both insert.
+  `refresh_checkpoint` read the current checkpoint, modified it, and wrote it
+  back in separate autocommits — a read-modify-write race where one update
+  could silently overwrite another. Both are on the checkpoint path, which
+  runs on every turn, so the race window is small but non-zero and the
+  consequence is a checkpoint that does not reflect the state it was supposed
+  to capture. Fixed by wrapping both in `with transaction()`, so the
+  check-and-insert and the read-modify-write are each atomic.
+
+- **Orphan step and variant deletion was not transactional.**
+  `agents/storage.py` deleted a variant and its parent step in two separate
+  autocommits. A crash between them left a step with zero variants — an
+  orphan that nothing could read and nothing would clean up, since the variant
+  deletion already succeeded. The step is the parent; the variant is the
+  child; deleting both is one operation or it is none. Fixed with a new
+  `delete_step()` helper that wraps both deletions in `with transaction()`,
+  so a step and its variants are removed together or not at all.
+
+- **Abort registration had a lock race.** The `ABORTS` dict in
+  `agents/runtime.py` was accessed under `_ABORTS_LOCK` in most paths, but
+  not when an abort event was pre-created by the caller before the runtime
+  looked it up. The pre-created event was written to `ABORTS` without holding
+  the lock, so two concurrent calls could race: one reading `ABORTS` under the
+  lock, one writing without it, with no guarantee the reader saw the writer's
+  entry or vice versa. Fixed by wrapping every access to `ABORTS` in
+  `_ABORTS_LOCK`, including the pre-created-event path, so the dict is never
+  read or written outside the lock.
+
+- **A dismissed character crashed the step executor.**
+  `next(c for c in ctx.cast if c["id"] == cid)` in the character step
+  executor raised `StopIteration` — an uncaught exception — when a character
+  was dismissed between plan construction and plan execution. The plan was
+  built against a cast that included the character; by the time the step ran,
+  the character was gone from `ctx.cast`, and the generator found no match.
+  A dismissal is an authoring action that can happen at any time, so the plan
+  executor must tolerate a cast member disappearing between build and run.
+  Fixed with `next((c for c in ctx.cast if c["id"] == cid), None)` and a
+  guard that skips the step when the character is no longer present, so a
+  dismissal mid-pipeline ends that character's participation cleanly rather
+  than crashing the turn.
+
+- **Chat deletion orphaned fourteen tables.** `chat_del` in `app.py` deleted
+  the chat row and a handful of associated records but left fourteen tables
+  uncleaned: `chat_personas`, `turn_player_inputs`, `frames`,
+  `room_registry`, `scheduled_events`, `guest_grants`, `world_events`,
+  `world_entities`, `world_placements`, `world_conditions`, `fiction_worlds`,
+  `fiction_locations`, `transit_edges`, and `chat_char_frames`. Each of these
+  carries chat-scoped data that becomes orphaned the moment the chat row is
+  gone — no cascade, no foreign key enforcement, no cleanup trigger. A
+  deleted chat left behind a full shadow of its world state, its turn
+  history, and its frame data, taking up space and returning stale results
+  from any query that scans by chat id. Fixed by adding cascade cleanup for
+  all fourteen tables wrapped in `with transaction()`, so deleting a chat
+  removes everything it owned or nothing at all.
+
+- **Async streaming paths were missing mid-stream error handling.** The sync
+  streaming functions in `providers.py` — `_sse_openai_sync`,
+  `_sse_anthropic_sync`, `_chat_complete_sync_once` — carried three error
+  checks the async versions did not: a mid-stream error event check that
+  detected provider-side errors signalled inside the SSE stream, a
+  placeholder-JSON retry that handled providers returning `{"error": ...}`
+  in a response body that should have been an event stream, and a content
+  filter check that caught rejection signals the provider embedded in a
+  otherwise well-formed chunk. The async paths — `_sse_openai_async`,
+  `_sse_anthropic_async`, `_chat_complete_async_once` — were written as
+  parallel implementations, not as shared code, and the three checks were
+  never ported. An async stream that hit any of these conditions would hang
+  or emit malformed output rather than failing cleanly. Fixed by porting all
+  three checks to the async paths, so sync and async streaming fail and
+  recover identically.
+
+- **`lorebook_link_update` accepted unvalidated request body.** `app.py`
+  passed the raw request body to `update_lorebook_link` via `**body` — a
+  dictionary splat that forwarded every key the client sent, including keys
+  the function did not expect. A request with an extra key either silently
+  set an arbitrary attribute on the link record or raised a `TypeError`,
+  depending on what `update_lorebook_link` did with it. Either outcome is
+  wrong: an API endpoint should accept exactly the fields it documents and
+  reject everything else. Fixed by extracting only the seven allowed fields
+  explicitly from the body before passing them, so unvalidated input never
+  reaches the data layer.
+
+- **Password length was unbounded before PBKDF2.** `auth_setup` in `app.py`
+  accepted a password of any length and passed it directly to PBKDF2 for
+  hashing. PBKDF2 is intentionally slow — its whole purpose is to be
+  expensive — and a megabyte-length password makes it catastrophically slow.
+  A request with a very long password could consume a worker for minutes,
+  which is a denial-of-service vector that costs the attacker one HTTP
+  request. Fixed with `MAX_PASSWORD_LENGTH = 1024` and a 400 response when
+  exceeded, which is well above any legitimate password and well below the
+  threshold where PBKDF2 becomes a liability.
+
+- **Every turn ran a database query for extra players.**
+  `_chat_has_extra_players` in `agents/runtime.py` queried the database on
+  every turn to check whether a chat had more than one player participant —
+  even for single-player chats, which is the common case. The result was
+  already loaded at pipeline setup into `ctx.extra_players`, where it sat
+  available to every function that received the context. The per-turn query
+  was a redundant round-trip that paid the latency cost of a database read
+  for information already in memory. Fixed by passing `ctx.extra_players` to
+  `build_plan` instead of re-querying, so the check is a field read rather
+  than a database call.
+
+- **The Director kept only the first action per character.**
+  `agents/director.py` built `char_actions` by assigning each character's
+  action to its slot — but the slot was a scalar, so a character with
+  multiple actions in their sequence had the second overwrite the first, the
+  third overwrite the second, and so on, silently dropping every action
+  after the first. A multi-action sequence — approach, draw, strike —
+  collapsed to its opening move, and the rest of the sequence was lost
+  before any reader saw it. Fixed by appending to a list instead of
+  overwriting a scalar, so a character's full action sequence is preserved
+  and every action reaches the pipeline.
+
 ## alpha5.0.2 — Concealment is symmetric; the gate was not
 
 ### Fixed

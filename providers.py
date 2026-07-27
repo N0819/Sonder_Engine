@@ -1568,15 +1568,26 @@ async def _chat_complete_async_once(
     async with httpx.AsyncClient(timeout=_httpx_timeout()) as client:
         if sink:
             try:
-                return await _sse_openai_async(base + "/chat/completions", _headers(prov), dict(body), sink, client, role=role, model=model)
+                out = await _sse_openai_async(base + "/chat/completions", _headers(prov), dict(body), sink, client, role=role, model=model)
             except LLMError as e:
                 if e.status_code == 400:
                     b2 = dict(body)
                     if json_mode:
                         b2.pop("response_format", None)
                     b2 = _strip_extended(b2)
-                    return await _sse_openai_async(base + "/chat/completions", _headers(prov), b2, sink, client, role=role, model=model)
-                raise
+                    out = await _sse_openai_async(base + "/chat/completions", _headers(prov), b2, sink, client, role=role, model=model)
+                else:
+                    raise
+            # Same placeholder-skeleton guard as the sync streaming path:
+            # a model that "honours" response_format=json_object by
+            # streaming an all-"..." skeleton would send that skeleton to
+            # the player as prose. Retry once without json_mode -- still
+            # streaming, so the live UI keeps receiving tokens.
+            if json_mode and _is_placeholder_json(out):
+                retry_body = dict(body)
+                retry_body.pop("response_format", None)
+                out = await _sse_openai_async(base + "/chat/completions", _headers(prov), retry_body, sink, client, role=role, model=model)
+            return out
         _t0 = time.time()
         r = await client.post(base + "/chat/completions", headers=_headers(prov), json=body)
         if r.status_code == 400:
@@ -1616,6 +1627,15 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
                 j = json.loads(line)
             except Exception:
                 continue
+            # Some OpenAI-compatible backends emit an {"error": {...}} chunk
+            # mid-stream (e.g. an overload 30s in). Ignoring it silently
+            # returned the truncated prefix as a completed response, which for
+            # a JSON step could pass validation and commit truncated. Surface
+            # it as a retryable failure instead -- matches _sse_openai.
+            if isinstance(j, dict) and j.get("error"):
+                err = j["error"]
+                msg = err.get("message") if isinstance(err, dict) else str(err)
+                raise LLMError(f"provider stream error: {msg}", 0, True)
             if j.get("usage"):
                 usage = j["usage"]
             d = (j.get("choices") or [{}])[0].get("delta", {}).get("content")
@@ -1648,6 +1668,13 @@ async def _sse_anthropic_async(base, headers, body, sink, client, role=None, mod
                 j = json.loads(line)
             except Exception:
                 continue
+            # Anthropic's documented mid-stream error event (overloaded_error,
+            # etc.) -- surface as retryable rather than silently truncating.
+            # Matches _sse_anthropic.
+            if j.get("type") == "error":
+                err = j.get("error") or {}
+                msg = err.get("message") if isinstance(err, dict) else str(err)
+                raise LLMError(f"provider stream error: {msg or 'overloaded'}", 0, True)
             if j.get("type") == "message_start":
                 usage = _merge_usage(usage, (j.get("message") or {}).get("usage"))
             elif j.get("type") == "message_delta":
@@ -1711,7 +1738,11 @@ def list_models(prov):
     r = _session().get(url, headers=_headers(prov), timeout=REQUEST_TIMEOUT)
     r.raise_for_status()
     j = r.json()
-    data = j.get("data", j if isinstance(j, list) else [])
+    data = (
+        j if isinstance(j, list)
+        else j.get("data", []) if isinstance(j, dict)
+        else []
+    )
     out = []
     def zero(x):
         try:

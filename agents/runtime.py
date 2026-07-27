@@ -32,8 +32,8 @@ from .mapping import mapping_quick, mapping_stage
 from .narration import narrator, narrator_extra
 from .perception import perception_act, perception_establish, perception_outcome
 from .storage import (
-    active_content, clear_steps_stale, mark_steps_stale, save_step,
-    step_is_stale, variant_count,
+    active_content, clear_steps_stale, delete_step, mark_steps_stale,
+    save_step, step_is_stale, variant_count,
 )
 
 def _load_extra_players(chat_id, turn_idx, frame_id=None):
@@ -128,7 +128,8 @@ class StaleStepError(RuntimeError):
     """
 
 def request_abort(chat_id, frame_id=None):
-    ev = ABORTS.get((chat_id, frame_id))
+    with _ABORTS_LOCK:
+        ev = ABORTS.get((chat_id, frame_id))
     if ev:
         ev.set()
         return True
@@ -377,7 +378,7 @@ def resume_key_for_turn(turn_id, chat_id):
 
     return None
 
-def build_plan(interp, cast_rows, chat_id=None, frame_id=None):
+def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=None):
     if not isinstance(interp, dict):
         interp = {}
         
@@ -444,7 +445,17 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None):
         ("perception_outcome", "Perception · pass 2 — the outcome"),
         ("narrator", "Narrator · render"),
     ]
-    if chat_id is not None and _chat_has_extra_players(chat_id, frame_id):
+    # Prefer pre-loaded extra_players (already on ctx from _load_extra_players
+    # during pipeline setup) to avoid a redundant DB query every turn. Fall
+    # back to _chat_has_extra_players only when caller has no ctx yet
+    # (e.g. resume_key_for_turn).
+    if extra_players is not None:
+        _has_extras = len(extra_players) > 0
+    elif chat_id is not None:
+        _has_extras = _chat_has_extra_players(chat_id, frame_id)
+    else:
+        _has_extras = False
+    if _has_extras:
         plan.append(("narrator_extra", "Narrator · render (other players)"))
     plan.append(("commit", "Mapping & memory · commit-up"))
     return plan
@@ -715,14 +726,7 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
                 # forward, but it's still visible via the pipeline drawer.
                 continue
 
-            qi(
-                "DELETE FROM variants WHERE step_id=?",
-                (step["id"],),
-            )
-            qi(
-                "DELETE FROM steps WHERE id=?",
-                (step["id"],),
-            )
+            delete_step(step["id"])
 
         mark_steps_stale(turn_id, keys[start_i:])
 
@@ -788,7 +792,8 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             variant_count(turn_id, "director_interpret"))
 
     plan = build_plan(ctx["director_interpret"], cast_rows, chat_id=chat_id,
-                      frame_id=turn_row["frame_id"])
+                      frame_id=turn_row["frame_id"],
+                      extra_players=ctx.extra_players)
     keys = [k for k, _ in plan]
     if start_key is not None and start_key not in keys:
         # Refuse before deleting orphans or marking anything stale -- an
@@ -805,8 +810,7 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             # Rerolled or manually edited at least once -- see the matching
             # comment in the establishment branch above. Preserve, don't delete.
             continue
-        qi("DELETE FROM variants WHERE step_id=?", (s["id"],))
-        qi("DELETE FROM steps WHERE id=?", (s["id"],))
+        delete_step(s["id"])
 
     start_i = keys.index(start_key) if (start_key in keys) else 1
     mark_steps_stale(turn_id, keys[start_i:])
@@ -929,7 +933,8 @@ def run_pipeline(
     if abort is None:
         abort = begin_pipeline(chat_id, frame_id)
     else:
-        ABORTS[(chat_id, frame_id)] = abort
+        with _ABORTS_LOCK:
+            ABORTS[(chat_id, frame_id)] = abort
     cancel_event.set(abort)
 
     try:
@@ -961,5 +966,6 @@ def run_pipeline(
         cancel_event.set(None)
         active_frame_id.set(None)
 
-        if ABORTS.get((chat_id, frame_id)) is abort:
-            ABORTS.pop((chat_id, frame_id), None)
+        with _ABORTS_LOCK:
+            if ABORTS.get((chat_id, frame_id)) is abort:
+                ABORTS.pop((chat_id, frame_id), None)
