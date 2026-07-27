@@ -35,16 +35,16 @@
 | `llm_quality.py` | 263 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `mechanics.py` | 274 |  | `spatial`, `spatial_frames` |
-| `memory.py` | 2222 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `prompts`, `providers`, `theory_of_mind` |
+| `memory.py` | 2291 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `prompts`, `providers`, `theory_of_mind` |
 | `paradox.py` | 489 |  | `character_schema`, `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 2675 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 2688 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1833 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 352 |  | — |
 | `scene.py` | 1142 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
-| `schemas.py` | 2257 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `schemas.py` | 2310 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 3412 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 965 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 184 | Bearing math and reciprocal spatial-edge normalization. | — |
@@ -380,14 +380,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `search_memories()` | 1090 | 136 lines |
-| `consolidate_character_memory()` | 1342 | 80 lines |
-| `restore_lorebook()` | 1736 | 79 lines |
-| `monitoring_subtree()` | 531 | 78 lines |
-| `resolve_lorebook_graph()` | 343 | 76 lines |
-| `lorebook_manifest()` | 465 | 65 lines |
-| `reconcile_inference_confidence()` | 2159 | 64 lines |
-| `duplicate_lorebook_tree_for_chat()` | 1878 | 58 lines |
+| `search_memories()` | 1130 | 136 lines |
+| `consolidate_character_memory()` | 1398 | 93 lines |
+| `restore_lorebook()` | 1805 | 79 lines |
+| `monitoring_subtree()` | 571 | 78 lines |
+| `resolve_lorebook_graph()` | 383 | 76 lines |
+| `lorebook_manifest()` | 505 | 65 lines |
+| `reconcile_inference_confidence()` | 2228 | 64 lines |
+| `build_character_memory_context()` | 1337 | 60 lines |
 
 ### `paradox.py`
 
@@ -427,10 +427,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 2666 | 10 lines |
-| `presets()` | 2657 | 2 lines |
-| `active_preset()` | 2660 | 2 lines |
-| `nsfw_enabled()` | 2663 | 2 lines |
+| `get_prompt()` | 2679 | 10 lines |
+| `presets()` | 2670 | 2 lines |
+| `active_preset()` | 2673 | 2 lines |
+| `nsfw_enabled()` | 2676 | 2 lines |
 
 ### `providers.py`
 
@@ -475,14 +475,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 1607 | 226 lines |
-| `semantic_output_errors()` | 2128 | 76 lines |
-| `validate_llm_output_strict()` | 2205 | 53 lines |
-| `_coerce_conditions()` | 1425 | 37 lines |
+| `preprocess_llm_output()` | 1660 | 226 lines |
+| `semantic_output_errors()` | 2181 | 76 lines |
+| `validate_llm_output_strict()` | 2258 | 53 lines |
+| `_coerce_conditions()` | 1478 | 37 lines |
 | `_coerce_str_list()` | 13 | 33 lines |
-| `_coerce_considered_responses()` | 1362 | 32 lines |
-| `validate_llm_output()` | 1834 | 29 lines |
-| `_fill_entity_names()` | 1581 | 24 lines |
+| `_coerce_considered_responses()` | 1415 | 32 lines |
+| `validate_llm_output()` | 1887 | 29 lines |
+| `_coerce_evidence_refs()` | 966 | 27 lines |
 
 ### `spatial.py`
 

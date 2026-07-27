@@ -62,6 +62,46 @@ MEMORY_PROVENANCE = [
     "inferred", "remembered",
 ]
 
+# P8: which rolling summary a memory folds into.
+#
+# Consolidation used to melt every provenance into ONE autobiographical string
+# that was then fed back wholesale each turn -- so the distinction this engine's
+# thesis rests on, between what a character SAW, what they were TOLD, and what
+# they GUESSED, did not survive the summary layer. A belief they inferred came
+# back a few turns later indistinguishable from something they had witnessed,
+# which is belief laundering into knowledge inside a single mind.
+#
+# Three scopes rather than a provenance tag per sentence, because the summary is
+# prose written by a model and a tag inside prose is a convention it can drop.
+# A separate row cannot be dropped. `memory_summaries` is already keyed
+# (chat_id, char_id, scope) and every dump/restore/archive path iterates rows
+# generically, so this needs no migration and rides existing round-trips.
+SUMMARY_SCOPE_FIRSTHAND = "autobiographical"
+SUMMARY_SCOPE_HEARSAY = "hearsay"
+SUMMARY_SCOPE_SURMISE = "surmise"
+
+_PROVENANCE_SCOPE = {
+    "witnessed": SUMMARY_SCOPE_FIRSTHAND,
+    "remembered": SUMMARY_SCOPE_FIRSTHAND,
+    "heard": SUMMARY_SCOPE_HEARSAY,
+    "told": SUMMARY_SCOPE_HEARSAY,
+    "read": SUMMARY_SCOPE_HEARSAY,
+    "inferred": SUMMARY_SCOPE_SURMISE,
+}
+
+# Keyed by scope: the model field carrying it, and how the character's own
+# context labels it back to them.
+_SUMMARY_SCOPES = (
+    (SUMMARY_SCOPE_FIRSTHAND, "summary", "what_i_experienced"),
+    (SUMMARY_SCOPE_HEARSAY, "hearsay_summary", "what_i_was_told"),
+    (SUMMARY_SCOPE_SURMISE, "surmise_summary", "what_i_concluded"),
+)
+
+
+def summary_scope_for(provenance):
+    return _PROVENANCE_SCOPE.get(
+        str(provenance or "").strip().casefold(), SUMMARY_SCOPE_FIRSTHAND)
+
 try:
     import sqlite_vec
     _HAS_VEC = True
@@ -1300,6 +1340,18 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     recent = recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=recent_turns, limit=12)
     recent_ids = {m["id"] for m in recent}
     summary = get_memory_summary(chat_id, char_id)
+    # P8: the other two epistemic classes travel as their own labelled fields
+    # rather than being melted into the first-hand paragraph. A character must
+    # be able to tell what they saw from what they were told from what they
+    # worked out -- collapsing them is the same layer-collapse the engine
+    # polices between minds, happening inside one.
+    provenance_summaries = {}
+    for scope, _field, label in _SUMMARY_SCOPES:
+        if scope == SUMMARY_SCOPE_FIRSTHAND:
+            continue
+        text = str(get_memory_summary(chat_id, char_id, scope).get("summary") or "").strip()
+        if text:
+            provenance_summaries[label] = text
     query_parts = [current_view or "", str(active_state.get("goal") or ""), str(active_state.get("mood") or ""),
                    " ".join(summary.get("unresolved_threads") or [])]
     query_text = " ".join(p for p in query_parts if p)
@@ -1334,9 +1386,13 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         },
         "recent_episodes": recent,
         "recalled_old_memories": recalled,
+        # First-hand only. What reached this character through someone else's
+        # account, and what they worked out for themselves, are carried
+        # separately below and must not be folded in here.
         "autobiographical_summary": summary.get("summary") or "",
         "summary_key_phrases": summary.get("key_phrases") or [],
         "unresolved_threads": summary.get("unresolved_threads") or [],
+        **provenance_summaries,
     }
 
 def consolidate_character_memory(chat_id, char_id, *, through_turn_idx=None, archive_old=True,
@@ -1397,10 +1453,23 @@ def consolidate_character_memory(chat_id, char_id, *, through_turn_idx=None, arc
         result = json.loads(re.sub(r",\s*([}\]])", r"\1", match.group(0)))
     start_turn = min(m["turn_idx"] for m in memories)
     end_turn = max(m["turn_idx"] for m in memories)
-    save_memory_summary(chat_id, char_id, result.get("summary") or "",
-                        start_turn_idx=start_turn, end_turn_idx=end_turn,
-                        key_phrases=result.get("key_phrases") or [],
-                        unresolved_threads=result.get("unresolved_threads") or [])
+    # One row per epistemic class. The first-hand row is written
+    # unconditionally, even when this window produced nothing first-hand,
+    # because maybe_consolidate_character_memory reads ITS end_turn_idx as the
+    # cursor -- skip it on a hearsay-only window and the same memories
+    # re-consolidate forever.
+    present = {summary_scope_for(m.get("provenance")) for m in memories}
+    for scope, field, _label in _SUMMARY_SCOPES:
+        text = str(result.get(field) or "").strip()
+        if scope != SUMMARY_SCOPE_FIRSTHAND and not text and scope not in present:
+            continue
+        save_memory_summary(
+            chat_id, char_id, text, scope=scope,
+            start_turn_idx=start_turn, end_turn_idx=end_turn,
+            key_phrases=(result.get("key_phrases") or []
+                         if scope == SUMMARY_SCOPE_FIRSTHAND else []),
+            unresolved_threads=(result.get("unresolved_threads") or []
+                                if scope == SUMMARY_SCOPE_FIRSTHAND else []))
     if archive_old:
         cutoff = max(start_turn, end_turn - 12)
         # Archive ONLY memories that were part of THIS (frame-visible)
