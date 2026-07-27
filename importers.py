@@ -33,6 +33,30 @@ def _silent_provider_stream():
 def _blob(v):
     return np.asarray(v, dtype=np.float32).tobytes()
 
+def _prepared_lore_embeddings(entries):
+    """Resolve entry vectors before opening the import write transaction."""
+    vectors = [None] * len(entries)
+    missing = []
+    for idx, entry in enumerate(entries):
+        raw = entry.get("embedding")
+        if isinstance(raw, str):
+            try:
+                decoded = base64.b64decode(raw.encode("ascii"), validate=True)
+                if decoded and len(decoded) % 4 == 0:
+                    vectors[idx] = np.frombuffer(decoded, dtype=np.float32).copy()
+            except (ValueError, TypeError):
+                pass
+        if vectors[idx] is None:
+            missing.append(idx)
+    if missing:
+        texts = [
+            f"{entries[idx].get('keys') or ''} {entries[idx].get('content') or ''}"
+            for idx in missing
+        ]
+        for idx, vector in zip(missing, embed_texts(texts)):
+            vectors[idx] = vector
+    return vectors
+
 def _repair_json(text):
     return re.sub(r',\s*([}\]])', r'\1', text or "")
 
@@ -929,7 +953,8 @@ def _reinterpret_entries(entries):
 
 def import_lorebook(payload, name=None, reinterpret=False,
                     book_type=None, summary=None):
-    src = payload.get("entries") if isinstance(payload, dict) else payload
+    payload_meta = payload if isinstance(payload, dict) else {}
+    src = payload_meta.get("entries") if payload_meta else payload
     if isinstance(src, dict):
         src = list(src.values())
     # Skip author-disabled entries. World Info exports mark them with
@@ -967,28 +992,43 @@ def import_lorebook(payload, name=None, reinterpret=False,
     if is_native:
         if book_type not in LOREBOOK_TYPES:
             book_type = "general"
-        lb = qi(
-            "INSERT INTO lorebooks(name,book_type,summary) VALUES(?,?,?)",
-            (lbname, book_type, summary or ""),
-        )
-        for e in src:
-            add_lore(
-                lb,
-                e.get("keys", ""),
-                e.get("content", ""),
-                turn_added=e.get("turn_added"),
-                locked=e.get("locked", 0),
-                category=e.get("category", "other"),
-                title=e.get("title"),
-                knowledge_tag=e.get("knowledge_tag"),
-                knowledge_range=e.get("knowledge_range"),
-                knowledge_locations=e.get("knowledge_locations"),
-                importance=e.get("importance", 0.5),
-                aliases=e.get("aliases"),
-                scope=e.get("scope"),
-                relations=e.get("relations"),
-                source_notes=e.get("source_notes", ""),
+        vectors = _prepared_lore_embeddings(src)
+        with transaction():
+            lb = qi(
+                "INSERT INTO lorebooks("
+                "name,book_type,summary,scope_world_id,scope_location_id,"
+                "inheritance_mode,sort_order,anchor_entity_id"
+                ") VALUES(?,?,?,?,?,?,?,?)",
+                (
+                    lbname,
+                    book_type,
+                    summary or "",
+                    payload_meta.get("scope_world_id"),
+                    payload_meta.get("scope_location_id"),
+                    payload_meta.get("inheritance_mode") or "inherit",
+                    int(payload_meta.get("sort_order") or 0),
+                    payload_meta.get("anchor_entity_id"),
+                ),
             )
+            for e, vector in zip(src, vectors):
+                add_lore(
+                    lb,
+                    e.get("keys", ""),
+                    e.get("content", ""),
+                    turn_added=e.get("turn_added"),
+                    locked=e.get("locked", 0),
+                    category=e.get("category", "other"),
+                    title=e.get("title"),
+                    knowledge_tag=e.get("knowledge_tag"),
+                    knowledge_range=e.get("knowledge_range"),
+                    knowledge_locations=e.get("knowledge_locations"),
+                    importance=e.get("importance", 0.5),
+                    aliases=e.get("aliases"),
+                    scope=e.get("scope"),
+                    relations=e.get("relations"),
+                    source_notes=e.get("source_notes", ""),
+                    embedding=vector,
+                )
         return lb, len(src)
 
     entries = []
@@ -1008,40 +1048,55 @@ def import_lorebook(payload, name=None, reinterpret=False,
     if book_type not in LOREBOOK_TYPES:
         book_type = guess_book_type(entries)
 
-    lb = qi(
-        "INSERT INTO lorebooks(name,book_type,summary) VALUES(?,?,?)",
-        (lbname, book_type, summary or ""),
-    )
-
     if reinterpret and entries:
         try:
             reinterpreted_entries = _reinterpret_entries(entries)
-            for e in reinterpreted_entries:
-                add_lore(
-                    lb,
-                    e["keys"],
-                    e["content"],
-                    turn_added=None,
-                    locked=e["locked"],
-                    category=e["category"],
-                )
-            return lb, len(reinterpreted_entries)
         except Exception as exc:
             raise RuntimeError(
                 f"AI lore reinterpretation failed: {exc}"
             ) from exc
+        prepared_entries = reinterpreted_entries
+    else:
+        prepared_entries = [
+            {
+                "keys": keys,
+                "content": content,
+                "locked": locked,
+                "category": guess_category(keys, content),
+            }
+            for keys, content, locked in entries
+        ]
 
-    for keys, content, locked in entries:
-        add_lore(
-            lb,
-            keys,
-            content,
-            turn_added=None,
-            locked=locked,
-            category=guess_category(keys, content),
+    vectors = _prepared_lore_embeddings(prepared_entries)
+    with transaction():
+        lb = qi(
+            "INSERT INTO lorebooks("
+            "name,book_type,summary,scope_world_id,scope_location_id,"
+            "inheritance_mode,sort_order,anchor_entity_id"
+            ") VALUES(?,?,?,?,?,?,?,?)",
+            (
+                lbname,
+                book_type,
+                summary or "",
+                payload_meta.get("scope_world_id"),
+                payload_meta.get("scope_location_id"),
+                payload_meta.get("inheritance_mode") or "inherit",
+                int(payload_meta.get("sort_order") or 0),
+                payload_meta.get("anchor_entity_id"),
+            ),
         )
+        for entry, vector in zip(prepared_entries, vectors):
+            add_lore(
+                lb,
+                entry["keys"],
+                entry["content"],
+                turn_added=None,
+                locked=entry["locked"],
+                category=entry["category"],
+                embedding=vector,
+            )
 
-    return lb, len(entries)
+    return lb, len(prepared_entries)
 
 def reinterpret_lorebook(lid):
     from db import q

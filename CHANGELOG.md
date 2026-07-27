@@ -2,7 +2,72 @@
 
 ## Unreleased
 
+### Added
+
+- **Portable, privacy-conscious pipeline traces.** Completed turns can now be
+  exported from their immutable step/variant history with
+  `tools/pipeline_trace.py`, validated by a canonical SHA-256 envelope, and
+  replayed offline as the saved pipeline event stream without importing a
+  provider or making another model call. Exports are hash-only by default;
+  story text, retrieved lore, and private character reasoning require the
+  explicit `--include-content` option. Generated `*.trace.json` artifacts are
+  ignored by Git to reduce accidental disclosure.
+
+- **Real browser behavior tests and CI test tiers.** An optional Playwright
+  suite now exercises persisted appearance settings, out-of-order story
+  navigation, cross-story modal ownership, and streamed-turn progress/cleanup
+  against the actual unbundled frontend. `make test-fast` covers 1,380 pure
+  contract tests in seconds, while `make test-full` retains all database and
+  integration coverage. GitHub Actions runs the fast tier on Python 3.11/3.12,
+  the full tier once, and the Chromium suite once.
+
+### Changed
+
+- **Chat archives are now self-contained version 4 documents.** Export includes
+  owned and isolated lorebook descendants, checkpoint-only characters and
+  personas, and live frame membership. Import uses two-pass hierarchy
+  reconstruction and remaps character, persona, frame, turn, book, memory,
+  and checkpoint references through embedded resources. Unresolved foreign
+  IDs are dropped rather than being allowed to collide with an unrelated
+  local row that happens to reuse the same integer.
+
+- **Dependencies now have bounded support ranges and a tested CI baseline.**
+  Runtime/dev requirements declare compatible ranges, while
+  `constraints.txt` records the direct versions exercised by CI, including
+  the FastAPI/Starlette pair. Browser dependencies and binaries remain an
+  explicit optional install.
+
+- **Host authentication moved behind a typed router boundary.**
+  `/api/auth/*` request validation and cookie transport now live in
+  `auth_routes.py`; credential/session persistence remains in
+  `guest_access.py`. This is the first extracted FastAPI ownership seam from
+  the application monolith and preserves the existing HTTP contract.
+
 ### Fixed
+
+- **Host setup could leave a permanently incomplete account.**
+  Username, PBKDF2 salt/hash, and initial session were previously four
+  separately committed writes. A failure between them made setup appear
+  complete while no password could authenticate. Account creation/reset are
+  now atomic, and concurrent setup requests re-check existence under the same
+  write transaction.
+
+- **Detached multiplayer personas retained remote authority.** Removing an
+  extra persona from a chat now revokes all of its guest grants in the same
+  transaction. Guest-token verification independently requires an active
+  `chat_personas` row, so stale or manually edited database state also fails
+  closed.
+
+- **Lorebook import/export was lossy and partially durable.** Standalone and
+  chat-bound round trips now preserve hierarchy, scope, inheritance mode,
+  ordering, anchors, links, and retired-turn remaps. Import embeddings are
+  prepared before a single write transaction, so a failed later entry cannot
+  leave behind an empty book or partial tree.
+
+- **Generated route documentation dropped `APIRouter` prefixes.**
+  `docs/CODE_MAP.md` reported extracted authentication paths as `/login` and
+  `/setup` instead of their public `/api/auth/*` URLs. The generator now
+  resolves literal local router prefixes, with a regression test.
 
 - **A curtain was a window.** `_BARRIER_ALIASES` in `spatial.py` mapped
   "curtain" to `open` — fully transparent, fully passable — before mapping it

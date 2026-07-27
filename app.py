@@ -72,6 +72,13 @@ from memory import (
 from scene import persona_of, get_scene
 from backdrops import (build_backdrop_request, request_backdrop, cached_backdrop,
                        backdrop_status, backdrop_error)
+from auth_routes import (
+    GUEST_ALLOWED_API_PATHS,
+    GUEST_COOKIE,
+    HOST_COOKIE,
+    PUBLIC_API_PATHS,
+    router as auth_router,
+)
 
 # ---- App setup ----
 # No CORS middleware: the frontend is always served same-origin from this
@@ -116,6 +123,7 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="Sonder Engine", version="1.0", lifespan=lifespan)
+app.include_router(auth_router)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -128,18 +136,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # hole, not just the guest-classification one -- SameSite=Strict on the
 # host cookie is what actually stops a forged cross-site request, not any
 # inspection of where the request appears to come from.
-HOST_COOKIE = "fe_host"
-GUEST_COOKIE = "fe_guest"
-HOST_COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # matches guest.HOST_SESSION_TTL
-# Cap password length before PBKDF2 hashing to prevent CPU-exhaustion DoS.
-# 1024 chars is generous for a passphrase while keeping hashing bounded.
-MAX_PASSWORD_LENGTH = 1024
-PUBLIC_API_PATHS = {
-    "/api/join", "/api/auth/status", "/api/auth/setup",
-    "/api/auth/login", "/api/auth/logout",
-}
-GUEST_ALLOWED_API_PATHS = {"/api/guest/state", "/api/guest/input"}
-
 @app.get("/guest")
 def guest_page():
     # Deliberately its own small standalone page rather than the full SPA
@@ -157,67 +153,6 @@ def login_page():
     # Standalone page like /guest: handles both first-run account setup
     # and sign-in, then redirects into the SPA once a session cookie is set.
     return FileResponse("static/login.html")
-
-def _set_host_cookie(response: JSONResponse, token: str) -> JSONResponse:
-    response.set_cookie(
-        HOST_COOKIE, token, httponly=True, samesite="strict",
-        max_age=HOST_COOKIE_MAX_AGE,
-    )
-    return response
-
-@app.get("/api/auth/status")
-def auth_status(request: Request):
-    return {
-        "setup_required": not guest.host_account_exists(),
-        "authenticated": guest.verify_host_session(
-            request.cookies.get(HOST_COOKIE)
-        ),
-    }
-
-@app.post("/api/auth/setup")
-def auth_setup(username: str = Body(""), password: str = Body("")):
-    if guest.host_account_exists():
-        return JSONResponse({"detail": "Account already exists"}, status_code=409)
-    if not username.strip():
-        return JSONResponse({"detail": "Username is required"}, status_code=400)
-    if not password:
-        return JSONResponse({"detail": "Password is required"}, status_code=400)
-    if len(password) > MAX_PASSWORD_LENGTH:
-        return JSONResponse(
-            {"detail": f"Password must be at most {MAX_PASSWORD_LENGTH} characters"},
-            status_code=400,
-        )
-    token = guest.create_host_account(username, password)
-    if token is None:
-        return JSONResponse({"detail": "Account already exists"}, status_code=409)
-    return _set_host_cookie(JSONResponse({"ok": True}), token)
-
-@app.post("/api/auth/login")
-def auth_login(username: str = Body(""), password: str = Body("")):
-    if guest.login_rate_limited():
-        return JSONResponse(
-            {"detail": "Too many attempts, wait a minute"}, status_code=429
-        )
-    if len(password) > MAX_PASSWORD_LENGTH:
-        return JSONResponse(
-            {"detail": f"Password must be at most {MAX_PASSWORD_LENGTH} characters"},
-            status_code=400,
-        )
-    # Generic failure detail: don't reveal whether the username or the
-    # password was the wrong half.
-    if not guest.verify_host_login(username, password):
-        return JSONResponse(
-            {"detail": "Invalid username or password"}, status_code=401
-        )
-    token = guest.create_host_session()
-    return _set_host_cookie(JSONResponse({"ok": True}), token)
-
-@app.post("/api/auth/logout")
-def auth_logout(request: Request):
-    guest.destroy_host_session(request.cookies.get(HOST_COOKIE))
-    response = JSONResponse({"ok": True})
-    response.delete_cookie(HOST_COOKIE)
-    return response
 
 @app.middleware("http")
 async def access_control(request: Request, call_next):
@@ -646,11 +581,28 @@ def _remap_row_json_fields(rows, remap):
     return rows
 
 def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
-                   char_idmap=None, world_id_remap=None, frame_idmap=None):
+                   char_idmap=None, persona_idmap=None,
+                   world_id_remap=None, frame_idmap=None):
     frame_idmap = frame_idmap or {}
+    remapped_memories = []
     for memory in blob.get("memories") or []:
+        if char_idmap is not None:
+            new_char_id = char_idmap.get(memory.get("char_id"))
+            if new_char_id is None:
+                continue
+            memory["char_id"] = new_char_id
         memory["turn_id"] = turn_idmap.get(memory.get("turn_id"))
         memory["frame_id"] = frame_idmap.get(memory.get("frame_id"))
+        remapped_memories.append(memory)
+    if "memories" in blob:
+        blob["memories"] = remapped_memories
+
+    if char_idmap is not None and "memory_summaries" in blob:
+        blob["memory_summaries"] = [
+            {**summary, "char_id": char_idmap[summary["char_id"]]}
+            for summary in (blob.get("memory_summaries") or [])
+            if char_idmap.get(summary.get("char_id")) is not None
+        ]
 
     if isinstance(blob.get("world"), dict):
         # Retired-concept cleanup (see turn_branch's matching comment).
@@ -702,14 +654,17 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
     if isinstance(blob.get("world"), dict):
         _remap_active_books(blob["world"], bookmap)
 
-    if char_idmap and blob.get("chars"):
+    if char_idmap is not None and blob.get("chars"):
         remapped_chars = {}
         for old_key, state in blob["chars"].items():
             try:
                 old_id = int(old_key)
-                new_key = str(char_idmap.get(old_id, old_id))
+                new_id = char_idmap.get(old_id)
+                if new_id is None:
+                    continue
+                new_key = str(new_id)
             except (ValueError, TypeError):
-                new_key = str(old_key)
+                continue
             remapped_chars[new_key] = state
         blob["chars"] = remapped_chars
 
@@ -721,8 +676,11 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
                 continue
             ncf = dict(cf)
             ncf["frame_id"] = nfid
-            if char_idmap:
-                ncf["char_id"] = char_idmap.get(ncf.get("char_id"), ncf.get("char_id"))
+            if char_idmap is not None:
+                new_char_id = char_idmap.get(ncf.get("char_id"))
+                if new_char_id is None:
+                    continue
+                ncf["char_id"] = new_char_id
             remapped_char_frames.append(ncf)
         blob["char_frames"] = remapped_char_frames
 
@@ -740,6 +698,11 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
             nfr = dict(fr)
             nfr["id"] = nfid
             nfr["parent_frame_id"] = frame_idmap.get(fr.get("parent_frame_id"))
+            if char_idmap is not None:
+                nfr["travelers"] = _remap_frame_character_ids(
+                    nfr.get("travelers"), char_idmap)
+                nfr["nonexistent_cast"] = _remap_frame_character_ids(
+                    nfr.get("nonexistent_cast"), char_idmap)
             remapped_frames.append(nfr)
         blob["frames"] = remapped_frames
 
@@ -753,6 +716,11 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
                 continue
             np = dict(p)
             np["frame_id"] = frame_idmap.get(old_fid) if old_fid is not None else None
+            if persona_idmap is not None:
+                new_persona_id = persona_idmap.get(np.get("persona_id"))
+                if new_persona_id is None:
+                    continue
+                np["persona_id"] = new_persona_id
             remapped_personas.append(np)
         blob["chat_personas"] = remapped_personas
 
@@ -799,6 +767,36 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
                     blob["world"][k] = _deep_remap_ids(v, world_id_remap)
 
     return blob
+
+def _json_id_list(value):
+    """Return integer ids from a frame's JSON-list storage value."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value:
+        try:
+            result.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    return result
+
+def _remap_frame_character_ids(value, char_idmap):
+    """Remap frame membership and serialize it for the TEXT columns.
+
+    Missing characters are deliberately omitted. Carrying their raw source
+    database ids can attach a traveler/nonexistent mask to an unrelated local
+    character whose row happens to reuse that integer id.
+    """
+    return json.dumps([
+        char_idmap[old_id]
+        for old_id in _json_id_list(value)
+        if old_id in char_idmap
+    ])
     
 def _ensure_resource_uid(table: str, row_id: int, prefix: str):
     row = q(f"SELECT resource_uid FROM {table} WHERE id=?", (row_id,), one=True)
@@ -1650,6 +1648,11 @@ def lore_export(lid: int):
         "book_type": lb["book_type"] or "general",
         "summary": lb["summary"] or "",
         "resource_uid": lb["resource_uid"],
+        "scope_world_id": lb["scope_world_id"],
+        "scope_location_id": lb["scope_location_id"],
+        "inheritance_mode": lb["inheritance_mode"] or "inherit",
+        "sort_order": lb["sort_order"] or 0,
+        "anchor_entity_id": lb["anchor_entity_id"],
         "entries": dump_lorebook(lid),
     }
 
@@ -2149,7 +2152,16 @@ def chat_add_persona(cid: int, body: dict = Body(...)):
 
 @app.delete("/api/chats/{cid}/personas/{pid}")
 def chat_del_persona(cid: int, pid: int):
-    qi("UPDATE chat_personas SET status='dormant' WHERE chat_id=? AND persona_id=?", (cid, pid))
+    # Attachment and remote authority have the same lifecycle. Committing
+    # these together prevents a detached player from retaining a live guest
+    # session if the process stops between the two writes.
+    with transaction():
+        qi(
+            "UPDATE chat_personas SET status='dormant' "
+            "WHERE chat_id=? AND persona_id=?",
+            (cid, pid),
+        )
+        guest.revoke_persona_grants(cid, pid)
     return {"ok": True}
 
 @app.post("/api/chats/{cid}/turns/{idx}/player_input")
@@ -2778,7 +2790,7 @@ def fixed_points_delete(cid: int, anchor_id: int):
 def chat_export(cid: int):
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
     if not chat: raise HTTPException(404)
-    export = {"version": 3, "chat": dict(chat), "frames": [], "turns": [], "world": {}, "participants": [], "char_frames": [], "memories": [], "memory_summaries": [], "events": [], "checkpoints": [], "lorebook": None, "lorebooks": []}
+    export = {"version": 4, "chat": dict(chat), "frames": [], "turns": [], "world": {}, "participants": [], "char_frames": [], "memories": [], "memory_summaries": [], "events": [], "checkpoints": [], "lorebook": None, "lorebooks": []}
     export["frames"] = [dict(f) for f in q("SELECT * FROM frames WHERE chat_id=?", (cid,))]
     export["char_frames"] = [dict(r) for r in q("SELECT * FROM chat_char_frames WHERE chat_id=?", (cid,))]
     for t in q("SELECT * FROM turns WHERE chat_id=? ORDER BY idx", (cid,)):
@@ -2808,9 +2820,28 @@ def chat_export(cid: int):
     # inputs, and the lore link graph -- all silently dropped before.
     export["chat_personas"] = [dict(r) for r in q("SELECT * FROM chat_personas WHERE chat_id=?", (cid,))]
     export["turn_player_inputs"] = [dict(r) for r in q("SELECT * FROM turn_player_inputs WHERE chat_id=?", (cid,))]
-    export["lorebook_links"] = dump_lorebook_links(chat_lorebook_ids(cid, enabled_only=False))
     canon = chat["lorebook_id"]
-    for lid in chat_lorebook_ids(cid, enabled_only=False):
+    # Archives preserve ownership, not only current retrieval reachability.
+    # An isolated child is intentionally absent from its parent's retrieval
+    # graph, but it is still durable chat data and must not disappear on
+    # export. Keep attached/reachable library books too for compatibility.
+    archive_book_ids = []
+    for lid in [
+        canon,
+        *(row["id"] for row in q(
+            "SELECT id FROM lorebooks WHERE chat_id=? ORDER BY sort_order,id",
+            (cid,),
+        )),
+        *(row["lorebook_id"] for row in q(
+            "SELECT lorebook_id FROM chat_lorebooks WHERE chat_id=?",
+            (cid,),
+        )),
+        *chat_lorebook_ids(cid, enabled_only=False),
+    ]:
+        if lid is not None and lid not in archive_book_ids:
+            archive_book_ids.append(lid)
+    export["lorebook_links"] = dump_lorebook_links(archive_book_ids)
+    for lid in archive_book_ids:
         lb = q("SELECT * FROM lorebooks WHERE id=?", (lid,), one=True)
         if not lb: continue
         att = q("SELECT enabled FROM chat_lorebooks WHERE chat_id=? AND lorebook_id=?", (cid, lid), one=True)
@@ -2831,6 +2862,55 @@ def chat_export(cid: int):
         cid_ = row.get("char_id")
         if cid_ is not None and cid_ not in char_ids:
             char_ids.append(cid_)
+    for frame in export["frames"]:
+        for cid_ in (
+            _json_id_list(frame.get("travelers"))
+            + _json_id_list(frame.get("nonexistent_cast"))
+        ):
+            if cid_ not in char_ids:
+                char_ids.append(cid_)
+    # Checkpoints can legitimately reference cast/personas that are no longer
+    # in the live roster. Embed those resources too: otherwise importing the
+    # story looks fine until reroll restores an older checkpoint containing
+    # source-install integer ids.
+    checkpoint_persona_ids = []
+    for cp in export["checkpoints"]:
+        try:
+            cp_blob = json.loads(cp["blob"]) if isinstance(cp["blob"], str) else cp["blob"]
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(cp_blob, dict):
+            continue
+        for memory in (cp_blob.get("memories") or []):
+            cid_ = memory.get("char_id")
+            if cid_ is not None and cid_ not in char_ids:
+                char_ids.append(cid_)
+        for summary in (cp_blob.get("memory_summaries") or []):
+            cid_ = summary.get("char_id")
+            if cid_ is not None and cid_ not in char_ids:
+                char_ids.append(cid_)
+        for cid_ in (cp_blob.get("chars") or {}):
+            try:
+                cid_ = int(cid_)
+            except (TypeError, ValueError):
+                continue
+            if cid_ not in char_ids:
+                char_ids.append(cid_)
+        for cf in (cp_blob.get("char_frames") or []):
+            cid_ = cf.get("char_id")
+            if cid_ is not None and cid_ not in char_ids:
+                char_ids.append(cid_)
+        for frame in (cp_blob.get("frames") or []):
+            for cid_ in (
+                _json_id_list(frame.get("travelers"))
+                + _json_id_list(frame.get("nonexistent_cast"))
+            ):
+                if cid_ not in char_ids:
+                    char_ids.append(cid_)
+        for roster_row in (cp_blob.get("chat_personas") or []):
+            pid = roster_row.get("persona_id")
+            if pid is not None and pid not in checkpoint_persona_ids:
+                checkpoint_persona_ids.append(pid)
     characters = []
     for ch_id in char_ids:
         c = q("SELECT * FROM characters WHERE id=?", (ch_id,), one=True)
@@ -2847,6 +2927,7 @@ def chat_export(cid: int):
         p = q("SELECT * FROM personas WHERE id=?", (chat["persona_id"],), one=True)
         if p:
             persona = {
+                "old_id": chat["persona_id"],
                 "resource_uid": p["resource_uid"],
                 "sheet": json.loads(p["sheet"]),
                 "source": json.loads(p["source"] or "{}"),
@@ -2856,8 +2937,10 @@ def chat_export(cid: int):
     # resolve the roster's persona ids.
     extra_personas = []
     seen_pids = {chat["persona_id"]} if chat["persona_id"] else set()
-    for row in export["chat_personas"]:
-        pid = row.get("persona_id")
+    for pid in [
+        *(row.get("persona_id") for row in export["chat_personas"]),
+        *checkpoint_persona_ids,
+    ]:
         if pid is None or pid in seen_pids:
             continue
         seen_pids.add(pid)
@@ -3018,8 +3101,10 @@ def chat_import(body: dict = Body(...)):
                 "split_turn_idx,merged_turn_idx) VALUES(?,?,?,?,?,?,?,?,?)",
                 (
                     new_chat_id, f.get("label") or "", int(f.get("ordinal") or 0),
-                    f.get("kind") or "other", f.get("travelers") or "[]",
-                    f.get("nonexistent_cast") or "[]", f.get("created", time.time()),
+                    f.get("kind") or "other",
+                    _remap_frame_character_ids(f.get("travelers"), old_char_map),
+                    _remap_frame_character_ids(f.get("nonexistent_cast"), old_char_map),
+                    f.get("created", time.time()),
                     f.get("split_turn_idx"), f.get("merged_turn_idx"),
                 ),
             )
@@ -3132,13 +3217,18 @@ def chat_import(body: dict = Body(...)):
         new_canon = None
         books = data.get("lorebooks")
         if books:
+            # Pass 1 creates every book without its self-referential parent.
+            # Pass 2 below can then remap hierarchy regardless of archive
+            # ordering (child-before-parent exports are valid).
             for b in books:
                 bk = b.get("book", {})
                 nb = qtx(
                     "INSERT INTO lorebooks("
                     "name,chat_id,origin_id,book_type,summary,resource_uid,"
-                    "anchor_entity_id,retired_turn_id"
-                    ") VALUES(?,?,?,?,?,?,?,?)",
+                    "parent_id,scope_world_id,scope_location_id,"
+                    "inheritance_mode,sort_order,anchor_entity_id,"
+                    "retired_turn_id"
+                    ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         bk.get("name") or "book",
                         new_chat_id,
@@ -3146,6 +3236,11 @@ def chat_import(body: dict = Body(...)):
                         bk.get("book_type") or "general",
                         bk.get("summary") or "",
                         _import_book_uid(bk.get("resource_uid")),
+                        None,
+                        bk.get("scope_world_id"),
+                        bk.get("scope_location_id"),
+                        bk.get("inheritance_mode") or "inherit",
+                        int(bk.get("sort_order") or 0),
                         bk.get("anchor_entity_id"),
                         # Turn-row FK: remap or null, never carry verbatim.
                         turn_id_map.get(bk.get("retired_turn_id")),
@@ -3170,21 +3265,42 @@ def chat_import(body: dict = Body(...)):
                         ),
                     )
 
+            for b in books:
+                bk = b.get("book", {})
+                new_book = bookmap.get(bk.get("id"))
+                if new_book is None:
+                    continue
+                qtx(
+                    "UPDATE lorebooks SET parent_id=? WHERE id=?",
+                    (bookmap.get(bk.get("parent_id")), new_book),
+                )
+
         elif data.get("lorebook") and data["lorebook"].get("entries"):
             lb_data = data["lorebook"]
+            bk = lb_data.get("book", {})
             new_canon = qtx(
                 "INSERT INTO lorebooks("
-                "name,chat_id,origin_id,resource_uid"
-                ") VALUES(?,?,?,?)",
+                "name,chat_id,origin_id,book_type,summary,resource_uid,"
+                "scope_world_id,scope_location_id,inheritance_mode,sort_order,"
+                "anchor_entity_id,retired_turn_id"
+                ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
-                    (lb_data.get("book", {}).get("name") or "Imported canon") + " (import)",
+                    (bk.get("name") or "Imported canon") + " (import)",
                     new_chat_id,
-                    lb_data.get("book", {}).get("id"),
-                    _import_book_uid(lb_data.get("book", {}).get("resource_uid")),
+                    bk.get("id"),
+                    bk.get("book_type") or "general",
+                    bk.get("summary") or "",
+                    _import_book_uid(bk.get("resource_uid")),
+                    bk.get("scope_world_id"),
+                    bk.get("scope_location_id"),
+                    bk.get("inheritance_mode") or "inherit",
+                    int(bk.get("sort_order") or 0),
+                    bk.get("anchor_entity_id"),
+                    turn_id_map.get(bk.get("retired_turn_id")),
                 ),
             )
             restore_lorebook(new_canon, lb_data["entries"])
-            old = lb_data.get("book", {}).get("id")
+            old = bk.get("id")
             if old:
                 bookmap[old] = new_canon
             qtx("UPDATE chats SET lorebook_id=? WHERE id=?", (new_canon, new_chat_id))
@@ -3312,7 +3428,9 @@ def chat_import(body: dict = Body(...)):
             blob = cp["blob"] if isinstance(cp["blob"], str) else json.dumps(cp["blob"])
             blob = json.loads(blob)
             remapped = _remap_cp_blob(blob, turn_id_map, bookmap, new_canon,
-                                      char_idmap=old_char_map, frame_idmap=frame_idmap)
+                                      char_idmap=old_char_map,
+                                      persona_idmap=persona_idmap,
+                                      frame_idmap=frame_idmap)
             qtx(
                 "INSERT INTO checkpoints(chat_id,turn_idx,blob,created) "
                 "VALUES(?,?,?,?)",

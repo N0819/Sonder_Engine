@@ -7,6 +7,22 @@ import tempfile
 
 import pytest
 
+
+def pytest_collection_modifyitems(items):
+    """Keep the fast tier free of measured database setup cost.
+
+    The instrumented suite showed each ``temp_db`` setup taking roughly
+    1.2--1.6 seconds in a populated development checkout.  Database-backed
+    tests remain part of ``make test-full``; the fast tier concentrates on
+    pure contracts, schemas, spatial rules, prompt boundaries, and frontend
+    source guards.
+    """
+
+    for item in items:
+        if "temp_db" in item.fixturenames:
+            item.add_marker(pytest.mark.slow)
+
+
 @pytest.fixture
 def temp_db():
     """Create and configure a temporary test database."""

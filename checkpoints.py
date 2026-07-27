@@ -44,13 +44,29 @@ def snapshot_state(chat_id):
         for r in q("SELECT * FROM chat_personas WHERE chat_id=?", (chat_id,))
     ]
     canon = chat["lorebook_id"] if chat else None
+    # Snapshot durable ownership, not only retrieval reachability. Isolated
+    # descendants intentionally do not inherit/retrieve through their parent,
+    # but they are still chat-owned state that a reroll must restore exactly.
     book_ids = []
+    for lid in [
+        canon,
+        *(row["id"] for row in q(
+            "SELECT id FROM lorebooks WHERE chat_id=? ORDER BY sort_order,id",
+            (chat_id,),
+        )),
+        *(row["lorebook_id"] for row in q(
+            "SELECT lorebook_id FROM chat_lorebooks WHERE chat_id=?",
+            (chat_id,),
+        )),
+        *chat_lorebook_ids(chat_id, enabled_only=False),
+    ]:
+        if lid is not None and lid not in book_ids:
+            book_ids.append(lid)
     books = []
-    for lid in chat_lorebook_ids(chat_id, enabled_only=False):
+    for lid in book_ids:
         lbrow = q("SELECT * FROM lorebooks WHERE id=?", (lid,), one=True)
         if not lbrow:
             continue
-        book_ids.append(lid)
         att = q("SELECT enabled FROM chat_lorebooks WHERE chat_id=? AND lorebook_id=?",
                 (chat_id, lid), one=True)
         books.append({
