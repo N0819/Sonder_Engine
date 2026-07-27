@@ -28,16 +28,20 @@ uvicorn app:app --host 127.0.0.1 --port 8008 --reload
 ```
 
 Open http://127.0.0.1:8008. The default SQLite database is engine.db; set ENGINE_DB before startup to use another path.
-```
-```
+
 ## Development commands
 
 ```bash
-make test       # run the test suite
-make check      # compile, regenerate/verify the map, run structure checks, then test
+pip install -c constraints.txt -r requirements-dev.txt
+make test-fast  # broad suite without explicitly slow integration tests
+make test-full  # every Python regression test
+make check      # compile, regenerate/verify the map, structure check, full test
 make map        # regenerate docs/CODE_MAP.md
 make run        # start the local server
 ```
+
+Real-browser tests are optional; see [`docs/TESTING.md`](docs/TESTING.md) for
+their isolated install and for the dependency/CI policy.
 
 The application intentionally uses top-level imports such as `from db import q`. Run commands from the repository root rather than treating the directory as an installed package.
 

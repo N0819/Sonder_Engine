@@ -29,7 +29,7 @@ import hashlib
 import secrets
 import time
 
-from db import q, qi, get_setting, set_setting
+from db import q, qi, get_setting, set_setting, transaction
 
 HOST_USERNAME_SETTING = "host_username"
 HOST_PW_HASH_SETTING = "host_pw_hash"
@@ -66,16 +66,22 @@ def create_host_account(username: str, password: str) -> str | None:
     stored, never the plaintext. Returns a fresh session token on
     success (so setup signs the browser in immediately), None on refusal.
     """
-    if host_account_exists():
-        return None
     username = username.strip()
     if not username or not password:
         return None
     salt = secrets.token_bytes(16).hex()
-    set_setting(HOST_USERNAME_SETTING, username)
-    set_setting(HOST_PW_SALT_SETTING, salt)
-    set_setting(HOST_PW_HASH_SETTING, _hash_password(password, salt))
-    return create_host_session()
+    # Account identity, verifier material, and the initial session are one
+    # security boundary. A crash after writing only the username previously
+    # made host_account_exists() true while leaving an account that could
+    # never authenticate. BEGIN IMMEDIATE also closes the two-setup-request
+    # race: the second request re-checks existence after the first commits.
+    with transaction():
+        if host_account_exists():
+            return None
+        set_setting(HOST_USERNAME_SETTING, username)
+        set_setting(HOST_PW_SALT_SETTING, salt)
+        set_setting(HOST_PW_HASH_SETTING, _hash_password(password, salt))
+        return create_host_session()
 
 
 def verify_host_login(username: str, password: str) -> bool:
@@ -137,10 +143,11 @@ def reset_host_account() -> None:
     """Wipe the host account and every session -- the escape hatch for a
     lost password (FICTION_ENGINE_RESET_HOST=1 at startup). The next
     visit to /login sees the first-run setup page again."""
-    set_setting(HOST_USERNAME_SETTING, "")
-    set_setting(HOST_PW_HASH_SETTING, "")
-    set_setting(HOST_PW_SALT_SETTING, "")
-    qi("DELETE FROM host_sessions")
+    with transaction():
+        set_setting(HOST_USERNAME_SETTING, "")
+        set_setting(HOST_PW_HASH_SETTING, "")
+        set_setting(HOST_PW_SALT_SETTING, "")
+        qi("DELETE FROM host_sessions")
 
 
 def generate_join_code() -> str:
@@ -250,7 +257,10 @@ def verify_guest_token(token: str | None) -> dict | None:
         return None
     now = time.time()
     grant = q(
-        "SELECT * FROM guest_grants WHERE token_hash=? AND revoked=0",
+        "SELECT g.* FROM guest_grants g "
+        "JOIN chat_personas cp "
+        "ON cp.chat_id=g.chat_id AND cp.persona_id=g.persona_id "
+        "WHERE g.token_hash=? AND g.revoked=0 AND cp.status='active'",
         (_hash(token),),
         one=True,
     )
@@ -261,6 +271,21 @@ def verify_guest_token(token: str | None) -> dict | None:
         "chat_id": grant["chat_id"],
         "persona_id": grant["persona_id"],
     }
+
+
+def revoke_persona_grants(chat_id: int, persona_id: int) -> None:
+    """Invalidate every remote session for a persona removed from a chat.
+
+    Callers normally use this in the same transaction that marks the
+    chat_personas row dormant. verify_guest_token() independently checks the
+    active attachment too, so stale or hand-edited database state still fails
+    closed even if a future caller forgets this lifecycle hook.
+    """
+    qi(
+        "UPDATE guest_grants SET revoked=1 "
+        "WHERE chat_id=? AND persona_id=? AND revoked=0",
+        (chat_id, persona_id),
+    )
 
 
 def revoke_grant(chat_id: int, grant_id: int) -> bool:

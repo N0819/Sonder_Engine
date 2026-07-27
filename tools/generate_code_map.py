@@ -27,6 +27,7 @@ MODULE_PURPOSES = {
     "agents.runtime": "Pipeline plans, dispatch, streaming, cancellation, resume, and reruns.",
     "agents.storage": "Step and active-variant persistence helpers.",
     "app": "FastAPI application, resource CRUD, import/export, turn control, and streaming endpoints.",
+    "auth_routes": "Typed host-authentication HTTP routes and cookie transport.",
     "character_schema": "Versioned character/persona defaults, normalization, accessors, and export payloads.",
     "checkpoints": "Whole-chat snapshots and checkpoint restore orchestration.",
     "commit": "Validated persistence of scene, entities, cast, lore, relationships, events, and memories.",
@@ -36,6 +37,7 @@ MODULE_PURPOSES = {
     "logging_utils": "Structured timing and observability helpers.",
     "memory": "Lorebook graph, memory retrieval/consolidation, relationships, and vector search.",
     "pipeline_context": "Typed mutable context passed through a turn pipeline.",
+    "pipeline_trace": "Privacy-conscious export, validation, and offline replay of persisted pipeline history.",
     "prompt_cache": "Provider-specific prompt-cache helpers.",
     "prompts": "Default system prompts and prompt preset access.",
     "providers": "Provider selection, retries, streaming, cancellation, model listing, and embeddings.",
@@ -91,6 +93,33 @@ def parse_module(path: Path, local_modules: set[str]) -> dict:
     functions: list[tuple[str, int, int, bool]] = []
     classes: list[tuple[str, int, int]] = []
     routes: list[tuple[str, str, str, int]] = []
+    router_prefixes: dict[str, str] = {}
+
+    # Route decorators carry only the path relative to their APIRouter.
+    # Record literal local prefixes first so the generated map describes the
+    # actual public URL instead of turning /api/auth/login into /login.
+    for node in tree.body:
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        value = node.value
+        if not isinstance(value, ast.Call):
+            continue
+        call_name = value.func.id if isinstance(value.func, ast.Name) else None
+        if call_name != "APIRouter":
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        names = [target.id for target in targets if isinstance(target, ast.Name)]
+        prefix = ""
+        for keyword in value.keywords:
+            if (
+                keyword.arg == "prefix"
+                and isinstance(keyword.value, ast.Constant)
+                and isinstance(keyword.value.value, str)
+            ):
+                prefix = keyword.value.value
+                break
+        for name in names:
+            router_prefixes[name] = prefix
 
     for node in tree.body:
         if isinstance(node, ast.Import):
@@ -118,7 +147,11 @@ def parse_module(path: Path, local_modules: set[str]) -> dict:
                     continue
                 if not decorator.args or not isinstance(decorator.args[0], ast.Constant):
                     continue
-                route_path = decorator.args[0].value
+                route_path = str(decorator.args[0].value)
+                if isinstance(func.value, ast.Name):
+                    route_path = (
+                        router_prefixes.get(func.value.id, "") + route_path
+                    )
                 routes.append((func.attr.upper(), str(route_path), node.name, node.lineno))
         elif isinstance(node, ast.ClassDef):
             end = getattr(node, "end_lineno", node.lineno)
