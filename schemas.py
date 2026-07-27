@@ -1049,12 +1049,15 @@ class CharacterAppraisal(BaseModel):
 
 class StressState(BaseModel):
     activation: float = Field(default=0.0, ge=0.0, le=1.0)
+    # Aversive component of activation, peak-held on its own so a pleasant
+    # drive is never re-read as distress next beat (psychology_runtime).
+    strain: float = Field(default=0.0, ge=0.0, le=1.0)
     load: float = Field(default=0.0, ge=0.0, le=1.0)
     coping_mode: str = ""
     overloaded: bool = False
 
     _clamp_stress = validator(
-        "activation", "load", pre=True, allow_reuse=True
+        "activation", "strain", "load", pre=True, allow_reuse=True
     )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
 
 
@@ -1062,9 +1065,14 @@ class HedonicState(BaseModel):
     pain: float = Field(default=0.0, ge=0.0, le=1.0)
     pleasure: float = Field(default=0.0, ge=0.0, le=1.0)
     source: str = ""
+    # Slow integral of unresolved somatic drive, and the character's own
+    # declaration that it discharged this beat (psychology_runtime).
+    charge: float = Field(default=0.0, ge=0.0, le=1.0)
+    saturated: bool = False
+    released: bool = False
 
     _clamp_hedonics = validator(
-        "pain", "pleasure", pre=True, allow_reuse=True
+        "pain", "pleasure", "charge", pre=True, allow_reuse=True
     )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
 
 
@@ -1698,11 +1706,22 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
                 text = line.strip()
                 if not text:
                     continue
+                # X14: preserve concealment markers a weak model may embed
+                # in a string line (e.g. "[concealed] Sarah: I know").
+                line_visibility = "overt"
+                line_conceal_from = []
+                m = re.match(r'^\s*\[(concealed|overt)\]\s*(.*)', text, re.IGNORECASE)
+                if m:
+                    line_visibility = m.group(1).lower()
+                    text = m.group(2)
                 if ":" in text and len(text.split(":", 1)[0]) <= 60:
                     spk, quote = text.split(":", 1)
                     line = {"speaker": spk.strip(), "exact_quote": quote.strip().strip('"\'')}
                 else:
                     line = {"speaker": "unknown", "exact_quote": text}
+                line["visibility"] = line_visibility
+                if line_conceal_from:
+                    line["conceal_from"] = line_conceal_from
             if not isinstance(line, dict):
                 continue
 
@@ -1717,6 +1736,17 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
             if not line.get("speaker"):
                 line["speaker"] = line.get("name") or line.get("who") or "unknown"
             line["volume"] = normalize_speech_volume(line.get("volume"))
+            # X14: normalize visibility so a concealed line survives the
+            # coercion intact. Without this, visibility from the original
+            # entry is silently dropped for string lines and unrecognized
+            # variants on dict lines, defaulting to "overt" downstream.
+            vis = str(line.get("visibility") or "").strip().lower()
+            if vis in ("concealed", "hidden", "secret"):
+                line["visibility"] = "concealed"
+            else:
+                line.setdefault("visibility", "overt")
+            if not isinstance(line.get("conceal_from"), list):
+                line["conceal_from"] = []
             if str(line.get("exact_quote") or "").strip():
                 cleaned_dialogue.append(line)
 

@@ -28,6 +28,12 @@ non-destructive legacy-card completion, and the perception/self-knowledge tests
 attack the new information paths with hidden-intent and other-body markers.
 `test_chat_character_cards` covers per-story card isolation, live-state
 preservation, identity-key rejection, UI wiring, and portable archive fidelity.
+`test_observation_derivation` is the companion to those leak tests on the other
+axis: the projection can be perfectly leak-free and still describe the beat
+wrongly, and the character agent is told to treat it as structure.
+`test_authorial_channel` and `test_authored_outcome_attribution` cover
+attribution — which declarations are the player's to make, and which seams go
+blind when an act that lands on a character carries no bound target.
 `test_initial_outfit` covers schema/import separation from body appearance,
 character/persona editor wiring, one-time seeding into live attire, first
 attachment behavior, authoritative establishment, and the private-card

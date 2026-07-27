@@ -61,7 +61,6 @@ from .common import (
     _dict,
     _dict_list,
     _extract_authority_claims,
-    _is_mental_action,
     _list,
     _normalize_scene_patch,
     _check_player_act_authority,
@@ -70,6 +69,8 @@ from .common import (
     _resolve_player_room,
     _sync_sequence_mirrors,
     assign_event_ids,
+    authored_other_subject,
+    bind_sequence_targets,
     canonicalize_positions,
     character_room,
     character_scene_keys,
@@ -79,60 +80,69 @@ from .common import (
     player_speech_lines,
 )
 
-def _route_authorial_npc_cognition(ctx, out):
-    """Authorial-channel floor (P3): when the PLAYER authors another character's
-    INTERIOR cognition -- a mental-verb beat whose grammatical SUBJECT is a
-    sheeted cast member ('Dr. Moon remembers she has her smartphone') -- that is
-    the player puppeting a mind the character alone owns. Reroute it from a
-    fait-accompli pc_action into an OFFER handed to that character's own agent
-    (out['authorial_offers'], surfaced in character_step), and drop it from the
-    resolved sequence so the Director never enacts the cognition as objective
-    truth. Any OBJECT the same input introduces (the phone exists) still rides
-    the normal world/generation path -- only the interior state is rerouted.
-
-    High precision: requires the cast name to be the LEADING subject AND the act
-    to be mental, so 'I remember Dr. Moon's face' (player's own recall about an
-    NPC) is untouched -- its subject is the player, not the NPC."""
-    cast = ctx.cast or []
-    if not cast:
-        return
-    name_to_id = {}
-    for c in cast:
+def _cast_match_forms(cast):
+    """Two views of the cast's identifying text, both casefolded: by id (for
+    subject detection) and by display name (for target binding)."""
+    by_id, by_name = {}, {}
+    for row in cast or []:
         try:
-            nm = character_name(json.loads(c["sheet"]))
+            sheet = json.loads(row["sheet"])
         except Exception:
             continue
-        if nm:
-            name_to_id[nm.casefold()] = c["id"]
-    if not name_to_id:
+        name = character_name(sheet)
+        if not name:
+            continue
+        forms = [str(k).casefold() for k in character_scene_keys(sheet)
+                 if str(k or "").strip()]
+        if not forms:
+            forms = [name.casefold()]
+        by_id[row["id"]] = forms
+        by_name[name] = forms
+    return by_id, by_name
+
+
+def _route_authorial_npc_beat(ctx, out, actor_forms=()):
+    """Authorial-channel floor (P3): when the PLAYER authors another character's
+    INTERIOR cognition or AUTONOMOUS response -- a beat whose subject is a
+    sheeted cast member and whose outcome is theirs alone to have ('Dr. Moon
+    remembers she has her smartphone', 'the strain finally pushes Dr. Moon over
+    the edge') -- that is the player puppeting a mind the character owns.
+    Reroute it from a fait-accompli pc_action into an OFFER handed to that
+    character's own agent (out['authorial_offers'], surfaced in character_step),
+    and drop it from the resolved sequence so the Director never enacts it as
+    objective truth. Any OBJECT the same input introduces (the phone exists)
+    still rides the normal world/generation path.
+
+    Cognition was the original scope, and it left the twin case open: an
+    involuntary bodily outcome authored for a character is puppeting by the
+    same argument, and because such an element stayed in the PLAYER's sequence
+    it inherited the player as its actor -- perception prepends the actor label
+    to the `observable` surface, so the outcome was delivered to every observer,
+    and to the narrator, as something the PLAYER underwent.
+
+    Subject detection is common.authored_other_subject; 'I remember Dr. Moon's
+    face' (the player's own recall about a character) and 'stabs Sarah' (the
+    player acting ON someone) are both left alone."""
+    cast_forms, _ = _cast_match_forms(ctx.cast)
+    if not cast_forms:
         return
     offers = out.setdefault("authorial_offers", [])
     kept = []
     changed = False
     for e in (out.get("sequence") or []):
-        if e.get("type") != "action":
-            kept.append(e)
-            continue
-        att = str(e.get("attempt") or "")
-        low = att.casefold()
-        subject_cid = None
-        for nm_cf, cid in name_to_id.items():
-            if low.startswith(nm_cf + " ") or low.startswith(nm_cf + "'"):
-                remainder = att[len(nm_cf):].strip(" '’")
-                if _is_mental_action(e.get("verb"), remainder):
-                    subject_cid = cid
-                break
+        subject_cid = authored_other_subject(e, cast_forms, actor_forms)
         if subject_cid is not None:
+            att = str(e.get("attempt") or "")
             offers.append({
                 "subject_id": subject_cid,
                 "proposition": att,
                 "source": "player",
             })
             ctx.add_warning(
-                "director_interpret: player-authored NPC cognition rerouted to "
-                f"an offer for cast {subject_cid} ({att!r})")
+                "director_interpret: player-authored NPC cognition or response "
+                f"rerouted to an offer for cast {subject_cid} ({att!r})")
             changed = True
-            continue  # drop the puppeted cognition from the resolved sequence
+            continue  # drop the puppeted beat from the resolved sequence
         kept.append(e)
     if changed:
         out["sequence"] = kept
@@ -373,7 +383,13 @@ def director_interpret(ctx, nonce):
     ctx.warnings.extend(warnings)
 
     norm_sequence(out)
-    _route_authorial_npc_cognition(ctx, out)
+    _route_authorial_npc_beat(
+        ctx, out, [str(pers.get("name") or persona_name(pers) or "").casefold()])
+    # Bind the acts the model left unbound BEFORE anything downstream asks
+    # whether they land on a character: the reaction-phase gate, claim subject
+    # binding and perception's targeted-observer check all read `targets`.
+    _, target_forms = _cast_match_forms(ctx.cast)
+    bind_sequence_targets(out.get("sequence"), target_forms)
     out["sequence"] = assign_event_ids(
         out.get("sequence"), f"turn:{ctx.turn.id}:player")
 
@@ -388,6 +404,7 @@ def director_interpret(ctx, nonce):
             entry = {}
             other_players[pid] = entry
         norm_sequence(entry)
+        bind_sequence_targets(entry.get("sequence"), target_forms)
         entry["sequence"] = assign_event_ids(
             entry.get("sequence"), f"turn:{ctx.turn.id}:extra:{pid}")
 
@@ -457,9 +474,12 @@ def director_interpret(ctx, nonce):
     # actor, so a self-directed effect (no target) resolves to them -- see
     # _extract_authority_claims; this stops the resolve reconciliation flagging
     # the player's own body actions (wave, go rigid) as 'no resolvable subject'.
+    # target_forms keeps that fallback off an effect whose text names someone
+    # else, so an unbound act never resolves to the player by default.
     fl["authority_claims"] = _extract_authority_claims(
         out.get("sequence"), ctx.input,
-        actor_name=(pers.get("name") or persona_name(pers)))
+        actor_name=(pers.get("name") or persona_name(pers)),
+        target_forms=target_forms)
 
     # Detect contested actions
     seq = out.get("sequence")

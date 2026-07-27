@@ -16,6 +16,15 @@ def _float(value, default=0.0):
     return default if result != result else result
 
 
+# Sustained-drive integration. The gain is per psych unit of stimulus, the
+# half-life is six times the pain/pleasure level's so charge outlives the beat
+# that caused it, and saturation is the point at which the state says the drive
+# is demanding resolution rather than merely present.
+_CHARGE_GAIN = 0.18
+_CHARGE_HALF_LIFE = 12.0
+_CHARGE_SATURATION = 0.85
+
+
 def _clamp(value, low=0.0, high=1.0, default=0.0):
     return max(low, min(high, _float(value, default)))
 
@@ -37,13 +46,24 @@ def elapsed_psych_units(previous_seconds, current_seconds, fallback_turns=1):
     return max(0.0, _float(fallback_turns, 1.0))
 
 
-def resolve_hedonic(previous, appraisal, interoception, body_state, elapsed_units):
-    """Resolve transient pain/pleasure from this beat's grounded appraisal.
+def resolve_hedonic(previous, appraisal, interoception, body_state,
+                    elapsed_units, released=False):
+    """Resolve transient pain/pleasure from this beat's grounded appraisal,
+    plus the sustained charge those levels leave behind.
 
     The proposal must carry a concrete `why`; otherwise non-zero values are
     ignored. Survival vitals may add a pain floor, but are never required.
     Pain and pleasure are independent because real mixed states can contain
     both.
+
+    `pain`/`pleasure` are LEVELS: peak-held and fast-decaying, they say what
+    the body registers right now. A level alone cannot represent a stimulus
+    that has been building for many beats -- once it clamps at the ceiling,
+    beat twelve is indistinguishable from beat one, so nothing in the state
+    ever says "this has gone on and has to go somewhere". `charge` is the
+    slow integral of that unresolved drive. It only ever discharges when the
+    character declares the resolution (`released`), because that resolution is
+    theirs to have; the runtime owns how it accumulates, not whether it ends.
     """
     previous = previous if isinstance(previous, dict) else {}
     appraisal = appraisal if isinstance(appraisal, dict) else {}
@@ -76,10 +96,24 @@ def resolve_hedonic(previous, appraisal, interoception, body_state, elapsed_unit
         previous.get("source") or "")
     if pain < 0.02 and pleasure < 0.02:
         source = ""
+
+    old_charge = _clamp(previous.get("charge"))
+    if released:
+        charge = 0.0
+    else:
+        charge_decay = 0.5 ** (elapsed / _CHARGE_HALF_LIFE) if elapsed else 1.0
+        # Pain drives less accumulation than pleasure at equal level: a body
+        # under sustained pain escalates through stress, which resolve_stress
+        # already models, not through a drive waiting on release.
+        drive = max(proposed_pleasure, proposed_pain * 0.5)
+        charge = _clamp(old_charge * charge_decay
+                        + drive * _CHARGE_GAIN * min(max(elapsed, 1.0), 3.0))
     return {
         "pain": round(_clamp(pain), 4),
         "pleasure": round(_clamp(pleasure), 4),
         "source": source[:300],
+        "charge": round(charge, 4),
+        "saturated": charge >= _CHARGE_SATURATION,
     }
 
 
@@ -90,6 +124,16 @@ def resolve_stress(previous, appraisal, profile, hedonic, elapsed_units,
     Stress biases the next deliberation but does not select behavior. Inputs are
     appraisal dimensions the character authored from its permitted current
     observations plus its own hedonic state.
+
+    Activation has two independent sources, and collapsing them was wrong:
+    STRAIN (threat, novelty, low control, pain) is aversive and accrues
+    cumulative load, while DRIVE (sustained pleasure and its unresolved charge)
+    is activating without being distressing. Subtracting pleasure from a single
+    combined figure -- as this did -- made a body at the ceiling of a powerful
+    stimulus read as perfectly composed, activation and load both arithmetically
+    zero. Pleasure still damps the accumulation of chronic load; it no longer
+    damps the acute arousal of the moment. `overloaded` and `load` remain
+    strain-only, because a demanding drive is not a coping failure.
     """
     previous = previous if isinstance(previous, dict) else {}
     appraisal = appraisal if isinstance(appraisal, dict) else {}
@@ -119,29 +163,39 @@ def resolve_stress(previous, appraisal, profile, hedonic, elapsed_units,
         if signed < 0:
             threat = max(threat, abs(signed) * certainty)
 
-    target = _clamp(
+    charge = _clamp(hedonic.get("charge"))
+
+    strain_target = _clamp(
         reactivity * (
             threat * 0.55 + novelty * 0.15
             + (1.0 - controllability) * 0.15
             + (1.0 - coping) * 0.15
             + norm * 0.1
         )
-        + pain * 0.45 - pleasure * 0.15
+        + pain * 0.45
     )
+    drive = _clamp(pleasure * 0.3 + charge * 0.35)
     elapsed = max(0.0, _float(elapsed_units))
     half_life = 2.0 + (1.0 - recovery) * 6.0
     decay = 0.5 ** (elapsed / half_life) if elapsed else 1.0
-    old_activation = _clamp(previous.get("activation"))
+    # `strain` is peak-held separately from `activation` so last beat's drive
+    # is never re-read as this beat's distress. Legacy states carry no strain
+    # key; their activation is the closest thing to it.
+    old_strain = _clamp(previous.get(
+        "strain", previous.get("activation")))
     old_load = _clamp(previous.get("load"))
-    activation = max(old_activation * decay, target)
+    strain = max(old_strain * decay, strain_target)
+    activation = _clamp(strain + drive)
     load_decay = 0.5 ** (elapsed / 60.0) if elapsed else 1.0
-    load = _clamp(old_load * load_decay + activation * 0.08)
+    load = _clamp(old_load * load_decay
+                  + max(0.0, strain - pleasure * 0.15) * 0.08)
     mode = str(proposed_mode or previous.get("coping_mode") or "")
     return {
         "activation": round(activation, 4),
+        "strain": round(strain, 4),
         "load": round(load, 4),
         "coping_mode": mode[:120],
-        "overloaded": max(activation, load) >= threshold,
+        "overloaded": max(strain, load) >= threshold,
     }
 
 

@@ -81,6 +81,8 @@ These are architectural guarantees, not stylistic preferences.
 
 - The player owns the declaration of player speech, thought, and attempted action.
 - The Director interprets and resolves declarations; it must not silently replace the player’s declared content.
+- Every element of the player's `sequence` is attributed to the player: perception prepends the actor label to its `observable` surface, and the narrator renders it as the player's own conduct. An interior or autonomous outcome the player authors FOR a character therefore must not stay in that sequence — `agents/director.py` (`_route_authorial_npc_beat`) rerouts it to an offer that character's own agent decides on. A player act that merely *causes* such an outcome stays the player's; the target's response is resolved through the reaction phase.
+- An act that lands on another character must carry that character in `targets` — the reaction-phase gate, claim subject binding, and perception's targeted-observer check all read it, so an unbound act is invisible to every one of them (`agents/common.py`, `bind_sequence_targets`).
 - Character agents declare behavior but do not author objective success.
 - Model output is provisional until deterministic commit code validates and persists it.
 
@@ -197,6 +199,11 @@ Do not rename a shared function without searching every JavaScript file.
 - `test_perception_intent_leak.py` and `test_character_self_knowledge.py`:
   adversarial checks for structured-observation smuggling and cross-character
   private/body-state leakage.
+- `test_authorial_channel.py` and `test_authored_outcome_attribution.py`: who an
+  authored outcome belongs to — reroute of puppeted cognition/response, target
+  binding, the reaction gate, and claim subject binding.
+- `test_observation_derivation.py`: whether the structured observations
+  perception derives are *true*, as distinct from leak-free.
 
 Add a test next to the subsystem it protects. A bug involving leaked dialogue or private knowledge belongs in a perception/cognition test, not only in a narrator snapshot.
 Tests that request `temp_db` are collected into the slow/full tier. A test

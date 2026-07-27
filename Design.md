@@ -87,7 +87,7 @@ alpha5.1.
 | Two perception passes per turn (onset, outcome) | **Built** | `perception_act` before resolution, `perception_outcome` after |
 | Player-leads loop; characters declare blind to each other | **Built** | Plan built from `director_interpret.flow`; character steps run in parallel |
 | Memory provenance | **Built, exceeds spec** | Six kinds (`witnessed/heard/told/read/inferred/remembered`) against the specified three, plus `turn_idx`, bound at commit |
-| Action visibility posture | **Built** | `visibility` + `conceal_from` + `targets` on every declaration |
+| Action visibility posture | **Built** | `visibility` + `conceal_from` + `targets` on every declaration; targets the model leaves empty are bound deterministically, because the seams that ask "does this land on someone?" all read that field |
 | Two-store protagonist, never merged | **Built** | `private_voice_setting` appears only in `agents/narration.py` — verified absent from character and perception stages. `shadow_profile` is separate world state |
 | Seeded, logged, replayable dice | **Built** | `director_resolve` uses `random.Random("{chat}:{turn}:{nonce}:{actor}:{attempt}")` and records `seed/roll/modifier/dc/outcome/margin` |
 | Deterministic scheduling | **Built** | `scheduled_events.seed` written as deterministic strings; `stable_event_key` gives rerun idempotency |
@@ -95,7 +95,7 @@ alpha5.1.
 | Narrator exemplar pool, event-amnesiac | **Built** | `exemplars` setting read in `agents/narration.py`; narrator receives the player view, not the event stream |
 | Tiered cognition | **Built** | Model roles (`default`/`director`/`narrator`/`utility`) plus per-character `simulation.tier` |
 | Theory of mind, cached and event-triggered | **Built** | `theory_of_mind.py`; `tom_triggers` on the flow |
-| Event-grounded live psychology | **Built** | v4 character schema plus `psychology_runtime.py`: stress, mixed pain/pleasure outside survival, protected beliefs, learned cue associations, and simulation-time recovery |
+| Event-grounded live psychology | **Built** | v4 character schema plus `psychology_runtime.py`: stress split into aversive strain and non-distressing drive, mixed pain/pleasure outside survival with a slow-integrating unresolved `charge`, protected beliefs, learned cue associations, and simulation-time recovery |
 | Authored initial outfit with live story attire | **Built** | Character/persona `initial_outfit` is kept separate from stable body appearance and seeds `scene.attire` once; later clothing changes remain mutable story state |
 | Checkpoint / rollback | **Built** | `checkpoints.py`; branching depends on it |
 | Consolidation, salience-weighted hybrid retrieval | **Built** | `consolidate_character_memory`; keyword + embedding search in `memory.py` |
@@ -194,7 +194,7 @@ Memory layers, per character:
 |---|---|---|
 | Stable core | Traits with activation/inhibition cues, values, self-image, protected beliefs, coping patterns | Rare, evidence-gated |
 | Stance / relationships | Trust, warmth, fear per target | Event-triggered (see [Structural debt](#structural-debt)) |
-| Active state | Mood, goals, affect, stress activation/load, independent pain and pleasure | Every turn; relaxes using simulation time |
+| Active state | Mood, goals, affect, stress activation/strain/load, independent pain and pleasure, and the unresolved charge they accumulate | Every turn; relaxes using simulation time. Charge outlives the level that built it and discharges only on the character's own declared resolution |
 | Learned associations | Cue, appraisal bias, response tendency, strength | Evidence-gated reinforcement/extinction |
 | Episodic | Witnessed events, provenance + salience | On commit; consolidated over time |
 | Summaries | Autobiographical synthesis | Post-commit; reconstructible |

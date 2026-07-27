@@ -23,6 +23,7 @@ from .common import (
     _character_by_id,
     _character_display_name,
     _conceal_from_targets_observer,
+    _delivery_ok,
     _unknown_actor_label,
     character_room,
     _dict,
@@ -89,6 +90,12 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
                     )
                 ):
                     continue
+                # Pattern 3: unified delivery gate for hearing -- checks
+                # containment_conceals and awareness before hear_level.
+                if not _delivery_ok(scene, observer_name, actor_name, "hearing",
+                                    volume=event.get("volume", "normal"),
+                                    awareness=awareness_of(ctx.chat.id, observer_name)):
+                    continue
                 level = hear_level(relation, event.get("volume", "normal"))
                 if level == "none":
                     continue
@@ -104,6 +111,13 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
                 perceived_by.add(observer_id)
             elif event.get("type") == "action":
                 if event.get("visibility") == "concealed":
+                    continue
+                # Pattern 3: use the unified delivery gate for actions,
+                # which checks containment_conceals and awareness in
+                # addition to has_visual. The old code used bare
+                # has_visual(relation), missing containment and awareness.
+                if not _delivery_ok(scene, observer_name, actor_name, "action",
+                                    awareness=awareness_of(ctx.chat.id, observer_name)):
                     continue
                 if not has_visual(relation):
                     continue

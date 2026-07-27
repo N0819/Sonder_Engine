@@ -1003,6 +1003,7 @@ def character_initial_active_state(sheet: dict) -> dict:
         "active_concerns": state.get("active_concerns") or [],
         "stress": {
             "activation": _profile_float(stress.get("activation"), 0.0),
+            "strain": _profile_float(stress.get("strain"), 0.0),
             "load": _profile_float(stress.get("load"), 0.0),
             "coping_mode": str(stress.get("coping_mode") or ""),
         },
@@ -1010,6 +1011,8 @@ def character_initial_active_state(sheet: dict) -> dict:
             "pain": _profile_float(hedonic.get("pain"), 0.0),
             "pleasure": _profile_float(hedonic.get("pleasure"), 0.0),
             "source": str(hedonic.get("source") or ""),
+            "charge": _profile_float(hedonic.get("charge"), 0.0),
+            "saturated": bool(hedonic.get("saturated")),
         },
         # Interior-depth: blended affect (surface + optional undercurrent over a
         # resting baseline) and this-beat wants. undercurrent starts null (the

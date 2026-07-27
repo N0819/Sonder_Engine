@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import types
 
-from agents.director import _route_authorial_npc_cognition
+from agents.director import _route_authorial_npc_beat
 
 
 def _ctx(cast):
@@ -44,7 +44,7 @@ def test_npc_cognition_rerouted_to_offer():
     ctx = _ctx(cast)
     out = {"sequence": [
         _act("Dr. Moon remembers she has her smartphone", "remember", [25])]}
-    _route_authorial_npc_cognition(ctx, out)
+    _route_authorial_npc_beat(ctx, out)
     # dropped from the enacted sequence...
     assert out["sequence"] == []
     # ...and delivered as an offer for cast 25
@@ -61,7 +61,7 @@ def test_player_self_recall_untouched():
     ctx = _ctx(cast)
     out = {"sequence": [
         _act("remember the runes her mother taught her", "recall")]}
-    _route_authorial_npc_cognition(ctx, out)
+    _route_authorial_npc_beat(ctx, out)
     assert len(out["sequence"]) == 1
     assert out.get("authorial_offers", []) == []
 
@@ -73,7 +73,7 @@ def test_physical_npc_action_not_an_offer():
     ctx = _ctx(cast)
     out = {"sequence": [
         _act("Dr. Moon steps back from the panel", "step", [25])]}
-    _route_authorial_npc_cognition(ctx, out)
+    _route_authorial_npc_beat(ctx, out)
     assert len(out["sequence"]) == 1
     assert out.get("authorial_offers", []) == []
 
@@ -85,6 +85,57 @@ def test_recall_about_npc_not_rerouted():
     ctx = _ctx(cast)
     out = {"sequence": [
         _act("I remember Dr. Moon's face from the file", "recall", [25])]}
-    _route_authorial_npc_cognition(ctx, out)
+    _route_authorial_npc_beat(ctx, out)
+    assert len(out["sequence"]) == 1
+    assert out.get("authorial_offers", []) == []
+
+
+def test_npc_autonomous_response_rerouted_to_offer():
+    """A character giving in is theirs to decide, exactly like a memory: an
+    autonomous response authored FOR them is an offer, not an enacted fact."""
+    cast = _cast([("Dr. Moon", 25)])
+    ctx = _ctx(cast)
+    out = {"sequence": [_act("Dr. Moon gives in and lowers the gun", "yield")]}
+    _route_authorial_npc_beat(ctx, out)
+    assert out["sequence"] == []
+    assert out["authorial_offers"][0]["subject_id"] == 25
+
+
+def test_indirectly_authored_npc_response_rerouted():
+    """The same puppeting written with the character as OBJECT rather than
+    leading subject -- the shape the leading-subject rule alone missed. Left in
+    the player's sequence it would inherit the player as its actor, and be
+    delivered to every observer as the PLAYER's own response."""
+    cast = _cast([("Dr. Moon", 25)])
+    ctx = _ctx(cast)
+    out = {"sequence": [
+        _act("the mounting strain finally pushes Dr. Moon over the edge",
+             "break")]}
+    _route_authorial_npc_beat(ctx, out, ["Ash"])
+    assert out["sequence"] == []
+    assert out["authorial_offers"][0]["subject_id"] == 25
+
+
+def test_player_act_causing_a_response_is_still_the_players():
+    """'shoves Dr. Moon until she gives in' names an autonomous outcome, but
+    the PLAYER is its agent: it stays a pc_action and the character's response
+    is adjudicated in the reaction phase, not pre-empted by an offer."""
+    cast = _cast([("Dr. Moon", 25)])
+    ctx = _ctx(cast)
+    out = {"sequence": [
+        _act("shoves Dr. Moon until she gives in", "shove", [25])]}
+    _route_authorial_npc_beat(ctx, out, ["Ash"])
+    assert len(out["sequence"]) == 1
+    assert out.get("authorial_offers", []) == []
+
+
+def test_player_named_subject_is_never_rerouted():
+    """An attempt the player leads by their OWN name is theirs even when it
+    names a character and an autonomous outcome."""
+    cast = _cast([("Dr. Moon", 25)])
+    ctx = _ctx(cast)
+    out = {"sequence": [
+        _act("Ash gives in and hands Dr. Moon the file", "yield")]}
+    _route_authorial_npc_beat(ctx, out, ["ash"])
     assert len(out["sequence"]) == 1
     assert out.get("authorial_offers", []) == []

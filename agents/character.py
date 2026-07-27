@@ -201,6 +201,13 @@ def character_step(ctx, cid, nonce):
         current_turn_idx=ctx.turn.idx,
         current_view=view or "",
         active_state=active,
+        # F1: on a reroll, exclude any memories minted by the stale run
+        # of this turn (turn_idx > cutoff means everything after the
+        # last good turn is excluded). current_turn_idx already excludes
+        # this turn with <, but a reroll may have committed memories for
+        # this turn before the reroll started; max_turn_idx = idx - 1
+        # ensures those are also excluded.
+        max_turn_idx=(ctx.turn.idx - 1) if ctx.get("_reroll") else None,
     )
 
     char_room = character_room(sc, sh)
@@ -363,7 +370,7 @@ def character_step(ctx, cid, nonce):
 
     # Authorial offers (P3): propositions the PLAYER authored about THIS
     # character's interior/behavior, rerouted here instead of being enacted as
-    # truth (see director._route_authorial_npc_cognition). The character decides
+    # truth (see director._route_authorial_npc_beat). The character decides
     # in-character how (or whether) each lands -- its agency is preserved.
     _offers = [o.get("proposition") for o in
                ((ctx.get("director_interpret") or {}).get("authorial_offers") or [])

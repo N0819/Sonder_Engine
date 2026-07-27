@@ -91,6 +91,54 @@
 
 ### Fixed
 
+- **An outcome authored for a character was enacted as the player's own.**
+  A player input that mixed their own act with a bodily or interior outcome
+  written for another character produced a second element in the *player's*
+  action sequence. Every element of that sequence is attributed to the player —
+  perception prepends the actor label to the subject-free `observable` surface,
+  and the narrator is licensed to render the sequence as the player's conduct —
+  so the character's outcome was delivered to every observer, and narrated, as
+  something the player underwent. The authorial reroute that already existed
+  for puppeted *cognition* now covers autonomous responses on the same
+  argument, including the indirect phrasing where the character is the object
+  rather than the leading subject. A player act that merely causes such an
+  outcome is untouched, and its target's response is resolved through the
+  reaction phase as before.
+
+- **An act that landed on a character often carried no bound target.** With
+  `targets` and effect `target_id` both left empty, three seams went blind at
+  once: no reaction phase was planned, the claim-subject fallback read "no
+  targets" as "self-directed" and stamped the *player* as the subject of
+  another character's outcome, and perception's targeted-observer check could
+  not match. Targets the text plainly supports are now bound deterministically
+  before any of those seams run, and the self-subject fallback no longer fires
+  on an effect whose text names somebody else.
+
+- **Only violence could be physically contested.** The reaction-phase gate
+  required a verb from a small combat whitelist, so any other contestable
+  outcome asserted on a character's body was resolved without that character
+  getting a reaction. Contestability, a bound target, and a declared effect are
+  now the condition; the whitelist only widens it.
+
+- **Structured observations described every beat the same way.** The projection
+  emitted one atom holding the whole view, with unanchored substring cues:
+  `paint` matched `pain`, a single quoted line relabelled a page of body
+  sensation as hearing, and `something` pinned fidelity to ambiguous on any
+  view long enough to contain it. Views now decompose into per-channel atoms
+  with cue-density grading, and a perceiver's own body state counts as directed
+  at them. The information budget is unchanged — the projection still reads
+  only the post-gate view.
+
+- **A sustained stimulus was indistinguishable from a momentary one.** Pain and
+  pleasure were peak-held levels that clamp at the ceiling, so beat twelve of an
+  unbroken stimulus looked exactly like beat one and nothing ever accumulated.
+  Hedonic state now carries a slow-integrating `charge` that outlives the level
+  and discharges only when the character declares the resolution. Stress
+  activation was also computed with pleasure *subtracted*, which made a body at
+  the ceiling of a powerful stimulus read as perfectly composed with activation
+  and load both zero; activation now separates aversive strain from
+  non-distressing drive, and `load`/`overloaded` remain strain-only.
+
 - **Host setup could leave a permanently incomplete account.**
   Username, PBKDF2 salt/hash, and initial session were previously four
   separately committed writes. A failure between them made setup appear

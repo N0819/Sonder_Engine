@@ -18,12 +18,14 @@ from providers import embed_texts
 from prompts import get_prompt
 import affect
 import psychology_runtime
+import re as _re
 from character_schema import (character_name, new_uid, character_psychology,
                               character_interoception,
                               character_initial_outfit,
                               character_initial_active_state, effective_drive,
                               character_standing_intentions,
-                              normalize_character_data, persona_name)
+                              normalize_character_data, persona_name,
+                              character_appearance as _char_appearance)
 from frames import is_recognized_in_frame
 from scene import set_char_state, set_char_status, seed_initial_attire
 from mechanics import mechanics_sweep, news_latency_seconds, stable_event_key
@@ -3230,26 +3232,56 @@ def prepare_memory_commit(ctx, *, scene=None):
                 f" {room_desc}" if room_desc else ""
             )
         if v:
+            # F2/P1: dialogue memory recognition gate. The speaker's
+            # canonical name was stored regardless of whether the hearer
+            # recognizes them, leaking identity into memory. Check the
+            # hearer's known map -- if the speaker isn't recognized, store
+            # an appearance-based label or "a voice" instead, and drop
+            # intended_target (which also names the speaker).
+            _known_map = wget(cid, "known", {}) or {}
+            _hearer_known = set(_known_map.get(cname) or [])
             for d in dlog:
                 spk = d.get("speaker", "")
                 if _is_player(spk, chat):
                     spk = "the player"
                 if spk == cname:
                     continue
+                # Recognition gate: use canonical name only if the hearer
+                # knows the speaker; otherwise use appearance label or
+                # "a voice".
+                if spk != "the player" and spk not in _hearer_known:
+                    # Find the speaker's sheet for appearance text
+                    _spk_sheet = None
+                    for _cr in ctx.cast:
+                        if character_name(json.loads(_cr["sheet"])) == spk:
+                            _spk_sheet = json.loads(_cr["sheet"])
+                            break
+                    _app = _char_appearance(_spk_sheet) if _spk_sheet else ""
+                    _app = _app.strip() if isinstance(_app, str) else ""
+                    if _app:
+                        # Strip leading name tokens (like _unknown_actor_label)
+                        _app = _re.sub(r'^(?:[A-Z][\w\'-]+,?\s+)+', '', _app)
+                        _app = _re.sub(r'^(a|an|the)\s+', '', _app, flags=_re.I)
+                        spk_label = f"the {_app[:60]}" if _app else "a voice"
+                    else:
+                        spk_label = "a voice"
+                    tgt = None  # drop intended_target -- it names the speaker
+                else:
+                    spk_label = spk
+                    tgt = d.get("intended_target")
                 quote = d.get("exact_quote", "")
                 qbody = _quote_body(quote)
                 if qbody and (quote in v or qbody in v):
                     category = _durable_dialogue_category(qbody)
                     if category:
-                        tgt = d.get("intended_target")
                         pending_memories.append({
                             "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
                             "turn_idx": turn.idx, "kind": "dialogue", "category": category,
                             "provenance": "heard",
                             "salience": 0.9 if category == "promise" else 0.82,
-                            "content": f"{spk} said {quote}" + (f" to {tgt}" if tgt else ""),
-                            "gist": f"{spk}: {qbody}", "key_phrases": [qbody, spk],
-                            "entities": [spk], "location": room_name,
+                            "content": f"{spk_label} said {quote}" + (f" to {tgt}" if tgt else ""),
+                            "gist": f"{spk_label}: {qbody}", "key_phrases": [qbody, spk_label],
+                            "entities": [spk_label], "location": room_name,
                             "emotional_context": mood,
                             "valence": _mem_valence, "arousal": _mem_arousal,
                             "event_key": _stable_event_key(
@@ -3395,9 +3427,17 @@ def prepare_memory_commit(ctx, *, scene=None):
                     prev_affect, appraisal_out, baseline, elapsed_units,
                     proposed=asv.get("affect") or asv.get("mood"))
                 body_state = vitals_of(sc, cname)
+                proposed_hedonic = (
+                    asv.get("hedonic") if isinstance(asv.get("hedonic"), dict)
+                    else {}
+                )
                 new_hedonic = psychology_runtime.resolve_hedonic(
                     prev_as.get("hedonic"), appraisal_out,
                     character_interoception(sh), body_state, elapsed_units,
+                    # Discharging an accumulated drive is the character's own
+                    # event to have, so the declaration is theirs; how it built
+                    # up in the first place stays the runtime's.
+                    released=bool(proposed_hedonic.get("released")),
                 )
                 proposed_stress = (
                     asv.get("stress") if isinstance(asv.get("stress"), dict) else {}

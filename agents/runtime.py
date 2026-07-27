@@ -601,6 +601,16 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
         input=turn_row["player_input"],
         extra_players=_load_extra_players(chat_id, turn_row["idx"], turn_row["frame_id"]),
     )
+    # F1: flag reroll runs so downstream consumers (memory search in
+    # character steps) can apply a turn cutoff and exclude stale memories
+    # minted by the original run of this turn.
+    if from_key is not None or only_key is not None:
+        ctx["_reroll"] = True
+
+    def _restore_and_refresh():
+        """Restore durable state and invalidate the pre-restore cast cache."""
+        restore_checkpoint(chat_id, turn_row["idx"])
+        ctx.cast = active_cast(chat_id, turn_row["frame_id"])
 
     establishment = (turn_row["idx"] == 0)
 
@@ -642,7 +652,7 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
                 f"or rerun before rerolling '{only_key}'"
             )
         if only_key == "commit" and has_existing_steps:
-            restore_checkpoint(chat_id, turn_row["idx"])
+            _restore_and_refresh()
         elif (
             only_key != "commit"
             and has_existing_steps
@@ -658,7 +668,7 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             # Downstream steps (commit included) are marked stale just below,
             # leaving the turn in an explicit needs-resume state rather than a
             # half-committed one.
-            restore_checkpoint(chat_id, turn_row["idx"])
+            _restore_and_refresh()
         # Marked stale BEFORE computing (not after) so a crash/abort mid-step
         # leaves accurate breadcrumbs instead of the pre-existing downstream
         # content silently continuing to look fresh.
@@ -694,7 +704,7 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
         return
 
     if has_existing_steps:
-        restore_checkpoint(chat_id, turn_row["idx"])
+        _restore_and_refresh()
 
     if establishment:
         plan = establishment_plan()

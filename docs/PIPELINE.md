@@ -106,6 +106,14 @@ observation objects are discarded. They therefore carry the same information
 budget as the view and cannot reintroduce raw event intent, private tell grounds,
 unknown identities, or another body's internal state.
 
+The projection decomposes a view into per-channel atoms (consecutive sentences
+sharing a sensory channel, capped per view), and grades intensity, suddenness
+and ambiguity by cue density rather than tripping them on a single hit. An
+atom's own body state counts as directed at the perceiver. This metadata is
+advisory context for the character's appraisal — no deterministic code consumes
+the numbers — so its failure mode is a character told to doubt what it plainly
+perceived, not a leak.
+
 ### `reaction_loop`
 
 Used for contested, time-sensitive physical reactions. Reactions are declarations under limited information, not guaranteed outcomes.
