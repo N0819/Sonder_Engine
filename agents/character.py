@@ -147,6 +147,56 @@ def _known_pronouns(cast, persona, recognized, exclude=None):
     return out
 
 
+def _annotate_known_exits(digest, scene, visited_rooms):
+    """Mark each exit with whether this character has been through it.
+
+    `spatial_digest` renders an exit as {room, barrier} -- identical whether
+    the character arrived through that doorway a beat ago or has never taken
+    it. With nothing to separate them, preferring the unexplored exit is not a
+    choice the payload makes available, and the result reads as backtracking.
+
+    `visited_rooms` is the character's OWN route (commit records it from their
+    committed position), so this adds no knowledge they did not earn by
+    walking. `last_seen_beats_ago` is ordinal, not a turn count: how far back
+    in their own route it was, which is the form a person actually has.
+    """
+    if not isinstance(digest, dict):
+        return digest
+    rooms = (scene or {}).get("rooms") or {}
+    name_to_id = {}
+    for rid, room in rooms.items():
+        display = str((room or {}).get("name") or rid)
+        name_to_id.setdefault(display, rid)
+    route = [r for r in (visited_rooms or []) if isinstance(r, str)]
+    counts = {}
+    for rid in route:
+        counts[rid] = counts.get(rid, 0) + 1
+    out = {}
+    for bucket, edges in digest.items():
+        if not isinstance(edges, list):
+            out[bucket] = edges
+            continue
+        marked = []
+        for edge in edges:
+            if not isinstance(edge, dict):
+                marked.append(edge)
+                continue
+            rid = name_to_id.get(str(edge.get("room") or ""))
+            entry = dict(edge)
+            if rid and rid in counts:
+                entry["been_there"] = True
+                entry["times_entered"] = counts[rid]
+                for back, seen in enumerate(reversed(route), 1):
+                    if seen == rid:
+                        entry["last_seen_beats_ago"] = back
+                        break
+            else:
+                entry["been_there"] = False
+            marked.append(entry)
+        out[bucket] = marked
+    return out
+
+
 def character_step(ctx, cid, nonce):
     chat = ctx.chat
     row = next((c for c in ctx.cast if c["id"] == cid), None)
@@ -197,14 +247,16 @@ def character_step(ctx, cid, nonce):
     else:
         observations = base_observations
 
+    # Resolved before the memory context, not after: where the character is
+    # standing is a retrieval cue, and the recall is built here.
+    char_room = character_room(sc, sh)
     memory_context = build_character_memory_context(
         chat_id=chat.id, char_id=cid,
         current_turn_idx=ctx.turn.idx,
         current_view=view or "",
         active_state=active,
+        here=(sc.get("rooms") or {}).get(char_room, {}).get("name") or char_room,
     )
-
-    char_room = character_room(sc, sh)
     known_tags, excl_titles = _char_known_tags(sh)
     knowledge = knowledge_for_character(_books(ctx), char_room, known_tags, excl_titles)
     stored_state = json.loads(row["cstate"] or "{}")
@@ -353,7 +405,14 @@ def character_step(ctx, cid, nonce):
             # the way THEY face) -- grounding for their movement/positioning
             # choices, not a script to narrate. Empty when they have no
             # established orientation.
-            "spatial_frame": spatial_digest(sc, character_name(sh)),
+            "spatial_frame": _annotate_known_exits(
+                spatial_digest(sc, character_name(sh)), sc,
+                stored_state.get("visited_rooms") or []),
+            # Where they are, named. The digest lists what leads OUT of a room
+            # without ever naming the room itself, so a character had to
+            # re-derive their own location from the view's prose every beat.
+            "current_room": (sc.get("rooms") or {}).get(
+                character_room(sc, sh), {}).get("name") or "",
         },
         "memory": memory_context,
         "relationships": relationships,

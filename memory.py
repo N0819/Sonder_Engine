@@ -1128,7 +1128,8 @@ def _rrf_add(scores, reasons, ranking, weight, reason):
             reasons[mid].append(reason)
 
 def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
-                    current_turn_idx=None, chronological=True, viewer_frame_id=_UNSET):
+                    current_turn_idx=None, chronological=True, viewer_frame_id=_UNSET,
+                    here=None):
     rows = q("SELECT * FROM memories WHERE chat_id=? AND char_id=? AND (?=1 OR archived=0)",
              (chat_id, char_id, 1 if include_archived else 0))
     if current_turn_idx is not None:
@@ -1212,6 +1213,19 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
                 fused[mid] += 0.12 * (1.0 - age)
                 if "recent-memory cue" not in reasons[mid]:
                     reasons[mid].append("recent-memory cue")
+        # Where you are is a retrieval cue. Ranking was semantic + lexical +
+        # recency only, so "what happened in THIS room" -- and the navigational
+        # form of it, "which way did I go from here last time" -- had no index
+        # behind it at all: the one memory that answers it competes purely on
+        # wording. `location` was already stored on every row and simply never
+        # read. Deliberately modest, and additive rather than a filter: being
+        # here makes a memory easier to reach, it does not make everything
+        # elsewhere unreachable.
+        if here and str(mem.get("location") or "").strip().casefold() == \
+                str(here).strip().casefold():
+            fused[mid] += 0.09
+            if "happened here" not in reasons[mid]:
+                reasons[mid].append("happened here")
         if mem["category"] == "promise" and any(t in query_text.lower() for t in ("promise", "promised", "swore", "vow", "agreed")):
             fused[mid] += 0.1
             reasons[mid].append("promise category")
@@ -1335,7 +1349,7 @@ def save_memory_summary(chat_id, char_id, summary, *, scope="autobiographical", 
         embedding, embedding_model, embedding_dim, time.time()))
 
 def build_character_memory_context(chat_id, char_id, current_turn_idx, current_view, active_state, *,
-                                   recent_turns=4, recall_limit=8):
+                                   recent_turns=4, recall_limit=8, here=None):
     active_state = active_state or {}
     recent = recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=recent_turns, limit=12)
     recent_ids = {m["id"] for m in recent}
@@ -1361,7 +1375,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # committed memories while deciding turn N, reroll or not.
     recalled = search_memories(chat_id, char_id, query_text, k=recall_limit,
                                include_archived=True, current_turn_idx=current_turn_idx,
-                               chronological=True)
+                               chronological=True, here=here)
     recalled = [m for m in recalled if m["id"] not in recent_ids]
     return {
         "working_memory": {
