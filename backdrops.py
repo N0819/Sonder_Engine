@@ -40,6 +40,7 @@ import re
 import threading
 
 from db import q, wget_for_frame
+from spatial import effective_light, light_at, normalize_light, room_of
 
 # Where generated images live. Deliberately NOT the database: engine.db is
 # already ~400MB of text, and a few hundred backdrops would dwarf it while
@@ -87,7 +88,7 @@ def place_desc(room):
     cannot show. Defined here, above its callers, because `visual_signature`
     is the first of them.
     """
-    return _setting_only((room or {}).get("desc") or "")
+    return to_visual_register(_setting_only((room or {}).get("desc") or ""))
 
 
 def _room_of_player(scene, player_name):
@@ -97,7 +98,7 @@ def _room_of_player(scene, player_name):
     return (scene or {}).get("player_room")
 
 
-def visual_signature(scene, room_id, style=None):
+def visual_signature(scene, room_id, style=None, viewer=None):
     """A stable hash of everything that changes how `room_id` LOOKS.
 
     Deliberately excludes people and speech: a room does not become a different
@@ -116,6 +117,11 @@ def visual_signature(scene, room_id, style=None):
         "desc": place_desc(room),
         "time": time_bucket(scene.get("time")),
         "location": scene.get("location") or "",
+        # Without this a room that goes dark keeps serving its lit backdrop --
+        # the cache is keyed on what changes how the room LOOKS, and nothing
+        # changes that more.
+        "light": _viewer_light(scene, room_id, viewer),
+        "light_sources": _light_sources_in(scene, room_id),
         "style": style or {},
     }
     for key in _VISUAL_STATE_KEYS:
@@ -241,6 +247,7 @@ def _setting_only(text):
     # ate the setting prose along with it.
     stripped = re.sub(r'[""«»"][^""«»"]*[""«»"]', " . ", str(text or ""))
     stripped = _PERSON_CLAUSE.sub(" ", stripped)
+    stripped = _BODY_CLAUSE.sub(" ", stripped)
     # Fragments left by removing a quote mid-sentence.
     stripped = re.sub(r"(?<![.!?])\s*\.\.+", " ", stripped)
     # Collapse the runs of bare periods left where consecutive quotes were
@@ -249,6 +256,114 @@ def _setting_only(text):
     stripped = re.sub(r"^[\s.]+", "", stripped)
     stripped = re.sub(r"\s{2,}", " ", stripped).strip()
     return stripped
+
+
+# --- visual register ------------------------------------------------------
+#
+# Image generators reject prompts on keywords, not on meaning, and a room
+# description written for prose is full of them. "Blood on the walls" is an
+# ordinary thing for a room to have after a fight and an instant refusal from
+# most generators -- so a legitimate empty-room backdrop fails on a word.
+#
+# The fix is to say what the EYE SEES instead of naming the concept: "dark red
+# spatter across the plaster" paints the identical picture and is not a
+# keyword. This is better image prompting regardless -- generators render
+# colour, texture and form far more reliably than they render abstractions --
+# and it is the whole trick here. Nothing below is trying to obtain an image a
+# generator would refuse on its merits: backdrops are EMPTY ROOMS by
+# construction (see _PERSON_CLAUSE above and the "no people" instruction in the
+# style string), so what is being described is furniture, surfaces and light.
+# Where a term describes something only a person can be or do, the right
+# rewrite is to drop it, and that is what these do.
+#
+# Ordered longest-first at build time so "blood-soaked" is handled before
+# "blood".
+_VISUAL_REGISTER = {
+    # Aftermath. The commonest refusal, and the easiest to render honestly.
+    "bloodstained": "stained dark red",
+    "blood-stained": "stained dark red",
+    "bloodsoaked": "soaked dark red",
+    "blood-soaked": "soaked dark red",
+    "bloodspatter": "dark red spatter",
+    "blood spatter": "dark red spatter",
+    "bloodsplatter": "dark red spatter",
+    "bloody": "dark red streaked",
+    "blood": "dark red staining",
+    "gore": "dark wet residue",
+    "gory": "dark and wet",
+    "viscera": "dark wet matter",
+    "entrails": "dark wet matter",
+    "carnage": "wreckage and dark staining",
+    "massacre": "wreckage and dark staining",
+    "slaughter": "wreckage and dark staining",
+    "butchered": "torn apart",
+    "mutilated": "torn apart",
+    "dismembered": "broken apart",
+    "severed": "cut through",
+    "wound": "torn surface",
+    "wounds": "torn surfaces",
+    "flesh": "pale surface",
+    # Furniture and implements, described as objects rather than by purpose.
+    "torture": "iron",
+    "torture chamber": "stone room with iron fittings",
+    "torture device": "iron frame",
+    "execution": "iron",
+    "gallows": "heavy wooden frame",
+    "guillotine": "heavy wooden frame with a blade",
+    "bondage": "leather-strapped",
+    "restraints": "leather straps and buckles",
+    "shackles": "iron cuffs and chain",
+    "manacles": "iron cuffs and chain",
+    "whip": "coiled leather cord",
+    "whips": "coiled leather cords",
+    "brothel": "lounge with curtained alcoves",
+    "bordello": "lounge with curtained alcoves",
+    # Substances and apparatus.
+    "drugs": "small glass vials",
+    "narcotics": "small glass vials",
+    "syringe": "glass and steel instrument",
+    "syringes": "glass and steel instruments",
+    "opium": "resin and long pipes",
+    # Charged abstractions a generator cannot draw anyway.
+    "horrifying": "stark", "horrific": "stark", "gruesome": "stark",
+    "grotesque": "misshapen", "obscene": "lurid",
+    "murder": "violence",
+}
+
+# Nouns that can only be a PERSON. A sentence containing one is dropped whole,
+# exactly as a sentence with a pronoun or a speech verb is -- patching the word
+# would leave "The has been removed" behind, and the sentence had no place in
+# an empty-room prompt to begin with.
+_BODY_CLAUSE = re.compile(
+    r"[^.!?]*\b(corpses?|cadavers?|dead bodies|dead body|bodies|body|"
+    r"remains|nude|naked|nudity|sex|sexual|erotic|explicit|suicide)"
+    r"\b[^.!?]*[.!?]",
+    re.I)
+
+_VISUAL_REGISTER_RE = re.compile(
+    r"\b(" + "|".join(
+        re.escape(term) for term in
+        sorted(_VISUAL_REGISTER, key=len, reverse=True)
+    ) + r")\b",
+    re.I,
+)
+
+
+def to_visual_register(text):
+    """Rewrite charged vocabulary into what it actually looks like.
+
+    Applied to every text that reaches an image prompt, and to the cache key
+    through the same path, so the two cannot drift.
+    """
+    text = str(text or "")
+    if not text:
+        return ""
+    out = _VISUAL_REGISTER_RE.sub(
+        lambda m: _VISUAL_REGISTER[m.group(0).casefold()], text)
+    # Tidy the spacing a substitution can disturb.
+    out = re.sub(r"\s+([,.;])", r"\1", out)
+    out = re.sub(r"\s{2,}", " ", out)
+    return out.strip()
 
 
 # Scene fields that describe the PLACE. Everything else -- entities, positions,
@@ -260,10 +375,65 @@ def _setting_only(text):
 #   "The TARDIS materializes in this room... Hinami and the Doctor are
 #    outside it now."
 # A whitelist that admits a freeform field is not a whitelist.
-_PLACE_FIELDS = ("name", "desc")
+# `light` is part of what a place LOOKS like -- arguably the largest part, for
+# a picture. A cellar at noon and the same cellar unlit are the same
+# architecture and two completely different images.
+_PLACE_FIELDS = ("name", "desc", "light")
 
 
-def room_projection(scene, room_id):
+def _viewer_light(scene, room_id, viewer=None):
+    """The light this picture should be painted by.
+
+    The room's ambient light when nobody is named -- but a backdrop is the room
+    as the PLAYER sees it, and a player carrying a torch through a lightless
+    cave is not standing in the dark. A hand light does not raise the room's
+    ambient (it makes a pool, which is right for who can see whom), so asking
+    the room alone would render a cave the player is lighting as pitch black,
+    and would not change back when they switch the light off.
+    """
+    if viewer:
+        lit = light_at(scene, viewer)
+        if room_of(scene, viewer) == room_id:
+            return lit
+    return effective_light(scene, room_id)
+
+
+def _light_sources_in(scene, room_id):
+    """Names of the active light sources in this room, for the image prompt.
+
+    A picture of a cave lit by a campfire and a picture of a cave lit by a
+    ceiling strip are different pictures, and the difference is the source.
+    Occupant-free by construction: only entities, never people's positions.
+    """
+    out = []
+    positions = (scene or {}).get("positions") or {}
+    for eid, entity in ((scene or {}).get("entities") or {}).items():
+        if not isinstance(entity, dict) or not entity.get("light_source"):
+            continue
+        state = entity.get("state") if isinstance(entity.get("state"), dict) else {}
+        if state.get("lit", True) in (False, 0, "off", "false", "no", "doused", "out"):
+            continue
+        name = str(entity.get("name") or eid)
+        where = positions.get(eid, positions.get(name))
+        if where == room_id and not any(o["name"] == name for o in out):
+            out.append({
+                "name": name,
+                # Intensity: a candle and a floodlight are different pictures
+                # of the same room.
+                "emits": normalize_light(entity.get("light_source")),
+                "fills_room": _light_radius_of(entity) == "room",
+            })
+    return out
+
+
+def _light_radius_of(entity):
+    declared = str((entity or {}).get("light_radius") or "").strip().casefold()
+    if declared in ("room", "spot"):
+        return declared
+    return "spot" if (entity or {}).get("portable") else "room"
+
+
+def room_projection(scene, room_id, viewer=None):
     """A whitelisted, occupant-free description of one room.
 
     Deliberately a whitelist rather than a filter: adding a new scene field
@@ -273,6 +443,13 @@ def room_projection(scene, room_id):
     scene = scene or {}
     room = ((scene.get("rooms") or {}).get(room_id) or {})
     out = {k: room.get(k) for k in _PLACE_FIELDS if room.get(k)}
+    # What the room is ACTUALLY lit by, not just what it was built with: a
+    # campfire, a lantern set down, a burning wreck. Without this a cellar lit
+    # by a fire someone built still renders pitch black.
+    out["light"] = _viewer_light(scene, room_id, viewer)
+    lights = _light_sources_in(scene, room_id)
+    if lights:
+        out["light_sources"] = lights
     # `desc` is the richest field and was assumed to be pure architecture. Live
     # data says otherwise -- mapping writes occupants into it ("Crew members
     # and civilians gather here...") -- so it goes through the same
@@ -285,6 +462,8 @@ def room_projection(scene, room_id):
         out["desc"] = place_desc(room)
         if not out["desc"]:
             out.pop("desc")
+    if out.get("light"):
+        out["light"] = normalize_light(out["light"])
     out["room"] = room_id
     # scene.location is NOT included -- but NOT because the engine is broken.
     # It tracks relocation correctly since TR-3 (checkpoints after that fix
@@ -410,7 +589,7 @@ def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None):
     room_id = _room_of_player(scene, player_name)
     if not room_id:
         return None
-    signature = visual_signature(scene, room_id, style)
+    signature = visual_signature(scene, room_id, style, viewer=player_name)
     room = ((scene.get("rooms") or {}).get(room_id) or {})
     return {
         "room": room_id,
@@ -420,14 +599,14 @@ def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None):
         # Structured, occupant-free: this is what an image prompt is written
         # from. Rich (architecture, light, exits, damage) and safe by
         # construction (no entities, no positions, no people).
-        "place": room_projection(scene, room_id),
+        "place": room_projection(scene, room_id, viewer=player_name),
         # Optional atmosphere only, from the ARRIVAL beat (mid-scene prose is
         # people talking; arrival prose describes the place). People and speech
         # are stripped, but this is a supplement -- `place` is the source of
         # record, so a thin or empty flavour string costs nothing.
-        "flavour": _setting_only(player_view_for_turn(
+        "flavour": to_visual_register(_setting_only(player_view_for_turn(
             chat_id, arrival_turn_for_room(chat_id, turn_idx, room_id,
-                                           player_name))),
+                                           player_name)))),
         "time": scene.get("time") or "",
         "location": scene.get("location") or "",
     }
@@ -449,6 +628,59 @@ _BACKDROP_STYLE = (
 )
 
 
+# How each light level should be PAINTED. "dark" is the interesting one: an
+# unlit room is not a black rectangle, it is a room rendered by whatever little
+# light reaches it, which is what makes a usable backdrop rather than a void.
+_LIGHT_PROMPT = {
+    "dark": ("unlit, near-total darkness, deep shadow with only faint edges "
+             "picked out, barely legible forms"),
+    "dim": "dimly lit, low warm light, long shadows, muted detail",
+    "bright": "harshly lit, strong bright light, blown highlights, hard shadows",
+}
+
+
+# How a source of a given strength paints a space. A candle in a cave and a
+# floodlit hangar are the same instruction ("there is a light") only if you do
+# not look: intensity decides how much of the room the picture even contains.
+_SOURCE_LOOK = {
+    "dim": ("a small pool of warm light around it, falling off fast into deep "
+            "shadow, most of the space unlit"),
+    "lit": "casting steady light across the space, shadows thrown outward",
+    "bright": ("throwing harsh light, blown highlights near it and hard black "
+               "shadows beyond"),
+}
+
+
+def _source_lighting(place):
+    """Prompt fragments naming what is lighting the room, and how strongly."""
+    sources = place.get("light_sources") or []
+    if not sources:
+        return []
+
+    names = ", ".join(str(s.get("name") or "") for s in sources if s.get("name"))
+    if not names:
+        return []
+
+    # The strongest source sets the look; a candle beside a bonfire does not
+    # get a say in how the picture reads.
+    strongest = max(
+        sources,
+        key=lambda s: {"dark": 0, "dim": 1, "lit": 2, "bright": 3}.get(
+            s.get("emits"), 2),
+    )
+    look = _SOURCE_LOOK.get(strongest.get("emits") or "lit", "")
+    fragment = "lit by " + names
+    if look:
+        fragment += ", " + look
+    # A hand light in an otherwise dark room is the whole composition: say so,
+    # or the model paints an evenly lit room with a torch in it.
+    if not strongest.get("fills_room") and \
+            normalize_light(place.get("light")) in ("dark", "dim"):
+        fragment += ("; the light source is the only illumination and the room "
+                     "beyond it is dark")
+    return [fragment]
+
+
 def compose_prompt(place, style=None, flavour=""):
     """A deterministic image prompt from the whitelisted place projection.
 
@@ -465,6 +697,13 @@ def compose_prompt(place, style=None, flavour=""):
         parts.append(", ".join(str(o) for o in place["overlays"]))
     if place.get("time"):
         parts.append("time: %s" % place["time"])
+    # Lighting, in words an image model acts on. Omitted at "lit", which is the
+    # default and needs no instruction -- saying "normally lit" would only
+    # compete with whatever the description already implies.
+    lighting = _LIGHT_PROMPT.get(normalize_light(place.get("light")))
+    if lighting:
+        parts.append(lighting)
+    parts.extend(_source_lighting(place))
     if flavour:
         parts.append(flavour)
     for key in ("genre", "tone"):

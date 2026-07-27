@@ -66,6 +66,14 @@ $("#b-style").onclick = async () => {
     placeholder: "Never generate — e.g. modern tech, gore, named real people." },
     g.avoid || "");
 
+  const survivalState = await api("GET", `/api/chats/${S.chatId}/survival`);
+  const survivalBox = el("input", {
+    type: "checkbox", ...(survivalState.enabled ? { checked: "" } : {})
+  });
+  const npcBox = el("input", {
+    type: "checkbox", ...(survivalState.show_npcs ? { checked: "" } : {})
+  });
+
   modal("Genre & style", b => b.append(
     el("div", { class: "small dim" },
       "Applies to what the engine ", el("b", {}, "invents"),
@@ -80,8 +88,20 @@ $("#b-style").onclick = async () => {
       el("div", { class: "small" }, "Mapping notes ", el("span", { class: "dim" }, "— shapes newly generated rooms")), mapNotes),
     el("div", { style: "margin-top:8px" },
       el("div", { class: "small" }, "Avoid"), avoid),
+    el("div", { style: "margin-top:12px;border-top:1px solid var(--bd);padding-top:10px" },
+      el("label", { class: "tgl" }, survivalBox, " track bodily condition"),
+      el("div", { class: "small dim", style: "margin-top:4px" },
+        "Breath, stamina, nourishment and injury for every body, moved by how much time a beat takes rather than by turns. Off means absent: nothing is tracked and nothing reaches the Director, so a story that did not ask for a hunger clock never pays for one. Air is the sharp one, since a body sealed in a closed container runs out."),
+      el("label", { class: "tgl", style: "margin-top:8px" },
+        npcBox, " also show other characters beside the story"),
+      el("div", { class: "small dim", style: "margin-top:4px" },
+        "Your own condition sits in the margin beside the prose. Everyone else's is tracked either way and read in the Cast panel — turn this on to have theirs surface alongside yours as well.")),
     el("div", { class: "row", style: "margin-top:10px" },
       el("button", { class: "primary", onclick: async () => {
+        await api("PUT", `/api/chats/${S.chatId}/survival`,
+                  { enabled: survivalBox.checked,
+                    show_npcs: npcBox.checked });
+        await refreshVitalsHud();
         const out = await api("PUT", `/api/chats/${S.chatId}/style_guide`, {
           style_guide: {
             genre: genre.value, tone: tone.value,
@@ -225,6 +245,7 @@ $("#b-cast").onclick = async () => {
   const tabs = [
     { id: "cast", label: "Cast", render: renderCastTab },
     { id: "lorebooks", label: "Lorebooks", render: renderLorebooksTab },
+    { id: "condition", label: "Condition", render: renderConditionTab },
     { id: "insights", label: "Insights", render: renderInsightsTab },
     { id: "multiplayer", label: "Multiplayer", render: renderMultiplayerTab },
     { id: "frames", label: "Frames", render: renderFramesTab },
@@ -355,7 +376,282 @@ function renderCastTab(d, b) {
   b.append(renderBackgroundPresencesPanel());
 
   hydrateCastLocations(locationSlots, sceneSlot);
+
 }
+
+// ---- Condition tab ---------------------------------------------------------
+// Where everyone's numbers live. The margin tracker shows the player by
+// default because that is the body you act with; this is the full table,
+// including every NPC, and it is why showing them beside the prose can stay
+// off without the information being lost.
+
+function renderConditionTab(d, b) {
+  const panel = el("div");
+  b.append(panel);
+  hydrateConditionTab(panel);
+}
+
+async function hydrateConditionTab(panel) {
+  if (!S.chatId) {
+    return;
+  }
+
+  let data;
+  try {
+    data = await api("GET", `/api/chats/${S.chatId}/vitals`);
+  } catch (error) {
+    panel.append(emptyState("Could not read condition."));
+    return;
+  }
+  if (!panel.isConnected) {
+    return;
+  }
+
+  if (!data.enabled) {
+    panel.append(el("div", { class: "small dim" },
+      "This story does not track bodily condition. Turn it on in Genre & style — breath, stamina, nourishment and injury, moved by how much time each beat takes."));
+    return;
+  }
+
+  if (!(data.bodies || []).length) {
+    panel.append(emptyState("Nothing tracked yet."));
+    return;
+  }
+
+  panel.append(el("div", { class: "small dim" },
+    "Everyone this story is tracking. Your own condition also sits in the margin beside the prose; the rest appear there only if you switch that on."));
+
+  for (const body of data.bodies) {
+    const rows = el("div", { class: "vitals-grid full" });
+    for (const row of VITAL_ROWS) {
+      rows.append(
+        el("span", { class: "vital-name" }, row.label),
+        vitalMeter(body.vitals?.[row.key], row.invert),
+        el("span", { class: "vital-word" }, body.labels?.[row.key] || "—")
+      );
+    }
+    panel.append(el("div", { class: "card", style: "margin-top:8px" },
+      el("div", { class: "row" },
+        el("b", {}, body.name),
+        body.is_player ? el("span", { class: "badge" }, "you") : null),
+      rows));
+  }
+
+}
+
+// ---- Survival tracker ------------------------------------------------------
+
+const VITAL_ROWS = [
+  { key: "air", label: "Air", invert: false },
+  { key: "stamina", label: "Stamina", invert: false },
+  { key: "nourishment", label: "Satiation", invert: false },
+  { key: "injury", label: "Injury", invert: true }
+];
+
+function vitalMeter(value, invert) {
+  const pct = Math.round(
+    Math.max(0, Math.min(Number(value ?? (invert ? 0 : 1)), 1)) * 100
+  );
+  // For injury a HIGH number is bad; for the rest a low one is. One scale,
+  // read the right way round, so green always means "fine".
+  const severity = invert ? pct : 100 - pct;
+  const tone = severity >= 70 ? "bad" : severity >= 40 ? "warn" : "ok";
+  return el("div", { class: "vital-meter" },
+    el("div", {
+      class: `vital-fill ${tone}`,
+      style: `width:${pct}%`
+    })
+  );
+}
+
+// The corner HUD. Rendered into #vitals, which sits opposite the activity
+// panel so the two never collide, and styled to match it -- this is chrome,
+// not content, and should read as part of the frame.
+//
+// It shows the player first and every other tracked body after, because the
+// Director tracks NPCs too: a companion who is starving matters to the player
+// even though it is not the player who is starving.
+// Resize resistance, measured rather than guessed. The usable gutter is a
+// function of #main's width, which changes when the window resizes AND when the
+// sidebar collapses -- a media query on viewport width can only see one of
+// those. This measures the real distance between #main's left edge and the
+// centred transcript column, and hides the tracker when there is not enough of
+// it rather than letting the margin note sit on top of the prose.
+const VITALS_MIN_GUTTER = 186;
+const VITALS_MAX_WIDTH = 232;
+
+function syncVitalsGutter() {
+  const composer = $("#composer");
+  const inner = $("#composer-inner");
+  if (!composer || !inner) {
+    return;
+  }
+
+  // The input box is capped and centred inside #composer, so the gutter is
+  // the real distance from the composer's left edge to the box. Measured from
+  // the elements rather than assumed from the viewport, because the sidebar
+  // collapsing changes it and no resize event reports that.
+  const usable = Math.floor(
+    inner.getBoundingClientRect().left - composer.getBoundingClientRect().left - 10
+  );
+  // The NPC panel sits ABOVE the composer, not over it. The composer's height
+  // changes as the textarea grows, so this is measured every sync rather than
+  // assumed -- a fixed offset put the panel on top of the input box.
+  // Vertical placement. Both panels are stacked up from the bottom of #main:
+  // yours starts just above the composer, theirs above yours. Measured every
+  // sync because the composer grows as you type and either panel's height
+  // depends on how many bodies it holds.
+  const band = composer.offsetHeight;
+  const playerHost = $("#vitals");
+  const npcHost = $("#vitals-npcs");
+
+  const playerVisible = playerHost && !playerHost.classList.contains("hidden");
+  if (playerHost) {
+    playerHost.style.setProperty("--vitals-bottom", (band + 12) + "px");
+  }
+  if (npcHost) {
+    const above = playerVisible ? playerHost.offsetHeight + 10 : 0;
+    npcHost.style.setProperty("--vitals-bottom", (band + 12 + above) + "px");
+  }
+  const fits = usable >= VITALS_MIN_GUTTER;
+  const width = Math.min(Math.max(usable, 0), VITALS_MAX_WIDTH) + "px";
+
+  for (const host of [$("#vitals"), $("#vitals-npcs")]) {
+    if (!host) {
+      continue;
+    }
+    host.style.setProperty("--vitals-width", width);
+    host.style.setProperty("--vitals-left", "12px");
+    // Never let geometry resurrect a panel with nothing in it.
+    if (fits && !host.classList.contains("hidden")) {
+      host.classList.add("fits");
+    } else {
+      host.classList.remove("fits");
+    }
+  }
+}
+
+window.syncVitalsGutter = syncVitalsGutter;
+window.addEventListener("resize", syncVitalsGutter);
+if (window.ResizeObserver) {
+  // Catches the sidebar collapsing, which no resize event reports.
+  const observed = $("#composer");
+  if (observed) {
+    new ResizeObserver(syncVitalsGutter).observe(observed);
+  }
+}
+
+function hideVitalsHud(host) {
+  if (!host) {
+    return;
+  }
+  host.classList.add("hidden");
+  host.classList.remove("fits");
+  host.innerHTML = "";
+}
+
+function vitalsBlock(body) {
+  const rows = el("div", { class: "vitals-grid" });
+  for (const row of VITAL_ROWS) {
+    rows.append(
+      el("span", { class: "vital-name" }, row.label),
+      vitalMeter(body.vitals?.[row.key], row.invert),
+      el("span", { class: "vital-word" }, body.labels?.[row.key] || "—")
+    );
+  }
+  return el("div", {
+    class: "vitals-body" + (body.is_player ? "" : " npc")
+  },
+    body.is_player
+      ? null
+      : el("div", { class: "vitals-who" }, body.name),
+    rows);
+}
+
+async function refreshVitalsHud() {
+  const host = $("#vitals");
+  if (!host) {
+    return;
+  }
+
+  if (!S.chatId) {
+    hideVitalsHud(host);
+    hideVitalsHud($("#vitals-npcs"));
+    return;
+  }
+
+  // Which story this refresh is FOR. It is fired without await from openChat,
+  // so switching stories quickly can land an old chat's response after the new
+  // one's -- which left the previous story's tracker sitting there. Same guard
+  // the lorebook workspace uses for its own superseded loads.
+  const wanted = S.chatId;
+
+  let data;
+  try {
+    data = await api("GET", `/api/chats/${wanted}/vitals`);
+  } catch (error) {
+    if (S.chatId === wanted) {
+      hideVitalsHud(host);        // a tracker must never break the story view
+      hideVitalsHud($("#vitals-npcs"));
+    }
+    return;
+  }
+
+  if (S.chatId !== wanted) {
+    return;                       // a newer story superseded this load
+  }
+
+  if (!data.enabled || !(data.bodies || []).length) {
+    hideVitalsHud(host);
+    hideVitalsHud($("#vitals-npcs"));
+    return;
+  }
+
+  // Two homes, because they are two different things. YOURS sits in the gutter
+  // beside the input box -- the body you act with, always in view while you
+  // type. THEIRS is opt-in and rendered over the story background above it,
+  // where there is room for more than one and where it can stay quiet.
+  const player = (data.bodies || []).filter(b => b.is_player);
+  const others = data.show_npcs
+    ? (data.bodies || []).filter(b => !b.is_player)
+    : [];
+
+  if (player.length) {
+    // Identical structure to the NPC panel: heading, then a labelled row per
+    // vital. The two read as the same object in two places, which is the point.
+    host.innerHTML = "";
+    host.append(el("div", { id: "vitals-head" }, "Condition"));
+    const list = el("div", { id: "vitals-list" });
+    player.forEach(b => list.append(vitalsBlock(b)));
+    host.append(list);
+    host.classList.remove("hidden");
+  } else {
+    hideVitalsHud(host);
+  }
+
+  const npcHost = $("#vitals-npcs");
+  if (npcHost) {
+    if (others.length) {
+      npcHost.innerHTML = "";
+      npcHost.append(el("div", { id: "vitals-npcs-head" }, "Others"));
+      others.forEach(b => npcHost.append(vitalsBlock(b)));
+      npcHost.classList.remove("hidden");
+    } else {
+      hideVitalsHud(npcHost);
+    }
+  }
+
+  syncVitalsGutter();
+  requestAnimationFrame(syncVitalsGutter);
+}
+
+function clearVitalsHud() {
+  hideVitalsHud($("#vitals"));
+  hideVitalsHud($("#vitals-npcs"));
+}
+
+window.clearVitalsHud = clearVitalsHud;
+window.refreshVitalsHud = refreshVitalsHud;
 
 // ---- Character relocation --------------------------------------------------
 // Moving someone is an authoring edit, not a story beat: it changes the scene

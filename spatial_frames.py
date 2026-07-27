@@ -37,7 +37,8 @@ from db import q, qi, transaction, wget, wget_for_frame, wset, wset_for_frame
 from frames import create_frame, get_frame
 from paradox import get_paradox
 from scene import active_cast, persona_of, set_char_state, set_char_status
-from spatial import room_of, rooms_adjacent, travel_bearing, anchor_bearing_of
+from spatial import (THRESHOLD_CROSSING_BEATS, anchor_bearing_of, has_visual,
+                     room_of, rooms_adjacent, spatial_rel, travel_bearing)
 
 NOT_A_ZONE = None
 
@@ -361,6 +362,81 @@ def infer_came_from(chat_id, frame_id, prev_scene, new_scene, cast_names):
             orientation.pop(name, None)  # left the scene
             changed = True
 
+    return changed
+
+
+def infer_threshold_crossings(chat_id, frame_id, prev_scene, new_scene,
+                              cast_names):
+    """Deterministic per-body `crossings`, joining the infer_came_from family
+    (called from commit_scene on the merged scene, right after it).
+
+    A position field changes in an instant; going through a doorway does not.
+    Where the boundary is one sight passes through, that mismatch costs
+    nothing -- the room behind keeps watching through the opening. Where the
+    boundary is OPAQUE, it made bodies blink out of the world: the beat a body
+    stepped through a curtained doorway or into an enclosure, every observer
+    behind it lost them completely, mid-step, with nothing narrated as having
+    happened.
+
+    So a body that has just crossed an opaque boundary is recorded as still
+    crossing: {from, to, beats}. spatial.sight_level floors sight at `shapes`
+    for observers in the room they LEFT while the record lives, which is what
+    lets them be seen going in without being seen once in. The record is
+    decremented each beat the body stays put and dropped the moment it moves
+    again or leaves the scene -- so it can only ever make a body visible for
+    the crossing itself, never afterwards.
+
+    Mutates new_scene['crossings'] in place; returns whether anything changed.
+    """
+    prev_pos = prev_scene.get("positions") or {}
+    new_pos = new_scene.get("positions") or {}
+    crossings = new_scene.get("crossings")
+    if not isinstance(crossings, dict):
+        crossings = {}
+
+    names = set(cast_names or [])
+    names.update(new_pos.keys())
+    names.update(crossings.keys())
+
+    changed = False
+    for name in names:
+        old_r = prev_pos.get(name)
+        new_r = new_pos.get(name)
+
+        # A real step this beat, through something sight does not cross.
+        if (new_r and old_r and new_r != old_r
+                and rooms_adjacent(new_scene, old_r, new_r)
+                and not has_visual(spatial_rel(new_scene, old_r, new_r))):
+            crossings[name] = {"from": old_r, "to": new_r,
+                               "beats": THRESHOLD_CROSSING_BEATS}
+            changed = True
+            continue
+
+        rec = crossings.get(name)
+        if not isinstance(rec, dict):
+            continue
+
+        # Moved on, or gone from the scene: the crossing is over either way.
+        if not new_r or new_r != rec.get("to"):
+            crossings.pop(name, None)
+            changed = True
+            continue
+
+        try:
+            beats = int(rec.get("beats") or 0) - 1
+        except (TypeError, ValueError):
+            beats = 0
+        if beats > 0:
+            crossings[name] = {**rec, "beats": beats}
+        else:
+            crossings.pop(name, None)
+        changed = True
+
+    if changed:
+        if crossings:
+            new_scene["crossings"] = crossings
+        else:
+            new_scene.pop("crossings", None)
     return changed
 
 

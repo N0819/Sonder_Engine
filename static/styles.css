@@ -178,7 +178,7 @@ outline:none;border-color:color-mix(in srgb,var(--acc) 55%,var(--bd))}
 #sideactions{padding:10px;border-top:1px solid var(--bd);display:flex;
 gap:6px;flex-wrap:wrap;background:rgba(11,14,20,.32)}
 #sideactions>button{flex:1 1 112px}
-#main{flex:1;display:flex;flex-direction:column;min-width:0}
+#main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}  /* positions #vitals-npcs over the story */
 /* Desktop-only collapse of the left sidebar (stories/characters/personas/
    lore). Scoped to >680px so it never fights the mobile drawer below, which
    uses position:fixed + the .open class instead. */
@@ -247,7 +247,7 @@ color:var(--fg)}
    what you read were two different column widths sitting directly above one
    another. `--composer-measure` is 65ch of the PROSE face plus the send/stop
    column, so the text field itself lines up with the prose above it. */
-#composer{display:flex;gap:8px;padding:10px 12px;
+#composer{display:flex;gap:8px;padding:10px 12px;position:relative;
 border-top:1px solid var(--bd);background:var(--bg2);
 box-shadow:0 -10px 30px rgba(0,0,0,.13)}
 /* Same column as .turn: max-width 720px, centred. Matching THAT (rather than
@@ -299,6 +299,78 @@ align-items:center;min-height:20px}
 .badge.err{border-color:#71414c;color:#ffadb5}
 /* Where a cast member is standing. Capped so a long room name ("TARDIS ›
    Secondary Console Room") cannot push the row's buttons off the card. */
+/* Bodily condition.
+
+   NOT a floating panel. It lives in the gutter #main already has -- the
+   transcript column is capped and centred, so on a wide enough screen there is
+   dead space between the sidebar and the prose. Putting it there means it
+   never covers the story and never collides with the sidebar, which a fixed
+   bottom-left panel did.
+
+   Styled as marginalia rather than chrome: no card, no border, no shadow. It
+   should read as something pencilled in the margin of the page.
+
+   EVERY colour here is a theme variable. The four themes each override the
+   ok/warn/err and card/border families, so a hardcoded rgba would have looked
+   correct in exactly one of them -- the meters would still be default
+   blue-grey on tavern's wood and on lcars's black.
+
+   Visibility is NOT a media query: the gutter depends on #main's width, which
+   changes when the sidebar collapses as well as when the window resizes. It is
+   measured (see syncVitalsGutter) and this class is toggled from that. */
+/* ONE rule for both panels. They kept drifting apart while they had separate
+   declarations -- the player one ended up laying out in flow, stretching the
+   width of #main and pushing the composer up, which an absolutely positioned
+   element cannot do. Written once, they cannot differ by accident again: the
+   only thing that distinguishes them is how far up from the bottom they sit. */
+#vitals,#vitals-npcs{
+  position:absolute;
+  left:var(--vitals-left,12px);
+  width:var(--vitals-width,232px);
+  bottom:var(--vitals-bottom,12px);
+  z-index:7;
+  pointer-events:none;
+  display:flex;
+  flex-direction:column;
+  gap:9px;
+  opacity:0;
+  visibility:hidden;
+  transition:opacity .15s ease;
+}
+#vitals.fits,#vitals-npcs.fits{opacity:1;visibility:visible}
+#vitals-npcs.fits{animation:activity-in .18s ease}
+#vitals-head,#vitals-npcs-head{font-size:11px;letter-spacing:.07em;
+text-transform:uppercase;color:var(--dim);margin-bottom:6px;padding-left:1px}
+#vitals-list{display:flex;flex-direction:column;gap:9px}
+.vitals-body + .vitals-body{padding-top:8px;border-top:1px solid var(--bd)}
+.vitals-who{display:flex;align-items:center;gap:5px;font-size:12px;
+color:var(--fg);margin-bottom:5px}
+.vitals-who .badge{font-size:9px;min-height:0;padding:0 5px}
+/* A FIXED label column, so every bar starts at the same x. That alignment is
+   what makes four meters scannable rather than four similar smudges -- with an
+   auto column each bar began wherever its label happened to end. */
+.vitals-grid{display:grid;grid-template-columns:74px minmax(0,1fr);
+gap:5px 9px;align-items:center}
+.vital-name{font-size:12px;color:var(--fg);opacity:.78}
+.vital-word{display:none}          /* the bar carries it; words crowd a margin */
+/* The Cast panel's Condition tab has room for all three columns and the word. */
+.vitals-grid.full{grid-template-columns:auto minmax(70px,1fr) auto;gap:5px 9px;
+margin-top:6px}
+.vitals-grid.full .vital-word{display:inline;font-size:11px;color:var(--dim)}
+.vitals-grid.full .vital-meter{height:6px}
+.vital-meter{height:6px;border-radius:2px;overflow:hidden;
+background:var(--card-bg);border:1px solid var(--card-border)}
+.vital-fill{height:100%;transition:width .25s ease}
+.vital-fill.ok{background:var(--ok)}
+.vital-fill.warn{background:var(--warn)}
+.vital-fill.bad{background:var(--err)}
+/* An NPC tracker is opt-in and deliberately fainter than the player's: it is
+   emerging over the backdrop, not competing with it. */
+.vitals-body.npc{opacity:.88}
+/* A faint plate so the meters read over a scene backdrop. Deliberately not a
+   card: no border, no shadow, just enough to separate text from picture. */
+#vitals,#vitals-npcs{background:color-mix(in srgb,var(--bg) 58%,transparent);
+border-radius:9px;backdrop-filter:blur(3px);padding:9px 11px 10px}
 .cast-location{display:inline-flex;align-items:center;min-width:0}
 .cast-room-select{max-width:210px;font-size:12px}
 .chip{display:inline-flex;align-items:center;padding:2px 8px;margin:2px 3px 2px 0;

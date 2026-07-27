@@ -1017,6 +1017,8 @@ from memory import (
     get_lorebook_links, restore_lorebook_links,
     LOREBOOK_LINK_TYPES,
 )
+from survival import (survival_enabled, set_survival_enabled, seed_vitals,
+                      survival_shows_npcs, set_survival_shows_npcs)
 from importers import (
     generate_lorebook_plan, apply_lorebook_plan, resume_lorebook_plan,
     recoverable_lore_gen_job, lore_gen_job, cancel_lore_gen_job,
@@ -2267,6 +2269,85 @@ def chat_del_char(cid: int, ch: int):
     pend.append({"type": "departure", "who": name})
     wset(cid, "pending", pend)
     return {"ok": True}
+
+@app.get("/api/chats/{cid}/survival")
+def survival_get(cid: int):
+    return {"enabled": survival_enabled(cid),
+            "show_npcs": survival_shows_npcs(cid)}
+
+@app.put("/api/chats/{cid}/survival")
+def survival_put(cid: int, body: dict = Body(...)):
+    """Bodily condition tracking for THIS story: breath, stamina, nourishment,
+    injury.
+
+    Off by default and off means ABSENT -- turning it off stops the ticking and
+    leaves whatever a scene already recorded alone rather than zeroing bodies.
+    """
+    chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+
+    enabled = bool(body.get("enabled"))
+    set_survival_enabled(cid, enabled)
+    if "show_npcs" in body:
+        set_survival_shows_npcs(cid, bool(body.get("show_npcs")))
+
+    if enabled:
+        # Seed the bodies this story knows about. Without this, switching the
+        # feature on did nothing visible: the table only came into existence
+        # when the Director wrote a vitals patch, and on a quiet turn it had no
+        # reason to -- so the tracker stayed empty and the tick had nothing to
+        # advance. Existing records are untouched, so re-enabling resumes.
+        _require_chat_idle(cid)
+        chat = dict(chat)
+        scene = get_scene(cid, chat)
+        names = [persona_name(persona_of(chat))]
+        for row in q(
+            "SELECT ch.sheet FROM chat_chars cc JOIN characters ch "
+            "ON ch.id = cc.char_id WHERE cc.chat_id=? AND cc.status='active'",
+            (cid,),
+        ):
+            try:
+                names.append(character_name(json.loads(row["sheet"])))
+            except (TypeError, ValueError):
+                continue
+        seed_vitals(scene, names)
+        wset(cid, "scene", scene)
+
+    return {"enabled": enabled, "show_npcs": survival_shows_npcs(cid)}
+
+@app.get("/api/chats/{cid}/vitals")
+def chat_vitals_get(cid: int):
+    """Every tracked body's condition in this chat, for the UI tracker.
+
+    Returns an empty table when the feature is off or nothing has been
+    recorded, so the tracker can simply not render.
+    """
+    from survival import vital_label
+
+    chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+
+    scene = get_scene(cid, dict(chat))
+    table = scene.get("vitals") if isinstance(scene.get("vitals"), dict) else {}
+    player = persona_name(persona_of(dict(chat)))
+
+    bodies = []
+    for name, record in (table or {}).items():
+        if not isinstance(record, dict):
+            continue
+        bodies.append({
+            "name": name,
+            "is_player": str(name).strip().casefold() == str(player).strip().casefold(),
+            "vitals": {k: record.get(k) for k in
+                       ("air", "stamina", "nourishment", "injury")},
+            "labels": {k: vital_label(k, record.get(k)) for k in
+                       ("air", "stamina", "nourishment", "injury")},
+        })
+    bodies.sort(key=lambda b: (not b["is_player"], b["name"]))
+    return {"enabled": survival_enabled(cid), "bodies": bodies,
+            "player": player, "show_npcs": survival_shows_npcs(cid)}
 
 @app.get("/api/chats/{cid}/positions")
 def chat_positions_get(cid: int):

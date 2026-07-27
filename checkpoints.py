@@ -393,7 +393,26 @@ PRESERVED_SETTING_KEYS = (
     "style_guide",         # genre, tone, register
     "narration_person",    # first/second/third person
     "paradox_policy",
+    # The fixed points themselves, not just the policy for handling them. They
+    # are declared and deleted through the UI -- an author's standing
+    # constraint on the fiction ("this must exist"), in the same family as the
+    # style guide. Rewinding past the turn one was declared on should not
+    # quietly retract it; the paradoxes those points DETECT are story state and
+    # roll back with everything else.
+    "fixed_points",
+    # The player's own secret history, edited through the persona lock in the
+    # Cast tab. Authoring, not a turn fact -- without this, editing your
+    # persona's secrets and then rerolling silently discarded the edit.
+    "persona_private_history",
     "background_presences",
+    # Whether this story tracks bodily condition at all. An authoring decision
+    # about the fiction, not a fact about turn 40 -- rewinding to turn 12 must
+    # not silently switch it off, and branching must not start the branch with
+    # it in a different state from the story it came from. The VITALS
+    # themselves are diegetic and live in the scene blob, so they correctly
+    # roll back with everything else: rewind to before you were starving and
+    # you are not starving.
+    "survival_enabled",
 )
 
 
