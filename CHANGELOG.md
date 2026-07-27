@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## v5.0 — A way through that is not a way to look through
+## alpha5.0 — A way through that is not a way to look through
 
 ### Added
 - **A way through that is not a way to look through.** The barrier vocabulary
