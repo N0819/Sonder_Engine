@@ -1238,12 +1238,46 @@ def perception_outcome(ctx, nonce):
     if _br_actions:
         resolved_event_text = (resolved_event_text + " " + "; ".join(_br_actions)).strip()
 
+    # What each source LOOKS like, handed to the model for every source at
+    # once. The action-onset pass already strips this when nobody can see the
+    # actor (see perception_act's `actor_not_visible`); the outcome pass never
+    # got the equivalent, so an enclosed perceiver's payload carried the full
+    # appearance of the body enclosing them and the model wrote it into the
+    # view -- detail no deterministic gate had pasted. Prompt wording is the
+    # wrong instrument here: this module's own comment on the identity strip
+    # says why -- objective state copied into a context with an instruction to
+    # ignore it is the pattern that made strong models leak in the first place.
+    #
+    # A source is EXCLUDED FROM ITS OWN TEST: it can always "see" itself, which
+    # would keep every appearance alive no matter who else is present, and a
+    # perceiver has no use for their own appearance in a second-person view.
+    #
+    # The question is asked directly rather than read off the perceivers'
+    # `visual_channel_to_sources` maps, because those cover only `sources` --
+    # the cast who ACTED this beat -- while `appearances` is keyed by the whole
+    # cast. Reading the maps would strip the appearance of any bystander who
+    # merely stood there, which is a behaviour change well beyond this leak.
+    # Same helper, so the answer cannot drift from the one the views use.
+    visible_appearances = dict(appearances or {})
+    if awake_perceivers and appearances:
+        appearance_sources = [{"name": n, "room": room_of(sc, n)}
+                              for n in appearances]
+        reachable = set()
+        for p in awake_perceivers:
+            chan = _source_channels(
+                sc, p["name"], p.get("room"), appearance_sources,
+            )["visual_channel_to_sources"]
+            reachable.update(n for n, ok in chan.items()
+                             if ok and n != p.get("name"))
+        visible_appearances = {n: t for n, t in appearances.items()
+                               if n in reachable}
+
     payload = {
         "resolved_event": resolved_event_text,
         "dialogue_order": res.get("dialogue_order"),
         "dialogue_log": enriched_dlog,
         "sources": sources,
-        "present_appearances": appearances,
+        "present_appearances": visible_appearances,
         **({"subject_disguise": p_disguise} if p_disguise else {}),
         "concealed_actions": concealed,
         "scene": {"location": sc.get("location"), "time": sc.get("time"),
@@ -1424,7 +1458,11 @@ def perception_outcome(ctx, nonce):
                            "note": "bodiless voice, present throughout"}
                 else:
                     rel = spatial_rel(sc, sp_room, p.get("room"))
-            can_see = visual.get(d_speaker, False) or rel.get("same_room", False)
+                    # This fallback builds its own rel and so misses the
+                    # concealment `_source_channels` applies to the map above.
+                    if containment_conceals(sc, p["name"], d_speaker):
+                        rel = {**rel, "concealed": True}
+            can_see = _in_plain_view(rel, visual.get(d_speaker, False))
             if d_speaker in recognized_sources:
                 display = d_speaker
             else:
@@ -1452,7 +1490,14 @@ def perception_outcome(ctx, nonce):
                     if appearance_text:
                         view = _append_once(view, appearance_text, marker=appearance_text)
                     described_this_pass.add(d_speaker)
-                display = _unknown_actor_label(d_speaker, appearance_text)
+                # The LABEL is derived from the same appearance and was built
+                # regardless of can_see, so gating only the paragraph above
+                # left a compressed version of it going through: an unseen
+                # voice still rendered as "the tall woman in a long grey coat
+                # says ...". A perceiver who cannot see the speaker has no
+                # visual referent for them at all -- what they have is a voice.
+                display = (_unknown_actor_label(d_speaker, appearance_text)
+                           if can_see else "a voice")
             # COMM CHANNEL: a line marked medium:'comm' reaches its addressed
             # party across any physical barrier (see _dialogue_hear_level). It
             # carries the VOICE, never SIGHT -- can_see is left untouched, so
