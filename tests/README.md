@@ -38,3 +38,12 @@ blind when an act that lands on a character carries no bound target.
 character/persona editor wiring, one-time seeding into live attire, first
 attachment behavior, authoritative establishment, and the private-card
 information firewall on that new payload.
+`test_pipeline_audit_leak_gaps` covers the pipeline audit information-leak
+fixes: rear-arc action injection (B3), `co_present_positions` destination
+leak (S3-A4), string-line concealment erosion (X14), reroll memory turn
+cutoff (F1), dialogue memory recognition gate (F2/P1), entity-state
+concealed-actor gate (S3-A8), omniscient event re-entry (Pattern 4),
+surgical concealed redaction (D1/D2), portal-state visibility gating
+(S3-A5), and background-presence recognition gate (F3).
+`test_reroll_restore_integrity` covers checkpoint restore cast-cache refresh
+and cast membership rollback.

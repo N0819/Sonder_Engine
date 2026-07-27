@@ -154,6 +154,14 @@ Its output is merged into `perception_outcome`'s dialogue processing rather than
 
 Filters the resolved event into separate observer experiences. This output feeds both player narration and character-specific memories.
 
+Concealed actions are sentence-level redacted from the resolved event text
+per-perceiver via `_redact_concealed_from_event` — sentences referencing a
+concealed actor (identified by structured name, not prose matching) are
+withheld; overt sentences survive. The unified delivery gate `_delivery_ok`
+in `agents/common.py` consolidates containment, awareness, sight (including
+rear-arc/`behind_sources`), and hearing (with proximity) checks for every
+deterministic delivery site.
+
 ### `narrator`
 
 Renders the player-facing prose. Fidelity checks and player-echo stripping are applied before the output is saved.
@@ -163,14 +171,17 @@ Renders the player-facing prose. Fidelity checks and player-echo stripping are a
 `commit_all` first prepares the exact post-turn scene plus all lore and memory embeddings without holding SQLite's write lock. It then invokes every durable domain inside one outer transaction under a per-turn idempotency lock:
 
 1. scene and simulation clock
-2. world entities and conditions (a derived projection built from the same prepared post-dedup diff as the scene)
+2. world entities and conditions (a derived projection built from the same prepared post-dedup diff as the scene) — entity state blobs referencing concealed actors are skipped (S3-A8)
 3. cast status/state
 4. paradox checks
 5. spatial-frame reconciliation
 6. mapping/canon updates
 7. character active psychology, beliefs/associations, memories, relationships,
-   and event row
-8. background-presence tracking
+   and event row — dialogue memories store appearance labels for unrecognized
+   speakers (F2/P1); rerolls exclude memories from the current/later turns via
+   `max_turn_idx` (F1)
+8. background-presence tracking — co-located character names pass through the
+   player's recognition map (F3)
 9. pending-state clear
 
 A failure in any domain aborts immediately and rolls back all earlier writes from that turn. Character autobiographical consolidation runs after the primary transaction because it is a reconstructible derived cache and may require an LLM call; consolidation failure produces a warning without corrupting committed facts.
@@ -244,3 +255,7 @@ model stream.
 | Correct result is narrated incorrectly | `perception_outcome`, then `narrator` |
 | Correct turn disappears after reload | `commit.py`, checkpoints, or database restore |
 | Reroll leaves mixed old/new state | stale-step propagation, active variants, or resume logic |
+| Character knows a concealed action from a prior turn | `recent_events_for_observer` in `scene.py` (Pattern 4), `_redact_concealed_from_event` in `agents/perception.py` |
+| Character remembers something from a rerolled turn | `max_turn_idx` cutoff in `memory.py` (F1) |
+| Background dialogue names an unrecognized character | `_present_others` recognition gate in `agents/background.py` (F3) |
+| Narrator reports a door state in an unseen room | `_visible_portal_states` visibility gating in `agents/narration.py` (S3-A5) |
