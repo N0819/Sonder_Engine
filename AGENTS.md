@@ -33,7 +33,7 @@ their claims against source and the maintained guides before acting on them.
 | Player input interpretation | `agents/director.py` (`director_interpret`) | `schemas.py`, `prompts.py`, pipeline tests |
 | Flow planning, resume, or streaming | `agents/runtime.py` (`build_plan`, `_run_pipeline`) | `agents/storage.py`, `checkpoints.py`, pipeline tests |
 | Opening scene generation | `agents/director.py`, `agents/perception.py` | `scene.py`, `spatial.py`, `commit.py` |
-| Perception or information leakage | `agents/perception.py` (`_source_channels`, `_redact_concealed_from_event`, `_surface_translate_event`, `_touch_only_sources`), `agents/common.py` delivery helpers | `spatial.py` (`scent_level`, `visual_level_between`, `containment_conceals`), `scene.py`, `schemas.py`, perception tests — concealed actions are structurally redacted from the resolved event per-perceiver; touch-only sources get surface-translated event text (act names replaced with surface sensations); scent is barrier-gated via `scent_channel_to_sources` |
+| Perception or information leakage | `agents/perception.py` (`_source_channels`, `_redact_concealed_from_event`, `_surface_translate_event`, `_touch_only_sources`, `_per_observer_model_views`), `agents/common.py` (`_delivery_ok`, `_AUTONOMY_VERBS`, `bind_sequence_targets`), `agents/loops.py` (`deterministic_micro_perception`), `agents/background.py` (`_present_others`), `agents/narration.py` (`_visible_portal_states`) | `spatial.py` (`scent_level`, `visual_level_between`, `containment_conceals`, `visible_adjacent_rooms`), `scene.py` (`recent_events_for_observer`), `schemas.py`, `memory.py` (`max_turn_idx` cutoff), `commit.py` (entity-state concealed-actor gate), perception tests — concealed actions are sentence-level redacted from the resolved event per-perceiver; touch-only sources get surface-translated event text; scent is barrier-gated; per-observer LLM calls create structural information boundaries; the unified `_delivery_ok` gate consolidates containment, awareness, sight (including rear-arc), and hearing (with proximity) checks; background-presence names pass through the player's recognition map; portal states for unseen rooms are withheld; entity state blobs referencing concealed actors are skipped; omniscient event rows are per-observer redacted when loaded into character context |
 | Character decisions or dialogue | `agents/character.py`, `agents/loops.py` | `memory.py`, `scene.py`, `prompts.py` |
 | Character psychology, stress, pain/pleasure, belief learning, or association learning | `character_schema.py`, `psychology_runtime.py`, `affect.py`, `agents/character.py`, `commit.py` | `schemas.py`, `prompts.py`, `importers.py`, character-card UI, `theory_of_mind.py`, psychology and information-leak tests — transient state may use only the character's scrubbed current observations, own sheet, own body state, and earned memory |
 | Background (unregistered) presence reactions | `agents/background.py`, `commit.py` (`pick_background_reactor`) | `agents/perception.py` (merge into dialogue_log), `prompts.py`, `schemas.py` |
@@ -76,6 +76,14 @@ These are architectural guarantees, not stylistic preferences.
 - Perception of an action onset and perception of its resolved outcome are separate passes.
 - The Narrator should render the player-facing view, not an omniscient reconstruction of every private agent result.
 - Every perceptual channel is barrier-gated: sight (`_SIGHT_BARRIERS`), sound (`_AMBIENT_BARRIERS` + material), scent (`_SCENT_BARRIERS`), and touch (containment/concealment). Touch-only perception is cause-blind: surface sensations cross, the act producing them does not.
+- Per-observer LLM calls (`_per_observer_model_views`) create structural information boundaries: each perceiver gets a separate prompt and response rather than sharing one omniscient call.
+- The unified delivery gate `_delivery_ok` in `agents/common.py` consolidates containment, awareness, sight (including rear-arc/`behind_sources`), and hearing (with proximity) checks. Every deterministic delivery site must call it rather than using scattered bare checks.
+- The stored events row is omniscient (for the author/audit trail), but what's loaded into character context is per-observer redacted via `recent_events_for_observer` in `scene.py`.
+- Entity state blobs referencing concealed actors are withheld at commit time — the entity's state is only updated when overtly perceived.
+- Portal states for rooms the player cannot see are withheld from the narrator payload.
+- Background-presence co-located character names pass through the player's recognition map.
+- Rerolls exclude memories from the current/later turns via `max_turn_idx`.
+- Dialogue memories store appearance labels for unrecognized speakers, not canonical names.
 
 ### Authority boundaries
 
@@ -204,6 +212,14 @@ Do not rename a shared function without searching every JavaScript file.
   binding, the reaction gate, and claim subject binding.
 - `test_observation_derivation.py`: whether the structured observations
   perception derives are *true*, as distinct from leak-free.
+- `test_pipeline_audit_leak_gaps.py`: information-leak gaps from the pipeline
+  audit — rear-arc action injection, `co_present_positions` destination leak,
+  string-line concealment erosion, reroll memory turn cutoff, dialogue memory
+  recognition gate, entity-state concealed-actor gate, omniscient event
+  re-entry, surgical concealed redaction, portal-state visibility gating,
+  background-presence recognition gate.
+- `test_reroll_restore_integrity.py`: checkpoint restore refreshes cast cache
+  and rolls back cast membership.
 
 Add a test next to the subsystem it protects. A bug involving leaked dialogue or private knowledge belongs in a perception/cognition test, not only in a narrator snapshot.
 Tests that request `temp_db` are collected into the slow/full tier. A test

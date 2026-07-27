@@ -1,5 +1,133 @@
 # Changelog
 
+## Unreleased — Pipeline audit information-leak fixes
+
+### Fixed
+
+- **Background presence leaked unrecognized character names (F3/SEAM 5).**
+  `_present_others` in `agents/background.py` listed every co-located
+  character by canonical name in the background-presence payload — the same
+  identity leak `_unknown_actor_label` closes everywhere else. A player who
+  had not met a character still saw their name in background dialogue. Fixed
+  by applying the player's `known` recognition map: unrecognized characters
+  are rendered as their appearance-derived label or "someone" rather than
+  their canonical name, mirroring `deterministic_micro_perception`.
+
+- **Portal states leaked through unseen doors (S3-A5).**
+  `_visible_portal_states` in `agents/narration.py` included open/shut state
+  for portals in rooms the player could not see. A closed door in an
+  adjacent room the player had no sight of was reported as closed, leaking
+  spatial information. Fixed by passing the player's visible rooms
+  (own room plus `visible_adjacent_rooms`) and withholding portal states for
+  rooms outside that set.
+
+- **Entity state blobs persisted concealed actors (S3-A8).**
+  `commit_world_entities` in `commit.py` wrote entity state blobs verbatim
+  from the beat resolution, even when the blob referenced a concealed actor.
+  The entity's position/state then leaked to anyone reading world state
+  later. Fixed by collecting concealed actors from the dialogue log,
+  director_interpret, and character results, then skipping entity state
+  updates that reference a concealed actor — the entity's state is only
+  updated when overtly perceived.
+
+- **Omniscient event text re-entered later character contexts (Pattern 4).**
+  The stored events row is omniscient (for the author/audit trail), but it
+  was loaded verbatim into character context on subsequent turns. A
+  concealed action from a prior beat thus re-entered a perceiver's context
+  unredacted. Fixed with `recent_events_for_observer` in `scene.py`, which
+  applies `_redact_concealed_from_event` per-observer against the stored
+  event row's structured `dialogue_log` fields before returning the summary.
+  Callers loading past events into character context use this per-observer
+  path instead of the raw omniscient row.
+
+- **Concealed redaction withheld the whole paragraph (D1/D2).**
+  `_redact_concealed_from_event` in `agents/perception.py` replaced the
+  entire event text with a fallback message whenever any concealed act was
+  present. This was fail-closed and structurally safe, but heavy-handed: an
+  event with one concealed whisper and five overt actions delivered no event
+  text at all. Improved to sentence-level redaction: the event text is split
+  into sentences, each sentence is checked against the concealed actor names
+  from the structured concealed list (not prose matching), and only sentences
+  referencing a concealed actor are withheld. Overt sentences survive. If no
+  sentences survive, the fallback message is returned.
+
+- **Rear-arc action backstop ignored blind spot (B3).**
+  The deterministic action backstop in `perception_outcome` checked
+  `_in_plain_view` but not `behind_sources`, so an actor standing behind the
+  perceiver (outside their field of view) had their action injected into the
+  outcome view. Fixed by checking the perceiver's `behind_sources` list and
+  skipping actors listed there.
+
+- **`co_present_positions` leaked unperceived destinations (S3-A4).**
+  The narrator payload included characters who left the player's room with
+  their destination room name, which the player had not perceived. Fixed by
+  only including characters in the player's current room, and only if the
+  player could have perceived them (awake, light exists).
+
+- **String-line dialogue coercion erased concealment (X14).**
+  String dialogue lines coerced into structured form in `schemas.py`
+  defaulted `visibility` to "overt", dropping `[concealed]` prefixes and
+  `conceal_from` fields. A concealed line became overt in the structured
+  model output. Fixed by preserving the `visibility` and `conceal_from`
+  fields from the original string-line entry.
+
+- **Reroll memories included the current turn (F1).**
+  `search_memories` and `build_character_memory_context` in `memory.py` had
+  no turn cutoff, so a reroll could load memories minted during the turn
+  being rerolled — the character would "remember" something that hadn't
+  happened yet. Fixed with an optional `max_turn_idx` parameter that
+  excludes memories with `turn_idx > max_turn_idx`; rerolls pass the prior
+  turn's index as the cutoff.
+
+- **Dialogue memories stored unrecognized speaker names (F2/P1).**
+  `commit.py` minted dialogue memories with the speaker's canonical name
+  regardless of whether the hearer recognized them. A character who had
+  never met the speaker stored their name in memory as though they had.
+  Fixed by checking the hearer's `known` map: if the speaker isn't
+  recognized, the memory stores an appearance-based label or "a voice"
+  instead of the canonical name, and `intended_target` is dropped.
+
+- **Unified delivery gate for deterministic perception (Pattern 3).**
+  Deterministic delivery sites in `agents/loops.py` and `agents/perception.py`
+  used scattered bare checks (`has_visual`, `hear_level`) without consistent
+  containment, awareness, or proximity gating. A new `_delivery_ok` function
+  in `agents/common.py` consolidates containment concealment, awareness,
+  sight (including rear-arc/behind_sources), and hearing (with proximity and
+  sealed-container blocking) into one predicate every delivery site calls.
+
+- **Sensory channel cue matching used substring matching.**
+  `_CHANNEL_CUES` and `_INTENSITY_CUES` in `agents/perception.py` matched
+  cues by substring, so "paint" matched "pain" and a single ambiguous word
+  could flip a whole view's channel. Fixed with word-boundary regex matching.
+
+- **Per-observer LLM calls for perception (A4/A5/A6).**
+  `_per_observer_model_views` in `agents/perception.py` splits the
+  perceiver set into one LLM call per perceiver instead of one shared call,
+  creating structural information boundaries rather than relying on post-hoc
+  prose scrubs to separate what each observer knows.
+
+- **Authorial channel autonomy verbs (common.py).**
+  New `_AUTONOMY_VERBS`, `_AUTONOMY_PHRASES`, and `_SUBJECT_LEADS` sets in
+  `agents/common.py` detect when a player authors an autonomous response
+  for another character, including indirect phrasing where the character is
+  the object. `bind_sequence_targets` binds targets the text plainly
+  supports before the reaction gate, claim-subject, and perception checks
+  run — all three were blind to unbound targets.
+
+- **Reroll restore left stale cast cache.**
+  `agents/runtime.py` called `restore_checkpoint` but did not refresh
+  `ctx.cast` afterward, so a rerun could use stale cast membership.
+  `_restore_and_refresh()` restores the checkpoint AND refreshes the cast
+  cache. `checkpoints.py` removes `background_presences` from preserved
+  settings and rolls back cast membership on restore.
+
+- **Psychology sustained-drive charge system.**
+  `psychology_runtime.py` adds a slow-integrating `charge` that outlives the
+  peak-held level and discharges only when the character declares
+  resolution. Stress activation now separates aversive strain from
+  non-distressing drive, so a body at the ceiling of a powerful stimulus no
+  longer reads as perfectly composed.
+
 ## alpha5.1 — A story can leave whole
 
 ### Added

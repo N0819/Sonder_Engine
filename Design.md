@@ -83,7 +83,7 @@ alpha5.1.
 
 | Founding commitment | Status | Evidence / gap |
 |---|---|---|
-| Firewall as plumbing — each mind gets only its perception object | **Built** | `agents/perception.py` emits per-observer views; characters receive their view, never the event stream |
+| Firewall as plumbing — each mind gets only its perception object | **Built** | `agents/perception.py` emits per-observer views via `_per_observer_model_views` (one LLM call per perceiver); characters receive their view, never the event stream; stored event rows are per-observer redacted via `recent_events_for_observer` when loaded into character context |
 | Two perception passes per turn (onset, outcome) | **Built** | `perception_act` before resolution, `perception_outcome` after |
 | Player-leads loop; characters declare blind to each other | **Built** | Plan built from `director_interpret.flow`; character steps run in parallel |
 | Memory provenance | **Built, exceeds spec** | Six kinds (`witnessed/heard/told/read/inferred/remembered`) against the specified three, plus `turn_idx`, bound at commit |
