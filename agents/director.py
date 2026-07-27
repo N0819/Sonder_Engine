@@ -2786,8 +2786,34 @@ def director_resolve(ctx, nonce):
                 s.get("visibility", "overt"), s.get("conceal_from") or [],
                 s.get("volume", "normal"))
 
-    existing_bodies = set()
+    # S3-B1. Two defects lived in this backstop, both from keying the
+    # already-present check on the quote BODY alone.
+    #
+    # The validation loop above drops a director-invented line only for
+    # registered cast and the primary player, so a line attributed to any OTHER
+    # name survives -- a resolve model that transcribes a character's whisper
+    # under speaker "the barkeep" kept the wrong entry, and because the body was
+    # then in existing_bodies, the deterministic re-append of the character's
+    # OWN declaration was suppressed. The wrong speaker displaced the true one
+    # permanently: the concealment restore is keyed (speaker, body) so the
+    # whisper also lost its tag, views injected the wrong attribution, and every
+    # hearer minted a memory of it (the memory gate checks only that the quote
+    # reached the view, not who the view said spoke).
+    #
+    # The same key also silently dropped a second speaker legitimately saying
+    # the same words -- "I know." from two people is one line, not a duplicate.
+    #
+    # So: a body that WAS declared, attributed to someone who did not declare
+    # it, is a mis-transcription. Re-attribute it when exactly one speaker
+    # declared it, drop it when the true speaker is ambiguous, and track
+    # presence per (speaker, body) from here on.
+    declarers_by_body = {}
+    for (speaker_cf, body) in speech_concealment:
+        if body:
+            declarers_by_body.setdefault(body, set()).add(speaker_cf)
 
+    existing_keys = set()
+    retagged = []
     for d in dlog:
         d.setdefault("volume", "normal")
         d.setdefault("intended_target", None)
@@ -2795,36 +2821,59 @@ def director_resolve(ctx, nonce):
         if is_player_speaker(d.get("speaker", ""), chat):
             d["speaker"] = p_name
         body = _quote_body(d.get("exact_quote", ""))
-        key = (str(d.get("speaker") or "").casefold(), body)
+        speaker_cf = str(d.get("speaker") or "").casefold()
+        declarers = declarers_by_body.get(body) or set()
+        if body and declarers and speaker_cf not in declarers:
+            if len(declarers) == 1:
+                true_cf = next(iter(declarers))
+                true_name = next(
+                    (n for n in (*char_speech, p_name)
+                     if str(n).casefold() == true_cf), None)
+                if true_name:
+                    ctx.add_warning(
+                        f"Re-attributed a declared line transcribed under "
+                        f"{d.get('speaker')!r} back to its declarer "
+                        f"{true_name!r} (player/character speech authority).")
+                    d["speaker"] = true_name
+                    speaker_cf = true_cf
+            else:
+                ctx.add_warning(
+                    f"Dropped a line attributed to {d.get('speaker')!r} whose "
+                    "quote was declared by someone else and the true speaker "
+                    "is ambiguous.")
+                continue
+        key = (speaker_cf, body)
         if key in speech_concealment:
             d["visibility"], d["conceal_from"], d["volume"] = speech_concealment[key]
         else:
             d.setdefault("visibility", "overt")
             d.setdefault("conceal_from", [])
         if body:
-            existing_bodies.add(body)
+            existing_keys.add(key)
+        retagged.append(d)
+    dlog = retagged
 
     for line in player_speech_lines(interp):
         body = _quote_body(line)
-        if body and body not in existing_bodies:
+        if body and (p_name.casefold(), body) not in existing_keys:
             vis, cf, vol = speech_concealment.get(
                 (p_name.casefold(), body), ("overt", [], interp.get("speech_volume", "normal")))
             dlog.append({"speaker": p_name, "exact_quote": line,
                          "volume": vol,
                          "intended_target": None, "tone": "",
                          "visibility": vis, "conceal_from": cf})
-            existing_bodies.add(body)
+            existing_keys.add((p_name.casefold(), body))
 
     for cname, speeches in char_speech.items():
         for s in speeches:
             body = _quote_body(s["text"])
-            if body and body not in existing_bodies:
+            if body and (str(cname).casefold(), body) not in existing_keys:
                 dlog.append({"speaker": cname, "exact_quote": s["text"],
                              "volume": s.get("volume", "normal"),
                              "intended_target": None, "tone": s.get("tone", ""),
                              "visibility": s.get("visibility", "overt"),
                              "conceal_from": s.get("conceal_from") or []})
-                existing_bodies.add(body)
+                existing_keys.add((str(cname).casefold(), body))
 
     for d in dlog:
         eq = d.get("exact_quote", "")

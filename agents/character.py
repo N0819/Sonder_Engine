@@ -41,7 +41,8 @@ from scene import (
 from schemas import validate_llm_output
 from spatial import room_of, spatial_digest
 from survival import vitals_of
-from theory_of_mind import mind_models_for_payload
+from psychology_runtime import cognitive_absorption
+from theory_of_mind import mind_models_for_payload, sheet_capacity
 
 from .common import (
     _agent_json,
@@ -201,13 +202,6 @@ def character_step(ctx, cid, nonce):
         current_turn_idx=ctx.turn.idx,
         current_view=view or "",
         active_state=active,
-        # F1: on a reroll, exclude any memories minted by the stale run
-        # of this turn (turn_idx > cutoff means everything after the
-        # last good turn is excluded). current_turn_idx already excludes
-        # this turn with <, but a reroll may have committed memories for
-        # this turn before the reroll started; max_turn_idx = idx - 1
-        # ensures those are also excluded.
-        max_turn_idx=(ctx.turn.idx - 1) if ctx.get("_reroll") else None,
     )
 
     char_room = character_room(sc, sh)
@@ -228,6 +222,17 @@ def character_step(ctx, cid, nonce):
         stored_state.get("mind_models") or {}, ctx.turn.idx,
         elapsed_seconds=(_sim_clock or {}).get("elapsed_seconds"),
     )
+    # How much of this mind its own body currently has. Own interoceptive state
+    # only -- another character's pain is never an input to this character's
+    # cognition (see AGENTS.md's own-body isolation rule).
+    absorption = cognitive_absorption(
+        (active or {}).get("hedonic"), (active or {}).get("stress"))
+    # The stable sheet is SELECTED at commit (where the reconciled beliefs and
+    # the settled end-of-beat body state both exist) and simply read here, so
+    # what the character holds in mind this turn is what they came out of the
+    # last beat holding.
+    active_hypotheses = list(stored_state.get("active_hypotheses") or [])[
+        :sheet_capacity(absorption)]
     frame_id = ctx.turn.frame_id
     if frame_id is not None:
         # A frame's own state-swap already starts blank the first time
@@ -353,6 +358,11 @@ def character_step(ctx, cid, nonce):
         "memory": memory_context,
         "relationships": relationships,
         "mind_models": mind_models,
+        # The stable hypothesis sheet: the few open questions this mind is
+        # actively holding, each keyed "i_suspect" so the field itself carries
+        # the epistemic status. mind_models above is the full ledger; this is
+        # what is actually in mind, and its size shrinks with absorption.
+        "active_hypotheses": active_hypotheses,
         "known_pronouns": _known_pronouns(
             ctx.cast, persona_of(chat),
             set(relationships) | set(mind_models),
@@ -475,7 +485,8 @@ def character_step(ctx, cid, nonce):
             out.get("manifest"), out.get("active_state"))
         for _w in _tell_warnings:
             ctx.add_warning(f"character {character_name(sh)}: {_w}")
-    out["mind_model_updates"] = cap_mind_model_updates(out.get("mind_model_updates") or [])
+    out["mind_model_updates"] = cap_mind_model_updates(
+        out.get("mind_model_updates") or [], absorption=absorption)
     norm_sequence(out)
     out["sequence"] = assign_event_ids(
         out.get("sequence"), f"turn:{ctx.turn.id}:character:{cid}")

@@ -13,12 +13,12 @@ from memory import (
     knowledge_for_character, get_relationships,
     save_relationships, update_relationships_from_inference,
     apply_relationship_updates, maybe_consolidate_character_memory,
+    reconcile_inference_confidence,
 )
 from providers import embed_texts
 from prompts import get_prompt
 import affect
 import psychology_runtime
-import re as _re
 from character_schema import (character_name, new_uid, character_psychology,
                               character_interoception,
                               character_initial_outfit,
@@ -31,7 +31,8 @@ from scene import set_char_state, set_char_status, seed_initial_attire
 from mechanics import mechanics_sweep, news_latency_seconds, stable_event_key
 from spatial import (merge_scene_with_diff,
                      normalize_room_id, spatial_rel, hear_level)
-from theory_of_mind import apply_mind_model_updates
+from theory_of_mind import (apply_mind_model_updates, sheet_capacity,
+                            select_active_hypotheses)
 from survival import vitals_of
 from paradox import check_and_apply_paradox
 from spatial_frames import detect_and_reconcile as detect_and_reconcile_spatial
@@ -1524,55 +1525,50 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
         diff = res.get("state_diff") or {}
     turn_id = ctx.turn.id
 
-    # S3-A8: Build the set of actors who were concealed during this beat.
-    # An entity state blob that references a concealed actor leaks their
-    # presence/position to anyone who later reads the entity state.  The
-    # entity's position/state is only updated when overtly perceived.
-    _concealed_actors = set()
-    res = ctx.director_resolve or ctx.director_establish or {}
-    for d in (res.get("dialogue_log") or []):
-        if str(d.get("visibility") or "").casefold() == "concealed":
-            _concealed_actors.add(str(d.get("speaker") or "").casefold())
-    # Also check the director_interpret for concealed player actions.
-    interp = ctx.director_interpret or {}
-    try:
-        from scene import persona_of as _persona_of
-        _p_name = (_persona_of(chat) or {}).get("name") or ""
-    except Exception:
-        _p_name = ""
-    for a in (interp.get("actions") or
-              ([interp["action"]] if interp.get("action") else [])):
-        if isinstance(a, dict) and a.get("visibility") == "concealed":
-            _concealed_actors.add(str(_p_name).casefold())
-    # Check character results for concealed actions.
-    for _cid, _result in (ctx.character_results or {}).items():
-        if not isinstance(_result, dict):
-            continue
-        for a in (_result.get("actions") or _result.get("sequence") or []):
-            if isinstance(a, dict) and a.get("visibility") == "concealed":
-                _cname = _result.get("name") or ""
-                if _cname:
-                    _concealed_actors.add(str(_cname).casefold())
+    # S3-A8 is the STALE-POSTURE symptom, not a concealment leak: the resolve
+    # payload hands the model the complete pre-beat `scene.entities`, so a free-
+    # text `posture`/`description` clause gets copied forward verbatim even when
+    # this beat's own prose contradicts it, and `_PROTECTED_STATE_KEYS` then
+    # shields it from normalization so the stale clause wins downstream.
+    #
+    # An earlier attempt at this finding read it as a leak and skipped any
+    # entity whose JSON contained a concealed actor's name as a SUBSTRING
+    # (so an actor named Al matched "small"), dropping the update permanently
+    # with nothing to re-apply it. That silently diverged `world_entities` from
+    # the `world.scene` blob it is a projection of -- durable corruption traded
+    # for a leak that was never the finding. Detect and report the copy-forward
+    # instead; the entity still commits, because a stale clause is a narration
+    # problem and a missing row is a world-model problem.
+    _prior_entities = (wget(cid, "scene", {}) or {}).get("entities") or {}
+    _beat_prose = str(
+        (ctx.director_resolve or ctx.director_establish or {}).get(
+            "resolved_event") or "").casefold()
 
-    def _entity_references_concealed(entity_def):
-        """True if the entity_def's state blob mentions a concealed actor."""
-        if not _concealed_actors or not isinstance(entity_def, dict):
+    def _copied_forward_unchanged(entity_id, entity_def):
+        prior = _prior_entities.get(entity_id)
+        if not isinstance(prior, dict) or not isinstance(entity_def, dict):
             return False
-        # Check the entity's state sub-dict for concealed actor names.
-        state = entity_def.get("state") or {}
-        blob = json.dumps(entity_def, ensure_ascii=False).casefold()
-        return any(name in blob for name in _concealed_actors)
+        name = str(entity_def.get("name") or "").casefold()
+        if not name or name not in _beat_prose:
+            return False
+        prior_state = prior.get("state") if isinstance(prior.get("state"), dict) else {}
+        new_state = entity_def.get("state") if isinstance(entity_def.get("state"), dict) else {}
+        return any(
+            key in prior_state and key in new_state
+            and prior_state[key] == new_state[key]
+            and str(new_state[key] or "").strip()
+            for key in ("posture", "description")
+        )
 
     with transaction() as c:
         for entity_id, entity_def in (diff.get("entities") or {}).items():
             if not isinstance(entity_def, dict):
                 continue
-            # S3-A8: skip entity state blobs that reference concealed actors.
-            if _entity_references_concealed(entity_def):
+            if _copied_forward_unchanged(entity_id, entity_def):
                 ctx.add_warning(
-                    f"entity {entity_id}: state blob references a concealed "
-                    f"actor; withholding update until overtly perceived")
-                continue
+                    f"entity {entity_id}: this beat's prose names it, but its "
+                    f"posture/description came through byte-identical to the "
+                    f"pre-beat blob -- possible stale clause (S3-A8)")
             existing = q("SELECT entity_id FROM world_entities WHERE entity_id=? AND chat_id=?",
                          (entity_id, cid), one=True)
             payload = json.dumps(entity_def, ensure_ascii=False)
@@ -3231,6 +3227,7 @@ def prepare_memory_commit(ctx, *, scene=None):
     pending_memories = []
     state_updates = []
     relationship_ops = []
+    belief_reconciles = []
     _clock = wget(
         cid, "simulation_clock",
         {"elapsed_seconds": 0.0, "display": "now"},
@@ -3291,24 +3288,30 @@ def prepare_memory_commit(ctx, *, scene=None):
                     spk = "the player"
                 if spk == cname:
                     continue
-                # Recognition gate: use canonical name only if the hearer
-                # knows the speaker; otherwise use appearance label or
-                # "a voice".
+                # Recognition gate: the canonical name only if the hearer knows
+                # the speaker. The label comes from _unknown_actor_label, the
+                # same helper every perception path uses, rather than a second
+                # hand-rolled copy of it -- the copy truncated at a fixed 60
+                # characters and cut mid-word, and two implementations of the
+                # identity floor drift apart exactly where it matters.
                 if spk != "the player" and spk not in _hearer_known:
-                    # Find the speaker's sheet for appearance text
-                    _spk_sheet = None
-                    for _cr in ctx.cast:
-                        if character_name(json.loads(_cr["sheet"])) == spk:
-                            _spk_sheet = json.loads(_cr["sheet"])
-                            break
-                    _app = _char_appearance(_spk_sheet) if _spk_sheet else ""
-                    _app = _app.strip() if isinstance(_app, str) else ""
-                    if _app:
-                        # Strip leading name tokens (like _unknown_actor_label)
-                        _app = _re.sub(r'^(?:[A-Z][\w\'-]+,?\s+)+', '', _app)
-                        _app = _re.sub(r'^(a|an|the)\s+', '', _app, flags=_re.I)
-                        spk_label = f"the {_app[:60]}" if _app else "a voice"
-                    else:
+                    from agents.common import (
+                        _unknown_actor_label, character_scene_keys)
+                    _spk_sheet = next(
+                        (sheet for sheet in
+                         (json.loads(_cr["sheet"]) for _cr in ctx.cast)
+                         if character_name(sheet) == spk),
+                        None)
+                    spk_label = _unknown_actor_label(
+                        spk,
+                        _char_appearance(_spk_sheet) if _spk_sheet else None,
+                        character_scene_keys(_spk_sheet)[1:] if _spk_sheet else None,
+                    )
+                    # This memory is HEARD. When there is no appearance to
+                    # describe, _unknown_actor_label falls back to "the
+                    # unfamiliar person" -- which claims the hearer saw a body.
+                    # What they have is a voice.
+                    if spk_label == "the unfamiliar person":
                         spk_label = "a voice"
                     tgt = None  # drop intended_target -- it names the speaker
                 else:
@@ -3679,8 +3682,18 @@ def prepare_memory_commit(ctx, *, scene=None):
                     continue
                 try:
                     stance.setdefault("axes", {})
+                    # P9: the schema clamps each DELTA, but the running total
+                    # was unbounded -- a character nudged the same direction
+                    # every beat walked past the [-1, 1] the axes are read as
+                    # (character_schema seeds them from baseline_stances in
+                    # that range), and every consumer downstream then compared
+                    # against a scale the value had left. Clamped here because
+                    # this is the only place the accumulation happens; a reroll
+                    # re-applying a delta is P2's problem, not this one.
                     stance["axes"][ax] = round(
-                        float(stance["axes"].get(ax, 0)) + float(u.get("delta", 0)),
+                        max(-1.0, min(1.0,
+                            float(stance["axes"].get(ax, 0))
+                            + float(u.get("delta", 0)))),
                         3,
                     )
                     stance.setdefault("log", []).append({
@@ -3690,10 +3703,39 @@ def prepare_memory_commit(ctx, *, scene=None):
                 except Exception:
                     pass
             st["stance"] = stance
+            _mm_updates = own_result.get("mind_model_updates") or []
+            # Absorption is read off the state we just settled, so it reflects
+            # the body at the END of the beat -- the state the character
+            # actually comes out of it in, which is what governs what they can
+            # still hold in mind going into the next one.
+            _settled = st.get("active_state") or {}
+            _absorption = psychology_runtime.cognitive_absorption(
+                _settled.get("hedonic"), _settled.get("stress"))
             st = apply_mind_model_updates(
-                st, own_result.get("mind_model_updates") or [], turn.idx,
-                elapsed_seconds=_clock_seconds,
+                st, _mm_updates, turn.idx, elapsed_seconds=_clock_seconds,
+                absorption=_absorption,
             )
+            # Re-selected on every beat this character acted in, not only when
+            # `_mm_updates` is non-empty: capacity tracks the BODY, so someone
+            # merely in more pain than last beat holds fewer open questions
+            # even though they concluded nothing new.
+            _sheet, _sheet_keys = select_active_hypotheses(
+                st.get("mind_models") or {},
+                st.get("active_hypothesis_keys"),
+                sheet_capacity(_absorption),
+                turn.idx,
+                elapsed_seconds=_clock_seconds,
+                absorption=_absorption,
+            )
+            st["active_hypotheses"] = _sheet
+            st["active_hypothesis_keys"] = _sheet_keys
+            if _mm_updates:
+                # Only characters whose beliefs actually moved this turn are
+                # reconciled: the reconcile scans that character's whole
+                # inference bank, and a belief cannot be abandoned on a turn
+                # nothing was claimed about it.
+                belief_reconciles.append(
+                    (cid, ccid, st, _clock_seconds))
             explicit_updates = own_result.get("relationship_updates") or []
             if explicit_updates:
                 relationship_ops.append(("explicit", ccid, explicit_updates))
@@ -3713,6 +3755,7 @@ def prepare_memory_commit(ctx, *, scene=None):
         "memory_batch": prepare_memories_batch(pending_memories),
         "state_updates": state_updates,
         "relationship_ops": relationship_ops,
+        "belief_reconciles": belief_reconciles,
         "event_content": event_content,
     }
 
@@ -3772,6 +3815,18 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
         for chat_id, char_id, state_json in prepared["state_updates"]:
             set_char_state(
                 chat_id, char_id, state_json, frame_id=turn.frame_id,
+            )
+        # After the batch insert AND after the state write, so this turn's own
+        # freshly-minted inference rows are re-weighted by the same reconciled
+        # mind_models everything else now reads -- a claim minted at the
+        # model's declared confidence and then blended/suppressed by
+        # apply_mind_model_updates would otherwise sit in the bank at the
+        # pre-blend number forever.
+        for chat_id, char_id, char_state, clock_seconds in prepared.get(
+                "belief_reconciles") or []:
+            reconcile_inference_confidence(
+                chat_id, char_id, char_state, turn.idx,
+                elapsed_seconds=clock_seconds,
             )
         qi(
             """INSERT INTO events(chat_id,turn_id,content) VALUES(?,?,?)

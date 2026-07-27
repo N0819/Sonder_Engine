@@ -515,9 +515,22 @@ def crossing_visible_from(scene: dict, observer_room, name: str) -> bool:
     Only from the room they LEFT. The room they are entering has them
     arriving, which is ordinary presence and needs no special case; the room
     behind is the one that would otherwise lose them the instant they crossed.
+
+    The grace does NOT apply to a body-parented interior. It exists because
+    going through a doorway takes time a position field cannot express, so a
+    body would otherwise blink out mid-step -- but entry into the inside of a
+    BODY is not a threshold anyone stands part-way through, and there is no
+    shape to watch once it is done. Left as a doorway, this kept a body fully
+    inside another rendering as `shapes` to the very body containing them for
+    two more beats, which is the concealment failing at exactly the moment it
+    matters most. What the surrounding body has instead is the touch channel,
+    which containment already grants and which tells them far more than a
+    silhouette would.
     """
     rec = crossing_of(scene, name)
-    return bool(rec) and bool(observer_room) and rec.get("from") == observer_room
+    if not rec or not observer_room or rec.get("from") != observer_room:
+        return False
+    return _body_interior_holder(scene, name) is None
 
 
 def spatial_rel_between(scene: dict, observer: str, target: str) -> dict:
@@ -531,6 +544,9 @@ def spatial_rel_between(scene: dict, observer: str, target: str) -> dict:
                            room_of(scene, target)))
     if crossing_visible_from(scene, room_of(scene, observer), target):
         rel["crossing"] = True
+    holder = _body_interior_holder(scene, observer)
+    if holder and holder.casefold() == str(target or "").strip().casefold():
+        rel["inside_source"] = True
     # A carried body's position derives to its carrier's, so a body enclosed in
     # something standing right here reads as `same_room` -- which answers sight
     # before barriers or light are consulted at all.
@@ -741,6 +757,21 @@ def hear_level(
     barrier = _material_shifted_barrier(
         normalize_barrier(rel.get("barrier")), rel.get("material"))
     distance = rel.get("distance")
+
+    # Sound CONDUCTED rather than transmitted. A body inside another body's
+    # interior is not listening through a wall: the enclosing body is the
+    # medium, and its voice arrives through the mass around them -- close and
+    # low rather than faint. Treating that as an ordinary opaque barrier left
+    # an occupant unable to make out the one voice they are physically closest
+    # to in the world.
+    #
+    # Strictly one-way. `inside_source` says the LISTENER is inside the
+    # speaker; the reverse direction is a voice trying to get OUT through that
+    # same mass, which is the muffling the barrier already models correctly.
+    if rel.get("inside_source"):
+        if volume in ("mutter", "whisper"):
+            return "fragment"
+        return "full"
 
     if rel.get("same_room"):
         # A whisper (mutter) only fully reaches someone WITHIN REACH; it carries
@@ -1496,29 +1527,84 @@ def containment_hides(mode) -> bool:
     return str(mode or "").strip().casefold() not in _OPEN_CONTAINMENT_MODES
 
 
+def _body_interior_holder(scene: dict, name: str):
+    """The body whose INSIDE `name` is currently standing in, if any.
+
+    A scene can express one body being inside another two ways. The
+    `contained` ledger is one: an explicit record that a body is held in
+    something. The other is a room -- an interior space parented to a body,
+    which the occupant simply has as their position, exactly like any other
+    room.
+
+    Only the ledger was ever consulted, so the room form concealed nothing.
+    A body fully inside another read as an ordinary occupant of an ordinary
+    adjacent room: `containment_conceals` returned False in both directions,
+    which left the observer outside with a sight channel to them and left the
+    body inside with no touch channel to the body around it -- seen when they
+    should not be, and not felt when they should be.
+
+    A parent that holds a POSITION is a body; a parent that does not is a bag,
+    a ship, a jar -- already handled by `_is_carried_interior` for a different
+    question (whether you take its inside in as ambience).
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    positions = (scene or {}).get("positions") or {}
+    room_id = _ci_get(positions, name)
+    room = rooms.get(room_id) if room_id else None
+    if not isinstance(room, dict):
+        return None
+    parent = str(room.get("parent_entity") or "").strip()
+    if not parent:
+        return None
+    if _ci_get(positions, parent) is None:
+        return None
+    if parent.casefold() == str(name or "").strip().casefold():
+        return None
+    return parent
+
+
 def _hiding_holders(scene: dict, name: str) -> list:
     """Holders that conceal `name`, innermost first. Cycle-safe."""
     contained = (scene or {}).get("contained") or {}
     if not isinstance(contained, dict):
-        return []
+        contained = {}
     out = []
     current = name
     seen = {str(name or "").strip().casefold()}
     while True:
+        holder = None
         record = _ci_get(contained, current)
-        if not isinstance(record, dict):
-            break
-        holder = record.get("in")
+        if isinstance(record, dict) and record.get("in"):
+            if not containment_hides(record.get("mode")):
+                # Carried in the open: not a hiding holder, but keep walking
+                # the chain -- its own holder may still be one.
+                holder = record.get("in")
+                key = str(holder).strip().casefold()
+                if key in seen:
+                    break
+                seen.add(key)
+                current = holder
+                continue
+            holder = record.get("in")
+        else:
+            holder = _body_interior_holder(scene, current)
         if not holder:
             break
         key = str(holder).strip().casefold()
         if key in seen:
             break
         seen.add(key)
-        if containment_hides(record.get("mode")):
-            out.append(holder)
+        out.append(holder)
         current = holder
     return out
+
+
+def hiding_holders_of(scene: dict, name: str) -> list:
+    """Public form of `_hiding_holders` -- the enclosures around one body,
+    innermost first, whether expressed as a `contained` record or as a
+    body-parented interior room. Read it rather than `scene['contained']`
+    directly, or the room form is invisible to the caller."""
+    return list(_hiding_holders(scene, name))
 
 
 def _innermost_hiding_holder(scene: dict, name: str):

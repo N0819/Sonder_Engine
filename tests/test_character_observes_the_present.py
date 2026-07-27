@@ -18,7 +18,23 @@ ids attached, and the model reached for what it could cite. Across that chat:
 
 from __future__ import annotations
 
+import json
+import time
+
 import memory
+from character_schema import default_character_data
+
+
+def _chat_and_char(db, name="Alice"):
+    chat_id = db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Test", "", time.time()),
+    )
+    char_id = db.qi(
+        "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
+        (name, json.dumps(default_character_data(name)), "{}", time.time()),
+    )
+    return chat_id, char_id
 
 
 def test_the_present_beat_is_citable(temp_db):
@@ -37,13 +53,41 @@ def test_the_present_beat_is_citable(temp_db):
 def test_every_real_event_id_is_older_than_this_turn(temp_db):
     """Documents WHY the sentinel is needed rather than only asserting it: the
     exclusion below is correct and deliberate, so the present beat can never
-    acquire a real id before it commits."""
+    acquire a real id before it commits.
+
+    Asserted against a NON-EMPTY bank on purpose. The same assertion over an
+    empty bank passes vacuously and would have kept passing through audit F1,
+    when `search_memories` had no turn cutoff at all.
+    """
+    chat_id, char_id = _chat_and_char(temp_db)
+
+    # Turn 5 is the turn being decided; its outcome memory is already
+    # committed, which is exactly the state a reroll or a rerun-from-stage
+    # replays the onset in. Turn 6 stands in for a later play-order row --
+    # a branch or another frame can leave one sitting ahead of this turn.
+    memory.add_memory(chat_id, char_id, None, "episode", "witnessed", 0.9,
+                      "The door opened and the stranger shot me.", turn_idx=5,
+                      gist="shot by the stranger")
+    memory.add_memory(chat_id, char_id, None, "episode", "witnessed", 0.9,
+                      "A door opens somewhere later.", turn_idx=6,
+                      gist="a door opens later")
+    # An older memory, so the recall is not empty for a boring reason.
+    memory.add_memory(chat_id, char_id, None, "episode", "witnessed", 0.9,
+                      "A door opened onto the ward last week.", turn_idx=2,
+                      gist="a door opened onto the ward")
+
     ctx = memory.build_character_memory_context(
-        chat_id=1, char_id=1, current_turn_idx=5,
+        chat_id=chat_id, char_id=char_id, current_turn_idx=5,
         current_view="A door opens.", active_state={})
 
-    for episode in ctx["recent_episodes"] + ctx["recalled_old_memories"]:
+    episodes = ctx["recent_episodes"] + ctx["recalled_old_memories"]
+    assert episodes, "bank must be non-empty or this test is vacuous"
+    for episode in episodes:
         assert episode.get("turn_idx") is None or episode["turn_idx"] < 5
+    contents = " ".join(str(e.get("content") or "") for e in episodes)
+    assert "shot me" not in contents
+    assert "somewhere later" not in contents
+    assert "onto the ward" in contents
 
 
 def test_the_prompt_says_which_one_to_cite():

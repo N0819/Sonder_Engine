@@ -36,8 +36,15 @@ memory.
 
 from __future__ import annotations
 
+import json
 import re
 
+from character_schema import (
+    character_appearance,
+    character_name,
+    persona_appearance,
+    persona_name,
+)
 from db import wget
 from schemas import validate_llm_output
 from prompts import get_prompt
@@ -61,7 +68,9 @@ from background_claims import (
     novel_proper_nouns,
 )
 
-from .common import _agent_json
+from scene import persona_of
+
+from .common import _agent_json, _unknown_actor_label
 
 
 def _filtered_player_declaration(ctx):
@@ -117,16 +126,43 @@ def _beat_for_presence(dr, sc, station_room, name):
                 resolved = resolved.replace(body, "")
             continue
         speaker = str(d.get("speaker") or "").strip()
-        if station_room and sc:
-            sp_room = _room_of(sc, speaker)
-            if sp_room and hear_level(
-                spatial_rel(sc, sp_room, station_room),
-                d.get("volume") or "normal",
-            ) == "none":
-                continue
+        # X1: the hearing check used to run only `if station_room and sc`, so a
+        # presence tracked from a dialogue_log speaker alone -- which has no
+        # station room -- fell straight through it and received every audible
+        # quote of the beat verbatim, then spoke a reply that became public
+        # canon. Co-presence is not the default; not knowing where a presence
+        # stands is a reason to deliver nothing, and the scene-manager path
+        # already fails closed on exactly this uncertainty.
+        if not sc or not station_room:
+            continue
+        sp_room = _room_of(sc, speaker)
+        if not sp_room:
+            continue
+        level = hear_level(
+            spatial_rel(sc, sp_room, station_room),
+            d.get("volume") or "normal",
+        )
+        if level == "none":
+            continue
+        if level != "full":
+            # X2: a line dropped only at "none" meant `fragment` handed over the
+            # whole exact_quote -- the presence "half-heard" it and could then
+            # quote it back verbatim. commit._character_address_of already
+            # requires "full" to count a line as addressed; these two paths
+            # reading the same level differently is the bug.
+            audible.append(
+                "an indistinct exchange%s" % (f" from {speaker}" if speaker else ""))
+            continue
         audible.append("%s: %s" % (speaker, quote) if speaker else quote)
     if audible:
         return " ".join(audible).strip()
+    # No audible line: fall back to the beat's prose ONLY for a presence whose
+    # station is known. Without a station there is no vantage from which any of
+    # it was perceived, and resolved_event is the omniscient frame -- returning
+    # it here would hand an unplaced presence MORE than the dialogue gate above
+    # just withheld.
+    if not station_room:
+        return ""
     return re.sub(r"\s{2,}", " ", resolved).strip()
 
 
@@ -181,7 +217,6 @@ def background_react(ctx, nonce):
     if not names:
         return _result([], [])
 
-    present_others = _present_others(ctx)
     roster = {n.casefold() for n in _known_name_roster(ctx.chat, ctx.cast)}
     roster |= {(e.get("name") or "").casefold() for e in (ctx.extra_players or [])}
     sc = wget(ctx.chat.id, "scene", {}) or {}
@@ -196,6 +231,9 @@ def background_react(ctx, nonce):
     # interaction_loop for minds that lack the state that loop exists to guard).
     reactions = []
     for name in names:
+        # Per presence, not once for the batch: each one gets the cast under
+        # its OWN recognition (see _present_others).
+        present_others = _present_others(ctx, _presence_recognizes(ctx, name))
         entry = _react_one(ctx, dr, name, present_others, roster, sc,
                            presences.get(name) or {}, nonce)
         if entry:
@@ -418,7 +456,8 @@ def scene_life(ctx, nonce, level, cfg):
             "player_declaration": _filtered_player_declaration(ctx),
             "events": events,
             "present_characters": [
-                p for p in _present_others(ctx) if p not in names],
+                p for p in _present_others(ctx, _presence_recognizes(ctx, *names))
+                if p not in names],
         },
         "cast": cast,
         "variant_seed": nonce,
@@ -506,6 +545,11 @@ def _known_world_names(ctx, sc, managed_names):
         known |= set(_known_name_roster(ctx.chat, ctx.cast))
     except Exception:
         pass
+    # Recognition-gated on purpose: _known_name_roster above already supplies
+    # the canonical names, so what this adds is the appearance LABELS a
+    # presence refers to strangers by. Those are descriptions of people
+    # already in the room, not invented lore, and must not be scored as
+    # claims.
     for p in _present_others(ctx):
         known.add(p)
     try:
@@ -641,52 +685,70 @@ def _reproduces_withheld(quote, withheld):
     return False
 
 
-def _present_others(ctx):
-    """Co-located character names for the background payload, gated by the
-    player's recognition map.  Without this gate the canonical names of
-    characters the player has not met leaked into the background presence's
-    payload (and thence into its authored dialogue, which the player reads) --
-    the same identity-leak class _unknown_actor_label exists to close
-    everywhere else in the pipeline.  An unrecognized character is rendered
-    as their appearance-derived label or "someone" rather than their
-    canonical name, mirroring the recognition gate in
-    agents/loops.py:deterministic_micro_perception."""
-    present_others = []
-    pers_name = None
-    try:
-        from scene import persona_of, persona_name
-        pers = persona_of(ctx.chat)
-        pers_name = pers.get("name") or persona_name(pers) if isinstance(pers, dict) else None
-    except Exception:
-        pass
-    if pers_name:
-        present_others.append(pers_name)
-    # Player's known map: canonical names they recognize.
-    known_map = {}
-    try:
-        known_map = wget(ctx.chat.id, "known", {}) or {}
-    except Exception:
-        pass
-    player_known = set(known_map.get(pers_name) or []) if pers_name else set()
-    try:
-        from agents.common import _unknown_actor_label
-    except Exception:
-        _unknown_actor_label = lambda name, app=None: "someone"
+def _presence_recognizes(ctx, *presence_names):
+    """Names EVERY one of these background presences may use canonically.
+
+    The `known` world key is the engine's only per-mind recognition ledger,
+    keyed by the recognizing mind's own name (commit seeds it on promotion;
+    mapping's validated_introductions grows it). An unregistered presence
+    normally has no entry, so this normally returns the empty set -- that is
+    the intended answer, not a degradation: a bystander with no memory has no
+    basis for anybody's name.
+
+    Several presences share one payload on the scene_life path, so the
+    intersection is what that payload may carry: a name only one of them
+    knows would be handed to all of them, which is precisely the
+    cross-contamination §3.2 forbids.
+    """
+    known = wget(ctx.chat.id, "known", {}) or {}
+    sets = [{str(x) for x in (known.get(n) or [])} for n in presence_names]
+    return set.intersection(*sets) if sets else set()
+
+
+def _present_others(ctx, recognized=None):
+    """Co-located character names for a background presence's payload, gated
+    by what THAT presence recognizes.
+
+    This used to gate on the PLAYER's `known` map, which answers the wrong
+    question: a background presence is a separate mind, and every other gate
+    in this file already treats it as one -- _beat_for_presence gates on its
+    station room and hear_level, _audience_map matches conceal_from against
+    its own name. Borrowing the player's acquaintances let a presence who has
+    met nobody address the cast by name, and conversely hid a name from a
+    presence who does know it. `recognized` is that presence's own set (see
+    _presence_recognizes); the default of None means no vantage at all, so
+    nothing is recognized.
+
+    The justification for the old basis was that the presence's authored
+    dialogue is read by the player. That is a property of the OUTPUT path,
+    and it is handled there -- narration re-derives every speaker attribution
+    through the player's own recognition gate (agents/narration.py's
+    _speaker_display). It is also not weakened by this change: an
+    unregistered presence's recognized set is in practice empty, i.e.
+    strictly tighter than the player's map.
+
+    An unrecognized character renders as their appearance-derived label,
+    matching the recognition gate in
+    agents/loops.py:deterministic_micro_perception. The label comes from
+    agents/common.py's _unknown_actor_label, which is the canonical
+    implementation -- it strips the actor's own name tokens out of the
+    appearance summary (those summaries routinely lead with the name) and
+    trims on a word boundary.
+    """
+    recognized = set(recognized or ())
+    pers = persona_of(ctx.chat)
+    p_name = persona_name(pers)
+    # The player is subject to the same gate: a presence that has never been
+    # introduced has no more claim on the protagonist's name than on anyone
+    # else's.
+    present_others = [p_name if p_name in recognized
+                      else _unknown_actor_label(p_name, persona_appearance(pers))]
     for row in ctx.cast:
-        try:
-            import json as _json
-            from character_schema import character_name, character_appearance
-            sh = _json.loads(row["sheet"])
-            cname = character_name(sh)
-            if cname in player_known or cname == pers_name:
-                present_others.append(cname)
-            else:
-                # Unrecognized: use appearance label or "someone".
-                appearance = character_appearance(sh)
-                label = _unknown_actor_label(cname, appearance)
-                present_others.append(label)
-        except Exception:
-            continue
+        sh = json.loads(row["sheet"])
+        cname = character_name(sh)
+        present_others.append(
+            cname if cname in recognized
+            else _unknown_actor_label(cname, character_appearance(sh)))
     return present_others
 
 

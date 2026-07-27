@@ -313,6 +313,160 @@ def test_position_delta_payload_reports_unmoved_and_moved(temp_db):
     assert facts2 == []
 
 
+def test_position_delta_payload_gates_on_sight(temp_db):
+    """S3-A4 (second half): co-location was the whole gate, so a character who
+    walked into the player's PITCH-DARK room still arrived in the payload with
+    moved=True -- and the F2 check then enforces prose agreement with a body
+    the player never perceived. Sight now decides inclusion; light in the room
+    is what makes the same beat perceptible or not."""
+    dark = {
+        "rooms": {"bridge": {"name": "Bridge", "light": "dark"},
+                  "ready_room": {"name": "Ready Room"}},
+        "positions": {"Mara": "ready_room", "Player": "bridge"},
+    }
+    entered = json.loads(json.dumps(dark))
+    entered["positions"]["Mara"] = "bridge"
+    ctx = _mk_ctx(temp_db, dark, outcome_scene=entered)
+    payload, facts, _ = _position_delta_payload(
+        ctx, {"id": ctx.chat.id}, "Player", "bridge", {"Mara"},
+        {"Mara": {"appearance": "", "aliases": []}})
+    assert payload == {} and facts == []
+
+    # Same beat with the lights on: she is plainly visible and must still be
+    # narrated -- over-denial here would break ordinary co-present narration.
+    lit = json.loads(json.dumps(dark))
+    lit["rooms"]["bridge"].pop("light")
+    lit_entered = json.loads(json.dumps(lit))
+    lit_entered["positions"]["Mara"] = "bridge"
+    ctx = _mk_ctx(temp_db, lit, outcome_scene=lit_entered)
+    payload, facts, _ = _position_delta_payload(
+        ctx, {"id": ctx.chat.id}, "Player", "bridge", {"Mara"},
+        {"Mara": {"appearance": "", "aliases": []}})
+    assert payload["Mara"]["moved"] is True
+    assert facts == [{"name": "Mara", "room_id": "bridge", "moved": True}]
+    # No sight line into the ready room -> the origin is withheld even though
+    # the arrival itself is perceived.
+    assert payload["Mara"]["prev_room"] is None
+
+
+def test_position_delta_payload_names_origin_only_when_visible(temp_db):
+    """The origin room's DISPLAY NAME is a second, separate perception: seeing
+    someone come through a door tells you nothing about the room behind it.
+    An open sight line makes it the player's to know."""
+    base = {
+        "rooms": {
+            "bridge": {"name": "Bridge", "adjacent": [
+                {"to": "ready_room", "barrier": "open", "distance": "near"}]},
+            "ready_room": {"name": "Ready Room", "adjacent": [
+                {"to": "bridge", "barrier": "open", "distance": "near"}]},
+        },
+        "positions": {"Mara": "ready_room", "Player": "bridge"},
+    }
+    entered = json.loads(json.dumps(base))
+    entered["positions"]["Mara"] = "bridge"
+    ctx = _mk_ctx(temp_db, base, outcome_scene=entered)
+    payload, _, _ = _position_delta_payload(
+        ctx, {"id": ctx.chat.id}, "Player", "bridge", {"Mara"},
+        {"Mara": {"appearance": "", "aliases": []}})
+    assert payload["Mara"]["prev_room"] == "Ready Room"
+
+    # A wall between them carries the same movement with no visible origin.
+    walled = json.loads(json.dumps(base))
+    for rid, other in (("bridge", "ready_room"), ("ready_room", "bridge")):
+        walled["rooms"][rid]["adjacent"] = [
+            {"to": other, "barrier": "wall", "distance": "near"}]
+    walled_entered = json.loads(json.dumps(walled))
+    walled_entered["positions"]["Mara"] = "bridge"
+    ctx = _mk_ctx(temp_db, walled, outcome_scene=walled_entered)
+    payload, _, _ = _position_delta_payload(
+        ctx, {"id": ctx.chat.id}, "Player", "bridge", {"Mara"},
+        {"Mara": {"appearance": "", "aliases": []}})
+    assert payload["Mara"]["moved"] is True
+    assert payload["Mara"]["prev_room"] is None
+
+
+def test_position_delta_payload_skips_rear_arc_entrant(temp_db):
+    """A body in the player's rear blind spot delivers no new visual detail
+    (spatial.entity_arc), so a character who slipped in behind them is not a
+    fact the narrator may be held to."""
+    rooms = {"taproom": {"name": "the Taproom", "anchors": {
+        "bar": {"desc": "the long oak bar", "dir": "n"},
+        "door": {"desc": "the front door", "dir": "e"}}},
+        "yard": {"name": "the Yard"}}
+    prev = {"rooms": rooms, "positions": {"Player": "taproom",
+                                          "Creeper": "yard"},
+            "stations": {"Player": {"at": "bar"}, "Creeper": {"at": "door"}},
+            "orientation": {"Player": {"facing": "w"}}}
+    now = json.loads(json.dumps(prev))
+    now["positions"]["Creeper"] = "taproom"
+    ctx = _mk_ctx(temp_db, prev, outcome_scene=now, cast_names=("Creeper",))
+    payload, facts, _ = _position_delta_payload(
+        ctx, {"id": ctx.chat.id}, "Player", "taproom", {"Creeper"},
+        {"Creeper": {"appearance": "", "aliases": []}})
+    assert payload == {} and facts == []
+
+    # Turn to face the door and the same arrival is seen.
+    now["orientation"]["Player"]["facing"] = "e"
+    ctx = _mk_ctx(temp_db, prev, outcome_scene=now, cast_names=("Creeper",))
+    payload, _, _ = _position_delta_payload(
+        ctx, {"id": ctx.chat.id}, "Player", "taproom", {"Creeper"},
+        {"Creeper": {"appearance": "", "aliases": []}})
+    assert payload["Creeper"]["moved"] is True
+
+
+def test_narrator_payload_builds_with_visible_adjacent_rooms(temp_db, monkeypatch):
+    """Crash regression: the narrator built its visible-room set with
+    ``set(visible_adjacent_rooms(...))``, but that helper returns room RECORDS
+    ({room_id, room_name, barrier, description}) -- ``TypeError: unhashable
+    type: 'dict'`` on every awake, non-establishment turn whose room had a
+    sight-permitting adjacency. The payload must build, and portal_states must
+    stay scoped (S3-A5) to the rooms the player can see."""
+    import agents.narration as narration
+
+    scene = {
+        "rooms": {
+            "r1": {"name": "Hall", "notes": "a hall", "adjacent": [
+                {"to": "r2", "barrier": "open"},
+                {"to": "r3", "barrier": "wall"}]},
+            "r2": {"name": "Kitchen", "notes": "a kitchen", "adjacent": [
+                {"to": "r1", "barrier": "open"}]},
+            "r3": {"name": "Cellar", "adjacent": [
+                {"to": "r1", "barrier": "wall"}]},
+        },
+        "positions": {"Player": "r1", "kitchen_door": "r2",
+                      "cellar_door": "r3"},
+        "entities": {
+            "kitchen_door": {"name": "kitchen door", "kind": "door",
+                             "state": {"open": True}},
+            "cellar_door": {"name": "cellar door", "kind": "door",
+                            "state": {"open": False}},
+        },
+    }
+    ctx = _mk_ctx(temp_db, scene, outcome_scene=scene, cast_names=())
+    # The director resolves the player's room onto the context; the persona
+    # here has no positions entry of its own.
+    ctx["_player_room"] = "r1"
+    ctx["director_interpret"] = {"sequence": [], "speech": None}
+    ctx["perception_outcome"] = {"views": {"player": "The hall is quiet."}}
+
+    captured = {}
+
+    def _fake_agent_json(step_key, model_key, prompt, payload, **kw):
+        captured["payload"] = payload
+        return {"prose": "The hall stays quiet.", "new_specifics": []}
+
+    monkeypatch.setattr(narration, "_agent_json", _fake_agent_json)
+    monkeypatch.setattr(narration, "validate_llm_output",
+                        lambda key, out: (out, []))
+
+    out = narration.narrator(ctx, 0)
+    assert out["prose"]
+    portals = captured["payload"].get("portal_states") or {}
+    # Visible through the open doorway; the walled-off cellar's door is not.
+    assert portals.get("kitchen door") == "open"
+    assert "cellar door" not in portals
+
+
 def test_ordered_beat_events_order_and_view_filter(temp_db):
     ctx = _mk_ctx(temp_db, {"rooms": {}, "positions": {}})
     ctx.director_interpret = {"sequence": [

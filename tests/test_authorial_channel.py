@@ -139,3 +139,59 @@ def test_player_named_subject_is_never_rerouted():
     _route_authorial_npc_beat(ctx, out, ["ash"])
     assert len(out["sequence"]) == 1
     assert out.get("authorial_offers", []) == []
+
+
+class TestAuthoredSubjectDoesNotEatPlayerActs:
+    """The autonomy vocabulary is made of ordinary words on purpose ('relax',
+    'agree', 'enjoy'), so scanning a whole attempt for them turned any sentence
+    containing one into puppeting and DROPPED the player's declared act from
+    the sequence -- the one thing AGENTS.md forbids the Director to do
+    silently. The test is the clause the character is the subject of."""
+
+    FORMS = {7: ["sarah"], 9: ["dr. moon", "moon"]}
+    ACTOR = ["vorne"]
+
+    def _subject(self, attempt, verb=None, **kw):
+        from agents.common import authored_other_subject
+        elem = {"type": "action", "attempt": attempt, "verb": verb, **kw}
+        return authored_other_subject(elem, self.FORMS, self.ACTOR)
+
+    # --- still caught: the cases the reroute exists for -------------------
+    def test_name_led_cognition_is_rerouted(self):
+        assert self._subject(
+            "Dr. Moon remembers she has her smartphone") == 9
+
+    def test_name_led_volition_is_rerouted(self):
+        assert self._subject("Dr. Moon gives in") == 9
+
+    def test_indirect_autonomous_outcome_is_rerouted(self):
+        assert self._subject(
+            "the strain finally pushes Dr. Moon over the edge") == 9
+
+    def test_declared_mental_verb_on_a_name_led_beat_is_rerouted(self):
+        assert self._subject("Sarah stares at the wall", verb="remember") == 7
+
+    # --- no longer eaten: ordinary player acts ----------------------------
+    def test_a_later_clause_about_the_player_does_not_reroute(self):
+        """'enjoy' belongs to the player's clause, not Sarah's."""
+        assert self._subject("Sarah steps back and I enjoy the view") is None
+
+    def test_an_autonomy_word_before_the_name_does_not_reroute(self):
+        assert self._subject(
+            "her grip on the knife doesn't yield as I push against Sarah"
+        ) is None
+
+    def test_player_recall_about_a_character_is_not_rerouted(self):
+        """The declared verb belongs to the leading noun here, not to Sarah --
+        this is the player's own memory, and rerouting it handed Sarah an
+        offer to have the player's thought."""
+        assert self._subject("the way Sarah smiled", verb="remember") is None
+
+    def test_a_physical_npc_beat_is_left_alone(self):
+        assert self._subject("Dr. Moon steps back") is None
+
+    def test_acting_on_someone_stays_the_players_act(self):
+        assert self._subject("stabs Sarah") is None
+
+    def test_an_unnamed_clause_is_left_alone(self):
+        assert self._subject("the door swings shut and the lock catches") is None
