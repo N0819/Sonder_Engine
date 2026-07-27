@@ -186,6 +186,8 @@ def get_scene(chat_id, chat=None):
     # Containment: who is being carried by what. A contained body's position is
     # derived from its container's, so it cannot walk off on its own.
     sc.setdefault("contained", {})
+    # `vitals` is deliberately NOT defaulted: its absence is what tells the
+    # engine survival tracking is off for this story (survival.py).
     return sc
 
 def appearance_of(name, base, scene):
@@ -373,6 +375,99 @@ def apply_awareness_diff(amap, diff):
                         "cause": str(state.get("cause") or "").strip(),
                         "rousable_by": str(state.get("rousable_by") or "").strip()}
     return out
+
+
+# --- Restraint (world_conditions kind 'restraint') --------------------------
+# The tripwire that DETECTS un-recorded restraint in prose has existed since
+# the omission audit (director._untracked_restraint_subjects). Nothing ever
+# read the condition it asks for, so a character recorded as bound hand and
+# foot could still walk across the room -- the state was written, believed by
+# nobody, and enforced nowhere.
+#
+# Unlike awareness, restraint does NOT gate perception or speech: a bound
+# person sees everything and can talk. What it gates is the body. So the
+# enforcement is deliberately narrow and mechanical -- they cannot leave the
+# room they are held in -- and everything subtler is handed to the Director as
+# ground truth to resolve against.
+RESTRAINT_LEVELS = ("held", "bound", "pinned", "encased")
+# Levels at which a body cannot relocate itself. All of them: "held" is the
+# mildest and still means someone else has you.
+IMMOBILIZING_RESTRAINTS = frozenset(RESTRAINT_LEVELS)
+
+
+def _normalize_restraint_level(raw):
+    level = str(raw or "").strip().casefold()
+    if not level:
+        return "bound"
+    if level in RESTRAINT_LEVELS:
+        return level
+    # Unknown wording degrades to the MILDEST real restraint rather than
+    # vanishing, matching how awareness treats an unrecognized level.
+    return "held"
+
+
+def restraint_map(chat_id):
+    """Active `restraint` conditions, keyed casefolded subject -> record.
+
+    Mirrors awareness_map. Only restrained subjects appear; everyone else is
+    free by absence, so a chat that never restrains anyone is untouched.
+    """
+    out = {}
+    for row in q(
+        "SELECT subject_id, payload FROM world_conditions WHERE chat_id=? "
+        "AND kind='restraint' AND active=1", (chat_id,),
+    ):
+        try:
+            payload = json.loads(row["payload"])
+        except (TypeError, ValueError):
+            payload = {}
+        state = payload.get("state") or {}
+        subject = str(payload.get("subject_id") or row["subject_id"] or "").strip()
+        if not subject:
+            continue
+        out[subject.casefold()] = {
+            "subject": subject,
+            "level": _normalize_restraint_level(state.get("level")),
+            "by": str(state.get("by") or "").strip(),
+            "means": str(state.get("means") or "").strip(),
+            "escapable_by": str(state.get("escapable_by") or "").strip(),
+        }
+    return out
+
+
+def apply_restraint_diff(rmap, diff):
+    """Overlay a not-yet-committed diff's restraint conditions, so a binding
+    that happens THIS beat is in force for the same beat's resolution."""
+    out = dict(rmap or {})
+    for _cid, cond_list in ((diff or {}).get("conditions") or {}).items():
+        if not isinstance(cond_list, list):
+            cond_list = [cond_list]
+        for cond in cond_list:
+            if not isinstance(cond, dict) or cond.get("kind") != "restraint":
+                continue
+            subject = str(cond.get("subject_id") or "").strip()
+            if not subject:
+                continue
+            key = subject.casefold()
+            state = cond.get("state") or {}
+            if not int(cond.get("active", 1)):
+                out.pop(key, None)          # released this beat
+                continue
+            out[key] = {
+                "subject": subject,
+                "level": _normalize_restraint_level(state.get("level")),
+                "by": str(state.get("by") or "").strip(),
+                "means": str(state.get("means") or "").strip(),
+                "escapable_by": str(state.get("escapable_by") or "").strip(),
+            }
+    return out
+
+
+def restraint_of(chat_id_or_map, name):
+    """The restraint record for `name`, or None when free (fail-open)."""
+    rmap = chat_id_or_map if isinstance(chat_id_or_map, dict) \
+        else restraint_map(chat_id_or_map)
+    return rmap.get(str(name or "").casefold())
 
 
 def awareness_of(chat_id_or_map, name):

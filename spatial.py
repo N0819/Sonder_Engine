@@ -84,6 +84,24 @@ _BARRIER_ALIASES = {
     "lattice": "bars",
     "portcullis": "bars",
     "railing": "bars",
+    # Passable but opaque -- the inverse of `window`, and just as unauthorable
+    # before now: any of these had to be lied about as `open_door` (which sees
+    # straight through) or degrade to `wall` (which nothing passes).
+    "membrane": "membrane",
+    "curtain": "membrane",
+    "curtained": "membrane",
+    "curtained_doorway": "membrane",
+    "curtained doorway": "membrane",
+    "drape": "membrane",
+    "drapes": "membrane",
+    "flap": "membrane",
+    "tent_flap": "membrane",
+    "tent flap": "membrane",
+    "beads": "membrane",
+    "bead_curtain": "membrane",
+    "bead curtain": "membrane",
+    "veil": "membrane",
+    "opaque_opening": "membrane",
 }
 
 _VALID_BARRIERS = {
@@ -93,6 +111,15 @@ _VALID_BARRIERS = {
     # Sight passes, bodies do not. `window` also stops sound; `bars` does not.
     "window",
     "bars",
+    # Bodies pass, sight does not -- the exact inverse of `window`, and the
+    # rung this ladder was missing. A curtained doorway, a bead screen, a tent
+    # flap, a gasketed hatch, the soft wall of an enclosure you climb into:
+    # every one of them is walked through and none of them is seen through.
+    # Without it, the only way to author a doorway a body can use was
+    # `open_door`, which also hands everyone outside a clear line of sight in
+    # -- so entering such a space made its occupant MORE exposed than standing
+    # in the open, which is precisely backwards.
+    "membrane",
     "wall",
     "separated",
     "unknown",
@@ -100,7 +127,7 @@ _VALID_BARRIERS = {
 
 # The three questions a barrier answers, kept apart because they genuinely
 # differ. Conflating them is what left the engine with no way to say "you can
-# see it but you cannot reach it".
+# see it but you cannot reach it" -- or, in `membrane`'s case, the reverse.
 _SIGHT_BARRIERS = {"open", "open_door", "window", "bars"}
 
 def normalize_barrier(value: str | None) -> str:
@@ -346,6 +373,241 @@ def room_of(scene: dict, name: str) -> Optional[str]:
                 return v
     return None
 
+# ---------------------------------------------------------------------------
+# LIGHT -- the other half of sight.
+#
+# Sight was decided entirely by barriers: whether something stood between two
+# rooms, and whether you could see through it. Whether there was any light to
+# see BY did not exist. A pitch-black cellar and a sunlit hall were identical
+# to the engine, which for a system whose whole purpose is to stop a mind
+# knowing what it did not perceive is the largest hole in that promise --
+# darkness is the most ordinary perception gate there is.
+#
+# Absent means lit, so every existing scene behaves exactly as before. This is
+# the same fail-open the awareness gate and scale use.
+LIGHT_LEVELS = ("dark", "dim", "lit", "bright")
+_LIGHT_ALIASES = {
+    "": "lit", "none": "dark", "pitch_dark": "dark", "pitch black": "dark",
+    "pitch_black": "dark", "black": "dark", "unlit": "dark", "blackout": "dark",
+    "lightless": "dark", "gloom": "dim", "dusk": "dim", "twilight": "dim",
+    "shadowed": "dim", "shadowy": "dim", "murky": "dim", "faint": "dim",
+    "candlelit": "dim", "moonlit": "dim", "half_light": "dim", "low": "dim",
+    "normal": "lit", "daylight": "lit", "well_lit": "lit", "well lit": "lit",
+    "bright": "bright", "glaring": "bright", "blinding": "bright",
+    "floodlit": "bright", "sunlit": "lit", "harsh": "bright",
+}
+
+
+def normalize_light(value) -> str:
+    level = str(value or "").strip().casefold().replace(" ", "_")
+    level = _LIGHT_ALIASES.get(level, level)
+    return level if level in LIGHT_LEVELS else "lit"
+
+
+def room_light(scene: dict, room_id: str) -> str:
+    """The light a room has of its own, before anything spills into it."""
+    room = ((scene or {}).get("rooms") or {}).get(room_id)
+    if not isinstance(room, dict):
+        return "lit"
+    return normalize_light(room.get("light"))
+
+
+_LIGHT_ORDER = {"dark": 0, "dim": 1, "lit": 2, "bright": 3}
+
+
+def _brighter(a, b):
+    return a if _LIGHT_ORDER.get(a, 2) >= _LIGHT_ORDER.get(b, 2) else b
+
+
+def source_light(scene: dict, room_id: str, *, filling_only=False) -> str:
+    """The brightest ACTIVE light source in this room.
+
+    A room's own `light` is what the place provides -- a window, a fixture, the
+    sun. This is what someone brought with them: a torch, a lantern, a
+    phone-screen, a burning brand. Without it, a character standing in a
+    lightless cellar holding a lit lamp still saw nothing, which is the obvious
+    way for a room-level model to be wrong.
+
+    A carried source travels for free: an entity being carried already has its
+    holder's position derived onto it (derive_contained_positions), so the lamp
+    is wherever its bearer is without anything here needing to know who is
+    holding what.
+
+    Nothing here is specific to carrying. Any entity with `light_source` lights
+    the room it is in, so every way a story makes light works the same way and
+    none of them needed their own case: a campfire built this beat, a brazier,
+    a hearth, a lamp switched on, a glowing rune, a burning wreck. Building one
+    is creating an entity with `light_source` and a position -- which is what
+    creating a campfire already was.
+
+    Declared as `light_source` on the entity -- the level it EMITS -- and
+    switched off with state.lit false, so a doused torch stops lighting the
+    room without ceasing to be a torch.
+
+    `filling_only` counts just the sources that light a whole room. A hand
+    torch does not: it makes a pool of light around whoever holds it and leaves
+    the rest of the room dark, which is `light_at`'s business, not this one's.
+    """
+    entities = (scene or {}).get("entities") or {}
+    if not isinstance(entities, dict) or not room_id:
+        return "dark"
+    positions = (scene or {}).get("positions") or {}
+
+    best = "dark"
+    for eid, entity in entities.items():
+        if not isinstance(entity, dict) or not entity.get("light_source"):
+            continue
+        state = entity.get("state") if isinstance(entity.get("state"), dict) else {}
+        lit = state.get("lit", True)
+        if lit in (False, 0, "off", "false", "no", "doused", "out"):
+            continue
+        where = _ci_get(positions, eid)
+        if where is None:
+            where = _ci_get(positions, str(entity.get("name") or ""))
+        if where != room_id:
+            continue
+        if filling_only and _light_radius(entity) != "room":
+            continue
+        best = _brighter(best, normalize_light(entity.get("light_source")))
+    return best
+
+
+# How far a source throws. A hand light makes a pool; a hearth or a ceiling
+# fixture fills the space. Portable things default to a pool, because that is
+# what carrying a light is actually like -- and the difference is the whole
+# reason a torch in a cellar is tense rather than a solved problem.
+def _light_radius(entity):
+    declared = str((entity or {}).get("light_radius") or "").strip().casefold()
+    if declared in ("room", "spot"):
+        return declared
+    return "spot" if (entity or {}).get("portable") else "room"
+
+
+def light_at(scene: dict, name: str) -> str:
+    """The light actually falling on one body.
+
+    A room's ambient light, plus any source close enough to reach them. This is
+    what makes a torch a torch: standing next to the person holding it you are
+    lit, across the room you are a shape in the dark, and the room itself never
+    became "lit" for everyone at once.
+    """
+    room_id = room_of(scene, name)
+    if not room_id:
+        return "lit"
+
+    # Ambient: the room's own light, plus sources that fill a whole room.
+    level = _brighter(room_light(scene, room_id),
+                      source_light(scene, room_id, filling_only=True))
+
+    entities = (scene or {}).get("entities") or {}
+    positions = (scene or {}).get("positions") or {}
+    for eid, entity in entities.items():
+        if not isinstance(entity, dict) or not entity.get("light_source"):
+            continue
+        if _light_radius(entity) == "room":
+            continue                      # already counted as ambient
+        state = entity.get("state") if isinstance(entity.get("state"), dict) else {}
+        if state.get("lit", True) in (False, 0, "off", "false", "no", "doused", "out"):
+            continue
+        label = str(entity.get("name") or eid)
+        where = _ci_get(positions, eid)
+        if where is None:
+            where = _ci_get(positions, label)
+        if where != room_id:
+            continue
+
+        emitted = normalize_light(entity.get("light_source"))
+        # Held by this body, or standing in its pool: fully lit. Elsewhere in
+        # the room: you can see the light without being in it.
+        if str(label).strip().casefold() == str(name).strip().casefold() \
+                or proximity_rel(scene, name, label) in ("within_reach", "near"):
+            level = _brighter(level, emitted)
+        else:
+            level = _brighter(level, "dim" if emitted != "dark" else "dark")
+    return level
+
+
+def effective_light(scene: dict, room_id: str) -> str:
+    """A room's light including what spills in from next door.
+
+    A dark room with an open doorway onto a lit one is not pitch black -- there
+    is enough to make out shapes, which is the difference between a cellar with
+    the door open and a cellar with the door shut. Spill lifts dark to dim and
+    never further: borrowed light does not let you read by it.
+    """
+    # Anything burning in here counts as much as anything built in -- but only
+    # what actually fills the room. A hand torch is handled per body, in
+    # light_at, so it never silently illuminates the far corner.
+    own = _brighter(room_light(scene, room_id),
+                    source_light(scene, room_id, filling_only=True))
+    if own != "dark":
+        return own
+
+    rooms = (scene or {}).get("rooms") or {}
+    room = rooms.get(room_id)
+    if not isinstance(room, dict):
+        return own
+
+    for edge in room.get("adjacent") or []:
+        if not isinstance(edge, dict):
+            continue
+        if normalize_barrier(edge.get("barrier")) not in _SIGHT_BARRIERS:
+            continue
+        if room_light(scene, edge.get("to")) in ("lit", "bright"):
+            return "dim"
+    return "dark"
+
+
+def light_blocks_sight(level) -> bool:
+    """Is there too little light here to see anything at all."""
+    return normalize_light(level) == "dark"
+
+
+# What light lets you make out, mirroring hear_level's none/fragment/full. A
+# binary "can you see" cannot express the state most scenes actually want: a
+# shape moving in the gloom that you cannot identify.
+SIGHT_LEVELS = ("none", "shapes", "full")
+_LIGHT_SIGHT = {
+    "dark": "none",       # nothing, including the person beside you
+    "dim": "shapes",      # movement, outline, bulk -- not faces, not detail
+    "lit": "full",
+    "bright": "full",
+}
+
+
+def sight_level(rel: dict) -> str:
+    """How well these two can see each other: none | shapes | full.
+
+    Barriers answer whether there is a line at all; light answers what that
+    line carries. A lit room through an open door is full sight; the same room
+    unlit is nothing; and dim is the interesting middle -- enough to know
+    someone is there and not enough to know who.
+
+    `crossing` is the third input, and it is about a BODY rather than a place:
+    someone who has just gone through an opaque boundary is not instantly
+    gone. Passing through a curtained doorway is watched from the room behind
+    for as long as it takes -- so a crossing floors sight at `shapes` even
+    where the barrier or the dark would otherwise answer `none`. It never
+    RAISES sight above what the light allows; it only refuses to let a body
+    vanish mid-step. See spatial_frames.infer_threshold_crossings for how long
+    it lasts.
+    """
+    crossing = bool(rel.get("crossing"))
+    if not _sight_line(rel):
+        return "shapes" if crossing else "none"
+    level = _LIGHT_SIGHT.get(normalize_light(rel.get("light")), "full")
+    if crossing and level == "none":
+        return "shapes"
+    return level
+
+
+def _sight_line(rel: dict) -> bool:
+    """Is there a line of sight at all, ignoring light."""
+    if rel.get("same_room"):
+        return True
+    return normalize_barrier(rel.get("barrier")) in _SIGHT_BARRIERS
+
+
 def has_visual(rel: dict) -> bool:
     """Can these two see each other at all.
 
@@ -353,11 +615,82 @@ def has_visual(rel: dict) -> bool:
     here: a body sealed in a glass container is visible to the room, and sees
     the room back. Passage and audibility are answered elsewhere and stay
     unchanged -- being seen through glass is not being reachable through it.
-    """
-    if rel.get("same_room"):
-        return True
 
-    return normalize_barrier(rel.get("barrier")) in _SIGHT_BARRIERS
+    Kept as the boolean every existing caller expects; `sight_level` is the
+    graded answer underneath it.
+    """
+    return sight_level(rel) != "none"
+
+
+# How many beats a body stays visibly mid-crossing after stepping through a
+# boundary sight does not pass. Going through a doorway is an act with duration
+# -- the room behind watches it happen -- and collapsing it into the instant
+# the position field changes made bodies blink out of the world. Two beats: the
+# one they step through on, and one more still half in it.
+THRESHOLD_CROSSING_BEATS = 2
+
+
+def crossing_of(scene: dict, name: str) -> Optional[dict]:
+    """This body's live crossing record, or None.
+
+    {from: room left, to: room entered, beats: how many remain}. Written at
+    commit by spatial_frames.infer_threshold_crossings; read here so every
+    sight decision sees it through the one function that decides sight.
+    """
+    rec = (scene.get("crossings") or {}).get(str(name or ""))
+    if not isinstance(rec, dict):
+        return None
+    try:
+        beats = int(rec.get("beats") or 0)
+    except (TypeError, ValueError):
+        return None
+    return rec if beats > 0 else None
+
+
+def crossing_visible_from(scene: dict, observer_room, name: str) -> bool:
+    """Is `name` still visibly going through, watched from `observer_room`.
+
+    Only from the room they LEFT. The room they are entering has them
+    arriving, which is ordinary presence and needs no special case; the room
+    behind is the one that would otherwise lose them the instant they crossed.
+    """
+    rec = crossing_of(scene, name)
+    return bool(rec) and bool(observer_room) and rec.get("from") == observer_room
+
+
+def spatial_rel_between(scene: dict, observer: str, target: str) -> dict:
+    """`spatial_rel` for two BODIES rather than two rooms.
+
+    Identical to the room-level form except that it carries whatever is true
+    of these two specifically -- currently, whether the target is still
+    part-way through a boundary the observer is standing behind.
+    """
+    rel = dict(spatial_rel(scene, room_of(scene, observer),
+                           room_of(scene, target)))
+    if crossing_visible_from(scene, room_of(scene, observer), target):
+        rel["crossing"] = True
+    return rel
+
+
+def visual_level_between(scene: dict, observer: str, target: str) -> str:
+    """Graded sight from one BODY to another, accounting for local light.
+
+    The room-level form cannot know that the target is standing in a torch's
+    pool while the observer is not -- and that difference is exactly what a
+    carried light is for.
+    """
+    rel = spatial_rel(scene, room_of(scene, observer), room_of(scene, target))
+    crossing = crossing_visible_from(scene, room_of(scene, observer), target)
+    if not _sight_line(rel):
+        # Still going through: a shape in the doorway, not yet gone.
+        return "shapes" if crossing else "none"
+    # You see what is LIT, so the light that matters is the light on the thing
+    # being looked at.
+    level = _LIGHT_SIGHT.get(light_at(scene, target), "full")
+    if crossing and level == "none":
+        return "shapes"
+    return level
+
 
 def spatial_rel(
     scene: dict,
@@ -377,6 +710,10 @@ def spatial_rel(
             "same_room": True,
             "barrier": "open",
             "distance": "same",
+            # Whether there is light to see by here. A dark room hides the
+            # person standing next to you, which is why this is carried even
+            # for the same-room case.
+            "light": effective_light(scene, b_room),
         }
 
     rooms = scene.get("rooms") or {}
@@ -399,7 +736,14 @@ def spatial_rel(
                 "barrier": normalize_barrier(
                     edge.get("barrier")
                 ),
+                # What the barrier is made of, carried through so hearing can
+                # account for it. Absent means "ordinary", which is the
+                # behaviour every existing scene already had.
+                "material": edge.get("material") or "",
                 "distance": edge.get("distance", "near"),
+                # The light in the room being LOOKED AT: seeing into a dark
+                # room from a lit one is still seeing nothing.
+                "light": effective_light(scene, b_room),
             }
 
     return {
@@ -408,7 +752,7 @@ def spatial_rel(
         "distance": "far",
     }
 
-_PASSABLE_BARRIERS = {"open", "open_door"}
+_PASSABLE_BARRIERS = {"open", "open_door", "membrane"}
 
 def passable_route_exists(
     scene: dict,
@@ -464,6 +808,60 @@ def passable_route_exists(
                 frontier.append(nxt)
     return False
 
+# What a barrier is MADE of, independent of what kind of barrier it is. A
+# paper shoji screen and an oak door are both `closed_door` -- they stop a body
+# and block sight identically -- and are nothing alike to listen through. The
+# barrier type answers "can it be passed / seen through"; the material answers
+# "what does it do to a voice", and conflating them made every closed door in
+# every setting sound like the same door.
+#
+# A step of +1 means sound behaves as though the barrier were one grade more
+# open; -1, one grade more solid. Deliberately coarse: fiction needs the
+# difference between a paper screen and a stone wall, not an absorption
+# coefficient.
+_MATERIAL_SOUND_STEPS = {
+    # Barely there acoustically -- a voice carries almost as if nothing stood
+    # between, which is exactly the point of a screen you can be overheard
+    # through.
+    "paper": 1, "shoji": 1, "rice_paper": 1, "screen": 1, "curtain": 1,
+    "cloth": 1, "fabric": 1, "canvas": 1, "tarp": 1, "beads": 1,
+    "foliage": 1, "leaves": 1,
+    # The default: an ordinary door or partition.
+    "wood": 0, "timber": 0, "plank": 0, "plaster": 0, "drywall": 0,
+    "panel": 0, "composite": 0,
+    # Dense or sealed: sound loses another grade.
+    "metal": -1, "steel": -1, "iron": -1, "glass": -1, "stone": -1,
+    "brick": -1, "concrete": -1, "rock": -1, "earth": -1, "armor": -1,
+    "armour": -1, "bulkhead": -1, "vault": -1, "lead": -1,
+    "soundproof": -2, "insulated": -2, "sealed": -1, "airlock": -1,
+}
+
+# Ordered most open -> most solid. A material step moves the barrier along
+# this ladder before the volume table is consulted.
+# `membrane` is deliberately absent. The ladder is walked by relative steps, so
+# inserting a rung anywhere silently changes what its NEIGHBOURS shift onto --
+# putting it between `bars` and `closed_door` moved a paper screen (closed_door,
+# one grade more open) off `bars` and onto it. A membrane's material is the
+# membrane, so there is nothing for a material to modulate: _material_shifted_
+# barrier leaves any barrier not on this ladder exactly as it found it.
+_SOUND_LADDER = ("open", "open_door", "bars", "closed_door", "window", "wall")
+
+
+def _material_shifted_barrier(barrier, material):
+    """The barrier to LISTEN through, after accounting for what it is made of.
+
+    Only the acoustic question is shifted. Sight and passage still read the
+    real barrier, so a paper screen you cannot see through and cannot walk
+    through is still exactly that -- it is only easy to hear through.
+    """
+    step = _MATERIAL_SOUND_STEPS.get(
+        str(material or "").strip().casefold().replace(" ", "_"))
+    if not step or barrier not in _SOUND_LADDER:
+        return barrier
+    index = _SOUND_LADDER.index(barrier)
+    return _SOUND_LADDER[max(0, min(index - step, len(_SOUND_LADDER) - 1))]
+
+
 def hear_level(
     rel: dict,
     volume: str,
@@ -471,7 +869,8 @@ def hear_level(
     proximity: str | None = None,
 ) -> str:
     volume = str(volume or "normal").strip().casefold()
-    barrier = normalize_barrier(rel.get("barrier"))
+    barrier = _material_shifted_barrier(
+        normalize_barrier(rel.get("barrier")), rel.get("material"))
     distance = rel.get("distance")
 
     if rel.get("same_room"):
@@ -503,6 +902,37 @@ def hear_level(
             return "fragment"
 
         return "none"
+
+    if barrier == "bars":
+        # A grate is an acoustic hole. Sound passes as it would through an
+        # open door -- which is the whole difference between a cage and a cell.
+        if volume in ("normal", "loud", "shout"):
+            return "full"
+
+        if volume == "mutter":
+            return "fragment"
+
+        return "none"
+
+    if barrier == "membrane":
+        # Soft and opaque: nothing is seen through it and a good deal is heard.
+        # It muffles rather than stops -- a raised voice carries, an ordinary
+        # one arrives as a fragment, and something said under the breath does
+        # not survive the crossing at all.
+        if volume in ("loud", "shout"):
+            return "full"
+
+        if volume == "normal":
+            return "fragment"
+
+        return "none"
+
+    if barrier == "window":
+        # Glass is the opposite of bars: you are seen and not heard. Sealed
+        # panes carry only real force, and never speech at conversational
+        # volume -- which is why a shout through glass is a fragment, and a
+        # normal sentence is nothing at all.
+        return "fragment" if volume == "shout" else "none"
 
     if barrier == "closed_door":
         if volume in ("loud", "shout"):
@@ -1763,7 +2193,7 @@ def contacts_of(scene: dict, name: str) -> list:
 
 
 def contact_phrase(contact: dict, *, subject_first=True) -> str:
-    """One contact as a plain clause: 'Lilaeve's hand grips Hinami's waist'."""
+    """One contact as a plain clause: 'Bramwell's hand grips Hinami's waist'."""
     if not isinstance(contact, dict):
         return ""
     actor = str(contact.get("actor") or "").strip()
@@ -1828,6 +2258,25 @@ def spatial_facts(scene: dict, observer: str, source_names) -> list:
     # Relative size, when anyone is off their baseline. This is the fact that
     # silently invalidates everything else -- reach, lifting, whether a hold is
     # even possible -- so it is stated before the contacts below it.
+    # Light before anything else: it decides whether the rest of this list is
+    # perceivable at all.
+    here = effective_light(scene, room_of(scene, observer))
+    if here == "dark":
+        facts.append(
+            "It is pitch dark here — you cannot see anything, including the "
+            "people in this room with you.")
+    elif here == "dim":
+        facts.append("The light here is dim; shapes and movement, not detail.")
+    elif here == "bright":
+        facts.append("The light here is harsh and bright.")
+
+    # Bodily condition, when the story tracks it at all. Lazy import: survival
+    # reads spatial for sealed-enclosure detection, and this is the only edge
+    # back the other way.
+    if scene.get("vitals"):
+        from survival import vitals_facts
+        facts.extend(vitals_facts(scene, observer))
+
     facts.extend(size_facts(scene, observer, source_names))
     # Being carried is a harder constraint than any of the above: it decides
     # where you are at all, so the narrator is told before it describes anyone
@@ -2059,6 +2508,17 @@ _ENTITY_DEFAULT_FIELDS = {
     "container": False,
     "interior_rooms": [],
     "ubiquitous": False,
+    # Absent from this map, these two could only ever be set at CREATION: the
+    # merge below copies listed fields and leaves everything else at whatever
+    # the existing record held, so a Director declaring `enclosure` on an
+    # entity it had already introduced was silently dropped every time. That
+    # made both fields unfixable in flight -- an interior authored see-through
+    # stayed see-through for the rest of the story, and a lamp that came back
+    # without its emission could never get it back. None is the right default
+    # here precisely because it is what "not declared" already looks like, so
+    # silence still reads as silence.
+    "enclosure": None,
+    "light_source": None,
 }
 
 
@@ -2180,10 +2640,30 @@ def _transit_state(entity) -> Optional[dict]:
     transit = state.get("transit") if isinstance(state, dict) else None
     return transit if isinstance(transit, dict) else None
 
-# What an entity's enclosure is MADE of, which decides what a closed one still
-# lets through. `enclosure` sits beside portable/container as a structural fact:
-# a glass case and a strongbox are both closed, and only one of them is opaque.
-CONTAINER_ENCLOSURES = ("opaque", "transparent", "barred")
+# What an entity's enclosure is MADE of, which decides what it still lets
+# through. `enclosure` sits beside portable/container as a structural fact: a
+# glass case and a strongbox are both closed, and only one of them is opaque.
+#
+# It used to describe only the CLOSED state, on the assumption that an open way
+# in is an open way to look in. That holds for a lid or a door and fails for
+# every soft or draped opening, where the way in is opaque in both states --
+# `membrane` is that case, and the one enclosure whose OPEN doorway is not
+# see-through.
+CONTAINER_ENCLOSURES = ("opaque", "transparent", "barred", "membrane")
+
+
+def _open_enclosure_barrier(ent):
+    """The doorway barrier for an OPEN entity interior.
+
+    `open_door` for everything that opens by swinging a lid or a hatch aside,
+    which is the historical behaviour and stays the default. A `membrane`
+    enclosure is the exception: passable in both states and never see-through,
+    so entering one hides its occupant instead of exposing them.
+    """
+    enclosure = str((ent or {}).get("enclosure") or "").strip().casefold()
+    if enclosure == "membrane":
+        return "membrane"
+    return "open_door"
 
 
 def _closed_enclosure_barrier(ent):
@@ -2239,8 +2719,10 @@ def apply_transit_dock_edges(scene: dict) -> bool:
 
     Per entity with interior rooms:
     - docked (or no transit state) + hatch open  -> edge to the entity's
-      exterior room, barrier open_door (an existing edge to that room keeps
-      its authored barrier/distance when no hatch state overrides it);
+      exterior room, barrier open_door -- or membrane, when the entity's
+      `enclosure` says the way in is opaque even standing open (an existing
+      edge to that room otherwise keeps its authored barrier/distance when no
+      hatch state overrides it);
     - docked + hatch closed/locked -> same edge, barrier closed_door;
     - sealed / in_transit -> exterior edges severed (a closed_door edge to
       transit.route_room only, when one is set -- the shaft/ocean/sky);
@@ -2314,12 +2796,22 @@ def apply_transit_dock_edges(scene: dict) -> bool:
         phase = str((transit or {}).get("phase") or "docked").casefold()
         # (target, barrier); barrier None = preserve whatever was authored.
         if transit is None and not entity_state.get("hatch"):
-            target, barrier = exterior, None
+            # Nothing declared about the way in: keep whatever was authored
+            # (barrier None), UNLESS the enclosure itself settles the question.
+            # A membrane is opaque by construction, so an authored `open_door`
+            # onto one is a description the enclosure contradicts -- and
+            # preserving it is what let a body walk into an interior and stay
+            # in plain view of the room outside.
+            target = exterior
+            barrier = (_open_enclosure_barrier(ent)
+                       if str(ent.get("enclosure") or "").strip().casefold()
+                       == "membrane" else None)
         elif transit is None:
             # A static container: the lid alone decides the doorway.
             target = exterior
             barrier = (_closed_enclosure_barrier(ent)
-                       if hatch in ("closed", "locked") else "open_door")
+                       if hatch in ("closed", "locked")
+                       else _open_enclosure_barrier(ent))
         elif phase in _TRANSIT_CLOSED_PHASES:
             target = str(transit.get("route_room") or "") or None
             barrier = "closed_door"
@@ -2329,7 +2821,8 @@ def apply_transit_dock_edges(scene: dict) -> bool:
         else:  # docked, or an unrecognized phase read conservatively as docked
             target = exterior
             barrier = (_closed_enclosure_barrier(ent)
-                       if hatch in ("closed", "locked") else "open_door")
+                       if hatch in ("closed", "locked")
+                       else _open_enclosure_barrier(ent))
 
         # No authoritative exterior at all (entity has no recorded position)
         # outside an explicitly closed phase: there is nothing to derive the
@@ -2487,6 +2980,10 @@ def _dedup_duplicate_position_keys(positions, entities, incoming_positions=None)
 _ENTITY_STRUCTURAL_FIELDS = (
     "kind", "subtype", "name", "description", "aliases", "interior_rooms",
     "portable", "container", "ubiquitous", "parent_entity",
+    # What the thing is made of and what it gives off are as durable as what
+    # it is -- and were being lost whenever two records for one entity
+    # collapsed, which is the other half of the same gap.
+    "enclosure", "light_source",
 )
 
 
@@ -2503,8 +3000,8 @@ def _dedup_duplicate_entity_keys(entities, incoming_entities=None):
     neither, and it is the record that says what each body is doing and what it
     is in contact with.
 
-    Observed live: one character held two entity records -- `char_62aa02c0...`
-    frozen at the beat it was created, and `Lilaeve Voss` written every beat
+    Observed live: one character held two entity records -- `char_9f13c0a4...`
+    frozen at the beat it was created, and `Bramwell` written every beat
     since. Both claimed to describe her, so "who is in contact with whom" had
     two contradictory answers at once, one of them arbitrarily old, and every
     reader that walks entities saw the same person twice.
@@ -2752,6 +3249,24 @@ def merge_scene_with_diff(
 
     apply_contact_ops(merged, diff.get("contact_ops"))
     normalize_scene_contacts(merged)
+
+    # Bodily condition, last: air depends on whether the doorway ended the beat
+    # sealed, which the dock-edge rewrite above has only just settled. Entirely
+    # skipped unless something has written a vitals table -- absence is the
+    # off switch, so a story without survival tracking never touches this.
+    incoming_vitals = diff.get("vitals")
+    if incoming_vitals or merged.get("vitals"):
+        from survival import apply_vitals_diff, tick_vitals
+        apply_vitals_diff(merged, incoming_vitals)
+        elapsed = 0
+        time_block = diff.get("time")
+        if isinstance(time_block, dict):
+            elapsed = time_block.get("duration_seconds") or 0
+        tick_vitals(
+            merged, elapsed,
+            asleep=[n for n, r in (merged.get("contained") or {}).items()
+                    if isinstance(r, dict) and r.get("mode") == "asleep"],
+        )
     return merged
 
 def normalize_room_id(name: str) -> str:

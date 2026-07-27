@@ -270,9 +270,9 @@ class TestGroundTruth:
 
     def test_a_third_party_in_view_sees_the_arrangement(self):
         scene = merge_scene_with_diff(_scene(
-            positions={"Hinami": "hall", "Tamamo": "hall", "Lilaeve": "hall"},
+            positions={"Hinami": "hall", "Tamamo": "hall", "Bramwell": "hall"},
         ), _pocketed())
-        facts = " ".join(containment_facts(scene, "Lilaeve", ["Tamamo", "Hinami"]))
+        facts = " ".join(containment_facts(scene, "Bramwell", ["Tamamo", "Hinami"]))
         assert "Hinami" in facts and "Tamamo" in facts
 
     def test_nothing_is_said_when_nobody_is_carried(self):

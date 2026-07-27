@@ -21,7 +21,11 @@ from memory import lorebook_manifest
 from paradox import paradox_visible_to
 from prompts import get_prompt
 from scene import (
+    IMMOBILIZING_RESTRAINTS,
     NON_AWAKE_GATED,
+    apply_restraint_diff,
+    restraint_map,
+    restraint_of,
     _ability_mod,
     _normalize_awareness_level,
     appearance_of,
@@ -1269,7 +1273,7 @@ def _normalize_diff_shape(sd):
     if not isinstance(sd, dict):
         sd = {}
     for k in ("positions", "rooms", "entities", "overlays", "attire",
-              "conditions", "scales", "containment"):
+              "conditions", "scales", "containment", "vitals"):
         if not isinstance(sd.get(k), dict):
             sd[k] = {}
     for k in ("cast_changes", "world_facts", "introductions",
@@ -1807,6 +1811,34 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
             "and a gated level would have taken away their view and their next "
             "move."
         )
+
+    # Restraint, enforced rather than merely detected. The omission scan below
+    # has always asked the Director to RECORD a binding; nothing ever read the
+    # result, so a character bound hand and foot could still walk out. A
+    # restraint that is in force -- including one applied this same beat --
+    # blocks that body from relocating itself. Everything subtler (what they
+    # can still reach, whether they can work free) stays the Director's call.
+    _rmap = apply_restraint_diff(restraint_map(ctx.chat["id"]), sd)
+    if _rmap and isinstance(sd.get("positions"), dict):
+        _prior = (sc.get("positions") or {})
+        for _who in list(sd["positions"]):
+            _record = restraint_of(_rmap, _who)
+            if not _record or _record["level"] not in IMMOBILIZING_RESTRAINTS:
+                continue
+            _was = _prior.get(_who)
+            if _was is None or sd["positions"][_who] == _was:
+                continue
+            # Being CARRIED somewhere while bound is legitimate -- that is the
+            # restrainer moving them, not them walking off.
+            if (sc.get("contained") or {}).get(_who):
+                continue
+            sd["positions"].pop(_who, None)
+            ctx.add_warning(
+                f"Blocked a move by {_who}, who is {_record['level']}"
+                + (f" by {_record['by']}" if _record["by"] else "")
+                + ": a restrained body cannot relocate itself. Release the "
+                "restraint first, or have someone carry them."
+            )
 
     signals = _strip_blank_diff_placeholders(sd)
     for name in _untracked_restraint_subjects(

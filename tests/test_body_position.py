@@ -41,14 +41,14 @@ def _scene(**over):
     scene = {
         "rooms": {"bedroom": {"name": "Bedroom", "adjacent": []},
                   "hall": {"name": "Hall", "adjacent": []}},
-        "positions": {"Lilaeve Voss": "bedroom", "Hinami": "bedroom"},
+        "positions": {"Bramwell": "bedroom", "Hinami": "bedroom"},
         "entities": {}, "contacts": [],
     }
     scene.update(over)
     return scene
 
 
-def _hold(actor="Lilaeve Voss", actor_part="hand", target="Hinami",
+def _hold(actor="Bramwell", actor_part="hand", target="Hinami",
           target_part="waist", manner="grip"):
     return {"actor": actor, "actor_part": actor_part, "target": target,
             "target_part": target_part, "manner": manner}
@@ -62,7 +62,7 @@ class TestRecordingContact:
         # One relation, one record. The old shape wrote a paragraph onto each
         # body and let the two drift.
         assert len(scene["contacts"]) == 1
-        assert scene["contacts"][0]["actor"] == "Lilaeve Voss"
+        assert scene["contacts"][0]["actor"] == "Bramwell"
         assert scene["contacts"][0]["target_part"] == "waist"
 
     def test_body_parts_are_kept(self):
@@ -76,7 +76,7 @@ class TestRecordingContact:
 
     def test_one_person_can_hold_several_things_at_once(self):
         scene = merge_scene_with_diff(_scene(
-            positions={"Lilaeve Voss": "bedroom", "Hinami": "bedroom",
+            positions={"Bramwell": "bedroom", "Hinami": "bedroom",
                        "Tamamo": "bedroom"},
         ), {"contact_ops": [
             {"op": "add", **_hold(actor_part="hand", target_part="wrist")},
@@ -126,7 +126,7 @@ class TestEndingContact:
         scene = merge_scene_with_diff(
             _scene(), {"contact_ops": [{"op": "add", **_hold()}]})
         scene = merge_scene_with_diff(scene, {"contact_ops": [
-            {"op": "remove", "actor": "Lilaeve Voss", "target": "Hinami"}]})
+            {"op": "remove", "actor": "Bramwell", "target": "Hinami"}]})
 
         # Parts omitted ends all contact between the two: ending a hold must
         # not require recalling exactly which parts were recorded.
@@ -138,7 +138,7 @@ class TestEndingContact:
         scene = merge_scene_with_diff(
             _scene(), {"contact_ops": [{"op": "add", **_hold()}]})
         scene = merge_scene_with_diff(scene, {"contact_ops": [
-            {"op": "remove", "actor": "Hinami", "target": "Lilaeve Voss"}]})
+            {"op": "remove", "actor": "Hinami", "target": "Bramwell"}]})
         assert scene["contacts"] == []
 
     def test_removing_one_part_leaves_the_others(self):
@@ -147,19 +147,19 @@ class TestEndingContact:
             {"op": "add", **_hold(actor_part="mouth", target_part="throat")},
         ]})
         scene = merge_scene_with_diff(scene, {"contact_ops": [
-            {"op": "remove", "actor": "Lilaeve Voss", "target": "Hinami",
+            {"op": "remove", "actor": "Bramwell", "target": "Hinami",
              "actor_part": "hand"}]})
 
         assert [c["actor_part"] for c in scene["contacts"]] == ["mouth"]
 
     def test_clear_releases_everything_one_person_is_part_of(self):
         scene = merge_scene_with_diff(_scene(
-            positions={"Lilaeve Voss": "bedroom", "Hinami": "bedroom",
+            positions={"Bramwell": "bedroom", "Hinami": "bedroom",
                        "Tamamo": "bedroom"},
         ), {"contact_ops": [
             {"op": "add", **_hold()},
             {"op": "add", **_hold(actor="Tamamo", target="Hinami")},
-            {"op": "add", **_hold(actor="Tamamo", target="Lilaeve Voss")},
+            {"op": "add", **_hold(actor="Tamamo", target="Bramwell")},
         ]})
         scene = merge_scene_with_diff(
             scene, {"contact_ops": [{"op": "clear", "actor": "Hinami"}]})
@@ -167,7 +167,7 @@ class TestEndingContact:
         # Everything Hinami was part of, on either side, and nothing else.
         assert len(scene["contacts"]) == 1
         assert scene["contacts"][0]["actor"] == "Tamamo"
-        assert scene["contacts"][0]["target"] == "Lilaeve Voss"
+        assert scene["contacts"][0]["target"] == "Bramwell"
 
     def test_a_bare_clear_releases_the_scene(self):
         scene = merge_scene_with_diff(
@@ -207,7 +207,7 @@ class TestMovementClearsContactByItself:
 
     def test_an_op_cannot_smuggle_in_an_impossible_contact(self):
         scene = merge_scene_with_diff(_scene(
-            positions={"Lilaeve Voss": "bedroom", "Hinami": "hall"},
+            positions={"Bramwell": "bedroom", "Hinami": "hall"},
         ), {"contact_ops": [{"op": "add", **_hold()}]})
 
         # Hygiene runs after the ops, so a hold across two rooms never lands.
@@ -225,24 +225,24 @@ class TestMovementClearsContactByItself:
 class TestReading:
     def test_what_is_touching_this_person(self):
         scene = merge_scene_with_diff(_scene(
-            positions={"Lilaeve Voss": "bedroom", "Hinami": "bedroom",
+            positions={"Bramwell": "bedroom", "Hinami": "bedroom",
                        "Tamamo": "bedroom"},
         ), {"contact_ops": [
             {"op": "add", **_hold()},
             {"op": "add", **_hold(actor="Tamamo", target_part="shoulder")},
-            {"op": "add", **_hold(actor="Tamamo", target="Lilaeve Voss")},
+            {"op": "add", **_hold(actor="Tamamo", target="Bramwell")},
         ]})
 
         # The reader that did not exist: this was only answerable by re-reading
         # a prose paragraph and hoping.
         on_hinami = contacts_of(scene, "Hinami")
         assert len(on_hinami) == 2
-        assert {c["actor"] for c in on_hinami} == {"Lilaeve Voss", "Tamamo"}
+        assert {c["actor"] for c in on_hinami} == {"Bramwell", "Tamamo"}
 
     def test_it_finds_a_person_on_either_side(self):
         scene = merge_scene_with_diff(
             _scene(), {"contact_ops": [{"op": "add", **_hold()}]})
-        assert len(contacts_of(scene, "Lilaeve Voss")) == 1
+        assert len(contacts_of(scene, "Bramwell")) == 1
         assert len(contacts_of(scene, "Hinami")) == 1
 
     def test_lookup_is_case_insensitive(self):
@@ -257,9 +257,9 @@ class TestReading:
         assert contacts_of(scene, "") == []
 
     def test_a_contact_reads_as_a_plain_clause(self):
-        assert contact_phrase(_hold()) == "Lilaeve Voss's hand grips Hinami's waist"
+        assert contact_phrase(_hold()) == "Bramwell's hand grips Hinami's waist"
         assert contact_phrase(_hold(actor_part="", target_part="", manner="hold")) \
-            == "Lilaeve Voss holds Hinami"
+            == "Bramwell holds Hinami"
 
 
 class TestNarratorGroundTruth:
@@ -269,26 +269,26 @@ class TestNarratorGroundTruth:
     def test_the_observers_own_contact_is_stated(self):
         scene = merge_scene_with_diff(
             _scene(), {"contact_ops": [{"op": "add", **_hold()}]})
-        facts = spatial_facts(scene, "Hinami", ["Lilaeve Voss"])
+        facts = spatial_facts(scene, "Hinami", ["Bramwell"])
 
         assert any("waist" in f and "hand" in f for f in facts)
 
     def test_contact_between_two_others_in_view_is_stated(self):
         scene = merge_scene_with_diff(_scene(
-            positions={"Lilaeve Voss": "bedroom", "Hinami": "bedroom",
+            positions={"Bramwell": "bedroom", "Hinami": "bedroom",
                        "Tamamo": "bedroom"},
         ), {"contact_ops": [
-            {"op": "add", **_hold(actor="Tamamo", target="Lilaeve Voss")}]})
+            {"op": "add", **_hold(actor="Tamamo", target="Bramwell")}]})
 
-        facts = spatial_facts(scene, "Hinami", ["Tamamo", "Lilaeve Voss"])
-        assert any("Tamamo" in f and "Lilaeve Voss" in f for f in facts)
+        facts = spatial_facts(scene, "Hinami", ["Tamamo", "Bramwell"])
+        assert any("Tamamo" in f and "Bramwell" in f for f in facts)
 
     def test_contact_among_people_out_of_view_is_not_stated(self):
         scene = merge_scene_with_diff(_scene(
-            positions={"Lilaeve Voss": "bedroom", "Hinami": "bedroom",
+            positions={"Bramwell": "bedroom", "Hinami": "bedroom",
                        "Tamamo": "bedroom"},
         ), {"contact_ops": [
-            {"op": "add", **_hold(actor="Tamamo", target="Lilaeve Voss")}]})
+            {"op": "add", **_hold(actor="Tamamo", target="Bramwell")}]})
 
         # Not in the observer's source_names: not theirs to know.
         facts = spatial_facts(scene, "Hinami", [])
@@ -302,19 +302,19 @@ class TestNarratorGroundTruth:
         scene = merge_scene_with_diff(
             _scene(), {"contact_ops": [{"op": "add", **_hold()}]})
 
-        # Lilaeve is present and holding her, but not a source the observer can
+        # Bramwell is present and holding her, but not a source the observer can
         # name: no line, rather than a line naming a stranger.
         facts = spatial_facts(scene, "Hinami", [])
-        assert not any("Lilaeve" in f for f in facts)
+        assert not any("Bramwell" in f for f in facts)
 
     def test_a_released_hold_stops_being_stated(self):
         scene = merge_scene_with_diff(
             _scene(), {"contact_ops": [{"op": "add", **_hold()}]})
         scene = merge_scene_with_diff(scene, {"contact_ops": [
-            {"op": "remove", "actor": "Lilaeve Voss", "target": "Hinami"}]})
+            {"op": "remove", "actor": "Bramwell", "target": "Hinami"}]})
 
         assert not any("waist" in f
-                       for f in spatial_facts(scene, "Hinami", ["Lilaeve Voss"]))
+                       for f in spatial_facts(scene, "Hinami", ["Bramwell"]))
 
 
 class TestHygieneIsSafe:
@@ -355,30 +355,30 @@ class TestMirroredAssertions:
 
     def test_the_same_hold_from_both_sides_is_one_record(self):
         scene = merge_scene_with_diff(_scene(), {"contact_ops": [
-            {"op": "add", "actor": "Lilaeve Voss", "actor_part": "hand",
+            {"op": "add", "actor": "Bramwell", "actor_part": "hand",
              "target": "Hinami", "target_part": "wrist", "manner": "grip"},
             {"op": "add", "actor": "Hinami", "actor_part": "wrist",
-             "target": "Lilaeve Voss", "target_part": "hand", "manner": "grip"},
+             "target": "Bramwell", "target_part": "hand", "manner": "grip"},
         ]})
         assert len(scene["contacts"]) == 1
 
     def test_the_mirror_updates_the_record_rather_than_twinning_it(self):
         scene = merge_scene_with_diff(_scene(), {"contact_ops": [
-            {"op": "add", "actor": "Lilaeve Voss", "actor_part": "hand",
+            {"op": "add", "actor": "Bramwell", "actor_part": "hand",
              "target": "Hinami", "target_part": "wrist", "manner": "rest"}]})
         scene = merge_scene_with_diff(scene, {"contact_ops": [
             {"op": "add", "actor": "Hinami", "actor_part": "wrist",
-             "target": "Lilaeve Voss", "target_part": "hand", "manner": "grip"}]})
+             "target": "Bramwell", "target_part": "hand", "manner": "grip"}]})
 
         assert len(scene["contacts"]) == 1
         assert scene["contacts"][0]["manner"] == "grip"
 
     def test_different_parts_are_different_contacts_not_mirrors(self):
         scene = merge_scene_with_diff(_scene(), {"contact_ops": [
-            {"op": "add", "actor": "Lilaeve Voss", "actor_part": "hand",
+            {"op": "add", "actor": "Bramwell", "actor_part": "hand",
              "target": "Hinami", "target_part": "wrist", "manner": "grip"},
             {"op": "add", "actor": "Hinami", "actor_part": "hand",
-             "target": "Lilaeve Voss", "target_part": "wrist", "manner": "grip"},
+             "target": "Bramwell", "target_part": "wrist", "manner": "grip"},
         ]})
         # Each holding the other's wrist is two holds, not one stated twice.
         assert len(scene["contacts"]) == 2
@@ -401,25 +401,25 @@ class TestLiftingContactOutOfEntityState:
 
     def test_the_documented_old_shape_converts(self):
         """`target` plus a proximity that means contact."""
-        scene = self._lift({"Lilaeve Voss": {
-            "name": "Lilaeve Voss",
+        scene = self._lift({"Bramwell": {
+            "name": "Bramwell",
             "state": {"proximity": "pressed_fully_against", "target": "Hinami",
                       "posture": "grinding_with_full_contact"}}},
-            positions={"Hinami": "bedroom", "Lilaeve Voss": "bedroom"})
+            positions={"Hinami": "bedroom", "Bramwell": "bedroom"})
 
         assert len(scene["contacts"]) == 1
-        assert scene["contacts"][0]["actor"] == "Lilaeve Voss"
+        assert scene["contacts"][0]["actor"] == "Bramwell"
         assert scene["contacts"][0]["manner"] == "press"
 
     def test_mere_nearness_does_not_become_contact(self):
         """`close_on_bed` is proximity, not contact -- stations model that.
         Inventing a hold is worse than missing one: contact becomes ground
         truth the narrator is told."""
-        scene = self._lift({"Lilaeve Voss": {
-            "name": "Lilaeve Voss",
+        scene = self._lift({"Bramwell": {
+            "name": "Bramwell",
             "state": {"proximity": "close_on_bed", "target": "Hinami",
                       "posture": "leaning_in"}}},
-            positions={"Hinami": "bedroom", "Lilaeve Voss": "bedroom"})
+            positions={"Hinami": "bedroom", "Bramwell": "bedroom"})
 
         assert scene["contacts"] == []
 
@@ -512,14 +512,14 @@ class TestLiftingContactOutOfEntityState:
     def test_the_live_chat_40_state_lifts_cleanly(self):
         """Verbatim from the live scene that prompted this."""
         scene = self._lift({
-            "hinami": {"name": "Hinami", "kind": "kitsune", "state": {
+            "hinami": {"name": "Hinami", "kind": "traveller", "state": {
                 "posture": "curled_up_in_nest_eyes_closed",
                 "leaning_against": "tamamo",
                 "contact": "bodies_aligned_in_warmth",
                 "squished_against": "tamamo_side",
                 "alongside": "Tamamo",
                 "tails_wrapped_around": "Tamamo"}},
-            "Tamamo": {"name": "Tamamo", "kind": "kitsune", "state": {
+            "Tamamo": {"name": "Tamamo", "kind": "traveller", "state": {
                 "posture": "reclining_in_nest_embracing_hinami",
                 "beside": "Hinami"}},
         })

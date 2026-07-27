@@ -34,10 +34,13 @@ import os
 import affect
 from spatial import (
     ambient_scope,
+    crossing_visible_from,
     egocentric_frame,
     entity_arc,
     entity_side,
     has_visual,
+    effective_light,
+    visual_level_between,
     hear_level,
     merge_scene_with_diff,
     proximity_rel,
@@ -115,6 +118,7 @@ from .common import (
     _fallback_perception_views,
     _inject_action,
     _inject_dialogue,
+    _appearance_as_prose,
     _inject_visible_actor,
     _normalise_views,
     _resolve_player_room,
@@ -309,7 +313,10 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name):
         if not demeanor and not tells:
             continue
         rel = spatial_rel(scene, s.get("room"), o_room)
-        visible = has_visual(rel) and sname not in behind
+        # Per-BODY, so a source standing in a torch's pool is visible while the
+        # rest of the dark room is not -- the room-level answer cannot see that.
+        visible = (visual_level_between(scene, observer, sname) != "none"
+                   and sname not in behind)
         audible = bool(rel.get("same_room"))
         acuity = 0.4
         familiarity = 0.45 if (observer in (known.get(sname) or [])
@@ -450,8 +457,8 @@ def perception_establish(ctx, nonce):
     # it meant the player's actual name/appearance was silently never
     # used on turn 0 -- always "the player" with no real appearance.
     p_name = pers.get("name") or persona_name(pers)
-    p_appearance = appearance_of(
-        p_name, pers.get("appearance") or persona_appearance(pers), sc)
+    p_appearance = _appearance_as_prose(appearance_of(
+        p_name, pers.get("appearance") or persona_appearance(pers), sc))
 
     p_room = _resolve_player_room(sc, pers, None, ctx.cast, ctx.get("input"))
     ctx["_player_room"] = p_room
@@ -542,7 +549,11 @@ def perception_establish(ctx, nonce):
                   "scales": sc.get("scales") or {},
                   # Who is being carried by what. A carried body perceives
                   # from wherever its carrier is.
-                  "contained": sc.get("contained") or {}},
+                  "contained": sc.get("contained") or {},
+                  # How much light there is to see by, per room. A perceiver
+                  # in a dark room perceives by sound and touch.
+                  "light": {rid: effective_light(sc, rid)
+                            for rid in (sc.get("rooms") or {})}},
         "declared_act": declared,
         "perceivers": awake_perceivers,
         "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
@@ -609,8 +620,8 @@ def perception_act(ctx, nonce):
 
     p_rdata = (sc.get("rooms") or {}).get(p_room) if p_room else None
     p_name = pers.get("name") or persona_name(pers)
-    p_appearance = appearance_of(
-        p_name, pers.get("appearance") or persona_appearance(pers), sc)
+    p_appearance = _appearance_as_prose(appearance_of(
+        p_name, pers.get("appearance") or persona_appearance(pers), sc))
     # A physical disguise conceals the actor's real appearance from observers:
     # p_visible is what is actually SEEN (disguised form when active), fed to
     # both the LLM and the deterministic injection below so a concealed feature
@@ -689,6 +700,12 @@ def perception_act(ctx, nonce):
         sh, act, _ = sheet_state(c)
         r = character_room(sc, sh)
         rel = spatial_rel(sc, p_room, r)
+        # The actor may be part-way through a boundary this observer is
+        # standing behind -- going through a doorway is watched from the room
+        # behind rather than vanishing the instant the position field changed.
+        # Floors sight at `shapes`; it never grants more than the light allows.
+        if crossing_visible_from(sc, r, p_name):
+            rel = {**rel, "crossing": True}
         rdata = (sc.get("rooms") or {}).get(r) if r else None
 
         perceivers.append({
@@ -732,6 +749,28 @@ def perception_act(ctx, nonce):
         action_onset = {**action_onset, "actor": neutral,
                         "actor_name": neutral,
                         "actor_present_appearance": p_appearance_safe}
+    # The same argument as the identity strip above, for the OTHER thing this
+    # payload hands over unconditionally. When no perceiver in this call has a
+    # visual channel to the actor, none of them has any legitimate use for what
+    # the actor LOOKS like -- and handing it over anyway is the exact pattern
+    # the block above forbids: objective state copied into a context with an
+    # implicit instruction not to use it.
+    #
+    # Observed live: the player inside a sealed interior room with no
+    # adjacency to the room its owner was standing in, and
+    # the perceiver's view came back "You see A tall figure in a grey
+    # travelling coat, hood raised.;
+    # clothing state: ..." -- the appearance string verbatim, capital and
+    # trailing fragment included, for a body that was not visible at all.
+    #
+    # The deterministic injector was already gated on has_visual and correctly
+    # stayed silent; this closes the channel that bypassed it. What the
+    # perceiver CAN still feel (weight, movement, contact) is unaffected --
+    # this removes only the look of a body nobody can see.
+    if awake_perceivers and not any(
+            p.get("visual_channel_to_actor") for p in awake_perceivers):
+        action_onset = {**action_onset, "actor_present_appearance": "",
+                        "actor_not_visible": True}
 
     payload = {
         "scene": {"location": sc.get("location"), "time": sc.get("time"),
@@ -746,7 +785,11 @@ def perception_act(ctx, nonce):
                   "scales": sc.get("scales") or {},
                   # Who is being carried by what. A carried body perceives
                   # from wherever its carrier is.
-                  "contained": sc.get("contained") or {}},
+                  "contained": sc.get("contained") or {},
+                  # How much light there is to see by, per room. A perceiver
+                  # in a dark room perceives by sound and touch.
+                  "light": {rid: effective_light(sc, rid)
+                            for rid in (sc.get("rooms") or {})}},
         "declared_act": action_onset,
         "perceivers": awake_perceivers,
         "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
@@ -935,8 +978,8 @@ def perception_outcome(ctx, nonce):
     ctx["_player_room"] = p_room
 
     p_name = pers.get("name") or persona_name(pers)
-    p_appearance_true = appearance_of(
-        p_name, pers.get("appearance") or persona_appearance(pers), sc)
+    p_appearance_true = _appearance_as_prose(appearance_of(
+        p_name, pers.get("appearance") or persona_appearance(pers), sc))
     # Conceal a disguised subject's real appearance in every observer's outcome
     # view: p_appearance becomes the disguised (visible) form, so present_
     # appearances and the deterministic injection below never expose concealed
@@ -1043,8 +1086,8 @@ def perception_outcome(ctx, nonce):
         e_name = extra["name"]
         e_room = room_of(sc, e_name) or p_room
         sources.append({"name": e_name, "room": e_room})
-        appearances[e_name] = appearance_of(
-            e_name, extra.get("appearance") or f"{e_name}, a person of unremarkable appearance.", sc)
+        appearances[e_name] = _appearance_as_prose(appearance_of(
+            e_name, extra.get("appearance") or f"{e_name}, a person of unremarkable appearance.", sc))
         entry = other_players.get(pid_key) or {}
         for e in (entry.get("sequence") or []):
             if e.get("type") == "action" and e.get("attempt") and e.get("visibility") == "concealed":
@@ -1100,8 +1143,8 @@ def perception_outcome(ctx, nonce):
     for c in ctx.cast:
         sh, act, _ = sheet_state(c)
         r = character_room(sc, sh)
-        appearances[character_name(sh)] = appearance_of(
-            character_name(sh), character_appearance(sh), sc)
+        appearances[character_name(sh)] = _appearance_as_prose(appearance_of(
+            character_name(sh), character_appearance(sh), sc))
         rdata = (sc.get("rooms") or {}).get(r) if r else None
         perceivers.append({
             "id": c["id"], "name": character_name(sh), "room": r,
@@ -1160,7 +1203,11 @@ def perception_outcome(ctx, nonce):
                   "scales": sc.get("scales") or {},
                   # Who is being carried by what. A carried body perceives
                   # from wherever its carrier is.
-                  "contained": sc.get("contained") or {}},
+                  "contained": sc.get("contained") or {},
+                  # How much light there is to see by, per room. A perceiver
+                  # in a dark room perceives by sound and touch.
+                  "light": {rid: effective_light(sc, rid)
+                            for rid in (sc.get("rooms") or {})}},
         "perceivers": awake_perceivers,
         "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
         "output_reminder": (
