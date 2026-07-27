@@ -963,6 +963,35 @@ class NarratorOutput(BaseModel):
 
 # ---- Character Output ----
 
+def _coerce_evidence_refs(value):
+    """Accept a bare string where an EvidenceRef was expected.
+
+    Models routinely cite evidence as a list of strings rather than objects
+    ("the sound from the east corridor"), and because BOTH EvidenceRef fields
+    have defaults, the object form carries no information a string cannot --
+    so rejecting it threw away a whole valid character turn over shape alone.
+    Observed live: a character step failed validation with three
+    `observations_used.N: value is not a valid dict`, which in an unattended
+    run aborts the beat entirely.
+
+    A token that looks like an id ("current", "turn:12:...") lands on
+    `event_id`; anything else is prose and lands on `fact`.
+    """
+    if not isinstance(value, (list, tuple)):
+        return value
+    out = []
+    for item in value:
+        if isinstance(item, str):
+            text = item.strip()
+            if not text:
+                continue
+            looks_like_id = bool(re.fullmatch(r"[\w:.\-]+", text)) and " " not in text
+            out.append({"event_id": text} if looks_like_id else {"fact": text})
+        else:
+            out.append(item)
+    return out
+
+
 class EvidenceRef(BaseModel):
     event_id: str = ""
     fact: str = ""
@@ -973,6 +1002,9 @@ class MindHypothesis(BaseModel):
     claim: str
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     evidence: list[EvidenceRef] = Field(default_factory=list)
+
+    _coerce_evidence = validator("evidence", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_evidence_refs(v))
     alternatives: list[str] = Field(default_factory=list)
 
     _coerce_alternatives = validator("alternatives", pre=True, allow_reuse=True)(
@@ -1112,6 +1144,9 @@ class BeliefUpdate(BaseModel):
     belief: str
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     evidence: list[EvidenceRef] = Field(default_factory=list)
+
+    _coerce_evidence = validator("evidence", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_evidence_refs(v))
     operation: str = "reinforce"
     emotional_charge: float = Field(default=0.0, ge=-1.0, le=1.0)
 
@@ -1131,6 +1166,9 @@ class AssociationUpdate(BaseModel):
     amount: float = Field(default=0.1, ge=0.0, le=0.25)
     evidence: list[EvidenceRef] = Field(default_factory=list)
 
+    _coerce_evidence = validator("evidence", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_evidence_refs(v))
+
     _amount = validator("amount", pre=True, allow_reuse=True)(
         lambda cls, value: _clamp_float(value, 0.0, 0.25, 0.1)
     )
@@ -1149,6 +1187,10 @@ class InteractionControl(BaseModel):
 
 class CharacterOutput(BaseModel):
     observations_used: list[EvidenceRef] = Field(default_factory=list)
+
+    _coerce_observations = validator(
+        "observations_used", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_evidence_refs(v))
     appraisal: CharacterAppraisal = Field(default_factory=CharacterAppraisal)
     considered_responses: list[str] = Field(default_factory=list)
     response_candidates: list[ResponseCandidate] = Field(default_factory=list)
@@ -1184,6 +1226,17 @@ class CharacterOutput(BaseModel):
     drive_shift: Optional[dict] = None
     belief_updates: list[BeliefUpdate] = Field(default_factory=list)
     association_updates: list[AssociationUpdate] = Field(default_factory=list)
+
+    # `cue` is required and an entry without one names nothing, so it cannot be
+    # applied -- but dropping the entry is right where failing the entire
+    # character turn is not. Same posture as the dialogue coercion, which drops
+    # a line with no quote rather than rejecting the beat.
+    _drop_cueless = validator(
+        "association_updates", pre=True, allow_reuse=True)(
+        lambda cls, v: [
+            item for item in (v if isinstance(v, (list, tuple)) else [])
+            if not isinstance(item, dict) or str(item.get("cue") or "").strip()
+        ] if isinstance(v, (list, tuple)) else v)
     mind_model_updates: list[MindHypothesis] = Field(default_factory=list)
     relationship_updates: list[RelationshipUpdate] = Field(default_factory=list)
     interaction: InteractionControl = Field(default_factory=InteractionControl)

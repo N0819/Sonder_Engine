@@ -21,6 +21,12 @@ condition runs the identical layout. Rooms are visually distinct on purpose:
 if the character cannot tell two rooms apart, no amount of memory will help,
 and we would be measuring the wrong failure.
 
+`--agent scripted` runs the REAL director/perception/commit chain with only the
+model layer stubbed, so the plumbing can be verified for free before any of it
+is paid for. It is keyed on the ROLE argument of `_agent_json` (first
+positional), not the step name -- getting that wrong silently returns the wrong
+agent's output shape, which presents as the character never moving.
+
 CONTROL CONDITION. `--agent random` replaces the character stage with a
 uniform random choice among legal exits and makes no LLM calls at all. That is
 the null hypothesis made runnable: an agent with no memory whatsoever. An LLM
@@ -192,10 +198,97 @@ def character_sheet(name="Vesk"):
     return normalize_character_data(sheet)
 
 
-def setup(db_path, walls):
+# Model routing and provider credentials live in the settings table, so a fresh
+# scratch DB has no model for any role and a live run dies on the first call
+# with "No model configured for role ...". These are carried over; the
+# host_pw/host_secret rows are deliberately NOT (no server runs here, and there
+# is no reason for a throwaway experiment DB to hold auth material).
+_SETTINGS_TO_CARRY = (
+    "agent_models", "openrouter_routing", "active_preset", "prompt_presets",
+    "reasoning_effort", "max_output_tokens", "nsfw_enabled",
+)
+
+
+def carry_model_config(source_db, db_path):
+    """Copy the model config from the real DB into the scratch DB.
+
+    Two halves, and BOTH are needed. `settings.agent_models` says which model
+    each role uses; the `providers` table holds the connections those models
+    resolve through. Carrying only the first gets you past "No model configured
+    for role X" straight into "No USABLE model configured for role X", because
+    every candidate resolves to a provider that is not there.
+
+    This does put the source DB's API keys into the scratch file. That file is a
+    throwaway under the system temp dir and is never committed, but it is worth
+    knowing it is there -- pass --settings-from '' to opt out and configure the
+    scratch DB some other way.
+    """
+    import sqlite3
+    if not source_db or not os.path.exists(source_db):
+        print(f"  ! no source DB at {source_db!r}; a live run will have no "
+              f"model configured")
+        return 0, 0
+    src = sqlite3.connect(f"file:{source_db}?mode=ro", uri=True)
+    src.row_factory = sqlite3.Row
+    from db import qi
+    n_set = 0
+    for row in src.execute("SELECT key,value FROM settings"):
+        if row["key"] not in _SETTINGS_TO_CARRY:
+            continue
+        qi("INSERT INTO settings(key,value) VALUES(?,?) "
+           "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+           (row["key"], row["value"]))
+        n_set += 1
+    n_prov = 0
+    for row in src.execute("SELECT * FROM providers"):
+        qi("INSERT INTO providers(id,name,kind,base_url,api_key,enabled) "
+           "VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+           "name=excluded.name, kind=excluded.kind, base_url=excluded.base_url, "
+           "api_key=excluded.api_key, enabled=excluded.enabled",
+           (row["id"], row["name"], row["kind"], row["base_url"],
+            row["api_key"], row["enabled"]))
+        n_prov += 1
+    src.close()
+    return n_set, n_prov
+
+
+def force_single_model(spec):
+    """Point every configured role at one model.
+
+    Roles are normally a MIX -- in the source config here, director on grok,
+    perception on glm, character on minimax -- which is right for play and
+    wrong for an experiment: if the character navigates badly you cannot tell
+    whether that is the character model, the director resolving its moves, or
+    the perception model describing the room. Holding the model constant makes
+    the result attributable.
+    """
+    import json as _json
+    from db import q, qi
+    provider_id, _, model = str(spec).partition(":")
+    if not model:
+        raise SystemExit("--model must be '<provider_id>:<model>'")
+    row = q("SELECT value FROM settings WHERE key='agent_models'", one=True)
+    cfg = _json.loads(row["value"]) if row and row["value"] else {}
+    forced = {"provider": int(provider_id), "model": model, "fallbacks": []}
+    for role in list(cfg):
+        cfg[role] = dict(forced)
+    cfg["default"] = dict(forced)
+    qi("INSERT INTO settings(key,value) VALUES('agent_models',?) "
+       "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+       (_json.dumps(cfg),))
+    return model
+
+
+def setup(db_path, walls, source_db=None, model=None):
     import db
     db.configure(db_path)
     db.init()
+    if source_db:
+        n_set, n_prov = carry_model_config(source_db, db_path)
+        print(f"  carried {n_set} settings and {n_prov} provider connections "
+              f"from {source_db}")
+    if model:
+        print(f"  forced every role to {force_single_model(model)}")
     from db import qi, wset
     from character_schema import character_name
 
@@ -259,8 +352,54 @@ def _random_agent_handler(walls, name, rng):
     return handler
 
 
+# The four stages the question needs, plus mapping: mapping_quick is what
+# reconciles the beat against world/lore, and leaving it out changes what
+# reaches director_resolve.
+_LLM_CHAIN = ("mapping_quick", "director_resolve", "perception_outcome", "commit")
+
+
+def install_scripted_models(name, walls):
+    """Stub the model layer, keyed on the ROLE (`_agent_json`'s first
+    positional). The character picks a legal exit; everything downstream is the
+    real stage code, so this exercises director_resolve -> commit for free."""
+    import agents.character as ch, agents.perception as pc
+    import agents.director as dr, agents.mapping as mp
+    import providers
+    rng = random.Random(99)
+
+    def _fake(role, step, prompt, payload, **kw):
+        if role == "character":
+            here = payload.get("self", {}).get("room") or ""
+            return {"name": name, "private_thought": "",
+                    "sequence": [{"type": "action", "verb": "walk",
+                                  "attempt": "walk through the open archway",
+                                  "observable": "walks through the archway",
+                                  "commitment": "uncontested", "targets": [],
+                                  "intended_effects": [], "asserted_effects": []}],
+                    "active_state": {"mood": "steady", "goal": "reach the shrine"}}
+        if role == "director":
+            here = _scripted_here[0]
+            cell = next(c for c in walls if _rid(c) == here)
+            nxt = rng.choice(sorted(walls[cell]))
+            return {"resolved_event": f"{name} walks on.", "summary": "A step.",
+                    "dialogue_log": [], "obligations": [],
+                    "changes_asserted": [], "fact_adjudications": [],
+                    "state_diff": {"positions": {name: _rid(nxt)}}}
+        if role == "perception":
+            return {"views": {str(p["id"]): "A stone chamber."
+                              for p in (payload.get("perceivers") or [])}}
+        return {}
+
+    for mod in (ch, pc, dr, mp):
+        mod._agent_json = _fake
+    providers.chat_complete = lambda *a, **k: "{}"
+
+
+_scripted_here = [_rid(START)]
+
+
 def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
-             verbose, rng=None):
+             verbose, rng=None, show_grid=False, optimal_path=()):
     """One traversal. Returns the ordered list of rooms occupied."""
     import db as _db
     from db import qi, wget, wset
@@ -269,6 +408,7 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
     import agents.runtime as runtime
 
     visited = [position_of(chat_id, name)]
+    stalls = []
     for step in range(max_steps):
         idx = turn_base + step
         turn_id = qi(
@@ -291,7 +431,7 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
             "authorial_offers": [],
         }
 
-        if agent == "random":
+        if agent in ("random",):
             result = _random_agent_handler(walls, name, rng)(ctx, char_id, 0)
             ctx[f"character:{char_id}"] = result
             # The control does not exercise the director; move it directly so
@@ -300,18 +440,69 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
             sc.setdefault("positions", {})[name] = result["_forced_move"]
             wset(chat_id, "scene", sc)
         else:
-            ctx[f"character:{char_id}"] = runtime.compute_step(
-                f"character:{char_id}", ctx, 0)
-            for key in ("director_resolve", "perception_outcome", "commit"):
-                ctx[key] = runtime.compute_step(key, ctx, 0)
+            _scripted_here[0] = position_of(chat_id, name)
+            # A model that returns a slightly-off shape raises out of
+            # complete_validated_json and would otherwise end a multi-hour
+            # unattended run at whatever step it happened on. Retry the beat
+            # once, then skip it: a skipped beat is a stalled character, which
+            # the metrics already record honestly as a step with no move.
+            try:
+                ctx[f"character:{char_id}"] = runtime.compute_step(
+                    f"character:{char_id}", ctx, 0)
+                for key in _LLM_CHAIN:
+                    ctx[key] = runtime.compute_step(key, ctx, 0)
+            except Exception as exc:
+                stalls.append(f"step {step + 1}: {type(exc).__name__}: {exc}")
+                print(f"    step {step + 1:3}  STALLED "
+                      f"({type(exc).__name__}: {str(exc)[:120]})", flush=True)
+                continue
 
         here = position_of(chat_id, name)
         visited.append(here)
         if verbose:
             print(f"    step {step + 1:3}  {here}")
+        if show_grid:
+            print(render_grid(walls, here, visited, optimal_path))
+            print(f"    step {step + 1} | at {here} | "
+                  f"{len(set(visited))} of {GRID * GRID} chambers seen",
+                  flush=True)
         if here == _rid(GOAL):
             break
+    if stalls:
+        print(f"    ({len(stalls)} stalled beats this run)")
     return visited
+
+
+def render_grid(walls, here, seen, path=()):
+    """The maze as ASCII, with walls, where he is, and where he has been.
+
+    #  wall        @  him now
+    .  unvisited   o  visited this run      *  on the optimal path
+    """
+    seen = set(seen or ())
+    path = set(path or ())
+    lines = ["+" + "---+" * GRID]
+    for r in range(GRID):
+        mid, bottom = "|", "+"
+        for c in range(GRID):
+            rid = _rid((r, c))
+            if rid == here:
+                glyph = " @ "
+            elif rid == _rid(GOAL):
+                glyph = " X "
+            elif rid in seen:
+                glyph = " o "
+            elif (r, c) in path:
+                glyph = " * "
+            else:
+                glyph = " . "
+            east_open = (r, c + 1) in walls.get((r, c), ())
+            mid += glyph + (" " if east_open else "|")
+            south_open = (r + 1, c) in walls.get((r, c), ())
+            bottom += ("   +" if south_open else "---+")
+        lines.append(mid)
+        lines.append(bottom)
+    return "\n".join(lines)
 
 
 def metrics(visited, optimal):
@@ -338,11 +529,26 @@ def metrics(visited, optimal):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--agent", choices=("random", "llm"), default="random")
+    ap.add_argument("--agent", choices=("random", "scripted", "llm"),
+                    default="random")
     ap.add_argument("--runs", type=int, default=5)
     ap.add_argument("--max-steps", type=int, default=40)
     ap.add_argument("--db", default=None)
+    ap.add_argument("--model", default=None,
+                    help="force EVERY role to one model, as "
+                         "'<provider_id>:<model>' (e.g. 3:x-ai/grok-4.20). "
+                         "Without it each role keeps whatever the source DB "
+                         "configured, which is usually a mix.")
+    ap.add_argument("--settings-from", default="engine.db",
+                    help="DB to copy model/provider settings from "
+                         "(read-only; never written to)")
     ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--grid", action="store_true",
+                    help="print the maze after every step")
+    ap.add_argument("--out", default=None,
+                    help="append per-run results here as JSON lines; written "
+                         "and flushed after each run so an interrupted "
+                         "experiment still yields its completed runs")
     ap.add_argument("--go", action="store_true",
                     help="required for --agent llm; it spends real tokens")
     args = ap.parse_args()
@@ -351,10 +557,11 @@ def main():
     optimal = len(shortest_path(walls)) - 1
 
     if args.agent == "llm" and not args.go:
-        calls = args.runs * args.max_steps * 4
+        calls = args.runs * args.max_steps * len(_LLM_CHAIN)
         print(f"maze: {GRID}x{GRID}, optimal path {optimal} moves")
         print(f"--agent llm would make UP TO ~{calls} LLM calls "
-              f"({args.runs} runs x {args.max_steps} steps x ~4 stages).")
+              f"({args.runs} runs x {args.max_steps} steps x "
+              f"{len(_LLM_CHAIN)} stages + character).")
         print("Re-run with --go to spend that. Try --agent random first: it is "
               "free and validates the harness.")
         return 0
@@ -365,7 +572,12 @@ def main():
     print(f"maze {GRID}x{GRID} seed {MAZE_SEED} | optimal {optimal} moves | "
           f"agent={args.agent} | db={db_path}")
 
-    chat_id, char_id, name = setup(db_path, walls)
+    chat_id, char_id, name = setup(
+        db_path, walls,
+        source_db=args.settings_from if args.agent == "llm" else None,
+        model=args.model if args.agent == "llm" else None)
+    if args.agent == "scripted":
+        install_scripted_models(name, walls)
     # One stream for the whole experiment, so run 2 is not a replay of run 1.
     rng = random.Random(20260727)
     rows, turn_base = [], 1
@@ -374,10 +586,16 @@ def main():
         print(f"\n  run {run}/{args.runs}")
         visited = run_once(chat_id, char_id, name, walls, agent=args.agent,
                            max_steps=args.max_steps, turn_base=turn_base,
-                           verbose=args.verbose, rng=rng)
+                           verbose=args.verbose, rng=rng,
+                           show_grid=args.grid,
+                           optimal_path=shortest_path(walls))
         turn_base += len(visited)
         m = metrics(visited, optimal)
         rows.append(m)
+        if args.out:
+            with open(args.out, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"run": run, "visited": visited, **m}) + "\n")
+                fh.flush()
         print(f"    steps={m['steps']} unique={m['unique']} "
               f"backtracks={m['backtracks']} reversals={m['reversals']} "
               f"reached={m['reached']} excess={m['excess']}")
