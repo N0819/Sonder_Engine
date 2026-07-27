@@ -387,6 +387,187 @@ def test_perception_act_still_delivers_an_actor_in_the_open(
     assert "unfolds" in view, view
 
 
+# --- 5. the other direction: what the ENCLOSED body is told ----------------
+#
+# Everything above gates what the ENCLOSING side learns. Concealment is
+# symmetric -- being shut inside blocks the view OUT as completely as the view
+# in -- and the outcome pass had a second, separate leak on the way back.
+#
+# Found in live play after the rest of this file shipped. The enclosed player
+# HEARS the character enclosing them speak, which is legitimate; audibility is
+# not sight. But the unrecognised-speaker branch pasted that speaker's full
+# appearance paragraph into the view, gated on
+# `visual.get(speaker) or rel.get("same_room")`. Its own comment says the
+# right thing -- "pasting a full visual appearance onto an unseen voice would
+# hallucinate sight the perceiver doesn't have" -- and it was written for
+# comm channels and walls, both of which put the speaker in ANOTHER room. A
+# body sealed inside the speaker is in the same room by derivation, so the OR
+# was true and the paste went ahead.
+
+def _speaking_enclosure_ctx(temp_db):
+    """Player shut inside the one cast member, who SPEAKS this beat.
+
+    The player does not recognise them, which is what routes the view through
+    the appearance-pasting branch.
+    """
+    persona = default_persona_data(ENCLOSED)
+    persona_id = temp_db.qi(
+        "INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
+        (ENCLOSED, json.dumps(persona), "{}"))
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created,persona_id) VALUES(?,?,?,?)",
+        ("Enclosed", "", time.time(), persona_id))
+    sheet = default_character_data(CARRIER)
+    # Where character_appearance actually reads from. Setting a top-level
+    # "appearance" key silently does nothing -- the fixture looked right and
+    # tested nothing, which the mutation check caught and a green run did not.
+    sheet["embodiment"]["visible"]["summary"] = (
+        "a tall woman in a long grey coat, hood raised, "
+        "boots caked with river mud")
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        (CARRIER, json.dumps(sheet), "{}", time.time(), "char_speaker"))
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+        (chat_id, char_id, "active", "{}"))
+
+    temp_db.wset(chat_id, "scene", {
+        "location": "the hall", "time": "night",
+        "rooms": {"room1": {"name": "Hall", "adjacent": []}},
+        "positions": {ENCLOSED: "room1", CARRIER: "room1"},
+        "contained": {ENCLOSED: {"in": CARRIER, "mode": "inside"}},
+        "entities": {}, "attire": {}, "overlays": {}})
+    # The player has NOT been introduced to them -- the unrecognised branch.
+    temp_db.wset(chat_id, "known", {})
+
+    cast = temp_db.q(
+        "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?", (chat_id,))
+    turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (chat_id, 1, "", time.time()))
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Enclosed", persona_id=persona_id,
+                      lorebook_id=None, scenario="", created=time.time()),
+        turn=TurnData(id=turn_id, chat_id=chat_id, idx=1, player_input="",
+                      created=time.time()),
+        cast=cast, input="")
+    ctx["_player_room"] = "room1"
+    ctx["director_interpret"] = {"flow": {"reactors": [cast[0]["id"]]}}
+    ctx["director_resolve"] = {
+        "resolved_event": "A voice speaks, close and all around.",
+        "dialogue_order": [CARRIER],
+        "dialogue_log": [{"speaker": CARRIER,
+                          "exact_quote": "Stay still.",
+                          "volume": "normal", "intended_target": ENCLOSED,
+                          "visibility": "overt", "conceal_from": []}],
+        "state_diff": {},
+    }
+    return ctx
+
+
+def test_enclosed_player_hears_the_voice_but_gets_no_appearance(
+        temp_db, monkeypatch):
+    """The live report: the player was still getting full NPC appearance."""
+    import agents.perception as perception
+
+    ctx = _speaking_enclosure_ctx(temp_db)
+    monkeypatch.setattr(
+        perception, "_agent_json",
+        lambda role, key, system, payload, **kw: {
+            "views": {"player": "Warm dark presses in on every side of you."}})
+
+    out = perception.perception_outcome(ctx, nonce="n")
+    view = out["views"]["player"] or ""
+
+    # The appearance paragraph must not be there, in whole or in part.
+    assert "grey coat" not in view, view
+    assert "hood raised" not in view, view
+    assert "river mud" not in view, view
+    # ...but the voice legitimately reached them. Audibility is not sight.
+    assert "Stay still" in view, view
+
+
+def test_enclosed_player_gets_a_voice_not_a_visual_label(
+        temp_db, monkeypatch):
+    """Gating the paragraph left a COMPRESSED version going through.
+
+    `_unknown_actor_label` derives a short descriptor from the same
+    appearance so two strangers in a scene are distinguishable -- and it was
+    built regardless of `can_see`, then injected as the dialogue's speaker.
+    So the full paragraph stopped and "the tall woman in a long grey coat
+    says ..." carried on. Milder, same leak: a perceiver who cannot see the
+    speaker has no visual referent for them at all.
+    """
+    import agents.perception as perception
+
+    ctx = _speaking_enclosure_ctx(temp_db)
+    monkeypatch.setattr(
+        perception, "_agent_json",
+        lambda role, key, system, payload, **kw: {
+            "views": {"player": "Warm dark presses in on every side of you."}})
+
+    view = perception.perception_outcome(ctx, nonce="n")["views"]["player"] or ""
+
+    for token in ("grey coat", "hood", "river mud", "tall woman", "boots"):
+        assert token not in view, (token, view)
+    assert "Stay still" in view, view
+
+
+def test_outcome_payload_withholds_appearances_nobody_can_see(
+        temp_db, monkeypatch):
+    """The model's own channel, which no deterministic gate covers.
+
+    The live view carried detail ("soaked silk strips clinging to her
+    curves") that no injector had pasted -- the model wrote it, from
+    `present_appearances`. The act pass strips this when nobody can see the
+    actor; the outcome pass shipped it unconditionally.
+    """
+    import agents.perception as perception
+
+    ctx = _speaking_enclosure_ctx(temp_db)
+    seen = {}
+
+    def capture(role, key, system, payload, **kw):
+        seen.update(payload)
+        return {"views": {"player": "Warm dark on every side."}}
+
+    monkeypatch.setattr(perception, "_agent_json", capture)
+    perception.perception_outcome(ctx, nonce="n")
+
+    appearances = seen.get("present_appearances") or {}
+    assert CARRIER not in appearances, appearances
+    assert "grey coat" not in json.dumps(appearances), appearances
+
+
+def test_outcome_payload_keeps_appearances_someone_can_see(
+        temp_db, monkeypatch):
+    """Negative control: an ordinary scene still hands over appearances.
+
+    A source is excluded from its OWN visibility test -- it can always see
+    itself, which would keep every appearance alive regardless of who else
+    is there -- so this must pass for a reason other than self-sight.
+    """
+    import agents.perception as perception
+
+    ctx = _speaking_enclosure_ctx(temp_db)
+    sc = temp_db.wget(ctx.chat["id"], "scene", {})
+    sc.pop("contained")           # nothing enclosing anyone now
+    temp_db.wset(ctx.chat["id"], "scene", sc)
+
+    seen = {}
+
+    def capture(role, key, system, payload, **kw):
+        seen.update(payload)
+        return {"views": {"player": "You are in the Hall."}}
+
+    monkeypatch.setattr(perception, "_agent_json", capture)
+    perception.perception_outcome(ctx, nonce="n")
+
+    assert CARRIER in (seen.get("present_appearances") or {})
+
+
 # --- 2. the prompt rule that governs the surviving channel ------------------
 #
 # The leak reached the view through a stage with no code path to constrain it:
@@ -412,6 +593,45 @@ def test_prompt_says_heightened_senses_buy_resolution_not_knowledge(
     text = perception_prompt
     assert "ACUITY IS RESOLUTION, NOT KNOWLEDGE" in text
     assert "never converts a sensation into knowledge of the act" in text
+
+
+def test_prompt_binds_when_sight_is_absent_not_only_when_all_channels_shut(
+        perception_prompt):
+    """The rule was scoped to "when a channel is closed" and did not land.
+
+    The failure case has an open, high-bandwidth touch channel and no sight,
+    so the model read the precondition as not applying and wrote a full
+    tactile account of the act. The trigger is absence of SIGHT.
+    """
+    text = perception_prompt
+    assert "NOT only when every channel is shut" in text
+    assert "continuous full-body contact" in text
+
+
+def test_prompt_puts_the_touch_boundary_at_the_contact_surface(
+        perception_prompt):
+    """Abstract "interior state" did not bind; a named boundary does.
+
+    Worse, the old wording ("muscle tension, pulse and breath read through
+    skin with uncanny precision") could be read as LICENSING an account of
+    what the other body was doing internally.
+    """
+    text = perception_prompt
+    assert "TOUCH RESOLVES AT THE SURFACE, NOT PAST IT" in text
+    assert "WHERE THE TWO BODIES MEET" in text
+    assert "licenses NOTHING further" in text
+
+
+def test_prompt_says_the_observable_is_written_for_a_sighted_bystander(
+        perception_prompt):
+    """The verb kept reappearing because the observable reads as a fact.
+
+    Naming where it comes from, and that it is not a sentence owed a place
+    in every view, attacks the reason the paraphrase kept happening.
+    """
+    text = perception_prompt
+    assert "THE DECLARED OBSERVABLE IS WRITTEN FOR A SIGHTED BYSTANDER" in text
+    assert "not a sentence to rephrase" in text
 
 
 def test_director_must_not_write_one_body_s_act_into_another_s_state():

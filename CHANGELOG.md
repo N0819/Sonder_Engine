@@ -2,6 +2,103 @@
 
 ## Unreleased
 
+## alpha5.0.2 — Concealment is symmetric; the gate was not
+
+### Fixed
+- **The enclosed side was still handed the enclosing side's appearance.**
+  alpha5.0.1 gated what the *enclosing* mind learns. Concealment is symmetric —
+  being shut inside something blocks the view **out** as completely as the view
+  in — and the return path had a separate leak that survived the whole release.
+
+  Reported from live play immediately after alpha5.0.1 shipped: the player,
+  sealed inside another character, was still receiving that character's full
+  appearance paragraph. Not through the actions loop, which alpha5.0.1 fixed,
+  but through the **dialogue** loop, which has its own copy of the same gate.
+
+  The enclosed player legitimately *hears* the character enclosing them speak —
+  audibility is not sight, and that part was correct. But the
+  unrecognised-speaker branch then pastes that speaker's appearance into the
+  view so a nameless voice has something to be referred to by, gated on
+  `visual.get(speaker) or rel.get("same_room")`. Its own comment states the
+  right rule — *"pasting a full visual appearance onto an unseen voice would
+  hallucinate sight the perceiver doesn't have"* — and the implementation was
+  written for the two cases that motivated it, a comm channel and a wall, which
+  both put the speaker in **another room**. A body sealed inside the speaker is
+  in the same room by derivation, so the `or` was true and the paste went
+  ahead. The same `same_room` bypass as alpha5.0.1, one loop over.
+
+  Both loops now go through `_in_plain_view`. The dialogue loop's fallback
+  branch, which builds its own relation when a speaker is missing from the
+  precomputed map, applies containment concealment too — it had bypassed
+  `_source_channels` entirely.
+
+- **Gating the appearance paragraph left a compressed copy going through.**
+  Reported from play again, one fix later: milder, same leak.
+  `_unknown_actor_label` derives a short descriptor from that same appearance
+  so two strangers in a scene stay distinguishable — and it was built
+  regardless of `can_see`, then used as the dialogue's speaker. So the
+  paragraph stopped and *"the tall woman in a long grey coat says …"* carried
+  on. A perceiver who cannot see the speaker has no visual referent for them
+  at all; they get a voice.
+
+- **The outcome payload handed the model every appearance in the scene.**
+  The channel no deterministic gate covers. `present_appearances` went over
+  ungated, and the model wrote detail into the view that no injector had
+  pasted. The action-onset pass has stripped this since alpha5.0.1
+  (`actor_not_visible`); the outcome pass never got the equivalent. Prompt
+  wording is the wrong instrument here, and this module's own comment on the
+  identity strip says why: objective state copied into a context with an
+  instruction to ignore it is the pattern that made strong models leak in the
+  first place.
+
+  A source is excluded from its own visibility test — it can always see
+  itself, which would keep every appearance alive regardless of who else is
+  present. The question is asked directly for each appearance key rather than
+  read off the perceivers' `visual_channel_to_sources` maps, because those
+  cover only the cast who ACTED this beat while `appearances` is keyed by the
+  whole cast; reading the maps would have stripped the appearance of any
+  bystander who merely stood there. That over-blocking was caught by a
+  negative-control test failing, not by the leak test passing.
+
+- **Perception's channel rules, rewritten after watching them fail.** The
+  alpha5.0.1 wording did not bind in play, for three diagnosable reasons.
+  Its trigger was "when a channel to a source is closed" — but the failure
+  case has an open, high-bandwidth touch channel and no sight, so the
+  precondition read as not applying. Every example was a distant discrete act
+  on an object (a note, a knife, a latch), none of which maps onto sustained
+  contact. And "never reaches interior state" was abstract enough that
+  "muscle tension, pulse and breath read through skin with uncanny precision"
+  could be read as LICENSING an account of what the other body was doing
+  inside itself.
+
+  Now: the rule binds on absence of SIGHT, not on every channel being shut.
+  `TOUCH RESOLVES AT THE SURFACE, NOT PAST IT` replaces the abstraction with a
+  physical boundary — contact delivers what happens where the two bodies meet,
+  never the machinery producing it, and never anything that needs light.
+  `THE DECLARED OBSERVABLE IS WRITTEN FOR A SIGHTED BYSTANDER` names why the
+  verb kept reappearing: it reads as a fact owed a place in every view, and it
+  is not. The acuity rule now grants exactly the three things a keen-touch
+  sense names, at the surface, and "licenses NOTHING further".
+
+  These are prompt rules, and the tests covering them assert only that the
+  text is present. Nothing in the suite can fail when a model ignores one —
+  which is how the first version passed a green gate and still leaked. They
+  reduce the frequency of a failure the code gates above exist to catch; they
+  are not themselves the guarantee.
+
+### Notes
+- The test added for this is mutation-verified, and the first version of it was
+  **not**. It passed identically with the fix reverted: the fixture set a
+  top-level `appearance` key, but `character_appearance` reads
+  `embodiment.visible.summary`, so the appearance under test was empty and the
+  assertions proved nothing. A green run says nothing about whether a test can
+  fail. Every guard in `tests/test_enclosed_act_leak.py` has now been checked
+  by reverting the code it protects and confirming at least one test fails —
+  seven mutations, all caught. The exceptions are the deliberate negative
+  controls (an ordinary same-room actor is still delivered; an entity in the
+  open keeps its state), which must survive those mutations, since their job is
+  to catch the gate over-blocking rather than under-blocking.
+
 ## alpha5.0.1 — A closed channel costs resolution, not just modality
 
 ### Fixed

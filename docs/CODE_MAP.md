@@ -15,7 +15,7 @@
 | `agents/loops.py` | 538 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 196 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 765 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/perception.py` | 1540 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
+| `agents/perception.py` | 1585 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 965 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 72 | Step and active-variant persistence helpers. | `db` |
 | `app.py` | 4228 | FastAPI application, resource CRUD, import/export, turn control, and streaming endpoints. | `agents`, `backdrops`, `character_schema`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `survival`, `updates` |
@@ -37,7 +37,7 @@
 | `paradox.py` | 486 |  | `db`, `frames` |
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 2472 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 2491 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1802 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `scene.py` | 949 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 2048 | Pydantic output contracts and semantic validation for agent payloads. | — |
@@ -144,7 +144,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `perception_outcome()` | 980 | 561 lines |
+| `perception_outcome()` | 980 | 606 lines |
 | `perception_act()` | 656 | 323 lines |
 | `perception_establish()` | 492 | 163 lines |
 | `_delivered_manifest()` | 339 | 50 lines |
@@ -391,10 +391,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 2463 | 10 lines |
-| `presets()` | 2454 | 2 lines |
-| `active_preset()` | 2457 | 2 lines |
-| `nsfw_enabled()` | 2460 | 2 lines |
+| `get_prompt()` | 2482 | 10 lines |
+| `presets()` | 2473 | 2 lines |
+| `active_preset()` | 2476 | 2 lines |
+| `nsfw_enabled()` | 2479 | 2 lines |
 
 ### `providers.py`
 
