@@ -42,7 +42,7 @@ from pipeline_context import ChatData, PipelineContext, TurnData
 
 from agents.common import _ensure_environment, _inject_action, _perceptible_entities
 from agents.perception import _in_plain_view, _source_channels
-from prompts import get_prompt
+from prompts import DEFAULT_PROMPTS
 from spatial import containment_conceals
 
 
@@ -577,7 +577,7 @@ def test_outcome_payload_keeps_appearances_someone_can_see(
 
 @pytest.fixture()
 def perception_prompt():
-    return get_prompt("perception")
+    return DEFAULT_PROMPTS["perception"]
 
 
 def test_prompt_forbids_carrying_the_act_verb_into_a_surviving_channel(
@@ -652,7 +652,7 @@ def test_director_must_not_write_one_body_s_act_into_another_s_state():
     free-text act attributed to another body walks straight past.
     """
     for prompt_id in ("director_resolve", "director_establish"):
-        text = get_prompt(prompt_id)
+        text = DEFAULT_PROMPTS[prompt_id]
         assert "STATE DESCRIBES ONE BODY'S OWN DOING" in text, prompt_id
         assert "never what a" in text and "body is doing to it" in text, prompt_id
         # The reason, not just the rule -- this is what stops it being

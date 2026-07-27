@@ -52,6 +52,7 @@ def test_max_tokens_scales_with_batch_character_volume(monkeypatch):
         return json.dumps({"entries": [{"keys": "k", "content": "rewritten", "category": "other"}]})
 
     monkeypatch.setattr(importers, "chat_complete", fake_chat_complete)
+    monkeypatch.setattr(importers, "get_prompt", lambda _prompt_id: "")
 
     long_entries = [("k", "x" * 20000, 0)]
     importers._reinterpret_entries(long_entries)
@@ -64,6 +65,7 @@ def test_no_usable_entries_error_includes_raw_response_for_diagnosis(monkeypatch
         return "not valid json at all {truncated"
 
     monkeypatch.setattr(importers, "chat_complete", fake_chat_complete)
+    monkeypatch.setattr(importers, "get_prompt", lambda _prompt_id: "")
 
     with pytest.raises(RuntimeError) as exc_info:
         importers._reinterpret_entries([("k", "some content", 0)])
@@ -80,6 +82,7 @@ def test_successful_reinterpretation_still_works(monkeypatch):
         ]})
 
     monkeypatch.setattr(importers, "chat_complete", fake_chat_complete)
+    monkeypatch.setattr(importers, "get_prompt", lambda _prompt_id: "")
 
     result = importers._reinterpret_entries([("castle, keep", "old text", 0)])
 
