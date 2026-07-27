@@ -2,6 +2,125 @@
 
 ## Unreleased
 
+## alpha5.0.1 — A closed channel costs resolution, not just modality
+
+### Fixed
+- **An enclosed body's act reached the body enclosing it.** alpha5.0 closed the
+  question of who can *see* into an enclosure. This closes what the survivors
+  of that gate are allowed to carry.
+
+  Found auditing a live playthrough. One character was shut inside another; the
+  Director's `observable` for the enclosed character's beat was correct by its
+  own spec — the outward surface a hypothetical SIGHTED bystander would take in
+  — and every gate downstream fired exactly as designed. `containment_conceals`
+  returned true, `visual_channel_to_actor` came back false, the actor's
+  appearance was stripped from the payload before the call. The view written
+  for the enclosing character still named the act, rendered as a tactile
+  paraphrase of the same sentence. Identity was gated. No visual detail was
+  added. The act's **verb** walked across into the one channel still open, and
+  the character agent quoted that view verbatim as its sole observation before
+  speaking a line that handed the fact back to the player.
+
+  Nothing in the code was wrong, which is why nothing caught it. The perception
+  prompt carries detailed rules for sight, sound, smell, vibration and
+  temperature, and had none at all for **touch** — so degrading the modality
+  while preserving the semantics read as compliance with every rule present.
+  Its governing line ("you may SUBTRACT and DEGRADE; you may NEVER add meaning,
+  name intent") reads as being about *why* an act was done, so it did not bite
+  on *what* the act was. A perceiver's declared `senses` then supplied the
+  justification: a keen-touch trait reading muscle tension and pulse through
+  skin contact was used as a bridge licensing whatever resolution the sentence
+  needed.
+
+  The rule now stated: a closed channel costs **resolution**, not just
+  modality. Sensation crosses; the name of the act does not. Heightened acuity
+  sharpens detail *within its own modality* and buys nothing else — it never
+  converts a sensation into knowledge of the act that caused it, never opens a
+  channel the sense does not name, and never reaches interior state. Working
+  out what a sensation means is the character agent's job, with its own
+  uncertainty and its own capacity to be wrong. Perception handing over the
+  conclusion is the layer collapse the engine exists to prevent.
+
+- **Objective entity state went to perceivers with no channel to it.**
+  A second, independent path to the same leak, live in the payload whether or
+  not the Director's `observable` said anything. `_perceptible_entities` fed
+  the objective entity table into every perception call ungated, and the
+  Director writes `state.posture` / `state.proximity` in act-naming language —
+  so a body shut inside a container had everything it was doing spelled out in
+  a payload where no perceiver could see it. This is the same shape as the
+  entity-alias leak that function was written to fix: objective state handed
+  over with an implicit instruction not to use it.
+
+  It now takes the perceiver set it is building for and withholds `state` for
+  an entity that **no** perceiver in the call can reach. Concealment is decided
+  by containment alone, so an entity in the open is unaffected and the ordinary
+  scene is untouched. The entity itself still appears — presence may legitimately
+  arrive by contact or sound even when nothing else does — and a body always
+  keeps its own state, because proprioception is not a leak.
+
+- **The Director wrote one body's act into another body's state.** The gate
+  above cannot reach this one, which is what makes it the sharper half. An
+  enclosed body's `state` can be withheld, because the engine knows what
+  encloses it. A **container is in plain view by construction** — so its own
+  state is never withheld from anyone. When the Director wrote the occupant's
+  act into the *container's* `state.posture` — the enclosing body's own record
+  naming what the enclosed body was doing, in the shape of "shut over the
+  figure prying at its hinge" — it published that act to every observer who
+  could see the container, through a string that is otherwise entirely
+  legitimate perceivable state. No downstream filter can take it back.
+
+  The rule that lives next door — "CONTACT GOES IN contact_ops AND NOWHERE
+  ELSE… State describes ONE body" — governs contact *relations*, so a free-text
+  act attributed to another body walked straight past it. `director_resolve`
+  and `director_establish` now both carry the other axis of that rule: an
+  entity's state says what THAT body is doing, never what a different body is
+  doing to it, in it, or inside it. Say what the enclosure does; never say what
+  the thing inside it is doing.
+
+- **The deterministic backstop undid the model's compliance.** Caught in live
+  play the moment the rules above started working, and the reason they could
+  not have shipped alone. Perception's injection backstops paste a declared act
+  into a view when the model's own prose does not cover it — a floor that
+  exists so a distracted model cannot silently drop a beat. Their sight gate
+  was `rel.get("same_room") or vis`.
+
+  `vis` was correctly false: containment concealment had already closed the
+  visual channel. But **a carried body has no position of its own** — the
+  engine derives it from its carrier's — so `same_room` was true for a body
+  sealed inside someone standing right there, and the `or` reinstated the exact
+  bypass containment concealment exists to close. While the model was naming
+  the act itself the duplicate check matched and the backstop stayed silent; as
+  soon as the model complied and omitted it, the backstop pasted the raw
+  `observable` in instead, unknown-actor label and all. The fix removed the
+  model's leak and the floor put it straight back, in worse prose.
+
+  Sight now consults concealment first, at one shared helper (`_in_plain_view`)
+  rather than at each of the three injection sites. `_ensure_environment`, the
+  empty-view fallback, had the same bypass and announced an enclosed actor as
+  "here with you" before pasting its observable.
+
+- **Only the action-onset pass ever asked about containment.** Found while
+  fixing the above. `visual_channel_to_sources` — the map gating the outcome
+  pass and scene opening, including the appearance-describer that pastes a
+  full appearance paragraph into a view — was built from a bare `spatial_rel`
+  with no concealment applied at all. `perception_act` had the
+  `containment_conceals` call inline; every other pass asked the unpatched
+  question, so an enclosed body was visually available to everyone standing
+  around whatever held it. Live views rendered an enclosed body's fine visual
+  detail — colouring, small movements described as seen — to the very body
+  enclosing it, with a full appearance paragraph pasted on the end. All five
+  perceiver-entry builders now go through one helper (`_source_channels`) that
+  computes the spatial relation and the visual channel together, so the two
+  can no longer disagree.
+
+- **A debug scene dump could be published by the release path.** Scene/chat
+  blobs written out of a live playthrough are play content, not engine source,
+  and `.gitignore` did not cover them. Untracked is not protection here: the
+  release path copies the working tree wholesale, so anything not ignored
+  ships. Now ignored.
+
+## alpha5.0 — A way through that is not a way to look through
+
 ### Added
 - **A way through that is not a way to look through.** The barrier vocabulary
   could say "you can see it but you cannot reach it" — that is what `window`
