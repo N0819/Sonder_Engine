@@ -26,8 +26,9 @@ MODULE_PURPOSES = {
     "agents.perception": "Opening, action-onset, and outcome observer views.",
     "agents.runtime": "Pipeline plans, dispatch, streaming, cancellation, resume, and reruns.",
     "agents.storage": "Step and active-variant persistence helpers.",
-    "app": "FastAPI application, resource CRUD, import/export, turn control, and streaming endpoints.",
+    "app": "FastAPI application assembly, resource CRUD, turn control, and streaming endpoints.",
     "auth_routes": "Typed host-authentication HTTP routes and cookie transport.",
+    "chat_archive": "Typed, atomic chat archive export/import service and HTTP routes.",
     "character_schema": "Versioned character/persona defaults, normalization, accessors, and export payloads.",
     "checkpoints": "Whole-chat snapshots and checkpoint restore orchestration.",
     "commit": "Validated persistence of scene, entities, cast, lore, relationships, events, and memories.",
@@ -44,6 +45,7 @@ MODULE_PURPOSES = {
     "scene": "Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge.",
     "schemas": "Pydantic output contracts and semantic validation for agent payloads.",
     "spatial": "Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic.",
+    "spatial_orientation": "Bearing math and reciprocal spatial-edge normalization.",
 }
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
@@ -156,6 +158,45 @@ def parse_module(path: Path, local_modules: set[str]) -> dict:
         elif isinstance(node, ast.ClassDef):
             end = getattr(node, "end_lineno", node.lineno)
             classes.append((node.name, node.lineno, end - node.lineno + 1))
+
+    # Extracted service objects may register bound methods explicitly because
+    # decorators cannot reference an instance that is injected later by the
+    # application assembly layer.
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "add_api_route"
+            and len(node.args) >= 2
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            continue
+        handler = node.args[1]
+        if isinstance(handler, ast.Attribute):
+            handler_name = handler.attr
+        elif isinstance(handler, ast.Name):
+            handler_name = handler.id
+        else:
+            handler_name = "<callable>"
+        methods = ["GET"]
+        for keyword in node.keywords:
+            if keyword.arg != "methods":
+                continue
+            if isinstance(keyword.value, (ast.List, ast.Tuple, ast.Set)):
+                parsed = [
+                    item.value.upper()
+                    for item in keyword.value.elts
+                    if isinstance(item, ast.Constant)
+                    and isinstance(item.value, str)
+                ]
+                if parsed:
+                    methods = parsed
+        for method in methods:
+            routes.append(
+                (method, node.args[0].value, handler_name, node.lineno)
+            )
 
     return {
         "imports": sorted(imports),

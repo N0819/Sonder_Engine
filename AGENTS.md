@@ -32,6 +32,7 @@ python tools/project_check.py
 | Objective action resolution | `agents/director.py` (`director_resolve`) | `schemas.py`, `spatial.py`, `commit.py` |
 | Narration | `agents/narration.py` (`narrator`) | narrator prompt in `prompts.py`, output validation |
 | Persistence or rollback | `commit.py`, `checkpoints.py` | `db.py`, `memory.py`, restore tests |
+| Portable chat archive export/import | `chat_archive.py` | `app.py` remap primitives, `checkpoints.py`, `memory.py`, archive fidelity tests |
 | Deterministic mechanics (timed arrivals, expiry, dock edges, zone/carry inference, news latency) | `mechanics.py` (`mechanics_sweep`) | `commit.py` (`commit_transit_sweep`), `spatial.py`, `spatial_frames.py`, `tests/test_mechanics_sweep.py` |
 | Whether a barrier can be seen/heard/smelled/walked through | `spatial.py` (`_SIGHT_BARRIERS`/`_PASSABLE_BARRIERS`/`_AMBIENT_BARRIERS`/`_SCENT_BARRIERS`, `has_visual`, `sight_level`, `scent_level`, `normalize_barrier`) | `visible_adjacent_rooms`, `tests/test_see_through.py`, `tests/test_membrane_barrier.py` — four separate questions; `window` passes sight only, `bars` sight+sound, `membrane` passage only (the inverse of `window`: a curtained doorway, a tent flap). `has_visual`/`sight_level` is where sight is decided; `scent_level` is where scent is decided. `_SOUND_LADDER` is walked by RELATIVE steps — inserting a rung changes what its NEIGHBOURS shift onto, so `membrane` is deliberately off it. `_SCENT_BARRIERS` gates scent the same way `_SIGHT_BARRIERS` gates sight: `membrane` and `closed_door` muffle, `window`/`wall` block, `open`/`bars` pass |
 | Containers you can be inside (jar/cage/crate/tent) | entity `enclosure` + `interior_rooms` + `state.hatch`, derived in `spatial.py` (`_closed_enclosure_barrier`, `_open_enclosure_barrier`, dock-edge rewrite) | `tests/test_see_through.py`, `tests/test_membrane_barrier.py` — `enclosure` describes BOTH states: `opaque`/`transparent`/`barred` leave an OPEN interior see-through (right for a lid), `membrane` is opaque open or shut and overrides an authored `open_door`. A closed transparent container yields a `window` edge; `_is_carried_interior` keeps a carried container's inside out of the surrounding room's view. `enclosure`/`light_source` are in `_ENTITY_DEFAULT_FIELDS`, without which they could only be set at entity CREATION |
@@ -47,7 +48,7 @@ python tools/project_check.py
 | Character/persona format | `character_schema.py` | `importers.py`, editor UI, schema tests |
 | Provider behavior | `providers.py` | `app.py` provider routes, `prompt_cache.py` |
 | Per-call request timeout | `providers.py` (`request_timeout`, `clamp_read_timeout`, `_request_timeout`/`_httpx_timeout`) | the caller's own knob (e.g. the lorebook generator's `timeout` param); `REQUEST_TIMEOUT`/`HTTPX_TIMEOUT` stay the pipeline default |
-| API behavior | `app.py` | matching file in `static/js/` |
+| API behavior | `app.py`, extracted route module when present | matching file in `static/js/` |
 | Browser UI | `static/index.html`, `static/js/`, CSS | matching API route in `app.py` |
 | Database shape | `db.py` | migrations, snapshot/export/restore code, tests |
 
@@ -120,14 +121,22 @@ Avoid broad rewrites of `agents/runtime.py`, `app.py`, or `memory.py` unless the
 
 ### `app.py`
 
+- Application assembly and shared remap primitives
 - Bootstrap/settings
 - Lorebook tree and links
 - Providers
 - Characters and personas
 - Lorebooks
-- Chats, export/import, and branches
+- Chats and branches (`chat_archive.py` owns portable export/import)
 - Memories
 - Turns, rerolls, checkpoints, resume, and async streaming
+
+### Extracted boundaries
+
+- `auth_routes.py`: typed host authentication routes and cookie transport
+- `chat_archive.py`: typed, atomic portable chat export/import service and routes
+- `spatial_orientation.py`: bearing math and reciprocal edge normalization,
+  re-exported through `spatial.py` for compatibility
 
 ### `memory.py`
 
