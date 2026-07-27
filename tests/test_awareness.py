@@ -143,9 +143,19 @@ def _stub(monkeypatch, views):
     import agents.perception as perception
 
     def fake(role, step_key, system, payload, **kw):
-        # record which perceivers the LLM was actually asked about
-        fake.asked = [str(p["id"]) for p in payload.get("perceivers", [])]
-        return {"views": dict(views)}
+        # record which perceivers the LLM was actually asked about (accumulates
+        # across per-observer calls)
+        fake.asked.extend(
+            str(p["id"]) for p in payload.get("perceivers", []))
+        # Return the view for whichever perceiver this call is about.
+        asked_ids = [str(p["id"]) for p in payload.get("perceivers", [])]
+        out = {pid: views.get(pid, views.get("player", ""))
+               for pid in asked_ids if pid in views}
+        if not out and asked_ids:
+            # Fall back to whatever was provided so the deterministic path
+            # still has something to scrub.
+            out = {asked_ids[0]: views.get(asked_ids[0], "")}
+        return {"views": dict(out) if out else dict(views)}
 
     fake.asked = []
     monkeypatch.setattr(perception, "_agent_json", fake)

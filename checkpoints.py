@@ -434,7 +434,14 @@ PRESERVED_SETTING_KEYS = (
     # Cast tab. Authoring, not a turn fact -- without this, editing your
     # persona's secrets and then rerolling silently discarded the edit.
     "persona_private_history",
-    "background_presences",
+    # "background_presences" is deliberately NOT here. It is diegetic
+    # bookkeeping written by every commit (conduct tails, write-once identity
+    # blurbs, pending_reply debts, promotion counters) -- preserving it let a
+    # DISCARDED run's spoken line stay in the 4-entry conduct tail voiced back
+    # to the presence on the rerun, anchored identity to a rerolled beat
+    # forever, and carried reply debts into a timeline where the address never
+    # happened. It answers to what happened in the story, so it must roll
+    # back with the story.
     # Whether this story tracks bodily condition at all. An authoring decision
     # about the fiction, not a fact about turn 40 -- rewinding to turn 12 must
     # not silently switch it off, and branching must not start the branch with
@@ -496,6 +503,21 @@ def _restore_checkpoint_body(chat_id, r):
             wset(chat_id, k, v)
         for k, v in preserved.items():
             wset(chat_id, k, v)
+        # Membership is diegetic state too. A character promoted or attached
+        # by the discarded run must not survive as a hollow cast member after
+        # its memories, recognition and scene state have rolled back.
+        snapshot_char_ids = {
+            int(cidk) for cidk in (b.get("chars") or {})
+            if str(cidk).lstrip("-").isdigit()
+        }
+        for row in q(
+            "SELECT char_id FROM chat_chars WHERE chat_id=?", (chat_id,),
+        ):
+            if int(row["char_id"]) not in snapshot_char_ids:
+                qi(
+                    "DELETE FROM chat_chars WHERE chat_id=? AND char_id=?",
+                    (chat_id, row["char_id"]),
+                )
         for cidk, st in (b.get("chars") or {}).items():
             if isinstance(st, dict) and "status" in st and "state" in st:
                 qi("UPDATE chat_chars SET state=?,status=? WHERE chat_id=? AND char_id=?",

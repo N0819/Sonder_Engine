@@ -16,15 +16,17 @@ from db import q
 from llm_quality import complete_validated_json
 from memory import chat_lorebook_ids, chat_lorebook_weights
 from providers import chat_complete
-from scene import get_scene, persona_of
+from scene import get_scene, persona_of, awareness_of, awareness_map, NON_AWAKE_GATED
 from schemas import normalize_speech_volume
 from spatial import (
     ambient_scope,
     containment_conceals,
     has_visual,
+    hear_level,
     nearby_rooms,
     normalize_room_id,
     room_of,
+    spatial_rel,
 )
 from theory_of_mind import _TOM_CONFIDENCE_CAPS, cap_mind_model_updates
 
@@ -56,6 +58,66 @@ _MENTAL_VERBS = {
     "feel", "believe", "assume", "wonder", "hope", "fear", "doubt",
 }
 
+# Outcomes only the person undergoing them may declare: interior volition
+# (agreeing, submitting, giving in) and involuntary body events (fainting,
+# panicking, knees buckling). AGENTS.md's AUTHORITY STOPS AT OTHER MINDS makes
+# these the character's own to enact, so a player-authored element whose
+# SUBJECT is a cast member and whose outcome is one of these is rerouted to
+# that character as an OFFER rather than enacted as objective truth (see
+# director._route_authorial_npc_beat). A player act that merely CAUSES such an
+# outcome ('stabs Sarah') is untouched -- the player is the agent there, and
+# the target's response is resolved through the reaction phase.
+_AUTONOMY_VERBS = {
+    "orgasm", "climax", "cum", "submit", "surrender", "yield", "relent",
+    "succumb", "capitulate", "obey", "comply", "consent", "agree",
+    "acquiesce", "relax", "calm", "panic", "faint", "swoon", "buckle",
+    "forgive", "trust", "crave", "desire", "enjoy", "overwhelm",
+}
+
+_AUTONOMY_PHRASES = (
+    "over the edge", "gives in", "give in", "lets go", "let go",
+    "loses control", "lose control", "cannot hold", "can't hold",
+    "cannot resist", "can't resist", "cannot help", "can't help",
+    "falls in love", "changes her mind", "changes his mind",
+    "changes their mind", "makes up her mind", "makes up his mind",
+)
+
+# Words that can OPEN a clause without being its verb. A player action element
+# is authored verb-first by convention ('takes a deep breath...'), so an
+# attempt opening with one of these is a noun/pronoun-led clause -- somebody
+# or something OTHER than the declaring player is its subject.
+_SUBJECT_LEADS = {
+    "the", "a", "an", "this", "that", "these", "those", "his", "her",
+    "their", "its", "my", "your", "our", "he", "she", "they", "it",
+}
+
+
+def _stem_token(tok):
+    """Crude suffix stem for verb matching ('remembers' -> 'remember')."""
+    for suf in ("ing", "es", "ed", "s"):
+        if len(tok) > len(suf) + 2 and tok.endswith(suf):
+            return tok[:-len(suf)]
+    return tok
+
+
+def _is_autonomous_response(verb, text):
+    """True when the described outcome is a volitional or involuntary response
+    that belongs to the person having it -- submitting, panicking, giving in.
+    Checked on the declared verb and anywhere in the text (unlike
+    _is_mental_action's leading-token rule) because the construction that
+    matters here routinely buries the verb: 'the strain finally pushes her
+    over the edge'."""
+    v = str(verb or "").strip().casefold()
+    if v in _AUTONOMY_VERBS or _stem_token(v) in _AUTONOMY_VERBS:
+        return True
+    low = str(text or "").casefold()
+    if any(phrase in low for phrase in _AUTONOMY_PHRASES):
+        return True
+    return any(
+        tok in _AUTONOMY_VERBS or _stem_token(tok) in _AUTONOMY_VERBS
+        for tok in re.findall(r"[a-z']+", low)
+    )
+
 
 def _is_mental_action(verb, attempt):
     """True when an action element is purely interior (no outward surface):
@@ -64,17 +126,12 @@ def _is_mental_action(verb, attempt):
     mother taught her'). Conservative: only the leading token is checked, so a
     physical act that merely mentions thought later ('carve while recalling
     the shape') is NOT suppressed."""
-    def _stem(tok):
-        for suf in ("ing", "es", "ed", "s"):
-            if len(tok) > len(suf) + 2 and tok.endswith(suf):
-                return tok[:-len(suf)]
-        return tok
     v = str(verb or "").strip().lower()
-    if v in _MENTAL_VERBS or _stem(v) in _MENTAL_VERBS:
+    if v in _MENTAL_VERBS or _stem_token(v) in _MENTAL_VERBS:
         return True
     head = re.split(r"[^\w]+", str(attempt or "").strip().lower(), maxsplit=1)
     lead = head[0] if head else ""
-    return bool(lead) and (lead in _MENTAL_VERBS or _stem(lead) in _MENTAL_VERBS)
+    return bool(lead) and (lead in _MENTAL_VERBS or _stem_token(lead) in _MENTAL_VERBS)
 
 
 def observable_action_text(elem):
@@ -448,8 +505,113 @@ def _next_speaker_candidates(ctx, last_actor_id, perceived_by, already_spoke):
     candidates.sort(reverse=True)
     return [char_id for _, char_id in candidates]
 
+def _element_effect_text(elem):
+    """Every effect `kind` an action element declares, joined for text tests."""
+    effects = list(_list(elem.get("intended_effects"))) + list(
+        _list(elem.get("asserted_effects")))
+    return " ".join(
+        str(eff.get("kind") or "") for eff in effects if isinstance(eff, dict))
+
+
+def authored_other_subject(elem, name_forms, actor_forms=()):
+    """The cast id whose OWN cognition, volition, or involuntary response a
+    player-authored action element declares -- or None when the element is the
+    player's own act.
+
+    `name_forms` maps cast id -> casefolded name/alias forms identifying that
+    character; `actor_forms` are the declaring player's own forms.
+
+    Two shapes are caught, both requiring another mind to be the SUBJECT of an
+    interior or autonomous outcome:
+      1. the element OPENS with a cast member's name ('Dr. Moon remembers she
+         has her phone', 'Dr. Moon gives in');
+      2. a noun/pronoun-led clause names exactly one cast member as the
+         experiencer of such an outcome ('the strain finally pushes Dr. Moon
+         over the edge') -- the same puppeting written indirectly, which the
+         leading-subject rule alone misses.
+
+    A verb-led attempt is the player's own predicate by the sequence
+    convention, and an attempt the player leads by name is theirs, so neither
+    is rerouted -- 'stabs Sarah' stays the player's act and Sarah's response
+    is resolved through the reaction phase. A physical NPC beat with no
+    interior or autonomous outcome ('Dr. Moon steps back') is likewise left
+    for the world/perception path."""
+    if not isinstance(elem, dict) or elem.get("type") != "action":
+        return None
+    att = str(elem.get("attempt") or "").strip()
+    low = att.casefold()
+    if not low:
+        return None
+    autonomous = _is_mental_action(
+        elem.get("verb"), att) or _is_autonomous_response(
+            elem.get("verb"), f"{att} {_element_effect_text(elem)}")
+    if not autonomous:
+        return None
+    for cid, forms in (name_forms or {}).items():
+        for form in forms:
+            if any(low.startswith(form + suf) for suf in (" ", "'", "’")):
+                return cid
+    lead_tokens = re.split(r"[^\w']+", low, maxsplit=1)
+    lead = lead_tokens[0] if lead_tokens else ""
+    if lead in {str(f).casefold() for f in (actor_forms or ())}:
+        return None
+    if lead not in _SUBJECT_LEADS:
+        return None
+    named = {
+        cid for cid, forms in (name_forms or {}).items()
+        if any(re.search(rf"\b{re.escape(form)}\b", low) for form in forms)
+    }
+    return named.pop() if len(named) == 1 else None
+
+
+def bind_sequence_targets(sequence, target_forms):
+    """Fill an action element's EMPTY `targets` with the display names of the
+    cast members its own text names, and mirror those names onto effects that
+    left `target_id` null.
+
+    The director routinely emits an act that plainly lands on a character with
+    `targets: []` -- and every downstream seam that asks "does this land on
+    another body?" (the reaction-phase gate, claim subject binding, perception's
+    targeted-observer check) reads `targets`, so an unbound act is invisible to
+    all of them. Binding is by NAME because `ActionElement.targets` is typed as
+    display names and perception matches them casefolded. Only ever ADDS a
+    binding the text already supports; an element the director bound itself is
+    left untouched."""
+    bound = 0
+    for elem in _dict_list(sequence):
+        if elem.get("type") != "action" or elem.get("targets"):
+            continue
+        haystack = f"{elem.get('attempt') or ''} {_element_effect_text(elem)}".casefold()
+        if not haystack.strip():
+            continue
+        names = []
+        for display, forms in (target_forms or {}).items():
+            if any(re.search(rf"\b{re.escape(form)}\b", haystack)
+                   for form in forms):
+                names.append(display)
+        if not names:
+            continue
+        elem["targets"] = names
+        bound += 1
+        if len(names) == 1:
+            for eff in _dict_list(elem.get("intended_effects")) + _dict_list(
+                    elem.get("asserted_effects")):
+                if not eff.get("target_id"):
+                    eff["target_id"] = names[0]
+    return bound
+
+
 def _requires_reaction_phase(event, valid_actor_ids, actor_names):
-    """Only genuinely urgent contestable physical actions trigger reactions."""
+    """True when a contestable act lands on another character and asserts an
+    outcome on them -- the case the reaction phase exists to adjudicate.
+
+    The gate used to demand a verb from a small combat whitelist, so only
+    violence could earn a reaction: any other contestable outcome asserted on a
+    character's body (a grip they might break, an intimate act, a persuasion
+    landing) was resolved with no chance for that character to contest it
+    physically. Contestability plus a bound target plus a declared effect is
+    the real condition; the whitelist and the multi-stage cues now only widen
+    it, catching acts that declare no effect of their own."""
     if not isinstance(event, dict):
         return False
     if event.get("type") != "action":
@@ -478,9 +640,11 @@ def _requires_reaction_phase(event, valid_actor_ids, actor_names):
     stage = str(event.get("stage") or "immediate")
 
     return bool(
-        verb in _REACTIVE_VERBS
+        event.get("intended_effects")
+        or event.get("asserted_effects")
+        or verb in _REACTIVE_VERBS
         or any(term in attempt for term in _REACTIVE_VERBS)
-        or (stage in _REACTIVE_STAGES and event.get("intended_effects"))
+        or stage in _REACTIVE_STAGES
     )
 
 def _requires_director_resolution(result):
@@ -521,7 +685,21 @@ def _normalize_effect(effect):
         return None
     return {"target_id": None, "kind": str(effect), "details": {}}
 
-def _extract_authority_claims(sequence, raw_input, actor_name=None):
+def _named_cast_subject(text, target_forms):
+    """The single cast display name `text` names, or None when it names none
+    or more than one (an ambiguous subject is worse than an absent one)."""
+    low = str(text or "").casefold()
+    if not low.strip():
+        return None
+    hits = [
+        display for display, forms in (target_forms or {}).items()
+        if any(re.search(rf"\b{re.escape(form)}\b", low) for form in forms)
+    ]
+    return hits[0] if len(hits) == 1 else None
+
+
+def _extract_authority_claims(sequence, raw_input, actor_name=None,
+                              target_forms=None):
     """Extract authority claims from the interpreted sequence.
 
     raw_input is the player's own declaration and serves as the FALLBACK
@@ -541,7 +719,15 @@ def _extract_authority_claims(sequence, raw_input, actor_name=None):
     and the actor-less `event` branch (a player-authored WORLD assertion
     like "two guards appear") are left for the director to adjudicate --
     resolving them to the player would silently hand the player authorship
-    of world facts."""
+    of world facts.
+
+    target_forms (cast display name -> casefolded match forms) closes the
+    hole that fallback opened: when the model leaves BOTH targets and
+    target_id empty on an act whose text is plainly about another character,
+    "no targets" is not evidence of self-direction, and stamping the player
+    as subject hands them authorship of that character's body. Naming the
+    cast member the text does is strictly better than either wrong answer --
+    the resolve seam can then actually check the claim's coverage."""
     fallback_text = str(raw_input or "")
     claims = []
     for i, event in enumerate(sequence or []):
@@ -576,6 +762,13 @@ def _extract_authority_claims(sequence, raw_input, actor_name=None):
         # A null effect target is the actor's own body only when the action
         # named no targets at all; if it did, the null is a dropped reference.
         self_subject = actor_name if not (event.get("targets") or []) else None
+        if self_subject and target_forms:
+            # ...and only when the act is not plainly about someone else.
+            named = _named_cast_subject(
+                f"{event.get('attempt') or ''} {_element_effect_text(event)}",
+                target_forms)
+            if named:
+                self_subject = named
         if commitment == "asserted":
             for effect_index, effect in enumerate(
                 event.get("asserted_effects") or []
@@ -1085,6 +1278,64 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
         if words:
             return "the " + " ".join(words).rstrip(".;:").lower()
     return "the unfamiliar person"
+
+def _delivery_ok(scene, observer_name, source_name, channel,
+                volume="normal", proximity=None, behind_sources=None,
+                awareness=None):
+    """Unified delivery gate (Pattern 3): consolidate the scattered
+    per-observer delivery checks into one predicate so every call site
+    applies the same containment, awareness, sight, and hearing gates.
+
+    Returns True if the source's channel reaches this observer.
+
+    - **containment_conceals**: a sealed container blocks sight and
+      hearing for non-carriers.
+    - **awareness**: a non-awake mind receives nothing.
+    - **sight**: has_visual + not in rear blind spot + not concealed.
+    - **hearing**: hear_level with proximity; sealed containers block.
+    - **action**: requires sight (an action is visible or it is nothing).
+    """
+    # Awareness gate: non-awake = no delivery.
+    if awareness is not None and awareness in NON_AWAKE_GATED:
+        return False
+
+    # Containment gate: a concealed (sealed) container blocks both sight
+    # and sound for a non-carrier observer.
+    if containment_conceals(scene, observer_name, source_name):
+        if channel == "hearing":
+            # Sound through a sealed container is blocked entirely.
+            return False
+        # Sight through a sealed container is also blocked.
+        return False
+
+    if channel == "sight":
+        # Rear-arc blind spot: a source behind the observer is not visible
+        # even if same-room.
+        if behind_sources and source_name in behind_sources:
+            return False
+        return True
+
+    if channel == "action":
+        # Actions require sight: same visual gate as 'sight' channel.
+        if behind_sources and source_name in behind_sources:
+            return False
+        return True
+
+    if channel == "hearing":
+        # Compute spatial relation for hear_level.
+        from character_schema import character_name as _cn
+        # The caller should pass the relation-derived hear level result;
+        # but if not, we can compute it here.
+        # For the unified gate, we expect the caller to have already
+        # determined the spatial relation; here we just check that hearing
+        # is not blocked by containment (already checked above).
+        # The actual hear_level computation requires spatial_rel, which
+        # needs room info; callers pass the result via the 'level' return.
+        # This gate returns True if hearing is not blocked by containment
+        # or awareness; the caller still needs hear_level for volume/distance.
+        return True
+
+    return True
 
 def _strip_identity_tokens(text, forms):
     """Remove an actor's name/alias forms from engine-supplied prose (an

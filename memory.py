@@ -1087,9 +1087,28 @@ def _rrf_add(scores, reasons, ranking, weight, reason):
             reasons[mid].append(reason)
 
 def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
-                    current_turn_idx=None, chronological=True, viewer_frame_id=_UNSET):
+                    current_turn_idx=None, chronological=True, viewer_frame_id=_UNSET,
+                    max_turn_idx=None):
     rows = q("SELECT * FROM memories WHERE chat_id=? AND char_id=? AND (?=1 OR archived=0)",
              (chat_id, char_id, 1 if include_archived else 0))
+    if current_turn_idx is not None:
+        # An onset-time reroll must not retrieve the discarded outcome memory
+        # for the very turn it is deciding again. Exclude both the current and
+        # any future play-order rows before semantic/lexical ranking.
+        rows = [
+            row for row in rows
+            if row["turn_idx"] is None or row["turn_idx"] < current_turn_idx
+        ]
+    # F1: reroll turn cutoff -- a reroll of a mid-pipeline step must not
+    # retrieve memories minted by the stale run of this same turn (or any
+    # later turn). Unlike current_turn_idx (which excludes the turn itself
+    # with <), max_turn_idx is inclusive: memories from turn_idx ==
+    # max_turn_idx are kept, only turn_idx > max_turn_idx is excluded.
+    if max_turn_idx is not None:
+        rows = [
+            row for row in rows
+            if row["turn_idx"] is None or row["turn_idx"] <= max_turn_idx
+        ]
     vf = _active_frame_id.get() if viewer_frame_id is _UNSET else viewer_frame_id
     rows = [r for r in rows if _frames.is_memory_visible(char_id, r["frame_id"], vf, r["turn_idx"])]
     if not rows:
@@ -1261,7 +1280,7 @@ def save_memory_summary(chat_id, char_id, summary, *, scope="autobiographical", 
         embedding, embedding_model, embedding_dim, time.time()))
 
 def build_character_memory_context(chat_id, char_id, current_turn_idx, current_view, active_state, *,
-                                   recent_turns=4, recall_limit=8):
+                                   recent_turns=4, recall_limit=8, max_turn_idx=None):
     active_state = active_state or {}
     recent = recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=recent_turns, limit=12)
     recent_ids = {m["id"] for m in recent}
@@ -1270,7 +1289,8 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                    " ".join(summary.get("unresolved_threads") or [])]
     query_text = " ".join(p for p in query_parts if p)
     recalled = search_memories(chat_id, char_id, query_text, k=recall_limit,
-                               include_archived=True, current_turn_idx=current_turn_idx, chronological=True)
+                               include_archived=True, current_turn_idx=current_turn_idx, chronological=True,
+                               max_turn_idx=max_turn_idx)
     recalled = [m for m in recalled if m["id"] not in recent_ids]
     return {
         "working_memory": {

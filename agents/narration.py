@@ -324,14 +324,20 @@ def _position_delta_payload(ctx, chat, p_name, p_room, recognized, cast_info):
         now_room = cast_room(sc, name, ctx.cast)
         if not now_room:
             continue
-        if not p_room or (now_room != p_room and prev_room != p_room):
+        # S3-A4: only include characters currently IN the player's room.
+        # Previously, a character who LEFT (prev_room == p_room but now_room
+        # != p_room) was included with their destination room name, leaking
+        # spatial info the player hasn't perceived. The player can only
+        # place someone who is still co-present -- a character who left is
+        # gone, and their destination is not the player's to know.
+        if not p_room or now_room != p_room:
             continue
         moved = (prev_room is None) or (prev_room != now_room)
         display = _speaker_display(
             name, recognized, info.get("appearance"), info.get("aliases"))
         payload[display] = {
             "room": room_names.get(now_room, now_room),
-            "prev_room": room_names.get(prev_room, prev_room),
+            "prev_room": room_names.get(prev_room, prev_room) if moved else None,
             "moved": moved,
         }
         facts.append({"name": display, "room_id": now_room, "moved": moved})
