@@ -20,6 +20,7 @@ from scene import get_scene, persona_of
 from schemas import normalize_speech_volume
 from spatial import (
     ambient_scope,
+    containment_conceals,
     has_visual,
     nearby_rooms,
     normalize_room_id,
@@ -290,7 +291,7 @@ def _contextual_rooms(sc, cast, *extra_room_ids, hops=1):
 _ENTITY_LOOKUP_ONLY_FIELDS = ("aliases",)
 
 
-def _perceptible_entities(sc):
+def _perceptible_entities(sc, perceiver_names=None):
     """The entities dict to serialize into a PERCEPTION payload.
 
     Perception is handed the objective entity table so it can describe what
@@ -313,10 +314,38 @@ def _perceptible_entities(sc):
     where that is unambiguous, and aliases are dropped. A character who
     legitimately knows what the thing is knows it from their own sheet and
     memory -- which is where that knowledge belongs.
+
+    `state` is the SECOND thing this table carries that an observer may have
+    no channel to. The Director writes it as objective fact, in act-naming
+    language -- `state.posture` and `state.proximity` spell out what a body
+    is doing and where it is doing it. Observed live: a body shut inside a
+    container had its every act written out in `state` while no perceiver in
+    the call had any sight of it at all. That is the same shape as the alias
+    leak above -- objective state handed over with an implicit instruction
+    not to use it -- and the same argument applies: when NOBODY in this call
+    can perceive the entity, none of them has a legitimate use for what it is
+    doing, so it does not go in.
+
+    `perceiver_names` is who the payload is being built for. Concealment is
+    decided by containment only (spatial.containment_conceals): an entity in
+    the open is unaffected, so this is inert for the ordinary scene and bites
+    exactly on the enclosed case that motivated it. The entity still appears
+    -- only `state` is withheld -- because presence may reach the perceiver
+    through contact or sound even when nothing else does. Omitted (the
+    default) keeps the whole table, which is right for callers that have no
+    perceiver set to gate against.
     """
     entities = (sc or {}).get("entities") or {}
     if not isinstance(entities, dict):
         return entities
+
+    names = [str(n).strip() for n in (perceiver_names or []) if str(n or "").strip()]
+
+    def _state_reaches_anyone(ent_name):
+        if not names or not ent_name:
+            return True
+        return any(not containment_conceals(sc, observer, ent_name)
+                   for observer in names)
 
     by_name = {}
     for eid, ent in entities.items():
@@ -335,8 +364,10 @@ def _perceptible_entities(sc):
         # never collapse into one payload entry.
         key = name if name and len(by_name.get(name.casefold(), ())) == 1 \
             else eid
-        projected[key] = {k: v for k, v in ent.items()
-                          if k not in _ENTITY_LOOKUP_ONLY_FIELDS}
+        drop = set(_ENTITY_LOOKUP_ONLY_FIELDS)
+        if not _state_reaches_anyone(name or eid):
+            drop.add("state")
+        projected[key] = {k: v for k, v in ent.items() if k not in drop}
     return projected
 
 
@@ -1922,7 +1953,12 @@ def _ensure_environment(view, perceiver, display, rel, vis, action_desc):
     parts = [f"You are in {perceiver.get('room_name')}."]
     if perceiver.get("room_notes"):
         parts.append(perceiver["room_notes"])
-    if rel.get("same_room"):
+    # `same_room` is true for a body sealed inside something standing in the
+    # room -- a carried body's position derives to its carrier's. Announcing
+    # it as "here with you" and pasting its observable is the same bypass the
+    # injection sites had; `concealed` is absent (falsy) for every rel that
+    # never went through containment, so open scenes are unchanged.
+    if rel.get("same_room") and not rel.get("concealed"):
         parts.append(f"{display} is here with you.")
         if action_desc:
             # action_desc is now an intent-free `observable` surface (predicate
