@@ -44,13 +44,29 @@ def snapshot_state(chat_id):
         for r in q("SELECT * FROM chat_personas WHERE chat_id=?", (chat_id,))
     ]
     canon = chat["lorebook_id"] if chat else None
+    # Snapshot durable ownership, not only retrieval reachability. Isolated
+    # descendants intentionally do not inherit/retrieve through their parent,
+    # but they are still chat-owned state that a reroll must restore exactly.
     book_ids = []
+    for lid in [
+        canon,
+        *(row["id"] for row in q(
+            "SELECT id FROM lorebooks WHERE chat_id=? ORDER BY sort_order,id",
+            (chat_id,),
+        )),
+        *(row["lorebook_id"] for row in q(
+            "SELECT lorebook_id FROM chat_lorebooks WHERE chat_id=?",
+            (chat_id,),
+        )),
+        *chat_lorebook_ids(chat_id, enabled_only=False),
+    ]:
+        if lid is not None and lid not in book_ids:
+            book_ids.append(lid)
     books = []
-    for lid in chat_lorebook_ids(chat_id, enabled_only=False):
+    for lid in book_ids:
         lbrow = q("SELECT * FROM lorebooks WHERE id=?", (lid,), one=True)
         if not lbrow:
             continue
-        book_ids.append(lid)
         att = q("SELECT enabled FROM chat_lorebooks WHERE chat_id=? AND lorebook_id=?",
                 (chat_id, lid), one=True)
         books.append({
@@ -222,8 +238,22 @@ def _restore_books(chat_id, books, links=None):
     elif chat_row and chat_row["lorebook_id"] is not None and chat_row["lorebook_id"] in current:
         qi("UPDATE chats SET lorebook_id=NULL WHERE id=?", (chat_id,))
 
-    if links:
-        restore_lorebook_links(chat_id, old_to_new, links)
+    # Links between books represented by this snapshot are snapshot-owned
+    # state too. Replace that managed subgraph even when the saved list is
+    # empty: otherwise links created by a later, discarded timeline survive,
+    # and add_lorebook_link's dedup means saved metadata never replaces an
+    # existing row. Links involving books outside the snapshot mapping are
+    # deliberately left alone.
+    managed_ids = sorted(set(old_to_new.values()))
+    if managed_ids:
+        placeholders = ",".join("?" * len(managed_ids))
+        qi(
+            f"DELETE FROM lorebook_links "
+            f"WHERE source_book_id IN ({placeholders}) "
+            f"AND target_book_id IN ({placeholders})",
+            tuple(managed_ids) + tuple(managed_ids),
+        )
+    restore_lorebook_links(chat_id, old_to_new, links or [])
 
     return old_to_new
 
@@ -534,19 +564,27 @@ def ensure_checkpoint(chat_id, turn_idx):
     Captures the current world/character/lore state so it can be
     restored if the turn is deleted or re-run.
     """
-    existing = q(
-        "SELECT id FROM checkpoints WHERE chat_id=? AND turn_idx=?",
-        (chat_id, turn_idx),
-        one=True,
-    )
-    if existing:
-        return existing["id"]
+    # Snapshot outside the transaction: snapshot_state makes many
+    # read-only q() calls and does no writes, so it needs no lock.
+    # Holding the write lock for the duration of a snapshot would
+    # needlessly block other writers.
     blob = json.dumps(snapshot_state(chat_id))
-    return qi(
-        "INSERT INTO checkpoints(chat_id, turn_idx, blob, created) "
-        "VALUES(?,?,?,?)",
-        (chat_id, turn_idx, blob, time.time()),
-    )
+    # Check-then-insert inside a transaction so two concurrent calls
+    # for the same (chat_id, turn_idx) can't both pass the existence
+    # check and race on the UNIQUE(chat_id, turn_idx) insert.
+    with transaction():
+        existing = q(
+            "SELECT id FROM checkpoints WHERE chat_id=? AND turn_idx=?",
+            (chat_id, turn_idx),
+            one=True,
+        )
+        if existing:
+            return existing["id"]
+        return qi(
+            "INSERT INTO checkpoints(chat_id, turn_idx, blob, created) "
+            "VALUES(?,?,?,?)",
+            (chat_id, turn_idx, blob, time.time()),
+        )
 
 def refresh_checkpoint(chat_id, turn_idx):
     """Patch ONLY the lorebook-related sections of the checkpoint at
@@ -562,20 +600,33 @@ def refresh_checkpoint(chat_id, turn_idx):
     only changes the book set, so only the book sections are refreshed;
     everything else in the existing blob is left untouched.
     """
-    row = q(
-        "SELECT blob FROM checkpoints WHERE chat_id=? AND turn_idx=?",
-        (chat_id, turn_idx),
-        one=True,
-    )
-    if not row:
-        # No pre-turn checkpoint captured yet -- fall back to a full
-        # snapshot (nothing to preserve).
-        return ensure_checkpoint(chat_id, turn_idx)
-    blob = json.loads(row["blob"])
+    # Snapshot outside the transaction: snapshot_state is read-only and
+    # may take time; holding the write lock for its duration would
+    # needlessly block other writers.
     fresh = snapshot_state(chat_id)
-    for key in ("lore", "lorebooks", "lorebook_links"):
-        blob[key] = fresh.get(key)
-    qi(
-        "UPDATE checkpoints SET blob=?, created=? WHERE chat_id=? AND turn_idx=?",
-        (json.dumps(blob), time.time(), chat_id, turn_idx),
-    )
+    # Read-modify-write inside a transaction so a concurrent
+    # ensure_checkpoint or refresh_checkpoint can't interleave.
+    with transaction():
+        row = q(
+            "SELECT blob FROM checkpoints WHERE chat_id=? AND turn_idx=?",
+            (chat_id, turn_idx),
+            one=True,
+        )
+        if not row:
+            # No pre-turn checkpoint captured yet -- fall back to a full
+            # snapshot (nothing to preserve).  The insert is already
+            # inside this transaction; delegate to ensure_checkpoint
+            # would nest a second transaction (savepoint) and re-snapshot,
+            # so do the insert directly here instead.
+            return qi(
+                "INSERT INTO checkpoints(chat_id, turn_idx, blob, created) "
+                "VALUES(?,?,?,?)",
+                (chat_id, turn_idx, json.dumps(fresh), time.time()),
+            )
+        blob = json.loads(row["blob"])
+        for key in ("lore", "lorebooks", "lorebook_links"):
+            blob[key] = fresh.get(key)
+        qi(
+            "UPDATE checkpoints SET blob=?, created=? WHERE chat_id=? AND turn_idx=?",
+            (json.dumps(blob), time.time(), chat_id, turn_idx),
+        )

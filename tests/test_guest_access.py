@@ -32,6 +32,15 @@ def _make_chat_and_persona(db):
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
         ("Test", "", time.time()),
     )
+    # Guest grants are authority for an attached extra player, never a
+    # free-standing persona/chat pair. The HTTP route has always enforced
+    # this; verify_guest_token now independently fails closed on the same
+    # lifecycle invariant.
+    db.qi(
+        "INSERT INTO chat_personas(chat_id,persona_id,status) "
+        "VALUES(?,?,'active')",
+        (chat_id, persona_id),
+    )
     return chat_id, persona_id
 
 

@@ -45,16 +45,17 @@
 <div id="join-screen">
   <div class="card">
     <div>Enter the join code your friend gave you.</div>
+    <label for="code-input">Join code</label>
     <input id="code-input" placeholder="ABCD1234" autocomplete="off" autocapitalize="characters" maxlength="8">
     <button id="join-btn" class="primary">Join story</button>
-    <div class="err" id="join-err"></div>
+    <div class="err" id="join-err" role="alert" aria-live="polite"></div>
   </div>
 </div>
 
 <div id="play-screen" style="display:none">
   <div id="msgs"></div>
   <div id="composer">
-    <textarea id="input" placeholder="Act, speak, or leave empty…"></textarea>
+    <textarea id="input" aria-label="Your action or speech" placeholder="Act, speak, or leave empty…"></textarea>
     <button id="send-btn" class="primary">Send</button>
   </div>
 </div>
@@ -93,10 +94,9 @@ async function doJoin() {
   joinBtn.disabled = true;
   joinErr.textContent = "";
   try {
-    const r = await api("POST", "/api/join", { code });
-    headSub.textContent = `${r.chat_name} — playing as ${r.persona_name}`;
-    joinScreen.style.display = "none";
-    playScreen.style.display = "flex";
+    await api("POST", "/api/join", { code });
+    const state = await api("GET", "/api/guest/state");
+    showPlayState(state);
     startPolling();
   } catch (e) {
     joinErr.textContent = e.message;
@@ -135,23 +135,69 @@ function render(turns) {
   msgsEl.scrollTop = msgsEl.scrollHeight;
 }
 
-async function refresh() {
-  try {
-    const state = await api("GET", "/api/guest/state");
-    nextIdx = state.next_idx;
-    render(state.turns);
-  } catch (e) {
-    // A revoked/expired session shows up here; leave the last known
-    // view up rather than clearing it, and just stop polling.
-    headSub.textContent = "Connection lost — " + e.message;
-    clearInterval(pollHandle);
-  }
+function showPlayState(state) {
+  headSub.textContent = `${state.chat_name} — playing as ${state.persona_name}`;
+  joinScreen.style.display = "none";
+  playScreen.style.display = "flex";
+  nextIdx = state.next_idx;
+  render(state.turns);
+}
+
+let refreshInFlight = null;
+function refresh() {
+  // A slow request must not overlap the next poll and later roll the
+  // transcript back to an older next_idx.
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      const state = await api("GET", "/api/guest/state");
+      showPlayState(state);
+      return true;
+    } catch (e) {
+      // A revoked/expired session shows up here; leave the last known
+      // view up rather than clearing it, and just stop polling.
+      headSub.textContent = "Connection lost — " + e.message;
+      stopPolling();
+      return false;
+    }
+  })().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
 }
 
 let pollHandle = null;
+let polling = false;
+
+function stopPolling() {
+  polling = false;
+  if (pollHandle !== null) clearTimeout(pollHandle);
+  pollHandle = null;
+}
+
+async function pollOnce() {
+  if (!polling) return;
+  await refresh();
+  if (polling) pollHandle = setTimeout(pollOnce, 10000);
+}
+
 function startPolling() {
-  refresh();
-  pollHandle = setInterval(refresh, 10000);
+  // Callers already hold fresh state (from join or session restore), so wait
+  // one interval instead of issuing a duplicate request immediately.
+  stopPolling();
+  polling = true;
+  pollHandle = setTimeout(pollOnce, 10000);
+}
+
+async function resumeGuestSession() {
+  try {
+    const state = await api("GET", "/api/guest/state");
+    showPlayState(state);
+    startPolling();
+  } catch (e) {
+    // No valid HttpOnly guest cookie: remain on the join screen. The same
+    // response intentionally covers missing, expired, and revoked sessions.
+  }
 }
 
 async function send() {
@@ -174,6 +220,8 @@ sendBtn.onclick = send;
 inputEl.addEventListener("keydown", e => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send() }
 });
+
+resumeGuestSession();
 </script>
 </body>
 </html>

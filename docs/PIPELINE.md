@@ -164,6 +164,40 @@ When rerunning from a stage:
 - Each recomputation creates a new immutable variant and marks it active.
 - `_assert_plan_materialized` verifies that every planned stage has a valid result before the turn is considered complete.
 
+## Portable diagnostic traces
+
+Completed stage outputs already live in immutable `steps` / `variants` rows.
+`pipeline_trace.py` can export that record as a versioned, canonical JSON
+artifact and replay the saved `step_start` / `step` / `done` event sequence
+offline. Replay never imports the runtime dispatcher and never calls a model;
+it reproduces persisted outputs, not the original computations.
+
+The default export is deliberately hash-only. It includes structure, active
+variant selection, stale state, variant counts, and SHA-256 integrity hashes,
+but omits player input and stage payloads. A replayable export is an explicit
+privacy decision because those payloads may contain story text, retrieved lore,
+and private character reasoning:
+
+```bash
+# Lower-exposure structural diagnostic (not replayable)
+python tools/pipeline_trace.py export 42 -o turn-42.trace.json
+
+# Local replay artifact, including inactive reroll history
+python tools/pipeline_trace.py export 42 --include-content --all-variants \
+  -o turn-42.full.trace.json
+
+python tools/pipeline_trace.py inspect turn-42.full.trace.json
+python tools/pipeline_trace.py replay turn-42.full.trace.json
+```
+
+Exports do not mutate application rows and atomically replace their destination
+file. Repeated exports of unchanged rows are byte-identical. The artifact
+intentionally excludes provider keys, prompts, character sheets, the chat
+scenario, and unrelated world rows. It is a bounded post-mortem tool: because
+failed stages have no completed variant, it can replay everything persisted
+before a failure but cannot reconstruct a provider exception or unsaved partial
+model stream.
+
 ## Where to debug
 
 | Symptom | Earliest likely stage |

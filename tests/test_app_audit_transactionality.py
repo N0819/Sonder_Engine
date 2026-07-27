@@ -17,6 +17,11 @@
    ``mem_add``'s bare ``float(salience)`` cast, ``dlg_put``'s bare
    ``int()``/``float()`` casts, and ``attach_lore``'s missing
    chat-existence check (previously an FK IntegrityError on a bad cid).
+
+4. ``turn_new`` committed the turn row before capturing its pre-turn
+   checkpoint.  A checkpoint failure therefore left a stepless orphan turn
+   behind even though the request failed.  Turn allocation, checkpoint
+   creation, and insertion now share one transaction.
 """
 
 from __future__ import annotations
@@ -80,6 +85,31 @@ def _row_counts(db):
         t: db.q(f"SELECT COUNT(*) AS n FROM {t}", one=True)["n"]
         for t in _TABLES
     }
+
+
+# ---- bug 4: turn_new committed before its checkpoint existed ----
+
+class TestTurnCreationAtomicity:
+    def test_checkpoint_failure_leaves_no_orphan_turn_or_pipeline_slot(
+        self, temp_db, monkeypatch,
+    ):
+        chat_id = _make_chat(temp_db)
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("checkpoint failed")
+
+        monkeypatch.setattr(app, "ensure_checkpoint", boom)
+
+        with pytest.raises(RuntimeError, match="checkpoint failed"):
+            app.turn_new(chat_id, {"input": "hello"})
+
+        assert temp_db.q(
+            "SELECT 1 FROM turns WHERE chat_id=?", (chat_id,), one=True,
+        ) is None
+        assert temp_db.q(
+            "SELECT 1 FROM checkpoints WHERE chat_id=?", (chat_id,), one=True,
+        ) is None
+        assert (chat_id, None) not in app.ABORTS
 
 
 # ---- bug 1: turn_branch was not transactional ----

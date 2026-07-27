@@ -4,6 +4,7 @@
 - [`../AGENTS.md`](../AGENTS.md): practical editing rules and invariants.
 - [`PIPELINE.md`](PIPELINE.md): implemented turn execution and debugging map.
 - [`DATABASE.md`](DATABASE.md): persistence and schema-change guide.
+- [`TESTING.md`](TESTING.md): fast/full/browser test tiers, dependency constraints, and CI policy.
 - [`CODE_MAP.md`](CODE_MAP.md): generated structural index.
 - [`ARCHITECTURE_AUDIT_2026-07-19.md`](ARCHITECTURE_AUDIT_2026-07-19.md): system audit, applied corrections, premise gaps, and prioritized roadmap.
 - [`OFFSCREEN_LIFE_DESIGN.md`](OFFSCREEN_LIFE_DESIGN.md): design note — off-screen life, reactivation, and villain ticks as one mechanism at three cadences (`Design.md` roadmap 7 and 10).

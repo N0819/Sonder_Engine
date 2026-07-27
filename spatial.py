@@ -6,6 +6,17 @@ import re
 from typing import Optional
 
 from schemas import is_derived_entity_name
+from spatial_orientation import (
+    _LEFT_SECTORS,
+    _REL_SECTORS,
+    _RIGHT_SECTORS,
+    lateral_of,
+    normalize_bearing,
+    normalize_scene_bearings,
+    opposite_bearing,
+    relative_bearing,
+    travel_bearing,
+)
 
 _BARRIER_ALIASES = {
     "": "wall",
@@ -24,9 +35,6 @@ _BARRIER_ALIASES = {
     "counter": "open",
     "open_counter": "open",
     "open counter": "open",
-    "curtain": "open",
-    "curtained_doorway": "open",
-    "curtained doorway": "open",
     "door": "open_door",
     "open door": "open_door",
     "shoji_open": "open_door",
@@ -130,6 +138,48 @@ _VALID_BARRIERS = {
 # see it but you cannot reach it" -- or, in `membrane`'s case, the reverse.
 _SIGHT_BARRIERS = {"open", "open_door", "window", "bars"}
 
+# Which barriers carry scent at all. Scent passes freely through open air and
+# doorways; bars and grilles let it through almost as well. A membrane (a
+# curtain, a tent flap, a body's soft wall) strongly attenuates it -- the
+# material is thin enough for some diffusion but not free passage. Glass
+# (window) stops air, and with it scent, entirely: a sealed container's
+# contents are not smelled from outside. A closed door muffles scent
+# significantly but does not fully stop it (gaps, undercuts). A wall blocks
+# completely.
+#
+# The graded answer is `scent_level` (none | muffled | full), mirroring
+# `sight_level` (none | shapes | full) and `hear_level` (none | fragment | full).
+_SCENT_BARRIERS = {"open", "open_door", "bars", "membrane", "closed_door"}
+
+def scent_level(rel: dict) -> str:
+    """How much scent from a source reaches the perceiver: none | muffled | full.
+
+    Barriers gate scent the same way they gate sight and sound. Containment
+    concealment (a body sealed inside another) blocks scent as completely as
+    it blocks sight: the enclosing body's soft wall is a membrane, and a
+    membrane between the perceiver and the source means scent is muffled at
+    best -- not leaked through unattenuated.
+
+    Same-room scent is full unless containment conceals the source from the
+    perceiver, in which case the membrane rule applies (muffled). This is the
+    exact bug this function exists to close: without it, a character sealed
+    inside another's body had their scent arriving at the enclosing character
+    at full strength, as though the barrier that hid them from sight did
+    nothing to what they smelled like.
+    """
+    if rel.get("concealed"):
+        return "muffled"
+    if rel.get("same_room"):
+        return "full"
+    barrier = normalize_barrier(rel.get("barrier"))
+    if barrier in ("open", "open_door", "bars"):
+        return "full"
+    if barrier in ("membrane", "closed_door"):
+        return "muffled"
+    # window, wall, separated, unknown -- glass stops air; wall stops
+    # everything; unknown is safe-closed.
+    return "none"
+
 def normalize_barrier(value: str | None) -> str:
     """Normalize model-generated barrier names into engine vocabulary."""
     barrier = str(value or "").strip().casefold()
@@ -160,201 +210,6 @@ def normalize_scene_barriers(scene: dict) -> dict:
             edge["barrier"] = normalize_barrier(
                 edge.get("barrier")
             )
-
-    return scene
-
-# ---------------------------------------------------------------------------
-# Compass bearings: allocentric orientation truth on adjacency edges.
-#
-# A bearing (n/ne/e/se/s/sw/w/nw) is the world's canonical, OBSERVER-FREE
-# direction of an exit. Egocentric left/right is never stored -- it is DERIVED
-# per observer from (their facing, the edge's bearing) at read time (see
-# relative_bearing + spatial_frames.infer_facing), exactly as per-observer
-# identity is derived from `known`. "Left" is a fact about an observer, not the
-# world; storing it would be the same category error as writing a perceiver's
-# knowledge into objective scene state. Vertical up/down stays on edge.vertical;
-# this is the horizontal compass only. Absence of a bearing degrades to exactly
-# the pre-bearing behavior -- no direction asserted, never a guess.
-# ---------------------------------------------------------------------------
-
-_BEARINGS = ("n", "ne", "e", "se", "s", "sw", "w", "nw")
-_BEARING_DEG = {b: i * 45 for i, b in enumerate(_BEARINGS)}
-
-_BEARING_ALIASES = {
-    "n": "n", "north": "n",
-    "ne": "ne", "northeast": "ne",
-    "e": "e", "east": "e",
-    "se": "se", "southeast": "se",
-    "s": "s", "south": "s",
-    "sw": "sw", "southwest": "sw",
-    "w": "w", "west": "w",
-    "nw": "nw", "northwest": "nw",
-}
-
-# Observer-relative words are NOT authorable allocentric truth. A model that
-# emits one as a bearing gets it DROPPED (-> None), never coerced into a
-# compass point -- the engine derives left/right elsewhere and must not let a
-# model smuggle an egocentric claim into objective edge state. "up"/"down"
-# belong to edge.vertical, so they are rejected here too.
-_EGOCENTRIC_WORDS = {
-    "left", "right", "ahead", "forward", "forwards", "front", "infront",
-    "behind", "back", "backward", "backwards", "rear", "aside", "beside",
-    "sideways", "port", "starboard", "onward", "onwards", "up", "down",
-}
-
-_OPPOSITE_BEARING = {
-    "n": "s", "s": "n", "e": "w", "w": "e",
-    "ne": "sw", "sw": "ne", "nw": "se", "se": "nw",
-}
-
-# Egocentric sectors at 45-degree steps clockwise from straight ahead.
-_REL_SECTORS = ("ahead", "ahead_right", "right", "behind_right",
-                "behind", "behind_left", "left", "ahead_left")
-_LEFT_SECTORS = {"left", "ahead_left", "behind_left"}
-_RIGHT_SECTORS = {"right", "ahead_right", "behind_right"}
-
-
-def normalize_bearing(value) -> Optional[str]:
-    """A model-supplied edge bearing collapsed to the 8-way compass, or None
-    when it is absent, unrecognized, or an OBSERVER-RELATIVE word (left/right/
-    ahead/...) that is not allocentric truth."""
-    raw = str(value or "").strip().casefold()
-    if not raw:
-        return None
-    key = re.sub(r"[^a-z]", "", raw)
-    if key in _EGOCENTRIC_WORDS:
-        return None
-    return _BEARING_ALIASES.get(key)
-
-
-def opposite_bearing(bearing: Optional[str]) -> Optional[str]:
-    return _OPPOSITE_BEARING.get(bearing)
-
-
-def relative_bearing(facing: Optional[str], target: Optional[str]) -> Optional[str]:
-    """The egocentric sector an absolute `target` bearing falls in for an
-    observer whose absolute `facing` is given (one of _REL_SECTORS), or None if
-    either bearing is unknown. Pure -- the single point where allocentric
-    compass truth becomes observer-relative."""
-    if facing not in _BEARING_DEG or target not in _BEARING_DEG:
-        return None
-    idx = round(((_BEARING_DEG[target] - _BEARING_DEG[facing]) % 360) / 45) % 8
-    return _REL_SECTORS[idx]
-
-
-def lateral_of(facing: Optional[str], target: Optional[str]) -> Optional[str]:
-    """'left'/'right' when the target bearing is on that side of the observer,
-    else None -- a pure fore/aft bearing (ahead/behind) returns None because
-    the movement-derived ahead/behind buckets already own that axis. Used to
-    refine an otherwise-'aside' exit into a side."""
-    rel = relative_bearing(facing, target)
-    if rel in _LEFT_SECTORS:
-        return "left"
-    if rel in _RIGHT_SECTORS:
-        return "right"
-    return None
-
-
-def _find_edge(room: Optional[dict], to_id: str) -> Optional[dict]:
-    """The adjacency edge from `room` to `to_id`, or None."""
-    if not isinstance(room, dict):
-        return None
-    for edge in room.get("adjacent") or []:
-        if isinstance(edge, dict) and edge.get("to") == to_id:
-            return edge
-    return None
-
-
-def travel_bearing(scene: dict, from_room: str, to_room: str) -> Optional[str]:
-    """Absolute compass bearing of travel from from_room to to_room, taken from
-    the forward edge's `dir`, or the reciprocal of the back edge's `dir`. None
-    when no bearing is authored on that adjacency (heading unknown)."""
-    rooms = scene.get("rooms") or {}
-    fwd = _find_edge(rooms.get(from_room), to_room)
-    if fwd is not None:
-        b = normalize_bearing(fwd.get("dir"))
-        if b:
-            return b
-    back = _find_edge(rooms.get(to_room), from_room)
-    if back is not None:
-        b = normalize_bearing(back.get("dir"))
-        if b:
-            return opposite_bearing(b)
-    return None
-
-
-def normalize_scene_bearings(scene: dict) -> dict:
-    """Normalize every adjacency edge's OPTIONAL `dir` into the compass
-    vocabulary (dropping observer-relative or unrecognized values), then
-    reconcile reciprocals: A->B bearing d implies B->A opposite(d). Fill a
-    missing reciprocal; on a CONTRADICTION drop BOTH sides -- never guess which
-    was right. Global loop-consistency is deliberately NOT enforced: only
-    per-edge-pair reciprocity, the only consistency an observer standing in a
-    room can ever actually test through its doorways.
-
-    One room claiming TWO neighbors on the same bearing is inside that scope:
-    an observer standing there and walking west can only arrive in one place.
-    Observed live (Elevator Adventure branch 41) -- west_deep_passage held
-    `dir: "w"` to both west_lower_descent and west_functional_chamber, so
-    egocentric_frame offered two different rooms as "ahead". Same policy as a
-    contradicting reciprocal: drop the bearing from every colliding edge (and
-    its reciprocal, so the next pass cannot re-derive it) and keep the
-    doorways. An unbearing'd exit is merely unplaced; a wrong one is a lie."""
-    if not isinstance(scene, dict):
-        return scene
-    rooms = scene.get("rooms") or {}
-
-    for room in rooms.values():
-        if not isinstance(room, dict):
-            continue
-        for edge in room.get("adjacent") or []:
-            if not isinstance(edge, dict) or "dir" not in edge:
-                continue
-            nb = normalize_bearing(edge.get("dir"))
-            if nb:
-                edge["dir"] = nb
-            else:
-                edge.pop("dir", None)
-
-    for a_id, room in rooms.items():
-        if not isinstance(room, dict):
-            continue
-        for edge in room.get("adjacent") or []:
-            if not isinstance(edge, dict):
-                continue
-            b_id = edge.get("to")
-            if not b_id or b_id == a_id or b_id not in rooms:
-                continue  # skip self-loops: back would be edge itself
-            back = _find_edge(rooms.get(b_id), a_id)
-            if back is None:
-                continue
-            fwd_dir, back_dir = edge.get("dir"), back.get("dir")
-            if fwd_dir and back_dir:
-                if opposite_bearing(fwd_dir) != back_dir:
-                    edge.pop("dir", None)
-                    back.pop("dir", None)
-            elif fwd_dir and not back_dir:
-                back["dir"] = opposite_bearing(fwd_dir)
-            elif back_dir and not fwd_dir:
-                edge["dir"] = opposite_bearing(back_dir)
-
-    # Same-bearing collisions, resolved after reciprocity so a bearing this
-    # pass just filled in is judged too.
-    for a_id, room in rooms.items():
-        if not isinstance(room, dict):
-            continue
-        by_bearing: dict[str, list] = {}
-        for edge in room.get("adjacent") or []:
-            if isinstance(edge, dict) and edge.get("dir"):
-                by_bearing.setdefault(edge["dir"], []).append(edge)
-        for colliding in by_bearing.values():
-            if len(colliding) < 2:
-                continue
-            for edge in colliding:
-                edge.pop("dir", None)
-                back = _find_edge(rooms.get(edge.get("to")), a_id)
-                if back is not None:
-                    back.pop("dir", None)
 
     return scene
 
@@ -2053,6 +1908,12 @@ def contacts_from_entity_state(scene: dict) -> dict:
                 "target_part": target_part,
                 "manner": _manner_from_fragment(proximity) or "press",
             })
+            # This legacy pair asserted one contact jointly. Once lifted, remove
+            # both halves just as the invented-key path below removes its source:
+            # leaving them behind would re-create a pruned/removed contact on a
+            # later merge as soon as the two bodies shared a room again.
+            state.pop("target", None)
+            state.pop("proximity", None)
 
         # The invented keys: a contact verb in the NAME, a person in the VALUE.
         for key in list(state.keys()):

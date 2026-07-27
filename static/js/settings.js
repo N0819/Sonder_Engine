@@ -1,7 +1,9 @@
 // ---- Chat tool modals ----
 $("#b-world").onclick = async () => {
   if (!S.chatId) return;
-  const w = await api("GET", `/api/chats/${S.chatId}/world`);
+  const chatId = S.chatId;
+  const w = await api("GET", `/api/chats/${chatId}/world`);
+  if (S.chatId !== chatId) return;
   const ta = el("textarea", { style: "width:100%;height:420px" }, JSON.stringify(w, null, 2));
   modal("World state", b => b.append(
     el("div", { class: "small dim", style: "margin-bottom:8px" },
@@ -11,12 +13,14 @@ $("#b-world").onclick = async () => {
       + "a fact that should no longer be true)."),
     ta,
     el("div", { class: "row", style: "margin-top:8px" },
-      el("button", { class: "primary", onclick: async () => { let j; try { j = JSON.parse(ta.value) } catch (e) { return toast("Invalid JSON", "err") } await api("PUT", `/api/chats/${S.chatId}/world`, j); closeModal(); toast("World state saved.", "ok"); } }, "Save"))));
+      el("button", { class: "primary", onclick: async () => { let j; try { j = JSON.parse(ta.value) } catch (e) { return toast("Invalid JSON", "err") } await api("PUT", `/api/chats/${chatId}/world`, j); closeModal(); toast("World state saved.", "ok"); } }, "Save"))));
 };
 
 $("#b-attire").onclick = async () => {
   if (!S.chatId) return;
-  const a = await api("GET", `/api/chats/${S.chatId}/attire`);
+  const chatId = S.chatId;
+  const a = await api("GET", `/api/chats/${chatId}/attire`);
+  if (S.chatId !== chatId) return;
   const ta = el("textarea", { style: "width:100%;height:340px" }, JSON.stringify(a, null, 2));
   modal("Attire — {name:{wearing:[],state:[]}}", b => b.append(
     el("div", { class: "small dim", style: "margin-bottom:8px" },
@@ -25,7 +29,7 @@ $("#b-attire").onclick = async () => {
       + "directly only to correct something or set up a scene's starting appearance by hand."),
     ta,
     el("div", { class: "row", style: "margin-top:8px" },
-      el("button", { class: "primary", onclick: async () => { let j; try { j = JSON.parse(ta.value) } catch (e) { return toast("Invalid JSON", "err") } await api("PUT", `/api/chats/${S.chatId}/attire`, j); closeModal(); toast("Attire saved.", "ok"); } }, "Save"))));
+      el("button", { class: "primary", onclick: async () => { let j; try { j = JSON.parse(ta.value) } catch (e) { return toast("Invalid JSON", "err") } await api("PUT", `/api/chats/${chatId}/attire`, j); closeModal(); toast("Attire saved.", "ok"); } }, "Save"))));
 };
 
 // Genre & style: the author's standing instruction for anything the engine
@@ -34,7 +38,9 @@ $("#b-attire").onclick = async () => {
 // existed, not "this world has no style".
 $("#b-style").onclick = async () => {
   if (!S.chatId) return;
-  const r = await api("GET", `/api/chats/${S.chatId}/style_guide`);
+  const chatId = S.chatId;
+  const r = await api("GET", `/api/chats/${chatId}/style_guide`);
+  if (S.chatId !== chatId) return;
   const g = r.style_guide || {};
 
   const SELF = "(self-determine — infer from scenario & lore)";
@@ -66,7 +72,8 @@ $("#b-style").onclick = async () => {
     placeholder: "Never generate — e.g. modern tech, gore, named real people." },
     g.avoid || "");
 
-  const survivalState = await api("GET", `/api/chats/${S.chatId}/survival`);
+  const survivalState = await api("GET", `/api/chats/${chatId}/survival`);
+  if (S.chatId !== chatId) return;
   const survivalBox = el("input", {
     type: "checkbox", ...(survivalState.enabled ? { checked: "" } : {})
   });
@@ -98,31 +105,34 @@ $("#b-style").onclick = async () => {
         "Your own condition sits in the margin beside the prose. Everyone else's is tracked either way and read in the Cast panel — turn this on to have theirs surface alongside yours as well.")),
     el("div", { class: "row", style: "margin-top:10px" },
       el("button", { class: "primary", onclick: async () => {
-        await api("PUT", `/api/chats/${S.chatId}/survival`,
+        await api("PUT", `/api/chats/${chatId}/survival`,
                   { enabled: survivalBox.checked,
                     show_npcs: npcBox.checked });
-        await refreshVitalsHud();
-        const out = await api("PUT", `/api/chats/${S.chatId}/style_guide`, {
+        const out = await api("PUT", `/api/chats/${chatId}/style_guide`, {
           style_guide: {
             genre: genre.value, tone: tone.value,
             director_notes: dirNotes.value, mapping_notes: mapNotes.value,
             avoid: avoid.value,
           },
         });
+        if (S.chatId === chatId) await refreshVitalsHud();
         closeModal();
         toast(Object.keys(out.style_guide).length
           ? "Style guide saved." : "Style guide cleared — the engine self-determines.", "ok");
       } }, "Save"),
       el("button", { onclick: async () => {
-        await api("PUT", `/api/chats/${S.chatId}/style_guide`, { style_guide: {} });
+        await api("PUT", `/api/chats/${chatId}/style_guide`, { style_guide: {} });
         closeModal(); toast("Style guide cleared — the engine self-determines.", "ok");
       } }, "Clear all"))));
 };
 
 $("#b-dlg").onclick = async () => {
   if (!S.chatId) return;
-  const c = await api("GET", `/api/chats/${S.chatId}/dialogue_config`);
-  const bg = await api("GET", `/api/chats/${S.chatId}/background_config`);
+  const chatId = S.chatId;
+  const c = await api("GET", `/api/chats/${chatId}/dialogue_config`);
+  if (S.chatId !== chatId) return;
+  const bg = await api("GET", `/api/chats/${chatId}/background_config`);
+  if (S.chatId !== chatId) return;
   const st = el("select", {}, ["terse", "natural", "chatty"].map(s => el("option", { value: s, ...(s === c.style ? { selected: "" } : {}) }, s)));
   const mn = el("input", { type: "number", value: c.min_lines, min: "0" });
   const mx = el("input", { type: "number", value: c.max_lines, min: "0" });
@@ -216,12 +226,12 @@ $("#b-dlg").onclick = async () => {
       el("tr", {}, el("td", {}, "variance"), el("td", {}, va))),
     el("div", { class: "row", style: "margin-top:8px" },
       el("button", { class: "primary", onclick: async () => {
-        await api("PUT", `/api/chats/${S.chatId}/dialogue_config`, {
+        await api("PUT", `/api/chats/${chatId}/dialogue_config`, {
           style: st.value, min_lines: mn.value, max_lines: mx.value, variance: va.value,
           autonomy: +auto.value, allow_npc_initiative: npcInit.checked, allow_npc_to_npc_dialogue: npcNpc.checked,
           stop_on_player_address: stopAddr.checked, stop_on_question_to_player: stopQ.checked, silence_ends_exchange: silence.checked
         });
-        await api("PUT", `/api/chats/${S.chatId}/background_config`, {
+        await api("PUT", `/api/chats/${chatId}/background_config`, {
           scene_life: sceneLife.value, max_managed: +maxManaged.value,
           max_reactors: +maxReactors.value
         });
@@ -240,7 +250,9 @@ $("#b-dlg").onclick = async () => {
 // component.
 $("#b-cast").onclick = async () => {
   if (!S.chatId) return;
-  const d = await api("GET", "/api/chats/" + S.chatId);
+  const chatId = S.chatId;
+  const d = await api("GET", "/api/chats/" + chatId);
+  if (S.chatId !== chatId) return;
 
   const tabs = [
     { id: "cast", label: "Cast", render: renderCastTab },
@@ -262,7 +274,7 @@ $("#b-cast").onclick = async () => {
         button.classList.toggle("on", button.dataset.tab === tabId);
       }
       content.innerHTML = "";
-      tabs.find(t => t.id === tabId).render(d, content);
+      tabs.find(t => t.id === tabId).render(d, content, chatId);
     }
 
     for (const tab of tabs) {
@@ -278,7 +290,7 @@ $("#b-cast").onclick = async () => {
   }, { wide: true });
 };
 
-function renderCastTab(d, b) {
+function renderCastTab(d, b, chatId) {
   const ps = el("select", {}, [
     el("option", { value: "" }, "(no persona)"),
     ...S.boot.personas.map(p => el("option", {
@@ -287,7 +299,7 @@ function renderCastTab(d, b) {
     }, p.name))
   ]);
   ps.onchange = () =>
-    api("PUT", "/api/chats/" + S.chatId, {
+    api("PUT", "/api/chats/" + chatId, {
       persona_id: ps.value ? +ps.value : null
     });
 
@@ -295,7 +307,7 @@ function renderCastTab(d, b) {
     el("div", { class: "row" },
       "Persona: ", ps,
       el("button", {
-        onclick: () => personaPH()
+        onclick: () => personaPH(chatId)
       }, "🔒 persona secrets")
     )
   );
@@ -322,13 +334,13 @@ function renderCastTab(d, b) {
         onclick: async () => {
           if (p.status === "active")
             await api("DELETE",
-              `/api/chats/${S.chatId}/characters/${p.id}`);
+              `/api/chats/${chatId}/characters/${p.id}`);
           else
             await api("POST",
-              `/api/chats/${S.chatId}/characters`,
+              `/api/chats/${chatId}/characters`,
               { char_id: p.id });
           closeModal();
-          $("#b-cast").click();
+          if (S.chatId === chatId) $("#b-cast").click();
         }
       }, p.status === "active"
         ? "→ dormant" : "→ active"),
@@ -338,11 +350,11 @@ function renderCastTab(d, b) {
       }, "🧠"),
       el("button", {
         title: "How this character feels about everyone else",
-        onclick: () => relationshipModal(p)
+        onclick: () => relationshipModal(p, chatId)
       }, "💞"),
       el("button", {
         title: "Per-story private history",
-        onclick: () => chatPH(p)
+        onclick: () => chatPH(p, chatId)
       }, "🔒")));
   }
 
@@ -365,17 +377,17 @@ function renderCastTab(d, b) {
         el("button", {
           onclick: async () => {
             await api("POST",
-              `/api/chats/${S.chatId}/characters`,
+              `/api/chats/${chatId}/characters`,
               { char_id: +addSel.value });
             closeModal();
-            $("#b-cast").click();
+            if (S.chatId === chatId) $("#b-cast").click();
           }
         }, "+ add to story")));
   }
 
-  b.append(renderBackgroundPresencesPanel());
+  b.append(renderBackgroundPresencesPanel(chatId));
 
-  hydrateCastLocations(locationSlots, sceneSlot);
+  hydrateCastLocations(locationSlots, sceneSlot, chatId);
 
 }
 
@@ -385,20 +397,20 @@ function renderCastTab(d, b) {
 // including every NPC, and it is why showing them beside the prose can stay
 // off without the information being lost.
 
-function renderConditionTab(d, b) {
+function renderConditionTab(d, b, chatId) {
   const panel = el("div");
   b.append(panel);
-  hydrateConditionTab(panel);
+  hydrateConditionTab(panel, chatId);
 }
 
-async function hydrateConditionTab(panel) {
-  if (!S.chatId) {
+async function hydrateConditionTab(panel, chatId) {
+  if (!chatId) {
     return;
   }
 
   let data;
   try {
-    data = await api("GET", `/api/chats/${S.chatId}/vitals`);
+    data = await api("GET", `/api/chats/${chatId}/vitals`);
   } catch (error) {
     panel.append(emptyState("Could not read condition."));
     return;
@@ -659,14 +671,14 @@ window.refreshVitalsHud = refreshVitalsHud;
 // blob is the only source of truth for live positions, so this reads and
 // writes there and nowhere else.
 
-async function hydrateCastLocations(slots, sceneSlot) {
-  if (!slots.size || !S.chatId) {
+async function hydrateCastLocations(slots, sceneSlot, chatId) {
+  if (!slots.size || !chatId) {
     return;
   }
 
   let data;
   try {
-    data = await api("GET", `/api/chats/${S.chatId}/positions`);
+    data = await api("GET", `/api/chats/${chatId}/positions`);
   } catch (error) {
     // Relocation is an addition to this tab, not its purpose -- a failed
     // lookup must leave the rest of the cast panel working.
@@ -701,7 +713,7 @@ async function hydrateCastLocations(slots, sceneSlot) {
     const person = (data.characters || [])
       .find(c => c.id === charId);
 
-    slot.append(castRoomSelect(charId, person, rooms));
+    slot.append(castRoomSelect(charId, person, rooms, chatId));
   }
 }
 
@@ -713,7 +725,7 @@ function castRoomLabel(room) {
     : room.name;
 }
 
-function castRoomSelect(charId, person, rooms) {
+function castRoomSelect(charId, person, rooms, chatId) {
   const current = person?.room || "";
   // The last value the server accepted, which is what a failed move reverts
   // to -- not the room they were in when this dropdown was built, which goes
@@ -742,7 +754,7 @@ function castRoomSelect(charId, person, rooms) {
     try {
       await api(
         "PUT",
-        `/api/chats/${S.chatId}/characters/${charId}/position`,
+        `/api/chats/${chatId}/characters/${charId}/position`,
         { room: target }
       );
 
@@ -771,13 +783,13 @@ function castRoomSelect(charId, person, rooms) {
   return select;
 }
 
-function renderLorebooksTab(d, b) {
+function renderLorebooksTab(d, b, chatId) {
     // ── Lorebook tree panel ──
     const lbPanel = el("div", { class: "card" });
     lbPanel.append(el("h4", {}, "Lorebooks"));
 
     const refreshBooks = async () => {
-      const dd = await api("GET", "/api/chats/" + S.chatId);
+      const dd = await api("GET", "/api/chats/" + chatId);
       const attached = dd.lorebooks || [];
       lbPanel.innerHTML = "";
       lbPanel.append(el("h4", {}, "Lorebooks"));
@@ -852,7 +864,7 @@ function renderLorebooksTab(d, b) {
                   title: "Detach from story",
                   onclick: async () => {
                     await api("DELETE",
-                      `/api/chats/${S.chatId}/lorebooks/${lb.id}`);
+                      `/api/chats/${chatId}/lorebooks/${lb.id}`);
                     refreshBooks();
                   }
                 }, "✕")
@@ -912,7 +924,7 @@ function renderLorebooksTab(d, b) {
             el("button", {
               onclick: async () => {
                 await api("POST",
-                  `/api/chats/${S.chatId}/lorebooks`,
+                  `/api/chats/${chatId}/lorebooks`,
                   { lorebook_id: +addSel.value });
                 refreshBooks();
               }
@@ -934,8 +946,8 @@ function renderLorebooksTab(d, b) {
         + "updated by the mapping agent."));
 }
 
-function renderMultiplayerTab(d, b) {
-  b.append(renderGuestInvitePanel());
+function renderMultiplayerTab(d, b, chatId) {
+  b.append(renderGuestInvitePanel(chatId));
 }
 
 // ── Frames: diegetic eras, persona stationing, and paradox settings ──
@@ -945,13 +957,13 @@ function renderMultiplayerTab(d, b) {
 // attached persona is stationed to a different frame (frames.py/
 // db.py's active_frame_id contextvar is what actually makes two frames'
 // pipelines safe to run at once, not anything in this panel).
-function renderFramesTab(d, b) {
-  b.append(renderFramesListPanel());
-  b.append(renderPersonaStationingPanel());
-  b.append(renderParadoxPanel());
+function renderFramesTab(d, b, chatId) {
+  b.append(renderFramesListPanel(d, chatId));
+  b.append(renderPersonaStationingPanel(chatId));
+  b.append(renderParadoxPanel(chatId));
 }
 
-function renderFramesListPanel() {
+function renderFramesListPanel(d, chatId) {
   const panel = el("div", {});
   const refresh = async () => {
     panel.innerHTML = "";
@@ -961,7 +973,7 @@ function renderFramesListPanel() {
       "Declare a different era of this same story -- a flash-forward, a visit "
       + "to the past. Switch between them with the pills next to the story name."));
 
-    const { frames } = await api("GET", `/api/chats/${S.chatId}/frames`);
+    const { frames } = await api("GET", `/api/chats/${chatId}/frames`);
     for (const f of frames) {
       if (f.id === null) continue; // the implicit present -- nothing to show
       panel.append(el("div", { class: "card row" },
@@ -999,13 +1011,15 @@ function renderFramesListPanel() {
             const label = labelIn.value.trim();
             if (!label) { toast("Give the frame a label.", "warn"); return; }
             try {
-              await api("POST", `/api/chats/${S.chatId}/frames`, {
+              await api("POST", `/api/chats/${chatId}/frames`, {
                 label, ordinal: +ordinalIn.value || 0, kind: kindSel.value,
                 travelers: [...travelersSel.selectedOptions].map(o => +o.value),
                 nonexistent_cast: [...nonexistentSel.selectedOptions].map(o => +o.value),
               });
               toast("Frame created.", "ok");
-              await openChat(S.chatId); // refresh the frame pills too
+              if (S.chatId === chatId) {
+                await openChat(chatId); // refresh the frame pills too
+              }
               refresh();
             } catch (e) {
               toast("Could not create frame: " + e.message, "err");
@@ -1017,7 +1031,7 @@ function renderFramesListPanel() {
   return panel;
 }
 
-function renderPersonaStationingPanel() {
+function renderPersonaStationingPanel(chatId) {
   const panel = el("div", { style: "margin-top:14px" });
   const refresh = async () => {
     panel.innerHTML = "";
@@ -1025,8 +1039,8 @@ function renderPersonaStationingPanel() {
       el("span", { class: "lore-panel-title" }, "Who's where")));
 
     const [{ personas }, { frames }] = await Promise.all([
-      api("GET", `/api/chats/${S.chatId}/personas`),
-      api("GET", `/api/chats/${S.chatId}/frames`),
+      api("GET", `/api/chats/${chatId}/personas`),
+      api("GET", `/api/chats/${chatId}/frames`),
     ]);
 
     if (!personas.length) {
@@ -1043,7 +1057,7 @@ function renderPersonaStationingPanel() {
         }, f.id === null ? "Present" : f.label)));
       sel.onchange = async () => {
         try {
-          await api("PUT", `/api/chats/${S.chatId}/personas/${p.id}/station`,
+          await api("PUT", `/api/chats/${chatId}/personas/${p.id}/station`,
             { frame_id: sel.value ? +sel.value : null });
           toast(`${p.name} is now in ${sel.options[sel.selectedIndex].text}.`, "ok");
         } catch (e) {
@@ -1058,7 +1072,7 @@ function renderPersonaStationingPanel() {
   return panel;
 }
 
-function renderParadoxPanel() {
+function renderParadoxPanel(chatId) {
   const panel = el("div", { style: "margin-top:14px" });
   const refresh = async () => {
     panel.innerHTML = "";
@@ -1069,9 +1083,9 @@ function renderParadoxPanel() {
       + "only ones you deliberately pin below as load-bearing."));
 
     const [policy, { fixed_points, paradoxes }, { frames }] = await Promise.all([
-      api("GET", `/api/chats/${S.chatId}/paradox_policy`),
-      api("GET", `/api/chats/${S.chatId}/fixed_points`),
-      api("GET", `/api/chats/${S.chatId}/frames`),
+      api("GET", `/api/chats/${chatId}/paradox_policy`),
+      api("GET", `/api/chats/${chatId}/fixed_points`),
+      api("GET", `/api/chats/${chatId}/frames`),
     ]);
 
     // Each frame has its OWN independent paradox slot -- more than one
@@ -1091,7 +1105,7 @@ function renderParadoxPanel() {
         value: m, ...(policy.mode === m ? { selected: "" } : {}),
       }, m)));
     modeSel.onchange = async () => {
-      await api("PUT", `/api/chats/${S.chatId}/paradox_policy`, { mode: modeSel.value });
+      await api("PUT", `/api/chats/${chatId}/paradox_policy`, { mode: modeSel.value });
       toast("Paradox policy updated.", "ok");
     };
     panel.append(el("div", { class: "row" },
@@ -1107,7 +1121,7 @@ function renderParadoxPanel() {
         el("span", { class: "small dim" }, fp.required_exists ? `${fp.entity_id} must exist` : `${fp.entity_id} must NOT exist`),
         el("button", {
           onclick: async () => {
-            await api("DELETE", `/api/chats/${S.chatId}/fixed_points/${fp.anchor_id}`);
+            await api("DELETE", `/api/chats/${chatId}/fixed_points/${fp.anchor_id}`);
             refresh();
           }
         }, "✕")));
@@ -1128,7 +1142,7 @@ function renderParadoxPanel() {
             return;
           }
           try {
-            await api("POST", `/api/chats/${S.chatId}/fixed_points`, {
+            await api("POST", `/api/chats/${chatId}/fixed_points`, {
               entity_id: entityIn.value.trim(), label: labelIn.value.trim(),
               required_exists: requireSel.value === "1",
             });
@@ -1150,12 +1164,12 @@ function renderParadoxPanel() {
 // license + commit.py's track_background_presences) -- promotion is
 // always user-confirmed, never automatic, since generating a sheet costs
 // a real LLM call and a permanent cast slot for what might be a one-off.
-function renderBackgroundPresencesPanel() {
+function renderBackgroundPresencesPanel(chatId) {
   const panel = el("div", {});
   panel.append(el("div", { class: "lore-panel-head" },
     el("span", { class: "lore-panel-title" }, "Background presences")));
 
-  api("GET", `/api/chats/${S.chatId}/promotable`).then(({ presences }) => {
+  api("GET", `/api/chats/${chatId}/promotable`).then(({ presences }) => {
     if (!presences.length) {
       panel.append(el("div", { class: "small dim" },
         "None tracked yet -- named entities the story keeps present without a character sheet will show up here."));
@@ -1168,7 +1182,7 @@ function renderBackgroundPresencesPanel() {
           `${p.dialogue_turns.length} line(s), ${p.mention_turns.length} mention(s)`));
       if (p.promotable) {
         row.append(el("button", {
-          onclick: () => promoteBackgroundPresence(S.chatId, p.name),
+          onclick: () => promoteBackgroundPresence(chatId, p.name),
         }, "✨ Promote to character"));
       } else {
         row.append(el("span", { class: "badge" }, "not yet"));
@@ -1189,7 +1203,7 @@ function renderBackgroundPresencesPanel() {
 // input into the same beat) -- this panel just adds the missing "attach
 // a persona as an extra player" + "generate a join code for them" UI on
 // top of plumbing that otherwise only had HTTP-level test coverage.
-function renderGuestInvitePanel() {
+function renderGuestInvitePanel(chatId) {
   const panel = el("div", {});
 
   const refresh = async () => {
@@ -1197,11 +1211,11 @@ function renderGuestInvitePanel() {
     panel.append(el("div", { class: "lore-panel-head" },
       el("span", { class: "lore-panel-title" }, "Invite a friend")));
 
-    const extras = await api("GET", `/api/chats/${S.chatId}/personas`).catch(() => ({ personas: [] }));
+    const extras = await api("GET", `/api/chats/${chatId}/personas`).catch(() => ({ personas: [] }));
     const attached = extras.personas || [];
 
     if (attached.length) {
-      const invites = (await api("GET", `/api/chats/${S.chatId}/guest_invites`)).grants;
+      const invites = (await api("GET", `/api/chats/${chatId}/guest_invites`)).grants;
       for (const p of attached) {
         const row = el("div", { class: "card row" }, el("b", {}, p.name));
         const forThisPersona = invites.filter(g => g.persona_id === p.id);
@@ -1214,7 +1228,7 @@ function renderGuestInvitePanel() {
               : null,
             el("button", {
               title: "Revoke", onclick: async () => {
-                await api("DELETE", `/api/chats/${S.chatId}/guest_invites/${active.id}`);
+                await api("DELETE", `/api/chats/${chatId}/guest_invites/${active.id}`);
                 refresh();
               }
             }, "revoke")
@@ -1222,7 +1236,7 @@ function renderGuestInvitePanel() {
         } else {
           row.append(el("button", {
             onclick: async () => {
-              const invite = await api("POST", `/api/chats/${S.chatId}/guest_invites`,
+              const invite = await api("POST", `/api/chats/${chatId}/guest_invites`,
                 { persona_id: p.id });
               const link = `${location.origin}/guest?code=${invite.code}`;
               modal("Share this with your friend", b => b.append(
@@ -1262,7 +1276,7 @@ function renderGuestInvitePanel() {
               });
               pid = r.id;
             }
-            await api("POST", `/api/chats/${S.chatId}/personas`, { persona_id: pid });
+            await api("POST", `/api/chats/${chatId}/personas`, { persona_id: pid });
             await boot();
             refresh();
           }
@@ -1280,19 +1294,19 @@ function renderGuestInvitePanel() {
 // single character or player legitimately sees this. Neither panel
 // claims to know a belief is wrong or a promise was broken/kept: that
 // judgment call belongs to whoever reads it, not a keyword heuristic.
-function renderInsightsTab(d, b) {
-  b.append(renderDramaticIronyPanel());
-  b.append(renderPromiseLedgerPanel());
+function renderInsightsTab(d, b, chatId) {
+  b.append(renderDramaticIronyPanel(chatId));
+  b.append(renderPromiseLedgerPanel(chatId));
 }
 
-function renderDramaticIronyPanel() {
+function renderDramaticIronyPanel(chatId) {
   const panel = el("div", {});
   panel.append(el("div", { class: "lore-panel-head" },
     el("span", { class: "lore-panel-title" }, "Dramatic irony")));
   panel.append(el("div", { class: "small dim", style: "margin-bottom:6px" },
     "What each character currently believes without having witnessed it firsthand -- secondhand, told, or inferred. Whether it's actually wrong is for you to judge."));
 
-  api("GET", `/api/chats/${S.chatId}/dramatic_irony`).then(({ feed }) => {
+  api("GET", `/api/chats/${chatId}/dramatic_irony`).then(({ feed }) => {
     if (!feed.length) {
       panel.append(el("div", { class: "small dim" },
         "Nothing tracked yet -- beliefs a character formed secondhand or by inference will show up here."));
@@ -1314,14 +1328,14 @@ function renderDramaticIronyPanel() {
   return panel;
 }
 
-function renderPromiseLedgerPanel() {
+function renderPromiseLedgerPanel(chatId) {
   const panel = el("div", { style: "margin-top:14px" });
   panel.append(el("div", { class: "lore-panel-head" },
     el("span", { class: "lore-panel-title" }, "Promise ledger")));
   panel.append(el("div", { class: "small dim", style: "margin-bottom:6px" },
     "Every promise-category memory across the whole story, in order. Kept or broken is a judgment call this doesn't make for you."));
 
-  api("GET", `/api/chats/${S.chatId}/promises`).then(({ promises }) => {
+  api("GET", `/api/chats/${chatId}/promises`).then(({ promises }) => {
     if (!promises.length) {
       panel.append(el("div", { class: "small dim" },
         "No promises tracked yet."));
@@ -2013,13 +2027,20 @@ $("#b-update").onclick = () => {
 };
 
 function renderUpdateChecking(b) {
+  const ownsModal = modalOwnership(b);
   b.innerHTML = "";
   b.append(el("div", { class: "row" },
     el("span", { class: "spinner" }),
     el("span", { class: "dim" }, "Checking GitHub for updates…")));
   api("GET", "/api/updates/check")
-    .then(r => renderUpdateStatus(b, r))
-    .catch(e => renderUpdateError(b, e?.message || "Update check failed."));
+    .then(r => {
+      if (!ownsModal()) return;
+      renderUpdateStatus(b, r);
+    })
+    .catch(e => {
+      if (!ownsModal()) return;
+      renderUpdateError(b, e?.message || "Update check failed.");
+    });
 }
 
 function renderUpdateError(b, message, retry = renderUpdateChecking) {
@@ -2073,8 +2094,8 @@ function renderUpdateStatus(b, r) {
 
   if (r.dirty) {
     b.append(el("div", { class: "dim", style: "margin-top:10px;white-space:pre-wrap" },
-      "⚠ You have local uncommitted changes. The update only fast-forwards, "
-      + "so it will refuse to run if those edits would be overwritten."));
+      "⚠ You have local uncommitted changes. Commit or stash them before "
+      + "installing an update."));
   }
 
   const installBtn = el("button", { class: "primary" }, "Install update");
@@ -2085,6 +2106,7 @@ function renderUpdateStatus(b, r) {
 }
 
 function runUpdateInstall(b, btn) {
+  const ownsModal = modalOwnership(b);
   btn.disabled = true;
   btn.textContent = "Installing…";
   const status = el("div", { class: "row", style: "margin-top:10px" },
@@ -2092,12 +2114,17 @@ function runUpdateInstall(b, btn) {
   b.append(status);
   api("POST", "/api/updates/install")
     .then(r => {
+      if (!ownsModal()) return;
       status.remove();
       if (!r || !r.ok) return renderUpdateError(b, (r && r.error) || "Install failed.");
       if (!r.updated) { toast(r.message || "Already up to date.", "ok"); return renderUpdateChecking(b); }
       renderUpdateDone(b, r);
     })
-    .catch(e => { status.remove(); renderUpdateError(b, e?.message || "Install failed."); });
+    .catch(e => {
+      if (!ownsModal()) return;
+      status.remove();
+      renderUpdateError(b, e?.message || "Install failed.");
+    });
 }
 
 function renderUpdateDone(b, r) {

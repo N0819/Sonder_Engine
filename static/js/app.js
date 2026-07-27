@@ -733,7 +733,8 @@ $("#send").onclick = () => {
 
   runStream(
     `/api/chats/${S.chatId}/turns`,
-    { input: text, frame_id: S.currentFrameId }
+    { input: text, frame_id: S.currentFrameId },
+    { chatId: S.chatId, frameId: S.currentFrameId }
   ).then(ok => {
     // The turn never started (e.g. immediate POST failure) -- give the
     // player their typed input back instead of silently eating it.
@@ -745,10 +746,7 @@ $("#send").onclick = () => {
 };
 
 $("#stop").onclick = () => {
-  if (S.chatId) {
-    const q = S.currentFrameId != null ? `?frame_id=${S.currentFrameId}` : "";
-    api("POST", `/api/chats/${S.chatId}/abort${q}`);
-  }
+  abortActiveRun();
 };
 
 $("#b-nsfw").onclick = toggleNSFW;

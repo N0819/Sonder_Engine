@@ -410,6 +410,18 @@ class TestLiftingContactOutOfEntityState:
         assert len(scene["contacts"]) == 1
         assert scene["contacts"][0]["actor"] == "Bramwell"
         assert scene["contacts"][0]["manner"] == "press"
+        state = scene["entities"]["Bramwell"]["state"]
+        assert "target" not in state
+        assert "proximity" not in state
+
+        # Once movement prunes the lifted relation, sharing a room again must
+        # not recreate it from stale copies of the legacy assertion.
+        scene = merge_scene_with_diff(
+            scene, {"positions": {"Bramwell": "hall"}})
+        assert scene["contacts"] == []
+        scene = merge_scene_with_diff(
+            scene, {"positions": {"Bramwell": "bedroom"}})
+        assert scene["contacts"] == []
 
     def test_mere_nearness_does_not_become_contact(self):
         """`close_on_bed` is proximity, not contact -- stations model that.

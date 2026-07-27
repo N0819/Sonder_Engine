@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  fast:
+    name: Fast checks (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            constraints.txt
+            requirements*.txt
+      - name: Install test dependencies
+        run: python -m pip install -c constraints.txt -r requirements-dev.txt
+      - name: Run fast checks
+        run: make check-fast
+
+  full:
+    name: Full Python suite
+    needs: fast
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            constraints.txt
+            requirements*.txt
+      - name: Install test dependencies
+        run: python -m pip install -c constraints.txt -r requirements-dev.txt
+      - name: Run full suite
+        run: make test-full
+
+  browser:
+    name: Browser behavior
+    needs: fast
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            constraints.txt
+            requirements*.txt
+      - name: Install browser-test dependencies
+        run: python -m pip install -c constraints.txt -r requirements-browser.txt
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Run browser behavior tests
+        run: make test-browser
