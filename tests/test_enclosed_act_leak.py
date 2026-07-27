@@ -464,6 +464,14 @@ def _speaking_enclosure_ctx(temp_db):
                           "visibility": "overt", "conceal_from": []}],
         "state_diff": {},
     }
+    # Give the carrier a minimal character result so they appear in `sources`
+    # (perception_outcome only adds cast members who spoke/acted this beat).
+    cast_id = cast[0]["id"] if cast else 1
+    ctx.character_results = {
+        cast_id: {"name": CARRIER, "sequence": [
+            {"type": "speech", "text": "Stay still.",
+             "visibility": "overt"}]}
+    }
     return ctx
 
 
@@ -559,7 +567,11 @@ def test_outcome_payload_keeps_appearances_someone_can_see(
     seen = {}
 
     def capture(role, key, system, payload, **kw):
-        seen.update(payload)
+        # With per-observer LLM calls, each call has one perceiver.
+        # Capture the player's perceiver payload specifically.
+        for p in (payload.get("perceivers") or []):
+            if p.get("id") == "player":
+                seen.update(payload)
         return {"views": {"player": "You are in the Hall."}}
 
     monkeypatch.setattr(perception, "_agent_json", capture)

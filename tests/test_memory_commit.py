@@ -157,4 +157,4 @@ def test_episode_does_not_append_dialogue_again(
     ) == 1
 
     assert len(promises) == 1
-    assert promises[0]["gist"] == "Bob: I promise I will return."
+    assert promises[0]["gist"] == "a voice: I promise I will return."
