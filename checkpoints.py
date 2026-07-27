@@ -503,17 +503,36 @@ def _restore_checkpoint_body(chat_id, r):
             wset(chat_id, k, v)
         for k, v in preserved.items():
             wset(chat_id, k, v)
-        # Membership is diegetic state too. A character promoted or attached
-        # by the discarded run must not survive as a hollow cast member after
-        # its memories, recognition and scene state have rolled back.
-        snapshot_char_ids = {
-            int(cidk) for cidk in (b.get("chars") or {})
-            if str(cidk).lstrip("-").isdigit()
-        }
-        for row in q(
-            "SELECT char_id FROM chat_chars WHERE chat_id=?", (chat_id,),
-        ):
-            if int(row["char_id"]) not in snapshot_char_ids:
+        # P4: membership is diegetic state too. A character AUTO-PROMOTED by
+        # the discarded run must not survive as a hollow cast member after its
+        # memories, recognition and scene state have rolled back.
+        #
+        # Two guards, both load-bearing. `"chars" in b` distinguishes a
+        # snapshot that recorded an empty cast from a legacy blob that has no
+        # chars key at all -- `b.get("chars") or {}` reads the same for both,
+        # and on the legacy blob an unguarded sweep deletes the ENTIRE cast.
+        # And a row carrying an authored per-story card is skipped: `sheet` is
+        # Cast-tab authoring, not a turn fact (CLAUDE.md keeps it separate from
+        # `state` for exactly this reason), it is not in the snapshot, and
+        # DELETE would destroy it with nothing to restore it from. Note the
+        # neighbouring _restore_frames explains at length why this file avoids
+        # deleting rows other tables and the author depend on; the same caution
+        # applies here.
+        if "chars" in b:
+            snapshot_char_ids = {
+                int(cidk) for cidk in (b.get("chars") or {})
+                if str(cidk).lstrip("-").isdigit()
+            }
+            for row in q(
+                "SELECT char_id, sheet FROM chat_chars WHERE chat_id=?",
+                (chat_id,),
+            ):
+                if int(row["char_id"]) in snapshot_char_ids:
+                    continue
+                if str(row["sheet"] or "").strip():
+                    # Left attached deliberately: a visible cast member with
+                    # rolled-back state beats silently discarding the card.
+                    continue
                 qi(
                     "DELETE FROM chat_chars WHERE chat_id=? AND char_id=?",
                     (chat_id, row["char_id"]),

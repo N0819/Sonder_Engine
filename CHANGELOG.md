@@ -1,5 +1,178 @@
 # Changelog
 
+## Unreleased — Concealment for parented interior rooms
+
+### Added
+
+- **Conducted hearing, one way only.** A body inside another body's interior is
+  not listening through a wall — the enclosing body is the medium, so its voice
+  arrives close and low rather than faint. `hear_level` honours an
+  `inside_source` relation flag set by `spatial_rel_between` and
+  `_source_channels`. Strictly one-way: the reverse direction is a voice trying
+  to get OUT through that same mass, which the barrier already models. Grants no
+  sight, and a murmur still only fragments — it changes the medium, not the
+  volume.
+
+### Changed
+
+- **A muffled line is now a partial transcript, not a description of one.**
+  Fragment rendering emitted `"...something about <three middle words>..."`,
+  which narrated the act of half-hearing instead of delivering the percept, read
+  badly in prose, and gave the narrator a stock phrase to echo. It now drops
+  function words and keeps the stressed ones that actually carry
+  (`...climax... going... squeeze...`). Each surviving word is emitted as its own
+  verbatim chunk, because `_scrub_invented_dialogue` validates a muffled line
+  chunk-by-chunk against what was really said — a chunk stitched across
+  punctuation would get the whole line dropped as invented.
+
+### Fixed
+
+- **An occupant of a room parented to another entity was concealed by nothing.**
+  Found live. A scene can express one entity inside another two ways — the
+  `contained` ledger, or a room carrying `parent_entity` which the occupant
+  simply has as their position — and every concealment mechanism keyed off the
+  ledger alone. The room form therefore read as an ordinary occupant of an
+  ordinary adjacent room: `containment_conceals` returned False in both
+  directions, so the enclosing entity kept a sight channel to what it contained,
+  and the occupant got no touch channel to what surrounded them. Seen when they
+  should not have been, and not felt when they should have been.
+
+  `spatial._hiding_holders` now resolves both forms, exposed publicly as
+  `hiding_holders_of`; `agents/perception._touch_only_sources` reads through it
+  rather than the raw ledger.
+
+- **The threshold-crossing grace defeated it even once fixed.**
+  `crossing_visible_from` floors sight at `shapes` for two beats so a body does
+  not blink out mid-step through a doorway. Entry into a parented interior is
+  not a threshold anyone stands part-way through, so the grace kept an occupant
+  rendering as `shapes` to the very entity enclosing them for two beats after
+  entry was complete — the concealment failing exactly where it mattered. The
+  grace no longer applies when the body is inside a parented interior; what the
+  enclosing entity has instead is the touch channel, which tells it more than a
+  silhouette would.
+
+- **X18 closed.** `scene.director_context` now takes `entitled`, and
+  `agents/mapping.py` passes `entitled=False`. The Director is genuinely
+  entitled to the omniscient record — it owns objective causality. Mapping is
+  not: it emits lore entries and `scene_patch` room notes, and `room_notes` is
+  served into every perceiver's payload, which is the laundering chain the audit
+  traced. An unentitled caller gets concealment-scrubbed resolved text and no
+  `player_input` for a turn carrying concealed player speech.
+
+## Unreleased — Sensation constrains cognition
+
+### Fixed
+
+- **Reappraisal was checked against a hardcoded calm.** `select_active_hypotheses`
+  asked `due_for_reappraisal` with current absorption pinned to `0.0`, so every
+  belief reached in extremity was flagged unconditionally — including for a
+  character still in the grip of the thing that produced it, told to reconsider
+  it "now that the body does not have your attention" while it plainly did.
+- **Reinforcement erased belief provenance.** The merged hypothesis is rebuilt
+  from the incoming update, so `first_seen_turn` and `formed_under` were dropped
+  every time a belief was restated: a conclusion reached in agony and merely
+  repeated became one that had always been held calmly, and could never come up
+  for review. Provenance belongs to the belief, not to the update that last
+  touched it.
+- **Reappraisal did nothing.** `formed_under` was stamped, mentioned in the
+  payload, and acted on by no code — the whole re-evaluation rested on the model
+  complying with an advisory string, which is not a guarantee this engine
+  accepts anywhere else. It now raises plasticity (bounded, so revision still
+  needs repeated evidence rather than one beat), and clears the stamp once
+  reviewed so it stops re-flagging forever.
+- **F8: the declared `kind` is no longer taken on trust.** Every ceiling keys off
+  it, and nothing checked it — not adversarially, just the path of least
+  resistance: a model wanting confidence about "Vorne is the sort who sells
+  people out" declares it `observation` (cap 1.0) rather than `trait` (0.45),
+  and the whole gradient, including the absorption erosion built on it, stops
+  applying. `effective_kind` lets the claim's own language vote and takes the
+  stricter of the two. Arranged so a misfire can only ever make a character less
+  sure, never more.
+
+### Added
+
+- **Absorption: what the body's claim on attention does to thought.**
+  `psychology_runtime.cognitive_absorption` measures how much of a mind its own
+  body currently has, and is deliberately **blind to valence** — pain and
+  pleasure are opposites in what they are worth to a character and identical in
+  what they cost. It is a separate axis from distress: `load`/`overloaded` stay
+  strain-only, because a demanding drive is not a coping failure but is still
+  something the mind is busy with. The curve is convex, so ordinary discomfort
+  costs little and severe sensation takes over.
+
+  `theory_of_mind` spends the figure three ways. The existing confidence-cap
+  table is already an *effort* gradient, so `absorbed_cap` erodes its effortful
+  end and leaves the immediate end alone: at full absorption `observation` still
+  caps at 1.0 while `second_order` falls 0.50 → 0.12. A character in agony does
+  not get worse at noticing what is in front of them, only at working out why
+  someone is doing what they are doing (Easterbrook cue-utilisation narrowing).
+  `formation_floor` makes a genuinely NEW hypothesis clear a bar before it can
+  form at all. And the hypothesis sheet shrinks.
+
+  Absorption gates **formation, not reinforcement**: recognising more of what
+  you already think is automatic processing and survives, while building a
+  theory is controlled and does not (Shiffrin & Schneider). An earlier version
+  applied the eroded cap to both, so a beat that *confirmed* a settled belief
+  cut it from 0.6 to 0.37 — absorption eating convictions it should only have
+  stopped the character adding to.
+
+- **The stable hypothesis sheet.** The character payload carried every tracked
+  entity's leading belief plus competitors with no overall bound, and nothing in
+  the structure said *these are your guesses* — a mind reading its own
+  conjecture back as settled fact, which is the same information-layer collapse
+  this engine polices between minds, happening inside one.
+
+  `select_active_hypotheses` keeps 1–5 open questions on
+  `chat_chars.state.active_hypotheses`, each keyed `i_suspect` so the field name
+  carries the epistemic status. Selection has hysteresis, so the sheet is
+  *stable*: an incumbent holds its slot unless clearly beaten, and it stops
+  churning every turn as confidences wobble. Capacity is `sheet_capacity`, so
+  someone merely in more pain than last beat holds fewer open questions even
+  though they concluded nothing new.
+
+- **Beliefs reached in extremity come back up for review.** A hypothesis formed
+  under absorption is stamped `formed_under` rather than merely capped, and
+  `due_for_reappraisal` re-opens it once the character is calmer. Neither
+  standing as though it were reached calmly, nor discounted forever — reviewed
+  when there is room to review it.
+
+  No schema change: all of it rides on `chat_chars.state`, already round-tripped
+  through archive, checkpoint, and branch.
+
+## Unreleased — Belief-weighted recall
+
+### Added
+
+- **Recall now follows belief.** An inference memory was minted with the
+  confidence the character declared the moment they formed it, and nothing ever
+  revisited it — while their `mind_models` kept moving underneath, since
+  `theory_of_mind.apply_mind_model_updates` blends a restated belief up,
+  partially explains away the competitor it displaces, decays the unreinforced,
+  and prunes below the floor. A character could therefore hold one belief and
+  preferentially *recall* the one they had already abandoned, because retrieval
+  ranked on a number frozen at mint time.
+
+  `theory_of_mind.belief_credence` answers "what does this character believe
+  about this claim now?" using the same matcher and threshold the merge itself
+  uses, and `memory.reconcile_inference_confidence` projects that credence back
+  onto the memories that expressed it at commit. `search_memories` adds a signed
+  belief term for `kind='inference'` rows, so the held belief outranks the
+  revised one on an otherwise equal match.
+
+  A belief that was explained away is pushed toward a floor, never erased — "I
+  was sure of this and I was wrong" stays recallable. `salience` is untouched:
+  how much an inference mattered when formed (which drives consolidation) is a
+  different question from how much the character credits it now.
+
+  Firewall: the reconcile's only inputs are that character's own memory rows and
+  own `mind_models`. It never consults the objective record or asks whether a
+  belief was *true* — a character revises from what they later perceived, and
+  grading beliefs against reality would collapse the belief layer into the truth
+  layer. Pinned structurally by `tests/test_belief_weighted_recall.py`.
+
+  No schema change: `memories.confidence` already existed and already
+  round-tripped through archive, checkpoint, and branch.
+
 ## Unreleased — Pipeline audit information-leak fixes
 
 ### Fixed
@@ -9,7 +182,7 @@
   character by canonical name in the background-presence payload — the same
   identity leak `_unknown_actor_label` closes everywhere else. A player who
   had not met a character still saw their name in background dialogue. Fixed
-  by applying the player's `known` recognition map: unrecognized characters
+  by applying that presence's OWN `known` recognition ledger: unrecognized characters
   are rendered as their appearance-derived label or "someone" rather than
   their canonical name, mirroring `deterministic_micro_perception`.
 
@@ -75,9 +248,13 @@
   `search_memories` and `build_character_memory_context` in `memory.py` had
   no turn cutoff, so a reroll could load memories minted during the turn
   being rerolled — the character would "remember" something that hadn't
-  happened yet. Fixed with an optional `max_turn_idx` parameter that
-  excludes memories with `turn_idx > max_turn_idx`; rerolls pass the prior
-  turn's index as the cutoff.
+  happened yet. `current_turn_idx` was passed but fed only the recency
+  scoring, so those rows ranked highly instead of being dropped. Fixed by
+  making it a hard filter applied before ranking: a search that supplies a
+  current turn never sees `turn_idx >= current_turn_idx`. Rows with a NULL
+  `turn_idx` (imported or authored) belong to no turn and are kept. The
+  author-facing memory-search route now omits `current_turn_idx` so the
+  Memories tab still shows the turn just played.
 
 - **Dialogue memories stored unrecognized speaker names (F2/P1).**
   `commit.py` minted dialogue memories with the speaker's canonical name

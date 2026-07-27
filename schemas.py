@@ -1709,7 +1709,6 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
                 # X14: preserve concealment markers a weak model may embed
                 # in a string line (e.g. "[concealed] Sarah: I know").
                 line_visibility = "overt"
-                line_conceal_from = []
                 m = re.match(r'^\s*\[(concealed|overt)\]\s*(.*)', text, re.IGNORECASE)
                 if m:
                     line_visibility = m.group(1).lower()
@@ -1720,8 +1719,6 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
                 else:
                     line = {"speaker": "unknown", "exact_quote": text}
                 line["visibility"] = line_visibility
-                if line_conceal_from:
-                    line["conceal_from"] = line_conceal_from
             if not isinstance(line, dict):
                 continue
 

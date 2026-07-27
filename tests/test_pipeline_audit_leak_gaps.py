@@ -21,6 +21,7 @@ import time
 
 import pytest
 
+import memory
 from character_schema import default_character_data
 from pipeline_context import ChatData, PipelineContext, TurnData
 from schemas import preprocess_llm_output
@@ -79,24 +80,71 @@ class TestStringLineConcealment:
 
 
 # ---------------------------------------------------------------------------
-# F1: Reroll memory turn cutoff (search_memories max_turn_idx)
+# F1: Reroll memory turn cutoff (search_memories current_turn_idx)
 # ---------------------------------------------------------------------------
 
 class TestRerollMemoryCutoff:
-    """search_memories should accept a max_turn_idx parameter that excludes
-    memories with turn_idx > max_turn_idx."""
+    """A mind deciding turn N must not retrieve turn N's own committed
+    outcome. `current_turn_idx` is the single hard filter that guarantees it;
+    it was once only a recency-scoring hint, which is what let a reroll read
+    the discarded future of the beat it was re-deciding (audit F1).
 
-    def test_max_turn_idx_parameter_exists(self):
-        import inspect
-        from memory import search_memories
-        sig = inspect.signature(search_memories)
-        assert "max_turn_idx" in sig.parameters
+    Asserted behaviourally against a populated bank -- the earlier version of
+    this test only checked that a parameter name appeared in a signature,
+    which a broken filter would have passed just as happily.
+    """
 
-    def test_build_character_memory_context_max_turn_idx(self):
-        import inspect
-        from memory import build_character_memory_context
-        sig = inspect.signature(build_character_memory_context)
-        assert "max_turn_idx" in sig.parameters
+    def _bank(self, db):
+        chat_id = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                        ("Test", "", time.time()))
+        char_id = db.qi(
+            "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
+            ("Alice", json.dumps(default_character_data("Alice")), "{}", time.time()))
+        memory.add_memory(chat_id, char_id, None, "episode", "witnessed", 0.9,
+                          "Alice watched the lantern go out.", turn_idx=3,
+                          gist="the lantern went out")
+        memory.add_memory(chat_id, char_id, None, "episode", "witnessed", 0.9,
+                          "Alice watched the lantern shatter on the floor.", turn_idx=7,
+                          gist="the lantern shattered")
+        memory.add_memory(chat_id, char_id, None, "episode", "witnessed", 0.9,
+                          "Alice watched the lantern be swept up afterwards.", turn_idx=8,
+                          gist="the lantern was swept up")
+        return chat_id, char_id
+
+    def test_current_and_later_turns_are_dropped(self, temp_db):
+        chat_id, char_id = self._bank(temp_db)
+        found = memory.search_memories(chat_id, char_id, "lantern", k=10,
+                                       current_turn_idx=7)
+        assert {m["turn_idx"] for m in found} == {3}
+
+    def test_no_cutoff_when_current_turn_idx_is_omitted(self, temp_db):
+        """The filter is opt-in: an author-facing search with no turn context
+        must still see the whole bank."""
+        chat_id, char_id = self._bank(temp_db)
+        found = memory.search_memories(chat_id, char_id, "lantern", k=10)
+        assert {m["turn_idx"] for m in found} == {3, 7, 8}
+
+    def test_unplaced_memories_survive_the_cutoff(self, temp_db):
+        """turn_idx IS NULL rows (imported/authored) belong to no turn, so
+        they cannot be this turn's leaked outcome and must not be dropped."""
+        chat_id, char_id = self._bank(temp_db)
+        memory.add_memory(chat_id, char_id, None, "semantic", "authored", 0.9,
+                          "Alice has always hated lantern light.", turn_idx=None,
+                          gist="hates lantern light")
+        found = memory.search_memories(chat_id, char_id, "lantern", k=10,
+                                       current_turn_idx=7)
+        assert None in {m["turn_idx"] for m in found}
+
+    def test_character_context_cannot_see_this_turns_outcome(self, temp_db):
+        """The end-to-end path a rerolled character step actually takes."""
+        chat_id, char_id = self._bank(temp_db)
+        ctx = memory.build_character_memory_context(
+            chat_id=chat_id, char_id=char_id, current_turn_idx=7,
+            current_view="The lantern is guttering.", active_state={})
+        episodes = ctx["recent_episodes"] + ctx["recalled_old_memories"]
+        assert episodes, "bank must be non-empty or this test is vacuous"
+        assert all(e.get("turn_idx") is None or e["turn_idx"] < 7 for e in episodes)
+        assert "shatter" not in " ".join(str(e.get("content") or "") for e in episodes)
 
 
 # ---------------------------------------------------------------------------
@@ -205,8 +253,16 @@ class TestCoPresentPositionsLeak:
         assert payload["Bob"]["moved"] is False
 
     def test_character_who_arrived_in_positions(self, temp_db):
-        """A character who arrived from another room should appear with
-        moved=True and prev_room set."""
+        """A character who arrived in the player's room appears with
+        moved=True -- the player watched them walk in -- but their ORIGIN is
+        only named when the player can see into it.
+
+        Rewritten for the second half of S3-A4: this test previously asserted
+        prev_room == "Room 2" for an entrant out of a room r1 has no sight
+        line to at all, which is the leak the audit named (the player is told
+        the display name of a room they may never have heard of). The arrival
+        itself stays -- withholding a body the player plainly sees would break
+        ordinary narration -- and the origin is asserted BOTH ways below."""
         from agents.narration import _position_delta_payload
         ctx, ids, scene, chat_id = self._setup_ctx(
             temp_db, ["Alice", "Bob"], {"r1": "Room 1", "r2": "Room 2"})
@@ -226,6 +282,16 @@ class TestCoPresentPositionsLeak:
         # Bob arrived in r1 -> should be in payload with moved=True
         assert "Bob" in payload
         assert payload["Bob"]["moved"] is True
+        # r1 has no adjacency to r2 at all: the player saw him arrive, not
+        # where he came from.
+        assert payload["Bob"]["prev_room"] is None
+
+        # Give r1 a sight line into r2 and the origin becomes the player's to
+        # know, so it ships.
+        outcome_scene["rooms"]["r1"]["adjacent"] = [
+            {"to": "r2", "barrier": "open", "distance": "near"}]
+        payload, facts, room_names = _position_delta_payload(
+            ctx, ctx.chat, "Alice", "r1", {"Bob"}, cast_info)
         assert payload["Bob"]["prev_room"] == "Room 2"
 
 
@@ -234,66 +300,88 @@ class TestCoPresentPositionsLeak:
 # ---------------------------------------------------------------------------
 
 class TestDeliveryGate:
-    """_delivery_ok should consolidate containment, awareness, and sight gates."""
+    """_delivery_ok is the single predicate every deterministic delivery site
+    calls: containment, awareness, hearing (with proximity) and sight (with
+    the rear-arc blind spot) in one place.
+
+    These used to pass a scene as the first argument and assert only that the
+    function returned True. That was vacuous -- the implementation returned
+    True for every channel after the containment check, so 'sight is OK' and
+    'hearing is not blocked by behind' were the same assertion about a
+    function that gated neither. The relation is now the caller's own
+    spatial_rel result, and each channel is checked for what it claims.
+    """
+
+    SCENE = {
+        "rooms": {"r1": {"name": "Room 1", "adjacent": []},
+                  "r2": {"name": "Room 2", "adjacent": []}},
+        "positions": {"Alice": "r1", "Bob": "r1", "Carol": "r2"},
+        "entities": {}, "attire": {}, "overlays": {},
+        "location": "x", "time": "day",
+    }
+
+    def _rel(self, a="r1", b="r1"):
+        from spatial import spatial_rel
+        return spatial_rel(self.SCENE, a, b)
 
     def test_delivery_ok_exists(self):
         from agents.common import _delivery_ok
         assert callable(_delivery_ok)
 
-    def test_non_aware_blocks_delivery(self):
+    def test_non_aware_blocks_every_channel(self):
         from agents.common import _delivery_ok
-        scene = {
-            "rooms": {"r1": {"name": "Room 1", "adjacent": []}},
-            "positions": {"Alice": "r1", "Bob": "r1"},
-            "entities": {}, "attire": {}, "overlays": {},
-            "location": "x", "time": "day",
-        }
-        # Non-awake awareness blocks all delivery
-        assert not _delivery_ok(scene, "Alice", "Bob", "sight",
-                                awareness="unconscious")
-        assert not _delivery_ok(scene, "Alice", "Bob", "hearing",
-                                awareness="asleep")
-        assert not _delivery_ok(scene, "Alice", "Bob", "action",
-                                awareness="sedated")
+        rel = self._rel()
+        for channel, level in (("sight", "unconscious"), ("hearing", "asleep"),
+                               ("action", "sedated")):
+            assert not _delivery_ok(rel, self.SCENE, "Alice", "Bob", channel,
+                                    awareness=level)
 
-    def test_behind_blocks_sight(self):
+    def test_awake_observer_receives_a_co_located_source(self):
         from agents.common import _delivery_ok
-        scene = {
-            "rooms": {"r1": {"name": "Room 1", "adjacent": []}},
-            "positions": {"Alice": "r1", "Bob": "r1"},
-            "entities": {}, "attire": {}, "overlays": {},
-            "location": "x", "time": "day",
-        }
-        # Behind sources blocks sight and action
-        assert not _delivery_ok(scene, "Alice", "Bob", "sight",
-                                behind_sources=["Bob"])
-        assert not _delivery_ok(scene, "Alice", "Bob", "action",
-                                behind_sources=["Bob"])
-        # Without behind_sources, sight is OK
-        assert _delivery_ok(scene, "Alice", "Bob", "sight")
+        rel = self._rel()
+        assert _delivery_ok(rel, self.SCENE, "Alice", "Bob", "sight",
+                            awareness="awake")
+        assert _delivery_ok(rel, self.SCENE, "Alice", "Bob", "hearing",
+                            awareness="awake")
 
-    def test_hearing_not_blocked_by_behind(self):
+    def test_behind_blocks_sight_and_action_but_not_hearing(self):
         from agents.common import _delivery_ok
-        scene = {
-            "rooms": {"r1": {"name": "Room 1", "adjacent": []}},
-            "positions": {"Alice": "r1", "Bob": "r1"},
-            "entities": {}, "attire": {}, "overlays": {},
-            "location": "x", "time": "day",
-        }
-        # Hearing is not blocked by behind (you can hear behind you)
-        assert _delivery_ok(scene, "Alice", "Bob", "hearing",
+        rel = self._rel()
+        assert not _delivery_ok(rel, self.SCENE, "Alice", "Bob", "sight",
+                                behind_sources=["Bob"])
+        assert not _delivery_ok(rel, self.SCENE, "Alice", "Bob", "action",
+                                behind_sources=["Bob"])
+        # Sound carries into the blind spot -- the rear arc is a visual fact.
+        assert _delivery_ok(rel, self.SCENE, "Alice", "Bob", "hearing",
                             behind_sources=["Bob"])
 
-    def test_aware_none_allows_delivery(self):
+    def test_sight_actually_consults_the_relation(self):
+        """The old gate returned True for sight regardless of the relation, so
+        a source in another room passed. has_visual is now applied."""
         from agents.common import _delivery_ok
-        scene = {
-            "rooms": {"r1": {"name": "Room 1", "adjacent": []}},
-            "positions": {"Alice": "r1", "Bob": "r1"},
-            "entities": {}, "attire": {}, "overlays": {},
-            "location": "x", "time": "day",
-        }
-        # awareness=None means no awareness gate -> allowed
-        assert _delivery_ok(scene, "Alice", "Bob", "sight", awareness=None)
+        far = self._rel("r1", "r2")
+        assert not _delivery_ok(far, self.SCENE, "Alice", "Carol", "action")
+
+    def test_hearing_applies_the_proximity_downgrade(self):
+        """F4: hear_level was called without proximity everywhere, so a mutter
+        carried to an arbitrarily large room at full volume."""
+        from agents.common import _delivery_ok
+        from spatial import hear_level
+        rel = self._rel()
+        assert hear_level(rel, "mutter", proximity="within_reach") != "none"
+        assert _delivery_ok(rel, self.SCENE, "Alice", "Bob", "hearing",
+                            volume="mutter", proximity="within_reach")
+        # Same room, but not within reach: the gate must agree with hear_level
+        # rather than deliver regardless.
+        assert (_delivery_ok(rel, self.SCENE, "Alice", "Bob", "hearing",
+                             volume="mutter", proximity="far")
+                == (hear_level(rel, "mutter", proximity="far") != "none"))
+
+    def test_a_source_is_always_delivered_to_itself(self):
+        from agents.common import _delivery_ok
+        rel = self._rel()
+        assert _delivery_ok(rel, self.SCENE, "Alice", "Alice", "sight",
+                            behind_sources=["Alice"])
 
 
 # ---------------------------------------------------------------------------
@@ -320,9 +408,11 @@ class TestDialogueMemoryRecognitionGate:
 # ---------------------------------------------------------------------------
 
 class TestPresentOthersRecognitionGate:
-    """_present_others in background.py should gate canonical character names
-    by the player's known map, using appearance labels for unrecognized
-    characters instead of leaking their canonical name."""
+    """_present_others in background.py names the cast for a BACKGROUND
+    PRESENCE's payload, so the recognition basis is that presence's own
+    entry in the `known` ledger -- not the player's. A presence with no
+    entry (the normal case for an unregistered one) recognizes nobody, and
+    every cast member renders as an appearance label."""
 
     def _setup_ctx(self, temp_db, names, known_map=None):
         chat_id = temp_db.qi(
@@ -332,8 +422,11 @@ class TestPresentOthersRecognitionGate:
         ids = {}
         for n in names:
             sheet = default_character_data(n)
-            # Give each character a distinctive appearance for label generation
-            sheet.setdefault("identity", {})["appearance"] = f"{n}, a person with distinctive features."
+            # A distinctive appearance so the label is checkably that
+            # character's. It has to go in embodiment.visible.summary --
+            # identity.appearance is not read by character_appearance.
+            sheet.setdefault("embodiment", {}).setdefault("visible", {})[
+                "summary"] = f"{n}, a wiry person in {n.lower()}-grey."
             cid = temp_db.qi(
                 "INSERT INTO characters(name,sheet,source,created,resource_uid) VALUES(?,?,?,?,?)",
                 (n, json.dumps(sheet), "{}", time.time(), f"char_{n}"),
@@ -358,28 +451,86 @@ class TestPresentOthersRecognitionGate:
         )
         return ctx, ids, chat_id
 
-    def test_unrecognized_character_gets_label(self, temp_db):
-        """A character not in the player's known map should appear as an
-        appearance-derived label, not their canonical name."""
-        from agents.background import _present_others
+    def test_presence_with_no_ledger_entry_recognizes_nobody(self, temp_db):
+        """The normal case: an unregistered presence has no `known` entry, so
+        every cast member -- and the player -- renders as a label."""
+        from agents.background import _present_others, _presence_recognizes
         ctx, ids, chat_id = self._setup_ctx(temp_db, ["Alice", "Bob"])
-        # Set known map: Alice knows nobody
-        temp_db.wset(chat_id, "known", {})
-        result = _present_others(ctx)
-        # The player name may or may not appear (depends on persona setup),
-        # but Bob should NOT appear by canonical name
-        assert "Bob" not in result
 
-    def test_recognized_character_keeps_name(self, temp_db):
-        """A character in the player's known map should appear by canonical name."""
-        from agents.background import _present_others
-        # The default persona name is "The Stranger" (see scene.persona_of)
+        result = _present_others(ctx, _presence_recognizes(ctx, "The Barkeep"))
+
+        assert "Alice" not in result
+        assert "Bob" not in result
+        assert "The Stranger" not in result
+        # Labels, and distinct ones -- two strangers must not collapse into
+        # the same phrase (the reason _unknown_actor_label derives from
+        # appearance at all).
+        assert any("alice-grey" in r for r in result)
+        assert any("bob-grey" in r for r in result)
+        assert len(set(result)) == len(result)
+
+    def test_presence_uses_its_own_ledger_entry(self, temp_db):
+        """A presence that has been introduced to someone may name them."""
+        from agents.background import _present_others, _presence_recognizes
         ctx, ids, chat_id = self._setup_ctx(
             temp_db, ["Alice", "Bob"],
-            known_map={"The Stranger": ["Bob"]})
-        result = _present_others(ctx)
-        # Bob should appear by canonical name since the player knows him
+            known_map={"The Barkeep": ["Bob"]})
+
+        result = _present_others(ctx, _presence_recognizes(ctx, "The Barkeep"))
+
         assert "Bob" in result
+        assert "Alice" not in result
+
+    def test_players_recognition_is_not_the_basis(self, temp_db):
+        """The regression this gate was rebuilt for: the player knowing Bob
+        says nothing about whether the barkeep does."""
+        from agents.background import _present_others, _presence_recognizes
+        ctx, ids, chat_id = self._setup_ctx(
+            temp_db, ["Alice", "Bob"],
+            known_map={"The Stranger": ["Alice", "Bob"]})
+
+        result = _present_others(ctx, _presence_recognizes(ctx, "The Barkeep"))
+
+        assert "Alice" not in result
+        assert "Bob" not in result
+
+    def test_shared_manager_payload_uses_the_intersection(self, temp_db):
+        """scene_life voices several presences from one payload, so a name
+        only one of them knows must not be handed to all of them."""
+        from agents.background import _present_others, _presence_recognizes
+        ctx, ids, chat_id = self._setup_ctx(
+            temp_db, ["Alice", "Bob"],
+            known_map={"The Barkeep": ["Alice", "Bob"],
+                       "The Fiddler": ["Bob"]})
+
+        both = _present_others(
+            ctx, _presence_recognizes(ctx, "The Barkeep", "The Fiddler"))
+
+        assert "Bob" in both
+        assert "Alice" not in both
+
+    def test_player_name_is_gated_too(self, temp_db):
+        """The protagonist is not exempt: a presence that has never been
+        introduced has no claim on the player's name either."""
+        from agents.background import _present_others, _presence_recognizes
+        ctx, ids, chat_id = self._setup_ctx(
+            temp_db, ["Alice"],
+            known_map={"The Barkeep": ["The Stranger"]})
+
+        gated = _present_others(ctx, _presence_recognizes(ctx, "The Fiddler"))
+        known = _present_others(ctx, _presence_recognizes(ctx, "The Barkeep"))
+
+        assert "The Stranger" not in gated
+        assert "The Stranger" in known
+
+    def test_no_bare_except_swallows_the_gate(self, temp_db):
+        """A failing lookup used to degrade the whole cast to "someone" with
+        no signal, which reads exactly like a working gate."""
+        import inspect
+        from agents import background
+        source = inspect.getsource(background._present_others)
+        assert "except" not in source
+        assert "someone" not in source
 
 
 # ---------------------------------------------------------------------------
@@ -511,35 +662,116 @@ class TestPortalStatesVisibilityGate:
 # S3-A8: Entity state blob concealed-actor reconciliation
 # ---------------------------------------------------------------------------
 
-class TestEntityStateBlobConcealment:
-    """commit_world_entities should skip entity state blobs that reference
-    concealed actors."""
+class TestEntityStateStalenessSignal:
+    """S3-A8 is the stale-posture symptom: a free-text posture/description
+    clause copied forward verbatim from the pre-beat blob wins over this
+    beat's own prose, because the deterministic layers prefer structured
+    truth and _PROTECTED_STATE_KEYS shields those keys from normalization.
 
-    def test_concealed_actor_check_exists(self):
-        """Verify commit.py has the concealed-actor check for entity blobs."""
-        import inspect
+    An earlier attempt read this finding as a concealment leak and SKIPPED
+    any entity whose JSON contained a concealed actor's name as a substring
+    -- so an actor named 'Al' matched 'small' -- dropping the update with
+    nothing to re-apply it, which diverged world_entities from the scene
+    blob it is a projection of. These tests pin the two properties that
+    matter: the row always commits, and the copy-forward is reported.
+    """
+
+    def _ctx_and_chat(self, temp_db, prior_entities, diff_entities, prose):
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("T", "", time.time()))
+        turn_id = temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+            (chat_id, 1, "", time.time()))
+        temp_db.wset(chat_id, "scene", {
+            "rooms": {}, "positions": {}, "entities": prior_entities,
+            "attire": {}, "overlays": {},
+        })
+        from pipeline_context import PipelineContext, ChatData, TurnData
+        ctx = PipelineContext(
+            chat=ChatData(id=chat_id, name="T", persona_id=None,
+                          lorebook_id=None, scenario="", created=time.time()),
+            turn=TurnData(id=turn_id, chat_id=chat_id, idx=1,
+                          player_input="", created=time.time()),
+            cast=[], input="")
+        ctx.director_resolve = {
+            "resolved_event": prose,
+            "state_diff": {"entities": diff_entities},
+        }
+        return ctx, chat_id
+
+    def test_entity_still_commits_when_a_concealed_actor_is_named(self, temp_db):
+        """The projection must never silently lose a row: world_entities is a
+        derived view of the scene commit, and a missing row is durable
+        corruption, not a closed leak."""
         import commit
-        source = inspect.getsource(commit)
-        assert "_concealed_actors" in source
-        assert "_entity_references_concealed" in source
+        ctx, chat_id = self._ctx_and_chat(
+            temp_db,
+            prior_entities={},
+            diff_entities={"vial": {"kind": "object", "name": "vial",
+                                    "state": {"description": "half empty"}}},
+            prose="Mara palms the vial.")
+        commit.commit_world_entities(ctx, nonce=0)
+        rows = temp_db.q(
+            "SELECT entity_id FROM world_entities WHERE chat_id=?", (chat_id,))
+        assert [r["entity_id"] for r in rows] == ["vial"]
+
+    def test_copy_forward_of_a_named_entity_is_reported(self, temp_db):
+        import commit
+        ctx, chat_id = self._ctx_and_chat(
+            temp_db,
+            prior_entities={"cot": {"kind": "object", "name": "cot",
+                                    "state": {"posture": "sprawled across it"}}},
+            diff_entities={"cot": {"kind": "object", "name": "cot",
+                                   "state": {"posture": "sprawled across it"}}},
+            prose="She rises from the cot and crosses the room.")
+        commit.commit_world_entities(ctx, nonce=0)
+        assert any("S3-A8" in w for w in ctx.warnings), ctx.warnings
+        # ...and it still committed.
+        rows = temp_db.q(
+            "SELECT entity_id FROM world_entities WHERE chat_id=?", (chat_id,))
+        assert [r["entity_id"] for r in rows] == ["cot"]
+
+    def test_an_updated_clause_is_not_reported(self, temp_db):
+        import commit
+        ctx, _ = self._ctx_and_chat(
+            temp_db,
+            prior_entities={"cot": {"kind": "object", "name": "cot",
+                                    "state": {"posture": "sprawled across it"}}},
+            diff_entities={"cot": {"kind": "object", "name": "cot",
+                                   "state": {"posture": "empty, blanket thrown back"}}},
+            prose="She rises from the cot and crosses the room.")
+        commit.commit_world_entities(ctx, nonce=0)
+        assert not any("S3-A8" in w for w in ctx.warnings), ctx.warnings
+
+    def test_an_entity_this_beat_never_mentions_is_not_reported(self, temp_db):
+        """An untouched entity legitimately carries its state forward."""
+        import commit
+        ctx, _ = self._ctx_and_chat(
+            temp_db,
+            prior_entities={"lamp": {"kind": "object", "name": "lamp",
+                                     "state": {"description": "unlit"}}},
+            diff_entities={"lamp": {"kind": "object", "name": "lamp",
+                                    "state": {"description": "unlit"}}},
+            prose="She rises from the cot and crosses the room.")
+        commit.commit_world_entities(ctx, nonce=0)
+        assert not any("S3-A8" in w for w in ctx.warnings), ctx.warnings
 
 
 # ---------------------------------------------------------------------------
 # Pattern 4: Omniscient events row per-observer redaction
 # ---------------------------------------------------------------------------
 
+SECRET = "the vault code is 4471"
+
+
 class TestEventsRowPerObserverRedaction:
-    """recent_events_for_observer should redact concealed actions from the
-    event text for observers who were concealed from."""
+    """The stored events row is omniscient. Every replay of it into a model
+    context must re-apply concealment first, and must do so to the string it
+    actually returns -- the first version of this redacted `event` and then
+    returned `summary`, so the redaction was thrown away on every real row."""
 
-    def test_function_exists(self):
-        """recent_events_for_observer should exist in scene.py."""
-        from scene import recent_events_for_observer
-        assert callable(recent_events_for_observer)
-
-    def test_redaction_with_concealed_dialogue(self, temp_db):
-        """When an event row contains a concealed dialogue entry, the
-        observer it was concealed from should get a redacted version."""
+    def _row(self, temp_db, conceal_from):
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
             ("T", "", time.time()),
@@ -548,29 +780,101 @@ class TestEventsRowPerObserverRedaction:
             "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
             (chat_id, 1, "", time.time()),
         )
-        event_content = json.dumps({
-            "turn": 1,
-            "summary": "Alice and Bob talked. Bob whispered a secret.",
-            "event": "Alice stood in the room. Bob whispered a secret to himself.",
-            "dialogue_log": [
-                {"speaker": "Bob", "exact_quote": "I have a secret.",
-                 "visibility": "concealed", "conceal_from": ["Alice"]},
-            ],
-        })
         temp_db.qi(
             "INSERT INTO events(chat_id,turn_id,content) VALUES(?,?,?)",
-            (chat_id, turn_id, event_content),
+            (chat_id, turn_id, json.dumps({
+                "turn": 1,
+                # Both fields are Director prose written from the omniscient
+                # frame; the summary is what every caller actually reads.
+                "summary": ("Alice lit the lamp. "
+                            "Bob murmured that %s." % SECRET),
+                "event": ("Alice lit the lamp. "
+                          "Bob murmured that %s to Cara." % SECRET),
+                "dialogue_log": [
+                    {"speaker": "Bob", "exact_quote": '"%s."' % SECRET,
+                     "visibility": "concealed", "conceal_from": conceal_from},
+                ],
+            })),
         )
-        from scene import recent_events_for_observer
-        # Alice (concealed from) should get redacted text
-        results = recent_events_for_observer(chat_id, "Alice", n=5)
-        assert len(results) == 1
-        # The concealed speaker "Bob" should not appear in the redacted event
-        # (summary is used as fallback, but the event text is redacted)
-        # Since Bob is a concealed actor, sentences mentioning Bob are redacted
+        return chat_id
 
-    def test_non_concealed_observer_gets_full_text(self, temp_db):
-        """An observer who was NOT concealed from should get the full text."""
+    def test_concealed_from_observer_loses_name_and_quote(self, temp_db):
+        """The observer the line was concealed from must get neither the
+        concealed speaker's name nor the content of what he said."""
+        from scene import recent_events_for_observer
+        chat_id = self._row(temp_db, ["Alice"])
+
+        results = recent_events_for_observer(chat_id, "Alice", n=5)
+
+        assert len(results) == 1
+        text = results[0]
+        assert "Bob" not in text
+        assert "4471" not in text
+        assert SECRET not in text
+
+    def test_entitled_observer_keeps_the_beat(self, temp_db):
+        """An observer the line was NOT concealed from is entitled to it --
+        redaction must be per-observer, not blanket."""
+        from scene import recent_events_for_observer
+        chat_id = self._row(temp_db, ["Alice"])
+
+        results = recent_events_for_observer(chat_id, "Cara", n=5)
+
+        assert len(results) == 1
+        text = results[0]
+        assert "Bob" in text
+        assert SECRET in text
+        assert "Alice lit the lamp" in text
+
+    def test_overt_sentences_survive_for_concealed_observer(self, temp_db):
+        """Redaction is sentence-level (D1/D2): what Alice did in the open is
+        still hers to remember."""
+        from scene import recent_events_for_observer
+        chat_id = self._row(temp_db, ["Alice"])
+
+        text = recent_events_for_observer(chat_id, "Alice", n=5)[0]
+
+        assert "Alice lit the lamp" in text
+
+    def test_globally_concealed_line_hidden_from_everyone(self, temp_db):
+        """An empty conceal_from means concealed from all, so even an
+        unnamed observer must not receive it."""
+        from scene import recent_events_for_observer
+        chat_id = self._row(temp_db, [])
+
+        text = recent_events_for_observer(chat_id, "Cara", n=5)[0]
+
+        assert "Bob" not in text
+        assert SECRET not in text
+
+    def test_no_observer_is_entitled_to_nothing(self, temp_db):
+        """A stage with no vantage (lore routing) gets every concealed entry
+        redacted, including ones targeted at a named third party."""
+        from scene import recent_events_for_observer
+        chat_id = self._row(temp_db, ["Alice"])
+
+        text = recent_events_for_observer(chat_id, None, n=5)[0]
+
+        assert "Bob" not in text
+        assert SECRET not in text
+        assert "Alice lit the lamp" in text
+
+    def test_mapping_recent_events_is_scrubbed(self, temp_db):
+        """X18's middle hop: recent_events feeds mapping's search_lore query,
+        and mapping is not entitled to the omniscient row."""
+        from scene import recent_events
+        chat_id = self._row(temp_db, ["Alice"])
+
+        results = recent_events(chat_id, n=5)
+
+        assert len(results) == 1
+        assert "Bob" not in results[0]
+        assert SECRET not in results[0]
+
+    def test_unconcealed_row_is_returned_verbatim(self, temp_db):
+        """No concealment, no change: the scrub must not cost ordinary beats
+        their text (recent_events' long-standing contract)."""
+        from scene import recent_events, recent_events_for_observer
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
             ("T", "", time.time()),
@@ -579,25 +883,21 @@ class TestEventsRowPerObserverRedaction:
             "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
             (chat_id, 1, "", time.time()),
         )
-        event_content = json.dumps({
-            "turn": 1,
-            "summary": "Alice and Bob talked.",
-            "event": "Alice stood in the room. Bob said hello.",
-            "dialogue_log": [
-                {"speaker": "Bob", "exact_quote": "Hello.",
-                 "visibility": "concealed", "conceal_from": ["Charlie"]},
-            ],
-        })
         temp_db.qi(
             "INSERT INTO events(chat_id,turn_id,content) VALUES(?,?,?)",
-            (chat_id, turn_id, event_content),
+            (chat_id, turn_id, json.dumps({
+                "summary": "Alice lit the lamp.",
+                "event": "Alice lit the lamp in the hall.",
+                "dialogue_log": [
+                    {"speaker": "Bob", "exact_quote": '"Evening."',
+                     "visibility": "overt", "conceal_from": []},
+                ],
+            })),
         )
-        from scene import recent_events_for_observer
-        # Alice was not concealed from -> should get full text
-        results = recent_events_for_observer(chat_id, "Alice", n=5)
-        assert len(results) == 1
-        # Alice should see the summary since the concealment was for Charlie
-        assert "Alice" in results[0]
+
+        assert recent_events(chat_id, n=5) == ["Alice lit the lamp."]
+        assert recent_events_for_observer(
+            chat_id, "Alice", n=5) == ["Alice lit the lamp."]
 
 
 # ---------------------------------------------------------------------------

@@ -310,3 +310,43 @@ def apply_association_updates(existing, psychology, updates, turn_idx,
         item["last_updated_turn"] = int(turn_idx)
         item["last_updated_seconds"] = _float(clock_seconds)
     return result[-20:]
+
+
+# Convex, not concave. A body tolerates mild sensation with its mind more or
+# less intact and is taken over by severe sensation, so the cost has to start
+# cheap and climb: an earlier concave curve read pain 0.2 as nearly half the
+# mind gone, which would have made characters cognitively crippled by ordinary
+# discomfort. The charge term is smaller because an unresolved drive nags
+# rather than floods.
+_ABSORPTION_CURVE = 1.3
+_ABSORPTION_CHARGE_WEIGHT = 0.35
+_ABSORPTION_SATURATED_FLOOR = 0.45
+
+
+def cognitive_absorption(hedonic, stress=None):
+    """How much of this mind the BODY is currently claiming, 0..1.
+
+    Deliberately blind to valence. Pain and pleasure are opposites in what they
+    are worth to the character and identical in what they cost: intense
+    pleasure occupies attention exactly as intense pain does, and neither
+    leaves much of the mind free to model somebody else's. Consumers use this
+    to narrow effortful cognition (see theory_of_mind), which is why they must
+    NOT use `strain` for it -- strain is the aversive component specifically,
+    and reading it as "how absorbed am I" would say a body at the ceiling of a
+    powerful pleasant stimulus is perfectly free to theorise.
+
+    Kept separate from `load`/`overloaded`, which stay strain-only: a demanding
+    drive is not a coping failure, but it is still something the mind is busy
+    with.
+    """
+    hedonic = hedonic if isinstance(hedonic, dict) else {}
+    stress = stress if isinstance(stress, dict) else {}
+    level = max(_clamp(hedonic.get("pain")), _clamp(hedonic.get("pleasure")))
+    absorbed = level ** _ABSORPTION_CURVE
+    charge = _clamp(hedonic.get("charge"))
+    absorbed = max(absorbed, _ABSORPTION_CHARGE_WEIGHT * charge)
+    if hedonic.get("saturated"):
+        absorbed = max(absorbed, _ABSORPTION_SATURATED_FLOOR)
+    # Acute arousal competes for the same bandwidth whatever produced it.
+    absorbed = max(absorbed, 0.5 * _clamp(stress.get("activation")))
+    return round(_clamp(absorbed), 4)

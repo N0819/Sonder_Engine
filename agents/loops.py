@@ -14,7 +14,7 @@ from scene import (
     get_scene,
     reaction_config,
 )
-from spatial import has_visual, hear_level, room_of, spatial_rel
+from spatial import hear_level, proximity_rel, room_of, spatial_rel
 
 from .character import character_step
 from .common import (
@@ -54,6 +54,10 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
     # additions flow verbatim into subsequent character steps and the
     # outcome views. Quotes stay verbatim; only the attribution is gated.
     known = wget(ctx.chat.id, "known", {})
+    # One awareness map for the whole sweep: awareness_of accepts a chat_id and
+    # re-queries when given one, which inside this per-observer/per-event loop
+    # is a query per event per observer.
+    amap = awareness_map(ctx.chat.id)
     views = {}
     perceived_by = set()
     for row in ctx.cast:
@@ -68,6 +72,10 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
             display = _unknown_actor_label(actor_name, actor_appearance)
         observer_room = character_room(scene, observer_sheet)
         relation = spatial_rel(scene, actor_room, observer_room)
+        observer_awareness = awareness_of(amap, observer_name)
+        # F4: the micro-loop used to read bare hear_level with no proximity, so
+        # a muttered aside landed full-volume on an arbitrarily large room.
+        proximity = proximity_rel(scene, observer_name, actor_name)
         additions = []
         for event in actor_result.get("sequence") or []:
             if event.get("type") == "speech":
@@ -90,15 +98,13 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
                     )
                 ):
                     continue
-                # Pattern 3: unified delivery gate for hearing -- checks
-                # containment_conceals and awareness before hear_level.
-                if not _delivery_ok(scene, observer_name, actor_name, "hearing",
-                                    volume=event.get("volume", "normal"),
-                                    awareness=awareness_of(ctx.chat.id, observer_name)):
+                volume = event.get("volume", "normal")
+                if not _delivery_ok(relation, scene, observer_name, actor_name,
+                                    "hearing", volume=volume,
+                                    proximity=proximity,
+                                    awareness=observer_awareness):
                     continue
-                level = hear_level(relation, event.get("volume", "normal"))
-                if level == "none":
-                    continue
+                level = hear_level(relation, volume, proximity=proximity)
                 quote = str(event.get("text") or "")
                 if level == "full":
                     additions.append(f'{display} says: "{quote}"')
@@ -112,14 +118,8 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
             elif event.get("type") == "action":
                 if event.get("visibility") == "concealed":
                     continue
-                # Pattern 3: use the unified delivery gate for actions,
-                # which checks containment_conceals and awareness in
-                # addition to has_visual. The old code used bare
-                # has_visual(relation), missing containment and awareness.
-                if not _delivery_ok(scene, observer_name, actor_name, "action",
-                                    awareness=awareness_of(ctx.chat.id, observer_name)):
-                    continue
-                if not has_visual(relation):
+                if not _delivery_ok(relation, scene, observer_name, actor_name,
+                                    "action", awareness=observer_awareness):
                     continue
                 # Intent-free `observable` surface only -- never the raw
                 # attempt (which carries the actor's purpose/intent). A mental

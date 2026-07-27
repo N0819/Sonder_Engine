@@ -33,9 +33,9 @@ their claims against source and the maintained guides before acting on them.
 | Player input interpretation | `agents/director.py` (`director_interpret`) | `schemas.py`, `prompts.py`, pipeline tests |
 | Flow planning, resume, or streaming | `agents/runtime.py` (`build_plan`, `_run_pipeline`) | `agents/storage.py`, `checkpoints.py`, pipeline tests |
 | Opening scene generation | `agents/director.py`, `agents/perception.py` | `scene.py`, `spatial.py`, `commit.py` |
-| Perception or information leakage | `agents/perception.py` (`_source_channels`, `_redact_concealed_from_event`, `_surface_translate_event`, `_touch_only_sources`, `_per_observer_model_views`), `agents/common.py` (`_delivery_ok`, `_AUTONOMY_VERBS`, `bind_sequence_targets`), `agents/loops.py` (`deterministic_micro_perception`), `agents/background.py` (`_present_others`), `agents/narration.py` (`_visible_portal_states`) | `spatial.py` (`scent_level`, `visual_level_between`, `containment_conceals`, `visible_adjacent_rooms`), `scene.py` (`recent_events_for_observer`), `schemas.py`, `memory.py` (`max_turn_idx` cutoff), `commit.py` (entity-state concealed-actor gate), perception tests — concealed actions are sentence-level redacted from the resolved event per-perceiver; touch-only sources get surface-translated event text; scent is barrier-gated; per-observer LLM calls create structural information boundaries; the unified `_delivery_ok` gate consolidates containment, awareness, sight (including rear-arc), and hearing (with proximity) checks; background-presence names pass through the player's recognition map; portal states for unseen rooms are withheld; entity state blobs referencing concealed actors are skipped; omniscient event rows are per-observer redacted when loaded into character context |
+| Perception or information leakage | `agents/perception.py` (`_source_channels`, `_redact_concealed_from_event`, `_surface_translate_event`, `_touch_only_sources`, `_per_observer_model_views`), `agents/common.py` (`_delivery_ok`, `_AUTONOMY_VERBS`, `bind_sequence_targets`), `agents/loops.py` (`deterministic_micro_perception`), `agents/background.py` (`_present_others`), `agents/narration.py` (`_visible_portal_states`) | `spatial.py` (`scent_level`, `visual_level_between`, `containment_conceals`, `visible_adjacent_rooms`), `scene.py` (`recent_events_for_observer`), `schemas.py`, `memory.py` (`current_turn_idx` cutoff), `commit.py` (S3-A8 copy-forward signal, dialogue-memory recognition gate), perception tests — concealed actions are sentence-level redacted from the resolved event per-perceiver, including pronoun-subject continuations; touch-only sources get surface-translated event text; scent is barrier-gated; per-observer LLM calls create structural information boundaries; the unified `_delivery_ok` gate consolidates containment, awareness, sight (including rear-arc), and hearing (with proximity) checks; background-presence names pass through that presence's OWN recognition ledger (an unregistered presence recognizes nobody); portal states for unseen rooms are withheld; a beat's prose copied forward onto an entity this beat names is reported, not dropped; the events row is concealment-scrubbed on the `recent_events` path that feeds mapping's lore query |
 | Character decisions or dialogue | `agents/character.py`, `agents/loops.py` | `memory.py`, `scene.py`, `prompts.py` |
-| Character psychology, stress, pain/pleasure, belief learning, or association learning | `character_schema.py`, `psychology_runtime.py`, `affect.py`, `agents/character.py`, `commit.py` | `schemas.py`, `prompts.py`, `importers.py`, character-card UI, `theory_of_mind.py`, psychology and information-leak tests — transient state may use only the character's scrubbed current observations, own sheet, own body state, and earned memory |
+| Character psychology, stress, pain/pleasure, belief learning, or association learning | `character_schema.py`, `psychology_runtime.py`, `affect.py`, `agents/character.py`, `commit.py` | `schemas.py`, `prompts.py`, `importers.py`, character-card UI, `theory_of_mind.py` (`belief_credence`, `absorbed_cap`, `select_active_hypotheses`), `psychology_runtime.py` (`cognitive_absorption`), `memory.py` (`reconcile_inference_confidence`), psychology and information-leak tests — transient state may use only the character's scrubbed current observations, own sheet, own body state, and earned memory |
 | Background (unregistered) presence reactions | `agents/background.py`, `commit.py` (`pick_background_reactor`) | `agents/perception.py` (merge into dialogue_log), `prompts.py`, `schemas.py` |
 | Objective action resolution | `agents/director.py` (`director_resolve`) | `schemas.py`, `spatial.py`, `commit.py` |
 | Narration | `agents/narration.py` (`narrator`) | narrator prompt in `prompts.py`, output validation |
@@ -78,11 +78,75 @@ These are architectural guarantees, not stylistic preferences.
 - Every perceptual channel is barrier-gated: sight (`_SIGHT_BARRIERS`), sound (`_AMBIENT_BARRIERS` + material), scent (`_SCENT_BARRIERS`), and touch (containment/concealment). Touch-only perception is cause-blind: surface sensations cross, the act producing them does not.
 - Per-observer LLM calls (`_per_observer_model_views`) create structural information boundaries: each perceiver gets a separate prompt and response rather than sharing one omniscient call.
 - The unified delivery gate `_delivery_ok` in `agents/common.py` consolidates containment, awareness, sight (including rear-arc/`behind_sources`), and hearing (with proximity) checks. Every deterministic delivery site must call it rather than using scattered bare checks.
-- The stored events row is omniscient (for the author/audit trail), but what's loaded into character context is per-observer redacted via `recent_events_for_observer` in `scene.py`.
+- **Containment has two forms, and both must be read through
+  `spatial.hiding_holders_of`.** A scene expresses one entity inside another
+  either as a `contained` ledger record OR as a room carrying `parent_entity`
+  whose parent itself holds a position. Reading `scene["contained"]` directly
+  sees only the first, which is how a live chat ended up with an occupant of a
+  parented interior visible to the very entity enclosing them and delivering no
+  touch to it — both halves of "concealed but felt" wrong, in opposite
+  directions. The threshold-crossing grace (`crossing_visible_from`) does not
+  apply to a parented interior: a doorway is something you stand part-way
+  through, an enclosure is not. Hearing from inside a parented interior is
+  CONDUCTED (`inside_source` on the relation → `hear_level` returns full): the
+  enclosing body is the medium. One-way only, and it grants no sight.
+- **Sensation constrains cognition.** `psychology_runtime.cognitive_absorption`
+  measures how much of a mind its own body is claiming, 0..1 and deliberately
+  **blind to valence** — intense pleasure occupies attention exactly as intense
+  pain does. Do NOT read `strain` for this: strain is the aversive component
+  specifically, and using it would say a body at the ceiling of a powerful
+  pleasant stimulus is free to theorise. `load`/`overloaded` stay strain-only.
+  `theory_of_mind` spends the figure three ways: the effortful end of the
+  confidence-cap gradient erodes (`absorbed_cap` — observation is untouched, so
+  noticing stays sharp while second-order mentalising collapses), a NEW
+  hypothesis must clear `formation_floor`, and the hypothesis sheet holds fewer
+  entries (`sheet_capacity`, 5 → 1). Absorption gates **formation, not
+  reinforcement** — recognising more of what you already think is automatic
+  processing and survives; building a theory is controlled and does not. It must
+  never ratchet an existing belief down.
+- **A model-declared `kind` is not trusted.** Every ceiling in `theory_of_mind`
+  keys off `kind`, so `effective_kind` makes the claim's own language vote too
+  and takes the **stricter** of declared and inferred. This is text matching and
+  must never be relied on as an information boundary — it is confidence
+  calibration, deliberately arranged so a misfire can only make a character less
+  sure, never more. Both entry points (`cap_mind_model_updates`,
+  `apply_mind_model_updates`) must agree on the kind, or a claim is capped under
+  one and merged under another.
+- **Belief provenance belongs to the belief.** `first_seen_turn`, `formed_under`
+  and `reappraised_turn` are carried across reinforcement; the merged hypothesis
+  is rebuilt from the incoming update, so anything not explicitly carried is
+  silently lost. `due_for_reappraisal` must be asked with the character's
+  CURRENT absorption — passing 0.0 flags every extremity-formed belief
+  unconditionally, including for a character still in the grip of it.
+- **The stable hypothesis sheet.** `select_active_hypotheses` keeps 1–5 open
+  questions on `chat_chars.state.active_hypotheses`, each keyed `i_suspect` so
+  the field itself carries the epistemic status — a mind reading its own
+  conjecture back as settled fact is the same information-layer collapse the
+  engine polices between minds, happening inside one. Selection has hysteresis
+  (`_SHEET_INCUMBENT_MARGIN`); without it the sheet churns each turn and stops
+  being "what I am actively wondering about". Selected at commit (where the
+  reconciled beliefs and settled end-of-beat body state both exist), read by
+  `agents/character.py`. A hypothesis formed under absorption carries
+  `formed_under`, and `due_for_reappraisal` re-opens it once the character is
+  calmer — neither standing as though reached calmly nor discounted forever.
+- **Recall follows belief.** An inference memory's `confidence` is not a mint-time
+  constant: `memory.reconcile_inference_confidence` re-weights it at commit to the
+  character's current credence, read from their own `mind_models` via
+  `theory_of_mind.belief_credence`, and `search_memories` ranks on it. A belief
+  they have since explained away is pushed toward a floor rather than erased --
+  they can still recall having held it, it just no longer outranks what replaced
+  it. Reconciliation reads ONLY that character's own memory rows and own
+  mind_models: it must never consult the objective record or ask whether a belief
+  was TRUE, because a character revises from what they later perceived, and
+  grading beliefs against reality collapses the belief layer into the truth
+  layer. `salience` is deliberately untouched (how much it mattered when formed,
+  which drives consolidation) as distinct from `confidence` (how much they credit
+  it now).
+- The stored events row is omniscient (for the author/audit trail). `recent_events`/`recent_events_for_observer` in `scene.py` scrub concealed content off the path that feeds mapping's lore query. **Still open (X18):** `director_context` reaches `mapping_stage` (`agents/mapping.py`) raw — the Director is entitled to omniscience, mapping is not.
 - Entity state blobs referencing concealed actors are withheld at commit time — the entity's state is only updated when overtly perceived.
 - Portal states for rooms the player cannot see are withheld from the narrator payload.
-- Background-presence co-located character names pass through the player's recognition map.
-- Rerolls exclude memories from the current/later turns via `max_turn_idx`.
+- Background-presence co-located character names pass through that presence's OWN `known` ledger entry, not the player's. An unregistered presence has no entry and therefore recognizes nobody; the shared scene-manager payload uses the intersection across its managed cast.
+- A character deciding turn N never retrieves memories stamped turn N or later; `search_memories` hard-filters on `current_turn_idx` before ranking. Author-facing search routes deliberately omit it.
 - Dialogue memories store appearance labels for unrecognized speakers, not canonical names.
 
 ### Authority boundaries

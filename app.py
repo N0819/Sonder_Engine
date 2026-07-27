@@ -2949,14 +2949,21 @@ def mem_search(
     query: str = Query(""),
     limit: int = Query(12, ge=1, le=50),
 ):
-    latest = _latest_turn(cid)
-    current_turn_idx = latest["idx"] if latest else 0
+    # No current_turn_idx on purpose. This is the author's Memories tab, the
+    # search half of the same panel whose browse half is list_memories -- and
+    # the author is not a fictional mind, so the F1 turn cutoff must not apply
+    # to them. current_turn_idx used to be a pure recency-scoring hint here
+    # and passing the latest turn was harmless; now that it is a hard filter
+    # in search_memories, passing it would silently hide every memory from the
+    # turn just played -- exactly the ones an author searches for after a beat
+    # -- while browse kept showing them. search_memories falls back to the
+    # newest turn in the bank for recency scoring, which is the right
+    # reference point for a whole-bank author search anyway.
     return {
         "query": query,
         "results": search_memories(
             cid, ch, query, k=limit,
             include_archived=True,
-            current_turn_idx=current_turn_idx,
             chronological=True,
         ),
     }
