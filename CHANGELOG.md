@@ -32,6 +32,40 @@
   barrier, so an unlit interior behind a membrane stays dark instead of being
   lit by the room outside and putting its occupant back on view.
 
+- **Being carried in the open, and being carried inside something.** A carried
+  body has no position of its own — the engine derives it from its carrier's.
+  So a body shut inside a container standing in a room read as `same_room` with
+  everyone else in that room, and `same_room` answers sight before barrier or
+  light is consulted at all. Interior rooms have had `enclosure` to settle this;
+  the carry path had nothing. `mode` recorded *how* something was carried and
+  touched visibility not at all, so a body in a closed bag was exactly as
+  visible as one held in an open palm.
+
+  `held`, `carried`, `riding`, `mounted` and `worn` are carried in view;
+  `pocket`, `container` and `inside` are shut away. A mode outside the
+  vocabulary reads as shut away deliberately — the in-view modes are exactly
+  that list, so a mode the engine cannot vouch for must not be the one that
+  grants sight. An absent mode still defaults to `carried`, so an ordinary
+  carry behaves as it always did.
+
+  **And the rule is symmetric**, which is the half that is easy to forget.
+  Sight needs both parties on the same side of every closed thing, so the test
+  is that their nearest enclosure matches: being shut inside blocks the view
+  *out* as completely as the view in. A holder is not inside its own enclosure,
+  so it does not see its own contents either — what it has instead is touch.
+  Two bodies inside the same enclosure see each other normally, and opaque is
+  not soundproof: what is shut away can still be heard.
+
+  A body's interior also stops depending on anyone remembering to declare it.
+  `enclosure` defaults to `membrane` for a body when nothing was authored,
+  because flesh is opaque whether or not the Director said so, and a safety
+  property is the wrong thing to leave to a model's memory. Bodies are
+  identified by what only bodies have — what they are wearing, and a size
+  relative to their own baseline — which separated every interior on disk
+  correctly: vehicles, ships, lifts and structures on one side, bodies on the
+  other. `container: true` is deliberately not the test; it is absent on plenty
+  of real vehicles and would call them bodies.
+
 - **Crossing a threshold takes longer than a position field does.** A body's
   room is one value that changes between one beat and the next. Where the
   boundary is see-through that costs nothing — the room behind watches through
