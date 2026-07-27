@@ -78,8 +78,8 @@ what it legitimately earned, and a filter decides what crosses.**
 
 ## Status at a glance
 
-Conformance against the founding architecture, verified against source at
-alpha4.3.
+Conformance against the founding architecture, re-verified against source at
+alpha5.1.
 
 | Founding commitment | Status | Evidence / gap |
 |---|---|---|
@@ -95,12 +95,13 @@ alpha4.3.
 | Narrator exemplar pool, event-amnesiac | **Built** | `exemplars` setting read in `agents/narration.py`; narrator receives the player view, not the event stream |
 | Tiered cognition | **Built** | Model roles (`default`/`director`/`narrator`/`utility`) plus per-character `simulation.tier` |
 | Theory of mind, cached and event-triggered | **Built** | `theory_of_mind.py`; `tom_triggers` on the flow |
+| Event-grounded live psychology | **Built** | v3 character schema plus `psychology_runtime.py`: stress, mixed pain/pleasure outside survival, protected beliefs, learned cue associations, and simulation-time recovery |
 | Checkpoint / rollback | **Built** | `checkpoints.py`; branching depends on it |
 | Consolidation, salience-weighted hybrid retrieval | **Built** | `consolidate_character_memory`; keyword + embedding search in `memory.py` |
 | Commit as sole persistence boundary | **Built** | `commit.py`; one outer transaction, any domain failure rolls the turn back |
 | **Player action absolute** | **Built, then deliberately exceeded** | See [Player authority](#player-authority) — a considered product divergence, not drift |
 | **Event-linked stance axes** | **Partial** | `trigger_event_ids` accepted but **optional**; relationships live in a `world` KV blob with no change log |
-| **Canon lock** | **Partial** | `lore_entries.canon_locked` exists and is settable via the API; no automatic locking rule |
+| **Canon lock** | **Partial** | `lore_entries.canon_locked` is settable via the API and chat-canon entries auto-lock after 20 turns; the specified repeated-reference lock rule is not implemented |
 | **Scene-boundary coherence pass** | **Partial** | Validation and dedup exist throughout commit; the specified retcon protocol is not implemented as such |
 | **Off-screen world ticks** | **Partial** | Deterministic scheduling and an `offscreen_log` exist; the world advancing meaningfully during absence is narrower than specified |
 | **Player authority modes** | **Stub** | `PlayerAuthorityMode` enum exists in `schemas.py` and is **consumed nowhere** |
@@ -158,7 +159,7 @@ Authority ends sharply. No agent overrules another in-domain.
 |---|---|---|
 | **Director** (`agents/director.py`) | Objective causality: interpreting the declaration, resolving outcomes, the seeded dice | Own character psychology or narration; silently replace the player's declared content |
 | **Perception** (`agents/perception.py`) | What each observer legitimately receives. Stateless by requirement | Invent intent, add meaning, contradict the event stream, or leak hidden state. It may subtract and degrade, never add |
-| **Character agents** (`agents/character.py`, `loops.py`) | The subjective: what I would attempt, what these signals mean to me | Decide their own success — capability is objective and lives in the world record |
+| **Character agents** (`agents/character.py`, `agents/loops.py`) | The subjective: what I would attempt, what these signals mean to me | Decide their own success — capability is objective and lives in the world record |
 | **Background presence** (`agents/background.py`) | At most one named unregistered presence, one stateless reaction per beat | Hold memory or psychology — that requires promotion to a real character |
 | **Narrator** (`agents/narration.py`) | Sentence-level craft, pacing, the player-facing slice | Originate player conduct or reveal unperceived facts |
 | **Mapping** (`agents/mapping.py`) | Lore routing, retrieval, canon staging | Know character interiority |
@@ -190,15 +191,20 @@ Memory layers, per character:
 
 | Layer | Nature | Cadence |
 |---|---|---|
-| Stable core | Traits, values, self-image | Rare, logged |
+| Stable core | Traits with activation/inhibition cues, values, self-image, protected beliefs, coping patterns | Rare, evidence-gated |
 | Stance / relationships | Trust, warmth, fear per target | Event-triggered (see [Structural debt](#structural-debt)) |
-| Active state | Mood, goal, affect | Every turn; relaxes toward baseline |
+| Active state | Mood, goals, affect, stress activation/load, independent pain and pleasure | Every turn; relaxes using simulation time |
+| Learned associations | Cue, appraisal bias, response tendency, strength | Evidence-gated reinforcement/extinction |
 | Episodic | Witnessed events, provenance + salience | On commit; consolidated over time |
 | Summaries | Autobiographical synthesis | Post-commit; reconstructible |
 
 `affect.py` implements surface/undercurrent/baseline with exponential decay
-toward baseline — the one legitimate decay. Stance axes must not erode on a
-clock; the grudge does not fade unless something fades it.
+toward baseline. `psychology_runtime.py` applies the same explicit-time
+principle to stress and hedonic carry-over while keeping pain and pleasure as
+independent current-event signals: a comforting touch can hurt a bruise and
+still feel welcome. Survival vitals can supply a pain floor but are not required.
+Stance axes must not erode on a clock; the grudge does not fade unless something
+fades it.
 
 ### Persistence and source of truth
 
@@ -214,8 +220,9 @@ copy blindly:
 **Physical-world authority.** The frame-scoped `world.scene` blob is the sole
 runtime authority for live rooms, positions and entity state. `room_registry` is
 the sole cross-frame ledger of room identity and retirement. `world_entities` is
-a derived projection of the scene commit. `world_placements` and `fiction_*` are
-decommissioned import-compatibility tables.
+a derived projection of the scene commit. `world_placements` is decommissioned;
+`fiction_worlds`, `fiction_locations`, and `transit_edges` are deprecated
+import-compatibility tables.
 
 **Commit is atomic.** Slow provider work (lore and memory embeddings) happens
 *before* the write lock; then all primary turn mutations commit inside one outer
@@ -326,7 +333,14 @@ Subsystems the original architecture never imagined, now load-bearing:
 - **Obligation ledger, background claims, authored events** — bookkeeping that
   keeps promises and unregistered presences coherent.
 - **Import pipeline** (`importers.py`, `character_schema.py`). External card
-  formats, heuristic and AI-reinterpreted paths, damaged-sheet repair on read.
+  formats, heuristic and AI-reinterpreted paths, damaged-sheet repair on read,
+  and a non-destructive v3 psychology gap-filler for older cards.
+- **Portable chat archives** (`chat_archive.py`). Versioned, typed export/import
+  with embedded resources, reference remapping, and atomic restoration.
+- **Portable pipeline traces** (`pipeline_trace.py`). Hash-only diagnostics by
+  default, with explicit content-bearing offline replay artifacts.
+- **Host authentication routes** (`auth_routes.py`, `guest_access.py`). Typed
+  request/cookie transport separated from credential/session persistence.
 - **Appearance system** (`static/themes.css`). Browser-local themes, independent
   story-text sizing.
 - **Provider layer** (`providers.py`, `prompt_cache.py`, `llm_quality.py`).
@@ -385,18 +399,21 @@ more than ~0.05; the schema clamps at ±0.2.
 ### 3. Two import paths of very different quality
 
 The heuristic (non-AI) import derives psychology from the card's `personality`
-field. A v2 card that puts everything in `description` — common — yields a sheet
-with no traits, drive, values, voice, abilities, goals or first message. Measured
-on a real card: 24 populated leaves against 111 for the same card through the AI
-path. Only two of those gaps produce a warning; the rest are silent.
+field. A v2 card that puts everything in `description` — common — can still
+yield a sparse first pass. The character editor now exposes **Fill psychology
+gaps**, which asks for a short account of formative pressures, triggers,
+conflicts, coping, sensitivities, and recurring cues, then fills empty v3
+psychology fields without replacing authored identity, appearance, goals, or
+non-empty psychology. The initial heuristic path still needs better automatic
+description fallback and sparse-import warning.
 
 ### 4. Documentation forcing functions are uneven
 
 `docs/CODE_MAP.md` is well maintained because `make structure` fails on
 staleness. No equivalent exists for hand-written docs, which is how the previous
-edition of this file drifted. `docs/DATABASE.md` is 60 lines for a schema at
-migration v17 with ~30 tables, while `AGENTS.md` routes every schema change
-through it.
+edition of this file drifted. `docs/DATABASE.md` remains deliberately compact
+for a schema with roughly 30 tables and a long migration chain, while
+`AGENTS.md` routes every schema change through it.
 
 ---
 
@@ -424,7 +441,9 @@ grudge inspectable rather than merely persistent. **Closes debt #2.**
 
 No LLM required: fall back to `description` for `self_model.summary` and voice
 notes when `personality` is empty, and warn specifically when a heuristic import
-lands below a populated-field threshold. **Closes debt #3.**
+lands below a populated-field threshold. The opt-in v3 gap-filler mitigates
+sparse old cards but does not remove the value of a better deterministic first
+pass. **Closes debt #3.**
 
 ### 4. Hard mode — enforce `PlayerAuthorityMode`
 
@@ -435,11 +454,12 @@ on the list, because it is the one that lets the engine's original thesis be
 played *as written* without taking the dial away from anyone who prefers
 otherwise.
 
-### 5. Automatic canon lock
+### 5. Complete automatic canon lock
 
-The column exists and is manually settable. Add the specified rule — facts
-on-page past a turn threshold, or referenced multiple times, lock automatically;
-locked wins a conflict. Cheap, and it is what stops long-run lore drift.
+Age-based locking is built: chat-canon entries older than 20 turns lock
+automatically, and locked entries reject in-place mapping updates. Add the
+remaining specified rule so facts referenced multiple times lock before the age
+threshold. Cheap, and it is what stops long-run lore drift.
 
 ### 6. Scene-boundary coherence pass
 

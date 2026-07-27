@@ -333,7 +333,7 @@ def _normalize_impact(raw, priority_of):
     impact = _clamp(raw.get("impact"))
     certainty = _clamp01(raw.get("certainty"), fallback=0.5)
     agency = str(raw.get("agency") or "none").strip().casefold()
-    if agency not in ("self", "other", "none"):
+    if agency not in ("self", "other", "world", "none"):
         agency = "none"
     try:
         priority = max(0.0, _float_or(priority_of(serves), 0.4))
@@ -369,7 +369,7 @@ _AROUSAL_DIRECTION = {
     "satisfaction": -1.0, "hope": 0.5,
 }
 
-def appraise(goal_impacts, priority_of):
+def appraise(goal_impacts, priority_of, dimensions=None):
     """OCC-style appraisal of this beat's goal impacts into a mood delta.
 
     `goal_impacts` is a list of {serves, impact[-1,1], certainty[0,1],
@@ -379,6 +379,8 @@ def appraise(goal_impacts, priority_of):
     valence/arousal delta and votes for one emotion tag. Deterministic and
     total: an empty/None list appraises to zeros with no emotions.
     """
+    extended = isinstance(dimensions, dict)
+    dimensions = dimensions if extended else {}
     d_v, d_a = 0.0, 0.0
     tag_weights: dict[str, float] = {}
     dominant, dominant_weight = None, -1.0
@@ -406,15 +408,46 @@ def appraise(goal_impacts, priority_of):
         if norm["serves"] == "drive" and weight > drive_weight:
             drive_impact, drive_weight = norm, weight
 
+    # Intrinsic bodily pleasantness and appraisal-process dimensions are
+    # orthogonal to goal success. A current touch can hurt or feel good even
+    # when no standing goal moved; novelty can mobilize without being bad.
+    intrinsic = _clamp(dimensions.get("intrinsic_pleasantness"))
+    norm = _clamp(dimensions.get("norm_compatibility"))
+    congruence = _clamp(dimensions.get("self_congruence"))
+    novelty = _clamp01(dimensions.get("novelty"))
+    somatic = dimensions.get("somatic_impact")
+    somatic = somatic if isinstance(somatic, dict) else {}
+    pain = _clamp01(somatic.get("pain"), fallback=0.0)
+    pleasure = _clamp01(somatic.get("pleasure"), fallback=0.0)
+    d_v += intrinsic * 0.25 + norm * 0.08 + congruence * 0.08
+    d_v += pleasure * 0.2 - pain * 0.25
+    d_a += novelty * 0.12 + max(pain, pleasure) * 0.12
+
     # sorted() is stable, so equal-weight tags keep first-seen order.
     emotions = [t for t, _ in sorted(tag_weights.items(), key=lambda kv: -kv[1])]
-    return {
+    result = {
         "dV": _clamp(d_v),
         "dA": _clamp(d_a),
         "emotions": emotions,
         "dominant": dominant,
         "drive_impact": drive_impact,
     }
+    if extended:
+        result.update({
+            "novelty": novelty,
+            "controllability": _clamp01(
+                dimensions.get("controllability"), fallback=0.5),
+            "coping_potential": _clamp01(
+                dimensions.get("coping_potential"), fallback=0.5),
+            "norm_compatibility": norm,
+            "self_congruence": congruence,
+            "intrinsic_pleasantness": intrinsic,
+            "somatic_impact": {
+                "pain": pain, "pleasure": pleasure,
+                "why": str(somatic.get("why") or ""),
+            },
+        })
+    return result
 
 # ---- Mood dynamics ----
 
@@ -445,7 +478,7 @@ def decay_affect(va, baseline_va, turns, half_life=_SURFACE_HALF_LIFE):
     """
     v, a = _va_pair(va)
     base_v, base_a = _va_pair(baseline_va)
-    elapsed = max(0, int(_float_or(turns)))
+    elapsed = max(0.0, _float_or(turns))
     if elapsed == 0:
         return (v, a)
     factor = 0.5 ** (elapsed / max(0.001, _float_or(half_life, _SURFACE_HALF_LIFE)))
@@ -986,7 +1019,7 @@ def update_drive_strain(strain, strain_log, appraisal_out, enacted_serves,
     to the log. Pure, total, and deterministic on junk inputs.
     """
     new = _clamp01(strain)
-    elapsed = max(0, int(_float_or(turns_since)))
+    elapsed = max(0.0, _float_or(turns_since))
     if elapsed:
         new *= 0.5 ** (elapsed / _STRAIN_HALF_LIFE)
 

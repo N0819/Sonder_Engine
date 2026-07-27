@@ -4,6 +4,26 @@
 
 ### Added
 
+- **Character psychology v3 and event-grounded pain/pleasure.** Character cards
+  can now describe trait triggers and inhibitors, value conflicts, protected
+  beliefs, coping/recovery patterns, stress reactivity, learned cue
+  associations, interoceptive sensitivities, and initial stress/hedonic state.
+  Each current beat can produce independent pain and pleasure even when
+  survival mode is disabled; deterministic commit code bounds persistence and
+  recovery using simulation time.
+
+- **Non-destructive psychology completion for older character cards.** The
+  character editor's **Fill psychology gaps** action asks for a concise account
+  of formative pressures, triggers, conflicts, coping, sensitivities, and
+  recurring cues. Generated content is previewed in the editor, fills empty
+  psychology/interoception fields, and waits for the normal Save action; identity,
+  appearance, goals, and authored values remain immutable.
+
+- **Structured appraisal observations with an adversarial firewall.** Character
+  appraisal receives typed observations re-derived from the final scrubbed
+  perception prose. Model-authored observation objects are discarded, and new
+  tests attack hidden-intent smuggling and cross-character body-state leaks.
+
 - **Portable, privacy-conscious pipeline traces.** Completed turns can now be
   exported from their immutable step/variant history with
   `tools/pipeline_trace.py`, validated by a canonical SHA-256 envelope, and

@@ -17,7 +17,9 @@ from memory import (
 from providers import embed_texts
 from prompts import get_prompt
 import affect
+import psychology_runtime
 from character_schema import (character_name, new_uid, character_psychology,
+                              character_interoception,
                               character_initial_active_state, effective_drive,
                               character_standing_intentions,
                               normalize_character_data, persona_name)
@@ -27,6 +29,7 @@ from mechanics import mechanics_sweep, news_latency_seconds, stable_event_key
 from spatial import (merge_scene_with_diff,
                      normalize_room_id, spatial_rel, hear_level)
 from theory_of_mind import apply_mind_model_updates
+from survival import vitals_of
 from paradox import check_and_apply_paradox
 from spatial_frames import detect_and_reconcile as detect_and_reconcile_spatial
 from spatial_frames import (infer_companion_carry, infer_vehicle_zones,
@@ -3175,6 +3178,18 @@ def prepare_memory_commit(ctx, *, scene=None):
     pending_memories = []
     state_updates = []
     relationship_ops = []
+    _clock = wget(
+        cid, "simulation_clock",
+        {"elapsed_seconds": 0.0, "display": "now"},
+    ) or {}
+    _time_diff = ((res.get("state_diff") or {}).get("time")
+                  if isinstance(res.get("state_diff"), dict) else None)
+    if isinstance(_time_diff, dict):
+        _clock_seconds = float(
+            _time_diff.get("end_seconds", _clock.get("elapsed_seconds", 0.0))
+            or 0.0)
+    else:
+        _clock_seconds = float(_clock.get("elapsed_seconds") or 0.0)
 
     for char_row in ctx.cast:
         ccid = char_row["id"]
@@ -3359,15 +3374,34 @@ def prepare_memory_commit(ctx, *, scene=None):
                 wants, enacted, suppressed = affect.normalize_wants(
                     asv.get("wants") or [], valid_ids)
 
+                appraisal_input = own_result.get("appraisal") or {}
                 appraisal_out = affect.appraise(
-                    ((own_result.get("appraisal") or {}).get("goal_impacts")) or [], _priority)
+                    appraisal_input.get("goal_impacts") or [], _priority,
+                    dimensions=appraisal_input,
+                )
                 prev_affect = prev_as.get("affect") if isinstance(prev_as, dict) else None
                 baseline = ((prev_affect or {}).get("baseline")
                             or character_initial_active_state(sh)["affect"]["baseline"])
                 turns_since = max(1, turn.idx - int(prev_as.get("affect_turn") or (turn.idx - 1)))
+                elapsed_units = psychology_runtime.elapsed_psych_units(
+                    prev_as.get("affect_seconds"), _clock_seconds, turns_since)
                 new_affect = affect.resolve_affect(
-                    prev_affect, appraisal_out, baseline, turns_since,
+                    prev_affect, appraisal_out, baseline, elapsed_units,
                     proposed=asv.get("affect") or asv.get("mood"))
+                body_state = vitals_of(sc, cname)
+                new_hedonic = psychology_runtime.resolve_hedonic(
+                    prev_as.get("hedonic"), appraisal_out,
+                    character_interoception(sh), body_state, elapsed_units,
+                )
+                proposed_stress = (
+                    asv.get("stress") if isinstance(asv.get("stress"), dict) else {}
+                )
+                new_stress = psychology_runtime.resolve_stress(
+                    prev_as.get("stress"), appraisal_out,
+                    (character_psychology(sh) or {}).get("stress_profile") or {},
+                    new_hedonic, elapsed_units,
+                    proposed_mode=proposed_stress.get("coping_mode"),
+                )
 
                 # Leak tripwire: this character's OWN speech must not state a
                 # suppressed want / the undercurrent / an unenacted intention.
@@ -3392,6 +3426,15 @@ def prepare_memory_commit(ctx, *, scene=None):
                     "enacted_want": enacted,
                     "suppressed_want": suppressed,
                     "affect_turn": turn.idx,
+                    "affect_seconds": _clock_seconds,
+                    "stress": new_stress,
+                    "hedonic": new_hedonic,
+                    "active_concerns": (
+                        asv.get("active_concerns")
+                        or prev_as.get("active_concerns")
+                        or character_initial_active_state(sh).get("active_concerns")
+                        or []
+                    ),
                 }
                 # --- Drive rupture (Tier 1): a deterministic strain ledger and
                 # two-key gate that can, rarely and earned, crack the core drive.
@@ -3402,9 +3445,11 @@ def prepare_memory_commit(ctx, *, scene=None):
                 strain = float(interior.get("drive_strain") or 0.0)
                 strain_log = list(interior.get("strain_log") or [])
                 _strain_turns = max(1, turn.idx - int(interior.get("strain_turn") or (turn.idx - 1)))
+                _strain_elapsed = psychology_runtime.elapsed_psych_units(
+                    interior.get("strain_seconds"), _clock_seconds, _strain_turns)
                 strain, _slog = affect.update_drive_strain(
                     strain, strain_log, appraisal_out,
-                    _serves_of(enacted), _serves_of(suppressed), _strain_turns)
+                    _serves_of(enacted), _serves_of(suppressed), _strain_elapsed)
                 if _slog:
                     _slog["turn"] = turn.idx
                     strain_log = (strain_log + [_slog])[-12:]
@@ -3487,6 +3532,17 @@ def prepare_memory_commit(ctx, *, scene=None):
                     "former_drives": former,
                     "last_shift_turn": last_shift,
                     "strain_turn": turn.idx,
+                    "strain_seconds": _clock_seconds,
+                    "beliefs": psychology_runtime.apply_belief_updates(
+                        interior.get("beliefs"), character_psychology(sh),
+                        own_result.get("belief_updates") or [], turn.idx,
+                        _clock_seconds,
+                    ),
+                    "associations": psychology_runtime.apply_association_updates(
+                        interior.get("associations"), character_psychology(sh),
+                        own_result.get("association_updates") or [], turn.idx,
+                        _clock_seconds,
+                    ),
                 }
                 if rupture is not None:
                     _interior_out["drive_rupture"] = rupture
@@ -3545,6 +3601,7 @@ def prepare_memory_commit(ctx, *, scene=None):
             st["stance"] = stance
             st = apply_mind_model_updates(
                 st, own_result.get("mind_model_updates") or [], turn.idx,
+                elapsed_seconds=_clock_seconds,
             )
             explicit_updates = own_result.get("relationship_updates") or []
             if explicit_updates:

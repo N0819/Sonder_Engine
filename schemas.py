@@ -712,6 +712,14 @@ class Observation(BaseModel):
     channel: str
     fidelity: str
     observed: dict[str, Any] = Field(default_factory=dict)
+    intensity: float = Field(default=0.5, ge=0.0, le=1.0)
+    suddenness: float = Field(default=0.0, ge=0.0, le=1.0)
+    ambiguity: float = Field(default=0.5, ge=0.0, le=1.0)
+    directed_at_self: bool = False
+
+    _clamp_observation_axes = validator(
+        "intensity", "suddenness", "ambiguity", pre=True, allow_reuse=True
+    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.5))
 
 class SensorChannel(BaseModel):
     channel_id: str
@@ -986,6 +994,140 @@ class RelationshipUpdate(BaseModel):
         lambda cls, v: _clamp_float(v, -0.2, 0.2, 0.0)
     )
 
+class GoalImpact(BaseModel):
+    serves: str = "situational"
+    impact: float = Field(default=0.0, ge=-1.0, le=1.0)
+    certainty: float = Field(default=0.5, ge=0.0, le=1.0)
+    agency: str = "none"
+    intentionality: float = Field(default=0.0, ge=0.0, le=1.0)
+    why: str = ""
+
+    _impact = validator("impact", pre=True, allow_reuse=True)(
+        lambda cls, value: _clamp_float(value, -1.0, 1.0, 0.0)
+    )
+    _certainty_intentionality = validator(
+        "certainty", "intentionality", pre=True, allow_reuse=True
+    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.5))
+
+
+class SomaticImpact(BaseModel):
+    pain: float = Field(default=0.0, ge=0.0, le=1.0)
+    pleasure: float = Field(default=0.0, ge=0.0, le=1.0)
+    why: str = ""
+
+    _axes = validator("pain", "pleasure", pre=True, allow_reuse=True)(
+        lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0)
+    )
+
+
+class CharacterAppraisal(BaseModel):
+    goal_relevance: str = ""
+    expectation: str = ""
+    emotion: str = ""
+    uncertainty: str = ""
+    novelty: float = Field(default=0.0, ge=0.0, le=1.0)
+    controllability: float = Field(default=0.5, ge=0.0, le=1.0)
+    coping_potential: float = Field(default=0.5, ge=0.0, le=1.0)
+    norm_compatibility: float = Field(default=0.0, ge=-1.0, le=1.0)
+    self_congruence: float = Field(default=0.0, ge=-1.0, le=1.0)
+    intrinsic_pleasantness: float = Field(default=0.0, ge=-1.0, le=1.0)
+    somatic_impact: SomaticImpact = Field(default_factory=SomaticImpact)
+    goal_impacts: list[GoalImpact] = Field(default_factory=list)
+
+    _unit_axes = validator(
+        "novelty", "controllability", "coping_potential",
+        pre=True, allow_reuse=True,
+    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.5))
+    _signed_axes = validator(
+        "norm_compatibility", "self_congruence", "intrinsic_pleasantness",
+        pre=True, allow_reuse=True,
+    )(lambda cls, value: _clamp_float(value, -1.0, 1.0, 0.0))
+
+    class Config:
+        extra = "allow"
+
+
+class StressState(BaseModel):
+    activation: float = Field(default=0.0, ge=0.0, le=1.0)
+    load: float = Field(default=0.0, ge=0.0, le=1.0)
+    coping_mode: str = ""
+    overloaded: bool = False
+
+    _clamp_stress = validator(
+        "activation", "load", pre=True, allow_reuse=True
+    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
+
+
+class HedonicState(BaseModel):
+    pain: float = Field(default=0.0, ge=0.0, le=1.0)
+    pleasure: float = Field(default=0.0, ge=0.0, le=1.0)
+    source: str = ""
+
+    _clamp_hedonics = validator(
+        "pain", "pleasure", pre=True, allow_reuse=True
+    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
+
+
+class CharacterActiveState(BaseModel):
+    mood: Any = ""
+    goal: str = ""
+    affect: dict = Field(default_factory=dict)
+    wants: list[dict] = Field(default_factory=list)
+    enacted_want: Optional[int] = None
+    suppressed_want: Optional[int] = None
+    active_concerns: list[str] = Field(default_factory=list)
+    stress: StressState = Field(default_factory=StressState)
+    hedonic: HedonicState = Field(default_factory=HedonicState)
+
+    class Config:
+        extra = "allow"
+
+
+class ResponseCandidate(BaseModel):
+    response: str = ""
+    serves: list[str] = Field(default_factory=list)
+    expected_outcome: str = ""
+    risk: float = Field(default=0.0, ge=0.0, le=1.0)
+    inhibition: float = Field(default=0.0, ge=0.0, le=1.0)
+    norm_conflict: str = ""
+    selected: bool = False
+
+    _lists = validator("serves", pre=True, allow_reuse=True)(
+        lambda cls, value: _coerce_str_list(value)
+    )
+    _candidate_axes = validator(
+        "risk", "inhibition", pre=True, allow_reuse=True
+    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
+
+
+class BeliefUpdate(BaseModel):
+    belief: str
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+    operation: str = "reinforce"
+    emotional_charge: float = Field(default=0.0, ge=-1.0, le=1.0)
+
+    _confidence = validator("confidence", pre=True, allow_reuse=True)(
+        lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.5)
+    )
+    _charge = validator("emotional_charge", pre=True, allow_reuse=True)(
+        lambda cls, value: _clamp_float(value, -1.0, 1.0, 0.0)
+    )
+
+
+class AssociationUpdate(BaseModel):
+    cue: str
+    appraisal_bias: str = ""
+    response_tendency: str = ""
+    operation: str = "reinforce"
+    amount: float = Field(default=0.1, ge=0.0, le=0.25)
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+
+    _amount = validator("amount", pre=True, allow_reuse=True)(
+        lambda cls, value: _clamp_float(value, 0.0, 0.25, 0.1)
+    )
+
+
 class InteractionControl(BaseModel):
     addresses: list[str] = Field(default_factory=list)
     expects_response: bool = False
@@ -999,17 +1141,32 @@ class InteractionControl(BaseModel):
 
 class CharacterOutput(BaseModel):
     observations_used: list[EvidenceRef] = Field(default_factory=list)
-    appraisal: dict = Field(default_factory=dict)
+    appraisal: CharacterAppraisal = Field(default_factory=CharacterAppraisal)
     considered_responses: list[str] = Field(default_factory=list)
+    response_candidates: list[ResponseCandidate] = Field(default_factory=list)
 
     _coerce_considered = validator("considered_responses", pre=True, allow_reuse=True)(
         lambda cls, v: _coerce_str_list(v)
+    )
+    _coerce_candidates = validator(
+        "response_candidates", pre=True, allow_reuse=True
+    )(
+        lambda cls, value: [
+            {"response": item} if isinstance(item, str) else item
+            for item in (value if isinstance(value, list) else [])
+            if isinstance(item, (str, dict))
+        ]
+    )
+    _coerce_active_state = validator("active_state", pre=True, allow_reuse=True)(
+        lambda cls, value: (
+            {"mood": value, "goal": ""} if isinstance(value, str) else value
+        )
     )
     sequence: list[dict] = Field(default_factory=list)
     speech: Optional[str] = None
     action: Optional[dict] = None
     actions: list[dict] = Field(default_factory=list)
-    active_state: dict = Field(default_factory=dict)
+    active_state: Optional[CharacterActiveState] = None
     # Interior depth (all optional; the deterministic floors in affect.py apply
     # at commit). Kept as permissive dicts/lists -- affect.py validates/normalizes.
     intent_ops: list[dict] = Field(default_factory=list)
@@ -1017,6 +1174,8 @@ class CharacterOutput(BaseModel):
     # A drive rupture proposal -- only valid inside an engine-opened window;
     # commit (validate_drive_shift) decides whether it counts.
     drive_shift: Optional[dict] = None
+    belief_updates: list[BeliefUpdate] = Field(default_factory=list)
+    association_updates: list[AssociationUpdate] = Field(default_factory=list)
     mind_model_updates: list[MindHypothesis] = Field(default_factory=list)
     relationship_updates: list[RelationshipUpdate] = Field(default_factory=list)
     interaction: InteractionControl = Field(default_factory=InteractionControl)
@@ -1120,6 +1279,10 @@ class LoreEntryRelation(BaseModel):
     
 class PerceptionOutput(BaseModel):
     views: dict[str, Optional[str]] = Field(default_factory=dict)
+    # Produced by deterministic post-processing from the final scrubbed view,
+    # never trusted from model output. This makes structured perception a
+    # projection of the already-audited prose channel, not a second leak path.
+    observations: dict[str, list[Observation]] = Field(default_factory=dict)
 
 class MappingStageOutput(BaseModel):
     relevant_books: list[int] = Field(default_factory=list)
@@ -1454,6 +1617,11 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
             _fill_entity_names(patch)
 
     if step_key == "perception":
+        # Observations are a deterministic projection of the final scrubbed
+        # view. Model-authored copies are discarded before validation so a
+        # malformed or malicious second channel can neither fail the step nor
+        # smuggle information past the prose gates.
+        result.pop("observations", None)
         views = result.get("views")
         if isinstance(views, dict):
             result["views"] = {
@@ -1763,8 +1931,11 @@ OUTPUT_EXAMPLES = {
         "observations_used": [],
         "appraisal": {},
         "considered_responses": [],
+        "response_candidates": [],
         "sequence": [],
         "active_state": {},
+        "belief_updates": [],
+        "association_updates": [],
         "mind_model_updates": [],
         "relationship_updates": [],
         "interaction": {
@@ -1778,6 +1949,7 @@ OUTPUT_EXAMPLES = {
     },
     "perception": {
         "views": {},
+        "observations": {},
     },
     "mapping_stage": {
         "relevant_books": [],

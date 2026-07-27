@@ -8,16 +8,23 @@ Before editing behavior:
 
 1. Read `docs/PIPELINE.md` for execution order and ownership boundaries.
 2. Search `docs/CODE_MAP.md` for the handler or function involved.
-3. Read the relevant schema in `schemas.py` before changing any model output.
-4. Read the corresponding commit function before adding fields that should persist.
-5. Find the nearest regression test and run the narrow test first.
+3. Read `docs/DATABASE.md` before changing persistent state, archives, or restore paths.
+4. Read the relevant schema in `schemas.py` before changing any model output.
+5. Read the corresponding commit function before adding fields that should persist.
+6. Read `docs/TESTING.md`, find the nearest regression test, and run the narrow test first.
 
-Regenerate the structural map after moving or adding functions:
+`docs/CODE_MAP.md` is generated; never hand-edit it. Regenerate and verify it
+after moving or adding functions:
 
 ```bash
-python tools/generate_code_map.py
-python tools/project_check.py
+make map
+make structure
 ```
+
+`AGENTS.md`, `docs/PIPELINE.md`, `docs/DATABASE.md`, `docs/TESTING.md`, and
+`Design.md` are the maintained guidance set. Dated audits and `*_DESIGN.md`
+files are scoped records or proposals, not implementation authority; check
+their claims against source and the maintained guides before acting on them.
 
 ## Edit routing
 
@@ -28,11 +35,14 @@ python tools/project_check.py
 | Opening scene generation | `agents/director.py`, `agents/perception.py` | `scene.py`, `spatial.py`, `commit.py` |
 | Perception or information leakage | `agents/perception.py` (`_source_channels`, `_redact_concealed_from_event`, `_surface_translate_event`, `_touch_only_sources`), `agents/common.py` delivery helpers | `spatial.py` (`scent_level`, `visual_level_between`, `containment_conceals`), `scene.py`, `schemas.py`, perception tests — concealed actions are structurally redacted from the resolved event per-perceiver; touch-only sources get surface-translated event text (act names replaced with surface sensations); scent is barrier-gated via `scent_channel_to_sources` |
 | Character decisions or dialogue | `agents/character.py`, `agents/loops.py` | `memory.py`, `scene.py`, `prompts.py` |
+| Character psychology, stress, pain/pleasure, belief learning, or association learning | `character_schema.py`, `psychology_runtime.py`, `affect.py`, `agents/character.py`, `commit.py` | `schemas.py`, `prompts.py`, `importers.py`, character-card UI, `theory_of_mind.py`, psychology and information-leak tests — transient state may use only the character's scrubbed current observations, own sheet, own body state, and earned memory |
 | Background (unregistered) presence reactions | `agents/background.py`, `commit.py` (`pick_background_reactor`) | `agents/perception.py` (merge into dialogue_log), `prompts.py`, `schemas.py` |
 | Objective action resolution | `agents/director.py` (`director_resolve`) | `schemas.py`, `spatial.py`, `commit.py` |
 | Narration | `agents/narration.py` (`narrator`) | narrator prompt in `prompts.py`, output validation |
 | Persistence or rollback | `commit.py`, `checkpoints.py` | `db.py`, `memory.py`, restore tests |
 | Portable chat archive export/import | `chat_archive.py` | `app.py` remap primitives, `checkpoints.py`, `memory.py`, archive fidelity tests |
+| Portable pipeline trace export/replay | `pipeline_trace.py`, `tools/pipeline_trace.py` | `agents/storage.py`, `db.py`, `tests/test_pipeline_trace.py`; content-bearing traces are private local artifacts |
+| Host authentication and guest access | `auth_routes.py`, `guest_access.py` | `app.py` router registration, auth/guest tests |
 | Deterministic mechanics (timed arrivals, expiry, dock edges, zone/carry inference, news latency) | `mechanics.py` (`mechanics_sweep`) | `commit.py` (`commit_transit_sweep`), `spatial.py`, `spatial_frames.py`, `tests/test_mechanics_sweep.py` |
 | Whether a barrier can be seen/heard/smelled/walked through | `spatial.py` (`_SIGHT_BARRIERS`/`_PASSABLE_BARRIERS`/`_AMBIENT_BARRIERS`/`_SCENT_BARRIERS`, `has_visual`, `sight_level`, `scent_level`, `normalize_barrier`) | `visible_adjacent_rooms`, `tests/test_see_through.py`, `tests/test_membrane_barrier.py` — four separate questions; `window` passes sight only, `bars` sight+sound, `membrane` passage only (the inverse of `window`: a curtained doorway, a tent flap). `has_visual`/`sight_level` is where sight is decided; `scent_level` is where scent is decided. `_SOUND_LADDER` is walked by RELATIVE steps — inserting a rung changes what its NEIGHBOURS shift onto, so `membrane` is deliberately off it. `_SCENT_BARRIERS` gates scent the same way `_SIGHT_BARRIERS` gates sight: `membrane` and `closed_door` muffle, `window`/`wall` block, `open`/`bars` pass |
 | Containers you can be inside (jar/cage/crate/tent) | entity `enclosure` + `interior_rooms` + `state.hatch`, derived in `spatial.py` (`_closed_enclosure_barrier`, `_open_enclosure_barrier`, dock-edge rewrite) | `tests/test_see_through.py`, `tests/test_membrane_barrier.py` — `enclosure` describes BOTH states: `opaque`/`transparent`/`barred` leave an OPEN interior see-through (right for a lid), `membrane` is opaque open or shut and overrides an authored `open_door`. A closed transparent container yields a `window` edge; `_is_carried_interior` keeps a carried container's inside out of the surrounding room's view. `enclosure`/`light_source` are in `_ENTITY_DEFAULT_FIELDS`, without which they could only be set at entity CREATION |
@@ -45,11 +55,12 @@ python tools/project_check.py
 | Lore retrieval or hierarchy | `memory.py`, `agents/mapping.py` | `app.py`, lore tests |
 | Which lorebooks a chat *has* (browsing/editing) | `app.py` (`GET /api/chats/{cid}/lorebooks`) | `static/js/lorebooks.js` workspace tree, `tests/test_lore_tree_browser.py` — ownership, NOT `chat_lorebook_ids()`: that resolves reachability for retrieval and cannot see a book nothing hangs off |
 | Lorebook-tree generation (authoring, not pipeline) | `importers.py` (`generate_lorebook_plan`, `resume_lorebook_plan`, `apply_lorebook_plan`) | `generator_lorebook*` prompts, `db.py` (`lore_gen_jobs`), `app.py` job routes, `static/js/lorebooks.js` generator tab, `tests/test_lore_gen_resume.py` |
-| Character/persona format | `character_schema.py` | `importers.py`, editor UI, schema tests |
+| Character/persona format | `character_schema.py` | `importers.py`, generation/import/fill prompts, editor UI, schema and non-destructive-fill tests |
 | Provider behavior | `providers.py` | `app.py` provider routes, `prompt_cache.py` |
 | Per-call request timeout | `providers.py` (`request_timeout`, `clamp_read_timeout`, `_request_timeout`/`_httpx_timeout`) | the caller's own knob (e.g. the lorebook generator's `timeout` param); `REQUEST_TIMEOUT`/`HTTPX_TIMEOUT` stay the pipeline default |
-| API behavior | `app.py`, extracted route module when present | matching file in `static/js/` |
+| API behavior | `app.py`, `auth_routes.py`, or `chat_archive.py`, according to route ownership in `docs/CODE_MAP.md` | matching file in `static/js/` |
 | Browser UI | `static/index.html`, `static/js/`, CSS | matching API route in `app.py` |
+| Test tiers, CI, or dependency support | `Makefile`, `.github/workflows/ci.yml`, `pyproject.toml`, `requirements*.txt`, `constraints.txt` | `docs/TESTING.md`, `tests/conftest.py`, `browser_tests/` |
 | Database shape | `db.py` | migrations, snapshot/export/restore code, tests |
 
 ## Core invariants
@@ -103,6 +114,10 @@ Physical-world authority (Phase 3a consolidation): the frame-scoped `world.scene
 
 Avoid broad rewrites of `agents/runtime.py`, `app.py`, or `memory.py` unless the change has dedicated tests. These files contain orchestration seams; seemingly local edits can affect reruns, variants, streaming, and commits.
 
+Never add runtime artifacts to source control. `engine.db*`, `*.sqlite*`,
+`backdrops/`, `__pycache__/`, `*.py[cod]`, and content-bearing `*.trace.json`
+files are local state or private diagnostics and are ignored deliberately.
+
 ## Large-file landmarks
 
 ### `agents/`
@@ -131,10 +146,12 @@ Avoid broad rewrites of `agents/runtime.py`, `app.py`, or `memory.py` unless the
 - Memories
 - Turns, rerolls, checkpoints, resume, and async streaming
 
-### Extracted boundaries
+### Supporting boundaries
 
 - `auth_routes.py`: typed host authentication routes and cookie transport
 - `chat_archive.py`: typed, atomic portable chat export/import service and routes
+- `pipeline_trace.py`: privacy-conscious export, validation, and offline replay
+  of persisted step/variant history
 - `spatial_orientation.py`: bearing math and reciprocal edge normalization,
   re-exported through `spatial.py` for compatibility
 
@@ -151,9 +168,11 @@ Avoid broad rewrites of `agents/runtime.py`, `app.py`, or `memory.py` unless the
 
 ### Frontend
 
-The UI uses browser globals rather than ES modules. Script order in `static/index.html` matters:
+The UI uses browser globals rather than ES modules. `theme-init.js` loads in
+the document head before rendering. The remaining script order at the end of
+`static/index.html` matters:
 
-`utils.js → components.js → editors.js → lorebooks.js → chat.js → settings.js → app.js`
+`utils.js → components.js → editors.js → lorebooks.js → backdrops.js → chat.js → settings.js → themes.js → app.js`
 
 Do not rename a shared function without searching every JavaScript file.
 
@@ -163,7 +182,21 @@ Do not rename a shared function without searching every JavaScript file.
 - `test_spatial.py`: room/barrier/hearing/visibility and scene-diff behavior.
 - `test_memory_*`: retrieval, deduplication, commit, and restore.
 - `test_lore*`: lorebook graph, stability, and restore.
+- `test_archive_fidelity.py`, `test_chat_archive_service.py`: portable archive
+  completeness, remapping, and service boundaries.
+- `test_pipeline_trace.py`: trace privacy defaults, integrity, and replay.
+- `test_frontend_state_guards.py`: static frontend ownership and race guards.
+- `browser_tests/`: real Chromium behavior; optional locally, required in CI.
 - `test_character_schema.py` and importer tests: resource formats.
+- `test_psychology_runtime.py`, `test_character_psychology_fill.py`, and
+  `test_character_card_psychology_ui.py`: live psychology, non-destructive
+  old-card completion, and editor/prompt coverage.
 - `test_theory_of_mind.py`, `test_tom_normalization.py`, and `test_ability_isolation.py`: private cognition boundaries.
+- `test_perception_intent_leak.py` and `test_character_self_knowledge.py`:
+  adversarial checks for structured-observation smuggling and cross-character
+  private/body-state leakage.
 
 Add a test next to the subsystem it protects. A bug involving leaked dialogue or private knowledge belongs in a perception/cognition test, not only in a narrator snapshot.
+Tests that request `temp_db` are collected into the slow/full tier. A test
+intended for `make test-fast` must not depend on another test having initialized
+`engine.db`; use pure constants or explicitly stub settings/prompt lookup.

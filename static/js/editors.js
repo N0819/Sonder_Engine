@@ -2,12 +2,12 @@ function defaultCharacterSheet() {
   return {
     identity: { name: "New Character", aliases: [], pronouns: { subject: "they", object: "them", possessive: "their" } },
     simulation: { tier: "mid", temperature: 0.8, sampler: {} },
-    embodiment: { senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", notes: "ordinary human senses" }], visible: { summary: "A person of unremarkable appearance.", build: "", face: "", hair: "", eyes: "", distinctive_features: [] }, latent: [] },
-    psychology: { drive: { essence: "", expression: "", taboo: "" }, traits: [], values: [], self_model: { summary: "", protected_beliefs: [], pride_triggers: [], shame_triggers: [] }, coping: { under_stress: [], default_conflict_style: "" } },
+    embodiment: { senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", notes: "ordinary human senses" }], visible: { summary: "A person of unremarkable appearance.", build: "", face: "", hair: "", eyes: "", distinctive_features: [] }, latent: [], interoception: { acuity: 0.5, pain_sensitivity: 0.5, fatigue_sensitivity: 0.5, pleasure_sensitivity: 0.5 } },
+    psychology: { drive: { essence: "", expression: "", taboo: "" }, traits: [], values: [], self_model: { summary: "", protected_beliefs: [], pride_triggers: [], shame_triggers: [], beliefs: [] }, coping: { under_stress: [], default_conflict_style: "", strategies: [], recovery_supports: [] }, stress_profile: { baseline_reactivity: 0.5, recovery_rate: 0.5, overload_threshold: 0.8, attentional_style: "", somatic_signs: [] }, learning: { associations: [] } },
     social: { voice: { register: "", cadence: "", verbosity: "natural", markers: [], notes: "" }, baseline_stances: { unknown_person: { trust: 0, warmth: 0, threat_sensitivity: 0 } } },
     competence: { abilities: [] },
     knowledge: { access_tags: ["common"], excluded_titles: [], public_history: "", private_history: [] },
-    initial_state: { mood: { label: "neutral", valence: 0, arousal: 0 }, goals: [], active_concerns: [] },
+    initial_state: { mood: { label: "neutral", valence: 0, arousal: 0 }, goals: [], active_concerns: [], stress: { activation: 0, load: 0, coping_mode: "" }, hedonic: { pain: 0, pleasure: 0, source: "" } },
     opening: { first_message: "" }
   };
 }
@@ -195,6 +195,10 @@ function charEditor(c) {
   f.eyes = fText("Eyes", sheet.embodiment?.visible?.eyes);
   f.distinctive = fStrList("Distinctive features", sheet.embodiment?.visible?.distinctive_features);
   f.latent = fLatent("Latent/hidden capabilities (powers, secret identities, equipment functions)", sheet.embodiment?.latent);
+  f.intero_acuity = fNum("Interoceptive acuity (0..1)", sheet.embodiment?.interoception?.acuity, "0.1");
+  f.pain_sensitivity = fNum("Pain sensitivity (0..1)", sheet.embodiment?.interoception?.pain_sensitivity, "0.1");
+  f.fatigue_sensitivity = fNum("Fatigue sensitivity (0..1)", sheet.embodiment?.interoception?.fatigue_sensitivity, "0.1");
+  f.pleasure_sensitivity = fNum("Pleasure sensitivity (0..1)", sheet.embodiment?.interoception?.pleasure_sensitivity, "0.1");
 
   f.drive_essence = fText("Drive — essence (the deepest thing they pursue/protect)", sheet.psychology?.drive?.essence);
   f.drive_expression = fText("Drive — expression (how it shows in ACTION, incl. their initiative)", sheet.psychology?.drive?.expression);
@@ -205,8 +209,17 @@ function charEditor(c) {
   f.protected = fStrList("Protected beliefs", sheet.psychology?.self_model?.protected_beliefs);
   f.pride = fStrList("Pride triggers", sheet.psychology?.self_model?.pride_triggers);
   f.shame = fStrList("Shame triggers", sheet.psychology?.self_model?.shame_triggers);
+  f.beliefs = fBeliefs("Durable self/world beliefs", sheet.psychology?.self_model?.beliefs);
   f.coping = fArea("Coping under stress", sheet.psychology?.coping?.under_stress?.join(", "), 2);
   f.conflict = fText("Default conflict style", sheet.psychology?.coping?.default_conflict_style);
+  f.coping_strategies = fCopingStrategies("Coping strategies", sheet.psychology?.coping?.strategies);
+  f.recovery_supports = fStrList("Recovery supports", sheet.psychology?.coping?.recovery_supports);
+  f.stress_reactivity = fNum("Baseline stress reactivity (0..1)", sheet.psychology?.stress_profile?.baseline_reactivity, "0.1");
+  f.stress_recovery = fNum("Stress recovery rate (0..1)", sheet.psychology?.stress_profile?.recovery_rate, "0.1");
+  f.overload_threshold = fNum("Overload threshold (0..1)", sheet.psychology?.stress_profile?.overload_threshold, "0.1");
+  f.attentional_style = fText("Attention under stress", sheet.psychology?.stress_profile?.attentional_style);
+  f.somatic_signs = fStrList("Characteristic stress signs", sheet.psychology?.stress_profile?.somatic_signs);
+  f.associations = fAssociations("Learned cue-response associations", sheet.psychology?.learning?.associations);
 
   f.voice_register = fText("Voice register", sheet.social?.voice?.register);
   f.voice_cadence = fText("Voice cadence", sheet.social?.voice?.cadence);
@@ -231,9 +244,45 @@ function charEditor(c) {
   f.arousal = fNum("Mood arousal (0..1)", sheet.initial_state?.mood?.arousal, "0.1");
   f.goals = fGoals("Standing goals (durable objectives the character actively pursues)", sheet.initial_state?.goals);
   f.active_concerns = fStrList("Active concerns", sheet.initial_state?.active_concerns);
+  f.initial_stress = fNum("Initial stress activation (0..1)", sheet.initial_state?.stress?.activation, "0.1");
+  f.initial_load = fNum("Initial cumulative stress load (0..1)", sheet.initial_state?.stress?.load, "0.1");
+  f.initial_coping = fText("Initial active coping mode", sheet.initial_state?.stress?.coping_mode);
+  f.initial_pain = fNum("Initial pain (0..1)", sheet.initial_state?.hedonic?.pain, "0.1");
+  f.initial_pleasure = fNum("Initial pleasure (0..1)", sheet.initial_state?.hedonic?.pleasure, "0.1");
+  f.initial_hedonic_source = fText("Initial pain/pleasure source", sheet.initial_state?.hedonic?.source);
 
   f.first_message = fArea("First message (optional, for scene open)", sheet.opening?.first_message, 3);
   const ph = phEditor(sheet.knowledge?.private_history, true);
+  const fillPsychology = c ? el("button", {
+    title: "Generate only missing psychology fields; populated fields are preserved",
+    onclick: async () => {
+      const brief = await promptModal(
+        "What kind of person is this? Describe formative pressures, what reliably "
+        + "sets them off or settles them, how their values conflict, how they cope "
+        + "under stress, and any learned sensitivities or recurring cues.");
+      if (brief === null) return;
+      const label = fillPsychology.textContent;
+      fillPsychology.textContent = "Filling…";
+      fillPsychology.disabled = true;
+      try {
+        const r = await api("POST", `/api/characters/${c.id}/fill_psychology`,
+          { prompt: brief });
+        const refreshed = {
+          ...c,
+          name: r.sheet?.identity?.name || c.name,
+          sheet: JSON.stringify(r.sheet)
+        };
+        closeAllModals();
+        await boot();
+        charEditor(refreshed);
+        toast("Missing psychology fields filled. Review and save any edits.", "ok");
+      } catch (e) {
+        toast("Psychology fill failed: " + e.message, "err");
+        fillPsychology.textContent = label;
+        fillPsychology.disabled = false;
+      }
+    }
+  }, "✨ Fill psychology gaps") : null;
 
   modal(c ? "Edit character — " + sheet.identity?.name : "New character", b => {
     if (gc) {
@@ -248,13 +297,25 @@ function charEditor(c) {
       el("details", { open: "" }, el("summary", {}, "Identity & Simulation"),
         f.name.node, f.aliases.node, f.pronouns.node, f.tier.node, f.temperature.node),
       el("details", { open: "" }, el("summary", {}, "Embodiment (Visible & Senses)"),
-        f.summary.node, f.senses.node, f.build.node, f.face.node, f.hair.node, f.eyes.node, f.distinctive.node, f.latent.node),
+        f.summary.node, f.senses.node, f.build.node, f.face.node, f.hair.node,
+        f.eyes.node, f.distinctive.node, f.latent.node,
+        el("div", { class: "small dim", style: "margin-top:8px" },
+          "Interoception controls how strongly this character notices internal "
+          + "body signals. Pain and pleasure work even when survival mode is off."),
+        f.intero_acuity.node, f.pain_sensitivity.node, f.fatigue_sensitivity.node,
+        f.pleasure_sensitivity.node),
       el("details", { open: "" }, el("summary", {}, "Psychology & Coping"),
         el("div", { class: "small dim", style: "margin-bottom:6px" },
           "Drive is the character's core motivation — the engine derives their proactive "
           + "wants from it every beat. A blank drive makes the character passive."),
+        fillPsychology,
         f.drive_essence.node, f.drive_expression.node, f.drive_taboo.node,
-        f.traits.node, f.values.node, f.self_summary.node, f.protected.node, f.pride.node, f.shame.node, f.coping.node, f.conflict.node),
+        f.traits.node, f.values.node, f.self_summary.node, f.protected.node,
+        f.pride.node, f.shame.node, f.beliefs.node, f.coping.node, f.conflict.node,
+        f.coping_strategies.node, f.recovery_supports.node,
+        f.stress_reactivity.node, f.stress_recovery.node,
+        f.overload_threshold.node, f.attentional_style.node,
+        f.somatic_signs.node, f.associations.node),
       el("details", { open: "" }, el("summary", {}, "Social & Voice"),
         f.voice_register.node, f.voice_cadence.node, f.voice_verbosity.node, f.voice_markers.node, f.voice_notes.node,
         f.trust.node, f.warmth.node, f.threat.node),
@@ -267,7 +328,10 @@ function charEditor(c) {
             el("label", { class: "tgl" }, f.knowledge_esoteric, " esoteric"))),
         f.excluded_titles.node, f.public_history.node),
       el("details", { open: "" }, el("summary", {}, "Initial State & Opening"),
-        f.mood.node, f.valence.node, f.arousal.node, f.goals.node, f.active_concerns.node, f.first_message.node),
+        f.mood.node, f.valence.node, f.arousal.node, f.goals.node,
+        f.active_concerns.node, f.initial_stress.node, f.initial_load.node,
+        f.initial_coping.node, f.initial_pain.node, f.initial_pleasure.node,
+        f.initial_hedonic_source.node, f.first_message.node),
       el("details", { open: "" }, el("summary", {}, "Private history"),
         el("div", { class: "small dim" }, "Secrets only this character (and anyone tagged in known_by) knows."), ph.node),
       el("div", { class: "row", style: "margin-top:10px" },
@@ -283,14 +347,37 @@ function charEditor(c) {
             embodiment: {
               senses: f.senses.read(),
               visible: { summary: f.summary.read(), build: f.build.read(), face: f.face.read(), hair: f.hair.read(), eyes: f.eyes.read(), distinctive_features: f.distinctive.read() },
-              latent: f.latent.read()
+              latent: f.latent.read(),
+              interoception: {
+                acuity: f.intero_acuity.read() ?? 0.5,
+                pain_sensitivity: f.pain_sensitivity.read() ?? 0.5,
+                fatigue_sensitivity: f.fatigue_sensitivity.read() ?? 0.5,
+                pleasure_sensitivity: f.pleasure_sensitivity.read() ?? 0.5
+              }
             },
             psychology: {
               drive: { essence: f.drive_essence.read(), expression: f.drive_expression.read(), taboo: f.drive_taboo.read() },
               traits: f.traits.read(),
               values: f.values.read(),
-              self_model: { summary: f.self_summary.read(), protected_beliefs: f.protected.read(), pride_triggers: f.pride.read(), shame_triggers: f.shame.read() },
-              coping: { under_stress: splitCL(f.coping.read()), default_conflict_style: f.conflict.read() }
+              self_model: {
+                summary: f.self_summary.read(), protected_beliefs: f.protected.read(),
+                pride_triggers: f.pride.read(), shame_triggers: f.shame.read(),
+                beliefs: f.beliefs.read()
+              },
+              coping: {
+                under_stress: splitCL(f.coping.read()),
+                default_conflict_style: f.conflict.read(),
+                strategies: f.coping_strategies.read(),
+                recovery_supports: f.recovery_supports.read()
+              },
+              stress_profile: {
+                baseline_reactivity: f.stress_reactivity.read() ?? 0.5,
+                recovery_rate: f.stress_recovery.read() ?? 0.5,
+                overload_threshold: f.overload_threshold.read() ?? 0.8,
+                attentional_style: f.attentional_style.read(),
+                somatic_signs: f.somatic_signs.read()
+              },
+              learning: { associations: f.associations.read() }
             },
             social: {
               voice: { register: f.voice_register.read(), cadence: f.voice_cadence.read(), verbosity: f.voice_verbosity.read(), markers: f.voice_markers.read(), notes: f.voice_notes.read() },
@@ -298,7 +385,20 @@ function charEditor(c) {
             },
             competence: { abilities: f.abilities.read() },
             knowledge: { access_tags, excluded_titles: f.excluded_titles.read(), public_history: f.public_history.read(), private_history: ph.read() },
-            initial_state: { mood: { label: f.mood.read(), valence: f.valence.read() || 0, arousal: f.arousal.read() || 0 }, goals: f.goals.read(), active_concerns: f.active_concerns.read() },
+            initial_state: {
+              mood: { label: f.mood.read(), valence: f.valence.read() || 0, arousal: f.arousal.read() || 0 },
+              goals: f.goals.read(), active_concerns: f.active_concerns.read(),
+              stress: {
+                activation: f.initial_stress.read() || 0,
+                load: f.initial_load.read() || 0,
+                coping_mode: f.initial_coping.read()
+              },
+              hedonic: {
+                pain: f.initial_pain.read() || 0,
+                pleasure: f.initial_pleasure.read() || 0,
+                source: f.initial_hedonic_source.read()
+              }
+            },
             // Persist the (possibly edited) greetings alongside first_message.
             // gc.read() is the live list from the greetings box; falling back to
             // the stored list keeps them intact for the new-character form.
