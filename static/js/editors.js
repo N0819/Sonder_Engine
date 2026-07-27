@@ -1,6 +1,7 @@
 function defaultCharacterSheet() {
   return {
     identity: { name: "New Character", aliases: [], pronouns: { subject: "they", object: "them", possessive: "their" } },
+    initial_outfit: { wearing: [], state: [] },
     simulation: { tier: "mid", temperature: 0.8, sampler: {} },
     embodiment: { senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", notes: "ordinary human senses" }], visible: { summary: "A person of unremarkable appearance.", build: "", face: "", hair: "", eyes: "", distinctive_features: [] }, latent: [], interoception: { acuity: 0.5, pain_sensitivity: 0.5, fatigue_sensitivity: 0.5, pleasure_sensitivity: 0.5 } },
     psychology: { drive: { essence: "", expression: "", taboo: "" }, traits: [], values: [], self_model: { summary: "", protected_beliefs: [], pride_triggers: [], shame_triggers: [], beliefs: [] }, coping: { under_stress: [], default_conflict_style: "", strategies: [], recovery_supports: [] }, stress_profile: { baseline_reactivity: 0.5, recovery_rate: 0.5, overload_threshold: 0.8, attentional_style: "", somatic_signs: [] }, learning: { associations: [] } },
@@ -190,10 +191,21 @@ function charEditor(c, options = {}) {
   }
   f.aliases = fStrList("Aliases", sheet.identity?.aliases);
   f.pronouns = fPronouns("Pronouns", sheet.identity?.pronouns);
+  f.initial_outfit = fStrList(
+    "Initial outfit — clothing only (one item per line)",
+    sheet.initial_outfit?.wearing
+  );
+  f.initial_outfit_state = fStrList(
+    "Initial clothing condition (optional)",
+    sheet.initial_outfit?.state
+  );
   f.tier = fSelect("Tier", [["bg", "background"], ["mid", "recurring"], ["major", "major/antagonist"]], sheet.simulation?.tier);
   f.temperature = fNum("Temperature (0.5–1.1)", sheet.simulation?.temperature, "0.05");
 
-  f.summary = fArea("Visible summary — what a stranger sees at a glance", sheet.embodiment?.visible?.summary, 3);
+  f.summary = fArea(
+    "Body appearance — stable visible features, excluding clothing",
+    sheet.embodiment?.visible?.summary, 3
+  );
   f.senses = fSenses("Senses", sheet.embodiment?.senses);
   f.build = fText("Build", sheet.embodiment?.visible?.build);
   f.face = fText("Face", sheet.embodiment?.visible?.face);
@@ -312,7 +324,13 @@ function charEditor(c, options = {}) {
     }
     b.append(
       el("details", { open: "" }, el("summary", {}, "Identity & Simulation"),
-        f.name.node, f.aliases.node, f.pronouns.node, f.tier.node, f.temperature.node),
+        f.name.node, f.aliases.node, f.pronouns.node,
+        el("div", { class: "small dim" },
+          "Appearance describes the body and stable visible features. Initial "
+          + "outfit is copied into the story's live attire state, where it can "
+          + "later be changed without rewriting this card."),
+        f.initial_outfit.node, f.initial_outfit_state.node,
+        f.tier.node, f.temperature.node),
       el("details", { open: "" }, el("summary", {}, "Embodiment (Visible & Senses)"),
         f.summary.node, f.senses.node, f.build.node, f.face.node, f.hair.node,
         f.eyes.node, f.distinctive.node, f.latent.node,
@@ -364,6 +382,10 @@ function charEditor(c, options = {}) {
               name: f.name.read(),
               aliases: f.aliases.read(),
               pronouns: f.pronouns.read()
+            },
+            initial_outfit: {
+              wearing: f.initial_outfit.read(),
+              state: f.initial_outfit_state.read()
             },
             simulation: { tier: f.tier.read(), temperature: f.temperature.read(), sampler: {} },
             embodiment: {
@@ -461,6 +483,7 @@ function charEditor(c, options = {}) {
 function personaEditor(p) {
   const sheet = p ? JSON.parse(p.sheet) : {
     identity: { name: "New Persona", aliases: [], pronouns: { subject: "they", object: "them", possessive: "their" } },
+    initial_outfit: { wearing: [], state: [] },
     embodiment: {
       senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", notes: "ordinary human senses" }],
       visible: { summary: "A person of unremarkable appearance.", build: "", face: "", hair: "", eyes: "", distinctive_features: [] },
@@ -474,8 +497,19 @@ function personaEditor(p) {
   f.name = fText("Name", sheet.identity?.name);
   f.aliases = fStrList("Aliases", sheet.identity?.aliases);
   f.pronouns = fPronouns("Pronouns", sheet.identity?.pronouns);
+  f.initial_outfit = fStrList(
+    "Initial outfit — clothing only (one item per line)",
+    sheet.initial_outfit?.wearing
+  );
+  f.initial_outfit_state = fStrList(
+    "Initial clothing condition (optional)",
+    sheet.initial_outfit?.state
+  );
   f.senses = fSenses("Senses", sheet.embodiment?.senses);
-  f.appearance = fArea("Appearance — what strangers see", sheet.embodiment?.visible?.summary, 3);
+  f.appearance = fArea(
+    "Body appearance — stable visible features, excluding clothing",
+    sheet.embodiment?.visible?.summary, 3
+  );
   f.build = fText("Build", sheet.embodiment?.visible?.build);
   f.face = fText("Face", sheet.embodiment?.visible?.face);
   f.hair = fText("Hair", sheet.embodiment?.visible?.hair);
@@ -490,7 +524,11 @@ function personaEditor(p) {
   modal(p ? "Edit persona — " + sheet.identity?.name : "New persona", b => {
     b.append(
       el("details", { open: "" }, el("summary", {}, "Basic"),
-        f.name.node, f.aliases.node, f.pronouns.node),
+        f.name.node, f.aliases.node, f.pronouns.node,
+        el("div", { class: "small dim" },
+          "Keep body appearance separate from clothing. Initial outfit seeds "
+          + "the story's live attire state and can change during play."),
+        f.initial_outfit.node, f.initial_outfit_state.node),
       el("details", { open: "" }, el("summary", {}, "Embodiment (Visible & Senses)"),
         f.appearance.node, f.senses.node, f.build.node, f.face.node, f.hair.node, f.eyes.node, f.distinctive.node, f.latent.node),
       el("details", { open: "" }, el("summary", {}, "History & Voice"), f.public_history.node, f.voice_setting.node),
@@ -499,7 +537,16 @@ function personaEditor(p) {
       el("div", { class: "row", style: "margin-top:10px" },
         el("button", { class: "primary", onclick: async () => {
           const s = {
-            identity: { name: f.name.read(), aliases: f.aliases.read(), pronouns: f.pronouns.read() },
+            identity: {
+              uid: sheet.identity?.uid,
+              name: f.name.read(),
+              aliases: f.aliases.read(),
+              pronouns: f.pronouns.read()
+            },
+            initial_outfit: {
+              wearing: f.initial_outfit.read(),
+              state: f.initial_outfit_state.read()
+            },
             embodiment: {
               senses: f.senses.read(),
               visible: { summary: f.appearance.read(), build: f.build.read(), face: f.face.read(), hair: f.hair.read(), eyes: f.eyes.read(), distinctive_features: f.distinctive.read() },

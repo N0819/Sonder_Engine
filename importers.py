@@ -326,15 +326,52 @@ def _reinterpret_payload(payload):
 
     return payload
 
+
+_OUTFIT_LINE_RE = re.compile(
+    r"(?im)^[ \t]*(?:initial outfit|outfit|clothing|attire|wearing)"
+    r"[ \t]*:[ \t]*(.+?)[ \t]*$"
+)
+
+
+def _outfit_items(value):
+    if isinstance(value, dict):
+        value = value.get("wearing") or value.get("items") or []
+    if isinstance(value, str):
+        value = re.split(r"[;\n]+", value)
+    if not isinstance(value, list):
+        value = [value] if value else []
+    return [str(item).strip() for item in value if str(item or "").strip()]
+
+
+def _heuristic_appearance_and_outfit(card):
+    """Separate labeled/direct clothing from stable body appearance."""
+    description = str(card.get("description") or "")
+    direct = (
+        card.get("initial_outfit")
+        or card.get("outfit")
+        or card.get("clothing")
+        or card.get("attire")
+    )
+    wearing = _outfit_items(direct)
+    for match in _OUTFIT_LINE_RE.finditer(description):
+        for item in _outfit_items(match.group(1)):
+            if item not in wearing:
+                wearing.append(item)
+    appearance = _OUTFIT_LINE_RE.sub("", description)
+    appearance = re.sub(r"\n{3,}", "\n\n", appearance).strip()
+    return appearance, {"wearing": wearing, "state": []}
+
+
 def heuristic_character_sheet(d):
     name = d.get("name") or "Unnamed"
     # Resolve {{char}}/{{user}} before any card text is copied into the sheet,
     # so a literal "{{user}}" never survives into first_message/history.
     d = _substitute_card_macros(d, name)
-    desc = d.get("description") or ""
+    desc, initial_outfit = _heuristic_appearance_and_outfit(d)
     personality = d.get("personality") or ""
 
     sheet = default_character_data(name)
+    sheet["initial_outfit"] = initial_outfit
     sheet["embodiment"]["visible"]["summary"] = (
         _first_sentences(desc, 3)
         or "A person of unremarkable appearance."
@@ -374,10 +411,12 @@ REINT_CHAR_SYS = (
  "Preserve setting only if it is explicitly supplied; otherwise create a "
  "character with no assumed relationship to the player, beyond what "
  "is directly stated.\n\n"
- "Separate embodiment.visible (currently observable features) from "
- "embodiment.latent (hidden capabilities, transformations, secret "
- "identities, equipment functions). Only visible features belong in the "
- "visible summary.\n\n"
+ "Separate embodiment.visible from embodiment.latent AND from initial_outfit. "
+ "embodiment.visible is stable BODY appearance only: build, face, hair, eyes, "
+ "skin, scars, and other features that remain when clothes change. Hidden "
+ "capabilities, transformations, secret identities, and equipment functions "
+ "belong in latent. Put every garment/accessory currently worn in "
+ "initial_outfit.wearing; never repeat outfit text in the appearance summary.\n\n"
  "Psychology should be behaviorally concrete and conditional. Traits include "
  "strength, ordinary expression, activation cues, and inhibitors. Values include "
  "priority, behavioral expression, and conflicts. The self_model includes a few "
@@ -412,6 +451,7 @@ REINT_CHAR_SYS = (
  "\"identity\":{\"uid\":\"\",\"name\":\"\",\"aliases\":[],"
  "\"pronouns\":{\"subject\":\"they\",\"object\":\"them\","
  "\"possessive\":\"their\"}},"
+ "\"initial_outfit\":{\"wearing\":[],\"state\":[]},"
  "\"simulation\":{\"tier\":\"bg|mid|major\","
  "\"temperature\":0.8,\"sampler\":{}},"
  "\"embodiment\":{\"senses\":[{\"channel\":\"vision\","
@@ -465,7 +505,10 @@ REINT_PERSONA_SYS = (
  "Convert this player persona into a native simulation-first persona. "
  "Do not assume a setting, genre, pre-existing NPC relationships, or "
  "special narrative role unless explicitly supplied.\n\n"
- "Separate visible embodiment from latent capabilities. "
+ "Separate visible embodiment from latent capabilities AND from clothing. "
+ "embodiment.visible is stable BODY appearance only; every starting "
+ "garment/accessory belongs in initial_outfit.wearing and must not be repeated "
+ "in the appearance summary. "
  "narration.voice_setting is private narrator guidance and is never "
  "available to NPCs.\n\n"
  "Output STRICT JSON matching the native persona schema:\n"
@@ -473,6 +516,7 @@ REINT_PERSONA_SYS = (
  "\"identity\":{\"uid\":\"\",\"name\":\"\",\"aliases\":[],"
  "\"pronouns\":{\"subject\":\"they\",\"object\":\"them\","
  "\"possessive\":\"their\"}},"
+ "\"initial_outfit\":{\"wearing\":[],\"state\":[]},"
  "\"embodiment\":{\"senses\":[{\"channel\":\"vision\","
  "\"acuity\":\"ordinary\",\"range\":\"ordinary\",\"notes\":\"\"}],"
  "\"visible\":{\"summary\":\"\",\"build\":\"\",\"face\":\"\","
@@ -668,12 +712,11 @@ def import_persona(payload, reinterpret=False):
     else:
         name = card.get("name") or "Player"
         card = _substitute_card_macros(card, name)
-        desc = (
-            card.get("description")
-            or card.get("personality")
-            or ""
-        )
+        desc, initial_outfit = _heuristic_appearance_and_outfit(card)
+        if not desc:
+            desc = card.get("personality") or ""
         sheet = default_persona_data(name)
+        sheet["initial_outfit"] = initial_outfit
         sheet["embodiment"]["visible"]["summary"] = (
             _first_sentences(desc, 3)
             or "A person of unremarkable appearance."

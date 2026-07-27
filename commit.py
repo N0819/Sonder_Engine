@@ -20,11 +20,12 @@ import affect
 import psychology_runtime
 from character_schema import (character_name, new_uid, character_psychology,
                               character_interoception,
+                              character_initial_outfit,
                               character_initial_active_state, effective_drive,
                               character_standing_intentions,
                               normalize_character_data, persona_name)
 from frames import is_recognized_in_frame
-from scene import set_char_state, set_char_status
+from scene import set_char_state, set_char_status, seed_initial_attire
 from mechanics import mechanics_sweep, news_latency_seconds, stable_event_key
 from spatial import (merge_scene_with_diff,
                      normalize_room_id, spatial_rel, hear_level)
@@ -2288,6 +2289,8 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None):
         if character_name(sheet) not in positions:
             player_name = persona_name(persona_of(chat_row))
             positions[character_name(sheet)] = positions.get(player_name)
+        seed_initial_attire(
+            sc, character_name(sheet), character_initial_outfit(sheet))
         wset(cid, "scene", sc)
 
     # Seed mutual recognition with the player and with every other

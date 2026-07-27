@@ -95,7 +95,8 @@ alpha5.1.
 | Narrator exemplar pool, event-amnesiac | **Built** | `exemplars` setting read in `agents/narration.py`; narrator receives the player view, not the event stream |
 | Tiered cognition | **Built** | Model roles (`default`/`director`/`narrator`/`utility`) plus per-character `simulation.tier` |
 | Theory of mind, cached and event-triggered | **Built** | `theory_of_mind.py`; `tom_triggers` on the flow |
-| Event-grounded live psychology | **Built** | v3 character schema plus `psychology_runtime.py`: stress, mixed pain/pleasure outside survival, protected beliefs, learned cue associations, and simulation-time recovery |
+| Event-grounded live psychology | **Built** | v4 character schema plus `psychology_runtime.py`: stress, mixed pain/pleasure outside survival, protected beliefs, learned cue associations, and simulation-time recovery |
+| Authored initial outfit with live story attire | **Built** | Character/persona `initial_outfit` is kept separate from stable body appearance and seeds `scene.attire` once; later clothing changes remain mutable story state |
 | Checkpoint / rollback | **Built** | `checkpoints.py`; branching depends on it |
 | Consolidation, salience-weighted hybrid retrieval | **Built** | `consolidate_character_memory`; keyword + embedding search in `memory.py` |
 | Commit as sole persistence boundary | **Built** | `commit.py`; one outer transaction, any domain failure rolls the turn back |

@@ -5,15 +5,16 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import uuid
 from typing import Any
 
 from pydantic import BaseModel, Field, validator
 
 CHARACTER_SCHEMA = "fiction-engine.character"
-CHARACTER_VERSION = 3
+CHARACTER_VERSION = 4
 PERSONA_SCHEMA = "fiction-engine.persona"
-PERSONA_VERSION = 2
+PERSONA_VERSION = 3
 
 
 def _profile_str_list(value):
@@ -258,6 +259,37 @@ def _float_or(value: Any, default: float) -> float:
         return default
     return default if f != f else f  # NaN -> default
 
+
+def _outfit_items(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        value = [part for part in re.split(r"[;\n]+", value) if part.strip()]
+    elif not isinstance(value, (list, tuple, set)):
+        value = [value]
+    result = []
+    for item in value:
+        text = str(item or "").strip()
+        if text and text not in result:
+            result.append(text)
+    return result
+
+
+def _normalize_initial_outfit(value: Any) -> dict:
+    """Normalize authored starting clothes into the live attire shape."""
+    if isinstance(value, dict):
+        wearing = value.get("wearing")
+        if wearing is None:
+            wearing = value.get("items") or value.get("outfit")
+        state = value.get("state")
+    else:
+        wearing, state = value, []
+    return {
+        "wearing": _outfit_items(wearing),
+        "state": _outfit_items(state),
+    }
+
+
 def default_character_data(name: str = "Unnamed") -> dict:
     result = {
         "identity": {
@@ -266,6 +298,7 @@ def default_character_data(name: str = "Unnamed") -> dict:
             "aliases": [],
             "pronouns": {"subject": "they", "object": "them", "possessive": "their"},
         },
+        "initial_outfit": {"wearing": [], "state": []},
         "simulation": {"tier": "mid", "temperature": 0.8, "sampler": {}},
         "embodiment": {
             "senses": [
@@ -361,6 +394,7 @@ def default_persona_data(name: str = "Player") -> dict:
             "aliases": [],
             "pronouns": {"subject": "they", "object": "them", "possessive": "their"},
         },
+        "initial_outfit": {"wearing": [], "state": []},
         "embodiment": {
             "senses": [
                 {"channel": "vision", "acuity": "ordinary", "range": "ordinary", "notes": ""},
@@ -533,11 +567,27 @@ def _coerce_latent(target_dict: dict) -> dict:
 def _coerce_appearance(target_dict: dict) -> dict:
     embodiment = target_dict.setdefault("embodiment", {})
     visible = embodiment.setdefault("visible", {})
+    # Older/native-adjacent sheets commonly put clothes beside body fields.
+    # Move them into authored starting attire before constructing appearance;
+    # clothing is mutable story state, not anatomy.
+    outfit_value = target_dict.get("initial_outfit")
+    if not any(_normalize_initial_outfit(outfit_value).values()):
+        outfit_value = None
+    for key in ("outfit", "clothing", "attire"):
+        top_level = target_dict.pop(key, None)
+        nested = embodiment.pop(key, None)
+        if outfit_value in (None, "", [], {}):
+            outfit_value = (
+                top_level
+                if top_level not in (None, "", [], {})
+                else nested
+            )
+    target_dict["initial_outfit"] = _normalize_initial_outfit(outfit_value)
     summary = str(visible.get("summary", "")).strip()
     is_default = not summary or summary == "A person of unremarkable appearance."
     extra_visual = []
     for key in ("build", "face", "hair", "eyes", "complexion", "height",
-                "weight", "clothing", "body_type", "ethnicity_descriptor"):
+                "weight", "body_type", "ethnicity_descriptor"):
         val = embodiment.pop(key, None)
         if val:
             label = key.replace("_", " ").capitalize()
@@ -548,7 +598,7 @@ def _coerce_appearance(target_dict: dict) -> dict:
     if extra_visual:
         # Fold popped embodiment details into the summary. Previously these were
         # only kept when the summary was default; a custom summary discarded
-        # hair/clothing/etc. permanently on every normalize (i.e. every import).
+        # hair/body details permanently on every normalize (i.e. every import).
         if is_default:
             visible["summary"] = ". ".join(extra_visual) + "."
         else:
@@ -561,7 +611,7 @@ def _coerce_appearance(target_dict: dict) -> dict:
     return target_dict
 
 CHARACTER_SECTIONS = (
-    "identity", "simulation", "embodiment", "psychology",
+    "identity", "initial_outfit", "simulation", "embodiment", "psychology",
     "social", "competence", "knowledge", "initial_state", "opening",
 )
 _IDENTITY_FIELDS = ("uid", "name", "aliases", "pronouns")
@@ -672,6 +722,8 @@ def normalize_character_data(value: dict) -> dict:
         result = _deep_defaults(default_character_data(name), value)
         _coerce_latent(result)
         _coerce_appearance(result)
+        result["initial_outfit"] = _normalize_initial_outfit(
+            result.get("initial_outfit"))
         result["psychology"] = _normalize_psychology(result.get("psychology"))
         interoception = result["embodiment"].get("interoception")
         if not isinstance(interoception, dict):
@@ -725,6 +777,12 @@ def normalize_character_data(value: dict) -> dict:
             "pronouns": copy.deepcopy(value.get("pronouns") or {
                 "subject": "they", "object": "them", "possessive": "their"}),
         },
+        "initial_outfit": _normalize_initial_outfit(
+            value.get("initial_outfit")
+            or value.get("outfit")
+            or value.get("clothing")
+            or value.get("attire")
+        ),
         "simulation": {
             "tier": str(value.get("tier") or "mid"),
             "temperature": _float_or(value.get("temperature"), 0.8),
@@ -812,6 +870,8 @@ def normalize_persona_data(value: dict) -> dict:
         result = _deep_defaults(default_persona_data(name), value)
         _coerce_latent(result)
         _coerce_appearance(result)
+        result["initial_outfit"] = _normalize_initial_outfit(
+            result.get("initial_outfit"))
         result["knowledge"]["private_history"] = _legacy_private_history(
             result["knowledge"].get("private_history"))
         return result
@@ -823,6 +883,12 @@ def normalize_persona_data(value: dict) -> dict:
             "pronouns": copy.deepcopy(value.get("pronouns") or {
                 "subject": "they", "object": "them", "possessive": "their"}),
         },
+        "initial_outfit": _normalize_initial_outfit(
+            value.get("initial_outfit")
+            or value.get("outfit")
+            or value.get("clothing")
+            or value.get("attire")
+        ),
         "embodiment": {
             "senses": _legacy_senses(value.get("senses")),
             "visible": {
@@ -857,6 +923,13 @@ def character_sampler(sheet: dict) -> dict:
 def character_appearance(sheet: dict) -> str:
     return str(normalize_character_data(sheet).get("embodiment", {}).get("visible", {})
                .get("summary") or "A person of unremarkable appearance.")
+
+
+def character_initial_outfit(sheet: dict) -> dict:
+    return copy.deepcopy(
+        normalize_character_data(sheet).get(
+            "initial_outfit", {"wearing": [], "state": []})
+    )
 
 def character_senses(sheet: dict) -> list[dict]:
     return copy.deepcopy(normalize_character_data(sheet).get("embodiment", {}).get("senses", []))
@@ -998,6 +1071,13 @@ def persona_name(sheet: dict) -> str:
 def persona_appearance(sheet: dict) -> str:
     return str(normalize_persona_data(sheet).get("embodiment", {}).get("visible", {})
                .get("summary") or "A person of unremarkable appearance.")
+
+
+def persona_initial_outfit(sheet: dict) -> dict:
+    return copy.deepcopy(
+        normalize_persona_data(sheet).get(
+            "initial_outfit", {"wearing": [], "state": []})
+    )
 
 def persona_senses(sheet: dict) -> list[dict]:
     return copy.deepcopy(normalize_persona_data(sheet).get("embodiment", {}).get("senses", []))
