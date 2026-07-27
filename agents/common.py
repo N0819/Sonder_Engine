@@ -257,6 +257,8 @@ def _merge_character_results(existing, new):
         "stance_updates",
         "inference_updates",
         "intent_ops",
+        "belief_updates",
+        "association_updates",
     ):
         combined = _concat_dedup(existing.get(field), new.get(field))
         if combined or field in existing or field in new:

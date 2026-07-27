@@ -8,10 +8,236 @@ import json
 import uuid
 from typing import Any
 
+from pydantic import BaseModel, Field, validator
+
 CHARACTER_SCHEMA = "fiction-engine.character"
-CHARACTER_VERSION = 2
+CHARACTER_VERSION = 3
 PERSONA_SCHEMA = "fiction-engine.persona"
 PERSONA_VERSION = 2
+
+
+def _profile_str_list(value):
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    if not isinstance(value, (list, tuple, set)):
+        value = [value]
+    return [str(item).strip() for item in value if str(item or "").strip()]
+
+
+def _profile_float(value, default=0.5, low=0.0, high=1.0):
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        result = default
+    if result != result:
+        result = default
+    return max(low, min(high, result))
+
+
+class _PsychologyModel(BaseModel):
+    class Config:
+        extra = "allow"
+
+
+class TraitProfile(_PsychologyModel):
+    name: str = ""
+    strength: float = 0.5
+    expression: str = ""
+    activation_cues: list[str] = Field(default_factory=list)
+    inhibited_by: list[str] = Field(default_factory=list)
+
+    _strength = validator("strength", pre=True, allow_reuse=True)(
+        lambda cls, value: _profile_float(value)
+    )
+    _lists = validator("activation_cues", "inhibited_by", pre=True, allow_reuse=True)(
+        lambda cls, value: _profile_str_list(value)
+    )
+
+
+class ValueProfile(_PsychologyModel):
+    name: str = ""
+    priority: float = 0.5
+    expression: str = ""
+    conflicts_with: list[str] = Field(default_factory=list)
+
+    _priority = validator("priority", pre=True, allow_reuse=True)(
+        lambda cls, value: _profile_float(value)
+    )
+    _conflicts = validator("conflicts_with", pre=True, allow_reuse=True)(
+        lambda cls, value: _profile_str_list(value)
+    )
+
+
+class BeliefProfile(_PsychologyModel):
+    belief: str = ""
+    confidence: float = 0.5
+    protected: bool = False
+    emotional_charge: float = 0.0
+    source: str = ""
+
+    _confidence = validator("confidence", pre=True, allow_reuse=True)(
+        lambda cls, value: _profile_float(value)
+    )
+    _charge = validator("emotional_charge", pre=True, allow_reuse=True)(
+        lambda cls, value: _profile_float(value, default=0.0, low=-1.0, high=1.0)
+    )
+
+
+class CopingStrategyProfile(_PsychologyModel):
+    name: str = ""
+    trigger: str = ""
+    response: str = ""
+    effectiveness: float = 0.5
+    costs: str = ""
+
+    _effectiveness = validator("effectiveness", pre=True, allow_reuse=True)(
+        lambda cls, value: _profile_float(value)
+    )
+
+
+class AssociationProfile(_PsychologyModel):
+    cue: str = ""
+    appraisal_bias: str = ""
+    response_tendency: str = ""
+    strength: float = 0.5
+    generalization_tags: list[str] = Field(default_factory=list)
+
+    _strength = validator("strength", pre=True, allow_reuse=True)(
+        lambda cls, value: _profile_float(value)
+    )
+    _tags = validator("generalization_tags", pre=True, allow_reuse=True)(
+        lambda cls, value: _profile_str_list(value)
+    )
+
+
+class PsychologyProfile(_PsychologyModel):
+    drive: dict = Field(default_factory=lambda: {
+        "essence": "", "expression": "", "taboo": "",
+    })
+    traits: list[TraitProfile] = Field(default_factory=list)
+    values: list[ValueProfile] = Field(default_factory=list)
+    self_model: dict = Field(default_factory=lambda: {
+        "summary": "", "protected_beliefs": [], "pride_triggers": [],
+        "shame_triggers": [], "beliefs": [],
+    })
+    coping: dict = Field(default_factory=lambda: {
+        "under_stress": [], "default_conflict_style": "", "strategies": [],
+        "recovery_supports": [],
+    })
+    stress_profile: dict = Field(default_factory=lambda: {
+        "baseline_reactivity": 0.5, "recovery_rate": 0.5,
+        "overload_threshold": 0.8, "attentional_style": "",
+        "somatic_signs": [],
+    })
+    learning: dict = Field(default_factory=lambda: {"associations": []})
+
+    @validator("traits", pre=True)
+    def _traits(cls, value):
+        if isinstance(value, (str, dict)):
+            value = [value]
+        return [
+            {"name": item} if isinstance(item, str) else item
+            for item in (value or [])
+            if isinstance(item, (str, dict))
+        ]
+
+    @validator("values", pre=True)
+    def _values(cls, value):
+        if isinstance(value, (str, dict)):
+            value = [value]
+        return [
+            {"name": item} if isinstance(item, str) else item
+            for item in (value or [])
+            if isinstance(item, (str, dict))
+        ]
+
+    @validator(
+        "drive", "self_model", "coping", "stress_profile", "learning", pre=True
+    )
+    def _mapping_fields(cls, value):
+        return value if isinstance(value, dict) else {}
+
+
+def _normalize_psychology(value: Any) -> dict:
+    """Typed, tolerant normalization for the durable psychology contract.
+
+    Imported cards and older native sheets remain accepted, but every live
+    reader receives the v3 shape. Unknown extension keys survive because the
+    profile models allow extras.
+    """
+    raw = value if isinstance(value, dict) else {}
+    result = PsychologyProfile.parse_obj(raw).dict()
+
+    self_model = result.get("self_model")
+    if not isinstance(self_model, dict):
+        self_model = {}
+    self_model = _deep_defaults({
+        "summary": "", "protected_beliefs": [], "pride_triggers": [],
+        "shame_triggers": [], "beliefs": [],
+    }, self_model)
+    self_model["protected_beliefs"] = _profile_str_list(
+        self_model.get("protected_beliefs"))
+    self_model["pride_triggers"] = _profile_str_list(
+        self_model.get("pride_triggers"))
+    self_model["shame_triggers"] = _profile_str_list(
+        self_model.get("shame_triggers"))
+    self_model["beliefs"] = [
+        BeliefProfile.parse_obj(
+            {"belief": item} if isinstance(item, str) else item
+        ).dict()
+        for item in (self_model.get("beliefs") or [])
+        if isinstance(item, (str, dict))
+    ]
+    result["self_model"] = self_model
+
+    coping = result.get("coping")
+    if not isinstance(coping, dict):
+        coping = {}
+    coping = _deep_defaults({
+        "under_stress": [], "default_conflict_style": "",
+        "strategies": [], "recovery_supports": [],
+    }, coping)
+    coping["under_stress"] = _profile_str_list(coping.get("under_stress"))
+    coping["recovery_supports"] = _profile_str_list(
+        coping.get("recovery_supports"))
+    coping["strategies"] = [
+        CopingStrategyProfile.parse_obj(
+            {"name": item, "response": item} if isinstance(item, str) else item
+        ).dict()
+        for item in (coping.get("strategies") or [])
+        if isinstance(item, (str, dict))
+    ]
+    result["coping"] = coping
+
+    stress = result.get("stress_profile")
+    if not isinstance(stress, dict):
+        stress = {}
+    stress = _deep_defaults({
+        "baseline_reactivity": 0.5, "recovery_rate": 0.5,
+        "overload_threshold": 0.8, "attentional_style": "",
+        "somatic_signs": [],
+    }, stress)
+    for key, default in (
+        ("baseline_reactivity", 0.5),
+        ("recovery_rate", 0.5),
+        ("overload_threshold", 0.8),
+    ):
+        stress[key] = _profile_float(stress.get(key), default=default)
+    stress["somatic_signs"] = _profile_str_list(stress.get("somatic_signs"))
+    result["stress_profile"] = stress
+
+    learning = result.get("learning")
+    if not isinstance(learning, dict):
+        learning = {}
+    associations = learning.get("associations") or []
+    learning["associations"] = [
+        AssociationProfile.parse_obj(item).dict()
+        for item in associations if isinstance(item, dict)
+    ]
+    result["learning"] = learning
+    return result
 
 def new_uid(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex}"
@@ -33,7 +259,7 @@ def _float_or(value: Any, default: float) -> float:
     return default if f != f else f  # NaN -> default
 
 def default_character_data(name: str = "Unnamed") -> dict:
-    return {
+    result = {
         "identity": {
             "uid": new_uid("char"),
             "name": name,
@@ -52,6 +278,12 @@ def default_character_data(name: str = "Unnamed") -> dict:
                 "distinctive_features": [],
             },
             "latent": [],
+            "interoception": {
+                "acuity": 0.5,
+                "pain_sensitivity": 0.5,
+                "fatigue_sensitivity": 0.5,
+                "pleasure_sensitivity": 0.5,
+            },
         },
         "psychology": {
             "traits": [],
@@ -61,8 +293,22 @@ def default_character_data(name: str = "Unnamed") -> dict:
                 "protected_beliefs": [],
                 "pride_triggers": [],
                 "shame_triggers": [],
+                "beliefs": [],
             },
-            "coping": {"under_stress": [], "default_conflict_style": ""},
+            "coping": {
+                "under_stress": [],
+                "default_conflict_style": "",
+                "strategies": [],
+                "recovery_supports": [],
+            },
+            "stress_profile": {
+                "baseline_reactivity": 0.5,
+                "recovery_rate": 0.5,
+                "overload_threshold": 0.8,
+                "attentional_style": "",
+                "somatic_signs": [],
+            },
+            "learning": {"associations": []},
             # Overarching core drive (Tier 1 of the goal hierarchy): identity-
             # level, rarely changes, and deliberately NOT part of the character
             # agent's output contract -- a model cannot flip-flop a field it
@@ -92,9 +338,12 @@ def default_character_data(name: str = "Unnamed") -> dict:
             "mood": {"label": "neutral", "valence": 0.0, "arousal": 0.0},
             "goals": [],
             "active_concerns": [],
+            "stress": {"activation": 0.0, "load": 0.0, "coping_mode": ""},
+            "hedonic": {"pain": 0.0, "pleasure": 0.0, "source": ""},
         },
         "opening": {"first_message": ""},
     }
+    return result
 
 def default_character_document(name: str = "Unnamed") -> dict:
     return {
@@ -423,6 +672,36 @@ def normalize_character_data(value: dict) -> dict:
         result = _deep_defaults(default_character_data(name), value)
         _coerce_latent(result)
         _coerce_appearance(result)
+        result["psychology"] = _normalize_psychology(result.get("psychology"))
+        interoception = result["embodiment"].get("interoception")
+        if not isinstance(interoception, dict):
+            interoception = {}
+        interoception = _deep_defaults(
+            default_character_data(name)["embodiment"]["interoception"],
+            interoception,
+        )
+        for key in (
+            "acuity", "pain_sensitivity", "fatigue_sensitivity",
+            "pleasure_sensitivity",
+        ):
+            interoception[key] = _profile_float(interoception.get(key))
+        result["embodiment"]["interoception"] = interoception
+        stress = result["initial_state"].get("stress")
+        if not isinstance(stress, dict):
+            stress = {}
+        stress = _deep_defaults(
+            {"activation": 0.0, "load": 0.0, "coping_mode": ""}, stress)
+        stress["activation"] = _profile_float(stress.get("activation"), 0.0)
+        stress["load"] = _profile_float(stress.get("load"), 0.0)
+        result["initial_state"]["stress"] = stress
+        hedonic = result["initial_state"].get("hedonic")
+        if not isinstance(hedonic, dict):
+            hedonic = {}
+        hedonic = _deep_defaults(
+            {"pain": 0.0, "pleasure": 0.0, "source": ""}, hedonic)
+        hedonic["pain"] = _profile_float(hedonic.get("pain"), 0.0)
+        hedonic["pleasure"] = _profile_float(hedonic.get("pleasure"), 0.0)
+        result["initial_state"]["hedonic"] = hedonic
         result["knowledge"]["private_history"] = _legacy_private_history(
             result["knowledge"].get("private_history"))
         return result
@@ -438,7 +717,7 @@ def normalize_character_data(value: dict) -> dict:
     if knowledge.get("esoteric", False):
         access_tags.append("esoteric")
     stance = value.get("stance") if isinstance(value.get("stance"), dict) else {}
-    return {
+    result = {
         "identity": {
             "uid": str(value.get("uid") or new_uid("char")),
             "name": name,
@@ -459,6 +738,10 @@ def normalize_character_data(value: dict) -> dict:
                 "distinctive_features": [],
             },
             "latent": copy.deepcopy(value.get("latent_capabilities") or []),
+            "interoception": {
+                "acuity": 0.5, "pain_sensitivity": 0.5,
+                "fatigue_sensitivity": 0.5, "pleasure_sensitivity": 0.5,
+            },
         },
         "psychology": {
             # Present but empty, matching default_character_data. Omitting the
@@ -473,8 +756,18 @@ def normalize_character_data(value: dict) -> dict:
                 "protected_beliefs": [],
                 "pride_triggers": [],
                 "shame_triggers": [],
+                "beliefs": [],
             },
-            "coping": {"under_stress": [], "default_conflict_style": ""},
+            "coping": {
+                "under_stress": [], "default_conflict_style": "",
+                "strategies": [], "recovery_supports": [],
+            },
+            "stress_profile": {
+                "baseline_reactivity": 0.5, "recovery_rate": 0.5,
+                "overload_threshold": 0.8, "attentional_style": "",
+                "somatic_signs": [],
+            },
+            "learning": {"associations": []},
         },
         "social": {
             "voice": _legacy_voice(value.get("voice")),
@@ -499,9 +792,13 @@ def normalize_character_data(value: dict) -> dict:
             "goals": ([{"goal": str(active.get("goal")), "priority": 0.5}]
                       if active.get("goal") else []),
             "active_concerns": [],
+            "stress": {"activation": 0.0, "load": 0.0, "coping_mode": ""},
+            "hedonic": {"pain": 0.0, "pleasure": 0.0, "source": ""},
         },
         "opening": {"first_message": str(value.get("first_message") or "")},
     }
+    result["psychology"] = _normalize_psychology(result["psychology"])
+    return result
 
 def normalize_persona_data(value: dict) -> dict:
     if not isinstance(value, dict):
@@ -564,6 +861,11 @@ def character_appearance(sheet: dict) -> str:
 def character_senses(sheet: dict) -> list[dict]:
     return copy.deepcopy(normalize_character_data(sheet).get("embodiment", {}).get("senses", []))
 
+def character_interoception(sheet: dict) -> dict:
+    return copy.deepcopy(
+        normalize_character_data(sheet).get("embodiment", {}).get("interoception", {})
+    )
+
 def character_abilities(sheet: dict) -> list[dict]:
     return copy.deepcopy(normalize_character_data(sheet).get("competence", {}).get("abilities", []))
 
@@ -615,6 +917,8 @@ def character_initial_active_state(sheet: dict) -> dict:
     label = mood.get("label") or "neutral"
     v = _float_or(mood.get("valence"), 0.0)
     a = _float_or(mood.get("arousal"), 0.0)
+    stress = state.get("stress") if isinstance(state.get("stress"), dict) else {}
+    hedonic = state.get("hedonic") if isinstance(state.get("hedonic"), dict) else {}
     return {
         # Legacy flat projection -- kept so every existing reader (sheet_state,
         # memory recall query, commit's emotional_context) works unchanged.
@@ -624,6 +928,16 @@ def character_initial_active_state(sheet: dict) -> dict:
         "goal": (str(goals[0].get("goal") or "")
                  if goals and isinstance(goals[0], dict) else ""),
         "active_concerns": state.get("active_concerns") or [],
+        "stress": {
+            "activation": _profile_float(stress.get("activation"), 0.0),
+            "load": _profile_float(stress.get("load"), 0.0),
+            "coping_mode": str(stress.get("coping_mode") or ""),
+        },
+        "hedonic": {
+            "pain": _profile_float(hedonic.get("pain"), 0.0),
+            "pleasure": _profile_float(hedonic.get("pleasure"), 0.0),
+            "source": str(hedonic.get("source") or ""),
+        },
         # Interior-depth: blended affect (surface + optional undercurrent over a
         # resting baseline) and this-beat wants. undercurrent starts null (the
         # graceful-degradation state); the baseline is the return attractor.

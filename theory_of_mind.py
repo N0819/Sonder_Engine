@@ -116,7 +116,10 @@ def cap_mind_model_updates(updates):
 def decayed_confidence(confidence, kind, turns_elapsed):
     """Exponential (Ebbinghaus-style) decay of an unreinforced belief."""
     conf = _clamp01(confidence, fallback=0.0)
-    elapsed = max(0, int(turns_elapsed or 0))
+    try:
+        elapsed = max(0.0, float(turns_elapsed or 0))
+    except (TypeError, ValueError):
+        elapsed = 0.0
     if elapsed == 0 or conf <= 0.0:
         return conf
     half_life = _TOM_HALF_LIFE.get(_kind_or_default(kind), _TOM_HALF_LIFE[_DEFAULT_KIND])
@@ -150,7 +153,14 @@ def claim_similarity(a, b):
     overlap = len(ta & tb)
     return overlap / min(len(ta), len(tb))
 
-def _elapsed(hypothesis, turn_idx):
+def _elapsed(hypothesis, turn_idx, elapsed_seconds=None):
+    if elapsed_seconds is not None and hypothesis.get("last_updated_seconds") is not None:
+        try:
+            delta = float(elapsed_seconds) - float(hypothesis["last_updated_seconds"])
+        except (TypeError, ValueError):
+            delta = 0.0
+        if delta > 0.0:
+            return delta / 60.0
     last = hypothesis.get("last_updated_turn", turn_idx)
     try:
         last = int(last)
@@ -158,12 +168,14 @@ def _elapsed(hypothesis, turn_idx):
         last = turn_idx
     return max(0, int(turn_idx) - last)
 
-def _live_confidence(hypothesis, turn_idx):
+def _live_confidence(hypothesis, turn_idx, elapsed_seconds=None):
     kind = _kind_or_default(hypothesis.get("kind"))
     return decayed_confidence(
-        hypothesis.get("confidence", 0.0), kind, _elapsed(hypothesis, turn_idx))
+        hypothesis.get("confidence", 0.0), kind,
+        _elapsed(hypothesis, turn_idx, elapsed_seconds))
 
-def apply_mind_model_updates(state, updates, turn_idx, floor=0.05, max_per_entity=30):
+def apply_mind_model_updates(state, updates, turn_idx, floor=0.05,
+                             max_per_entity=30, elapsed_seconds=None):
     """Merge this turn's mind-model updates into persistent character state.
 
     Replaces the old exact-text-keyed max()-only accumulation. A claim
@@ -206,7 +218,7 @@ def apply_mind_model_updates(state, updates, turn_idx, floor=0.05, max_per_entit
 
         if best_idx is not None and best_sim >= _SIMILARITY_THRESHOLD:
             existing = hyps[best_idx]
-            decayed_old = _live_confidence(existing, turn_idx)
+            decayed_old = _live_confidence(existing, turn_idx, elapsed_seconds)
             new_conf = decayed_old + (evidence_confidence - decayed_old) * plasticity
             merged = dict(update)
             merged["about_entity"] = about
@@ -214,6 +226,8 @@ def apply_mind_model_updates(state, updates, turn_idx, floor=0.05, max_per_entit
             merged["claim"] = claim
             merged["confidence"] = max(0.0, min(cap, new_conf))
             merged["last_updated_turn"] = turn_idx
+            if elapsed_seconds is not None:
+                merged["last_updated_seconds"] = float(elapsed_seconds)
             hyps[best_idx] = merged
         else:
             new_hyp = dict(update)
@@ -222,13 +236,21 @@ def apply_mind_model_updates(state, updates, turn_idx, floor=0.05, max_per_entit
             new_hyp["claim"] = claim
             new_hyp["confidence"] = max(0.0, min(cap, evidence_confidence))
             new_hyp["last_updated_turn"] = turn_idx
+            if elapsed_seconds is not None:
+                new_hyp["last_updated_seconds"] = float(elapsed_seconds)
             hyps.append(new_hyp)
 
             suppression = min(_MAX_SUPPRESSION, plasticity * evidence_confidence)
             for i in group:
                 sib = hyps[i]
-                sib["confidence"] = max(0.0, _live_confidence(sib, turn_idx) * (1 - suppression))
+                sib["confidence"] = max(
+                    0.0,
+                    _live_confidence(sib, turn_idx, elapsed_seconds)
+                    * (1 - suppression),
+                )
                 sib["last_updated_turn"] = turn_idx
+                if elapsed_seconds is not None:
+                    sib["last_updated_seconds"] = float(elapsed_seconds)
 
         model["last_updated_turn"] = turn_idx
 
@@ -242,7 +264,7 @@ def apply_mind_model_updates(state, updates, turn_idx, floor=0.05, max_per_entit
         for h in hyps:
             if not isinstance(h, dict):
                 continue
-            live_conf = _live_confidence(h, turn_idx)
+            live_conf = _live_confidence(h, turn_idx, elapsed_seconds)
             if live_conf >= floor:
                 scored.append((live_conf, h))
         scored.sort(key=lambda pair: pair[0], reverse=True)
@@ -255,7 +277,8 @@ def apply_mind_model_updates(state, updates, turn_idx, floor=0.05, max_per_entit
 
     return state
 
-def mind_models_for_payload(mind_models, turn_idx, max_competitors=2):
+def mind_models_for_payload(mind_models, turn_idx, max_competitors=2,
+                            elapsed_seconds=None):
     """Build the character-turn view: leading belief + live competitors.
 
     Applies decay for display without mutating storage, and groups by
@@ -274,7 +297,8 @@ def mind_models_for_payload(mind_models, turn_idx, max_competitors=2):
             kind = _kind_or_default(h.get("kind"))
             by_kind.setdefault(kind, []).append({
                 "claim": h.get("claim", ""),
-                "confidence": round(_live_confidence(h, turn_idx), 3),
+                "confidence": round(
+                    _live_confidence(h, turn_idx, elapsed_seconds), 3),
             })
         kinds_out = {}
         for kind, entries in by_kind.items():

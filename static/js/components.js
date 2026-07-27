@@ -370,16 +370,70 @@ function fTraits(label, traits) {
     const n = el("input", { value: t.name || "", placeholder: "name", style: "flex:1" });
     const s = el("input", { type: "number", step: "0.1", value: t.strength ?? 0.5, placeholder: "str", style: "width:60px" });
     const e = el("input", { value: t.expression || "", placeholder: "expression", style: "flex:1" });
-    return { node: [n, s, e], read: () => ({ name: n.value, strength: +s.value || 0, expression: e.value }) };
-  }, () => ({ name: "", strength: 0.5, expression: "" }));
+    const ac = el("input", { value: (t.activation_cues || []).join(", "), placeholder: "activation cues", style: "flex:1" });
+    const ib = el("input", { value: (t.inhibited_by || []).join(", "), placeholder: "inhibited by", style: "flex:1" });
+    return { node: [n, s, e, ac, ib], read: () => ({
+      name: n.value, strength: +s.value || 0, expression: e.value,
+      activation_cues: splitCL(ac.value), inhibited_by: splitCL(ib.value)
+    }) };
+  }, () => ({ name: "", strength: 0.5, expression: "", activation_cues: [], inhibited_by: [] }));
 }
 
 function fValues(label, values) {
   return fList(label, values, "+ value", v => {
     const n = el("input", { value: v.name || "", placeholder: "name", style: "flex:1" });
     const p = el("input", { type: "number", step: "0.1", value: v.priority ?? 0.5, placeholder: "pri", style: "width:60px" });
-    return { node: [n, p], read: () => ({ name: n.value, priority: +p.value || 0 }) };
-  }, () => ({ name: "", priority: 0.5 }));
+    const e = el("input", { value: v.expression || "", placeholder: "behavioral expression", style: "flex:1" });
+    const c = el("input", { value: (v.conflicts_with || []).join(", "), placeholder: "conflicts with", style: "flex:1" });
+    return { node: [n, p, e, c], read: () => ({
+      name: n.value, priority: +p.value || 0, expression: e.value,
+      conflicts_with: splitCL(c.value)
+    }) };
+  }, () => ({ name: "", priority: 0.5, expression: "", conflicts_with: [] }));
+}
+
+function fBeliefs(label, beliefs) {
+  return fList(label, beliefs, "+ belief", b => {
+    const belief = el("input", { value: b.belief || "", placeholder: "self/world belief", style: "flex:2" });
+    const confidence = el("input", { type: "number", min: "0", max: "1", step: "0.1", value: b.confidence ?? 0.5, title: "confidence", style: "width:70px" });
+    const protectedBelief = el("input", { type: "checkbox", ...(b.protected ? { checked: "" } : {}), title: "Protected identity belief" });
+    const charge = el("input", { type: "number", min: "-1", max: "1", step: "0.1", value: b.emotional_charge ?? 0, title: "emotional charge", style: "width:70px" });
+    const source = el("input", { value: b.source || "", placeholder: "source/formative evidence", style: "flex:1" });
+    return { node: [belief, confidence, el("label", { class: "tgl small" }, protectedBelief, " protected"), charge, source], read: () => ({
+      belief: belief.value, confidence: +confidence.value || 0,
+      protected: protectedBelief.checked, emotional_charge: +charge.value || 0,
+      source: source.value
+    }) };
+  }, () => ({ belief: "", confidence: 0.5, protected: false, emotional_charge: 0, source: "" }));
+}
+
+function fCopingStrategies(label, strategies) {
+  return fList(label, strategies, "+ coping strategy", s => {
+    const name = el("input", { value: s.name || "", placeholder: "strategy", style: "flex:1" });
+    const trigger = el("input", { value: s.trigger || "", placeholder: "trigger", style: "flex:1" });
+    const response = el("input", { value: s.response || "", placeholder: "typical response", style: "flex:2" });
+    const effectiveness = el("input", { type: "number", min: "0", max: "1", step: "0.1", value: s.effectiveness ?? 0.5, title: "effectiveness", style: "width:70px" });
+    const costs = el("input", { value: s.costs || "", placeholder: "costs/tradeoffs", style: "flex:1" });
+    return { node: [name, trigger, response, effectiveness, costs], read: () => ({
+      name: name.value, trigger: trigger.value, response: response.value,
+      effectiveness: +effectiveness.value || 0, costs: costs.value
+    }) };
+  }, () => ({ name: "", trigger: "", response: "", effectiveness: 0.5, costs: "" }));
+}
+
+function fAssociations(label, associations) {
+  return fList(label, associations, "+ learned association", a => {
+    const cue = el("input", { value: a.cue || "", placeholder: "cue", style: "flex:1" });
+    const bias = el("input", { value: a.appraisal_bias || "", placeholder: "appraisal bias", style: "flex:1" });
+    const response = el("input", { value: a.response_tendency || "", placeholder: "response tendency", style: "flex:1" });
+    const strength = el("input", { type: "number", min: "0", max: "1", step: "0.1", value: a.strength ?? 0.5, title: "strength", style: "width:70px" });
+    const tags = el("input", { value: (a.generalization_tags || []).join(", "), placeholder: "generalization tags", style: "flex:1" });
+    return { node: [cue, bias, response, strength, tags], read: () => ({
+      cue: cue.value, appraisal_bias: bias.value,
+      response_tendency: response.value, strength: +strength.value || 0,
+      generalization_tags: splitCL(tags.value)
+    }) };
+  }, () => ({ cue: "", appraisal_bias: "", response_tendency: "", strength: 0.5, generalization_tags: [] }));
 }
 
 function fGoals(label, goals) {

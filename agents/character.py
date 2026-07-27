@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 
 from affect import CRISIS_STRAIN_MIN, RUPTURE_FORCE_AFTER, ground_tells
-from db import q
+from db import q, wget
 from character_schema import (
     character_abilities,
+    character_interoception,
     character_name,
     character_psychology,
     character_standing_intentions,
@@ -39,6 +40,7 @@ from scene import (
 )
 from schemas import validate_llm_output
 from spatial import room_of, spatial_digest
+from survival import vitals_of
 from theory_of_mind import mind_models_for_payload
 
 from .common import (
@@ -170,6 +172,29 @@ def character_step(ctx, cid, nonce):
     view = reaction_views.get(cid) or interaction_views.get(cid)
     if view is None:
         view = ((ctx.get("perception_act", {}).get("views") or {}).get(str(cid)))
+    base_observations = (
+        (ctx.get("perception_act", {}).get("observations") or {}).get(str(cid))
+        or []
+    )
+    base_view = ((ctx.get("perception_act", {}).get("views") or {}).get(str(cid)))
+    # Interaction/reaction micro-views are already filtered for this mind but
+    # do not pass through the full perception stage. Never reuse stale base
+    # metadata for a changed view; project only the permitted text itself.
+    if view and view != base_view:
+        observations = [{
+            "observation_id": f"current:{cid}:micro",
+            "perceiver_id": str(cid),
+            "source_atom_id": "current",
+            "channel": "mixed",
+            "fidelity": "rendered",
+            "observed": {"text": str(view)},
+            "intensity": 0.5,
+            "suddenness": 0.1,
+            "ambiguity": 0.3,
+            "directed_at_self": False,
+        }]
+    else:
+        observations = base_observations
 
     memory_context = build_character_memory_context(
         chat_id=chat.id, char_id=cid,
@@ -188,7 +213,14 @@ def character_step(ctx, cid, nonce):
     _tom = _list(_flow.get("tom_triggers"))
 
     relationships = relationships_for_payload(chat.id, cid)
-    mind_models = mind_models_for_payload(stored_state.get("mind_models") or {}, ctx.turn.idx)
+    _sim_clock = wget(
+        chat.id, "simulation_clock",
+        {"elapsed_seconds": 0.0, "display": "now"},
+    )
+    mind_models = mind_models_for_payload(
+        stored_state.get("mind_models") or {}, ctx.turn.idx,
+        elapsed_seconds=(_sim_clock or {}).get("elapsed_seconds"),
+    )
     frame_id = ctx.turn.frame_id
     if frame_id is not None:
         # A frame's own state-swap already starts blank the first time
@@ -267,6 +299,8 @@ def character_step(ctx, cid, nonce):
         "active_state": active,
         "voice": character_voice(sh),
         "senses": senses_as_text(character_senses(sh)),
+        "sense_profile": character_senses(sh),
+        "interoception": character_interoception(sh),
         "abilities": character_abilities(sh),
         "attire": sc.get("attire", {}).get(character_name(sh)),
         "recent_self_lines": _recent_self_lines(
@@ -281,7 +315,14 @@ def character_step(ctx, cid, nonce):
             character_standing_intentions(sh), _interior.get("intentions") or []),
         # Former drives (scars) give continuity to a character who has changed.
         "former_drives": _interior.get("former_drives") or [],
+        "learned_beliefs": _interior.get("beliefs") or [],
+        "learned_associations": _interior.get("associations") or [],
     }
+    _body_state = vitals_of(sc, character_name(sh))
+    if _body_state:
+        # Own-body interoception only. Other characters' vitals never enter
+        # this payload; their outward signs must cross perception normally.
+        _self["body_state"] = _body_state
     if _window_open:
         _self["rupture"] = {"why": _rupture.get("why"), "direction": _rupture.get("direction"),
                             "forced": _rupture_forced}
@@ -295,6 +336,7 @@ def character_step(ctx, cid, nonce):
         "self": _self,
         "perception": {
             "view": view or "You register nothing new this beat.",
+            "observations": observations,
             # This character's OWN egocentric exits (ahead/behind/left/right of
             # the way THEY face) -- grounding for their movement/positioning
             # choices, not a script to narrate. Empty when they have no
@@ -315,6 +357,7 @@ def character_step(ctx, cid, nonce):
             "dialogue_mode": bool(_flow.get("dialogue_mode", False)),
             "speech_budget": dialogue_budget(chat, ctx.turn, cid, nonce),
         },
+        "simulation_clock": _sim_clock,
         "variant_seed": nonce,
     }
 

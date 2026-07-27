@@ -49,16 +49,23 @@ The application intentionally uses top-level imports such as `from db import q`.
 
 ```text
 agents/               role-specific agents, shared helpers, and pipeline runtime
-app.py                 FastAPI routes and streaming API
+app.py                 FastAPI assembly, remaining routes, and streaming API
+auth_routes.py         typed host-authentication routes
+chat_archive.py        portable chat archive service and routes
 commit.py              validated persistence boundary
 schemas.py             model-output contracts and validation
+character_schema.py     versioned character-card schema and migration
+psychology_runtime.py   bounded stress, hedonic, belief, and association state
 prompts.py             system prompts
 providers.py           LLM providers, streaming, retries, embeddings
 memory.py              lore, memory, relationships, retrieval
 scene.py / spatial.py  deterministic scene and perception support
+spatial_orientation.py bearing math and reciprocal edge normalization
+pipeline_trace.py      private-by-default persisted-history diagnostics
 db.py                  SQLite schema, migrations, transactions
 static/                 browser UI
 tests/                  invariant and regression tests
+browser_tests/          optional real Chromium behavior tests
 docs/                   practical architecture documentation
 tools/                  maintenance scripts
 archive/                inactive historical files retained for reference

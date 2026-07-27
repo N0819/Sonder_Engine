@@ -4,8 +4,12 @@ Each file owns one clear part of the turn pipeline:
 
 - `director.py` — scene establishment, input interpretation, and objective resolution.
 - `mapping.py` — lorebook routing and retrieval.
-- `perception.py` — opening, action-onset, and outcome observer views.
-- `character.py` — one character's private decision step.
+- `perception.py` — opening, action-onset, and outcome observer views; structured
+  observations are deterministically re-derived from each final scrubbed view.
+- `character.py` — one character's private decision step, including appraisal
+  proposals consumed by deterministic live-psychology commit code.
+- `background.py` — one stateless reaction for a deterministically selected,
+  named background presence.
 - `loops.py` — physical reactions, dialogue rounds, and deterministic micro-perception.
 - `narration.py` — player-facing prose.
 - `common.py` — shared normalization, delivery, lore, and validation helpers.
@@ -26,3 +30,8 @@ Each file owns one clear part of the turn pipeline:
 Keep role modules one-directional: they may import `common.py`, but `common.py`
 should never import a role module. `runtime.py` is the only module that should
 know every built-in stage. Keep plan placement explicit even when dispatch is registered dynamically.
+
+Adding a second representation of perceived information is security-sensitive.
+It must be a projection of the already-permitted view, not a parallel model
+channel fed from Director truth. Exercise the adversarial leak tests whenever a
+character payload or perception result gains fields.

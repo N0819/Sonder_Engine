@@ -8,10 +8,11 @@ This repo already maintains detailed docs for coding agents. Read them before ma
 
 1. [`AGENTS.md`](AGENTS.md) — edit routing table (which files to touch for which change), core invariants, source-of-truth order, and safe change workflow. **Read this first for any behavioral change.**
 2. [`docs/PIPELINE.md`](docs/PIPELINE.md) — exact opening-turn and normal-turn execution flow, stage-by-stage.
-3. [`docs/CODE_MAP.md`](docs/CODE_MAP.md) — generated index of modules, functions, routes, DB tables, and frontend sections. Regenerate with `python tools/generate_code_map.py`; do not hand-edit.
+3. [`docs/CODE_MAP.md`](docs/CODE_MAP.md) — generated index of modules, functions, routes, DB tables, and frontend sections. Regenerate with `make map`; do not hand-edit.
 4. [`docs/DATABASE.md`](docs/DATABASE.md) — schema, write helpers (`q`/`qi`/`qtx`/`transaction`/`wget`/`wset`), and the schema-change checklist.
-5. [`Design.md`](Design.md) — product philosophy, architecture, a verified conformance table (built / partial / not built), structural debt, and roadmap. Its status rows were checked against source; keep them that way by editing the row in the same commit as the behaviour.
-6. [`agents/README.md`](agents/README.md) — how to add a new pipeline stage.
+5. [`docs/TESTING.md`](docs/TESTING.md) — fast/full/browser tiers, dependency constraints, and CI policy.
+6. [`Design.md`](Design.md) — product philosophy, architecture, a verified conformance table (built / partial / not built), structural debt, and roadmap. Its status rows were checked against source; keep them that way by editing the row in the same commit as the behaviour.
+7. [`agents/README.md`](agents/README.md) — how to add a new pipeline stage.
 
 Do not duplicate content from these files in explanations; point to them instead.
 
@@ -19,22 +20,26 @@ Do not duplicate content from these files in explanations; point to them instead
 
 ```bash
 make run        # start the local server (uvicorn app:app --reload, port 8008)
-make test       # pytest -q
+make test-fast  # broad Python suite without database-backed slow tests
+make test-full  # every Python regression test
+make test       # alias for test-full
+make test-browser # optional real Chromium behavior tests
 make map        # regenerate docs/CODE_MAP.md
 make structure  # run tools/project_check.py (duplicate-symbol, patch-debris, empty-test, stale-map checks)
 make compile    # python -m compileall on all source
-make check      # compile + map + structure + test — run this before considering a change done
+make check-fast # compile + structure/map freshness + test-fast
+make check      # compile + map + structure + test-full — run this before considering a change done
 ```
 
 Single test:
 
 ```bash
-pytest tests/test_spatial.py::test_name -q
+python -m pytest tests/test_spatial.py::test_name -q
 ```
 
 Run commands from the repository root — the app uses top-level imports (`from db import q`), so it is not an installed package. Python 3.11+.
 
-The default SQLite database is `engine.db`; override with `ENGINE_DB` before importing `db.py`. Tests use the `temp_db` fixture (`tests/conftest.py`), which calls `db.configure()` on a temp file and cleans up WAL/SHM afterward — never point tests at the real `engine.db`.
+The default SQLite database is `engine.db`; override with `ENGINE_DB` before importing `db.py`. Database-backed tests request the `temp_db` fixture (`tests/conftest.py`), which calls `db.configure()` on a temp file and cleans up WAL/SHM afterward; those tests belong to the full tier. Fast-tier tests must stay database-independent and must never rely on another test initializing `engine.db`.
 
 ## Architecture
 
@@ -53,21 +58,28 @@ director_interpret → mapping_stage|mapping_quick → perception_act
 
 Key ownership boundaries (see `AGENTS.md` for the full table):
 - The **Director** (`agents/director.py`) owns objective causality — interprets player input and resolves outcomes — but not character psychology or narration, and must not silently replace the player's declared speech/action.
-- **Perception** (`agents/perception.py`) is a stateless filter deciding what each observer legitimately receives; it must not invent intent or leak hidden state.
-- **Character agents** (`agents/character.py`, `agents/loops.py`) declare behavior from private perception/memory/relationships only; they never decide their own success.
+- **Perception** (`agents/perception.py`) is a stateless filter deciding what each observer legitimately receives; its structured observations are re-derived from the final scrubbed prose view, not trusted from model output, so the second representation cannot expand the information budget.
+- **Character agents** (`agents/character.py`, `agents/loops.py`) declare behavior from private perception/memory/relationships only; they never decide their own success. `psychology_runtime.py` deterministically persists bounded stress, current-event pain/pleasure, beliefs, and learned associations from those permitted inputs.
 - **`agents/background.py`** gives at most one named, unregistered background presence a single stateless reaction per beat — no persistent memory or psychology (that requires promotion to a real character). Deterministically gated by `commit.py`'s `pick_background_reactor`, which returns `None` (no LLM call) for the large majority of turns.
 - The **Narrator** (`agents/narration.py`) renders only the player-facing slice and cannot originate new player conduct or reveal unperceived facts.
 - **`commit.py`** is the sole persistence boundary — model output is provisional until deterministic commit code validates it. Slow lore/memory preparation happens before the write lock, then all primary turn mutations commit inside one outer transaction. Any domain failure rolls the entire turn back; only reconstructible autobiographical-summary consolidation runs afterward.
 
 `agents/__init__.py` is a compatibility facade; role modules (`director.py`, `perception.py`, `character.py`, etc.) may import `agents/common.py` but never each other, and `runtime.py` is the only module aware of every built-in stage.
 
-Physical-world authority (consolidated in movement/space Phase 3a): the frame-scoped `world.scene` JSON blob is the single runtime source of truth for live rooms/positions/entity state; `room_registry` is the single cross-frame ledger of room identity/retirement; the normalized `world_entities` table is a derived projection of the scene commit, and `world_placements`/`fiction_*` are decommissioned import-compatibility tables. Every scene writer must keep the registry projection in sync — check both the commit path and restore path before adding one (see `docs/DATABASE.md`).
+Physical-world authority (consolidated in movement/space Phase 3a): the frame-scoped `world.scene` JSON blob is the single runtime source of truth for live rooms/positions/entity state; `room_registry` is the single cross-frame ledger of room identity/retirement; the normalized `world_entities` table is a derived projection of the scene commit. `world_placements` is decommissioned; `fiction_worlds`, `fiction_locations`, and `transit_edges` are deprecated import-compatibility tables. Every scene writer must keep the registry projection in sync — check both the commit path and restore path before adding one (see `docs/DATABASE.md`).
 
-Frontend (`static/js/`) uses browser globals, not ES modules; script load order in `static/index.html` matters (`utils.js → components.js → editors.js → lorebooks.js → chat.js → settings.js → app.js`). Never rename a shared JS function without grepping every file.
+Supporting service seams are explicit: `auth_routes.py` owns typed host-auth routes and cookie transport; `chat_archive.py` owns portable chat import/export; `pipeline_trace.py` owns privacy-conscious persisted-history export/replay; `spatial_orientation.py` owns bearing math and is re-exported through `spatial.py`.
+
+Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` loads in the document head; the remaining order is `utils.js → components.js → editors.js → lorebooks.js → backdrops.js → chat.js → settings.js → themes.js → app.js`. Never rename a shared JS function without grepping every file.
 
 ## Working in this repo
 
 - Reproduce a bug with a focused test before fixing; fix the earliest stage where data first becomes wrong rather than compensating downstream (e.g., in the Narrator).
-- New persistent fields need: schema/migration in `db.py`, read/commit code, export/import payload, checkpoint snapshot+restore, ID remapping in `app.py` if applicable, and a regression test (full checklist in `docs/DATABASE.md`).
+- New persistent fields need: schema/migration in `db.py`, read/commit code, portable archive handling in `chat_archive.py`, checkpoint snapshot+restore, branch/clone ID remapping in `app.py` if applicable, and a regression test (full checklist in `docs/DATABASE.md`).
 - Avoid broad rewrites of `agents/runtime.py`, `app.py`, or `memory.py` without dedicated tests — these are orchestration seams affecting reruns, variants, streaming, and commits.
+- Psychology changes must preserve the information firewall: a character may
+  receive its own interoception/body state and its final scrubbed observations,
+  never another character's vitals or raw Director event. Run the adversarial
+  perception and self-knowledge tests when adding any new cognition field.
 - Run `make check` before considering a change complete; it will catch a stale `docs/CODE_MAP.md`, duplicate top-level symbols, and leftover patch-debris markers as hard failures.
+- Never commit `engine.db*`, `*.sqlite*`, `backdrops/`, `__pycache__/`, Python bytecode, or content-bearing `*.trace.json` diagnostics.

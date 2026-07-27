@@ -1286,7 +1286,12 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
             "current_perception": current_view or "",
             "current_mood": active_state.get("mood") or "neutral",
             "current_goal": active_state.get("goal") or "",
-            "active_concerns": (summary.get("unresolved_threads") or [])[:4],
+            "active_concerns": list(dict.fromkeys([
+                *[str(item) for item in (active_state.get("active_concerns") or [])
+                  if str(item).strip()],
+                *[str(item) for item in (summary.get("unresolved_threads") or [])
+                  if str(item).strip()],
+            ]))[:6],
         },
         "recent_episodes": recent,
         "recalled_old_memories": recalled,

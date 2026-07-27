@@ -2,11 +2,35 @@
 
 from character_schema import (
     CHARACTER_SCHEMA,
+    CHARACTER_VERSION,
     default_character_data,
     normalize_character_data,
     normalize_persona_data,
     senses_as_text,
 )
+
+
+def test_v3_psychology_defaults_and_v2_migration():
+    normalized = normalize_character_data({
+        "schema": CHARACTER_SCHEMA,
+        "version": 2,
+        "data": {
+            "identity": {"name": "Legacy Native"},
+            "psychology": {
+                "traits": [{"name": "watchful", "strength": 7}],
+                "values": [{"name": "loyalty", "priority": -2}],
+            },
+        },
+    })
+
+    assert CHARACTER_VERSION == 3
+    assert normalized["psychology"]["traits"][0]["strength"] == 1.0
+    assert normalized["psychology"]["traits"][0]["activation_cues"] == []
+    assert normalized["psychology"]["values"][0]["priority"] == 0.0
+    assert normalized["psychology"]["self_model"]["beliefs"] == []
+    assert normalized["psychology"]["learning"]["associations"] == []
+    assert normalized["embodiment"]["interoception"]["pleasure_sensitivity"] == 0.5
+    assert normalized["initial_state"]["hedonic"]["pain"] == 0.0
 
 def test_default_character_is_agnostic():
     sheet = default_character_data("Test")

@@ -237,6 +237,46 @@ def test_perception_act_payload_is_intent_free(temp_db, monkeypatch):
     assert all("remember" not in json.dumps(e).lower() for e in onset_seq)
 
 
+def test_structured_observations_ignore_model_side_channel(temp_db, monkeypatch):
+    """A perception model cannot smuggle hidden intent through observations.
+
+    The runtime discards model-authored observation objects and re-projects the
+    final scrubbed prose view, so the new channel has exactly the prose
+    channel's information budget.
+    """
+    ctx, moon_id = _make_ctx(temp_db)
+    ctx.director_interpret = _norm(ELEVATOR_SEQUENCE)
+    ctx.director_interpret["flow"] = {
+        "reactors": [moon_id], "resolution_flags": {},
+    }
+    import agents.perception as perception
+
+    def malicious(role, step_key, system, payload, **kwargs):
+        return {
+            "views": {str(moon_id): "You see a hand press against the wall."},
+            "observations": {str(moon_id): [{
+                "observation_id": "leak",
+                "perceiver_id": str(moon_id),
+                "source_atom_id": "private",
+                "channel": "telepathy",
+                "fidelity": "omniscient",
+                "observed": {
+                    "text": "divine heritage; intends to arrest the free fall",
+                    "private_tell_ground": "she fears exposure",
+                },
+            }]},
+        }
+
+    monkeypatch.setattr(perception, "_agent_json", malicious)
+    result = perception.perception_act(ctx, nonce=0)
+    blob = json.dumps(result["observations"]).casefold()
+
+    assert "divine heritage" not in blob
+    assert "arrest the free fall" not in blob
+    assert "private_tell_ground" not in blob
+    assert "hand press against the wall" in blob
+
+
 def test_perception_outcome_delivers_observable_not_intent(temp_db, monkeypatch):
     ctx, moon_id = _make_ctx(temp_db)
     ctx.director_interpret = _norm(ELEVATOR_SEQUENCE)

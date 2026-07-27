@@ -23,6 +23,19 @@ marker only when measured cost shows that they exercise similarly expensive
 concurrency or integration boundaries. Never mark a test slow merely because
 it is inconvenient or intermittently failing.
 
+A fast-tier test must also be order-independent on a clean checkout. Do not let
+pure prompt or schema tests call runtime settings helpers that implicitly open
+`engine.db`; import built-in constants directly or stub the lookup when
+database behavior is not what the test covers. Validate changes to tiering with
+`ENGINE_DB` pointing at a new path so a populated development database cannot
+mask missing initialization.
+
+Information-flow changes require adversarial tests, not only happy-path schema
+tests. For perception or cognition payloads, include hostile model output that
+tries to smuggle raw intent/private grounds through new fields and cross-body
+fixtures that place distinctive secret vitals on another character. Assert the
+forbidden marker is absent from both the model payload and persisted result.
+
 The browser tests live outside the default `tests/` collection. This keeps
 `pip install -r requirements-dev.txt` and all normal Python checks independent
 of browser binaries:

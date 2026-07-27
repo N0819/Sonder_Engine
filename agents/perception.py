@@ -9,8 +9,10 @@ import re
 from character_schema import (
     character_appearance,
     character_name,
+    character_senses,
     persona_appearance,
     persona_name,
+    persona_senses,
 )
 from db import wget
 from prompts import get_prompt
@@ -108,6 +110,72 @@ def _perceiver_spatial_facts(scene, observer, sources):
     names = [s.get("name") for s in sources if s.get("name")]
     facts = spatial_facts(scene, observer, names)
     return {"spatial_facts": facts} if facts else {}
+
+
+def _observations_from_clean_views(clean_views):
+    """Project final, scrubbed prose views into structured observations.
+
+    This deliberately accepts *only* the post-gate view map. It never reads the
+    Director event, raw perception-model observations, manifests, private tell
+    grounds, canonical identity roster, or another body's vitals. Structured
+    perception therefore cannot become a side channel: its text is byte-for-
+    byte a view the perceiver was already allowed to receive, and its metadata
+    is derived from that text alone.
+    """
+    out = {}
+    for raw_pid, raw_view in (clean_views or {}).items():
+        pid = str(raw_pid)
+        text = str(raw_view or "").strip()
+        if not text:
+            out[pid] = []
+            continue
+        folded = text.casefold()
+        if any(word in folded for word in (
+            "you feel", "pain", "cannot breathe", "out of breath", "exhausted",
+            "starving", "wound",
+        )):
+            channel = "interoception"
+        elif any(word in folded for word in (
+            "you hear", "says", "voice", "shout", "muffled", "alarm",
+        )):
+            channel = "hearing"
+        elif any(word in folded for word in (
+            "touch", "pressure", "against your", "grips your", "holds your",
+        )):
+            channel = "touch"
+        else:
+            channel = "mixed"
+
+        intense = any(word in folded for word in (
+            "explosion", "gunshot", "scream", "cannot breathe", "critical",
+            "severe", "fire", "alarm", "struck",
+        ))
+        sudden = any(word in folded for word in (
+            "suddenly", "lunges", "falls", "snaps", "erupts", "alarm",
+            "gunshot", "explosion",
+        ))
+        ambiguous = any(word in folded for word in (
+            "muffled", "fragment", "unclear", "indistinct", "shape",
+            "something", "a voice",
+        ))
+        directed = bool(re.search(
+            r"\b(?:at|toward|towards) you\b|\b(?:grips|holds|strikes|touches) "
+            r"(?:you|your)\b|\byou are (?:struck|grabbed|held|targeted)\b",
+            folded,
+        ))
+        out[pid] = [{
+            "observation_id": f"current:{pid}:0",
+            "perceiver_id": pid,
+            "source_atom_id": "current",
+            "channel": channel,
+            "fidelity": "ambiguous" if ambiguous else "rendered",
+            "observed": {"text": text},
+            "intensity": 0.9 if intense else 0.5,
+            "suddenness": 0.85 if sudden else 0.1,
+            "ambiguity": 0.8 if ambiguous else 0.2,
+            "directed_at_self": directed,
+        }]
+    return out
 
 from .common import (
     _agent_json,
@@ -355,7 +423,36 @@ def _behind_sources(scene, observer, sources):
             and entity_arc(scene, observer, s.get("name")) == "rear"]
 
 
-def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name):
+def _tell_acuity(sheet):
+    """Numeric visual/auditory acuity for physical-tell delivery."""
+    if not isinstance(sheet, dict):
+        return 0.4
+    senses = (
+        character_senses(sheet)
+        if ("psychology" in sheet or "core" in sheet)
+        else persona_senses(sheet)
+        if "narration" in sheet
+        else sheet.get("senses") or []
+    )
+    rank = {
+        "absent": 0.0, "none": 0.0, "impaired": 0.2, "poor": 0.25,
+        "ordinary": 0.4, "normal": 0.4, "keen": 0.65,
+        "heightened": 0.75, "exceptional": 0.9,
+    }
+    values = []
+    for sense in senses if isinstance(senses, list) else []:
+        if not isinstance(sense, dict):
+            continue
+        channel = str(sense.get("channel") or "").casefold()
+        if channel not in ("vision", "hearing", "general"):
+            continue
+        label = str(sense.get("acuity") or "ordinary").casefold()
+        values.append(rank.get(label, 0.4))
+    return max(values) if values else 0.4
+
+
+def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
+                        observer_sheet=None):
     """Per SOURCE this observer can read: {surface_demeanor, cues:[cue,...]} --
     the interior-depth payoff (Phase 4). A character's `manifest` (surface
     demeanor + physical tells) is authored by that character; the ENGINE decides
@@ -387,7 +484,7 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name):
         visible = (visual_level_between(scene, observer, sname) != "none"
                    and sname not in behind)
         audible = bool(rel.get("same_room"))
-        acuity = 0.4
+        acuity = _tell_acuity(observer_sheet)
         familiarity = 0.45 if (observer in (known.get(sname) or [])
                                or sname in (known.get(observer) or [])) else 0.15
         attention = 0.4 if focus == sname else 0.15
@@ -670,7 +767,10 @@ def perception_establish(ctx, nonce):
             ctx, "perception_establish", view, p["name"], known, roster)
         clean_views[pid] = _dedupe_view_sentences(view) or None
 
-    return {"views": clean_views}
+    return {
+        "views": clean_views,
+        "observations": _observations_from_clean_views(clean_views),
+    }
 
 def perception_act(ctx, nonce):
     chat = ctx.chat
@@ -1047,7 +1147,10 @@ def perception_act(ctx, nonce):
 
     _disguise_leak_check(ctx, "perception_act", clean_views, perceivers,
                          p_name, p_disguise_terms, p_disguise_known)
-    return {"views": clean_views}
+    return {
+        "views": clean_views,
+        "observations": _observations_from_clean_views(clean_views),
+    }
 
 def _touch_only_sources(scene, perceiver_name, spatial_to_sources,
                         visual_channel_to_sources):
@@ -1379,7 +1482,8 @@ def perception_outcome(ctx, nonce):
         "room_layout": room_layout(sc, p_name),
         "behind_rooms": _behind_rooms(sc, p_name),
         "focus_target": _focus_target(sc, p_name),
-        "source_manifest": _delivered_manifest(ctx, sc, p_name, sources, known, cast_by_name),
+        "source_manifest": _delivered_manifest(
+            ctx, sc, p_name, sources, known, cast_by_name, pers),
         **_perceiver_spatial_facts(sc, p_name, sources),
     }]
 
@@ -1399,7 +1503,8 @@ def perception_outcome(ctx, nonce):
             "room_layout": room_layout(sc, e_name),
             "behind_rooms": _behind_rooms(sc, e_name),
             "focus_target": _focus_target(sc, e_name),
-            "source_manifest": _delivered_manifest(ctx, sc, e_name, sources, known, cast_by_name),
+            "source_manifest": _delivered_manifest(
+                ctx, sc, e_name, sources, known, cast_by_name, extra),
             **_perceiver_spatial_facts(sc, e_name, sources),
         })
 
@@ -1425,7 +1530,7 @@ def perception_outcome(ctx, nonce):
             "behind_rooms": _behind_rooms(sc, character_name(sh)),
             "focus_target": _focus_target(sc, character_name(sh)),
             "source_manifest": _delivered_manifest(
-                ctx, sc, character_name(sh), sources, known, cast_by_name),
+                ctx, sc, character_name(sh), sources, known, cast_by_name, sh),
         })
 
     # Consciousness gate: overlay THIS beat's just-resolved awareness
@@ -1831,4 +1936,7 @@ def perception_outcome(ctx, nonce):
 
     _disguise_leak_check(ctx, "perception_outcome", clean_views, perceivers,
                          p_name, p_disguise_terms, p_disguise_known)
-    return {"views": clean_views}
+    return {
+        "views": clean_views,
+        "observations": _observations_from_clean_views(clean_views),
+    }

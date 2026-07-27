@@ -1,4 +1,4 @@
-import json, time, re, uuid, base64, struct, zlib, hashlib, numpy as np
+import copy, json, time, re, uuid, base64, struct, zlib, hashlib, numpy as np
 from contextlib import contextmanager
 from db import q, qi, transaction
 from memory import (
@@ -378,10 +378,13 @@ REINT_CHAR_SYS = (
  "embodiment.latent (hidden capabilities, transformations, secret "
  "identities, equipment functions). Only visible features belong in the "
  "visible summary.\n\n"
- "Psychology should be behaviorally concrete. Traits include strength "
- "and ordinary expression. Values include priority. The self_model "
- "reflects how the character understands themselves. Coping describes "
- "typical behavior under stress.\n\n"
+ "Psychology should be behaviorally concrete and conditional. Traits include "
+ "strength, ordinary expression, activation cues, and inhibitors. Values include "
+ "priority, behavioral expression, and conflicts. The self_model includes a few "
+ "durable self/world beliefs with confidence and emotional charge. Coping "
+ "strategies name triggers, responses, effectiveness, and costs. Learned "
+ "associations must be supported by the card's history or examples and remain "
+ "biases, never irresistible commands. Do not assign diagnoses.\n\n"
  # Mirrors generator_character/promote_character in prompts.py. Those two
  # were given this guidance and this template slot; the import path was
  # not (it keeps its own schema prompt here), so every imported character
@@ -416,16 +419,27 @@ REINT_CHAR_SYS = (
  "\"visible\":{\"summary\":\"\",\"build\":\"\",\"face\":\"\","
  "\"hair\":\"\",\"eyes\":\"\",\"distinctive_features\":[]},"
  "\"latent\":[{\"capability\":\"\",\"visible_when\":\"\","
- "\"limits\":\"\"}]},"
+ "\"limits\":\"\"}],\"interoception\":{\"acuity\":0.5,"
+ "\"pain_sensitivity\":0.5,\"fatigue_sensitivity\":0.5,"
+ "\"pleasure_sensitivity\":0.5}},"
  "\"psychology\":{\"drive\":{\"essence\":\"\",\"expression\":\"\","
  "\"taboo\":\"\"},"
  "\"traits\":[{\"name\":\"\",\"strength\":0.5,"
- "\"expression\":\"\"}],"
- "\"values\":[{\"name\":\"\",\"priority\":0.5}],"
+ "\"expression\":\"\",\"activation_cues\":[],\"inhibited_by\":[]}],"
+ "\"values\":[{\"name\":\"\",\"priority\":0.5,\"expression\":\"\","
+ "\"conflicts_with\":[]}],"
  "\"self_model\":{\"summary\":\"\",\"protected_beliefs\":[],"
- "\"pride_triggers\":[],\"shame_triggers\":[]},"
+ "\"pride_triggers\":[],\"shame_triggers\":[],"
+ "\"beliefs\":[{\"belief\":\"\",\"confidence\":0.5,\"protected\":false,"
+ "\"emotional_charge\":0.0,\"source\":\"\"}]},"
  "\"coping\":{\"under_stress\":[],"
- "\"default_conflict_style\":\"\"}},"
+ "\"default_conflict_style\":\"\",\"strategies\":[{\"name\":\"\","
+ "\"trigger\":\"\",\"response\":\"\",\"effectiveness\":0.5,\"costs\":\"\"}],"
+ "\"recovery_supports\":[]},"
+ "\"stress_profile\":{\"baseline_reactivity\":0.5,\"recovery_rate\":0.5,"
+ "\"overload_threshold\":0.8,\"attentional_style\":\"\",\"somatic_signs\":[]},"
+ "\"learning\":{\"associations\":[{\"cue\":\"\",\"appraisal_bias\":\"\","
+ "\"response_tendency\":\"\",\"strength\":0.5,\"generalization_tags\":[]}]}},"
  "\"social\":{\"voice\":{\"register\":\"\",\"cadence\":\"\","
  "\"verbosity\":\"natural\",\"markers\":[],\"notes\":\"\"},"
  "\"baseline_stances\":{\"unknown_person\":{\"trust\":0.0,"
@@ -440,7 +454,9 @@ REINT_CHAR_SYS = (
  "\"initial_state\":{\"mood\":{\"label\":\"neutral\","
  "\"valence\":0.0,\"arousal\":0.0},"
  "\"goals\":[{\"goal\":\"\",\"priority\":0.5}],"
- "\"active_concerns\":[]},"
+ "\"active_concerns\":[],\"stress\":{\"activation\":0.0,\"load\":0.0,"
+ "\"coping_mode\":\"\"},\"hedonic\":{\"pain\":0.0,\"pleasure\":0.0,"
+ "\"source\":\"\"}},"
  "\"opening\":{\"first_message\":\"\"}"
  "}."
 )
@@ -794,6 +810,100 @@ def generate_character(brief):
         ),
     )
     return cid, sheet
+
+
+def _merge_missing_fields(existing, proposed):
+    """Recursively fill empty card fields without replacing authored content."""
+    if isinstance(existing, dict) and isinstance(proposed, dict):
+        result = copy.deepcopy(existing)
+        for key, value in proposed.items():
+            if key not in result:
+                result[key] = copy.deepcopy(value)
+            else:
+                result[key] = _merge_missing_fields(result[key], value)
+        return result
+    if isinstance(existing, list) and isinstance(proposed, list):
+        if not existing:
+            return copy.deepcopy(proposed)
+        if all(isinstance(item, dict) for item in [*existing, *proposed]):
+            result = copy.deepcopy(existing)
+            for candidate in proposed:
+                identity = next((
+                    str(candidate.get(key) or "").strip().casefold()
+                    for key in ("name", "belief", "cue")
+                    if str(candidate.get(key) or "").strip()
+                ), "")
+                match = next((
+                    idx for idx, current in enumerate(result)
+                    if identity and any(
+                        str(current.get(key) or "").strip().casefold() == identity
+                        for key in ("name", "belief", "cue")
+                    )
+                ), None)
+                if match is None:
+                    result.append(copy.deepcopy(candidate))
+                else:
+                    result[match] = _merge_missing_fields(
+                        result[match], candidate)
+            return result
+        return copy.deepcopy(existing)
+    if existing is None or existing == "" or existing == [] or existing == {}:
+        return copy.deepcopy(proposed)
+    return copy.deepcopy(existing)
+
+
+def fill_character_psychology(char_id, brief):
+    """Preview an AI fill of missing psychology/interoception fields.
+
+    The existing card remains unchanged until the editor's normal Save action.
+    This lets an author review the generated completion and keeps this helper
+    from turning a generation request into an implicit write.
+    """
+    row = q("SELECT sheet FROM characters WHERE id=?", (char_id,), one=True)
+    if not row:
+        raise ValueError("Character not found")
+    stored = json.loads(row["sheet"] or "{}")
+    normalized = normalize_character_data(stored)
+    payload = {
+        "brief": str(brief or "").strip(),
+        "character": normalized,
+    }
+    with _silent_provider_stream():
+        raw = chat_complete(
+            "utility",
+            get_prompt("fill_character_psychology"),
+            json.dumps(payload, ensure_ascii=False),
+            temperature=0.65,
+            max_tokens=5000,
+        )
+    proposed = _jparse(raw)
+    if not proposed:
+        raise RuntimeError(
+            "Psychology fill returned no usable data.\n"
+            f"Raw output:\n{raw[:800]}"
+        )
+    restricted = {}
+    if isinstance(proposed.get("psychology"), dict):
+        restricted["psychology"] = proposed["psychology"]
+    embodiment = proposed.get("embodiment")
+    if isinstance(embodiment, dict) and isinstance(
+            embodiment.get("interoception"), dict):
+        restricted["embodiment"] = {
+            "interoception": embodiment["interoception"],
+        }
+    initial = proposed.get("initial_state")
+    if isinstance(initial, dict):
+        allowed_initial = {
+            key: initial[key] for key in ("stress", "hedonic")
+            if isinstance(initial.get(key), dict)
+        }
+        if allowed_initial:
+            restricted["initial_state"] = allowed_initial
+    # Merge into the stored (pre-normalization) card so fields absent on a v2
+    # card are distinguishable from v3's neutral defaults.
+    merged = _merge_missing_fields(stored, restricted)
+    return normalize_character_data(merged)
+
 
 def generate_persona(brief):
     with _silent_provider_stream():

@@ -48,6 +48,7 @@ from importers import (
     generate_character, generate_persona, generate_lore_entries,
     reinterpret_lorebook, resolve_import_card, draft_promoted_character,
     recover_greetings_from_source, character_import_warnings,
+    fill_character_psychology,
 )
 from commit import (commit_all, promotable_background_presences,
                     promote_background_character,
@@ -1428,6 +1429,18 @@ def char_generate_greeting(cid: int, body: dict = Body(default={})):
     except Exception as exc:
         raise HTTPException(502, f"Greeting generation failed: {exc}") from exc
     return {"greeting": greeting}
+
+@app.post("/api/characters/{cid}/fill_psychology")
+def char_fill_psychology(cid: int, body: dict = Body(default={})):
+    """Preview missing v3 psychology fields for editor review."""
+    brief = str(body.get("prompt") or body.get("brief") or "").strip()
+    try:
+        sheet = fill_character_psychology(cid, brief)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, f"Psychology fill failed: {exc}") from exc
+    return {"id": cid, "sheet": sheet}
 
 @app.get("/api/characters/{cid}/export")
 def char_export(cid: int):

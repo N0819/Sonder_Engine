@@ -85,3 +85,69 @@ def test_character_payload_includes_own_public_history(temp_db, monkeypatch):
     assert captured["payload"]["self"]["public_history"] == (
         "Resident psychiatrist at Blackwood Sanatorium for eleven years."
     )
+
+
+def test_character_payload_never_includes_another_bodys_vitals(temp_db, monkeypatch):
+    """Own-body interoception must not become omniscient medical telemetry."""
+    import agents.character as character_module
+
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Vitals isolation", "", time.time()),
+    )
+    sheet = default_character_data("Observer")
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        ("Observer", json.dumps(sheet), "{}", time.time(), "char_observer"),
+    )
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+        (chat_id, char_id, "active", "{}"),
+    )
+    temp_db.wset(chat_id, "scene", {
+        "location": "Room", "time": "now",
+        "rooms": {"room": {"name": "Room", "adjacent": []}},
+        "positions": {"Observer": "room", "Hidden Patient": "room"},
+        "entities": {}, "attire": {}, "overlays": {},
+        "vitals": {
+            "Observer": {
+                "air": 1.0, "stamina": 0.8,
+                "nourishment": 1.0, "injury": 0.1,
+            },
+            "Hidden Patient": {
+                "air": 0.123456, "stamina": 0.234567,
+                "nourishment": 0.345678, "injury": 0.987654,
+            },
+        },
+    })
+    cast = temp_db.q(
+        "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
+        (chat_id,),
+    )
+    turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (chat_id, 1, "Wait.", time.time()),
+    )
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Vitals isolation", persona_id=None,
+                      lorebook_id=None, scenario="", created=time.time()),
+        turn=TurnData(id=turn_id, chat_id=chat_id, idx=1,
+                      player_input="Wait.", created=time.time()),
+        cast=cast, input="Wait.",
+    )
+    ctx.director_interpret = {"flow": {"reactors": [char_id], "tom_triggers": []}}
+    captured = {}
+
+    def fake_agent_json(role, step_key, system, payload, **kwargs):
+        captured["payload"] = payload
+        return {"sequence": []}
+
+    monkeypatch.setattr(character_module, "_agent_json", fake_agent_json)
+    character_module.character_step(ctx, char_id, nonce=0)
+
+    assert captured["payload"]["self"]["body_state"]["injury"] == 0.1
+    blob = json.dumps(captured["payload"])
+    for forbidden in ("0.123456", "0.234567", "0.345678", "0.987654"):
+        assert forbidden not in blob

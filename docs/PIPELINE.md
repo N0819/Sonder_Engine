@@ -92,6 +92,12 @@ Neither stage should directly decide what a character perceives. Full mapping ma
 
 Produces observer-specific views of the action onset: speech delivery, visible movement, immediate sensory evidence, and deterministic spatial additions. This occurs before objective resolution so characters do not react using future knowledge.
 
+It also emits structured observations for appraisal. These are reconstructed
+from each final scrubbed prose view after output validation; model-authored
+observation objects are discarded. They therefore carry the same information
+budget as the view and cannot reintroduce raw event intent, private tell grounds,
+unknown identities, or another body's internal state.
+
 ### `reaction_loop`
 
 Used for contested, time-sensitive physical reactions. Reactions are declarations under limited information, not guaranteed outcomes.
@@ -102,7 +108,13 @@ Runs bounded observable conversational or physical micro-beats when autonomous i
 
 ### `character:<id>`
 
-A single character decision using that character’s perception, memory context, private character data, relationships, and knowledge. Multiple independent character steps may run in parallel.
+A single character decision using that character’s scrubbed view and structured
+observations, memory context, private character data, relationships, learned
+beliefs/associations, and its own interoception/body state. It appraises
+goal impact, novelty, control, coping, norm/self compatibility, stress, and
+current-event pain/pleasure, then proposes several response candidates before
+declaring one behavior. Pain and pleasure are independent and do not require
+survival mode. Multiple independent character steps may run in parallel.
 
 ### `director_resolve`
 
@@ -134,7 +146,8 @@ Renders the player-facing prose. Fidelity checks and player-echo stripping are a
 4. paradox checks
 5. spatial-frame reconciliation
 6. mapping/canon updates
-7. character memories, relationships, and event row
+7. character active psychology, beliefs/associations, memories, relationships,
+   and event row
 8. background-presence tracking
 9. pending-state clear
 
