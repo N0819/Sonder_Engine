@@ -29,7 +29,8 @@ const loreUI = {
   entryFilter: "",
   entryCategory: "",
   plan: null,
-  rendering: false
+  rendering: false,
+  renderOwner: null
 };
 
 function loreBookTypeIcon(type) {
@@ -559,16 +560,17 @@ function loreWorkspaceVisible() {
   // Either the workspace DOM is currently mounted, or a render is in flight
   // (the loading block is briefly showing between the two states).
   return (
-    loreUI.rendering
+    (loreUI.rendering && loreUI.renderOwner?.())
     || Boolean($("#modalbody").querySelector(".lore-workspace"))
   );
 }
 
 async function renderLoreWorkspaceBody(selectedId) {
   const wanted = Number(selectedId);
-  loreUI.rendering = true;
-
   const body = $("#modalbody");
+  const ownsModal = modalOwnership(body);
+  loreUI.rendering = true;
+  loreUI.renderOwner = ownsModal;
 
   // On the FIRST open the modal is empty, so show a spinner. On an in-place
   // swap the workspace is already mounted -- keep it on screen and mark it
@@ -587,8 +589,10 @@ async function renderLoreWorkspaceBody(selectedId) {
     const state = await loadLoreWorkspaceData(selectedId);
 
     // A newer selection superseded this one mid-load -- let the latest win
-    // instead of clobbering it with stale content.
-    if (loreUI.selectedId !== wanted) {
+    // instead of clobbering it with stale content. Modal ownership is separate:
+    // the same selected id must not overwrite a different dialog opened while
+    // this request was in flight.
+    if (!ownsModal() || loreUI.selectedId !== wanted) {
       return;
     }
 
@@ -597,14 +601,19 @@ async function renderLoreWorkspaceBody(selectedId) {
     body.innerHTML = "";
     body.append(buildLoreWorkspace(state));
   } catch (error) {
-    if (loreUI.selectedId === wanted) {
+    if (ownsModal() && loreUI.selectedId === wanted) {
       body.innerHTML = "";
       body.append(
         emptyState("Could not load lorebook: " + error.message)
       );
     }
   } finally {
-    loreUI.rendering = false;
+    // Do not let an older render clear the in-flight marker/owner installed by
+    // a newer selection.
+    if (loreUI.renderOwner === ownsModal) {
+      loreUI.rendering = false;
+      loreUI.renderOwner = null;
+    }
   }
 }
 

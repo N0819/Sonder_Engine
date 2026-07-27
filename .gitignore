@@ -27,3 +27,8 @@ backdrops/
 # copies the working tree wholesale, so anything not ignored here ships.
 *_backup_*.json
 scene_chat*.json
+
+# Pipeline diagnostics can contain story text, retrieved lore, and private
+# character reasoning when exported with --include-content. Keep generated
+# traces local unless someone deliberately renames/adds a scrubbed fixture.
+*.trace.json

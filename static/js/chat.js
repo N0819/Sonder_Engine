@@ -38,6 +38,17 @@ function applySceneMood(text) {
 // while scrolling, not just the newest turn. Recreated on every renderChat()
 // since the old DOM nodes it observes get thrown away with M.innerHTML="".
 let _moodObserver = null;
+// Only the newest story navigation may publish its response. Fetches can
+// complete out of order when two sidebar rows are clicked quickly; without a
+// sequence guard, the older payload could be assigned to S.chat after S.chatId
+// had already moved on to the newer story.
+let _chatLoadSeq = 0;
+
+// The story/frame a stream started in is immutable for that run. The reader is
+// still free to browse elsewhere while generation continues, but Stop must
+// abort the pipeline that is actually running rather than whatever story is
+// currently on screen.
+let _activeRun = null;
 
 // Also drives the scene backdrop (backdrops.js): the picture behind the
 // transcript should be the room of whatever beat the reader is actually
@@ -84,20 +95,42 @@ function observeSceneMood(msgsEl, turnEntries) {
 
 async function openChat(id) {
   const switching = S.chatId !== id;
-  S.chatId = id;
+  const loadSeq = ++_chatLoadSeq;
   // Clear the outgoing story's condition panel BEFORE the awaits below. It
   // belongs to that story, and leaving it up while the next one loads showed
-  // the previous character's bars against the new story's prose.
+  // the previous character's bars against the new story's prose. Story-bound
+  // dialogs have the same ownership rule: dismiss the whole modal stack before
+  // S.chatId can make an old control act on the newly selected story.
   if (switching) {
+    closeAllModals();
     window.clearVitalsHud?.();
   }
-  S.chat = await api("GET", "/api/chats/" + id);
-  S.currentFrameId = null; // always reopen viewing the present
+  S.chatId = id;
+  let chat;
+  try {
+    chat = await api("GET", "/api/chats/" + id);
+  } catch (error) {
+    // A superseded request failing after a newer navigation succeeded is no
+    // longer actionable and must not produce a misleading global error toast.
+    if (loadSeq !== _chatLoadSeq || S.chatId !== id) return false;
+    throw error;
+  }
+  if (loadSeq !== _chatLoadSeq || S.chatId !== id) return false;
+
+  S.chat = chat;
+  // A genuine story switch starts in that story's present. Ordinary refreshes
+  // (turn completion, edit, reroll, delete) preserve the frame the reader was
+  // already viewing, unless that frame no longer exists.
+  const frameStillExists = (chat.frames || []).some(
+    frame => (frame.id ?? null) === S.currentFrameId
+  );
+  if (switching || !frameStillExists) S.currentFrameId = null;
   renderSide();
   renderChat();
   // Then populate for the story now open -- including the case where it does
   // not track condition at all and the panel simply stays away.
   window.refreshVitalsHud?.();
+  return true;
 }
 
 // Purely a client-side filter/view-selector -- see S.currentFrameId's
@@ -429,8 +462,20 @@ function handleEvt(ev) {
   }
 }
 
-async function runStream(url, body) {
+async function abortActiveRun() {
+  const run = _activeRun;
+  if (!run || !run.chatId) return false;
+  const query = run.frameId != null ? `?frame_id=${run.frameId}` : "";
+  return api("POST", `/api/chats/${run.chatId}/abort${query}`);
+}
+
+async function runStream(url, body, context = {}) {
   if (S.busy) return false;
+  const run = {
+    chatId: context.chatId !== undefined ? context.chatId : S.chatId,
+    frameId: context.frameId !== undefined ? context.frameId : S.currentFrameId,
+  };
+  _activeRun = run;
   S.busy = true;
   $("#send").disabled = true;
   $("#stop").classList.remove("hidden");
@@ -444,6 +489,7 @@ async function runStream(url, body) {
     ok = false;
     toast("Pipeline failed: " + e.message, "err", 9000);
   } finally {
+    if (_activeRun === run) _activeRun = null;
     S.busy = false;
     $("#send").disabled = false;
     $("#stop").classList.add("hidden");
@@ -880,18 +926,31 @@ function relMeter(label, value, centered) {
       el("div", { style: `height:100%;width:${pct}%;background:${fillColor};border-radius:4px` })));
 }
 
-async function relationshipModal(p) {
+async function relationshipModal(p, boundChatId = null) {
+  const chatId = boundChatId ?? S.chatId;
+  if (!chatId || S.chatId !== chatId) return;
   modal("Relationships — " + p.name, async body => {
+    const ownsModal = modalOwnership(body);
     body.innerHTML = "";
     body.append(loadingBlock("Loading…"));
     let rels;
     try {
-      rels = await api("GET", `/api/chats/${S.chatId}/characters/${p.id}/relationships`);
+      rels = await api("GET", `/api/chats/${chatId}/characters/${p.id}/relationships`);
     } catch (e) {
+      if (S.chatId !== chatId) {
+        if (ownsModal()) closeAllModals();
+        return;
+      }
+      if (!ownsModal()) return;
       body.innerHTML = "";
       body.append(el("div", { class: "dim" }, "Could not load relationships: " + e.message));
       return;
     }
+    if (S.chatId !== chatId) {
+      if (ownsModal()) closeAllModals();
+      return;
+    }
+    if (!ownsModal()) return;
     body.innerHTML = "";
     const names = Object.keys(rels || {});
     if (!names.length) {
@@ -1640,9 +1699,12 @@ async function previewMemoryContext() {
 }
 
 // ---- Private history ----
-async function chatPH(p) {
+async function chatPH(p, boundChatId = null) {
+  const chatId = boundChatId ?? S.chatId;
+  if (!chatId || S.chatId !== chatId) return;
   const d = await api("GET",
-    `/api/chats/${S.chatId}/characters/${p.id}/private_history`);
+    `/api/chats/${chatId}/characters/${p.id}/private_history`);
+  if (S.chatId !== chatId) return;
   const ph = phEditor(d.entries, true);
   modal(`Private history (this story) — ${p.name}`, b => {
     b.append(
@@ -1658,7 +1720,7 @@ async function chatPH(p) {
           class: "primary",
           onclick: async () => {
             await api("PUT",
-              `/api/chats/${S.chatId}/characters/${p.id}/private_history`,
+              `/api/chats/${chatId}/characters/${p.id}/private_history`,
               { entries: ph.read() });
             closeModal();
             toast("Private history saved.", "ok");
@@ -1667,9 +1729,12 @@ async function chatPH(p) {
   });
 }
 
-async function personaPH() {
+async function personaPH(boundChatId = null) {
+  const chatId = boundChatId ?? S.chatId;
+  if (!chatId || S.chatId !== chatId) return;
   const d = await api("GET",
-    `/api/chats/${S.chatId}/persona_private_history`);
+    `/api/chats/${chatId}/persona_private_history`);
+  if (S.chatId !== chatId) return;
   const ph = phEditor(d.entries, false);
   modal("Persona private history (this story)", b => {
     b.append(
@@ -1684,7 +1749,7 @@ async function personaPH() {
           class: "primary",
           onclick: async () => {
             await api("PUT",
-              `/api/chats/${S.chatId}/persona_private_history`,
+              `/api/chats/${chatId}/persona_private_history`,
               { entries: ph.read() });
             closeModal();
             toast("Saved.", "ok");

@@ -146,7 +146,12 @@ def _known_pronouns(cast, persona, recognized, exclude=None):
 
 def character_step(ctx, cid, nonce):
     chat = ctx.chat
-    row = next(c for c in ctx.cast if c["id"] == cid)
+    row = next((c for c in ctx.cast if c["id"] == cid), None)
+    if row is None:
+        # Cast member was dismissed between plan construction and execution;
+        # skip this character step gracefully rather than crashing with
+        # StopIteration.
+        return None
     sh, active, stance = sheet_state(row)
     sc = get_scene(chat["id"], chat)
 

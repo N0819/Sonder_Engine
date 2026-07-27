@@ -102,3 +102,25 @@ class TestHostLoginNonAsciiUsername:
         assert ga.verify_host_login(username, "wrong password") is False
         # A wrong non-ASCII username is also handled without raising.
         assert ga.verify_host_login("другой", password) is False
+
+
+class TestGuestAttachmentLifecycle:
+    def test_dormant_persona_invalidates_existing_token(self, temp_db):
+        chat_id, persona_id = _make_chat_and_persona(temp_db)
+        temp_db.qi(
+            "INSERT INTO chat_personas(chat_id,persona_id,status) "
+            "VALUES(?,?,'active')",
+            (chat_id, persona_id),
+        )
+        invite = ga.create_guest_invite(chat_id, persona_id)
+        redeemed = ga.redeem_code(invite["code"])
+
+        assert ga.verify_guest_token(redeemed["token"]) is not None
+
+        temp_db.qi(
+            "UPDATE chat_personas SET status='dormant' "
+            "WHERE chat_id=? AND persona_id=?",
+            (chat_id, persona_id),
+        )
+
+        assert ga.verify_guest_token(redeemed["token"]) is None

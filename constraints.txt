@@ -1,0 +1,15 @@
+# Direct-dependency versions exercised by CI, plus Starlette because FastAPI's
+# test client is sensitive to that compatibility pair. Runtime and dev
+# requirements use ranges; pass this file with ``pip -c`` for the CI baseline.
+fastapi==0.115.14
+httpx==0.28.1
+numpy==2.2.6
+playwright==1.61.0
+pydantic==2.11.7
+pytest==8.4.1
+pytest-asyncio==1.0.0
+pytest-playwright==0.8.0
+requests==2.32.4
+sqlite-vec==0.1.9
+starlette==0.46.2
+uvicorn==0.35.0

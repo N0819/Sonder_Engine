@@ -1252,6 +1252,16 @@ def _coerce_empty_dict_to_list(value):
     return value
 
 def _coerce_conditions(value):
+    def condition_dict(entry):
+        if not isinstance(entry, dict):
+            return entry
+        entry = dict(entry)
+        if "state" in entry and not isinstance(entry.get("state"), dict):
+            # Condition consumers require structured state. A scalar must not
+            # pass list[dict] validation only to crash those readers later.
+            entry["state"] = {}
+        return entry
+
     if value == []:
         return {}
     if isinstance(value, list):
@@ -1260,7 +1270,7 @@ def _coerce_conditions(value):
             if not isinstance(cond, dict):
                 continue
             key = str(cond.get("condition_id") or f"condition_{i}")
-            grouped.setdefault(key, []).append(cond)
+            grouped.setdefault(key, []).append(condition_dict(cond))
         return grouped
     if isinstance(value, dict):
         # conditions is dict[str, list[dict]] -- a model sometimes writes a
@@ -1271,9 +1281,9 @@ def _coerce_conditions(value):
         fixed = {}
         for key, entry in value.items():
             if isinstance(entry, list):
-                fixed[key] = entry
+                fixed[key] = [condition_dict(item) for item in entry]
             elif isinstance(entry, dict):
-                fixed[key] = [entry]
+                fixed[key] = [condition_dict(entry)]
             elif entry is not None:
                 fixed[key] = [entry]
         return fixed

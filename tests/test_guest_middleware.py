@@ -186,3 +186,32 @@ class TestGuestAccess:
         # verify_guest_token now correctly rejects the revoked token outright
         # (401, "not authenticated"), not just out-of-scope (403).
         assert guest_client.get("/api/guest/state").status_code == 401
+
+    def test_detaching_persona_revokes_its_guest_session(
+        self, client, temp_db,
+    ):
+        _host_client(client)
+        chat_id, persona_id = _make_chat_with_extra_persona(temp_db)
+        invite = client.post(
+            f"/api/chats/{chat_id}/guest_invites",
+            json={"persona_id": persona_id},
+        ).json()
+
+        guest_client = TestClient(app_module.app)
+        assert guest_client.post(
+            "/api/join", json={"code": invite["code"]}
+        ).status_code == 200
+        assert guest_client.get("/api/guest/state").status_code == 200
+
+        detached = client.delete(
+            f"/api/chats/{chat_id}/personas/{persona_id}"
+        )
+        assert detached.status_code == 200
+
+        grant = temp_db.q(
+            "SELECT revoked FROM guest_grants WHERE id=?",
+            (invite["grant_id"],),
+            one=True,
+        )
+        assert grant["revoked"] == 1
+        assert guest_client.get("/api/guest/state").status_code == 401

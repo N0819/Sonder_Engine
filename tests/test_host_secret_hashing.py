@@ -9,6 +9,8 @@ must invalidate every outstanding session.
 
 from __future__ import annotations
 
+import pytest
+
 import guest_access as guest
 from db import q, get_setting
 
@@ -64,6 +66,24 @@ def test_second_create_returns_none_and_does_not_overwrite(temp_db):
     assert get_setting("host_pw_hash") == hash_before
     assert guest.verify_host_login("host", PASSWORD) is True
     assert guest.verify_host_login("intruder", "other-password") is False
+
+
+def test_create_account_rolls_back_partial_credentials_and_session(
+    temp_db, monkeypatch,
+):
+    def fail_session():
+        raise RuntimeError("session storage failed")
+
+    monkeypatch.setattr(guest, "create_host_session", fail_session)
+
+    with pytest.raises(RuntimeError, match="session storage failed"):
+        guest.create_host_account("host", PASSWORD)
+
+    assert guest.host_account_exists() is False
+    assert get_setting("host_username") is None
+    assert get_setting("host_pw_salt") is None
+    assert get_setting("host_pw_hash") is None
+    assert q("SELECT id FROM host_sessions") == []
 
 
 def test_session_round_trip_and_destroy(temp_db):

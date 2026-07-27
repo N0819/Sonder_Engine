@@ -72,6 +72,13 @@ from memory import (
 from scene import persona_of, get_scene
 from backdrops import (build_backdrop_request, request_backdrop, cached_backdrop,
                        backdrop_status, backdrop_error)
+from auth_routes import (
+    GUEST_ALLOWED_API_PATHS,
+    GUEST_COOKIE,
+    HOST_COOKIE,
+    PUBLIC_API_PATHS,
+    router as auth_router,
+)
 
 # ---- App setup ----
 # No CORS middleware: the frontend is always served same-origin from this
@@ -116,6 +123,7 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="Sonder Engine", version="1.0", lifespan=lifespan)
+app.include_router(auth_router)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -128,15 +136,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # hole, not just the guest-classification one -- SameSite=Strict on the
 # host cookie is what actually stops a forged cross-site request, not any
 # inspection of where the request appears to come from.
-HOST_COOKIE = "fe_host"
-GUEST_COOKIE = "fe_guest"
-HOST_COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # matches guest.HOST_SESSION_TTL
-PUBLIC_API_PATHS = {
-    "/api/join", "/api/auth/status", "/api/auth/setup",
-    "/api/auth/login", "/api/auth/logout",
-}
-GUEST_ALLOWED_API_PATHS = {"/api/guest/state", "/api/guest/input"}
-
 @app.get("/guest")
 def guest_page():
     # Deliberately its own small standalone page rather than the full SPA
@@ -154,57 +153,6 @@ def login_page():
     # Standalone page like /guest: handles both first-run account setup
     # and sign-in, then redirects into the SPA once a session cookie is set.
     return FileResponse("static/login.html")
-
-def _set_host_cookie(response: JSONResponse, token: str) -> JSONResponse:
-    response.set_cookie(
-        HOST_COOKIE, token, httponly=True, samesite="strict",
-        max_age=HOST_COOKIE_MAX_AGE,
-    )
-    return response
-
-@app.get("/api/auth/status")
-def auth_status(request: Request):
-    return {
-        "setup_required": not guest.host_account_exists(),
-        "authenticated": guest.verify_host_session(
-            request.cookies.get(HOST_COOKIE)
-        ),
-    }
-
-@app.post("/api/auth/setup")
-def auth_setup(username: str = Body(""), password: str = Body("")):
-    if guest.host_account_exists():
-        return JSONResponse({"detail": "Account already exists"}, status_code=409)
-    if not username.strip():
-        return JSONResponse({"detail": "Username is required"}, status_code=400)
-    if not password:
-        return JSONResponse({"detail": "Password is required"}, status_code=400)
-    token = guest.create_host_account(username, password)
-    if token is None:
-        return JSONResponse({"detail": "Account already exists"}, status_code=409)
-    return _set_host_cookie(JSONResponse({"ok": True}), token)
-
-@app.post("/api/auth/login")
-def auth_login(username: str = Body(""), password: str = Body("")):
-    if guest.login_rate_limited():
-        return JSONResponse(
-            {"detail": "Too many attempts, wait a minute"}, status_code=429
-        )
-    # Generic failure detail: don't reveal whether the username or the
-    # password was the wrong half.
-    if not guest.verify_host_login(username, password):
-        return JSONResponse(
-            {"detail": "Invalid username or password"}, status_code=401
-        )
-    token = guest.create_host_session()
-    return _set_host_cookie(JSONResponse({"ok": True}), token)
-
-@app.post("/api/auth/logout")
-def auth_logout(request: Request):
-    guest.destroy_host_session(request.cookies.get(HOST_COOKIE))
-    response = JSONResponse({"ok": True})
-    response.delete_cookie(HOST_COOKIE)
-    return response
 
 @app.middleware("http")
 async def access_control(request: Request, call_next):
@@ -633,11 +581,28 @@ def _remap_row_json_fields(rows, remap):
     return rows
 
 def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
-                   char_idmap=None, world_id_remap=None, frame_idmap=None):
+                   char_idmap=None, persona_idmap=None,
+                   world_id_remap=None, frame_idmap=None):
     frame_idmap = frame_idmap or {}
+    remapped_memories = []
     for memory in blob.get("memories") or []:
+        if char_idmap is not None:
+            new_char_id = char_idmap.get(memory.get("char_id"))
+            if new_char_id is None:
+                continue
+            memory["char_id"] = new_char_id
         memory["turn_id"] = turn_idmap.get(memory.get("turn_id"))
         memory["frame_id"] = frame_idmap.get(memory.get("frame_id"))
+        remapped_memories.append(memory)
+    if "memories" in blob:
+        blob["memories"] = remapped_memories
+
+    if char_idmap is not None and "memory_summaries" in blob:
+        blob["memory_summaries"] = [
+            {**summary, "char_id": char_idmap[summary["char_id"]]}
+            for summary in (blob.get("memory_summaries") or [])
+            if char_idmap.get(summary.get("char_id")) is not None
+        ]
 
     if isinstance(blob.get("world"), dict):
         # Retired-concept cleanup (see turn_branch's matching comment).
@@ -689,14 +654,17 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
     if isinstance(blob.get("world"), dict):
         _remap_active_books(blob["world"], bookmap)
 
-    if char_idmap and blob.get("chars"):
+    if char_idmap is not None and blob.get("chars"):
         remapped_chars = {}
         for old_key, state in blob["chars"].items():
             try:
                 old_id = int(old_key)
-                new_key = str(char_idmap.get(old_id, old_id))
+                new_id = char_idmap.get(old_id)
+                if new_id is None:
+                    continue
+                new_key = str(new_id)
             except (ValueError, TypeError):
-                new_key = str(old_key)
+                continue
             remapped_chars[new_key] = state
         blob["chars"] = remapped_chars
 
@@ -708,8 +676,11 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
                 continue
             ncf = dict(cf)
             ncf["frame_id"] = nfid
-            if char_idmap:
-                ncf["char_id"] = char_idmap.get(ncf.get("char_id"), ncf.get("char_id"))
+            if char_idmap is not None:
+                new_char_id = char_idmap.get(ncf.get("char_id"))
+                if new_char_id is None:
+                    continue
+                ncf["char_id"] = new_char_id
             remapped_char_frames.append(ncf)
         blob["char_frames"] = remapped_char_frames
 
@@ -727,6 +698,11 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
             nfr = dict(fr)
             nfr["id"] = nfid
             nfr["parent_frame_id"] = frame_idmap.get(fr.get("parent_frame_id"))
+            if char_idmap is not None:
+                nfr["travelers"] = _remap_frame_character_ids(
+                    nfr.get("travelers"), char_idmap)
+                nfr["nonexistent_cast"] = _remap_frame_character_ids(
+                    nfr.get("nonexistent_cast"), char_idmap)
             remapped_frames.append(nfr)
         blob["frames"] = remapped_frames
 
@@ -740,6 +716,11 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
                 continue
             np = dict(p)
             np["frame_id"] = frame_idmap.get(old_fid) if old_fid is not None else None
+            if persona_idmap is not None:
+                new_persona_id = persona_idmap.get(np.get("persona_id"))
+                if new_persona_id is None:
+                    continue
+                np["persona_id"] = new_persona_id
             remapped_personas.append(np)
         blob["chat_personas"] = remapped_personas
 
@@ -786,6 +767,36 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
                     blob["world"][k] = _deep_remap_ids(v, world_id_remap)
 
     return blob
+
+def _json_id_list(value):
+    """Return integer ids from a frame's JSON-list storage value."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value:
+        try:
+            result.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    return result
+
+def _remap_frame_character_ids(value, char_idmap):
+    """Remap frame membership and serialize it for the TEXT columns.
+
+    Missing characters are deliberately omitted. Carrying their raw source
+    database ids can attach a traveler/nonexistent mask to an unrelated local
+    character whose row happens to reuse that integer id.
+    """
+    return json.dumps([
+        char_idmap[old_id]
+        for old_id in _json_id_list(value)
+        if old_id in char_idmap
+    ])
     
 def _ensure_resource_uid(table: str, row_id: int, prefix: str):
     row = q(f"SELECT resource_uid FROM {table} WHERE id=?", (row_id,), one=True)
@@ -1127,7 +1138,16 @@ def lorebook_link_create(lid: int, body: dict = Body(...)):
 
 @app.put("/api/lorebook_links/{link_id}")
 def lorebook_link_update(link_id: int, body: dict = Body(...)):
-    update_lorebook_link(link_id, **body)
+    update_lorebook_link(
+        link_id,
+        relation_type=body.get("relation_type"),
+        label=body.get("label"),
+        notes=body.get("notes"),
+        bidirectional=body.get("bidirectional"),
+        follow_for_retrieval=body.get("follow_for_retrieval"),
+        weight=body.get("weight"),
+        sort_order=body.get("sort_order"),
+    )
     return {"ok": True}
 
 @app.delete("/api/lorebook_links/{link_id}")
@@ -1628,6 +1648,11 @@ def lore_export(lid: int):
         "book_type": lb["book_type"] or "general",
         "summary": lb["summary"] or "",
         "resource_uid": lb["resource_uid"],
+        "scope_world_id": lb["scope_world_id"],
+        "scope_location_id": lb["scope_location_id"],
+        "inheritance_mode": lb["inheritance_mode"] or "inherit",
+        "sort_order": lb["sort_order"] or 0,
+        "anchor_entity_id": lb["anchor_entity_id"],
         "entries": dump_lorebook(lid),
     }
 
@@ -1853,17 +1878,29 @@ def chat_del(cid: int):
     # A still-running pipeline would keep writing into rows we're deleting
     # (and re-create orphan world rows for the dead chat id).
     _require_chat_idle(cid)
-    for t in q("SELECT id FROM turns WHERE chat_id=?", (cid,)):
-        for s in q("SELECT id FROM steps WHERE turn_id=?", (t["id"],)):
-            qi("DELETE FROM variants WHERE step_id=?", (s["id"],))
-        qi("DELETE FROM steps WHERE turn_id=?", (t["id"],))
-    for tbl in ("turns", "events", "world", "checkpoints", "chat_chars", "chat_lorebooks"):
-        qi(f"DELETE FROM {tbl} WHERE chat_id=?", (cid,))
-    qi("DELETE FROM memory_retrieval_fts WHERE chat_id=?", (str(cid),))
-    qi("DELETE FROM memories WHERE chat_id=?", (cid,))
-    qi("DELETE FROM memory_summaries WHERE chat_id=?", (cid,))
-    qi("DELETE FROM lorebooks WHERE chat_id=?", (cid,))
-    qi("DELETE FROM chats WHERE id=?", (cid,))
+    with transaction():
+        # Cascade through turns → steps → variants (no chat_id on steps/variants)
+        for t in q("SELECT id FROM turns WHERE chat_id=?", (cid,)):
+            for s in q("SELECT id FROM steps WHERE turn_id=?", (t["id"],)):
+                qi("DELETE FROM variants WHERE step_id=?", (s["id"],))
+            qi("DELETE FROM steps WHERE turn_id=?", (t["id"],))
+        # Tables with a direct chat_id foreign key
+        for tbl in (
+            "turns", "events", "world", "checkpoints",
+            "chat_chars", "chat_lorebooks", "chat_personas",
+            "chat_char_frames", "turn_player_inputs", "frames",
+            "guest_grants", "scheduled_events", "room_registry",
+            "world_events", "world_entities", "world_placements",
+            "world_conditions", "fiction_worlds", "fiction_locations",
+            "transit_edges",
+        ):
+            qi(f"DELETE FROM {tbl} WHERE chat_id=?", (cid,))
+        # FTS table stores chat_id as text
+        qi("DELETE FROM memory_retrieval_fts WHERE chat_id=?", (str(cid),))
+        qi("DELETE FROM memories WHERE chat_id=?", (cid,))
+        qi("DELETE FROM memory_summaries WHERE chat_id=?", (cid,))
+        qi("DELETE FROM lorebooks WHERE chat_id=?", (cid,))
+        qi("DELETE FROM chats WHERE id=?", (cid,))
     return {"ok": True}
 
 @app.get("/api/chats/{cid}")
@@ -2115,7 +2152,16 @@ def chat_add_persona(cid: int, body: dict = Body(...)):
 
 @app.delete("/api/chats/{cid}/personas/{pid}")
 def chat_del_persona(cid: int, pid: int):
-    qi("UPDATE chat_personas SET status='dormant' WHERE chat_id=? AND persona_id=?", (cid, pid))
+    # Attachment and remote authority have the same lifecycle. Committing
+    # these together prevents a detached player from retaining a live guest
+    # session if the process stops between the two writes.
+    with transaction():
+        qi(
+            "UPDATE chat_personas SET status='dormant' "
+            "WHERE chat_id=? AND persona_id=?",
+            (cid, pid),
+        )
+        guest.revoke_persona_grants(cid, pid)
     return {"ok": True}
 
 @app.post("/api/chats/{cid}/turns/{idx}/player_input")
@@ -2287,32 +2333,37 @@ def survival_put(cid: int, body: dict = Body(...)):
     if not chat:
         raise HTTPException(404, "Chat not found")
 
+    # This setting and its seeded scene state are one authoring edit. Do not
+    # let either race an active pipeline, and do not commit the toggles if
+    # seeding the scene fails.
+    _require_chat_idle(cid)
     enabled = bool(body.get("enabled"))
-    set_survival_enabled(cid, enabled)
-    if "show_npcs" in body:
-        set_survival_shows_npcs(cid, bool(body.get("show_npcs")))
+    with transaction():
+        set_survival_enabled(cid, enabled)
+        if "show_npcs" in body:
+            set_survival_shows_npcs(cid, bool(body.get("show_npcs")))
 
-    if enabled:
-        # Seed the bodies this story knows about. Without this, switching the
-        # feature on did nothing visible: the table only came into existence
-        # when the Director wrote a vitals patch, and on a quiet turn it had no
-        # reason to -- so the tracker stayed empty and the tick had nothing to
-        # advance. Existing records are untouched, so re-enabling resumes.
-        _require_chat_idle(cid)
-        chat = dict(chat)
-        scene = get_scene(cid, chat)
-        names = [persona_name(persona_of(chat))]
-        for row in q(
-            "SELECT ch.sheet FROM chat_chars cc JOIN characters ch "
-            "ON ch.id = cc.char_id WHERE cc.chat_id=? AND cc.status='active'",
-            (cid,),
-        ):
-            try:
-                names.append(character_name(json.loads(row["sheet"])))
-            except (TypeError, ValueError):
-                continue
-        seed_vitals(scene, names)
-        wset(cid, "scene", scene)
+        if enabled:
+            # Seed the bodies this story knows about. Without this, switching
+            # the feature on did nothing visible: the table only came into
+            # existence when the Director wrote a vitals patch, and on a quiet
+            # turn it had no reason to -- so the tracker stayed empty and the
+            # tick had nothing to advance. Existing records are untouched, so
+            # re-enabling resumes.
+            chat = dict(chat)
+            scene = get_scene(cid, chat)
+            names = [persona_name(persona_of(chat))]
+            for row in q(
+                "SELECT ch.sheet FROM chat_chars cc JOIN characters ch "
+                "ON ch.id = cc.char_id WHERE cc.chat_id=? AND cc.status='active'",
+                (cid,),
+            ):
+                try:
+                    names.append(character_name(json.loads(row["sheet"])))
+                except (TypeError, ValueError):
+                    continue
+            seed_vitals(scene, names)
+            wset(cid, "scene", scene)
 
     return {"enabled": enabled, "show_npcs": survival_shows_npcs(cid)}
 
@@ -2735,557 +2786,21 @@ def fixed_points_delete(cid: int, anchor_id: int):
     paradox.remove_fixed_point(cid, anchor_id)
     return {"ok": True}
 
-@app.get("/api/chats/{cid}/export")
-def chat_export(cid: int):
-    chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
-    if not chat: raise HTTPException(404)
-    export = {"version": 3, "chat": dict(chat), "frames": [], "turns": [], "world": {}, "participants": [], "char_frames": [], "memories": [], "memory_summaries": [], "events": [], "checkpoints": [], "lorebook": None, "lorebooks": []}
-    export["frames"] = [dict(f) for f in q("SELECT * FROM frames WHERE chat_id=?", (cid,))]
-    export["char_frames"] = [dict(r) for r in q("SELECT * FROM chat_char_frames WHERE chat_id=?", (cid,))]
-    for t in q("SELECT * FROM turns WHERE chat_id=? ORDER BY idx", (cid,)):
-        td = dict(t)
-        td["steps"] = []
-        for s in q("SELECT * FROM steps WHERE turn_id=? ORDER BY ord", (t["id"],)):
-            sd = dict(s)
-            sd["variants"] = [dict(v) for v in q("SELECT id,step_id,content,created,active FROM variants WHERE step_id=? ORDER BY id", (s["id"],))]
-            td["steps"].append(sd)
-        export["turns"].append(td)
-    export["world"] = {w["key"]: json.loads(w["value"]) for w in q("SELECT * FROM world WHERE chat_id=?", (cid,))}
-    export["participants"] = [dict(r) for r in q("SELECT * FROM chat_chars WHERE chat_id=?", (cid,))]
-    export["memories"] = dump_chat_memories(cid)
-    export["memory_summaries"] = dump_memory_summaries(cid)
-    export["events"] = [dict(r) for r in q("SELECT * FROM events WHERE chat_id=? ORDER BY id", (cid,))]
-    export["checkpoints"] = [
-        {"turn_idx": r["turn_idx"], "blob": r["blob"], "created": r["created"]}
-        for r in q("SELECT * FROM checkpoints WHERE chat_id=? ORDER BY turn_idx", (cid,))]
-    # Live normalized world tables -- without these, an import has an empty
-    # world_entities table while world.scene + fixed_points reference
-    # entities, so the first post-import commit false-fires a paradox.
-    for tbl in ("world_entities", "world_placements", "world_conditions",
-                "scheduled_events", "room_registry",
-                "fiction_worlds", "fiction_locations"):
-        export[tbl] = [dict(r) for r in q(f"SELECT * FROM {tbl} WHERE chat_id=?", (cid,))]
-    # Multiplayer roster + frame stations, and any pre-submitted co-player
-    # inputs, and the lore link graph -- all silently dropped before.
-    export["chat_personas"] = [dict(r) for r in q("SELECT * FROM chat_personas WHERE chat_id=?", (cid,))]
-    export["turn_player_inputs"] = [dict(r) for r in q("SELECT * FROM turn_player_inputs WHERE chat_id=?", (cid,))]
-    export["lorebook_links"] = dump_lorebook_links(chat_lorebook_ids(cid, enabled_only=False))
-    canon = chat["lorebook_id"]
-    for lid in chat_lorebook_ids(cid, enabled_only=False):
-        lb = q("SELECT * FROM lorebooks WHERE id=?", (lid,), one=True)
-        if not lb: continue
-        att = q("SELECT enabled FROM chat_lorebooks WHERE chat_id=? AND lorebook_id=?", (cid, lid), one=True)
-        export["lorebooks"].append({"book": dict(lb), "canon": lid == canon, "enabled": att["enabled"] if att else 1, "entries": dump_lorebook(lid)})
-    if canon:
-        lb = q("SELECT * FROM lorebooks WHERE id=?", (canon,), one=True)
-        if lb:
-            export["lorebook"] = {"book": dict(lb), "entries": dump_lorebook(canon)}
-    # Portable resource bundle. chat_import remaps every char_id/persona_id
-    # through resources.{persona,characters} (old_id -> embedded sheet). Without
-    # it, a cross-install import raises "references character N but does not
-    # embed it" (and even a same-install import that DID resolve by raw id would
-    # drop every memory/summary for the unembedded characters, or silently
-    # attach the wrong character if ids happen to collide). Embedding the sheets
-    # here is what makes an exported story actually portable.
-    char_ids = []
-    for row in export["participants"] + export["char_frames"]:
-        cid_ = row.get("char_id")
-        if cid_ is not None and cid_ not in char_ids:
-            char_ids.append(cid_)
-    characters = []
-    for ch_id in char_ids:
-        c = q("SELECT * FROM characters WHERE id=?", (ch_id,), one=True)
-        if not c:
-            continue
-        characters.append({
-            "old_id": ch_id,
-            "resource_uid": c["resource_uid"],
-            "sheet": json.loads(c["sheet"]),
-            "source": json.loads(c["source"] or "{}"),
-        })
-    persona = None
-    if chat["persona_id"]:
-        p = q("SELECT * FROM personas WHERE id=?", (chat["persona_id"],), one=True)
-        if p:
-            persona = {
-                "resource_uid": p["resource_uid"],
-                "sheet": json.loads(p["sheet"]),
-                "source": json.loads(p["source"] or "{}"),
-            }
-    # Extra multiplayer personas (chat_personas beyond chats.persona_id)
-    # need their sheets embedded too, or a cross-install import can't
-    # resolve the roster's persona ids.
-    extra_personas = []
-    seen_pids = {chat["persona_id"]} if chat["persona_id"] else set()
-    for row in export["chat_personas"]:
-        pid = row.get("persona_id")
-        if pid is None or pid in seen_pids:
-            continue
-        seen_pids.add(pid)
-        p = q("SELECT * FROM personas WHERE id=?", (pid,), one=True)
-        if not p:
-            continue
-        extra_personas.append({
-            "old_id": pid,
-            "resource_uid": p["resource_uid"],
-            "sheet": json.loads(p["sheet"]),
-            "source": json.loads(p["source"] or "{}"),
-        })
-    export["resources"] = {"persona": persona, "characters": characters,
-                           "extra_personas": extra_personas}
-    return export
-    
-def _variant_content(value):
-    if isinstance(value, str):
-        return value
-    return json.dumps(value or {}, ensure_ascii=False)
+from chat_archive import ArchiveRemappers, ChatArchiveService
 
-def _import_or_match_character(resource):
-    uid = resource.get("resource_uid")
-    if uid:
-        existing = q("SELECT id FROM characters WHERE resource_uid=?", (uid,), one=True)
-        if existing:
-            return existing["id"]
-
-    sheet = normalize_character_data(resource.get("sheet") or {})
-    uid = uid or sheet.get("identity", {}).get("uid") or new_uid("char")
-
-    return qi(
-        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
-        "VALUES(?,?,?,?,?)",
-        (
-            character_name(sheet),
-            json.dumps(sheet, ensure_ascii=False),
-            json.dumps(resource.get("source") or {}, ensure_ascii=False),
-            time.time(),
-            uid,
-        ),
+_chat_archive_service = ChatArchiveService(
+    ArchiveRemappers(
+        active_books=_remap_active_books,
+        fixed_point_frames=_remap_fixed_points_frames,
+        scheduled_event_frames=_remap_scheduled_event_frames,
+        checkpoint_blob=_remap_cp_blob,
+        json_id_list=_json_id_list,
+        frame_character_ids=_remap_frame_character_ids,
     )
-
-def _import_or_match_persona(resource):
-    if not resource:
-        return None
-
-    uid = resource.get("resource_uid")
-    if uid:
-        existing = q("SELECT id FROM personas WHERE resource_uid=?", (uid,), one=True)
-        if existing:
-            return existing["id"]
-
-    sheet = normalize_persona_data(resource.get("sheet") or {})
-    uid = uid or sheet.get("identity", {}).get("uid") or new_uid("persona")
-
-    return qi(
-        "INSERT INTO personas(name,sheet,source,resource_uid) "
-        "VALUES(?,?,?,?)",
-        (
-            persona_name(sheet),
-            json.dumps(sheet, ensure_ascii=False),
-            json.dumps(resource.get("source") or {}, ensure_ascii=False),
-            uid,
-        ),
-    )
-
-def _import_book_uid(uid):
-    """resource_uid for a lorebook created by chat_import.
-
-    Unlike characters/personas -- shared resources that _import_or_match_*
-    dedupes onto the existing row when the uid is already known -- an
-    imported chat's lorebooks are per-chat copies (chat_id-scoped). Reusing
-    the archive's uid verbatim therefore hits uq_lorebooks_resource_uid
-    when the archive is imported into the SAME install that exported it,
-    aborting the whole import. Keep the uid when it is free (cross-install
-    portability); mint a fresh one when this install already owns it --
-    the import is a distinct book in a distinct chat.
-    """
-    if uid and not q("SELECT id FROM lorebooks WHERE resource_uid=?",
-                     (uid,), one=True):
-        return uid
-    return new_uid("book")
-
-@app.post("/api/chats/import")
-def chat_import(body: dict = Body(...)):
-    archive = body.get("data")
-    if not isinstance(archive, dict):
-        raise HTTPException(400, "No chat data provided")
-
-    if archive.get("schema") == "fiction-engine.chat":
-        data = archive.get("data") or archive
-    else:
-        data = archive
-
-    # Tolerate a bare {"data": {...}} envelope even without the schema marker:
-    # some exports (e.g. the bundled demo) wrap the archive one level deep, and
-    # the frontend also re-wraps the request body as {"data": fileContent}.
-    if "chat" not in data and isinstance(data.get("data"), dict) \
-            and "chat" in data["data"]:
-        data = data["data"]
-
-    if "chat" not in data:
-        raise HTTPException(400, "Chat archive has no chat object")
-
-    resources = data.get("resources") or {}
-
-    with transaction():
-        persona_id = _import_or_match_persona(resources.get("persona"))
-
-        old_char_map = {}
-        for resource in resources.get("characters") or []:
-            old_id = resource.get("old_id")
-            new_id = _import_or_match_character(resource)
-            if old_id is not None:
-                old_char_map[old_id] = new_id
-
-        source_chat = data["chat"]
-
-        # Persona id remap for the multiplayer roster: the primary persona's
-        # source id (from the source chat row) maps to the resolved primary,
-        # and every embedded extra persona maps old_id -> found-or-created.
-        persona_idmap = {}
-        if source_chat.get("persona_id") and persona_id is not None:
-            persona_idmap[source_chat["persona_id"]] = persona_id
-        for resource in resources.get("extra_personas") or []:
-            old_pid = resource.get("old_id")
-            new_pid = _import_or_match_persona(resource)
-            if old_pid is not None and new_pid is not None:
-                persona_idmap[old_pid] = new_pid
-
-        if persona_id is None:
-            old_persona_id = source_chat.get("persona_id")
-            if old_persona_id:
-                existing = q("SELECT id FROM personas WHERE id=?", (old_persona_id,), one=True)
-                persona_id = existing["id"] if existing else None
-
-        # branched_from is deliberately NOT carried over, so it defaults to
-        # '[]': it holds raw chat ids, which name a directory of backdrops in
-        # the database they were written in and an unrelated chat's in any
-        # other. An imported chat starts with no inherited pictures.
-        new_chat_id = qtx(
-            "INSERT INTO chats(name,persona_id,scenario,created) "
-            "VALUES(?,?,?,?)",
-            (
-                (source_chat.get("name") or "Imported") + " (import)",
-                persona_id,
-                source_chat.get("scenario", ""),
-                time.time(),
-            ),
-        )
-
-        frame_idmap = {}
-        for f in data.get("frames") or []:
-            old_fid = f.get("id")
-            nfid = qtx(
-                "INSERT INTO frames(chat_id,label,ordinal,kind,travelers,nonexistent_cast,created,"
-                "split_turn_idx,merged_turn_idx) VALUES(?,?,?,?,?,?,?,?,?)",
-                (
-                    new_chat_id, f.get("label") or "", int(f.get("ordinal") or 0),
-                    f.get("kind") or "other", f.get("travelers") or "[]",
-                    f.get("nonexistent_cast") or "[]", f.get("created", time.time()),
-                    f.get("split_turn_idx"), f.get("merged_turn_idx"),
-                ),
-            )
-            if old_fid is not None:
-                frame_idmap[old_fid] = nfid
-        # parent_frame_id is self-referential -- deferred to a second
-        # pass so it can be remapped through the now-complete frame_idmap
-        # regardless of what order the source rows happened to come in.
-        for f in data.get("frames") or []:
-            old_fid = f.get("id")
-            old_parent = f.get("parent_frame_id")
-            if old_fid is not None and old_parent is not None and old_parent in frame_idmap:
-                qtx(
-                    "UPDATE frames SET parent_frame_id=? WHERE id=?",
-                    (frame_idmap[old_parent], frame_idmap[old_fid]),
-                )
-
-        turn_id_map = {}
-        for turn in data.get("turns") or []:
-            new_turn_id = qtx(
-                "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
-                "VALUES(?,?,?,?,?)",
-                (
-                    new_chat_id,
-                    turn["idx"],
-                    turn.get("player_input", ""),
-                    turn.get("created", time.time()),
-                    frame_idmap.get(turn.get("frame_id")),
-                ),
-            )
-            turn_id_map[turn.get("id")] = new_turn_id
-
-            for step in turn.get("steps") or []:
-                new_step_id = qtx(
-                    "INSERT INTO steps(turn_id,key,label,ord,stale) "
-                    "VALUES(?,?,?,?,?)",
-                    (
-                        new_turn_id,
-                        step["key"],
-                        step.get("label", ""),
-                        step.get("ord", 0),
-                        step.get("stale", 0),
-                    ),
-                )
-
-                variants = step.get("variants") or []
-                active_seen = False
-                for variant in variants:
-                    active = bool(variant.get("active", 0))
-                    if active and active_seen:
-                        active = False
-                    active_seen = active_seen or active
-
-                    qtx(
-                        "INSERT INTO variants(step_id,content,created,active) "
-                        "VALUES(?,?,?,?)",
-                        (
-                            new_step_id,
-                            _variant_content(variant.get("content")),
-                            variant.get("created", time.time()),
-                            int(active),
-                        ),
-                    )
-
-        for participant in data.get("participants") or []:
-            old_char_id = participant.get("char_id")
-            new_char_id = old_char_map.get(old_char_id)
-
-            if new_char_id is None:
-                existing = q("SELECT id FROM characters WHERE id=?", (old_char_id,), one=True)
-                if existing:
-                    new_char_id = existing["id"]
-
-            if new_char_id is None:
-                raise HTTPException(
-                    400,
-                    f"Chat archive references character {old_char_id} "
-                    f"but does not embed it",
-                )
-
-            qtx(
-                "INSERT INTO chat_chars(chat_id,char_id,status,state) "
-                "VALUES(?,?,?,?)",
-                (
-                    new_chat_id,
-                    new_char_id,
-                    participant.get("status", "active"),
-                    participant.get("state", "{}"),
-                ),
-            )
-
-        for cf in data.get("char_frames") or []:
-            new_char_id = old_char_map.get(cf.get("char_id"))
-            new_fid = frame_idmap.get(cf.get("frame_id"))
-            if new_char_id is None or new_fid is None:
-                continue
-            qtx(
-                "INSERT INTO chat_char_frames(chat_id,char_id,frame_id,status,state) "
-                "VALUES(?,?,?,?,?)",
-                (
-                    new_chat_id,
-                    new_char_id,
-                    new_fid,
-                    cf.get("status", "active"),
-                    cf.get("state", "{}"),
-                ),
-            )
-
-        bookmap = {}
-        new_canon = None
-        books = data.get("lorebooks")
-        if books:
-            for b in books:
-                bk = b.get("book", {})
-                nb = qtx(
-                    "INSERT INTO lorebooks("
-                    "name,chat_id,origin_id,book_type,summary,resource_uid,"
-                    "anchor_entity_id,retired_turn_id"
-                    ") VALUES(?,?,?,?,?,?,?,?)",
-                    (
-                        bk.get("name") or "book",
-                        new_chat_id,
-                        bk.get("origin_id"),
-                        bk.get("book_type") or "general",
-                        bk.get("summary") or "",
-                        _import_book_uid(bk.get("resource_uid")),
-                        bk.get("anchor_entity_id"),
-                        # Turn-row FK: remap or null, never carry verbatim.
-                        turn_id_map.get(bk.get("retired_turn_id")),
-                    ),
-                )
-                restore_lorebook(nb, b.get("entries") or [])
-                if bk.get("id"):
-                    bookmap[bk["id"]] = nb
-                if b.get("canon"):
-                    new_canon = nb
-                    qtx("UPDATE chats SET lorebook_id=? WHERE id=?", (nb, new_chat_id))
-                else:
-                    qtx(
-                        "INSERT INTO chat_lorebooks("
-                        "chat_id,lorebook_id,origin_id,enabled"
-                        ") VALUES(?,?,?,?)",
-                        (
-                            new_chat_id,
-                            nb,
-                            bk.get("origin_id"),
-                            1 if b.get("enabled", 1) else 0,
-                        ),
-                    )
-
-        elif data.get("lorebook") and data["lorebook"].get("entries"):
-            lb_data = data["lorebook"]
-            new_canon = qtx(
-                "INSERT INTO lorebooks("
-                "name,chat_id,origin_id,resource_uid"
-                ") VALUES(?,?,?,?)",
-                (
-                    (lb_data.get("book", {}).get("name") or "Imported canon") + " (import)",
-                    new_chat_id,
-                    lb_data.get("book", {}).get("id"),
-                    _import_book_uid(lb_data.get("book", {}).get("resource_uid")),
-                ),
-            )
-            restore_lorebook(new_canon, lb_data["entries"])
-            old = lb_data.get("book", {}).get("id")
-            if old:
-                bookmap[old] = new_canon
-            qtx("UPDATE chats SET lorebook_id=? WHERE id=?", (new_canon, new_chat_id))
-
-        mems = [
-            {
-                "char_id": old_char_map.get(m.get("char_id")),
-                "turn_id": turn_id_map.get(m.get("turn_id")),
-                "turn_idx": m.get("turn_idx"),
-                "frame_id": frame_idmap.get(m.get("frame_id")),
-                "kind": m.get("kind", "episodic"),
-                "category": m.get("category"),
-                "provenance": m.get("provenance", "witnessed"),
-                "salience": m.get("salience", 0.5),
-                "content": m.get("content", ""),
-                "gist": m.get("gist"),
-                "key_phrases": m.get("key_phrases"),
-                "entities": m.get("entities"),
-                "location": m.get("location", ""),
-                "emotional_context": m.get("emotional_context", ""),
-                "valence": m.get("valence", 0.0),
-                "arousal": m.get("arousal", 0.0),
-                "confidence": m.get("confidence", 1.0),
-                "archived": m.get("archived", False),
-                "event_key": m.get("event_key", ""),
-            }
-            for m in data.get("memories", [])
-            if m.get("content") and old_char_map.get(m.get("char_id"))
-        ]
-        restore_chat_memories(new_chat_id, mems)
-        # char_id here is still the SOURCE database's id -- remap through
-        # old_char_map exactly like `mems` above, and drop (rather than
-        # import verbatim) any summary whose character wasn't embedded
-        # in this archive: importing it unmapped would either crash the
-        # whole import against PRAGMA foreign_keys=ON, or -- worse, if
-        # the raw id happens to already exist locally -- silently attach
-        # another character's autobiography to the wrong character.
-        summaries = [
-            {**s, "char_id": old_char_map[s["char_id"]]}
-            for s in (data.get("memory_summaries") or [])
-            if old_char_map.get(s.get("char_id"))
-        ]
-        restore_memory_summaries(new_chat_id, summaries)
-
-        for e in data.get("events") or []:
-            qtx(
-                "INSERT INTO events(chat_id,turn_id,content) "
-                "VALUES(?,?,?)",
-                (
-                    new_chat_id,
-                    turn_id_map.get(e.get("turn_id")),
-                    e["content"],
-                ),
-            )
-
-        world = dict(data.get("world") or {})
-        remapped_world = {}
-        for k, v in world.items():
-            base, key_frame_id = parse_scoped_world_key(k)
-            if key_frame_id is None:
-                remapped_world[k] = v
-                continue
-            new_frame_id = frame_idmap.get(key_frame_id)
-            if new_frame_id is not None:
-                remapped_world[f"{base}{_FRAME_KEY_SEP}{new_frame_id}"] = v
-        world = remapped_world
-        _remap_active_books(world, bookmap)
-        # fixed_points frame_ids point at source frames -- rescope them to
-        # the import's own frames (integer ids the string remaps never see).
-        _remap_fixed_points_frames(world, frame_idmap)
-        for k, v in world.items():
-            wset(new_chat_id, k, v)
-
-        # Populate the normalized world tables so world.scene/fixed_points
-        # resolve against real rows (no false paradox on the first commit).
-        # Import keeps the source entity ids verbatim (internally consistent
-        # with the un-remapped world KV + checkpoint blobs); only the
-        # created/retired turn FKs go through the turn idmap.
-        world_tables = {
-            k: [dict(r) for r in (data.get(k) or [])]
-            for k in ("world_entities", "world_placements", "world_conditions",
-                      "scheduled_events", "room_registry",
-                      "fiction_worlds", "fiction_locations")
-        }
-        for ent in world_tables["world_entities"]:
-            ent["created_turn_id"] = turn_id_map.get(ent.get("created_turn_id"))
-            ent["retired_turn_id"] = turn_id_map.get(ent.get("retired_turn_id"))
-        # room_registry: turn FKs through the turn idmap, the owning book's
-        # integer id through bookmap (None when the book wasn't imported --
-        # insert_world_tables also guards the FK); room_uid/parent_entity
-        # stay verbatim like every other entity id on import.
-        for rr in world_tables["room_registry"]:
-            rr["created_turn_id"] = turn_id_map.get(rr.get("created_turn_id"))
-            rr["retired_turn_id"] = turn_id_map.get(rr.get("retired_turn_id"))
-            rr["owning_book_id"] = bookmap.get(rr.get("owning_book_id"))
-        _remap_scheduled_event_frames(world_tables["scheduled_events"], frame_idmap)
-        insert_world_tables(new_chat_id, world_tables)
-
-        # Multiplayer roster + pre-submitted co-player inputs + lore link
-        # graph -- remap persona_id through persona_idmap, frame_id through
-        # frame_idmap; drop rows whose persona wasn't resolvable.
-        for p in data.get("chat_personas") or []:
-            new_pid = persona_idmap.get(p.get("persona_id"))
-            if new_pid is None:
-                continue
-            qtx(
-                "INSERT OR IGNORE INTO chat_personas(chat_id,persona_id,status,frame_id) "
-                "VALUES(?,?,?,?)",
-                (new_chat_id, new_pid, p.get("status", "active"),
-                 frame_idmap.get(p.get("frame_id"))),
-            )
-        for tpi in data.get("turn_player_inputs") or []:
-            new_pid = persona_idmap.get(tpi.get("persona_id"))
-            if new_pid is None:
-                continue
-            qtx(
-                "INSERT OR IGNORE INTO turn_player_inputs(chat_id,turn_idx,persona_id,input,created) "
-                "VALUES(?,?,?,?,?)",
-                (new_chat_id, tpi.get("turn_idx"), new_pid,
-                 tpi.get("input", ""), tpi.get("created", time.time())),
-            )
-        restore_lorebook_links(new_chat_id, bookmap, data.get("lorebook_links") or [])
-
-        for cp in data.get("checkpoints") or []:
-            blob = cp["blob"] if isinstance(cp["blob"], str) else json.dumps(cp["blob"])
-            blob = json.loads(blob)
-            remapped = _remap_cp_blob(blob, turn_id_map, bookmap, new_canon,
-                                      char_idmap=old_char_map, frame_idmap=frame_idmap)
-            qtx(
-                "INSERT INTO checkpoints(chat_id,turn_idx,blob,created) "
-                "VALUES(?,?,?,?)",
-                (
-                    new_chat_id,
-                    cp["turn_idx"],
-                    json.dumps(remapped),
-                    cp.get("created", time.time()),
-                ),
-            )
-
-    return dict(q("SELECT * FROM chats WHERE id=?", (new_chat_id,), one=True))
+)
+chat_export = _chat_archive_service.export_chat
+chat_import = _chat_archive_service.import_chat
+app.include_router(_chat_archive_service.router)
 
 # ============================ MEMORIES ============================
 @app.get("/api/chats/{cid}/characters/{ch}/memories")
@@ -3450,14 +2965,16 @@ def turn_new(cid: int, body: dict = Body(...)):
         # idx allocation is chat-GLOBAL (play order across every frame), so
         # two frames creating turns at nearly the same moment race on
         # computing "current max + 1" -- wrapped in a transaction so the
-        # read-compute-insert is atomic against any other concurrent writer,
-        # not just against itself.
+        # read-compute-checkpoint-insert is atomic against any other concurrent
+        # writer, not just against itself.  The checkpoint must be in this same
+        # transaction: if capturing it fails, no stepless turn may survive to
+        # block the frame's next submission.
         with transaction():
             last = _latest_turn(cid)
             idx = (last["idx"] + 1) if last else 0
+            ensure_checkpoint(cid, idx)
             tid = qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
                      (cid, idx, _player_input(body), time.time(), frame_id))
-        ensure_checkpoint(cid, idx)
     except BaseException:
         # Release the slot we grabbed if row/checkpoint creation failed, so
         # a later request isn't wrongly rejected as "already running".

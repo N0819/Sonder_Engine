@@ -10,10 +10,17 @@ from spatial import (egocentric_frame, rooms_adjacent, spatial_digest,
                      lateral_of, travel_bearing, normalize_scene_bearings,
                      merge_scene_with_diff)
 from spatial_frames import infer_came_from, infer_focus, infer_facing
+import spatial_orientation
 
 
 def _scene(positions, orientation, rooms):
     return {"positions": positions, "orientation": orientation, "rooms": rooms}
+
+
+def test_spatial_keeps_orientation_compatibility_exports():
+    """Legacy callers can migrate independently of the ownership extraction."""
+    assert normalize_bearing is spatial_orientation.normalize_bearing
+    assert normalize_scene_bearings is spatial_orientation.normalize_scene_bearings
 
 
 CORRIDOR = {

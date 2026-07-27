@@ -26,7 +26,9 @@ MODULE_PURPOSES = {
     "agents.perception": "Opening, action-onset, and outcome observer views.",
     "agents.runtime": "Pipeline plans, dispatch, streaming, cancellation, resume, and reruns.",
     "agents.storage": "Step and active-variant persistence helpers.",
-    "app": "FastAPI application, resource CRUD, import/export, turn control, and streaming endpoints.",
+    "app": "FastAPI application assembly, resource CRUD, turn control, and streaming endpoints.",
+    "auth_routes": "Typed host-authentication HTTP routes and cookie transport.",
+    "chat_archive": "Typed, atomic chat archive export/import service and HTTP routes.",
     "character_schema": "Versioned character/persona defaults, normalization, accessors, and export payloads.",
     "checkpoints": "Whole-chat snapshots and checkpoint restore orchestration.",
     "commit": "Validated persistence of scene, entities, cast, lore, relationships, events, and memories.",
@@ -36,12 +38,14 @@ MODULE_PURPOSES = {
     "logging_utils": "Structured timing and observability helpers.",
     "memory": "Lorebook graph, memory retrieval/consolidation, relationships, and vector search.",
     "pipeline_context": "Typed mutable context passed through a turn pipeline.",
+    "pipeline_trace": "Privacy-conscious export, validation, and offline replay of persisted pipeline history.",
     "prompt_cache": "Provider-specific prompt-cache helpers.",
     "prompts": "Default system prompts and prompt preset access.",
     "providers": "Provider selection, retries, streaming, cancellation, model listing, and embeddings.",
     "scene": "Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge.",
     "schemas": "Pydantic output contracts and semantic validation for agent payloads.",
     "spatial": "Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic.",
+    "spatial_orientation": "Bearing math and reciprocal spatial-edge normalization.",
 }
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
@@ -91,6 +95,33 @@ def parse_module(path: Path, local_modules: set[str]) -> dict:
     functions: list[tuple[str, int, int, bool]] = []
     classes: list[tuple[str, int, int]] = []
     routes: list[tuple[str, str, str, int]] = []
+    router_prefixes: dict[str, str] = {}
+
+    # Route decorators carry only the path relative to their APIRouter.
+    # Record literal local prefixes first so the generated map describes the
+    # actual public URL instead of turning /api/auth/login into /login.
+    for node in tree.body:
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        value = node.value
+        if not isinstance(value, ast.Call):
+            continue
+        call_name = value.func.id if isinstance(value.func, ast.Name) else None
+        if call_name != "APIRouter":
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        names = [target.id for target in targets if isinstance(target, ast.Name)]
+        prefix = ""
+        for keyword in value.keywords:
+            if (
+                keyword.arg == "prefix"
+                and isinstance(keyword.value, ast.Constant)
+                and isinstance(keyword.value.value, str)
+            ):
+                prefix = keyword.value.value
+                break
+        for name in names:
+            router_prefixes[name] = prefix
 
     for node in tree.body:
         if isinstance(node, ast.Import):
@@ -118,11 +149,54 @@ def parse_module(path: Path, local_modules: set[str]) -> dict:
                     continue
                 if not decorator.args or not isinstance(decorator.args[0], ast.Constant):
                     continue
-                route_path = decorator.args[0].value
+                route_path = str(decorator.args[0].value)
+                if isinstance(func.value, ast.Name):
+                    route_path = (
+                        router_prefixes.get(func.value.id, "") + route_path
+                    )
                 routes.append((func.attr.upper(), str(route_path), node.name, node.lineno))
         elif isinstance(node, ast.ClassDef):
             end = getattr(node, "end_lineno", node.lineno)
             classes.append((node.name, node.lineno, end - node.lineno + 1))
+
+    # Extracted service objects may register bound methods explicitly because
+    # decorators cannot reference an instance that is injected later by the
+    # application assembly layer.
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "add_api_route"
+            and len(node.args) >= 2
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            continue
+        handler = node.args[1]
+        if isinstance(handler, ast.Attribute):
+            handler_name = handler.attr
+        elif isinstance(handler, ast.Name):
+            handler_name = handler.id
+        else:
+            handler_name = "<callable>"
+        methods = ["GET"]
+        for keyword in node.keywords:
+            if keyword.arg != "methods":
+                continue
+            if isinstance(keyword.value, (ast.List, ast.Tuple, ast.Set)):
+                parsed = [
+                    item.value.upper()
+                    for item in keyword.value.elts
+                    if isinstance(item, ast.Constant)
+                    and isinstance(item.value, str)
+                ]
+                if parsed:
+                    methods = parsed
+        for method in methods:
+            routes.append(
+                (method, node.args[0].value, handler_name, node.lineno)
+            )
 
     return {
         "imports": sorted(imports),

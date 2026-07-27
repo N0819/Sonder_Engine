@@ -47,6 +47,7 @@ from spatial import (
     proximity_rel,
     room_layout,
     room_of,
+    scent_level,
     spatial_facts,
     spatial_rel,
     visible_adjacent_rooms,
@@ -170,6 +171,18 @@ def _source_channels(sc, perceiver_name, perceiver_room, sources):
     the end by the deterministic actor-describer, which is gated on exactly
     this map.
 
+    The visual channel uses `visual_level_between` (per-body light-aware)
+    rather than `has_visual(rel)` (room-level ambient light only). A torch
+    held by the observer illuminates the target's position even when the
+    room itself is dark -- `has_visual` reads `rel["light"]` which is
+    `effective_light` of the room (ambient only), so it would return False
+    for a torch-bearer in a dark room. `visual_level_between` calls
+    `light_at(scene, target)` which accounts for per-body spot sources.
+    Containment concealment is still respected: `visual_level_between`
+    checks `containment_conceals` internally, and the `concealed` flag is
+    also set on `rel` for the spatial_to_sources map so `_in_plain_view`
+    and other consumers still see it.
+
     Returns the two keys to splat into a perceiver entry, so the answer is
     computed once and cannot drift between them.
     """
@@ -181,7 +194,13 @@ def _source_channels(sc, perceiver_name, perceiver_room, sources):
         rels[s["name"]] = rel
     return {
         "spatial_to_sources": rels,
-        "visual_channel_to_sources": {n: has_visual(r) for n, r in rels.items()},
+        "visual_channel_to_sources": {
+            n: (visual_level_between(sc, perceiver_name, n) != "none"
+                if room_of(sc, perceiver_name) is not None
+                else has_visual(rels[n]))
+            for n in rels
+        },
+        "scent_channel_to_sources": {n: scent_level(r) for n, r in rels.items()},
     }
 
 
@@ -691,21 +710,32 @@ def perception_act(ctx, nonce):
 
     # Observer-facing action text is the intent-free `observable` surface, never
     # the actor's intent-laden `attempt` -- a mental beat (observable "") is
-    # skipped so it never reaches the empty-view fallback below.
+    # skipped so it never reaches the empty-view fallback below.  Concealed
+    # actions are also skipped: action_desc feeds the deterministic
+    # _ensure_environment fallback that runs for EVERY perceiver, and a
+    # concealed action's observable surface must not reach perceivers it is
+    # hidden from (mirroring the action_elems filter below).
     action_desc = ""
     for e in (interp.get("sequence") or []):
-        if e.get("type") == "action":
+        if e.get("type") == "action" and e.get("visibility") != "concealed":
             surface = observable_action_text(e)
             if surface:
                 action_desc = surface
                 break
 
-    player_speech = [
+    # Concealed speech elements are withheld from the perceiver payload for
+    # the same reason as concealed actions: player_speech is embedded in
+    # action_onset (declared_act) which goes to the perception LLM, and a
+    # concealed line's text must not reach perceivers it is hidden from.
+    # The conceal_from list is preserved in the concealed_actions metadata
+    # below so the LLM still knows a concealed line existed.
+    overt_player_speech = [
         {"text": e.get("text"), "volume": e.get("volume", "normal"),
          "tone": e.get("tone", ""),
          "visibility": e.get("visibility", "overt"),
          "conceal_from": e.get("conceal_from") or []}
         for e in speech_elems
+        if e.get("visibility") != "concealed"
     ]
 
     # The sequence handed to the perception LLM is the observer-facing
@@ -713,10 +743,47 @@ def perception_act(ctx, nonce):
     # beats dropped. action_attempt (the scalar mirror) follows the same
     # surface -- action.get("attempt") is the actor's raw framing and, being
     # the FIRST element, is frequently the mental beat ("remember the runes").
-    observer_sequence = _observer_facing_sequence(interp.get("sequence"))
+    # Concealed actions are filtered OUT of the sequence entirely: every
+    # perceiver in this call is a non-actor (the actor is the player), so a
+    # concealed action's observable surface has no legitimate audience here.
+    # The concealed action metadata is preserved in the concealed_actions
+    # list on the payload (see perception_outcome's equivalent).
+    observer_sequence = [
+        e for e in _observer_facing_sequence(interp.get("sequence"))
+        if e.get("type") != "action" or e.get("visibility") != "concealed"
+    ]
     observer_action_attempt = next(
         (e["attempt"] for e in observer_sequence
          if e.get("type") == "action" and e.get("attempt")), None)
+
+    # Build the concealed_actions metadata list (mirrors perception_outcome):
+    # the LLM is told a concealed action existed and who it is hidden from,
+    # without receiving the observable surface in the main sequence.
+    concealed_actions = []
+    for e in (interp.get("sequence") or []):
+        if e.get("type") == "action" and e.get("visibility") == "concealed":
+            concealed_actions.append({
+                "actor": p_name,
+                "attempt": observable_action_text(e),
+                "conceal_from": e.get("conceal_from") or [],
+            })
+    for e in speech_elems:
+        if e.get("visibility") == "concealed":
+            concealed_actions.append({
+                "actor": p_name,
+                "attempt": e.get("text"),
+                "conceal_from": e.get("conceal_from") or [],
+            })
+
+    # Determine whether the scalar speech fields are concealed.  When the
+    # primary speech is concealed, passing the raw text as an unmarked scalar
+    # would leak it to every perceiver; withhold the text and mark it.
+    raw_speech = interp.get("speech")
+    raw_speech_volume = interp.get("speech_volume") or "normal"
+    primary_speech_concealed = any(
+        e.get("visibility") == "concealed" and e.get("text") == raw_speech
+        for e in speech_elems
+    )
 
     # Build action onset for reaction eligibility
     action_onset = {
@@ -727,9 +794,10 @@ def perception_act(ctx, nonce):
         "actor_room_name": (p_rdata or {}).get("name") or p_room,
         "actor_present_appearance": p_visible,
         "sequence": observer_sequence,
-        "player_speech": player_speech,
-        "speech": interp.get("speech"),
-        "speech_volume": interp.get("speech_volume") or "normal",
+        "player_speech": overt_player_speech,
+        "speech": "" if primary_speech_concealed else raw_speech,
+        "speech_volume": raw_speech_volume,
+        "speech_concealed": primary_speech_concealed,
         "action_attempt": observer_action_attempt,
         "visibility": action.get("visibility", "overt"),
         "conceal_from": action.get("conceal_from") or [],
@@ -773,6 +841,7 @@ def perception_act(ctx, nonce):
             "attention": act.get("goal") or "ambient",
             "spatial_to_actor": rel,
             "visual_channel_to_actor": has_visual(rel),
+            "scent_channel_to_actor": scent_level(rel),
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
             "behind_rooms": _behind_rooms(sc, character_name(sh)),
             "focus_target": _focus_target(sc, character_name(sh)),
@@ -849,6 +918,7 @@ def perception_act(ctx, nonce):
                   "light": {rid: effective_light(sc, rid)
                             for rid in (sc.get("rooms") or {})}},
         "declared_act": action_onset,
+        "concealed_actions": concealed_actions,
         "perceivers": awake_perceivers,
         "cast_pronouns": _observed_pronouns(chat["id"], ctx.cast),
         "note": (
@@ -884,9 +954,11 @@ def perception_act(ctx, nonce):
     # Mirror the action_elems concealment filter for speech: a speech
     # element marked visibility:'concealed' must never reach the blanket
     # hear_level-based injection below, which has no concept of an
-    # excluded audience -- only the perception LLM (given the full,
-    # unfiltered sequence via declared_act above) reasons about who a
-    # concealed line legitimately reaches.
+    # excluded audience.  The perception LLM also receives only overt
+    # speech/actions in the declared_act payload above (concealed entries
+    # are listed separately in concealed_actions metadata), so both the
+    # deterministic and LLM channels agree: a concealed line reaches only
+    # the perceivers the conceal_from list excludes.
     audible_speech_elems = [
         e for e in speech_elems if e.get("visibility") != "concealed"
     ]
@@ -976,6 +1048,141 @@ def perception_act(ctx, nonce):
     _disguise_leak_check(ctx, "perception_act", clean_views, perceivers,
                          p_name, p_disguise_terms, p_disguise_known)
     return {"views": clean_views}
+
+def _touch_only_sources(scene, perceiver_name, spatial_to_sources,
+                        visual_channel_to_sources):
+    """Return the set of source names who are touch-only for this perceiver.
+
+    A source is touch-only when the perceiver cannot SEE it (no visual
+    channel) but CAN feel it -- the two bodies are in physical contact
+    (scene.contacts) or one is contained within the other (scene.contained).
+
+    This is the structural basis for surface-translation: the resolved_event
+    prose names the acts a touch-only source is performing, and the
+    perception LLM -- able to feel the body but not see it -- resolves those
+    acts through the touch channel, effectively learning what the hidden
+    body is doing from the omniscient prose.  _surface_translate_event
+    replaces those act-naming sentences with neutral surface-sensation
+    descriptions so only motion/pressure reaches the perceiver.
+    """
+    if not scene or not perceiver_name:
+        return set()
+    p_cf = str(perceiver_name).casefold()
+    # --- contact-based touch channel ---
+    contacts = scene.get("contacts") or []
+    contact_names = set()
+    for c in contacts:
+        if not isinstance(c, dict):
+            continue
+        actor = str(c.get("actor") or "").strip()
+        target = str(c.get("target") or "").strip()
+        if actor.casefold() == p_cf:
+            contact_names.add(target)
+        elif target.casefold() == p_cf:
+            contact_names.add(actor)
+    # --- containment-based touch channel ---
+    contained = scene.get("contained") or {}
+    containment_names = set()
+    if isinstance(contained, dict):
+        for subject, record in contained.items():
+            if not isinstance(record, dict):
+                continue
+            holder = str(record.get("in") or "").strip()
+            s_name = str(subject).strip()
+            if s_name.casefold() == p_cf and holder:
+                containment_names.add(holder)
+            elif holder.casefold() == p_cf and s_name:
+                containment_names.add(s_name)
+    touch_candidates = {n for n in (contact_names | containment_names)
+                        if n and n.casefold() != p_cf}
+    # A touch-only source: in spatial range, no visual channel, in physical contact.
+    out = set()
+    for name in touch_candidates:
+        if name in spatial_to_sources and not visual_channel_to_sources.get(name, False):
+            out.add(name)
+    return out
+
+
+def _surface_translate_event(event_text, touch_only_sources):
+    """Replace act-naming sentences for touch-only sources with surface-sensation prose.
+
+    The resolved_event text is omniscient: it names what every actor is
+    doing ("she curls her fingers to rub her clit").  A perceiver who can
+    FEEL a source but not SEE it receives this text through the touch
+    channel and the perception LLM translates the named act into felt
+    sensation -- effectively learning the hidden body's exact actions from
+    prose that was supposed to be filtered by channel.
+
+    This function structurally withholds the act-naming language: sentences
+    that describe actions BY a touch-only source are replaced with a neutral
+    surface-sensation description that conveys only motion and pressure at
+    the contact surface, never what the hidden body is doing or why.
+
+    General by design -- works for any touch-only situation: a body held in
+    a hand, sealed in a container, pressed against a wall, etc.
+    """
+    if not event_text or not touch_only_sources:
+        return event_text
+
+    # Build casefolded lookup for matching source names in prose.
+    to_cf = {n.casefold(): n for n in touch_only_sources if n}
+
+    sentences = re.split(r'(?<=[.!?])\s+', event_text)
+    result = []
+    for sent in sentences:
+        matched_source = None
+        for cf_name, orig_name in to_cf.items():
+            # Match the source name as a whole word (case-insensitive).
+            if re.search(rf'\b{re.escape(cf_name)}\b', sent, re.IGNORECASE):
+                matched_source = orig_name
+                break
+        if matched_source is None:
+            result.append(sent)
+            continue
+        # Replace the act-naming sentence with a neutral surface-sensation
+        # description.  This conveys only that the body is moving/pressing
+        # at the contact surface -- no act names, no body-part specifics,
+        # no intent.  The perceiver's touch channel fills in what they
+        # actually feel; the omniscient prose does not.
+        result.append(
+            f"The body of {matched_source} shifts and presses at the contact surface.")
+    return " ".join(result) if result else event_text
+
+
+def _redact_concealed_from_event(event_text, concealed_for_this_perceiver):
+    """Remove sentences describing concealed actions from the resolved event.
+
+    Structural redaction: instead of trusting the perception LLM to ignore
+    concealed actions described in the omniscient resolved_event prose, we
+    strip the offending sentences BEFORE the text reaches the payload.
+    """
+    if not event_text or not concealed_for_this_perceiver:
+        return event_text
+    sentences = re.split(r'(?<=[.!?])\s+', event_text)
+    kept = []
+    for sent in sentences:
+        should_redact = False
+        for c in concealed_for_this_perceiver:
+            actor = c.get("actor", "")
+            attempt = c.get("attempt", "")
+            if actor and actor in sent:
+                # Match on significant words from the attempt to identify
+                # the sentence describing this concealed action.
+                attempt_words = [
+                    w for w in attempt.split()
+                    if len(w) > 4
+                    and w.lower() not in (
+                        "while", "being", "herself", "himself",
+                        "their", "with", "from", "into", "through",
+                        "about", "after", "before", "during",
+                    )
+                ]
+                if any(w.lower() in sent.lower() for w in attempt_words):
+                    should_redact = True
+                    break
+        if not should_redact:
+            kept.append(sent)
+    return " ".join(kept) if kept else "[actions redacted]"
 
 def perception_outcome(ctx, nonce):
     chat = ctx.chat
@@ -1238,6 +1445,48 @@ def perception_outcome(ctx, nonce):
     if _br_actions:
         resolved_event_text = (resolved_event_text + " " + "; ".join(_br_actions)).strip()
 
+    # STRUCTURAL CONCEALED-ACTION REDACTION
+    # The resolved_event prose is omniscient -- it describes ALL actions,
+    # including those marked visibility:"concealed".  Passing it unfiltered
+    # into the perception payload leaks concealed act details through the
+    # LLM's touch/proprioception channel (the model writes the concealed
+    # act into the enclosing perceiver's view as subtle body cues).
+    #
+    # Fix: build a per-perceiver redacted copy.  A concealed action is
+    # redacted for every perceiver EXCEPT the actor who performed it (the
+    # actor knows their own action).  The per-perceiver copy rides the
+    # perceiver dict as ``resolved_event``; the payload's top-level
+    # ``resolved_event`` is the globally-redacted version (all concealed
+    # actions stripped) so it can never leak even if the model ignores
+    # per-perceiver fields.
+    for p in awake_perceivers:
+        concealed_from_p = [
+            c for c in concealed
+            if c.get("actor") != p["name"]
+        ]
+        redacted = _redact_concealed_from_event(
+            resolved_event_text, concealed_from_p)
+        # STRUCTURAL TOUCH-ONLY SURFACE TRANSLATION
+        # After concealed-action redaction, also replace act-naming sentences
+        # for sources the perceiver can FEEL but not SEE (touch channel only).
+        # Without this, the resolved_event prose names the hidden body's acts
+        # and the perception LLM resolves them through touch -- effectively
+        # learning what the unseen body is doing from omniscient text.
+        touch_only = _touch_only_sources(
+            sc, p["name"],
+            p.get("spatial_to_sources") or {},
+            p.get("visual_channel_to_sources") or {},
+        )
+        if touch_only:
+            redacted = _surface_translate_event(redacted, touch_only)
+        p["resolved_event"] = redacted
+
+    # Top-level resolved_event: redact ALL concealed actions (most-redacted
+    # version).  Per-perceiver fields override this for actors who should
+    # see their own concealed actions.
+    _global_redacted = _redact_concealed_from_event(resolved_event_text, concealed)
+
+
     # What each source LOOKS like, handed to the model for every source at
     # once. The action-onset pass already strips this when nobody can see the
     # actor (see perception_act's `actor_not_visible`); the outcome pass never
@@ -1273,7 +1522,7 @@ def perception_outcome(ctx, nonce):
                                if n in reachable}
 
     payload = {
-        "resolved_event": resolved_event_text,
+        "resolved_event": _global_redacted,
         "dialogue_order": res.get("dialogue_order"),
         "dialogue_log": enriched_dlog,
         "sources": sources,

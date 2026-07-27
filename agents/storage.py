@@ -70,3 +70,14 @@ def clear_steps_stale(turn_id, keys):
     save_step's caller in runtime.py) keep showing as stale/orphaned
     instead of being marked falsely fresh."""
     _set_steps_stale(turn_id, keys, False)
+
+def delete_step(step_id):
+    """Delete a step and all its variants atomically.
+
+    A crash between deleting variants and deleting the step row would
+    leave a step with zero variants, breaking the "one active variant
+    per step" invariant. Wrapped in one transaction so it's all-or-nothing.
+    """
+    with transaction():
+        qi("DELETE FROM variants WHERE step_id=?", (step_id,))
+        qi("DELETE FROM steps WHERE id=?", (step_id,))
