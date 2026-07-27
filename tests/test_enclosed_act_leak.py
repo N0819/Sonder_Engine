@@ -1,0 +1,455 @@
+"""An enclosed body's ACT must not reach whatever encloses it.
+
+Found auditing a live playthrough. One character was shut inside a container
+another was carrying. The Director's `observable` for the enclosed body's beat
+was correct by its own spec -- what a hypothetical SIGHTED bystander would see
+-- and every containment gate downstream fired as designed:
+`containment_conceals` said True, `visual_channel_to_actor` came back False,
+the actor's appearance was stripped from the payload.
+
+The view written for the carrier still named the act. Identity was gated, no
+visual detail was added, and the act's VERB walked straight across into the
+touch channel as a tactile paraphrase. The character agent then quoted that
+view verbatim as its sole observation and acted on it.
+
+Two holes let it through, and this file guards both:
+
+  1. The perception prompt had no rule for what a NON-VISUAL channel may
+     carry. It has detailed rules for sight, sound, smell, vibration and
+     temperature, and none at all for touch -- so degrading the modality
+     while preserving the semantics read as compliant. A perceiver's declared
+     `senses` (a keen-touch trait that reads muscle tension and pulse through
+     skin contact) was then used as the bridge justifying the resolution.
+
+  2. `_perceptible_entities` handed the objective entity table to every
+     perceiver ungated. The enclosed body's record spelled out in
+     `state.posture` exactly what it was doing -- an independent path to the
+     same leak, live in the payload whether or not the Director's observable
+     said anything.
+
+The rule both encode: a closed channel costs RESOLUTION, not just modality.
+Sensation may cross; the name of the act may not. Guessing what a sensation
+means is the character agent's job, not perception's.
+"""
+
+import json
+import time
+
+import pytest
+
+from character_schema import default_character_data, default_persona_data
+from pipeline_context import ChatData, PipelineContext, TurnData
+
+from agents.common import _ensure_environment, _inject_action, _perceptible_entities
+from agents.perception import _in_plain_view, _source_channels
+from prompts import get_prompt
+from spatial import containment_conceals
+
+
+HOLDER = "Satchel"
+CARRIER = "Bo"
+ENCLOSED = "Ada"
+COMPANION = "Cass"
+
+
+def _scene():
+    """One room. ENCLOSED is shut inside HOLDER, which CARRIER stands with."""
+    return {
+        "rooms": {"hall": {"name": "Hall", "desc": "A hall.", "adjacent": []}},
+        "positions": {CARRIER: "hall", HOLDER: "hall"},
+        "contained": {ENCLOSED: {"in": HOLDER, "mode": "container"}},
+        "entities": {
+            ENCLOSED: {
+                "name": ENCLOSED, "kind": "object", "description": "",
+                "state": {
+                    "proximity": f"curled in the bottom of the {HOLDER}",
+                    "posture": "unfolding a sheet of paper and reading it",
+                    "description": "small enough to stand in a palm",
+                },
+            },
+            "lantern_01": {
+                "name": "Lantern", "kind": "object",
+                "description": "A shuttered lantern.",
+                "aliases": ["lamp", "light"],
+                "state": {"posture": "guttering on the side table"},
+            },
+        },
+    }
+
+
+# --- the premise the gate rests on ----------------------------------------
+
+def test_nothing_outside_the_enclosure_has_sight_of_what_is_inside_it():
+    """Sanity: the primitive the gate calls already answers correctly.
+
+    This was never the broken part -- it is asserted here so a regression in
+    `containment_conceals` shows up as a failure of THIS story, not as a
+    silently-passing gate that stopped gating anything.
+    """
+    sc = _scene()
+    assert containment_conceals(sc, CARRIER, ENCLOSED)
+    # ...and the enclosed body is not concealed from itself.
+    assert not containment_conceals(sc, ENCLOSED, ENCLOSED)
+
+
+# --- 1. objective entity state is withheld from minds that cannot reach it -
+
+def test_enclosed_state_withheld_when_only_an_outsider_perceives():
+    """The act-naming payload the live leak had a second path through."""
+    projected = _perceptible_entities(_scene(), [CARRIER])
+
+    assert "state" not in projected[ENCLOSED]
+    assert "reading" not in json.dumps(projected).casefold()
+
+
+def test_enclosed_state_withheld_from_the_body_doing_the_enclosing():
+    """The live shape: the enclosure is itself a mind, and a perceiver.
+
+    Distinct from the case above, where the container is inert and the
+    perceiver stands outside it. A holder is NOT exempt from its own
+    enclosure -- it is not inside itself, so the two do not match, and what
+    it has instead of sight is touch. This is the arrangement the leak was
+    found in, and the one where "it can obviously feel that" is most
+    tempting: what it can feel is pressure and movement, not the act.
+    """
+    sc = _scene()
+    sc["contained"][ENCLOSED] = {"in": CARRIER, "mode": "pocket"}
+    projected = _perceptible_entities(sc, [CARRIER])
+
+    assert "state" not in projected[ENCLOSED]
+    assert "reading" not in json.dumps(projected).casefold()
+
+
+def test_the_enclosed_body_still_appears_only_its_state_is_gone():
+    """Presence may reach a perceiver by contact or sound; the act may not.
+
+    Dropping the whole record would be a different bug -- a body shifting
+    inside a bag someone is holding is not absent from their world.
+    """
+    projected = _perceptible_entities(_scene(), [CARRIER])
+    assert ENCLOSED in projected
+    assert projected[ENCLOSED]["name"] == ENCLOSED
+
+
+def test_a_body_keeps_its_own_state_when_it_is_the_perceiver():
+    """Proprioception is not a leak."""
+    projected = _perceptible_entities(_scene(), [ENCLOSED])
+    assert projected[ENCLOSED]["state"]["posture"] == \
+        "unfolding a sheet of paper and reading it"
+
+
+def test_one_reaching_perceiver_is_enough():
+    """The gate is 'nobody in this call can reach it', not 'someone cannot'."""
+    projected = _perceptible_entities(_scene(), [CARRIER, ENCLOSED])
+    assert "state" in projected[ENCLOSED]
+
+
+def test_two_bodies_inside_the_same_enclosure_reach_each_other():
+    sc = _scene()
+    sc["contained"][COMPANION] = {"in": HOLDER, "mode": "container"}
+    projected = _perceptible_entities(sc, [COMPANION])
+    assert "state" in projected[ENCLOSED]
+
+
+# --- the ordinary scene must be untouched ----------------------------------
+
+def test_an_entity_in_the_open_is_unaffected():
+    projected = _perceptible_entities(_scene(), [CARRIER])
+    assert projected["Lantern"]["state"]["posture"] == \
+        "guttering on the side table"
+
+
+def test_nothing_contained_means_nothing_gated():
+    sc = _scene()
+    sc.pop("contained")
+    projected = _perceptible_entities(sc, [CARRIER])
+    assert "state" in projected[ENCLOSED]
+    assert "state" in projected["Lantern"]
+
+
+def test_omitting_the_perceiver_set_keeps_the_whole_table():
+    """Back-compat: callers with no perceiver set to gate against."""
+    projected = _perceptible_entities(_scene())
+    assert "state" in projected[ENCLOSED]
+
+
+def test_the_alias_scrub_still_applies_alongside_the_state_gate():
+    """The two hygiene rules on this table compose."""
+    projected = _perceptible_entities(_scene(), [CARRIER])
+    assert "aliases" not in projected["Lantern"]
+    assert "lamp" not in json.dumps(projected).casefold()
+
+
+# --- 3. the deterministic backstop must not undo the model's compliance -----
+#
+# Caught in live play the moment the prompt rules above started working. The
+# model stopped naming the act, which meant the injector's duplicate check
+# (`_action_already_rendered`) no longer found it in the view -- so the
+# backstop pasted the raw `observable` in instead, complete with the
+# unknown-actor label:
+#
+#   "...the beautiful young woman appearing swallows thick fluids, throat
+#    contracting and working visibly."
+#
+# The gate was `rel.get("same_room") or vis`. `vis` was correctly False. But a
+# carried body's position derives to its carrier's, so `same_room` was True and
+# the OR reinstated the exact bypass containment concealment exists to close.
+# Every leak this file guards would have walked back out through here.
+
+def _enclosed_rel():
+    """What perception computes for an actor sealed inside the perceiver."""
+    return {"same_room": True, "barrier": "open", "distance": "same",
+            "light": "lit", "concealed": True}
+
+
+def test_an_enclosed_actor_is_not_in_plain_view_despite_same_room():
+    assert not _in_plain_view(_enclosed_rel(), False)
+    # The other arm too: a stale/incorrect visual flag must not resurrect it.
+    assert not _in_plain_view(_enclosed_rel(), True)
+
+
+def test_an_ordinary_same_room_actor_is_still_in_plain_view():
+    """The bypass is closed for concealment only -- nothing else changes."""
+    assert _in_plain_view({"same_room": True}, False)
+    assert _in_plain_view({"same_room": False}, True)
+    assert not _in_plain_view({"same_room": False}, False)
+
+
+def test_the_injector_does_not_paste_an_enclosed_actor_s_observable():
+    """The regression itself, at the function that produced it."""
+    view = "You feel a shifting weight low in the satchel at your hip."
+    out = _inject_action(
+        view, "the woman in the grey coat",
+        "unfolds a sheet of paper and reads it",
+        _in_plain_view(_enclosed_rel(), False),
+    )
+    assert out == view
+    assert "unfolds" not in out
+
+
+def test_the_injector_still_delivers_an_actor_in_the_open():
+    view = "You are in the hall."
+    out = _inject_action(
+        view, "the woman in the grey coat",
+        "unfolds a sheet of paper and reads it",
+        _in_plain_view({"same_room": True}, False),
+    )
+    assert "unfolds" in out
+
+
+def test_the_empty_view_fallback_does_not_announce_an_enclosed_actor():
+    """`_ensure_environment` had the same `same_room` bypass."""
+    out = _ensure_environment(
+        None, {"room_name": "Hall", "room_notes": ""},
+        "the woman in the grey coat", _enclosed_rel(), False,
+        "unfolds a sheet of paper and reads it",
+    )
+    assert "here with you" not in out
+    assert "unfolds" not in out
+    assert "Hall" in out          # the perceiver still gets their surroundings
+
+
+def test_source_channels_conceals_an_enclosed_source_from_the_room():
+    """The outcome pass and the opening pass never asked this question.
+
+    `visual_channel_to_sources` was built from a bare `spatial_rel`, so an
+    enclosed body read as visually available to everyone standing around
+    whatever held it -- which is what gated the appearance-describer that
+    pasted a full appearance string onto the end of the view.
+    """
+    sc = _scene()
+    sc["contained"][ENCLOSED] = {"in": CARRIER, "mode": "pocket"}
+    sc["positions"][ENCLOSED] = "hall"
+    sources = [{"name": ENCLOSED, "room": "hall"}]
+
+    ch = _source_channels(sc, CARRIER, "hall", sources)
+    assert ch["visual_channel_to_sources"][ENCLOSED] is False
+    assert ch["spatial_to_sources"][ENCLOSED]["concealed"] is True
+
+
+def test_source_channels_leaves_an_ordinary_source_visible():
+    sc = _scene()
+    sources = [{"name": CARRIER, "room": "hall"}]
+    ch = _source_channels(sc, "Dana", "hall", sources)
+    assert ch["visual_channel_to_sources"][CARRIER] is True
+    assert not ch["spatial_to_sources"][CARRIER].get("concealed")
+
+
+# --- 4. end to end, through the real call site ------------------------------
+#
+# The unit tests above cover `_in_plain_view`, but a call site that reverted to
+# `rel.get("same_room") or vis` would sail past every one of them. This drives
+# the actual perception_act pass with a stubbed model that returns a COMPLIANT
+# view -- one that never names the act, which is what the prompt rules now ask
+# for. Anything about the act in the result is therefore the deterministic
+# backstop's doing, which is precisely the regression.
+
+def _enclosed_ctx(temp_db):
+    """Player shut inside the one cast member, who is the reactor."""
+    persona = default_persona_data(ENCLOSED)
+    persona_id = temp_db.qi(
+        "INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
+        (ENCLOSED, json.dumps(persona), "{}"))
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created,persona_id) VALUES(?,?,?,?)",
+        ("Enclosed", "", time.time(), persona_id))
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        (CARRIER, json.dumps(default_character_data(CARRIER)), "{}",
+         time.time(), "char_carrier"))
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+        (chat_id, char_id, "active", "{}"))
+
+    temp_db.wset(chat_id, "scene", {
+        "location": "the hall", "time": "night",
+        "rooms": {"room1": {"name": "Hall", "adjacent": []}},
+        "positions": {ENCLOSED: "room1", CARRIER: "room1"},
+        "contained": {ENCLOSED: {"in": CARRIER, "mode": "pocket"}},
+        "entities": {}, "attire": {}, "overlays": {}})
+    temp_db.wset(chat_id, "known",
+                 {CARRIER: [ENCLOSED], ENCLOSED: [CARRIER]})
+
+    cast = temp_db.q(
+        "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?", (chat_id,))
+    turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (chat_id, 1, "", time.time()))
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Enclosed", persona_id=persona_id,
+                      lorebook_id=None, scenario="", created=time.time()),
+        turn=TurnData(id=turn_id, chat_id=chat_id, idx=1, player_input="",
+                      created=time.time()),
+        cast=cast, input="")
+    ctx["_player_room"] = "room1"
+    ctx.director_interpret = {
+        "action": {"attempt": "reads the note", "visibility": "overt",
+                   "conceal_from": [], "targets": [], "commitment": "asserted"},
+        "sequence": [{
+            "type": "action", "attempt": "reads the note",
+            "observable": "unfolds a sheet of paper and reads it",
+            "visibility": "overt", "conceal_from": [], "targets": [],
+            "commitment": "asserted", "verb": "read", "stage": "immediate",
+            "event_id": "turn:1:player:0:action",
+        }],
+        "speech": None, "speech_volume": "normal",
+        "flow": {"reactors": [cast[0]["id"]]},
+    }
+    return ctx, cast[0]["id"]
+
+
+def test_perception_act_does_not_paste_an_enclosed_actor_s_act(
+        temp_db, monkeypatch):
+    """The live regression, end to end.
+
+    The stub returns the kind of view the prompt rules now produce: the
+    sensation, never the act. Before the fix the backstop appended
+    "<actor> unfolds a sheet of paper and reads it" to exactly this.
+    """
+    import agents.perception as perception
+
+    ctx, reactor_id = _enclosed_ctx(temp_db)
+    compliant = "A small shifting weight low against your hip, and a faint crackle."
+    monkeypatch.setattr(
+        perception, "_agent_json",
+        lambda role, key, system, payload, **kw: {
+            "views": {str(reactor_id): compliant}})
+
+    out = perception.perception_act(ctx, nonce="n")
+    view = out["views"][str(reactor_id)] or ""
+
+    assert "unfolds" not in view, view
+    assert "sheet of paper" not in view, view
+    assert "reads" not in view, view
+    # ...and the perceiver still gets what genuinely reached them.
+    assert "shifting weight" in view
+
+
+def test_perception_act_still_delivers_an_actor_in_the_open(
+        temp_db, monkeypatch):
+    """The same path with nothing enclosing anyone: delivery is unchanged."""
+    import agents.perception as perception
+
+    ctx, reactor_id = _enclosed_ctx(temp_db)
+    sc = temp_db.wget(ctx.chat["id"], "scene", {})
+    sc.pop("contained")
+    temp_db.wset(ctx.chat["id"], "scene", sc)
+
+    monkeypatch.setattr(
+        perception, "_agent_json",
+        lambda role, key, system, payload, **kw: {
+            "views": {str(reactor_id): "You are in the Hall."}})
+
+    out = perception.perception_act(ctx, nonce="n")
+    view = out["views"][str(reactor_id)] or ""
+    assert "unfolds" in view, view
+
+
+# --- 2. the prompt rule that governs the surviving channel ------------------
+#
+# The leak reached the view through a stage with no code path to constrain it:
+# perception writes prose. The rule can only live in the prompt, so the prompt
+# is what is asserted -- these fail if the paragraphs are dropped or reworded
+# past recognition, which is exactly when the leak comes back.
+
+@pytest.fixture()
+def perception_prompt():
+    return get_prompt("perception")
+
+
+def test_prompt_forbids_carrying_the_act_verb_into_a_surviving_channel(
+        perception_prompt):
+    text = perception_prompt
+    assert "NON-VISUAL CHANNELS CARRY SENSATION, NOT ACTS" in text
+    assert "never the name of the act producing it" in text
+    assert "Do NOT carry the declared " in text and "act's verb across" in text
+
+
+def test_prompt_says_heightened_senses_buy_resolution_not_knowledge(
+        perception_prompt):
+    text = perception_prompt
+    assert "ACUITY IS RESOLUTION, NOT KNOWLEDGE" in text
+    assert "never converts a sensation into knowledge of the act" in text
+
+
+def test_director_must_not_write_one_body_s_act_into_another_s_state():
+    """The gate above cannot save a leak written into the CONTAINER's record.
+
+    `_perceptible_entities` withholds state for an entity no perceiver can
+    reach -- and a container is in plain view by construction, so its own
+    state is never withheld from anyone. A Director that writes "shut over
+    the figure prying at its hinge" into the CONTAINER's posture has
+    published the occupant's act to every observer who can see the container,
+    and no downstream gate can take it back: the string is one body's
+    legitimate, perceivable state.
+
+    Observed live in the same playthrough as the rest of this file -- the
+    enclosing character's own `state.posture` named what the enclosed
+    character was doing. The nearby "CONTACT GOES IN contact_ops AND NOWHERE
+    ELSE" rule does not cover it: that governs contact RELATIONS, so a
+    free-text act attributed to another body walks straight past.
+    """
+    for prompt_id in ("director_resolve", "director_establish"):
+        text = get_prompt(prompt_id)
+        assert "STATE DESCRIBES ONE BODY'S OWN DOING" in text, prompt_id
+        assert "never what a" in text and "body is doing to it" in text, prompt_id
+        # The reason, not just the rule -- this is what stops it being
+        # reworded away as redundant with the contact rule beside it.
+        assert "in plain view by construction" in text, prompt_id
+
+
+def test_prompt_documents_the_payload_fields_it_is_silently_handed(
+        perception_prompt):
+    """contacts / contained / scales / entities.state went over undocumented.
+
+    All four are in the payload builders in agents/perception.py with only
+    code comments to explain them; the model was left to infer their meaning,
+    and inferred generously.
+    """
+    text = perception_prompt
+    assert "scene.contacts" in text
+    assert "scene.contained" in text
+    assert "scene.scales" in text
+    assert "scene.entities[*].state" in text

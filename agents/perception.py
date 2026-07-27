@@ -151,6 +151,55 @@ def _ubiquitous_names(sc):
         return frozenset()
 
 
+def _source_channels(sc, perceiver_name, perceiver_room, sources):
+    """spatial_to_sources / visual_channel_to_sources for ONE perceiver.
+
+    Concealment by containment belongs here rather than at the call sites. A
+    carried body has no position of its own -- the engine derives it from its
+    carrier's -- so `spatial_rel` alone reports `same_room` for a body sealed
+    inside something standing in the room, and `same_room` answers sight
+    before any barrier is consulted.
+
+    The action-onset pass patched that in one place (see perception_act,
+    where the same containment_conceals call is made inline). Every OTHER
+    pass asked the unpatched question, so a body shut inside another was
+    visually available to the whole room for the outcome pass and at scene
+    opening. Observed live: an outcome view rendering an enclosed body's
+    fine visual detail -- ear and tail colour, a throat moving "visibly" --
+    to the very body enclosing it, with the full appearance string pasted on
+    the end by the deterministic actor-describer, which is gated on exactly
+    this map.
+
+    Returns the two keys to splat into a perceiver entry, so the answer is
+    computed once and cannot drift between them.
+    """
+    rels = {}
+    for s in sources:
+        rel = spatial_rel(sc, s["room"], perceiver_room)
+        if containment_conceals(sc, perceiver_name, s["name"]):
+            rel = {**rel, "concealed": True}
+        rels[s["name"]] = rel
+    return {
+        "spatial_to_sources": rels,
+        "visual_channel_to_sources": {n: has_visual(r) for n, r in rels.items()},
+    }
+
+
+def _in_plain_view(rel, vis):
+    """Is this source available to SIGHT for this perceiver.
+
+    `same_room` was being OR'd with the visual channel at the deterministic
+    injection sites, which reinstated exactly the bypass containment
+    concealment exists to close: an enclosed actor reads as same_room with
+    everyone standing around its carrier. Concealment is consulted first
+    now; `has_visual` already returns False for a concealed rel, so a
+    concealed source is never in plain view by either arm.
+    """
+    if rel.get("concealed"):
+        return False
+    return bool(rel.get("same_room")) or bool(vis)
+
+
 def _ambient_location_for(sc, room_id):
     """Per-perceiver ambient/location scoping by nesting depth (item 5,
     coarse): the outermost place whose ambience legitimately reaches this
@@ -485,8 +534,7 @@ def perception_establish(ctx, nonce):
         "senses": senses_of(pers), "attention": "engaged",
         "knows_identity": True,
         "entity_state": p_state,
-        "spatial_to_sources": {s["name"]: spatial_rel(sc, s["room"], p_room) for s in sources},
-        "visual_channel_to_sources": {s["name"]: has_visual(spatial_rel(sc, s["room"], p_room)) for s in sources},
+        **_source_channels(sc, p_name, p_room, sources),
         "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
         "behind_sources": _behind_sources(sc, p_name, sources),
         "room_layout": room_layout(sc, p_name),
@@ -509,8 +557,7 @@ def perception_establish(ctx, nonce):
             "senses": senses_of(sh), "attention": act.get("goal") or "ambient",
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
             "entity_state": entity_states.get(character_name(sh)) or {},
-            "spatial_to_sources": {s["name"]: spatial_rel(sc, s["room"], r) for s in c_sources},
-            "visual_channel_to_sources": {s["name"]: has_visual(spatial_rel(sc, s["room"], r)) for s in c_sources},
+            **_source_channels(sc, character_name(sh), r, c_sources),
             "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), c_sources),
             "behind_sources": _behind_sources(sc, character_name(sh), c_sources),
             "room_layout": room_layout(sc, character_name(sh)),
@@ -540,7 +587,9 @@ def perception_establish(ctx, nonce):
 
     payload = {
         "scene": {"location": sc.get("location"), "time": sc.get("time"),
-                  "rooms": sc.get("rooms"), "entities": _perceptible_entities(sc),
+                  "rooms": sc.get("rooms"),
+                  "entities": _perceptible_entities(
+                      sc, [p["name"] for p in awake_perceivers]),
                   # Body position: who is in contact with whom, and
                   # where. A held wrist is something the held person
                   # knows first-hand.
@@ -781,7 +830,10 @@ def perception_act(ctx, nonce):
     payload = {
         "scene": {"location": sc.get("location"), "time": sc.get("time"),
                   "rooms": _contextual_rooms(sc, ctx.cast, p_room),
-                  "entities": _perceptible_entities(sc),
+                  # Entity `state` is objective and act-naming; withhold it
+                  # for a body no perceiver in this call can reach.
+                  "entities": _perceptible_entities(
+                      sc, [p["name"] for p in awake_perceivers]),
                   # Body position: who is in contact with whom, and
                   # where. A held wrist is something the held person
                   # knows first-hand.
@@ -893,9 +945,9 @@ def perception_act(ctx, nonce):
             view = _inject_dialogue(
                 view, display, e.get("text"),
                 level, e.get("volume", "normal"),
-                rel.get("same_room") or vis,
+                _in_plain_view(rel, vis),
             )
-        can_see = rel.get("same_room") or vis
+        can_see = _in_plain_view(rel, vis)
         for e in action_elems:
             view = _inject_action(
                 view, display, e["_surface"], can_see,
@@ -1114,8 +1166,7 @@ def perception_outcome(ctx, nonce):
         "visible_rooms": visible_adjacent_rooms(sc, p_room),
         "senses": senses_of(pers), "attention": "engaged",
         "knows_identity": True,
-        "spatial_to_sources": {s["name"]: spatial_rel(sc, s["room"], p_room) for s in sources},
-        "visual_channel_to_sources": {s["name"]: has_visual(spatial_rel(sc, s["room"], p_room)) for s in sources},
+        **_source_channels(sc, p_name, p_room, sources),
         "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
         "behind_sources": _behind_sources(sc, p_name, sources),
         "room_layout": room_layout(sc, p_name),
@@ -1135,8 +1186,7 @@ def perception_outcome(ctx, nonce):
             "visible_rooms": visible_adjacent_rooms(sc, e_room),
             "senses": senses_of(extra), "attention": "engaged",
             "knows_identity": True,
-            "spatial_to_sources": {s["name"]: spatial_rel(sc, s["room"], e_room) for s in sources},
-            "visual_channel_to_sources": {s["name"]: has_visual(spatial_rel(sc, s["room"], e_room)) for s in sources},
+            **_source_channels(sc, e_name, e_room, sources),
             "proximity_to_sources": _proximity_to_sources(sc, e_name, sources),
             "behind_sources": _behind_sources(sc, e_name, sources),
             "room_layout": room_layout(sc, e_name),
@@ -1161,8 +1211,7 @@ def perception_outcome(ctx, nonce):
             "senses": senses_of(sh),
             "attention": act.get("goal") or "ambient",
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
-            "spatial_to_sources": {s["name"]: spatial_rel(sc, s["room"], r) for s in sources},
-            "visual_channel_to_sources": {s["name"]: has_visual(spatial_rel(sc, s["room"], r)) for s in sources},
+            **_source_channels(sc, character_name(sh), r, sources),
             "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), sources),
             "behind_sources": _behind_sources(sc, character_name(sh), sources),
             "room_layout": room_layout(sc, character_name(sh)),
@@ -1199,7 +1248,10 @@ def perception_outcome(ctx, nonce):
         "concealed_actions": concealed,
         "scene": {"location": sc.get("location"), "time": sc.get("time"),
                   "rooms": _contextual_rooms(sc, ctx.cast, p_room),
-                  "entities": _perceptible_entities(sc),
+                  # See the act pass: objective entity state is withheld from
+                  # a payload whose perceivers all lack a channel to it.
+                  "entities": _perceptible_entities(
+                      sc, [p["name"] for p in awake_perceivers]),
                   # Body position: who is in contact with whom, and
                   # where. A held wrist is something the held person
                   # knows first-hand.
@@ -1416,7 +1468,7 @@ def perception_outcome(ctx, nonce):
             rel = spatial.get(act["actor"])
             if rel is None:
                 continue
-            can_see = visual.get(act["actor"], False) or rel.get("same_room", False)
+            can_see = _in_plain_view(rel, visual.get(act["actor"], False))
             if not can_see:
                 continue
             if act["actor"] in recognized_sources:

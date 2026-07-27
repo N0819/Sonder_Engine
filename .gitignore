@@ -20,3 +20,10 @@ demo/trek_bridge_scene_life/run.db*
 demo/trek_bridge_scene_life/run_out.txt
 engine.test.db*
 backdrops/
+
+# Scene/chat blobs dumped out of a live playthrough while debugging. These are
+# play content, not engine source -- one was picked up by a release rsync and
+# very nearly published. Untracked is not enough on its own: the release path
+# copies the working tree wholesale, so anything not ignored here ships.
+*_backup_*.json
+scene_chat*.json

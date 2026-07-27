@@ -519,6 +519,7 @@ exists in `schemas.py`, unconsumed, and is exactly that opt-in ladder.
 | A character is spookily prescient | Context leak | Firewall plus strict character context hygiene |
 | World heals — door un-breaks, trap vanishes | Off-screen state dropped | Commit-up plus standing intentions with triggers |
 | Secret-in-a-crowd is common knowledge | Visibility posture missing | Overt/concealed plus target on every declaration |
+| A character names an act it could only have *felt* | The closed channel cost modality but not resolution — the act's verb crossed into touch as a paraphrase | Sensation crosses, the act's name does not; acuity sharpens detail within its own modality and never buys knowledge of the cause |
 | Betrayal reads as confusion | Flat beliefs, no provenance | Provenance tags; revision as high salience |
 | Trust silently erodes | Clock-driven numeric drift | Stance axes event-linked; only mood decays |
 | Two characters share one position and one set of clothes | A model authored an identity key | Mint engine keys in code; never read them from model output |
