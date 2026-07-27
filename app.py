@@ -70,7 +70,7 @@ from memory import (
     dramatic_irony_feed, promise_ledger,
     dump_character_memories, import_character_memories,
 )
-from scene import persona_of, get_scene
+from scene import persona_of, get_scene, chat_character_sheet
 from backdrops import (build_backdrop_request, request_backdrop, cached_backdrop,
                        backdrop_status, backdrop_error)
 from auth_routes import (
@@ -456,7 +456,7 @@ def _branch_protected_identity_ids(chat_id, persona_id):
             protected.add((ps.get("identity") or {}).get("name") or persona_name(ps))
     except Exception:
         pass
-    for c in q("SELECT ch.sheet AS sheet FROM chat_chars cc "
+    for c in q("SELECT COALESCE(cc.sheet,ch.sheet) AS sheet FROM chat_chars cc "
                "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?", (chat_id,)):
         try:
             sh = json.loads(c["sheet"])
@@ -1922,16 +1922,24 @@ def chat_get(cid: int):
     if not chat:
         raise HTTPException(404)
 
-    parts = [
-        dict(r)
-        for r in q(
-            "SELECT ch.id,ch.name,ch.sheet,cc.status "
-            "FROM chat_chars cc "
-            "JOIN characters ch ON ch.id=cc.char_id "
-            "WHERE cc.chat_id=?",
-            (cid,),
-        )
-    ]
+    parts = []
+    for row in q(
+        "SELECT ch.id,COALESCE(cc.sheet,ch.sheet) AS sheet,cc.sheet AS override_sheet,"
+        "cc.state,cc.status FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
+        (cid,),
+    ):
+        sheet = normalize_character_data(json.loads(row["sheet"] or "{}"))
+        state = json.loads(row["state"] or "{}")
+        if state.get("private_history") is not None:
+            sheet["knowledge"]["private_history"] = state["private_history"]
+        parts.append({
+            "id": row["id"],
+            "name": character_name(sheet),
+            "sheet": json.dumps(sheet, ensure_ascii=False),
+            "status": row["status"],
+            "card_source": "chat" if row["override_sheet"] is not None else "library",
+        })
 
     turns = []
     for t in q("SELECT * FROM turns WHERE chat_id=? ORDER BY idx", (cid,)):
@@ -2329,6 +2337,64 @@ def chat_del_char(cid: int, ch: int):
     wset(cid, "pending", pend)
     return {"ok": True}
 
+
+@app.put("/api/chats/{cid}/characters/{ch}/card")
+def chat_char_card_put(cid: int, ch: int, body: dict = Body(...)):
+    """Set this story's authored card without touching reusable or live state."""
+    if not q("SELECT 1 FROM chats WHERE id=?", (cid,), one=True):
+        raise HTTPException(404, "Chat not found")
+    current_raw = chat_character_sheet(cid, ch)
+    if current_raw is None:
+        raise HTTPException(404, "That character is not in this story")
+
+    _require_chat_idle(cid)
+    current = normalize_character_data(current_raw)
+    sheet = normalize_character_data(body.get("sheet") or {})
+    raw_identity = (
+        current_raw.get("identity")
+        if isinstance(current_raw, dict)
+        and isinstance(current_raw.get("identity"), dict)
+        else {}
+    )
+    current_identity = current.get("identity") or {}
+    identity = sheet.get("identity") or {}
+    # Scene positions, recognition maps, memories, and relationship ledgers use
+    # these as stable identity keys. A card edit may change psychology, voice,
+    # history, senses, etc.; renaming an already-running fictional person needs
+    # a dedicated identity migration rather than a string replacement here.
+    if character_name(sheet) != character_name(current):
+        raise HTTPException(400, "A story character's name cannot be changed here")
+    # Very old cards may genuinely have no stored uid; the normalized editor
+    # supplies one on their first save. Once a uid exists it is immutable.
+    if (
+        raw_identity.get("uid")
+        and str(identity.get("uid") or "") != str(current_identity.get("uid") or "")
+    ):
+        raise HTTPException(400, "A story character's identity uid cannot be changed")
+
+    cc = q(
+        "SELECT state FROM chat_chars WHERE chat_id=? AND char_id=?",
+        (cid, ch), one=True,
+    )
+    state = json.loads(cc["state"] or "{}")
+    # Private history already has a per-story runtime override. Keep that
+    # authoritative channel in sync with the edited story card while leaving
+    # every other live-state field (mood, stress, beliefs, relationships)
+    # untouched.
+    state["private_history"] = (
+        (sheet.get("knowledge") or {}).get("private_history") or []
+    )
+    with transaction():
+        qi(
+            "UPDATE chat_chars SET sheet=?,state=? WHERE chat_id=? AND char_id=?",
+            (
+                json.dumps(sheet, ensure_ascii=False),
+                json.dumps(state, ensure_ascii=False),
+                cid, ch,
+            ),
+        )
+    return {"ok": True, "sheet": sheet, "card_source": "chat"}
+
 @app.get("/api/chats/{cid}/survival")
 def survival_get(cid: int):
     return {"enabled": survival_enabled(cid),
@@ -2367,7 +2433,8 @@ def survival_put(cid: int, body: dict = Body(...)):
             scene = get_scene(cid, chat)
             names = [persona_name(persona_of(chat))]
             for row in q(
-                "SELECT ch.sheet FROM chat_chars cc JOIN characters ch "
+                "SELECT COALESCE(cc.sheet,ch.sheet) AS sheet "
+                "FROM chat_chars cc JOIN characters ch "
                 "ON ch.id = cc.char_id WHERE cc.chat_id=? AND cc.status='active'",
                 (cid,),
             ):
@@ -2449,16 +2516,18 @@ def chat_positions_get(cid: int):
 
     characters = []
     for row in q(
-        "SELECT cc.char_id AS id, cc.status AS status, ch.name AS name "
+        "SELECT cc.char_id AS id,cc.status AS status,"
+        "COALESCE(cc.sheet,ch.sheet) AS sheet "
         "FROM chat_chars cc JOIN characters ch ON ch.id = cc.char_id "
         "WHERE cc.chat_id=? ORDER BY ch.name",
         (cid,),
     ):
+        name = character_name(json.loads(row["sheet"] or "{}"))
         characters.append({
             "id": row["id"],
-            "name": row["name"],
+            "name": name,
             "status": row["status"],
-            "room": room_of(scene, row["name"]),
+            "room": room_of(scene, name),
         })
 
     # persona_of returns a normalized SHEET (name at identity.name), and falls
@@ -2494,13 +2563,8 @@ def chat_char_position_put(cid: int, ch: int, body: dict = Body(...)):
     if not chat:
         raise HTTPException(404, "Chat not found")
 
-    char = q("SELECT name FROM characters WHERE id=?", (ch,), one=True)
-    if not char:
-        raise HTTPException(404, "Character not found")
-    if not q(
-        "SELECT 1 FROM chat_chars WHERE chat_id=? AND char_id=?", (cid, ch),
-        one=True,
-    ):
+    sheet = chat_character_sheet(cid, ch)
+    if sheet is None:
         raise HTTPException(404, "That character is not in this story")
 
     # The pipeline reads and rewrites positions throughout a turn; editing them
@@ -2519,7 +2583,7 @@ def chat_char_position_put(cid: int, ch: int, body: dict = Body(...)):
         )
 
     positions = scene.setdefault("positions", {})
-    name = char["name"]
+    name = character_name(sheet)
 
     # room_of resolves a name case- and punctuation-insensitively, so the key
     # already in the scene may not be spelled the way the character row is.
@@ -2546,8 +2610,8 @@ def ph_get(cid: int, ch: int):
     st = json.loads(cc["state"] or "{}") if cc else {}
     if st.get("private_history") is not None:
         return {"entries": st["private_history"], "source": "chat"}
-    row = q("SELECT sheet FROM characters WHERE id=?", (ch,), one=True)
-    sheet = normalize_character_data(json.loads(row["sheet"] or "{}")) if row else {}
+    raw_sheet = chat_character_sheet(cid, ch)
+    sheet = normalize_character_data(raw_sheet or {})
     return {"entries": sheet.get("knowledge", {}).get("private_history", []), "source": "sheet"}
 
 @app.put("/api/chats/{cid}/characters/{ch}/private_history")
@@ -3080,8 +3144,9 @@ def turn_branch(tid: int):
         # Copy chat characters
         for cc in q("SELECT * FROM chat_chars WHERE chat_id=?", (cid,)):
             qtx(
-                "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
-                (ncid, cc["char_id"], cc["status"], cc["state"])
+                "INSERT INTO chat_chars(chat_id,char_id,status,state,sheet) "
+                "VALUES(?,?,?,?,?)",
+                (ncid, cc["char_id"], cc["status"], cc["state"], cc["sheet"])
             )
 
         # Copy per-frame character overrides (state/status divergence between

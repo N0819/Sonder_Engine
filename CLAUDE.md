@@ -76,6 +76,11 @@ Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` lo
 
 - Reproduce a bug with a focused test before fixing; fix the earliest stage where data first becomes wrong rather than compensating downstream (e.g., in the Narrator).
 - New persistent fields need: schema/migration in `db.py`, read/commit code, portable archive handling in `chat_archive.py`, checkpoint snapshot+restore, branch/clone ID remapping in `app.py` if applicable, and a regression test (full checklist in `docs/DATABASE.md`).
+- Attached characters may have a per-story authored card in
+  `chat_chars.sheet`; `scene.active_cast` resolves it over the reusable
+  `characters.sheet`. Keep that configuration separate from `chat_chars.state`,
+  preserve it in archives/branches, and never permit a card edit to rekey the
+  in-story identity name or uid.
 - Avoid broad rewrites of `agents/runtime.py`, `app.py`, or `memory.py` without dedicated tests — these are orchestration seams affecting reruns, variants, streaming, and commits.
 - Psychology changes must preserve the information firewall: a character may
   receive its own interoception/body state and its final scrubbed observations,

@@ -4,6 +4,15 @@
 
 ### Added
 
+- **Per-story character-card editing.** The Cast panel can open the full
+  character editor for an attached participant and save a story-local card.
+  The reusable library character and every other story remain unchanged, while
+  the live agent pipeline immediately consumes the override. Current mood,
+  stress, learned beliefs, memories, relationships, and body state stay
+  separate and survive the edit. Story cards travel through branches and
+  portable archives; name and identity uid changes are rejected because those
+  values key existing scene and knowledge records.
+
 - **Character psychology v3 and event-grounded pain/pleasure.** Character cards
   can now describe trait triggers and inhibitors, value conflicts, protected
   beliefs, coping/recovery patterns, stress reactivity, learned cue

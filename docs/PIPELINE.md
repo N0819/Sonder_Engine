@@ -116,6 +116,12 @@ current-event pain/pleasure, then proposes several response candidates before
 declaring one behavior. Pain and pleasure are independent and do not require
 survival mode. Multiple independent character steps may run in parallel.
 
+The authored card is resolved per story: `chat_chars.sheet` wins when present,
+otherwise the reusable library `characters.sheet` is used. This override never
+replaces `chat_chars.state`; editing a card during an idle story changes future
+character context without resetting earned mood, stress, beliefs, memories, or
+relationships.
+
 ### `director_resolve`
 
 Combines the player declaration, character declarations, reaction declarations, objective state, mechanics, and deterministic checks into one resolved event and state diff.

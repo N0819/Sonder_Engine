@@ -328,8 +328,14 @@ function renderCastTab(d, b, chatId) {
     b.append(el("div", { class: "card row" },
       el("b", {}, p.name),
       el("span", { class: "badge" }, p.status),
+      p.card_source === "chat"
+        ? el("span", { class: "badge" }, "story card") : null,
       locationSlot,
       el("span", { class: "spacer" }),
+      el("button", {
+        title: "Edit this character card for this story only",
+        onclick: () => charEditor(p, { chatId })
+      }, "✏️ card"),
       el("button", {
         onclick: async () => {
           if (p.status === "active")

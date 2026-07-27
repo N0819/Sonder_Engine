@@ -172,16 +172,22 @@ function quickStartModal(character, greetingIndex) {
   });
 }
 
-function charEditor(c) {
+function charEditor(c, options = {}) {
+  const chatId = options.chatId ?? null;
+  const isChatCard = chatId !== null;
   const sheet = c ? JSON.parse(c.sheet) : defaultCharacterSheet();
   const f = {};
   const greetings = Array.isArray(sheet.opening?.greetings)
     ? sheet.opening.greetings : [];
   // Editable greetings box (saved characters only -- it needs a real id to
   // save/recover/quick-start against). gc.read() feeds back into Save below.
-  const gc = c ? greetingCarousel(c, greetings) : null;
+  const gc = c && !isChatCard ? greetingCarousel(c, greetings) : null;
 
   f.name = fText("Name", sheet.identity?.name);
+  if (isChatCard) {
+    const nameInput = f.name.node.querySelector("input");
+    if (nameInput) nameInput.disabled = true;
+  }
   f.aliases = fStrList("Aliases", sheet.identity?.aliases);
   f.pronouns = fPronouns("Pronouns", sheet.identity?.pronouns);
   f.tier = fSelect("Tier", [["bg", "background"], ["mid", "recurring"], ["major", "major/antagonist"]], sheet.simulation?.tier);
@@ -253,7 +259,7 @@ function charEditor(c) {
 
   f.first_message = fArea("First message (optional, for scene open)", sheet.opening?.first_message, 3);
   const ph = phEditor(sheet.knowledge?.private_history, true);
-  const fillPsychology = c ? el("button", {
+  const fillPsychology = c && !isChatCard ? el("button", {
     title: "Generate only missing psychology fields; populated fields are preserved",
     onclick: async () => {
       const brief = await promptModal(
@@ -284,7 +290,18 @@ function charEditor(c) {
     }
   }, "✨ Fill psychology gaps") : null;
 
-  modal(c ? "Edit character — " + sheet.identity?.name : "New character", b => {
+  modal(
+    isChatCard
+      ? "Edit story card — " + sheet.identity?.name
+      : c ? "Edit character — " + sheet.identity?.name : "New character",
+    b => {
+    if (isChatCard) {
+      b.append(el("div", { class: "card small dim" },
+        "This is a story-specific card. Changes affect this story only. "
+        + "Live mood, stress, memories, relationships, and physical state are "
+        + "preserved. Name and identity are locked because scene history uses "
+        + "them as stable keys."));
+    }
     if (gc) {
       b.append(el("div", { class: "card" },
         el("div", { style: "font-weight:600;margin-bottom:2px" }, "Greetings"),
@@ -342,7 +359,12 @@ function charEditor(c) {
           if (f.knowledge_esoteric.checked) access_tags.push("esoteric");
 
           const s = {
-            identity: { name: f.name.read(), aliases: f.aliases.read(), pronouns: f.pronouns.read() },
+            identity: {
+              uid: sheet.identity?.uid,
+              name: f.name.read(),
+              aliases: f.aliases.read(),
+              pronouns: f.pronouns.read()
+            },
             simulation: { tier: f.tier.read(), temperature: f.temperature.read(), sampler: {} },
             embodiment: {
               senses: f.senses.read(),
@@ -409,12 +431,31 @@ function charEditor(c) {
             }
           };
           try {
-            if (c) await api("PUT", "/api/characters/" + c.id, { sheet: s });
+            let result = null;
+            if (isChatCard) {
+              result = await api(
+                "PUT",
+                `/api/chats/${chatId}/characters/${c.id}/card`,
+                { sheet: s }
+              );
+            } else if (c) {
+              result = await api("PUT", "/api/characters/" + c.id, { sheet: s });
+            }
             else await api("POST", "/api/characters", { sheet: s });
-            closeModal(); await boot(); toast(c ? "Character saved." : "Character created.", "ok");
+            if (result?.sheet && c) {
+              c.sheet = JSON.stringify(result.sheet);
+              c.name = result.sheet.identity?.name || c.name;
+            }
+            closeModal();
+            if (!isChatCard) await boot();
+            toast(
+              isChatCard ? "Story character card saved."
+                : c ? "Character saved." : "Character created.",
+              "ok"
+            );
           } catch (e) { toast("Could not save: " + e.message, "err") }
         } }, "Save")));
-  });
+  }, { wide: true });
 }
 
 function personaEditor(p) {

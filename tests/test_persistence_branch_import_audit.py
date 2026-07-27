@@ -74,8 +74,13 @@ def _add_entity(db, chat_id, entity_id, created_turn_id=None):
 def test_branch_remaps_checkpoint_blob_frames_and_personas(temp_db):
     chat_id = _make_chat(temp_db)
     char_id = _make_char(temp_db)
-    temp_db.qi("INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
-               (chat_id, char_id, "active", "{}"))
+    story_sheet = default_character_data("Alice")
+    story_sheet["psychology"]["drive"]["essence"] = "Story-only drive"
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state,sheet) "
+        "VALUES(?,?,?,?,?)",
+        (chat_id, char_id, "active", "{}", json.dumps(story_sheet)),
+    )
     persona_id = _make_persona(temp_db, "Two", "persona_two")
     fid = create_frame(chat_id, label="past", ordinal=-1, kind="past")
     temp_db.qi("INSERT INTO chat_personas(chat_id,persona_id,status,frame_id) VALUES(?,?,?,?)",
@@ -97,6 +102,14 @@ def test_branch_remaps_checkpoint_blob_frames_and_personas(temp_db):
             assert fr["id"] == nfid, "blob frame id must be remapped to the branch's frame"
         for p in blob.get("chat_personas") or []:
             assert p["frame_id"] in (None, nfid), "persona station must be remapped"
+
+    branched_card = temp_db.q(
+        "SELECT sheet FROM chat_chars WHERE chat_id=? AND char_id=?",
+        (ncid, char_id), one=True,
+    )
+    assert json.loads(branched_card["sheet"])["psychology"]["drive"][
+        "essence"
+    ] == "Story-only drive"
 
     # And a restore of the branched chat must not PK-collide / crash.
     restore_checkpoint(ncid, 1)

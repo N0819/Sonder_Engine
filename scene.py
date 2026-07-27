@@ -58,13 +58,17 @@ def active_cast(chat_id, frame_id=None):
     ordinary baseline instead of nothing."""
     if frame_id is None:
         return q(
-            "SELECT ch.*, cc.state AS cstate, cc.status FROM chat_chars cc "
+            "SELECT ch.id,ch.name,COALESCE(cc.sheet,ch.sheet) AS sheet,"
+            "ch.source,ch.created,ch.resource_uid,"
+            "cc.state AS cstate,cc.status "
+            "FROM chat_chars cc "
             "JOIN characters ch ON ch.id=cc.char_id "
             "WHERE cc.chat_id=? AND cc.status='active' ORDER BY ch.id",
             (chat_id,),
         )
     return q(
-        "SELECT ch.*, "
+        "SELECT ch.id,ch.name,COALESCE(cc.sheet,ch.sheet) AS sheet,"
+        "ch.source,ch.created,ch.resource_uid,"
         "COALESCE(ccf.state, cc.state) AS cstate, "
         "COALESCE(ccf.status, cc.status) AS status "
         "FROM chat_chars cc "
@@ -75,6 +79,23 @@ def active_cast(chat_id, frame_id=None):
         "ORDER BY ch.id",
         (frame_id, chat_id),
     )
+
+
+def chat_character_sheet(chat_id, char_id):
+    """The authored card effective in one story, or None if not attached."""
+    row = q(
+        "SELECT COALESCE(cc.sheet,ch.sheet) AS sheet "
+        "FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
+        "WHERE cc.chat_id=? AND cc.char_id=?",
+        (chat_id, char_id), one=True,
+    )
+    if not row:
+        return None
+    try:
+        return json.loads(row["sheet"] or "{}")
+    except (TypeError, ValueError):
+        return {}
+
 
 def set_char_status(chat_id, char_id, status, frame_id=None):
     """Writes to the base chat_chars row when frame_id is None (present,
@@ -115,7 +136,8 @@ def all_cast_name_to_id(chat_id):
     return {
         character_name(json.loads(r["sheet"])): r["char_id"]
         for r in q(
-            "SELECT ch.id AS char_id, ch.sheet FROM chat_chars cc "
+            "SELECT ch.id AS char_id,COALESCE(cc.sheet,ch.sheet) AS sheet "
+            "FROM chat_chars cc "
             "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
             (chat_id,),
         )
@@ -912,7 +934,7 @@ def private_knowledge_for(chat, viewer_name, frame_id=None):
     vn = (viewer_name or "").lower().strip()
     out = []
     rows = q(
-        "SELECT ch.sheet, "
+        "SELECT COALESCE(cc.sheet,ch.sheet) AS sheet, "
         "COALESCE(ccf.state, cc.state) AS state "
         "FROM chat_chars cc "
         "JOIN characters ch ON ch.id=cc.char_id "

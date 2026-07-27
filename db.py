@@ -64,7 +64,7 @@ def parse_scoped_world_key(key):
     return key, None
 
 DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -258,6 +258,9 @@ CREATE TABLE IF NOT EXISTS chat_chars(
     char_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
     status TEXT NOT NULL DEFAULT 'active',
     state TEXT NOT NULL DEFAULT '{}',
+    -- Optional per-story authored card. Runtime state remains separate in
+    -- state; NULL follows the reusable characters.sheet resource.
+    sheet TEXT,
     PRIMARY KEY(chat_id, char_id)
 );
 CREATE INDEX IF NOT EXISTS idx_chat_chars_status ON chat_chars(status);
@@ -1063,6 +1066,10 @@ MIGRATIONS = [
         "updated REAL NOT NULL)",
         "CREATE INDEX IF NOT EXISTS idx_lore_gen_jobs_book "
         "ON lore_gen_jobs(lorebook_id, status)",
+    ],
+    # v18 -> v19
+    [
+        "ALTER TABLE chat_chars ADD COLUMN sheet TEXT",
     ],
 ]
 
