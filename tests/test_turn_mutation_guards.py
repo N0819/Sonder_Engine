@@ -32,6 +32,58 @@ def test_turn_new_rejects_when_chat_has_active_pipeline(temp_db):
         ABORTS.pop((chat_id, None), None)
 
 
+def test_survival_update_rejects_active_pipeline_without_mutating_state(temp_db):
+    chat_id = _make_chat(temp_db)
+    original_scene = {
+        "rooms": {"room": {"name": "Room"}},
+        "positions": {},
+        "entities": {},
+    }
+    temp_db.wset(chat_id, "scene", original_scene)
+    temp_db.wset(chat_id, "survival_enabled", False)
+    temp_db.wset(chat_id, "survival_track_npcs", False)
+
+    ABORTS[(chat_id, None)] = object()
+    try:
+        with pytest.raises(HTTPException) as exc_info:
+            app.survival_put(
+                chat_id,
+                {"enabled": True, "show_npcs": True},
+            )
+        assert exc_info.value.status_code == 409
+    finally:
+        ABORTS.pop((chat_id, None), None)
+
+    assert temp_db.wget(chat_id, "survival_enabled") is False
+    assert temp_db.wget(chat_id, "survival_track_npcs") is False
+    assert temp_db.wget(chat_id, "scene") == original_scene
+
+
+def test_survival_settings_roll_back_when_scene_seed_fails(temp_db, monkeypatch):
+    chat_id = _make_chat(temp_db)
+    temp_db.wset(chat_id, "scene", {
+        "rooms": {"room": {"name": "Room"}},
+        "positions": {},
+        "entities": {},
+    })
+    temp_db.wset(chat_id, "survival_enabled", False)
+    temp_db.wset(chat_id, "survival_track_npcs", False)
+
+    def fail_scene_write(*_args, **_kwargs):
+        raise RuntimeError("scene write failed")
+
+    monkeypatch.setattr(app, "wset", fail_scene_write)
+
+    with pytest.raises(RuntimeError, match="scene write failed"):
+        app.survival_put(
+            chat_id,
+            {"enabled": True, "show_npcs": True},
+        )
+
+    assert temp_db.wget(chat_id, "survival_enabled") is False
+    assert temp_db.wget(chat_id, "survival_track_npcs") is False
+
+
 def test_turn_reroll_404s_for_missing_turn(temp_db):
     with pytest.raises(HTTPException) as exc_info:
         app.turn_reroll(999999)

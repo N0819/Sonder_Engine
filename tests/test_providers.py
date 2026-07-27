@@ -48,6 +48,23 @@ def test_list_models_respects_nested_subscription_included_flag(monkeypatch):
     assert out["excluded-model"]["badge"] == "pay-per-use"
 
 
+def test_list_models_accepts_top_level_list_response(monkeypatch):
+    _fake_get(monkeypatch, [
+        {"id": "model-b"},
+        {"id": "model-a"},
+    ])
+
+    out = list_models(_prov())
+
+    assert [model["id"] for model in out] == ["model-a", "model-b"]
+
+
+def test_list_models_tolerates_malformed_scalar_response(monkeypatch):
+    _fake_get(monkeypatch, None)
+
+    assert list_models(_prov()) == []
+
+
 # ---- Image catalogue (scene backdrops) ----
 # Shapes here are trimmed copies of a REAL nano-gpt /api/models/image response.
 

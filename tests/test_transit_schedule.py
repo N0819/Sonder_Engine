@@ -175,6 +175,34 @@ def test_sweep_is_frame_scoped(temp_db):
     assert sc["positions"]["service_elevator"] == "floor1_hall"
 
 
+def test_other_frame_pending_event_does_not_block_current_frame_schedule(temp_db):
+    ctx = _make_ctx(temp_db, frame_id=None)
+    cid = ctx.chat.id
+    temp_db.qi(
+        "INSERT INTO scheduled_events(event_id,chat_id,due_at,kind,"
+        "location_id,payload,seed,status) VALUES(?,?,?,?,?,?,?,?)",
+        ("evt_other_frame", cid, 5.0, "transit_arrival", "floor1_hall",
+         json.dumps({"entity_id": "service_elevator",
+                     "destination_room": "old_destination", "frame_id": 999}),
+         "seed", "pending"),
+    )
+    sc = _elevator_scene({"phase": "in_transit", "hatch": "closed",
+                          "destination_room": "sub4_shelter",
+                          "eta_seconds": 60})
+
+    result = commit_transit_sweep(
+        ctx, 0, prepared={"scene": sc,
+                          "clock": {"elapsed_seconds": 100.0,
+                                    "display": "now"}})
+
+    assert result["scheduled"] == 1
+    rows = _pending_rows(temp_db, cid)
+    assert len(rows) == 2
+    payloads = [json.loads(row["payload"]) for row in rows]
+    assert any(payload.get("frame_id") is None for payload in payloads)
+    assert any(payload.get("frame_id") == 999 for payload in payloads)
+
+
 def test_manually_docked_entity_cancels_its_pending_event(temp_db):
     """The director docked the elevator by hand before the timer ran out:
     the event is moot and must be cancelled, not fired over the top."""
@@ -187,7 +215,10 @@ def test_manually_docked_entity_cancels_its_pending_event(temp_db):
                           "clock": {"elapsed_seconds": 100.0,
                                     "display": "now"}})
     sc["entities"]["service_elevator"]["state"]["transit"] = {
-        "phase": "docked", "hatch": "open"}
+        "phase": "docked", "hatch": "open",
+        # Stale journey metadata must not mint a replacement after the pending
+        # event is cancelled below.
+        "destination_room": "sub4_shelter", "eta_seconds": 60}
     sc["positions"]["service_elevator"] = "floor1_hall"
 
     result = commit_transit_sweep(
@@ -195,8 +226,9 @@ def test_manually_docked_entity_cancels_its_pending_event(temp_db):
                           "clock": {"elapsed_seconds": 500.0,
                                     "display": "later"}})
 
-    assert result["fired"] == 0
-    assert _pending_rows(temp_db, ctx.chat.id)[0]["status"] == "cancelled"
+    assert result["fired"] == 0 and result["scheduled"] == 0
+    rows = _pending_rows(temp_db, ctx.chat.id)
+    assert len(rows) == 1 and rows[0]["status"] == "cancelled"
     assert sc["positions"]["service_elevator"] == "floor1_hall"
 
 

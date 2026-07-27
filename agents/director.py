@@ -2218,7 +2218,7 @@ def director_resolve(ctx, nonce):
             char_speech.setdefault(name, []).extend(speeches)
         for event in sequence:
             if event.get("type") == "action" and event.get("attempt"):
-                char_actions.setdefault(name, event)
+                char_actions.setdefault(name, []).append(event)
 
     for c in ctx.cast:
         if int(c["id"]) in covered_ids:
@@ -2248,7 +2248,7 @@ def director_resolve(ctx, nonce):
                 char_speech.setdefault(cname, []).extend(speeches)
             dk_act = dk.get("action") or {}
             if dk_act.get("attempt"):
-                char_actions.setdefault(cname, dk_act)
+                char_actions.setdefault(cname, []).append(dk_act)
 
     sc = get_scene(chat["id"], chat)
     raw_intents = wget(chat["id"], "standing_intentions", []) or []
@@ -2647,8 +2647,9 @@ def director_resolve(ctx, nonce):
             parts.append(f"{p_name} attempts to {p_action['attempt']}")
         for cname in char_speech:
             parts.append(f"{cname} speaks")
-        for cname, cact in char_actions.items():
-            parts.append(f"{cname} attempts to {cact.get('attempt', '')}")
+        for cname, cacts in char_actions.items():
+            for cact in cacts:
+                parts.append(f"{cname} attempts to {cact.get('attempt', '')}")
         for d in dice:
             parts.append(f"{d.get('actor', 'someone')} "
                          f"({d['roll']}+{d['modifier']} vs {d['dc']}: {d['outcome']})")

@@ -213,6 +213,11 @@ def appearance_of(name, base, scene):
 # capability (concealed fox ears still hear) -- perception must preserve the
 # subject's real senses.
 
+def _condition_state(condition):
+    """Return structured state, tolerating malformed legacy condition rows."""
+    state = condition.get("state") if isinstance(condition, dict) else None
+    return state if isinstance(state, dict) else {}
+
 def active_disguises(chat_id):
     """Active physical_disguise conditions for `chat_id`, keyed by casefolded
     subject name. Each value: {subject, description, presented_appearance,
@@ -233,7 +238,7 @@ def active_disguises(chat_id):
         subject = str(payload.get("subject_id") or row["subject_id"] or "").strip()
         if not subject:
             continue
-        state = payload.get("state") or {}
+        state = _condition_state(payload)
         pick = lambda k: state.get(k) or payload.get(k)
         out[subject.casefold()] = {
             "subject": subject,
@@ -337,7 +342,7 @@ def awareness_map(chat_id):
         subject = str(payload.get("subject_id") or row["subject_id"] or "").strip()
         if not subject:
             continue
-        state = payload.get("state") or {}
+        state = _condition_state(payload)
         level = _normalize_awareness_level(state.get("level") or payload.get("level"))
         if level == "awake":
             continue
@@ -366,7 +371,7 @@ def apply_awareness_diff(amap, diff):
             if not subj:
                 continue
             key = subj.casefold()
-            state = cond.get("state") or {}
+            state = _condition_state(cond)
             level = _normalize_awareness_level(state.get("level"))
             if not int(cond.get("active", 1)) or level == "awake":
                 out.pop(key, None)  # woke / condition ended this beat
@@ -421,7 +426,7 @@ def restraint_map(chat_id):
             payload = json.loads(row["payload"])
         except (TypeError, ValueError):
             payload = {}
-        state = payload.get("state") or {}
+        state = _condition_state(payload)
         subject = str(payload.get("subject_id") or row["subject_id"] or "").strip()
         if not subject:
             continue
@@ -449,7 +454,7 @@ def apply_restraint_diff(rmap, diff):
             if not subject:
                 continue
             key = subject.casefold()
-            state = cond.get("state") or {}
+            state = _condition_state(cond)
             if not int(cond.get("active", 1)):
                 out.pop(key, None)          # released this beat
                 continue

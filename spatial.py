@@ -24,9 +24,6 @@ _BARRIER_ALIASES = {
     "counter": "open",
     "open_counter": "open",
     "open counter": "open",
-    "curtain": "open",
-    "curtained_doorway": "open",
-    "curtained doorway": "open",
     "door": "open_door",
     "open door": "open_door",
     "shoji_open": "open_door",
@@ -129,6 +126,48 @@ _VALID_BARRIERS = {
 # differ. Conflating them is what left the engine with no way to say "you can
 # see it but you cannot reach it" -- or, in `membrane`'s case, the reverse.
 _SIGHT_BARRIERS = {"open", "open_door", "window", "bars"}
+
+# Which barriers carry scent at all. Scent passes freely through open air and
+# doorways; bars and grilles let it through almost as well. A membrane (a
+# curtain, a tent flap, a body's soft wall) strongly attenuates it -- the
+# material is thin enough for some diffusion but not free passage. Glass
+# (window) stops air, and with it scent, entirely: a sealed container's
+# contents are not smelled from outside. A closed door muffles scent
+# significantly but does not fully stop it (gaps, undercuts). A wall blocks
+# completely.
+#
+# The graded answer is `scent_level` (none | muffled | full), mirroring
+# `sight_level` (none | shapes | full) and `hear_level` (none | fragment | full).
+_SCENT_BARRIERS = {"open", "open_door", "bars", "membrane", "closed_door"}
+
+def scent_level(rel: dict) -> str:
+    """How much scent from a source reaches the perceiver: none | muffled | full.
+
+    Barriers gate scent the same way they gate sight and sound. Containment
+    concealment (a body sealed inside another) blocks scent as completely as
+    it blocks sight: the enclosing body's soft wall is a membrane, and a
+    membrane between the perceiver and the source means scent is muffled at
+    best -- not leaked through unattenuated.
+
+    Same-room scent is full unless containment conceals the source from the
+    perceiver, in which case the membrane rule applies (muffled). This is the
+    exact bug this function exists to close: without it, a character sealed
+    inside another's body had their scent arriving at the enclosing character
+    at full strength, as though the barrier that hid them from sight did
+    nothing to what they smelled like.
+    """
+    if rel.get("concealed"):
+        return "muffled"
+    if rel.get("same_room"):
+        return "full"
+    barrier = normalize_barrier(rel.get("barrier"))
+    if barrier in ("open", "open_door", "bars"):
+        return "full"
+    if barrier in ("membrane", "closed_door"):
+        return "muffled"
+    # window, wall, separated, unknown -- glass stops air; wall stops
+    # everything; unknown is safe-closed.
+    return "none"
 
 def normalize_barrier(value: str | None) -> str:
     """Normalize model-generated barrier names into engine vocabulary."""
@@ -2053,6 +2092,12 @@ def contacts_from_entity_state(scene: dict) -> dict:
                 "target_part": target_part,
                 "manner": _manner_from_fragment(proximity) or "press",
             })
+            # This legacy pair asserted one contact jointly. Once lifted, remove
+            # both halves just as the invented-key path below removes its source:
+            # leaving them behind would re-create a pruned/removed contact on a
+            # later merge as soon as the two bodies shared a room again.
+            state.pop("target", None)
+            state.pop("proximity", None)
 
         # The invented keys: a contact verb in the NAME, a person in the VALUE.
         for key in list(state.keys()):

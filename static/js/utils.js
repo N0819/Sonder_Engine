@@ -5,7 +5,8 @@ const S = {
   // Image-generation catalogues are a separate listing on the one provider
   // that publishes one, so they cache separately from chat models.
   imageModels: {},
-  nsfw: false, tasks: new Map(), taskSeq: 0, modalToken: 0, memoryCharacter: null,
+  nsfw: false, tasks: new Map(), taskSeq: 0,
+  modalToken: 0, modalOwnerToken: null, memoryCharacter: null,
   // Which frame (diegetic era) this browser tab is currently viewing and
   // will post new turns into -- null means the present, the implicit
   // default every chat starts in. Purely client-side view state (see

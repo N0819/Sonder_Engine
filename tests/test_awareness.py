@@ -25,8 +25,10 @@ from pipeline_context import ChatData, PipelineContext, TurnData
 from scene import (
     NON_AWAKE_GATED,
     apply_awareness_diff,
+    apply_restraint_diff,
     awareness_map,
     awareness_of,
+    restraint_of,
 )
 
 FORBIDDEN_SCENE_TOKENS = ["condemned", "corridor", "flashlight", "Dr. Moon",
@@ -64,6 +66,16 @@ def test_unknown_level_degrades_to_dazed():
         "state": {"level": "flabbergasted"}}]}}
     assert awareness_of(apply_awareness_diff({}, diff), "X") == "dazed"
     assert "dazed" not in NON_AWAKE_GATED  # dazed stays in the LLM call
+
+
+def test_condition_readers_tolerate_non_mapping_state():
+    awareness = {"conditions": {"c1": [{
+        "subject_id": "X", "kind": "awareness", "state": "asleep"}]}}
+    restraint = {"conditions": {"c2": [{
+        "subject_id": "Y", "kind": "restraint", "state": ["held"]}]}}
+
+    assert awareness_of(apply_awareness_diff({}, awareness), "X") == "awake"
+    assert restraint_of(apply_restraint_diff({}, restraint), "Y")["level"] == "bound"
 
 
 # --- integration harness ----------------------------------------------------

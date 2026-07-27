@@ -139,7 +139,9 @@ def _fire_due_events(scene, elapsed, frame_id, pending):
 
         # transit_arrival
         eid = str(payload.get("entity_id") or "")
-        if payload.get("frame_id") != frame_id or row["due_at"] > elapsed:
+        if payload.get("frame_id") != frame_id:
+            continue
+        if row["due_at"] > elapsed:
             pending_entity_ids.add(eid)
             continue
         ent = entities.get(eid)
@@ -186,6 +188,8 @@ def _schedule_new_arrivals(scene, elapsed, frame_id, pending_entity_ids,
         state = ent.get("state")
         transit = state.get("transit") if isinstance(state, dict) else None
         if not isinstance(transit, dict):
+            continue
+        if str(transit.get("phase") or "").strip().casefold() == "docked":
             continue
         try:
             eta = float(transit.get("eta_seconds"))

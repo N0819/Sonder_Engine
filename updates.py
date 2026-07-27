@@ -59,10 +59,19 @@ def _git(*args, timeout=_LOCAL_TIMEOUT):
 
 
 def _is_git_repo():
+    """Return whether this install directory is itself a Git worktree root.
+
+    ``git rev-parse --is-inside-work-tree`` is too permissive here: a copied
+    install nested anywhere below an unrelated checkout would pass, and every
+    later updater command would then operate on that parent repository.
+    """
     try:
-        return _git("rev-parse", "--is-inside-work-tree") == "true"
+        top_level = _git("rev-parse", "--show-toplevel")
     except GitError:
         return False
+    return os.path.normcase(os.path.realpath(top_level)) == os.path.normcase(
+        os.path.realpath(REPO_ROOT)
+    )
 
 
 def _current_branch():
@@ -176,7 +185,11 @@ def check_updates():
     if not _is_git_repo():
         return {"ok": False, "error": "This install is not a git checkout, so it can't self-update."}
 
-    branch = _current_branch()
+    try:
+        branch = _current_branch()
+        dirty = bool(_short_status())
+    except GitError as e:
+        return {"ok": False, "error": str(e)}
     if branch == "HEAD":
         return {"ok": False, "error": "Repository is in a detached-HEAD state; can't determine a branch to update."}
 
@@ -210,7 +223,7 @@ def check_updates():
         "behind": behind,
         "ahead": ahead,
         "up_to_date": behind == 0,
-        "dirty": bool(_short_status()),
+        "dirty": dirty,
         "commits": commits,
         "releases": releases,
     }
@@ -220,16 +233,30 @@ def install_updates():
     """Fast-forward the working tree onto the tracked branch.
 
     Fetches again (so install is safe even if ``check_updates`` wasn't just
-    run), then ``git merge --ff-only``. Refuses -- via git's own error --
-    if the branch has diverged or local edits would be overwritten. On
-    success the caller must restart the server for new code to take effect.
+    run), then ``git merge --ff-only``. Refuses a dirty working tree or a
+    diverged branch, even when Git could technically merge around unrelated
+    local edits: an updater should never leave an install containing a mixture
+    of two source versions. On success the caller must restart the server for
+    new code to take effect.
     """
     if not _is_git_repo():
         return {"ok": False, "error": "This install is not a git checkout, so it can't self-update."}
 
-    branch = _current_branch()
+    try:
+        branch = _current_branch()
+        dirty = bool(_short_status())
+    except GitError as e:
+        return {"ok": False, "error": str(e)}
     if branch == "HEAD":
         return {"ok": False, "error": "Repository is in a detached-HEAD state; can't update."}
+    if dirty:
+        return {
+            "ok": False,
+            "error": (
+                "The working tree has local changes. Commit or stash them "
+                "before installing updates."
+            ),
+        }
 
     try:
         upstream = _upstream_ref(branch)
