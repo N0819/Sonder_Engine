@@ -23,7 +23,7 @@
 | `authored_events.py` | 124 |  | `db` |
 | `backdrops.py` | 876 |  | `db`, `spatial` |
 | `background_claims.py` | 287 |  | `db` |
-| `character_schema.py` | 1138 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
+| `character_schema.py` | 1145 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
 | `chat_archive.py` | 1030 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory` |
 | `checkpoints.py` | 673 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `commit.py` | 4125 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind` |
@@ -254,7 +254,7 @@
 | `character_initial_active_state()` | 983 | 48 lines |
 | `normalize_persona_data()` | 861 | 47 lines |
 | `_coerce_appearance()` | 567 | 45 lines |
-| `default_persona_data()` | 389 | 25 lines |
+| `character_standing_intentions()` | 1032 | 31 lines |
 
 ### `chat_archive.py`
 

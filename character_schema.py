@@ -1042,6 +1042,13 @@ def character_standing_intentions(sheet: dict) -> list[dict]:
     goals = state.get("goals") or []
     out = []
     for i, g in enumerate(goals, 1):
+        # A plain string is the obvious way to author a goal, normalization
+        # preserves it, and this used to skip it -- so a card written that way
+        # got NO standing intentions at all and behaved purely reactively, with
+        # nothing anywhere saying why. Accept both shapes rather than leaving a
+        # silent gap between what the card format takes and what this reads.
+        if isinstance(g, str):
+            g = {"goal": g}
         if not isinstance(g, dict):
             continue
         text = str(g.get("goal") or "").strip()
