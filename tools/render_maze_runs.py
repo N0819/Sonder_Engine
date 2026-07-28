@@ -47,12 +47,24 @@ class Maze:
     def __init__(self, meta):
         self.g = int(meta["grid"])
         self.goal = tuple(meta.get("goal") or (self.g - 1, self.g - 1))
+        self.start = tuple(meta.get("start") or (0, 0))
         M.MAZE_SEED = int(meta.get("seed") or M.MAZE_SEED)
-        M.GRID, M.GOAL = self.g, self.goal
-        self.walls = M.build_maze(grid=self.g, algo=meta.get("algo", "dfs"),
-                                  braid=float(meta.get("braid") or 0.0))
+        M.GRID, M.GOAL, M.START = self.g, self.goal, self.start
+        if meta.get("edges"):
+            # The maze as recorded, not as re-derived. Newer arms carry their
+            # own walls, which is the only form that survives a change to a
+            # carver -- and the only form an authored SVG maze has at all.
+            self.walls = {(r, c): set()
+                          for r in range(self.g) for c in range(self.g)}
+            for a, b in meta["edges"]:
+                a, b = tuple(a), tuple(b)
+                self.walls[a].add(b)
+                self.walls[b].add(a)
+        else:
+            self.walls = M.build_maze(grid=self.g, algo=meta.get("algo", "dfs"),
+                                      braid=float(meta.get("braid") or 0.0))
         self.opt = [M._rid(c) for c in
-                    M.shortest_path(self.walls, (0, 0), self.goal)]
+                    M.shortest_path(self.walls, self.start, self.goal)]
         self.optset = set(self.opt)
         self.cell = {M._rid(c): c for c in self.walls}
 
@@ -147,8 +159,10 @@ def main():
     o.append("Numbers in each grid are the beat a room was **first** entered. "
              "`*` marks the optimal route where he never went, `X` the goal.\n")
     o.append("## The maze\n")
-    o.append(f"{mz.g}×{mz.g} {meta.get('algo')}, braid {meta.get('braid')}, "
-             f"seed `{meta.get('seed')}` — {st.get('cells', mz.g * mz.g)} "
+    origin = (f"authored, `{meta['svg']}`" if meta.get("svg")
+              else f"{meta.get('algo')}, braid {meta.get('braid')}, "
+                   f"seed `{meta.get('seed')}`")
+    o.append(f"{mz.g}×{mz.g} {origin} — {st.get('cells', mz.g * mz.g)} "
              f"rooms, {st.get('junctions', '?')} junctions, "
              f"{st.get('dead_ends', '?')} dead ends, "
              f"optimal **{n_opt} moves**.\n")
@@ -186,4 +200,7 @@ def main():
         print(text)
 
 
-main()
+# Guarded: unguarded, importing this module to reuse `Maze` ran the CLI and
+# died on argparse, so the renderer could not be tested or reused at all.
+if __name__ == "__main__":
+    main()
