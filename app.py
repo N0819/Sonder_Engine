@@ -3226,8 +3226,10 @@ def turn_branch(tid: int):
                 )
                 for v in q("SELECT * FROM variants WHERE step_id=? ORDER BY id", (s["id"],)):
                     qtx(
-                        "INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,?)",
-                        (ns, v["content"], v["created"], v["active"])
+                        "INSERT INTO variants(step_id,content,created,active,"
+                        "reasoning) VALUES(?,?,?,?,?)",
+                        (ns, v["content"], v["created"], v["active"],
+                         v["reasoning"] if "reasoning" in v.keys() else "")
                     )
 
             for e in q("SELECT * FROM events WHERE turn_id=?", (t["id"],)):
@@ -3549,7 +3551,14 @@ def edit_prose(tid: int, body: dict = Body(...)):
 def pipeline_get(tid: int):
     steps = []
     for s in q("SELECT * FROM steps WHERE turn_id=? ORDER BY ord", (tid,)):
-        vs = [dict(r) for r in q("SELECT id,content,active,created FROM variants WHERE step_id=? ORDER BY id", (s["id"],))]
+        # `reasoning` is a thinking model's own trace, kept for debugging. It
+        # is sent so the pipeline view can offer it behind a disclosure, and
+        # it must stay clearly separated from `content`: it has been through
+        # none of the validation the output has, and it is the model talking
+        # to itself rather than anything the fiction has ratified.
+        vs = [dict(r) for r in q(
+            "SELECT id,content,active,created,reasoning FROM variants "
+            "WHERE step_id=? ORDER BY id", (s["id"],))]
         steps.append({"id": s["id"], "key": s["key"], "label": s["label"], "ord": s["ord"], "stale": bool(s["stale"]), "variants": vs})
     turn = q("SELECT * FROM turns WHERE id=?", (tid,), one=True)
     if not turn:

@@ -17,22 +17,22 @@
 | `agents/narration.py` | 875 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/perception.py` | 2354 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 976 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
-| `agents/storage.py` | 83 | Step and active-variant persistence helpers. | `db` |
-| `app.py` | 3872 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `auth_routes`, `backdrops`, `character_schema`, `chat_archive`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `survival`, `updates` |
+| `agents/storage.py` | 92 | Step and active-variant persistence helpers. | `db` |
+| `app.py` | 3881 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `auth_routes`, `backdrops`, `character_schema`, `chat_archive`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `survival`, `updates` |
 | `auth_routes.py` | 143 | Typed host-authentication HTTP routes and cookie transport. | `guest_access` |
 | `authored_events.py` | 124 |  | `db` |
 | `backdrops.py` | 876 |  | `db`, `spatial` |
 | `background_claims.py` | 287 |  | `db` |
 | `character_schema.py` | 1163 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
-| `chat_archive.py` | 1030 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory` |
+| `chat_archive.py` | 1039 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory` |
 | `checkpoints.py` | 673 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `commit.py` | 4227 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind` |
-| `db.py` | 1334 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
+| `db.py` | 1343 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 193 |  | `db` |
 | `greetings.py` | 252 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
 | `guest_access.py` | 328 |  | `db` |
 | `importers.py` | 2333 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `memory`, `prompts`, `providers` |
-| `llm_quality.py` | 263 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
+| `llm_quality.py` | 283 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `mechanics.py` | 274 |  | `spatial`, `spatial_frames` |
 | `memory.py` | 2321 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `prompts`, `providers`, `theory_of_mind` |
@@ -41,7 +41,7 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
 | `prompts.py` | 2772 | Default system prompts and prompt preset access. | `db` |
-| `providers.py` | 1845 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
+| `providers.py` | 1886 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 352 |  | — |
 | `scene.py` | 1142 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 2504 | Pydantic output contracts and semantic validation for agent payloads. | — |
@@ -178,20 +178,20 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `save_step()` | 10 | 19 lines |
-| `mark_steps_stale()` | 53 | 12 lines |
-| `delete_step()` | 74 | 10 lines |
-| `_set_steps_stale()` | 45 | 7 lines |
-| `clear_steps_stale()` | 66 | 7 lines |
-| `active_content()` | 30 | 5 lines |
-| `variant_count()` | 36 | 4 lines |
-| `step_is_stale()` | 41 | 3 lines |
+| `save_step()` | 10 | 28 lines |
+| `mark_steps_stale()` | 62 | 12 lines |
+| `delete_step()` | 83 | 10 lines |
+| `_set_steps_stale()` | 54 | 7 lines |
+| `clear_steps_stale()` | 75 | 7 lines |
+| `active_content()` | 39 | 5 lines |
+| `variant_count()` | 45 | 4 lines |
+| `step_is_stale()` | 50 | 3 lines |
 
 ### `app.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `turn_branch()` | 3116 | 385 lines |
+| `turn_branch()` | 3116 | 387 lines |
 | `_remap_cp_blob()` | 588 | 187 lines |
 | `chat_get()` | 1943 | 102 lines |
 | `lore_entry_edit()` | 1732 | 70 lines |
@@ -295,14 +295,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `init()` | 1242 | 49 lines |
-| `transaction()` | 1145 | 36 lines |
-| `conn()` | 1120 | 23 lines |
-| `_backfill_resource_uids()` | 1224 | 17 lines |
-| `qi()` | 1187 | 16 lines |
+| `init()` | 1251 | 49 lines |
+| `transaction()` | 1154 | 36 lines |
+| `conn()` | 1129 | 23 lines |
+| `_backfill_resource_uids()` | 1233 | 17 lines |
+| `qi()` | 1196 | 16 lines |
 | `parse_scoped_world_key()` | 52 | 13 lines |
-| `_execute_retry()` | 1089 | 13 lines |
-| `wget_for_frame()` | 1316 | 12 lines |
+| `_execute_retry()` | 1098 | 13 lines |
+| `wget_for_frame()` | 1325 | 12 lines |
 
 ### `frames.py`
 
@@ -356,7 +356,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 89 | 175 lines |
+| `complete_validated_json()` | 89 | 195 lines |
 | `_extract_balanced_object()` | 25 | 34 lines |
 | `strict_json_parse()` | 61 | 27 lines |
 
@@ -439,14 +439,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 1244 | 204 lines |
-| `async chat_complete_async()` | 1449 | 88 lines |
-| `chat_complete()` | 1090 | 83 lines |
-| `async _chat_complete_async_once()` | 1538 | 77 lines |
-| `resolve_role_candidates()` | 845 | 52 lines |
-| `list_models()` | 1743 | 51 lines |
-| `_sse_openai()` | 1000 | 46 lines |
-| `async _sse_openai_async()` | 1616 | 45 lines |
+| `_chat_complete_once()` | 1282 | 206 lines |
+| `async chat_complete_async()` | 1489 | 88 lines |
+| `chat_complete()` | 1128 | 83 lines |
+| `async _chat_complete_async_once()` | 1578 | 78 lines |
+| `resolve_role_candidates()` | 883 | 52 lines |
+| `list_models()` | 1784 | 51 lines |
+| `_sse_openai()` | 1038 | 46 lines |
+| `async _sse_openai_async()` | 1657 | 45 lines |
 
 ### `psychology_runtime.py`
 
@@ -597,7 +597,7 @@
 | POST | `/api/chats/{cid}/abort` | `chat_abort()` | `app.py:3112` |
 | GET | `/api/chats/{cid}/attire` | `attire_get()` | `app.py:2727` |
 | PUT | `/api/chats/{cid}/attire` | `attire_put()` | `app.py:2734` |
-| GET | `/api/chats/{cid}/backdrop/{signature}.png` | `backdrop_image()` | `app.py:3862` |
+| GET | `/api/chats/{cid}/backdrop/{signature}.png` | `backdrop_image()` | `app.py:3871` |
 | GET | `/api/chats/{cid}/background_config` | `bg_cfg_get()` | `app.py:2796` |
 | PUT | `/api/chats/{cid}/background_config` | `bg_cfg_put()` | `app.py:2800` |
 | POST | `/api/chats/{cid}/characters` | `chat_add_char()` | `app.py:2047` |
@@ -700,19 +700,19 @@
 | GET | `/api/providers/{pid}/image_models` | `image_models()` | `app.py:1339` |
 | GET | `/api/providers/{pid}/models` | `models()` | `app.py:1332` |
 | PUT | `/api/reasoning_effort` | `put_reasoning_effort()` | `app.py:955` |
-| POST | `/api/steps/{sid}/activate` | `step_activate()` | `app.py:3706` |
-| POST | `/api/steps/{sid}/edit` | `step_edit()` | `app.py:3696` |
-| POST | `/api/steps/{sid}/reroll` | `step_reroll()` | `app.py:3649` |
-| DELETE | `/api/turns/{tid}` | `turn_del()` | `app.py:3719` |
-| GET | `/api/turns/{tid}/backdrop` | `turn_backdrop()` | `app.py:3800` |
-| POST | `/api/turns/{tid}/backdrop` | `turn_backdrop_generate()` | `app.py:3835` |
+| POST | `/api/steps/{sid}/activate` | `step_activate()` | `app.py:3715` |
+| POST | `/api/steps/{sid}/edit` | `step_edit()` | `app.py:3705` |
+| POST | `/api/steps/{sid}/reroll` | `step_reroll()` | `app.py:3658` |
+| DELETE | `/api/turns/{tid}` | `turn_del()` | `app.py:3728` |
+| GET | `/api/turns/{tid}/backdrop` | `turn_backdrop()` | `app.py:3809` |
+| POST | `/api/turns/{tid}/backdrop` | `turn_backdrop_generate()` | `app.py:3844` |
 | POST | `/api/turns/{tid}/branch` | `turn_branch()` | `app.py:3116` |
-| PUT | `/api/turns/{tid}/input` | `edit_input()` | `app.py:3503` |
-| GET | `/api/turns/{tid}/pipeline` | `pipeline_get()` | `app.py:3549` |
-| PUT | `/api/turns/{tid}/prose` | `edit_prose()` | `app.py:3518` |
-| POST | `/api/turns/{tid}/reroll` | `turn_reroll()` | `app.py:3580` |
-| POST | `/api/turns/{tid}/rerun` | `turn_rerun()` | `app.py:3590` |
-| POST | `/api/turns/{tid}/resume` | `turn_resume()` | `app.py:3617` |
+| PUT | `/api/turns/{tid}/input` | `edit_input()` | `app.py:3505` |
+| GET | `/api/turns/{tid}/pipeline` | `pipeline_get()` | `app.py:3551` |
+| PUT | `/api/turns/{tid}/prose` | `edit_prose()` | `app.py:3520` |
+| POST | `/api/turns/{tid}/reroll` | `turn_reroll()` | `app.py:3589` |
+| POST | `/api/turns/{tid}/rerun` | `turn_rerun()` | `app.py:3599` |
+| POST | `/api/turns/{tid}/resume` | `turn_resume()` | `app.py:3626` |
 | GET | `/api/updates/check` | `updates_check()` | `app.py:1022` |
 | POST | `/api/updates/install` | `updates_install()` | `app.py:1026` |
 | GET | `/guest` | `guest_page()` | `app.py:145` |
@@ -742,7 +742,7 @@
 | `frames` | `id`, `chat_id`, `label`, `ordinal`, `kind`, `travelers`, `nonexistent_cast`, `created`, `parent_frame_id`, `split_turn_idx`, `merged_turn_idx` |
 | `turns` | `id`, `chat_id`, `idx`, `player_input`, `created`, `frame_id` |
 | `steps` | `id`, `turn_id`, `key`, `label`, `ord`, `stale` |
-| `variants` | `id`, `step_id`, `content`, `created`, `active` |
+| `variants` | `id`, `step_id`, `content`, `created`, `active`, `reasoning` |
 | `memories` | `id`, `chat_id`, `char_id`, `turn_id`, `turn_idx`, `kind`, `category`, `provenance`, `salience`, `content`, `gist`, `key_phrases`, `entities`, `location`, `emotional_context`, `valence`, `arousal`, `confidence`, `access_count`, `last_accessed`, `embedding`, `cue_embedding`, `embedding_model`, `embedding_dim`, `archived`, `event_key`, `frame_id` |
 | `memory_summaries` | `id`, `chat_id`, `char_id`, `scope`, `start_turn_idx`, `end_turn_idx`, `summary`, `key_phrases`, `unresolved_threads`, `embedding`, `embedding_model`, `embedding_dim`, `updated` |
 | `events` | `id`, `chat_id`, `turn_id`, `content` |
@@ -772,9 +772,9 @@ Sections: Scene backdrops (`:2`).
 
 Declared functions: `backdropLayers()`, `backdropLuminance()`, `applyBackdropContrast()`, `clearBackdrop()`, `showBackdrop()`, `backdropWorking()`, `awaitBackdrop()`, `generateBackdrop()`, `backdropForTurn()`, `backdropOnVisibleTurn()`, `backdropResetForRender()`, `updateBackdropBtn()`, `toggleBackdrops()`, `syncBackdrops()`.
 
-### `static/js/chat.js` (1759 lines)
+### `static/js/chat.js` (1776 lines)
 
-Sections: Scene mood (`:1`); Pipeline drawer (`:627`); Relationship viewer (`:911`); Memory browser (`:983`); Private history (`:1701`).
+Sections: Scene mood (`:1`); Pipeline drawer (`:627`); Relationship viewer (`:928`); Memory browser (`:1000`); Private history (`:1718`).
 
 Declared functions: `detectSceneMood()`, `applySceneMood()`, `observeSceneMood()`, `openChat()`, `renderFrameBar()`, `switchFrame()`, `updateChatScopedButtons()`, `renderChat()`, `branchTurn()`, `editTurnInput()`, `editTurnProse()`, `liveReset()`, `friendlyPhase()`, `turnStatusStart()`, `turnStatusSet()`, `turnStatusStop()`, `liveStep()`, `handleEvt()`, `abortActiveRun()`, `runStream()`, `confirmCheckpointRestore()`, `runReroll()`, `rerollTurn()`, `exportChat()`, `importChatModal()`, `openPipeline()`, `relMeter()`, `relationshipModal()`, `memModal()`, `exportCharacterMemories()`, `importCharacterMemoriesModal()`, `memQS()`, `memCharId()`, `loadMemoryBrowse()`, `getMemUI()`, `renderMemorySummary()`, `sortedMems()`, `renderMemoryList()`, `memoryCard()`, `fieldWrap()`, `reloadMemView()`, `runMemorySearch()`, `showNewMemoryForm()`, `consolidateMemories()`, `previewMemoryContext()`, `chatPH()`, `personaPH()`.
 

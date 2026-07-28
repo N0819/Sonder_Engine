@@ -22,8 +22,17 @@ def save_step(turn_id, key, label, ordn, content):
             sid = qi("INSERT INTO steps(turn_id,key,label,ord,stale) VALUES(?,?,?,?,0)",
                       (turn_id, key, label, ordn))
         qi("UPDATE variants SET active=0 WHERE step_id=?", (sid,))
-        vid = qi("INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
-                 (sid, json.dumps(content), time.time()))
+        # The reasoning trace belongs to the call that just produced this
+        # content, so it is read here rather than passed down through every
+        # stage signature. Diagnostic only -- never read back as content.
+        try:
+            from providers import last_reasoning
+            _think = str(last_reasoning.get() or "")[:20000]
+        except Exception:
+            _think = ""
+        vid = qi("INSERT INTO variants(step_id,content,created,active,reasoning) "
+                 "VALUES(?,?,?,1,?)",
+                 (sid, json.dumps(content), time.time(), _think))
         n = q("SELECT COUNT(*) c FROM variants WHERE step_id=?", (sid,), one=True)["c"]
     return sid, vid, n
 
