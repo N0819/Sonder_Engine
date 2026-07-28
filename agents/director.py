@@ -50,6 +50,7 @@ from spatial import (
     _merge_room,
     egocentric_frame,
     merge_scene_with_diff,
+    normalize_bearing,
     passable_route_exists,
     room_of,
     spatial_rel,
@@ -267,12 +268,29 @@ def _egocentric_exits(sc, observer):
     except Exception:
         return None
     summary = {}
+    bearings = {}
     for bucket in ("ahead", "behind", "left", "right", "aside",
                    "above", "below", "unclassified"):
-        rooms = [str(edge.get("to")) for edge in (frame.get(bucket) or [])
-                 if isinstance(edge, dict) and edge.get("to")]
+        rooms = []
+        for edge in (frame.get(bucket) or []):
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            rid = str(edge["to"])
+            rooms.append(rid)
+            # The COMPASS direction, kept rather than discarded. The buckets
+            # are egocentric and say nothing about north; a Director with
+            # only "ahead: [r0401]" has to invent a direction word for the
+            # prose, and inventing it is guessing. Measured in maze arm A11:
+            # "Vesk moves north into Chamber 0401" for a move that was west,
+            # roughly one movement event in seven. The character then reads
+            # that back as his own experience and navigates by it.
+            bearing = normalize_bearing(edge.get("dir"))
+            if bearing:
+                bearings[rid] = bearing
         if rooms:
             summary[bucket] = rooms
+    if bearings:
+        summary["bearings"] = bearings
     came_from = ((sc.get("orientation") or {}).get(observer) or {}).get(
         "came_from")
     if came_from:
@@ -292,12 +310,18 @@ def director_interpret(ctx, nonce):
     cast_info = []
     for c in ctx.cast:
         sh, _, _ = sheet_state(c)
+        cname = character_name(sh)
         cast_info.append({
             "id": c["id"],
-            "name": character_name(sh),
-            "room": room_of(sc, character_name(sh)),
-            "appearance": appearance_of(character_name(sh),
-                                        character_appearance(sh), sc),
+            "name": cname,
+            "room": room_of(sc, cname),
+            # Their heading, on the same terms as the player's above. This
+            # stage does not usually relocate a character -- director_resolve
+            # does -- but it interprets declarations ABOUT them, and a room
+            # with no orientation is the same undirected graph that made
+            # "forward" a coin flip for the player.
+            "exits": _egocentric_exits(sc, cname),
+            "appearance": appearance_of(cname, character_appearance(sh), sc),
             "abilities": character_abilities(sh),
         })
 

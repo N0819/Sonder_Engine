@@ -11,7 +11,7 @@
 | `agents/background.py` | 809 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/character.py` | 987 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 3476 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/director.py` | 2930 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
+| `agents/director.py` | 2954 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 552 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 201 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 875 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
@@ -32,7 +32,7 @@
 | `greetings.py` | 252 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
 | `guest_access.py` | 328 |  | `db` |
 | `importers.py` | 2333 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `memory`, `prompts`, `providers` |
-| `llm_quality.py` | 283 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
+| `llm_quality.py` | 292 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `mechanics.py` | 274 |  | `spatial`, `spatial_frames` |
 | `memory.py` | 2321 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `prompts`, `providers`, `theory_of_mind` |
@@ -40,7 +40,7 @@
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 2799 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 2806 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1910 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 352 |  | — |
 | `scene.py` | 1142 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
@@ -110,14 +110,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 2184 | 747 lines |
-| `director_interpret()` | 283 | 314 lines |
-| `_reconcile_resolution()` | 1832 | 268 lines |
-| `_reconcile_interpretation()` | 745 | 119 lines |
-| `director_establish()` | 154 | 95 lines |
-| `_evidence_present()` | 1604 | 89 lines |
-| `_narrated_destruction_subjects()` | 1220 | 79 lines |
-| `_untracked_unconsciousness_subjects()` | 1114 | 51 lines |
+| `director_resolve()` | 2208 | 747 lines |
+| `director_interpret()` | 301 | 320 lines |
+| `_reconcile_resolution()` | 1856 | 268 lines |
+| `_reconcile_interpretation()` | 769 | 119 lines |
+| `director_establish()` | 155 | 95 lines |
+| `_evidence_present()` | 1628 | 89 lines |
+| `_narrated_destruction_subjects()` | 1244 | 79 lines |
+| `_untracked_unconsciousness_subjects()` | 1138 | 51 lines |
 
 ### `agents/loops.py`
 
@@ -357,7 +357,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 89 | 195 lines |
+| `complete_validated_json()` | 89 | 204 lines |
 | `_extract_balanced_object()` | 25 | 34 lines |
 | `strict_json_parse()` | 61 | 27 lines |
 
@@ -431,10 +431,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 2790 | 10 lines |
-| `presets()` | 2781 | 2 lines |
-| `active_preset()` | 2784 | 2 lines |
-| `nsfw_enabled()` | 2787 | 2 lines |
+| `get_prompt()` | 2797 | 10 lines |
+| `presets()` | 2788 | 2 lines |
+| `active_preset()` | 2791 | 2 lines |
+| `nsfw_enabled()` | 2794 | 2 lines |
 
 ### `providers.py`
 

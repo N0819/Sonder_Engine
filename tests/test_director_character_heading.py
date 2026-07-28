@@ -114,3 +114,39 @@ def test_declarations_are_annotated_with_their_own_mover():
         d["exits"] = _egocentric_exits(sc, d["name"])
     assert decls[0]["exits"]["came_from"] == "north_room"
     assert decls[1]["exits"]["came_from"] == "mid"
+
+
+def test_the_compass_bearing_survives_the_bucket():
+    """The buckets are egocentric and say nothing about north. Without the
+    compass direction the Director has to invent a direction word for the
+    prose, and inventing it is guessing: A11 produced "Vesk moves north into
+    Chamber 0401" for a move that was west, roughly one movement event in
+    seven. egocentric_frame carries `dir` and it was being dropped here."""
+    exits = _egocentric_exits(_scene(), "Vesk")
+    bearings = exits.get("bearings") or {}
+    assert bearings.get("west_room") == "w"
+    assert bearings.get("east_room") == "e"
+    assert bearings.get("north_room") == "n"
+
+
+def test_every_listed_room_carries_a_bearing():
+    """A partially-populated map is worse than none: the Director would read
+    bearings for some doorways and fall back to guessing for the rest, which
+    is the original bug surviving in the gaps."""
+    sc = _scene()
+    exits = _egocentric_exits(sc, "Vesk")
+    listed = {r for b, v in exits.items()
+              if isinstance(v, list) for r in v}
+    assert listed, "no rooms bucketed at all"
+    missing = listed - set((exits.get("bearings") or {}))
+    assert not missing, f"bucketed without a bearing: {sorted(missing)}"
+
+
+def test_bearings_is_absent_rather_than_empty_when_nothing_is_known():
+    """Absent means 'cannot tell'. An empty dict reads as 'no directions
+    exist', which is a different and false claim."""
+    sc = {"rooms": {"lone": {"name": "Lone", "adjacent": []}},
+          "positions": {"Vesk": "lone"}, "entities": {}, "attire": {},
+          "overlays": {}}
+    exits = _egocentric_exits(sc, "Vesk") or {}
+    assert "bearings" not in exits or exits["bearings"]
