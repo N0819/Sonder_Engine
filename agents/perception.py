@@ -37,6 +37,7 @@ import os
 
 import affect
 from spatial import (
+    corridor_sightlines,
     hiding_holders_of,
     _body_interior_holder,
     ambient_scope,
@@ -404,6 +405,11 @@ def _observer_scene_payload(scene, perceiver):
         "light": {
             rid: effective_light(scene, rid) for rid in allowed_rooms
         },
+        # What can be read looking STRAIGHT down each passage: that it ends,
+        # opens out, or bends. Sight follows the line until the passage turns,
+        # a door blocks it, or the dark takes it -- so it grants no knowledge
+        # of anything round a corner.
+        "sightlines": corridor_sightlines(scene, room_id) if room_id else [],
     }
 
 

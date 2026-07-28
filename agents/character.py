@@ -39,7 +39,7 @@ from scene import (
     sheet_state,
 )
 from schemas import validate_llm_output
-from spatial import room_of, spatial_digest
+from spatial import corridor_sightlines, room_of, spatial_digest
 from survival import vitals_of
 from psychology_runtime import cognitive_absorption
 from theory_of_mind import mind_models_for_payload, sheet_capacity
@@ -174,6 +174,19 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     for rid, room in rooms.items():
         display = str((room or {}).get("name") or rid)
         name_to_id.setdefault(display, rid)
+    # What can be SEEN through each doorway right now, as against what has been
+    # walked. A chamber with no other way out is visible as such from the
+    # threshold; making a character enter it to find out is not caution, it is
+    # a missing sense.
+    seen_onward = {}
+    if here_rid:
+        try:
+            from spatial import visible_adjacent_rooms
+            for item in visible_adjacent_rooms(scene, here_rid) or []:
+                if isinstance(item, dict) and "onward_exits" in item:
+                    seen_onward[str(item.get("room_id"))] = item["onward_exits"]
+        except Exception:
+            seen_onward = {}
     route = [r for r in (visited_rooms or []) if isinstance(r, str)]
     counts = {}
     for rid in route:
@@ -251,6 +264,11 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                 continue
             rid = name_to_id.get(str(edge.get("room") or ""))
             entry = dict(edge)
+            if rid in seen_onward:
+                # Absent means "cannot tell from here" -- never "none".
+                entry["onward_exits_visible"] = seen_onward[rid]
+                if seen_onward[rid] == 0:
+                    entry["visibly_no_way_through"] = True
             if rid and rid in counts:
                 entry["been_there"] = True
                 entry["times_entered"] = counts[rid]
@@ -505,6 +523,12 @@ def character_step(ctx, cid, nonce):
             # re-derive their own location from the view's prose every beat.
             "current_room": (sc.get("rooms") or {}).get(
                 character_room(sc, sh), {}).get("name") or "",
+            # Looking straight down each passage: whether it ends, opens out or
+            # bends, and roughly how far off. Coarse on purpose -- "some way
+            # north the passage comes to an end" is the percept, not a room
+            # count -- and it stops at corners, so it is sight rather than a
+            # map.
+            "corridor_sight": corridor_sightlines(sc, char_room),
         },
         "memory": memory_context,
         "relationships": relationships,

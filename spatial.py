@@ -2370,6 +2370,133 @@ def _is_carried_interior(scene, room_id):
         container_of(scene, str(entity.get("name") or "")) is not None
 
 
+# How far a straight passage can be read, and how the reading coarsens. Sight
+# down a corridor is real -- you see that it ends before you walk it -- but it
+# degrades with distance into "somewhere along there", which is the form worth
+# handing a character.
+CORRIDOR_SIGHT_LIMIT = 6
+_CORRIDOR_VAGUENESS = ((1, "just ahead"), (2, "a short way"),
+                       (4, "some way"), (99, "far"))
+# How many rooms down a line are NAMED. Beyond this the passage is reported as
+# running on, without contents -- which is both what sight gives you and what
+# keeps this from becoming a page per beat.
+_CORRIDOR_NAMED = 2
+
+
+def _reverse_dir(d):
+    return {"n": "s", "s": "n", "e": "w", "w": "e"}.get(str(d or "").lower())
+
+
+def corridor_sightlines(scene, room_id):
+    """What can be seen looking STRAIGHT along each passage out of a room.
+
+    A character could previously see one room and no further, so a corridor
+    ending three rooms north was indistinguishable from one running on -- he
+    had to walk it. But you can see down a straight passage, and that you
+    cannot see round the corner is what makes it worth having: sight follows
+    the line until the passage turns, a door blocks it, or the dark swallows
+    it.
+
+    Deliberately coarse, and coarser with distance. The useful percept is "some
+    way north the passage comes to an end", not a room count -- so `distance`
+    is carried for ordering and `vagueness` for rendering, and a caller should
+    prefer the latter.
+
+    Returns [] when the scene's edges carry no `dir`, since without direction
+    there is no line to follow and guessing one would invent a sense.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    start = rooms.get(room_id)
+    if not isinstance(start, dict):
+        return []
+    out = []
+    for edge in start.get("adjacent") or []:
+        if not isinstance(edge, dict) or not edge.get("dir"):
+            continue
+        heading = str(edge["dir"]).lower()
+        if normalize_barrier(edge.get("barrier")) not in _SIGHT_BARRIERS:
+            continue
+        cur, prev, dist, terminus = edge.get("to"), room_id, 1, None
+        # What is made out ALONG the line, not merely where it ends. Detail
+        # decays the way sight does: the near chamber is read plainly, the next
+        # by its one memorable feature, past that only that something is there.
+        # Capped at _CORRIDOR_NAMED because a full description per room per
+        # direction would be a page of prose every beat -- and because nobody
+        # reads the far end of a corridor in that much detail anyway.
+        along = []
+        while cur and dist <= CORRIDOR_SIGHT_LIMIT:
+            room = rooms.get(cur)
+            if not isinstance(room, dict):
+                terminus = None
+                break
+            # Anything short of full sight stops the line. Light spills
+            # through an open doorway, so a dark room beside a lit one reads
+            # `dim` -- and shapes are enough to know something is there, not
+            # enough to read whether a passage ends. Reporting a terminus
+            # through gloom would be inventing detail.
+            if _LIGHT_SIGHT.get(effective_light(scene, cur), "full") != "full":
+                terminus = "darkness"
+                break
+            onward = [
+                e for e in (room.get("adjacent") or [])
+                if isinstance(e, dict) and str(e.get("to")) != str(prev)
+                and normalize_barrier(e.get("barrier")) not in ("wall",)
+            ]
+            if not onward:
+                terminus = "dead_end"
+                break
+            if len(along) < _CORRIDOR_NAMED:
+                along.append({
+                    "room": room.get("name") or cur,
+                    "detail": "clear" if dist == 1 else "landmark",
+                })
+            straight = [e for e in onward
+                        if str(e.get("dir") or "").lower() == heading
+                        and normalize_barrier(e.get("barrier")) in _SIGHT_BARRIERS]
+            if len(onward) > 1:
+                terminus = "opening"      # a junction: the line stops being one line
+                break
+            if not straight:
+                terminus = "turn"         # the passage bends; sight stops here
+                break
+            prev, cur, dist = cur, straight[0].get("to"), dist + 1
+        if terminus:
+            out.append({
+                "dir": heading, "distance": dist, "terminus": terminus,
+                "vagueness": next(v for lim, v in _CORRIDOR_VAGUENESS
+                                  if dist <= lim),
+                "along": along,
+            })
+    return out
+
+
+def _onward_exits(scene, all_rooms, target_id, from_room):
+    """How many ways out of `target_id` lead somewhere other than back here.
+
+    Looking through a doorway into a chamber, you see whether it has another
+    way out -- that is ordinary sight, not deduction. Without it a character
+    has to physically walk into a dead end to discover it is one, which is
+    exactly what was observed: a maze runner entered the same one-exit chamber
+    six times, having never been given the one fact that would have told him.
+
+    Omitted entirely when the room is too dark to make out, because then you
+    genuinely cannot see its doorways. Absent means "could not tell", never
+    "none" -- a caller must not read a missing key as a dead end.
+    """
+    if _LIGHT_SIGHT.get(effective_light(scene, target_id), "full") == "none":
+        return {}
+    room = all_rooms.get(target_id) or {}
+    onward = 0
+    for edge in room.get("adjacent") or []:
+        if not isinstance(edge, dict):
+            continue
+        if normalize_barrier(edge.get("barrier")) == "wall":
+            continue
+        if str(edge.get("to")) != str(from_room):
+            onward += 1
+    return {"onward_exits": onward}
+
+
 def visible_adjacent_rooms(
     scene: dict,
     room_id: str,
@@ -2431,6 +2558,7 @@ def visible_adjacent_rooms(
             ),
             "barrier": barrier,
             "description": notes[:800],
+            **_onward_exits(scene, all_rooms, adjacent_id, room_id),
         })
         seen.add(adjacent_id)
 

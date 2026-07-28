@@ -180,3 +180,104 @@ class TestDestinationIsNotADeadEnd:
         """Onward movement disqualifies it however often he also came back."""
         got = self._exits(["r3", "r1", "r2", "r1", "r3", "r1", "r3"])
         assert "no_route_onward" not in got["Dead End"]
+
+
+class TestCorridorSight:
+    """A character could see one room and no further, so a corridor ending
+    three rooms north was indistinguishable from one running on -- he had to
+    walk it. You can see down a straight passage; that you cannot see round the
+    corner is what makes it sight rather than a map."""
+
+    def _scene(self, rooms):
+        return {"rooms": rooms, "positions": {}, "entities": {},
+                "attire": {}, "overlays": {}}
+
+    def _corridor(self, n, terminal_adjacent):
+        """A straight north-running passage of `n` rooms from r0."""
+        rooms = {}
+        for i in range(n):
+            adj = []
+            if i:
+                adj.append({"to": f"r{i-1}", "barrier": "open", "dir": "s"})
+            if i + 1 < n:
+                adj.append({"to": f"r{i+1}", "barrier": "open", "dir": "n"})
+            rooms[f"r{i}"] = {"name": f"Room {i}", "light": "lit", "adjacent": adj}
+        rooms[f"r{n-1}"]["adjacent"].extend(terminal_adjacent)
+        return rooms
+
+    def test_a_dead_end_is_seen_from_down_the_corridor(self):
+        from spatial import corridor_sightlines
+        sc = self._scene(self._corridor(4, []))
+        line = corridor_sightlines(sc, "r0")[0]
+        assert line["terminus"] == "dead_end"
+        assert line["distance"] == 3
+
+    def test_distance_is_reported_vaguely(self):
+        """'some way north the passage ends', not 'three rooms north'."""
+        from spatial import corridor_sightlines
+        near = corridor_sightlines(self._scene(self._corridor(2, [])), "r0")[0]
+        far = corridor_sightlines(self._scene(self._corridor(5, [])), "r0")[0]
+        assert near["vagueness"] == "just ahead"
+        assert far["vagueness"] in ("some way", "far")
+        assert near["vagueness"] != far["vagueness"]
+
+    def test_sight_stops_at_a_bend(self):
+        """The passage turns; what is round the corner is not seen."""
+        from spatial import corridor_sightlines
+        rooms = self._corridor(3, [{"to": "east1", "barrier": "open", "dir": "e"}])
+        rooms["east1"] = {"name": "East", "light": "lit",
+                          "adjacent": [{"to": "r2", "barrier": "open", "dir": "w"}]}
+        line = corridor_sightlines(self._scene(rooms), "r0")[0]
+        assert line["terminus"] == "turn"
+        assert line["distance"] < 3
+
+    def test_sight_stops_at_darkness(self):
+        from spatial import corridor_sightlines
+        rooms = self._corridor(4, [])
+        rooms["r2"]["light"] = "dark"
+        assert corridor_sightlines(self._scene(rooms), "r0")[0]["terminus"] == "darkness"
+
+    def test_a_junction_reads_as_an_opening_not_an_end(self):
+        from spatial import corridor_sightlines
+        rooms = self._corridor(3, [
+            {"to": "w1", "barrier": "open", "dir": "w"},
+            {"to": "e1", "barrier": "open", "dir": "e"}])
+        rooms["w1"] = {"name": "W", "light": "lit", "adjacent": []}
+        rooms["e1"] = {"name": "E", "light": "lit", "adjacent": []}
+        assert corridor_sightlines(self._scene(rooms), "r0")[0]["terminus"] == "opening"
+
+    def test_no_direction_means_no_sightline(self):
+        """Without `dir` there is no line to follow, and guessing one would
+        invent a sense the character does not have."""
+        from spatial import corridor_sightlines
+        rooms = self._corridor(3, [])
+        for r in rooms.values():
+            for e in r["adjacent"]:
+                e.pop("dir")
+        assert corridor_sightlines(self._scene(rooms), "r0") == []
+
+    def test_detail_decays_with_distance(self):
+        """The near chamber is read plainly, the next by its one memorable
+        feature, past that only that the passage runs on. Both what sight does
+        and what keeps this from being a page of prose every beat."""
+        from spatial import corridor_sightlines, _CORRIDOR_NAMED
+        line = corridor_sightlines(self._scene(self._corridor(5, [])), "r0")[0]
+        along = line["along"]
+        assert len(along) == _CORRIDOR_NAMED, "far rooms must not be named"
+        assert along[0]["detail"] == "clear"
+        assert along[1]["detail"] == "landmark"
+
+    def test_the_payload_stays_small(self):
+        """Four directions of graded sight must not rival the view itself."""
+        import json
+        from spatial import corridor_sightlines
+        rooms = self._corridor(6, [])
+        blob = json.dumps(corridor_sightlines(self._scene(rooms), "r0"))
+        assert len(blob) < 600, f"sightline payload grew to {len(blob)} chars"
+
+    def test_a_distant_room_is_named_so_it_can_be_recognised(self):
+        """The real payoff: matching a landmark two rooms off against memory,
+        without walking there."""
+        from spatial import corridor_sightlines
+        line = corridor_sightlines(self._scene(self._corridor(4, [])), "r0")[0]
+        assert [a["room"] for a in line["along"]] == ["Room 1", "Room 2"]
