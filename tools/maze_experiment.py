@@ -733,7 +733,16 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
     stalls = []
     trace = [] if collect_trace else None
     for step in range(resume_from, max_steps):
-        idx = turn_base + step
+        # Taken from the DB rather than counted in this process. `turn_base +=
+        # len(visited)` undercounted: a STALLED beat inserts its turn row and
+        # then skips the append, so every stall left the next run starting one
+        # index low and eventually colliding on (chat_id, idx). It never bit
+        # while the character model did not stall, which is exactly the kind
+        # of bug that waits for the one arm you care about. One small query a
+        # beat is nothing beside the LLM calls, and it cannot be miscounted.
+        _max = _db.q("SELECT MAX(idx) AS m FROM turns WHERE chat_id=?",
+                     (chat_id,), one=True)
+        idx = int((_max or {})["m"] or 0) + 1
         turn_id = qi(
             "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
             (chat_id, idx, "", time.time()))
