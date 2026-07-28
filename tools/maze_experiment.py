@@ -88,31 +88,95 @@ _FEATURES = [
 ]
 
 
+# Composed so ANY grid size gets a distinct room. The fixed list wrapped with
+# `i % len`, so a grid above 6x6 silently reused descriptions -- which destroys
+# the one property the experiment depends on, since a character cannot be shown
+# to remember a room it cannot tell from another.
+_MATERIALS = ("blue tile", "grey slate", "red brick", "white marble",
+              "black basalt", "green glaze", "pale sandstone", "cracked plaster")
+_FITTINGS = ("a cold brazier", "a toppled bench", "a dry fountain",
+             "a rope ladder", "an upturned bell", "a heap of sand",
+             "a shattered mirror", "a cairn of stones", "a trough of ash")
+
+
+def _feature_for(index):
+    if index < len(_FEATURES):
+        return _FEATURES[index]
+    extra = index - len(_FEATURES)
+    mat = _MATERIALS[extra % len(_MATERIALS)]
+    fit = _FITTINGS[(extra // len(_MATERIALS)) % len(_FITTINGS)]
+    return f"a floor of {mat} and {fit}"
+
+
 def _rid(cell):
     return f"r{cell[0]}{cell[1]}"
 
 
-def build_maze(seed=MAZE_SEED):
-    """Randomised-DFS perfect maze. Returns {cell: set(neighbour cells)}."""
+def _neighbours(cell, grid):
+    r, c = cell
+    return [(r + dr, c + dc) for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1))
+            if 0 <= r + dr < grid and 0 <= c + dc < grid]
+
+
+def build_maze(seed=MAZE_SEED, grid=None, braid=0.0):
+    """Randomised-DFS maze, optionally BRAIDED. {cell: set(neighbour cells)}.
+
+    A perfect maze (braid=0) is a poor instrument for testing whether a
+    character LEARNS a space. It has exactly one path between any two cells, so
+    there is no better route to discover on run two -- improvement can only
+    show as fewer dead-end excursions, and a model that opens on the optimal
+    path (grok-4.20 did, exactly) has no headroom at all. It also makes
+    backtracking ambiguous: reversing out of a dead end is correct play, and
+    the metric cannot tell it from being lost.
+
+    Braiding removes a fraction of dead ends by opening one extra wall each,
+    creating LOOPS. That buys three things the perfect maze cannot: genuinely
+    competing routes of different length, so route quality becomes measurable;
+    unambiguous backtracking, since reversing is now a choice rather than the
+    only legal move; and a real navigation decision at junctions instead of a
+    corridor to follow.
+    """
+    grid = grid or GRID
     rng = random.Random(seed)
-    walls = {(r, c): set() for r in range(GRID) for c in range(GRID)}
+    walls = {(r, c): set() for r in range(grid) for c in range(grid)}
     stack, seen = [START], {START}
     while stack:
-        r, c = stack[-1]
-        nbrs = [
-            (r + dr, c + dc) for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1))
-            if 0 <= r + dr < GRID and 0 <= c + dc < GRID
-            and (r + dr, c + dc) not in seen
-        ]
+        cur = stack[-1]
+        nbrs = [n for n in _neighbours(cur, grid) if n not in seen]
         if not nbrs:
             stack.pop()
             continue
         nxt = rng.choice(nbrs)
-        walls[(r, c)].add(nxt)
-        walls[nxt].add((r, c))
+        walls[cur].add(nxt)
+        walls[nxt].add(cur)
         seen.add(nxt)
         stack.append(nxt)
+
+    if braid > 0:
+        dead_ends = [c for c in sorted(walls) if len(walls[c]) == 1]
+        rng.shuffle(dead_ends)
+        for cell in dead_ends[:int(len(dead_ends) * braid)]:
+            if len(walls[cell]) != 1:
+                continue  # already opened by an earlier braid
+            options = [n for n in _neighbours(cell, grid)
+                       if n not in walls[cell]]
+            if not options:
+                continue
+            nxt = rng.choice(options)
+            walls[cell].add(nxt)
+            walls[nxt].add(cell)
     return walls
+
+
+def maze_stats(walls, grid):
+    """How much of a navigation problem this actually is."""
+    edges = sum(len(v) for v in walls.values()) // 2
+    cells = len(walls)
+    dead_ends = sum(1 for c in walls if len(walls[c]) == 1)
+    junctions = sum(1 for c in walls if len(walls[c]) >= 3)
+    # A perfect maze has exactly cells-1 edges; every edge beyond that is a loop.
+    return {"cells": cells, "edges": edges, "loops": edges - (cells - 1),
+            "dead_ends": dead_ends, "junctions": junctions}
 
 
 def shortest_path(walls, a=START, b=GOAL):
@@ -136,7 +200,8 @@ def shortest_path(walls, a=START, b=GOAL):
 _DIRS = {(-1, 0): "n", (1, 0): "s", (0, -1): "w", (0, 1): "e"}
 
 
-def scene_rooms(walls):
+def scene_rooms(walls, goal=None):
+    goal = goal or GOAL
     rooms = {}
     for i, (r, c) in enumerate(sorted(walls)):
         cell = (r, c)
@@ -146,7 +211,7 @@ def scene_rooms(walls):
                 "to": _rid(n), "barrier": "open", "distance": "immediate",
                 "dir": _DIRS[(n[0] - r, n[1] - c)],
             })
-        feature = _FEATURES[i % len(_FEATURES)]
+        feature = _feature_for(i)
         rooms[_rid(cell)] = {
             "name": f"Chamber {_rid(cell)[1:]}",
             "desc": f"A square stone chamber with {feature}.",
@@ -154,11 +219,11 @@ def scene_rooms(walls):
             "light": "lit",
             "adjacent": adjacent,
         }
-    rooms[_rid(GOAL)]["desc"] += (
+    rooms[_rid(goal)]["desc"] += (
         " At the centre stands the shrine, unmistakable: a basin of still "
         "water under a shaft of daylight."
     )
-    rooms[_rid(GOAL)]["notes"] += " THE SHRINE IS HERE."
+    rooms[_rid(goal)]["notes"] += " THE SHRINE IS HERE."
     return rooms
 
 
@@ -644,6 +709,7 @@ def metrics(visited, optimal):
 
 
 def main():
+    global GRID, GOAL
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--agent", choices=("random", "scripted", "llm"),
@@ -656,6 +722,13 @@ def main():
                          "'<role>=<provider>:<model>' for one. Repeatable. "
                          "Without it each role keeps whatever the source DB "
                          "configured, which is usually a mix.")
+    ap.add_argument("--size", type=int, default=GRID,
+                    help="maze is NxN (default 6). --grid is the ASCII render.")
+    ap.add_argument("--braid", type=float, default=0.0,
+                    help="fraction of dead ends opened into LOOPS, 0-1. A "
+                         "perfect maze (0) has one path between any two cells, "
+                         "so there is no better route to learn and no way to "
+                         "tell being lost from backing out of a dead end.")
     ap.add_argument("--preset", choices=sorted(_PRESETS), default=None,
                     help="named model/effort configuration; --model and "
                          "--reasoning override it")
@@ -688,8 +761,14 @@ def main():
         print(f"preset {args.preset!r}: {len(preset['model'])} model specs, "
               f"reasoning {preset['reasoning']}")
 
-    walls = build_maze()
+    GRID = args.size
+    GOAL = (GRID - 1, GRID - 1)
+    walls = build_maze(grid=GRID, braid=args.braid)
     optimal = len(shortest_path(walls)) - 1
+    st = maze_stats(walls, GRID)
+    print(f"maze {GRID}x{GRID} braid={args.braid} | {st['cells']} rooms, "
+          f"{st['loops']} loops, {st['dead_ends']} dead ends, "
+          f"{st['junctions']} junctions | optimal {optimal} moves")
 
     if args.agent == "llm" and not args.go:
         calls = args.runs * args.max_steps * len(_LLM_CHAIN)
@@ -704,8 +783,7 @@ def main():
     db_path = args.db or tempfile.mkstemp(suffix=".maze.db")[1]
     if os.path.exists(db_path):
         os.remove(db_path)
-    print(f"maze {GRID}x{GRID} seed {MAZE_SEED} | optimal {optimal} moves | "
-          f"agent={args.agent} | db={db_path}")
+    print(f"seed {MAZE_SEED} | agent={args.agent} | db={db_path}")
 
     chat_id, char_id, name = setup(
         db_path, walls,
