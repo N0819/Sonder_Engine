@@ -18,6 +18,7 @@ are refused rather than guessed at.
 """
 import argparse
 import json
+import os
 import sys
 
 sys.path.insert(0, ".")
@@ -111,10 +112,29 @@ class Maze:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("runs_jsonl")
-    ap.add_argument("-o", "--out", help="write here instead of stdout")
+    ap.add_argument("-o", "--out", help=(
+        "write here instead of stdout. ONE FILE PER ARM -- name it for the "
+        "arm (docs/maze/A8-9x9-grok.md), never a shared name. Refuses to "
+        "overwrite; pass --force only to correct a file you just wrote."))
+    ap.add_argument("--force", action="store_true", help=(
+        "overwrite an existing document. Almost never right: a rendered arm "
+        "is a record of something that happened once and cannot be "
+        "regenerated after its results file is gone."))
     ap.add_argument("--title", default="The maze runs, move by move")
     ap.add_argument("--note", default="", help="one line of arm context")
     a = ap.parse_args()
+
+    # An arm's document is a RECORD, not a build artifact. Rendering a new arm
+    # over an old one destroys the only readable trace of a run that cannot
+    # happen again -- done once already, to the sight arm, whose traces were
+    # replaced by a later arm's on the same path. Recovered from git that
+    # time; there is no reason to rely on that twice.
+    if a.out and os.path.exists(a.out) and not a.force:
+        raise SystemExit(
+            f"{a.out} already exists. Each arm gets its OWN document -- name "
+            f"this one for its arm (e.g. docs/maze/A9-9x9-trinity.md) rather "
+            f"than replacing another arm's record. Use --force only to "
+            f"correct a file you just wrote yourself.")
 
     meta, runs = load(a.runs_jsonl)
     mz = Maze(meta)
