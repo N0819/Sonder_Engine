@@ -36,6 +36,44 @@ generation_event_sink = contextvars.ContextVar(
 )
 cancel_event = contextvars.ContextVar("cancel_event", default=None)
 
+# The last reasoning block a thinking model returned, per context. For such a
+# model this is the actual decision trace -- the structured output is only its
+# conclusion -- and it was being dropped at the response boundary, so the one
+# artifact that explains WHY a beat came out as it did never left this module.
+# It is diagnostic only: nothing downstream may treat it as content, because a
+# reasoning trace is a model talking to itself and has not been through any of
+# the checks the answer has.
+#
+# A ContextVar rather than a global: perception fans out across a thread pool
+# with contextvars.copy_context(), so a plain global would hand one observer's
+# reasoning to another.
+last_reasoning = contextvars.ContextVar("last_reasoning", default=None)
+
+
+def _capture_reasoning(message):
+    """Stash a thinking model's trace, under whichever key it arrived by."""
+    if not isinstance(message, dict):
+        return
+    text = ""
+    for key in ("reasoning", "reasoning_content", "thinking"):
+        value = message.get(key)
+        if isinstance(value, str) and value.strip():
+            text = value
+            break
+        # OpenRouter can return reasoning as a list of blocks.
+        if isinstance(value, list):
+            parts = [
+                str(b.get("text") or b.get("thinking") or "")
+                for b in value if isinstance(b, dict)
+            ]
+            if any(parts):
+                text = "\n".join(p for p in parts if p)
+                break
+    try:
+        last_reasoning.set(text or None)
+    except Exception:
+        pass
+
 REQUEST_TIMEOUT = (30, 300)
 
 # Independent pipeline stages (mapping+perception_act, narrator+
@@ -1429,6 +1467,7 @@ def _chat_complete_once(
             response.status_code,
             True,
         )
+    _capture_reasoning(parsed["choices"][0].get("message"))
     content = parsed["choices"][0]["message"]["content"]
     # Some models (nemotron:thinking observed) honour response_format=json_object
     # by returning a syntactically-valid SKELETON with every string value set to
@@ -1442,6 +1481,7 @@ def _chat_complete_once(
                               timeout=_request_timeout())
         if alt.status_code < 400:
             parsed = alt.json()
+            _capture_reasoning(parsed["choices"][0].get("message"))
             content = parsed["choices"][0]["message"]["content"]
     _log_usage(role, model, _t0, parsed.get("usage"))
     return content
@@ -1611,6 +1651,7 @@ async def _chat_complete_async_once(
             raise LLMError(f"{prov['name']}: HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
         parsed = r.json()
         _log_usage(role, model, _t0, parsed.get("usage"))
+        _capture_reasoning((parsed.get("choices") or [{}])[0].get("message"))
         return parsed["choices"][0]["message"]["content"]
 
 async def _sse_openai_async(url, headers, body, sink, client, role=None, model=None):

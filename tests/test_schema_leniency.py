@@ -212,3 +212,113 @@ class TestTheKeySlotIsTheItemsOwnRequiredField:
         out = CharacterOutput(belief_updates={
             "shorthand": {"belief": "the bridge is watched", "confidence": 0.6}})
         assert out.belief_updates[0].belief == "the bridge is watched"
+
+
+class TestAFailedBeatCarriesItsEvidence:
+    """A validation error names the field that was wrong and says nothing
+    about the shape that was sent.
+
+    "about_entity: field required" reads as an omission whether the model
+    omitted the field, nested it, or sent a map keyed by subject that we then
+    mangled into a one-element list. Twice the same failure was
+    undiagnosable, because the raw response died inside
+    complete_validated_json -- and both times the fix had to be inferred from
+    the beats either side of it.
+    """
+
+    def test_the_raw_response_is_attached_to_the_failure(self, monkeypatch):
+        import llm_quality
+        monkeypatch.setattr(
+            llm_quality, "chat_complete",
+            lambda *a, **k: '{"mind_model_updates": {"Mara": {"nope": 1}}}')
+        import pytest
+        with pytest.raises(RuntimeError) as exc:
+            llm_quality.complete_validated_json(
+                role="character_mid", step_key="character", system="sys",
+                payload={"x": 1}, repair_attempts=0)
+        msg = str(exc.value)
+        assert "model sent:" in msg, "the shape that failed must be visible"
+        assert "Mara" in msg, "and it must be the ACTUAL response"
+
+    def test_the_evidence_is_bounded(self, monkeypatch):
+        """A whole reasoning-model response in an exception message is not a
+        diagnostic, it is a denial of service on the log."""
+        import llm_quality
+        monkeypatch.setattr(
+            llm_quality, "chat_complete",
+            lambda *a, **k: '{"sequence": "' + "x" * 20000 + '"}')
+        import pytest
+        with pytest.raises(RuntimeError) as exc:
+            llm_quality.complete_validated_json(
+                role="character_mid", step_key="character", system="sys",
+                payload={"x": 1}, repair_attempts=0)
+        assert len(str(exc.value)) < 1500
+
+
+class TestReasoningIsKeptButQuarantined:
+    """A thinking model's trace is worth keeping and must never be content.
+
+    It is the model talking to itself: it has been through none of the
+    validation the answer has, and nothing in the fiction has ratified it. So
+    it is stored beside the output, offered behind a disclosure in the
+    pipeline view, carried across a branch (same machine, same run), and
+    deliberately NOT written into a portable archive.
+    """
+
+    def test_it_is_stored_beside_the_output(self, temp_db):
+        import providers
+        from agents.storage import save_step
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("T", "", 0.0))
+        tid = temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created) "
+            "VALUES(?,?,?,?)", (chat_id, 0, "", 0.0))
+        token = providers.last_reasoning.set("first I check the north door")
+        try:
+            save_step(tid, "character:1", "Vesk", 1, {"sequence": []})
+        finally:
+            providers.last_reasoning.reset(token)
+        row = temp_db.q(
+            "SELECT v.reasoning FROM variants v JOIN steps s ON v.step_id=s.id "
+            "WHERE s.turn_id=?", (tid,), one=True)
+        assert row["reasoning"] == "first I check the north door"
+
+    def test_a_model_without_one_stores_empty_not_null(self, temp_db):
+        import providers
+        from agents.storage import save_step
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("T", "", 0.0))
+        tid = temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created) "
+            "VALUES(?,?,?,?)", (chat_id, 0, "", 0.0))
+        token = providers.last_reasoning.set(None)
+        try:
+            save_step(tid, "narrator", "Narrator", 1, {"prose": "x"})
+        finally:
+            providers.last_reasoning.reset(token)
+        row = temp_db.q(
+            "SELECT v.reasoning FROM variants v JOIN steps s ON v.step_id=s.id "
+            "WHERE s.turn_id=?", (tid,), one=True)
+        assert row["reasoning"] == ""
+
+    def test_the_capture_handles_every_shape_a_provider_sends(self):
+        import providers
+        for message, expected in (
+            ({"reasoning": "plain"}, "plain"),
+            ({"reasoning_content": "deepseek style"}, "deepseek style"),
+            ({"reasoning": [{"text": "a"}, {"text": "b"}]}, "a\nb"),
+            ({"reasoning": ""}, None),
+            ({}, None),
+            (None, None),
+        ):
+            token = providers.last_reasoning.set("stale")
+            try:
+                providers._capture_reasoning(message)
+                got = providers.last_reasoning.get()
+            finally:
+                providers.last_reasoning.reset(token)
+            if message is None:
+                continue          # junk leaves the previous value alone
+            assert got == expected, f"{message!r} -> {got!r}"

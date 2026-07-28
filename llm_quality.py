@@ -251,13 +251,33 @@ def complete_validated_json(
 
         report = fallback_report
 
+    # What the model ACTUALLY sent, on the exception. A validation error names
+    # the field that was wrong and says nothing about the shape that was sent,
+    # and those are different questions: "about_entity: field required" reads
+    # as an omission whether the model omitted it, nested it, or sent a map we
+    # then mangled. Twice now the same failure has been undiagnosable because
+    # the raw response died inside this function, so the fix had to be
+    # guessed. Trimmed hard, and attached only when everything has already
+    # failed -- at which point the beat is lost anyway and the one thing worth
+    # salvaging is the evidence.
+    _shown = str(previous_raw if previous_raw else raw or "")[:600]
+    _sent = f" | model sent: {_shown}" if _shown.strip() else ""
+    # For a thinking model the reasoning is where the intent is visible, and
+    # a malformed answer usually has a perfectly clear intent behind it.
+    try:
+        from providers import last_reasoning as _lr
+        _think = str(_lr.get() or "")[:400]
+        if _think.strip():
+            _sent += f" | reasoning: …{_think[-400:]}"
+    except Exception:
+        pass
     if last_provider_error is not None:
         raise RuntimeError(
             f"{step_key}: all providers failed "
             f"(last provider error: {last_provider_error}); "
-            f"validation: {'; '.join(report.errors[:6])}"
+            f"validation: {'; '.join(report.errors[:6])}{_sent}"
         )
     raise RuntimeError(
         f"{step_key} failed JSON validation: "
-        + "; ".join(report.errors[:12])
+        + "; ".join(report.errors[:12]) + _sent
     )
