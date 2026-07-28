@@ -493,7 +493,7 @@ def scene_rooms(walls, goal=None):
 
 # --- the runner --------------------------------------------------------------
 
-def character_sheet(name="Vesk"):
+def _vesk_sheet(name="Vesk"):
     """Authored so repetition does not extinguish the drive -- and so nothing
     ELSE competes with walking.
 
@@ -585,6 +585,140 @@ def character_sheet(name="Vesk"):
         {"goal": "Beat your own best time on this run.", "priority": 0.6},
     ]
     return normalize_character_data(sheet)
+
+
+def _orrin_sheet(name="Orrin"):
+    """A second subject, authored against the one failure Vesk could not be
+    edited out of: his drive rewarded MOTION, so untried ground always served
+    it better than the way he already knew.
+
+    The measurement that forced a new subject (A12, runs 3-5). Vesk's drive
+    essence was "being the one who gets there -- motion as proof of worth".
+    Motion is the proof, so the drive is satisfied by any step at all, and a
+    step into unseen ground pays more than a step along a proved route. The
+    consequence was mechanical and repeatable: `active_state.goal` reformed
+    every run as "find route to Chamber 0506 or other new ground", a want
+    serving the DRIVE at urgency 0.95, and the freshly re-armed shrine
+    commission -- authored, priority 0.9, an INTENTION -- lost to it at every
+    junction, because appraisal weights drive-serving 1.0 against intention
+    0.8. Nothing in the navigation stack was wrong: the destination-route
+    affordance resolved, ran BFS over his own place graph, and emitted correct
+    hop counts -- toward 0506, the room he actually wanted. Three sheet edits
+    failed to move this, which is the "authoring is not retraction" finding
+    (CLAUDE.md): 222 memories of lived disposition outvote a new sheet.
+
+    So the fix is not a better commission, it is a drive the shrine SERVES.
+    Orrin's drive is solving, and a maze's solution IS the shrine -- the goal
+    becomes drive-serving by construction rather than by authored priority,
+    and it competes at weight 1.0 instead of 0.8.
+
+    The trap this sheet is authored around: "loves mazes" collapses straight
+    back into Vesk if it means loving the EXPLORING. Seeing every room is how
+    you fail to solve a maze quickly. So the pleasure is attached to the
+    through-line and to proving it, unseen ground is instrumental only while
+    it might BE the way through, and wandering -- moving without a working
+    theory -- is the taboo rather than standing still.
+    """
+    from character_schema import default_character_data, normalize_character_data
+    sheet = default_character_data(name)
+    sheet["identity"]["pronouns"] = {
+        "subject": "he", "object": "him", "possessive": "his"}
+    sheet["knowledge"] = dict(sheet.get("knowledge") or {})
+    sheet["knowledge"]["public_history"] = (
+        f"{name} solves mazes, and has never been able to explain to anyone "
+        "why it is the best thing there is. Give him a labyrinth and he is "
+        "happy in a way that embarrasses him slightly: he talks to himself, "
+        "he guesses out loud, he makes a small pleased noise when a corridor "
+        "goes where he said it would. He does not think of himself as an "
+        "explorer -- explorers want to see things, and he wants to be RIGHT. "
+        "A maze is a claim someone has made about which places connect, and "
+        "he takes it apart the way other people take apart an argument. The "
+        "keepers let him run the shrine-maze because he finds the way "
+        "through, and because he is unbearable when he is not allowed to."
+    )
+    sheet["psychology"] = dict(sheet.get("psychology") or {})
+    sheet["psychology"]["traits"] = [
+        "delighted by a confirmed guess", "theorises out loud",
+        "impatient with wandering", "sure-footed",
+    ]
+    # Every field filled, and every field load-bearing (CLAUDE.md: an empty
+    # one fails silently).
+    #
+    # `essence` must be UNSATISFIABLE or he is hollow the moment he touches
+    # the shrine -- so the object of the drive is the solving, not the
+    # solution. A solved maze stops being a maze; the wanting survives it and
+    # attaches to the next one. This is the same construction that keeps
+    # Vesk's drive alive across five runs, aimed at a different target.
+    #
+    # `expression` says he RUNS THE PROVED LINE. This is the load-bearing
+    # half. A11 measured the value "never breaking stride" being read as an
+    # argument AGAINST sprinting; A12 measured him taking a full 3-room run
+    # only in service of reaching unseen ground. Naming the run as the FINISH
+    # -- the best part, the payoff of having solved it -- is what makes a
+    # known route worth moving fast along, which is exactly the behaviour
+    # every previous arm failed to produce.
+    #
+    # `taboo` is wandering, NOT standing still. Vesk's taboo on stillness
+    # produced motion for its own sake, and motion for its own sake is what
+    # sent him down untried corridors forever. Orrin may stand still and
+    # think; what he cannot bear is moving with no theory of where he is.
+    sheet["psychology"]["drive"] = {
+        "essence": ("taking a maze apart -- holding the whole shape of it in "
+                    "his head at once, and then walking the line that proves "
+                    "he has it. It cannot be finished: a maze he has solved "
+                    "is not a maze any more, and the solving was the only "
+                    "part he wanted"),
+        "expression": ("he theorises constantly and tests immediately, reads "
+                       "every wall as information the moment he sees it, and "
+                       "once he knows the way through he RUNS it -- running "
+                       "the proved line is the finish, and the finish is the "
+                       "best part"),
+        "taboo": ("wandering: being inside a maze with no working theory of "
+                  "it, moving because he does not know what else to do"),
+    }
+    # Ordered trade-offs, each naming what gives way
+    # (DESIGN_PSYCHOLOGY_AS_PRESSURE (a)). The first is the whole experiment
+    # in one line, and it is deliberately phrased so that SEEING EVERYTHING is
+    # the thing that yields -- that is the exact preference Vesk had inverted.
+    sheet["psychology"]["values"] = [
+        "the way through over the whole map -- he would rather solve it than "
+        "see it",
+        "testing a theory over gathering more facts to build a better one",
+        "speed on proved ground over care on unproved -- a route he has "
+        "proved is a route he should be running",
+    ]
+    sheet["initial_state"] = dict(sheet.get("initial_state") or {})
+    # Deliberately NOT naming Chamber 0603. He has not earned that room's
+    # identity on run 1, and seeding it would be an information leak straight
+    # past the firewall -- the destination-route affordance resolves a goal
+    # string against his OWN place_graph, so a pre-seeded chamber id would
+    # hand him a route through rooms he has never seen. He learns the name by
+    # arriving, exactly as Vesk did, and from run 2 his own goal can name it.
+    sheet["initial_state"]["goals"] = [
+        {"goal": "Solve this maze: find the way through to the shrine, and "
+                 "prove you have it by walking it clean.", "priority": 0.9},
+        {"goal": "Think while you walk. A theory is tested by taking the "
+                 "turn, not by standing at it.", "priority": 0.95},
+        {"goal": "Beat your own best time on this run.", "priority": 0.6},
+    ]
+    return normalize_character_data(sheet)
+
+
+# Subject registry. `vesk` stays the default so arms A1-A12 remain
+# reproducible from this file; `orrin` is the maze-solver drive (A13+).
+_SUBJECTS = {"vesk": ("Vesk", _vesk_sheet), "orrin": ("Orrin", _orrin_sheet)}
+SUBJECT = "vesk"
+
+
+def character_sheet(name=None, subject=None):
+    """Build the configured subject's sheet.
+
+    `rearm_commission` calls this with only a name to recover the authored
+    commission, so the subject has to be resolvable without being threaded
+    through every call site -- hence the module global, set once in main().
+    """
+    default_name, builder = _SUBJECTS[subject or SUBJECT]
+    return builder(name or default_name)
 
 
 # Model routing and provider credentials live in settings/providers, so a fresh
@@ -1405,11 +1539,19 @@ def metrics(visited, optimal):
 
 
 def main():
-    global GRID, GOAL, START
+    global GRID, GOAL, START, SUBJECT
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--agent", choices=("random", "scripted", "llm"),
                     default="random")
+    ap.add_argument("--subject", choices=sorted(_SUBJECTS), default=SUBJECT,
+                    help="which authored character runs the maze. 'vesk' is "
+                         "the courier whose drive rewards MOTION (arms "
+                         "A1-A12); 'orrin' is the maze-solver whose drive is "
+                         "served by the solution itself, so the shrine "
+                         "competes at drive weight rather than as an "
+                         "intention. A subject cannot be changed mid-"
+                         "experiment -- start a fresh DB.")
     ap.add_argument("--runs", type=int, default=5)
     ap.add_argument("--max-steps", type=int, default=40)
     ap.add_argument("--db", default=None)
@@ -1473,6 +1615,7 @@ def main():
     ap.add_argument("--go", action="store_true",
                     help="required for --agent llm; it spends real tokens")
     args = ap.parse_args()
+    SUBJECT = args.subject
 
     if args.preset:
         preset = _PRESETS[args.preset]
@@ -1544,11 +1687,33 @@ def main():
                     f"{resume.get('algo')} maze; this invocation is "
                     f"{GRID}x{GRID} {args.algo}. Resuming across mazes would "
                     "carry one maze's route knowledge into another.")
+            # Same reasoning one layer in: the DB carries the subject's
+            # memories, place graph and psychology, so resuming a Vesk
+            # checkpoint as Orrin would run one character's drive against
+            # another's lived history. Checkpoints predating --subject have no
+            # key and are all Vesk by construction.
+            if resume.get("subject", "vesk") != SUBJECT:
+                raise SystemExit(
+                    f"checkpoint's subject is "
+                    f"{resume.get('subject', 'vesk')!r}; this invocation is "
+                    f"{SUBJECT!r}. Resuming across subjects would run one "
+                    "character's drive against another's memories.")
 
     db_path = resume.get("db") or args.db or tempfile.mkstemp(suffix=".maze.db")[1]
     if not resume and os.path.exists(db_path):
         os.remove(db_path)
-    print(f"seed {MAZE_SEED} | agent={args.agent} | db={db_path}")
+    print(f"seed {MAZE_SEED} | agent={args.agent} | subject={SUBJECT} "
+          f"| db={db_path}")
+    # The one automated check that catches a silently-empty psychology field.
+    # It normally only runs on the character IMPORT path, and every sheet in
+    # this file is built in code -- which is exactly how A11 ran 150 beats
+    # against an empty `drive` with nothing anywhere objecting (CLAUDE.md).
+    try:
+        from importers import character_import_warnings
+        for warning in character_import_warnings(character_sheet()) or []:
+            print(f"  SHEET WARNING: {warning}")
+    except Exception as exc:                            # pragma: no cover
+        print(f"  sheet warnings unavailable ({exc})")
 
     if resume:
         import db as _db
@@ -1613,7 +1778,7 @@ def main():
                 # silently draw real routes against invented walls -- and an
                 # authored maze has no recipe at all.
                 "svg": os.path.basename(args.svg) if args.svg else None,
-                "maze": fingerprint,
+                "maze": fingerprint, "subject": SUBJECT,
                 "edges": sorted({(min(a, b), max(a, b))
                                  for a, ns in walls.items() for b in ns}),
                 "runs": args.runs, "max_steps": args.max_steps,
@@ -1646,7 +1811,7 @@ def main():
                        "visited": visited, "rows": rows,
                        "turn_base": turn_base, "grid": GRID,
                        "algo": args.algo, "seed": MAZE_SEED,
-                       "maze": fingerprint,
+                       "maze": fingerprint, "subject": SUBJECT,
                        "rng_state": [st_[0], list(st_[1]), st_[2]]}, fh)
         # Replaced atomically: a checkpoint half-written when the process is
         # killed is worse than none, because it looks resumable.
