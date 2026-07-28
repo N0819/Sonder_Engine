@@ -53,6 +53,7 @@ until a `meta` line is added by hand.
 | **A6** | **12×12 kruskal** | does it scale, and does `worked_before` stop the run-3 drift? | `f8678f2^` → killed at 70 beats | **baseline** for A7 (bearings absent) |
 | **A7** | **12×12 kruskal** | same maze, bearings fix present | `f8678f2` | **running** |
 | **A8** | **9×9 kruskal** | replication of A2's maze with everything since | `f8678f2` | **running** |
+| **A9** | **9×9 kruskal** | can a cheaper character model do the job? | `e005100` | **running** |
 
 ### A6 / A7 — the bearings pair
 
@@ -76,6 +77,32 @@ Matched-beat comparison through beat 20:
 | rooms found | 12 | 14 |
 
 A6 in full, before it was stopped: 70 beats, 31 rooms, 18 reversals (26%).
+
+### A9 — the cheap-character arm
+
+Same maze as A8, same support models (`inception/mercury-2`) at the same
+reasoning (`low`), differing only in the character: `arcee-ai/trinity-large-thinking`
+in place of `x-ai/grok-4.20`. Character is the sole deliberating role, so it is
+the only one where model choice should show, and it is also the expensive one
+— if a cheaper model navigates comparably, that is the whole cost profile of a
+session.
+
+Reasoning is deliberately NOT matched: trinity runs at `medium` against grok's
+`low`. Trinity is a thinking model and reasoning-dependent, so pinning it to
+`low` would measure a handicap rather than the model. The arm therefore answers
+"is trinity good enough at the setting one would actually use" and not "is
+trinity better than grok at equal effort" — a different and less useful
+question, since nobody would run it at low.
+
+A first launch had to be discarded: `--reasoning default=low` leaves
+per-role entries already in `engine.db` standing, so `perception` was running
+at `high` while A8 ran it at `low`. Perception is the character's entire input,
+so that would have made the two arms incomparable while looking like a clean
+model swap. Every support role is now pinned explicitly.
+
+Early latency is far more variable than grok's steady 25–35s — observed 7s to
+79s per call — so the throughput question needs a full run to answer, not a
+sample.
 
 ### A8 — the 9×9 replication
 
