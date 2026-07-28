@@ -129,3 +129,46 @@ class TestSilenceMustNotAbortTheTurn:
         errs = semantic_output_errors(
             "director_resolve", {"resolved_event": ""}, source_payload={})
         assert "state_diff must be an object" in errs
+
+
+class TestAMapOfItemsIsNotOneItem:
+    """A bare dict arrives as two different things needing opposite handling.
+
+    One is a single item. The other is a MAP keyed by name, which models
+    reach for when the list is "updates about people":
+    {"Mara": {...}, "Vesk": {...}}. Wrapping that yields a one-element list
+    whose element is the whole map, failing as
+    `mind_model_updates.0.about_entity: field required` -- an error that
+    reads like the model omitted a field when we mangled its structure.
+    """
+
+    def test_a_map_keyed_by_subject_becomes_a_list_of_items(self):
+        from schemas import CharacterOutput
+        out = CharacterOutput(mind_model_updates={
+            "Mara": {"kind": "observation", "claim": "she flinched"},
+            "Vesk": {"kind": "observation", "claim": "he lied"}})
+        got = {m.about_entity: m.claim for m in out.mind_model_updates}
+        assert got == {"Mara": "she flinched", "Vesk": "he lied"}, (
+            "the key IS the subject in this shape")
+
+    def test_a_single_item_is_still_just_wrapped(self):
+        from schemas import CharacterOutput
+        out = CharacterOutput(mind_model_updates={
+            "about_entity": "Mara", "kind": "observation", "claim": "x"})
+        assert len(out.mind_model_updates) == 1
+        assert out.mind_model_updates[0].about_entity == "Mara"
+
+    def test_an_explicit_subject_is_never_overwritten_by_the_key(self):
+        from schemas import CharacterOutput
+        out = CharacterOutput(mind_model_updates={
+            "the woman in grey": {"about_entity": "Mara", "kind": "observation",
+                                  "claim": "x"}})
+        assert out.mind_model_updates[0].about_entity == "Mara"
+
+    def test_a_dict_of_non_objects_is_not_a_map_of_items(self):
+        """Values that are not objects cannot be items, so this is the
+        single-item case however unlike an item it looks."""
+        import pydantic, pytest
+        from schemas import CharacterOutput
+        with pytest.raises(pydantic.ValidationError):
+            CharacterOutput(mind_model_updates={"a": 1, "b": 2})
