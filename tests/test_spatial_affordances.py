@@ -527,8 +527,12 @@ class TestLoopDensityNotRoomCount:
         return out["ahead"][0]
 
     def test_the_widened_five_room_lock_is_still_caught(self):
-        route = (["r0", "r1", "r2", "r1"] * 2) + ["r0", "r1", "r3", "r4"]
-        assert len(set(route[-12:])) == 5
+        """The observed A7 tail: he wandered one room further each cycle and
+        came straight back, so the pocket grew while the progress did not.
+        It ends on a REVISIT, which is what being in a loop looks like -- a
+        route ending on new ground is a route leaving one."""
+        route = (["r0", "r1", "r2", "r1"] * 2) + ["r0", "r1", "r3", "r1"]
+        assert len(set(route[-12:])) == 4
         assert self._exits(route).get("circling_here") is True
 
     def test_covering_ground_never_trips_it(self):
@@ -542,3 +546,57 @@ class TestLoopDensityNotRoomCount:
         route = [f"r{i}" for i in range(LOOP_WINDOW // 2)] * 2
         assert len(set(route[-LOOP_WINDOW:])) == LOOP_DENSITY * LOOP_WINDOW
         assert self._exits(route, "R0").get("circling_here") is True
+
+
+class TestCorridorPacingIsCaught:
+    """Counting distinct rooms in a window measures the wrong thing.
+
+    Twice now the detector went quiet as the loop got WORSE. A fixed
+    four-room threshold missed a lock that widened to five. The ratio that
+    replaced it went silent on a seven-room corridor walked end to end --
+    0001/0101/0201/0202/0203/0204/0104, ten beats, not one room he had not
+    already seen -- because an out-and-back fills the window with distinct
+    rooms while arriving nowhere.
+
+    What a lost person actually notices is that nothing has been new for a
+    while, so that is what is measured.
+    """
+
+    SCENE = {"rooms": {f"r{i}": {"name": f"R{i}"} for i in range(40)},
+             "positions": {}, "entities": {}}
+
+    def _frame(self, route, room="R0"):
+        from agents.character import _annotate_known_exits
+        return _annotate_known_exits(
+            {"ahead": [{"room": room, "barrier": "open"}]}, self.SCENE, route)
+
+    def test_the_seven_room_corridor_that_defeated_the_ratio(self):
+        corridor = ["r0", "r1", "r2", "r3", "r4", "r5", "r6"]
+        route = corridor + (corridor[::-1] + corridor) * 2
+        assert len(set(route[-12:])) == 7, "the shape that went undetected"
+        f = self._frame(route)
+        assert f["ahead"][0].get("circling_here") is True
+        assert f["beats_since_new_ground"] >= 12
+
+    def test_the_count_says_how_long(self):
+        route = ["r0", "r1", "r2"] + ["r1", "r2"] * 5
+        f = self._frame(route, "R1")
+        assert f["beats_since_new_ground"] == len(route) - 3
+
+    def test_finding_somewhere_new_resets_it(self):
+        """Discovery is the thing being measured, so discovery clears it."""
+        route = ["r0", "r1"] * 8 + ["r9"]
+        f = self._frame(route, "R1")
+        assert "beats_since_new_ground" not in f
+        assert "circling_here" not in f["ahead"][0]
+
+    def test_steady_exploration_never_reports_it(self):
+        f = self._frame([f"r{i}" for i in range(25)], "R0")
+        assert "beats_since_new_ground" not in f
+        assert "circling_here" not in f["ahead"][0]
+
+    def test_a_couple_of_retraced_steps_is_not_being_lost(self):
+        """Ordinary movement, and a signal that fires on it is noise."""
+        route = [f"r{i}" for i in range(20)] + ["r18", "r19"]
+        f = self._frame(route, "R18")
+        assert "beats_since_new_ground" not in f

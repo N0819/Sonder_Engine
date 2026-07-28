@@ -243,9 +243,36 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     # route. Deliberately conservative: it needs a nearly-full window AND
     # genuinely few rooms, so that ordinary back-and-forth through a hub does
     # not read as being stuck.
+    # BEATS SINCE NEW GROUND is the honest measure, and the density test above
+    # is only a fast path for tight locks. Counting distinct rooms in a window
+    # fails on the shape that matters most: an out-and-back along a corridor
+    # fills the window with distinct rooms while making no progress at all.
+    #
+    # Observed live, twice, each time one level larger than the test written
+    # for the last one. A fixed four-room threshold missed a lock that widened
+    # to five. The ratio that replaced it went silent at a seven-room corridor
+    # walked end to end -- 0001/0101/0201/0202/0203/0204/0104, ten beats, not
+    # one room he had not already seen. The loop got worse and the warning
+    # stopped. Room counts measure the wrong thing; what a lost person
+    # actually notices is that nothing has been new for a while.
+    since_new = 0
+    seen_so_far = set()
+    for i, rid in enumerate(route):
+        if rid not in seen_so_far:
+            seen_so_far.add(rid)
+            since_new = 0
+        else:
+            since_new += 1
     circling = set()
-    if (len(recent) >= LOOP_WINDOW
-            and len(set(recent)) <= LOOP_DENSITY * len(recent)):
+    if since_new and (since_new >= LOOP_WINDOW or (
+            len(recent) >= LOOP_WINDOW
+            and len(set(recent)) <= LOOP_DENSITY * len(recent))):
+        # `since_new` being zero means the last step found somewhere new --
+        # the loop is already breaking, so this has nothing left to say.
+        # Eleven of the last twelve beats can still be a tight cycle at that
+        # moment, and the density test alone would go on calling it circling
+        # while he was walking out of it. A signal that argues against the
+        # move it wanted is worse than no signal.
         circling = set(recent)
     # Which rooms, in this character's OWN experience, they walked into and had
     # to walk straight back out of.
@@ -372,6 +399,12 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                 entry["been_there"] = False
             marked.append(entry)
         out[bucket] = marked
+    # Whole-route, not per-exit: how long since anywhere was new. The per-exit
+    # markers say something about each doorway; this says something about the
+    # walk. Only reported once it is worth noticing, since a couple of beats
+    # retracing your steps is ordinary movement, not being lost.
+    if since_new >= LOOP_WINDOW // 2:
+        out["beats_since_new_ground"] = since_new
     return out
 
 
