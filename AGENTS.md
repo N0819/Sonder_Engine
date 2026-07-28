@@ -90,6 +90,15 @@ These are architectural guarantees, not stylistic preferences.
   through, an enclosure is not. Hearing from inside a parented interior is
   CONDUCTED (`inside_source` on the relation → `hear_level` returns full): the
   enclosing body is the medium. One-way only, and it grants no sight.
+- **Spatial belief is belief.** A claim about a PLACE is re-keyed onto that
+  place at commit (`theory_of_mind.rekey_place_claims`) so rooms stop competing
+  as rival explanations of one subject; within a room, claims still revise each
+  other normally. Characters demonstrably build durable cognitive maps this way
+  — see [`docs/SPATIAL_LEARNING_EXPERIMENT.md`](docs/SPATIAL_LEARNING_EXPERIMENT.md)
+  — but the engine has **no outcome feedback**: confidence tracks restatement
+  and recency, never whether acting on a belief worked. Every navigational
+  affordance reports where a character has BEEN; none reports what SUCCEEDED,
+  so a proven route accumulates no weight against novelty.
 - **Sensation constrains cognition.** `psychology_runtime.cognitive_absorption`
   measures how much of a mind its own body is claiming, 0..1 and deliberately
   **blind to valence** — intense pleasure occupies attention exactly as intense
