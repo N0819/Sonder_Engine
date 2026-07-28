@@ -161,9 +161,11 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     walking. `last_seen_beats_ago` is ordinal, not a turn count: how far back
     in their own route it was, which is the form a person actually has.
 
-    `led_nowhere` marks an exit they have entered and always had to reverse out
-    of -- the thing `been_there` cannot say and the thing that actually stops a
-    repeated wrong turn.
+    `no_route_onward` marks an exit they entered and always had to reverse out
+    of -- the thing `been_there` cannot say, and the thing that actually stops
+    a repeated wrong turn. It is about DOORWAYS, not worth: somewhere they
+    chose to linger is never marked, because that is a destination rather than
+    a wrong turn.
     """
     if not isinstance(digest, dict):
         return digest
@@ -189,8 +191,12 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     # Derived purely from their own route: entered, and the next room was the
     # one they had just come from. No oracle knowledge of the maze -- this is
     # exactly what a person remembers about a wrong turn.
-    returns, onward = {}, {}
+    returns, onward, dwelt = {}, {}, set()
     for i, rid in enumerate(route):
+        if i + 1 < len(route) and route[i + 1] == rid:
+            # Stayed put here for a beat. A place someone CHOSE to remain in
+            # was a destination, not a wrong turn -- see below.
+            dwelt.add(rid)
         if i == 0 or i + 1 >= len(route):
             continue
         if route[i + 1] == route[i - 1]:
@@ -208,7 +214,7 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     # none, because it argues against the correct move as loudly as the wrong
     # one.
     #
-    # The single-room dead end is the easy case, caught by `led_nowhere`. What
+    # The single-room dead end is the easy case, caught by no_route_onward. What
     # actually traps is a dead-end CORRIDOR -- observed live, a character
     # bounced between two pass-through rooms for ten beats, since each was a
     # legitimate onward move and the exhausted thing was the whole branch.
@@ -253,12 +259,21 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                     # times. Always reported, because it is simply what
                     # happened.
                     entry["turned_back_here"] = returns[rid]
-                    # The INFERENCE: it leads nowhere. Held to two reversals
-                    # with no onward move, because turning back once is as
-                    # easily a change of mind as a dead end, and a wrong
-                    # `led_nowhere` would steer them away from the route.
-                    if returns[rid] >= 2 and not onward.get(rid):
-                        entry["led_nowhere"] = True
+                    # The INFERENCE, named for what it actually is: no route
+                    # ONWARD. Not "leads nowhere" -- a tavern is a room you
+                    # enter and leave by the same door, and a marker calling it
+                    # a dead end tells a character to avoid the place they were
+                    # going. This says only that it is not a way THROUGH: a
+                    # fact about doorways, saying nothing about whether it is
+                    # worth being in.
+                    #
+                    # Held to two reversals with no onward move, and never
+                    # applied to somewhere they chose to REMAIN: dwelling is
+                    # what going somewhere on purpose looks like, as against
+                    # passing through and finding a wall.
+                    if (returns[rid] >= 2 and not onward.get(rid)
+                            and rid not in dwelt):
+                        entry["no_route_onward"] = True
                 if here_rid and not _frontier_beyond(rid, here_rid):
                     entry["no_new_ground_that_way"] = True
                 for back, seen in enumerate(reversed(route), 1):
