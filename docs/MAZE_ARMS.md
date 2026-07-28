@@ -55,16 +55,57 @@ rather than colliding on them.
 
 ## Standing constraints
 
+- **Arms run on current code.** An experiment with a known flaw in it is not
+  cheaper than one that was restarted — it is worthless, and worse, it looks
+  like data. When a fix lands mid-arm, stop and `--resume`; when the arm
+  predates checkpointing, restart it.
+- **One variable per arm** wherever possible. Where an arm bundles two, it
+  says so and says what that costs.
 - **Maze size is capped at 10×10.** Larger grids cost hours per arm for
   little extra signal — the 12×12 has nearly double the junctions of the 9×9
   at the same mean trap depth, so it tests endurance rather than navigation.
-  The one 12×12 arm below predates the cap and is being finished because it
-  carries a matched pre-fix baseline that nothing else can supply.
-- **One variable per arm** wherever possible. Where an arm bundles two, it
-  says so and says what that costs.
-- Character is the only *deliberating* role (`x-ai/grok-4.20`); director,
-  perception, mapping and utility transform rather than decide and run on
-  `inception/mercury-2`. Reasoning `low` throughout. See the experiment doc §5.
+  The one 12×12 arm below predates the cap and was stopped on cost once it
+  had banked the comparison only it could supply.
+
+## Models and providers
+
+Character is the only *deliberating* role; director, perception, mapping and
+utility transform rather than decide. So the character model is where quality
+and cost both concentrate, and it is the only one worth arguing about.
+
+Measured on this workload (not vendor figures), per character beat:
+
+| | in/beat | out/beat | $/beat | $/5-run arm |
+|---|---|---|---|---|
+| `arcee-ai/trinity-large-thinking` @ 0.22/0.85 | 9,502 | 6,265 | **$0.0074** | **$2.22** |
+| `x-ai/grok-4.20` @ 1.25/2.50 | 15,407 | 5,398 | $0.0328 | $9.83 |
+
+Trinity's input figure is lower partly because it had fewer beats and so less
+accumulated route history; normalising it to grok's input still leaves it
+**3.8× cheaper**. Note it emits MORE output tokens than grok — a reasoning
+model's cost is the tokens it chooses to think in, not merely its rate.
+
+**Provider.** Two endpoints serve trinity. Direct A/B, same prompt, four calls
+each:
+
+| | measured | quantization |
+|---|---|---|
+| Arcee AI | **184 tok/s** (median 200) | full |
+| Parasail | 145 tok/s (median 145) | fp4 |
+
+Arcee wins throughput by ~27% and serves unquantized weights, which matters
+more for a reasoning-dependent model than the speed does. Parasail is better
+only on time-to-first-token (412ms vs 477ms) — irrelevant here, since a
+character call generates 5–7k tokens and TTFT is under 2% of it.
+
+Routing is set to `{"sort": "throughput", "order": ["arcee-ai"]}`. `order`
+rather than `only`, because the routing block is GLOBAL and rides every
+OpenRouter request in the app: `only` would hard-restrict mercury and grok
+calls to a provider that does not serve them.
+
+Beware comparing throughput across log windows. An earlier reading made pinned
+Arcee look *slower* than mixed routing; a controlled A/B reversed it. Load
+varies, and two samples taken an hour apart are not an experiment.
 
 ---
 
@@ -79,8 +120,8 @@ rather than colliding on them.
 | A5 | 9×9 kruskal + sight arm | do corridor sightlines help? | pre-header | done — best arm; reached the goal |
 | **A6** | **12×12 kruskal** | does it scale, and does `worked_before` stop the run-3 drift? | `f8678f2^` → killed at 70 beats | **baseline** for A7 (bearings absent) |
 | **A7** | **12×12 kruskal** | same maze, bearings fix present | `f8678f2` | stopped at run 2 — cost |
-| **A8** | **9×9 kruskal** | replication of A2's maze with everything since | `f8678f2` | **running** |
-| **A9** | **9×9 kruskal** | can a cheaper character model do the job? | `e005100` | **running** |
+| **A8** | **9×9 kruskal** | replication of A2's maze with everything since | `994c815` | **running** (restarted on current code) |
+| **A9** | **9×9 kruskal** | can a cheaper character model do the job? | `994c815` | **running** (restarted on current code) |
 
 ### A6 / A7 — the bearings pair
 
