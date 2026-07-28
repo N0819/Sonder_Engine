@@ -147,7 +147,8 @@ def _known_pronouns(cast, persona, recognized, exclude=None):
     return out
 
 
-def _annotate_known_exits(digest, scene, visited_rooms):
+def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
+                          here_rid=None):
     """Mark each exit with whether this character has been through it.
 
     `spatial_digest` renders an exit as {room, barrier} -- identical whether
@@ -159,6 +160,10 @@ def _annotate_known_exits(digest, scene, visited_rooms):
     committed position), so this adds no knowledge they did not earn by
     walking. `last_seen_beats_ago` is ordinal, not a turn count: how far back
     in their own route it was, which is the form a person actually has.
+
+    `led_nowhere` marks an exit they have entered and always had to reverse out
+    of -- the thing `been_there` cannot say and the thing that actually stops a
+    repeated wrong turn.
     """
     if not isinstance(digest, dict):
         return digest
@@ -171,6 +176,63 @@ def _annotate_known_exits(digest, scene, visited_rooms):
     counts = {}
     for rid in route:
         counts[rid] = counts.get(rid, 0) + 1
+    # Which rooms, in this character's OWN experience, they walked into and had
+    # to walk straight back out of.
+    #
+    # `been_there` alone does not stop anyone re-entering a dead end -- and it
+    # did not: observed live, a character was told been_there/times_entered=9
+    # for a one-exit chamber and walked back into it six times, because knowing
+    # you have been somewhere is not knowing it led nowhere. That is the
+    # difference between visit history and route knowledge, and only the second
+    # is any use for navigating.
+    #
+    # Derived purely from their own route: entered, and the next room was the
+    # one they had just come from. No oracle knowledge of the maze -- this is
+    # exactly what a person remembers about a wrong turn.
+    returns, onward = {}, {}
+    for i, rid in enumerate(route):
+        if i == 0 or i + 1 >= len(route):
+            continue
+        if route[i + 1] == route[i - 1]:
+            returns[rid] = returns.get(rid, 0) + 1
+        elif route[i + 1] != rid:
+            onward[rid] = onward.get(rid, 0) + 1
+
+    # Exits seen from rooms actually stood in, recorded at commit. The FRONTIER
+    # is a door seen but never walked through -- and it is the only thing that
+    # separates "that way is exhausted" from "that way is where I came from".
+    #
+    # A first attempt used only walked adjacency, which collapses the whole
+    # visited region into one blob: every exit came back "nothing new that way",
+    # including the way out. A signal that fires on everything is worse than
+    # none, because it argues against the correct move as loudly as the wrong
+    # one.
+    #
+    # The single-room dead end is the easy case, caught by `led_nowhere`. What
+    # actually traps is a dead-end CORRIDOR -- observed live, a character
+    # bounced between two pass-through rooms for ten beats, since each was a
+    # legitimate onward move and the exhausted thing was the whole branch.
+    known_exits = {
+        k: set(v) for k, v in (known_exits or {}).items() if isinstance(v, list)
+    }
+    visited = set(route)
+
+    def _frontier_beyond(first_step, here_rid):
+        """Is there any door left untried down that way."""
+        if first_step not in known_exits:
+            # Never stood there, so its doors are unknown: everything past it
+            # is potentially new.
+            return True
+        stack, seen_here = [first_step], {here_rid, first_step}
+        while stack:
+            cur = stack.pop()
+            for nxt in known_exits.get(cur, ()):
+                if nxt not in visited:
+                    return True          # a door seen and never taken
+                if nxt not in seen_here and nxt in known_exits:
+                    seen_here.add(nxt)
+                    stack.append(nxt)
+        return False
     out = {}
     for bucket, edges in digest.items():
         if not isinstance(edges, list):
@@ -186,6 +248,19 @@ def _annotate_known_exits(digest, scene, visited_rooms):
             if rid and rid in counts:
                 entry["been_there"] = True
                 entry["times_entered"] = counts[rid]
+                if returns.get(rid):
+                    # The FACT: they went in and came straight back out, N
+                    # times. Always reported, because it is simply what
+                    # happened.
+                    entry["turned_back_here"] = returns[rid]
+                    # The INFERENCE: it leads nowhere. Held to two reversals
+                    # with no onward move, because turning back once is as
+                    # easily a change of mind as a dead end, and a wrong
+                    # `led_nowhere` would steer them away from the route.
+                    if returns[rid] >= 2 and not onward.get(rid):
+                        entry["led_nowhere"] = True
+                if here_rid and not _frontier_beyond(rid, here_rid):
+                    entry["no_new_ground_that_way"] = True
                 for back, seen in enumerate(reversed(route), 1):
                     if seen == rid:
                         entry["last_seen_beats_ago"] = back
@@ -407,7 +482,9 @@ def character_step(ctx, cid, nonce):
             # established orientation.
             "spatial_frame": _annotate_known_exits(
                 spatial_digest(sc, character_name(sh)), sc,
-                stored_state.get("visited_rooms") or []),
+                stored_state.get("visited_rooms") or [],
+                known_exits=stored_state.get("known_exits") or {},
+                here_rid=char_room),
             # Where they are, named. The digest lists what leads OUT of a room
             # without ever naming the room itself, so a character had to
             # re-derive their own location from the view's prose every beat.

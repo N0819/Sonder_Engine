@@ -3728,6 +3728,24 @@ def prepare_memory_commit(ctx, *, scene=None):
                 if not _visited or _visited[-1] != _here_room:
                     _visited.append(_here_room)
                 st["visited_rooms"] = _visited[-VISITED_ROOMS_CAP:]
+                # The exits visible FROM a room they actually stood in. Not
+                # oracle knowledge: standing in a room is how you see its
+                # doorways. Without this there is no frontier -- no way to tell
+                # "a door I have seen but never taken" from "a door I have
+                # already been through", which is the difference between
+                # exploring and circling.
+                _known = st.get("known_exits")
+                if not isinstance(_known, dict):
+                    _known = {}
+                _room = (sc.get("rooms") or {}).get(_here_room) or {}
+                _known[_here_room] = sorted({
+                    str(e.get("to")) for e in (_room.get("adjacent") or [])
+                    if isinstance(e, dict) and e.get("to")
+                })
+                st["known_exits"] = {
+                    k: v for k, v in _known.items()
+                    if k in set(st["visited_rooms"])
+                }
             _mm_updates = own_result.get("mind_model_updates") or []
             # A claim about a PLACE is re-keyed onto that place before it is
             # merged. Hypotheses group by (about_entity, kind) and explain each
