@@ -168,24 +168,42 @@ class TestSpatialReaders:
         """`onward_exits` is how many ways out the room has BESIDES the one
         being looked through -- what anyone sees through a doorway. Added
         because a character otherwise had to walk into a dead end to learn it
-        was one; absent means 'too dark to tell', never 'none'."""
+        was one; absent means 'too dark to tell', never 'none'.
+
+        BEHAVIOR DELTA (reported, not silently absorbed). Two rooms below
+        gained an `onward_exits` they did not have when this was captured,
+        and the original had the reason for their absence wrong. The comment
+        here used to say the garden was unlit -- it is not, `effective_light`
+        reads it `lit`. They were bare because they reach the observer
+        through a REVERSE-declared edge, and that path never computed onward
+        exits at all: an entire class of neighbour was permanently opaque,
+        and opaque reads as 'cannot tell', so it had to be walked into to be
+        ruled out. Counting is now by destination and spans both sides of an
+        edge, which is also what stops the garden -- whose only way on to the
+        cargo hold is declared on the hold's side -- from reporting nought
+        and being rendered a visible dead end it is not.
+        """
         sc = _scene()
         # Forward open edge + reverse open edge (garden's archway back in).
         assert visible_adjacent_rooms(sc, "kitchen") == [
             {"room_id": "hallway", "room_name": "Hallway", "barrier": "open",
              "description": "Dusty portraits.", "onward_exits": 1},
-            # No onward_exits: the garden is unlit, so its doorways cannot be
-            # made out from here. Absent means "could not tell", not "none".
+            # 1 = the cargo hold, reachable only via the hold's own edge.
             {"room_id": "garden", "room_name": "Garden", "barrier": "open",
-             "description": "Night air."},
+             "description": "Night air.", "onward_exits": 1},
         ]
         # Reverse visibility into a docked vehicle's open hold.
         assert visible_adjacent_rooms(sc, "garden") == [
             {"room_id": "kitchen", "room_name": "Kitchen", "barrier": "open",
              "description": "Warm fireplace.", "onward_exits": 2},
+            # 1 = the bridge, on past the hold.
             {"room_id": "cargo_hold", "room_name": "Cargo Hold",
-             "barrier": "open_door", "description": "Crates."},
+             "barrier": "open_door", "description": "Crates.",
+             "onward_exits": 1},
         ]
+        # No `dir` anywhere in this fixture, so no bearings are invented.
+        assert not any("onward_bearings" in r for r in
+                       visible_adjacent_rooms(sc, "kitchen"))
 
     def test_hear_level_goldens(self):
         cases = [("open", "normal", "full"), ("open", "mutter", "fragment"),

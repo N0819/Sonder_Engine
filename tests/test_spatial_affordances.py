@@ -281,3 +281,122 @@ class TestCorridorSight:
         from spatial import corridor_sightlines
         line = corridor_sightlines(self._scene(self._corridor(4, [])), "r0")[0]
         assert [a["room"] for a in line["along"]] == ["Room 1", "Room 2"]
+
+
+class TestOnwardBearings:
+    """A count is read as a promise to carry on the way you face.
+
+    Observed live in the 12x12 maze harness: given `onward_exits: 1` for the
+    chamber to his west, the runner formed the belief "further WESTWARD exit
+    that can now be taken as continuation" at 0.78 confidence and walked west
+    into it on four separate beats. The chamber's one other way out went
+    north. He was not reasoning badly -- he was handed a number where the
+    thing he needed was a bearing.
+    """
+
+    def _scene(self, rooms):
+        return {"rooms": rooms, "positions": {}, "entities": {},
+                "attire": {}, "overlays": {}}
+
+    def _elbow(self):
+        """here --east--> corner, whose only other way out runs north."""
+        return self._scene({
+            "here": {"name": "Here", "light": "lit", "desc": "Here.",
+                     "adjacent": [
+                {"to": "corner", "barrier": "open", "dir": "e"}]},
+            "corner": {"name": "Corner", "light": "lit", "desc": "A corner.",
+                       "adjacent": [
+                {"to": "here", "barrier": "open", "dir": "w"},
+                {"to": "north", "barrier": "open", "dir": "n"}]},
+            "north": {"name": "North", "light": "lit", "desc": "North.",
+                      "adjacent": [
+                {"to": "corner", "barrier": "open", "dir": "s"}]},
+        })
+
+    def test_the_way_on_is_named_not_merely_counted(self):
+        from spatial import visible_adjacent_rooms
+        seen = {r["room_id"]: r for r in visible_adjacent_rooms(
+            self._elbow(), "here")}
+        assert seen["corner"]["onward_exits"] == 1
+        assert seen["corner"]["onward_bearings"] == ["n"], (
+            "one way on, and it is north -- not a continuation eastward")
+
+    def test_the_way_back_is_never_offered_as_a_way_on(self):
+        from spatial import visible_adjacent_rooms
+        seen = {r["room_id"]: r for r in visible_adjacent_rooms(
+            self._elbow(), "here")}
+        assert "w" not in seen["corner"]["onward_bearings"]
+
+    def test_a_visible_dead_end_names_no_bearing_at_all(self):
+        from spatial import visible_adjacent_rooms
+        sc = self._scene({
+            "here": {"name": "Here", "light": "lit", "desc": "Here.",
+                     "adjacent": [
+                {"to": "pocket", "barrier": "open", "dir": "e"}]},
+            "pocket": {"name": "Pocket", "light": "lit", "desc": "A pocket.",
+                       "adjacent": [
+                {"to": "here", "barrier": "open", "dir": "w"}]},
+        })
+        seen = {r["room_id"]: r for r in visible_adjacent_rooms(sc, "here")}
+        assert seen["pocket"]["onward_exits"] == 0
+        assert "onward_bearings" not in seen["pocket"]
+
+    def test_a_scene_without_directions_invents_none(self):
+        """No `dir` on the edges means no bearings to give. Guessing one
+        would be inventing a sense the character does not have."""
+        from spatial import visible_adjacent_rooms
+        sc = self._scene({
+            "here": {"name": "Here", "light": "lit", "desc": "Here.",
+                     "adjacent": [{"to": "corner", "barrier": "open"}]},
+            "corner": {"name": "Corner", "light": "lit", "desc": "A corner.",
+                       "adjacent": [
+                {"to": "here", "barrier": "open"},
+                {"to": "far", "barrier": "open"}]},
+            "far": {"name": "Far", "light": "lit", "desc": "Far.",
+                    "adjacent": [{"to": "corner", "barrier": "open"}]},
+        })
+        seen = {r["room_id"]: r for r in visible_adjacent_rooms(sc, "here")}
+        assert seen["corner"]["onward_exits"] == 1
+        assert "onward_bearings" not in seen["corner"]
+
+    def test_gloom_reports_nothing_not_even_a_count(self):
+        """Bearings must not become a back door round the light gate -- and
+        the gate is FULL sight, not merely some sight. Light spilling through
+        the doorway makes a dark chamber read `dim`, which carries bulk and
+        movement and cannot possibly carry which wall a doorway is in.
+        `corridor_sightlines` already refuses to read a terminus through
+        gloom; these two must not disagree."""
+        from spatial import effective_light, visible_adjacent_rooms
+        sc = self._elbow()
+        sc["rooms"]["corner"]["light"] = "dark"
+        assert effective_light(sc, "corner") == "dim", "spill, not blackness"
+        seen = {r["room_id"]: r for r in visible_adjacent_rooms(sc, "here")}
+        assert "onward_exits" not in seen["corner"]
+        assert "onward_bearings" not in seen["corner"]
+
+    def test_a_reverse_declared_neighbour_is_not_permanently_opaque(self):
+        """Sight does not care which room declared the edge. While it did,
+        a visibly closed chamber reachable only by a reverse-declared edge
+        reported nothing -- and absent reads as 'cannot tell', so it had to
+        be walked into to be ruled out."""
+        from spatial import visible_adjacent_rooms
+        sc = self._scene({
+            "here": {"name": "Here", "light": "lit", "desc": "Here.",
+                     "adjacent": []},
+            "pocket": {"name": "Pocket", "light": "lit", "desc": "A pocket.",
+                       "adjacent": [
+                {"to": "here", "barrier": "open", "dir": "w"}]},
+        })
+        seen = {r["room_id"]: r for r in visible_adjacent_rooms(sc, "here")}
+        assert seen["pocket"]["onward_exits"] == 0
+        assert "onward_bearings" not in seen["pocket"]
+
+    def test_the_bearing_reaches_the_characters_exit_marker(self):
+        """The datum is useless if it stops at spatial.py."""
+        from agents.character import _annotate_known_exits
+        marked = _annotate_known_exits(
+            {"ahead": [{"room": "Corner", "barrier": "open"}]},
+            self._elbow(), [], known_exits={}, here_rid="here")
+        entry = marked["ahead"][0]
+        assert entry["onward_exits_visible"] == 1
+        assert entry["onward_bearings"] == ["n"]

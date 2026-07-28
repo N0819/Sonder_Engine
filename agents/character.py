@@ -180,15 +180,25 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     # walked. A chamber with no other way out is visible as such from the
     # threshold; making a character enter it to find out is not caution, it is
     # a missing sense.
-    seen_onward = {}
+    seen_onward, seen_bearings = {}, {}
     if here_rid:
         try:
             from spatial import visible_adjacent_rooms
             for item in visible_adjacent_rooms(scene, here_rid) or []:
                 if isinstance(item, dict) and "onward_exits" in item:
-                    seen_onward[str(item.get("room_id"))] = item["onward_exits"]
+                    rid_seen = str(item.get("room_id"))
+                    seen_onward[rid_seen] = item["onward_exits"]
+                    # WHICH way on, not merely how many. The digest buckets
+                    # exits egocentrically (ahead/behind/left), so a count
+                    # sitting on the "behind" bucket carries no heading of its
+                    # own and gets read as "on in the direction I was already
+                    # facing" -- which is how a runner came to hunt a westward
+                    # exit, four times, out of a chamber whose only other way
+                    # out went north.
+                    if item.get("onward_bearings"):
+                        seen_bearings[rid_seen] = item["onward_bearings"]
         except Exception:
-            seen_onward = {}
+            seen_onward, seen_bearings = {}, {}
     worked = routes_that_worked if isinstance(routes_that_worked, dict) else {}
     route = [r for r in (visited_rooms or []) if isinstance(r, str)]
     counts = {}
@@ -270,6 +280,8 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
             if rid in seen_onward:
                 # Absent means "cannot tell from here" -- never "none".
                 entry["onward_exits_visible"] = seen_onward[rid]
+                if rid in seen_bearings:
+                    entry["onward_bearings"] = seen_bearings[rid]
                 if seen_onward[rid] == 0:
                     entry["visibly_no_way_through"] = True
             if rid and worked.get(rid):
