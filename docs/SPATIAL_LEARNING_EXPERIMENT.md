@@ -166,10 +166,17 @@ surfaced only as a crash.
 | `association_updates[].cue` | missing |
 | `initial_state.goals` | plain strings (silently produced **no** standing intentions) |
 | `response_candidates[].response` | a sequence element |
-| `changes_asserted[].change` | a structured object (**still open**) |
+| `changes_asserted[].change` | a structured object |
 
 Coercing `response_candidates[].response` took a live model from **9 stalls in
 22 beats (41%)** to **2 in 60 (3.3%)**, neither of which was a schema failure.
+
+All five are now closed by a single mechanism rather than one fix each:
+`schemas.LenientModel`, inherited by every schema model, accepts a structured
+value where a field is declared `str` and reduces it to the prose inside. It
+fires only on that exact mismatch, so it cannot mask a real type error on a
+field never meant to hold text — and it covers the ~90 other `str`-typed fields
+that carried the same exposure.
 
 ---
 
