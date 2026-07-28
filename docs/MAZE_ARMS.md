@@ -15,12 +15,26 @@ were drawn against invented walls. Both produced numbers that looked fine.
 ## Reading an arm
 
 Each results file (`--out`) opens with a `meta` line carrying grid, algo,
-braid, seed, goal, optimal, the models, the commit and the exact argv. Rebuild
+braid, seed, goal, optimal, the models, the commit and the exact argv. Render
 its document with:
 
 ```bash
-python tools/render_maze_runs.py <runs.jsonl> -o docs/MAZE_RUNS.md
+python tools/render_maze_runs.py <runs.jsonl> -o docs/maze/A9-9x9-trinity.md
 ```
+
+**One document per arm, named for the arm, never a shared filename.** An arm's
+document is a record of runs that happened once: the models are not
+deterministic and the accumulated memory is part of the experiment, so it
+cannot be reproduced. Rendering a new arm onto an old path destroys evidence —
+done once already, to the sight arm, whose traces were replaced by A8's and had
+to be recovered from git. The renderer now refuses to overwrite. Index each new
+document in [`MAZE_RUNS.md`](MAZE_RUNS.md).
+
+The same rule applies to findings: add a new section to
+[`SPATIAL_LEARNING_EXPERIMENT.md`](SPATIAL_LEARNING_EXPERIMENT.md) for a new
+arm rather than editing an earlier arm's numbers into it. A result that is
+revised rather than added to loses the thing that made it worth having, which
+is what was believed before.
 
 Arms recorded before that header existed are marked *pre-header* below; their
 maze parameters here are the reconstruction, and the renderer will refuse them
