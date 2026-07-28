@@ -76,3 +76,56 @@ class TestOneItemWhereAListWasDeclared:
         from schemas import CharacterOutput
         with pytest.raises(pydantic.ValidationError):
             CharacterOutput(mind_model_updates="she flinched")
+
+
+class TestSilenceMustNotAbortTheTurn:
+    """Doing nothing is a legitimate thing for a mind to do.
+
+    A character may stand still, stay silent, decline -- and an empty
+    `sequence` is how that arrives. `director_resolve` demanded a non-empty
+    `resolved_event` unconditionally, so a character's silence could abort
+    the whole turn. Observed live three times in one run: empty sequence ->
+    the director had nothing to write about -> empty resolved_event -> beat
+    discarded. Non-deterministically, too, since the same model narrated "he
+    stays where he is; no changes occur" on other beats, which made an
+    engine bug look like an unreliable model.
+    """
+
+    from schemas import semantic_output_errors as _sem
+
+    def test_an_empty_event_is_allowed_when_nobody_acted(self):
+        from schemas import semantic_output_errors
+        errs = semantic_output_errors(
+            "director_resolve", {"resolved_event": "", "state_diff": {}},
+            source_payload={"player_declaration": {"sequence": []},
+                            "character_declarations": [{"sequence": []}]})
+        assert "resolved_event is empty" not in errs
+
+    def test_an_empty_event_is_still_refused_when_someone_acted(self):
+        from schemas import semantic_output_errors
+        errs = semantic_output_errors(
+            "director_resolve", {"resolved_event": "", "state_diff": {}},
+            source_payload={"character_declarations": [
+                {"sequence": [{"type": "action", "attempt": "steps east"}]}]})
+        assert "resolved_event is empty" in errs
+
+    def test_the_player_acting_alone_still_requires_an_event(self):
+        from schemas import semantic_output_errors
+        errs = semantic_output_errors(
+            "director_resolve", {"resolved_event": "", "state_diff": {}},
+            source_payload={"player_declaration": {
+                "sequence": [{"type": "speech", "text": "hello"}]}})
+        assert "resolved_event is empty" in errs
+
+    def test_a_dice_roll_counts_as_something_happening(self):
+        from schemas import semantic_output_errors
+        errs = semantic_output_errors(
+            "director_resolve", {"resolved_event": "", "state_diff": {}},
+            source_payload={"dice_results_final": [{"dc": 12, "roll": 9}]})
+        assert "resolved_event is empty" in errs
+
+    def test_state_diff_is_still_required_either_way(self):
+        from schemas import semantic_output_errors
+        errs = semantic_output_errors(
+            "director_resolve", {"resolved_event": ""}, source_payload={})
+        assert "state_diff must be an object" in errs
