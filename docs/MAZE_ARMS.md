@@ -307,7 +307,27 @@ one later reads its five runs as a series:
 | run 1, beat 20 | characters get an egocentric heading (`22bbef8`) | the Director was moving him backward and narrating it as the direction he asked for |
 | run 1, beat 40 | `max_output_tokens` reaches the caller (`c976385`) | beats were dying on truncated JSON at exactly 16000 tokens |
 | run 2, beat ~2 | Director gets compass bearings (`94637dd`) | one movement event in seven still named a bearing the rooms contradicted |
-| run 2, beat ~25 | running: multiple rooms per beat | a courier whose craft is speed could only ever walk |
+| run 2, beat ~25 | running: multiple rooms per beat ([`DESIGN_RUNNING.md`](DESIGN_RUNNING.md)) | a courier whose craft is speed could only ever walk |
+| run 3, beat 29 | `unentered` splits from `closed` | the shrine is a cul-de-sac, so the affordance layer argued against the destination for being a destination — it was never entered in any run |
+
+A11 also produced two findings that are about the ARM rather than the engine,
+and both bear on how its numbers should be read.
+
+**Running was measurably unavailable.** Of 96 runnable passages, 72 allowed
+exactly one room and `winded` never fired anywhere — the maze is a perfect
+maze whose corridor cells are mostly bends, and the first version of the rule
+stopped a run at a bend. So for the whole of A11 the capability existed and had
+almost nothing to act on. The rule is now bounded by decision rather than
+sight; see [`DESIGN_RUNNING.md`](DESIGN_RUNNING.md) §3.
+
+**His goals decayed while the bug was live.** By run 3 `ia1` ("reach the shrine
+as fast as possible") was **abandoned** and `ia3` ("beat your own best time")
+**blocked** — the intention system correctly retiring goals that had yielded
+nothing for 150 beats. But the reason they yielded nothing was the `closed`
+verdict on the shrine. A defect that persists long enough stops being a defect
+and becomes a belief, and then an abandoned goal; fixing the world does not
+fix the character. Any arm that runs long enough to decay its own subject needs
+its intention state inspected before its numbers are believed.
 
 Runs 1 and 2 also differ in an unglamorous way: run 1's first nineteen beats
 were **discarded and restarted from blank**, because the Director's bearing
