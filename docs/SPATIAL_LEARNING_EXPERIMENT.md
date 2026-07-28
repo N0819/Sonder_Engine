@@ -61,6 +61,42 @@ All arms: same maze, same seed, same models. Each adds one capability.
 The memoryless control never reached the goal and saw 8–9 rooms: the maze is
 genuinely hard, and any arm beating it is doing something.
 
+### 2.0 The current build, end to end
+
+Arm A8 (see [`MAZE_ARMS.md`](MAZE_ARMS.md)) is the same maze again with
+everything since: bearings on visible onward exits, `worked_before` outcome
+feedback, the loop markers, and the schema repairs.
+
+| run | moves | unique | backtracks | reversals | reached |
+|---|---|---|---|---|---|
+| 1 | 58 | 28 | 33 | 8 | No |
+| 2 | 51 | 36 | 16 | 6 | **Yes** (excess 31) |
+| 3 | 60 | 45 | 16 | 5 | No |
+| 4 | 59 | 33 | 27 | 5 | No |
+| 5 | **20** | 21 | **0** | **0** | **Yes — exact optimal** |
+
+Both this arm and the sight arm reach 2/5, so the headline number did not
+move. **The shape did, and it inverted.** The sight arm peaked at run 2 and
+then lost it, failing runs 3, 4 and 5 — mastery followed by drift. This arm
+struggled early and ended on a flawless traversal: twenty moves, twenty-move
+optimum, not one backtrack and not one reversal. Its best run is the last
+thing it did rather than something it forgot.
+
+The reversal column is the cleanest learning signal the experiment has
+produced: **8 → 6 → 5 → 5 → 0**, monotonically down, against the sight arm's
+erratic 6 → 0 → 12 → 2 → 6.
+
+Read `unique` carefully here. Coverage FALLS to 21 rooms on the best run,
+and that is the correct direction: a character who knows the way does not
+tour the maze. Coverage measures searching, not knowing, and the two are
+opposites once the route is learned.
+
+Honest against-the-grain note: run 1 was worse than the sight arm's run 1
+(58 moves and no arrival, against 28 and an arrival). One run each, on a maze
+where a lucky first turn is worth twenty moves, so this is not evidence the
+build regressed — but it is not evidence it improved either, and the drift
+result is what this arm actually establishes.
+
 Move-by-move traces of all five sight-arm runs, with the maze drawn and each
 move annotated, are in [`docs/MAZE_RUNS.md`](MAZE_RUNS.md) — regenerate with
 `python tools/render_maze_runs.py <runs.jsonl>`.
