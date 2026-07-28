@@ -300,6 +300,29 @@ def set_reasoning_effort(spec):
     return cfg
 
 
+def apply_model_specs(specs):
+    """Apply one or more `--model` specs.
+
+    Each is `provider:model` (every role) or `role=provider:model` (that role).
+    Repeatable, because the useful experiment usually needs two at once: the
+    roles under test pinned to one model, and a support role -- perception --
+    left on, or moved to, something fast.
+    """
+    applied = []
+    for spec in specs or []:
+        for part in str(spec).split(","):
+            part = part.strip()
+            if not part:
+                continue
+            role, sep, target = part.partition("=")
+            if sep:
+                applied.append((role.strip(),
+                                force_single_model(target, [role.strip()])))
+            else:
+                applied.append(("*", force_single_model(part)))
+    return applied
+
+
 def force_single_model(spec, roles=None):
     """Point the named roles at one model (every configured role by default).
 
@@ -336,8 +359,7 @@ def force_single_model(spec, roles=None):
     return model
 
 
-def setup(db_path, walls, source_db=None, model=None, model_roles=None,
-          reasoning=None):
+def setup(db_path, walls, source_db=None, model=None, reasoning=None):
     import db
     db.configure(db_path)
     db.init()
@@ -346,8 +368,8 @@ def setup(db_path, walls, source_db=None, model=None, model_roles=None,
         print(f"  carried {n_set} settings and {n_prov} provider connections "
               f"from {source_db}")
     if model:
-        which = ", ".join(model_roles) if model_roles else "every role"
-        print(f"  forced {which} to {force_single_model(model, model_roles)}")
+        for role, applied in apply_model_specs(model):
+            print(f"  model[{role}] -> {applied}")
     if reasoning:
         print(f"  reasoning effort -> {set_reasoning_effort(reasoning)}")
     from db import qi, wset
@@ -602,15 +624,11 @@ def main():
     ap.add_argument("--runs", type=int, default=5)
     ap.add_argument("--max-steps", type=int, default=40)
     ap.add_argument("--db", default=None)
-    ap.add_argument("--model", default=None,
-                    help="force EVERY role to one model, as "
-                         "'<provider_id>:<model>' (e.g. 3:x-ai/grok-4.20). "
+    ap.add_argument("--model", action="append", default=None,
+                    help="'<provider>:<model>' for every role, or "
+                         "'<role>=<provider>:<model>' for one. Repeatable. "
                          "Without it each role keeps whatever the source DB "
                          "configured, which is usually a mix.")
-    ap.add_argument("--model-roles", default=None,
-                    help="comma-separated roles for --model. Default is every "
-                         "role, which usually also drags perception off its own "
-                         "faster provider for no experimental gain.")
     ap.add_argument("--reasoning", default=None,
                     help="'role=level,...' or a bare level for all")
     ap.add_argument("--settings-from", default="engine.db",
@@ -656,8 +674,6 @@ def main():
         db_path, walls,
         source_db=args.settings_from if args.agent == "llm" else None,
         model=args.model if args.agent == "llm" else None,
-        model_roles=([r for r in (args.model_roles or "").split(",") if r.strip()]
-                     if args.agent == "llm" else None),
         reasoning=args.reasoning if args.agent == "llm" else None)
     if args.agent == "scripted":
         install_scripted_models(name, walls)
