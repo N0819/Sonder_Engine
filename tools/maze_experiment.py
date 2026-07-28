@@ -97,19 +97,35 @@ _MATERIALS = ("blue tile", "grey slate", "red brick", "white marble",
 _FITTINGS = ("a cold brazier", "a toppled bench", "a dry fountain",
              "a rope ladder", "an upturned bell", "a heap of sand",
              "a shattered mirror", "a cairn of stones", "a trough of ash")
+_MARKS = ("scored with tally marks", "hung with dry reeds", "streaked with soot",
+          "wrapped in faded cord", "dusted with chalk", "bearing a carved spiral",
+          "veined with pale lichen", "split by a root")
 
 
 def _feature_for(index):
+    """A distinct feature for ANY room index.
+
+    Three axes, not two. The two-axis version topped out at 108 combinations,
+    so a 12x12 (144 rooms) silently reused descriptions -- the same failure the
+    fixed 36-entry list had, one grid size further out. This is the property the
+    whole experiment rests on: a character cannot be shown to remember a room it
+    cannot tell apart from another, so the generator must never run out.
+    """
     if index < len(_FEATURES):
         return _FEATURES[index]
     extra = index - len(_FEATURES)
     mat = _MATERIALS[extra % len(_MATERIALS)]
     fit = _FITTINGS[(extra // len(_MATERIALS)) % len(_FITTINGS)]
-    return f"a floor of {mat} and {fit}"
+    mark = _MARKS[(extra // (len(_MATERIALS) * len(_FITTINGS))) % len(_MARKS)]
+    return f"a floor of {mat}, {fit} {mark}"
 
 
 def _rid(cell):
-    return f"r{cell[0]}{cell[1]}"
+    """Room id. Zero-padded because bare concatenation COLLIDES: at grid 12,
+    (1,11) and (11,1) both render "r111", so scene_rooms silently returned 142
+    rooms for a 144-cell maze and two pairs of chambers became one. Any grid of
+    10 or more was quietly losing rooms."""
+    return f"r{cell[0]:02d}{cell[1]:02d}"
 
 
 def _neighbours(cell, grid):
@@ -118,7 +134,85 @@ def _neighbours(cell, grid):
             if 0 <= r + dr < grid and 0 <= c + dc < grid]
 
 
-def build_maze(seed=MAZE_SEED, grid=None, braid=0.0):
+def _carve_kruskal(rng, grid):
+    """Randomised Kruskal: a uniform spanning tree.
+
+    DFS carves by walking, which produces long winding corridors and very few
+    branch points -- a high "river factor". A 6x6 DFS maze here had THREE
+    junctions: a corridor with stubs, navigable by just following it. Kruskal
+    picks edges at random across the whole grid instead, so branching is even
+    and junctions are many. Same cell count, a far denser decision structure.
+    """
+    walls = {(r, c): set() for r in range(grid) for c in range(grid)}
+    parent = {c: c for c in walls}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    edges = []
+    for r in range(grid):
+        for c in range(grid):
+            if r + 1 < grid:
+                edges.append(((r, c), (r + 1, c)))
+            if c + 1 < grid:
+                edges.append(((r, c), (r, c + 1)))
+    rng.shuffle(edges)
+    for a, b in edges:
+        ra, rb = find(a), find(b)
+        if ra == rb:
+            continue
+        parent[ra] = rb
+        walls[a].add(b)
+        walls[b].add(a)
+    return walls
+
+
+def _carve_prim(rng, grid):
+    """Randomised Prim: grows from one cell, always from the frontier.
+
+    Even shorter corridors than Kruskal and the most dead ends of the three,
+    which makes it the most genuinely maze-like: lots of short branches to be
+    committed to and back out of.
+    """
+    walls = {(r, c): set() for r in range(grid) for c in range(grid)}
+    seen = {START}
+    frontier = [(START, n) for n in _neighbours(START, grid)]
+    while frontier:
+        i = rng.randrange(len(frontier))
+        cur, nxt = frontier.pop(i)
+        if nxt in seen:
+            continue
+        walls[cur].add(nxt)
+        walls[nxt].add(cur)
+        seen.add(nxt)
+        frontier.extend((nxt, n) for n in _neighbours(nxt, grid) if n not in seen)
+    return walls
+
+
+def _carve_dfs(rng, grid):
+    walls = {(r, c): set() for r in range(grid) for c in range(grid)}
+    stack, seen = [START], {START}
+    while stack:
+        cur = stack[-1]
+        nbrs = [n for n in _neighbours(cur, grid) if n not in seen]
+        if not nbrs:
+            stack.pop()
+            continue
+        nxt = rng.choice(nbrs)
+        walls[cur].add(nxt)
+        walls[nxt].add(cur)
+        seen.add(nxt)
+        stack.append(nxt)
+    return walls
+
+
+_CARVERS = {"dfs": _carve_dfs, "kruskal": _carve_kruskal, "prim": _carve_prim}
+
+
+def build_maze(seed=MAZE_SEED, grid=None, braid=0.0, algo="dfs"):
     """Randomised-DFS maze, optionally BRAIDED. {cell: set(neighbour cells)}.
 
     A perfect maze (braid=0) is a poor instrument for testing whether a
@@ -138,19 +232,7 @@ def build_maze(seed=MAZE_SEED, grid=None, braid=0.0):
     """
     grid = grid or GRID
     rng = random.Random(seed)
-    walls = {(r, c): set() for r in range(grid) for c in range(grid)}
-    stack, seen = [START], {START}
-    while stack:
-        cur = stack[-1]
-        nbrs = [n for n in _neighbours(cur, grid) if n not in seen]
-        if not nbrs:
-            stack.pop()
-            continue
-        nxt = rng.choice(nbrs)
-        walls[cur].add(nxt)
-        walls[nxt].add(cur)
-        seen.add(nxt)
-        stack.append(nxt)
+    walls = _CARVERS[algo](rng, grid)
 
     if braid > 0:
         dead_ends = [c for c in sorted(walls) if len(walls[c]) == 1]
@@ -168,6 +250,45 @@ def build_maze(seed=MAZE_SEED, grid=None, braid=0.0):
     return walls
 
 
+def deception_stats(walls, start, goal):
+    """How much of this maze is a trap, and how deep the traps run.
+
+    Counting dead-end TIPS is the wrong measure of a false path: a one-room
+    stub is spotted instantly, while a six-room corridor is a real commitment
+    to back out of. What matters is how far off the correct route a wrong turn
+    can take you, and how many such branches there are.
+    """
+    from collections import deque
+    prev = {start: None}
+    q = deque([start])
+    while q:
+        cur = q.popleft()
+        for n in sorted(walls[cur]):
+            if n not in prev:
+                prev[n] = cur
+                q.append(n)
+    path, cur = set(), goal
+    while cur is not None:
+        path.add(cur)
+        cur = prev[cur]
+    depth = {c: 0 for c in path}
+    q = deque(path)
+    while q:
+        cur = q.popleft()
+        for n in walls[cur]:
+            if n not in depth:
+                depth[n] = depth[cur] + 1
+                q.append(n)
+    off = [d for c, d in depth.items() if c not in path]
+    tips = [c for c in walls if len(walls[c]) == 1]
+    return {
+        "off_path": len(off),
+        "max_depth": max(off) if off else 0,
+        "mean_depth": round(sum(off) / len(off), 1) if off else 0.0,
+        "deep_traps": sum(1 for c in tips if depth.get(c, 0) >= 3),
+    }
+
+
 def maze_stats(walls, grid):
     """How much of a navigation problem this actually is."""
     edges = sum(len(v) for v in walls.values()) // 2
@@ -179,8 +300,15 @@ def maze_stats(walls, grid):
             "dead_ends": dead_ends, "junctions": junctions}
 
 
-def shortest_path(walls, a=START, b=GOAL):
+def shortest_path(walls, a=None, b=None):
+    """BFS shortest path. `a`/`b` default to the CURRENT module START/GOAL,
+    resolved at call time -- binding them as argument defaults froze them to
+    the 6x6 goal, so every resized maze reported the distance to (5,5) instead
+    of its real corner. A 14x14 was claiming an optimal of 10 moves when its
+    Manhattan distance alone is 26."""
     from collections import deque
+    a = START if a is None else a
+    b = GOAL if b is None else b
     prev, queue = {a: None}, deque([a])
     while queue:
         cur = queue.popleft()
@@ -724,6 +852,11 @@ def main():
                          "configured, which is usually a mix.")
     ap.add_argument("--size", type=int, default=GRID,
                     help="maze is NxN (default 6). --grid is the ASCII render.")
+    ap.add_argument("--algo", choices=sorted(_CARVERS), default="dfs",
+                    help="carver. dfs walks, so it makes long winding "
+                         "corridors with few branch points -- easy to follow. "
+                         "kruskal/prim branch evenly and roughly triple the "
+                         "junctions at the same size.")
     ap.add_argument("--braid", type=float, default=0.0,
                     help="fraction of dead ends opened into LOOPS, 0-1. A "
                          "perfect maze (0) has one path between any two cells, "
@@ -763,12 +896,17 @@ def main():
 
     GRID = args.size
     GOAL = (GRID - 1, GRID - 1)
-    walls = build_maze(grid=GRID, braid=args.braid)
+    walls = build_maze(grid=GRID, braid=args.braid, algo=args.algo)
     optimal = len(shortest_path(walls)) - 1
     st = maze_stats(walls, GRID)
-    print(f"maze {GRID}x{GRID} braid={args.braid} | {st['cells']} rooms, "
+    dec = deception_stats(walls, START, GOAL)
+    print(f"maze {GRID}x{GRID} {args.algo} braid={args.braid} | {st['cells']} rooms, "
           f"{st['loops']} loops, {st['dead_ends']} dead ends, "
           f"{st['junctions']} junctions | optimal {optimal} moves")
+    print(f"  traps: {dec['off_path']} of {st['cells']} rooms off-route "
+          f"({100*dec['off_path']//st['cells']}%), {dec['deep_traps']} false "
+          f"branches 3+ deep, worst {dec['max_depth']} rooms, "
+          f"mean {dec['mean_depth']}")
 
     if args.agent == "llm" and not args.go:
         calls = args.runs * args.max_steps * len(_LLM_CHAIN)
