@@ -165,18 +165,24 @@ class TestSpatialReaders:
             "cargo_hold", "cellar", "garden", "hallway", "kitchen", "study"]
 
     def test_visible_adjacent_rooms_goldens(self):
+        """`onward_exits` is how many ways out the room has BESIDES the one
+        being looked through -- what anyone sees through a doorway. Added
+        because a character otherwise had to walk into a dead end to learn it
+        was one; absent means 'too dark to tell', never 'none'."""
         sc = _scene()
         # Forward open edge + reverse open edge (garden's archway back in).
         assert visible_adjacent_rooms(sc, "kitchen") == [
             {"room_id": "hallway", "room_name": "Hallway", "barrier": "open",
-             "description": "Dusty portraits."},
+             "description": "Dusty portraits.", "onward_exits": 1},
+            # No onward_exits: the garden is unlit, so its doorways cannot be
+            # made out from here. Absent means "could not tell", not "none".
             {"room_id": "garden", "room_name": "Garden", "barrier": "open",
              "description": "Night air."},
         ]
         # Reverse visibility into a docked vehicle's open hold.
         assert visible_adjacent_rooms(sc, "garden") == [
             {"room_id": "kitchen", "room_name": "Kitchen", "barrier": "open",
-             "description": "Warm fireplace."},
+             "description": "Warm fireplace.", "onward_exits": 2},
             {"room_id": "cargo_hold", "room_name": "Cargo Hold",
              "barrier": "open_door", "description": "Crates."},
         ]
