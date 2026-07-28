@@ -14,9 +14,9 @@ were drawn against invented walls. Both produced numbers that looked fine.
 
 ## Reading an arm
 
-Each results file (`--out`) opens with a `meta` line carrying grid, algo,
-braid, seed, goal, optimal, the models, the commit and the exact argv. Render
-its document with:
+Each results file (`--out`) opens with a `meta` line carrying grid, start,
+goal, optimal, the models, the commit, the exact argv, and — since A11 — the
+maze's own `edges` plus a `maze` fingerprint. Render its document with:
 
 ```bash
 python tools/render_maze_runs.py <runs.jsonl> -o docs/maze/A9-9x9-trinity.md
@@ -39,6 +39,40 @@ is what was believed before.
 Arms recorded before that header existed are marked *pre-header* below; their
 maze parameters here are the reconstruction, and the renderer will refuse them
 until a `meta` line is added by hand.
+
+## Authored mazes
+
+Up to A10 every maze was generated: a seed plus a carver name, regenerated on
+demand by the harness and by the renderer. That is reproducible only for as
+long as nobody touches a carver, the braid loop or the Python RNG — and the
+renderer rebuilding walls from a recipe is exactly the mechanism that drew A5's
+real routes against A8's invented walls.
+
+`--svg` takes the maze from a file instead:
+
+```bash
+python tools/maze_experiment.py --svg tools/mazes/maze7x7-a11.svg ...
+```
+
+It parses the `<line>`-per-wall SVG that mazegenerator.net emits, and takes
+**start and goal from the gaps in the outer border** — the generator's entrance
+and exit — so the start is wherever the author put it rather than always
+`(0,0)`. Exactly two openings are required; a maze with none, or three, is
+rejected rather than guessed at, as are diagonal segments, a walled-off exit,
+and a file with no `<line>` elements at all. Every one of those produced a
+plausible-looking maze during development.
+
+Two things follow. A maze can now be *chosen for its shape* rather than
+accepted from a seed — which is how A11 exists. And results files now carry
+their own `edges`, so a rendered arm is reconstructed from what was recorded
+rather than re-derived from a recipe. `--resume` guards on a hash of those
+edges instead of on grid-size-plus-carver-name, which was only ever a proxy:
+two arms at the same size and algo but different seeds are different mazes,
+and an authored maze has no algo at all.
+
+The parse of the checked-in fixture is pinned by `tests/test_maze_svg.py`. If
+it drifts, an old arm's routes would render against different walls — silently,
+and with every derived annotation still looking like measurement.
 
 ## Fixing code mid-experiment
 
@@ -80,6 +114,11 @@ rather than colliding on them.
   at the same mean trap depth, so it tests endurance rather than navigation.
   The one 12×12 arm below predates the cap and was stopped on cost once it
   had banked the comparison only it could supply.
+- **Room count is not difficulty, and it is not cost either.** Both are set by
+  the optimal path and the trap profile. The 7×7 of A11 holds 60% of the 9×9's
+  rooms and yet needs *more* moves to solve (28 against 20), because more than
+  half its rooms are on the route. Read the `traps:` line the harness prints
+  before assuming a smaller grid is a cheaper or easier one.
 
 ## Models and providers
 
@@ -135,7 +174,9 @@ varies, and two samples taken an hour apart are not an experiment.
 | **A6** | **12×12 kruskal** | does it scale, and does `worked_before` stop the run-3 drift? | `f8678f2^` → killed at 70 beats | **baseline** for A7 (bearings absent) |
 | **A7** | **12×12 kruskal** | same maze, bearings fix present | `f8678f2` | stopped at run 2 — cost |
 | **A8** | **9×9 kruskal** | replication of A2's maze with everything since | `994c815` | **done — 2/5 reached, run 5 an exact optimal traversal** |
-| **A9** | **9×9 kruskal** | can a cheaper character model do the job? | `af92270` | **running** (resumed from checkpoint after a harness crash) |
+| **A9** | **9×9 kruskal** | can a cheaper character model do the job? | `af92270` | stopped — superseded by A10 after a harness crash and a resume onto carried-over memory |
+| **A10** | **9×9 kruskal** | A9 again from a blank state, all fixes present | `b0d2c13` | stopped at run 2 beat 34, checkpoint intact — run 1 matched grok's run 1 almost exactly |
+| **A11** | **7×7 authored** | does a durable place graph fix the repeat-run opening thrash? | pending Fable's place-graph work | **planned** |
 
 ### A6 / A7 — the bearings pair
 
@@ -208,6 +249,60 @@ model swap. Every support role is now pinned explicitly.
 Early latency is far more variable than grok's steady 25–35s — observed 7s to
 79s per call — so the throughput question needs a full run to answer, not a
 sample.
+
+### A11 — the authored 7×7
+
+The first arm on a maze chosen rather than generated:
+[`tools/mazes/maze7x7-a11.svg`](../tools/mazes/maze7x7-a11.svg), entrance at
+the top of column 3, exit at the bottom of the same column.
+
+```
++---+---+---+   +---+---+---+     S start (entrance gap)
+|     *   *   S     |       |     X goal  (exit gap)
++---+   +---+---+   +   +   +     * the 28-move optimum
+| *   * |           |   |   |
++   +---+   +---+---+   +---+
+| * |       | *   *   *   * |
++   +---+---+   +---+---+   +
+| *   *   * | *   * | *   * |
++---+---+   +---+   +   +   +
+|         *   *   * | * |   |
++   +---+---+---+---+   +---+
+|   |       | *   * | *   * |
++   +   +   +   +   +---+   +
+|       |   | X | *   *   * |
++---+---+---+   +---+---+---+
+```
+
+49 rooms, 4 junctions, 6 dead ends, no loops. **Optimal 28 moves** — and that
+number is the point of the maze. Measured against the arms it will be compared
+with:
+
+| | rooms | junctions | optimal | on route | worst trap | deep traps |
+|---|---|---|---|---|---|---|
+| A2/A8/A10 9×9 kruskal | 81 | 21 | 20 | 25% | 15 | 16 |
+| A11 7×7 authored | 49 | 4 | **28** | **57%** | 8 | 3 |
+
+So it is **not** a smaller version of the 9×9; it is a different instrument,
+and expecting it to be cheaper or easier because it has fewer rooms would be
+wrong on both counts. The 9×9 is a trap maze — a quarter of it is route and
+sixteen branches run three-plus rooms deep, so it measures whether a character
+resists committing to a wrong turn. A11 is a **corridor** maze: four junctions
+in the whole grid, but the correct answer is a 28-move sequence through 57% of
+the rooms. Getting lost there is not misreading a junction, it is losing the
+thread of a long route — which is precisely what the durable place graph is
+built to prevent, and what the run-2 opening thrash looks like.
+
+The cheapness is real but comes from the room count, not the run length: less
+accumulated route history per beat, so a smaller prompt. A successful run is
+*longer* than a 9×9 run, so `--max-steps` should not be cut proportionally.
+
+It is a perfect maze (0 loops), so the braiding argument in `build_maze`
+applies: reversing out of a dead end is correct play, and the reversal count
+cannot distinguish it from being lost. With six dead ends and a 28-move
+optimum the headroom is in **excess moves over 28**, which is the metric to
+read here — not reversals, and not room coverage, since a full traversal covers
+most of the grid either way.
 
 ### A8 — the 9×9 replication
 
