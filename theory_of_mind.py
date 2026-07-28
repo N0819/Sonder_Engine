@@ -210,8 +210,18 @@ def _tokens(text):
     filtered = [w for w in words if w not in _STOPWORDS]
     return set(filtered) if filtered else set(words)
 
-def claim_similarity(a, b):
+def claim_similarity(a, b, ignore=None):
     """How likely two claims describe the same underlying belief.
+
+    `ignore` is the SUBJECT both claims are about, and its tokens are removed
+    from both sides before comparing. Naming the subject inside the claim is
+    ordinary phrasing, but it inflated every same-subject pair toward a match:
+    "Chamber 0505 has a toppled bench" and "Chamber 0505 is empty and swept"
+    scored as the same belief on the strength of "chamber" and "0505" alone, so
+    two distinct facts about one room merged into one and the second silently
+    overwrote the first. The same held for people -- "Vorne is afraid" and
+    "Vorne wants to leave" shared "vorne". What a claim is ABOUT is already
+    carried by about_entity; only what it SAYS should decide sameness.
 
     Uses stopword-stripped token overlap coefficient rather than raw
     Jaccard, plus a subset short-circuit, so a terse restatement of a
@@ -226,6 +236,9 @@ def claim_similarity(a, b):
     rather than permanently distorting a belief.
     """
     ta, tb = _tokens(a), _tokens(b)
+    if ignore:
+        drop = _tokens(ignore)
+        ta, tb = (ta - drop) or ta, (tb - drop) or tb
     if not ta or not tb:
         return 1.0 if ta == tb else 0.0
     if ta <= tb or tb <= ta:
@@ -253,6 +266,58 @@ def _live_confidence(hypothesis, turn_idx, elapsed_seconds=None):
     return decayed_confidence(
         hypothesis.get("confidence", 0.0), kind,
         _elapsed(hypothesis, turn_idx, elapsed_seconds))
+
+def rekey_place_claims(updates, place_names, protected=()):
+    """Re-key a claim ABOUT A PLACE onto that place, so places stop competing.
+
+    Hypotheses are grouped by (about_entity, kind), and within a group a new
+    claim partially explains away its siblings -- which is right for a mind,
+    where rival theories about one person genuinely should suppress each other,
+    and exactly backwards for space. Observed live: a character mapping a maze
+    filed every room under one umbrella entity ("maze layout in this sector"),
+    so learning Chamber 0805 actively suppressed what it knew about Chamber
+    0505 -- two independent facts treated as rival explanations of one subject.
+    Confidences sat at 0.68 and 0.28 for rooms that had nothing to do with
+    each other, and the map dismantled itself as fast as it was built.
+
+    Re-keying to the specific place preserves BOTH behaviours: competing claims
+    about the SAME room still revise each other normally (a place can turn out
+    to be different from what you thought), while claims about DIFFERENT rooms
+    stop colliding.
+
+    `protected` names are never re-keyed -- a claim about a PERSON stays about
+    that person even when it mentions where they were standing. Only a claim
+    naming exactly one place is moved; naming two is ambiguous, and guessing
+    would scatter a belief onto the wrong room.
+    """
+    protected_cf = {str(p).strip().casefold() for p in (protected or ()) if str(p).strip()}
+    # Longest first: "Chamber 05" must not shadow "Chamber 0505".
+    names = sorted(
+        {str(n).strip() for n in (place_names or ()) if str(n).strip()},
+        key=len, reverse=True)
+    if not names:
+        return updates
+    out = []
+    for raw in updates or []:
+        if not isinstance(raw, dict):
+            continue
+        update = dict(raw)
+        about = str(update.get("about_entity") or "").strip()
+        if about.casefold() in protected_cf:
+            out.append(update)
+            continue
+        haystack = f"{about} {update.get('claim') or ''}"
+        hits = [n for n in names
+                if re.search(rf"\b{re.escape(n)}\b", haystack, re.I)]
+        # Substring shadowing already handled by longest-first; collapse names
+        # that are prefixes of an earlier hit.
+        distinct = [n for n in hits
+                    if not any(n != o and n.casefold() in o.casefold() for o in hits)]
+        if len(distinct) == 1:
+            update["about_entity"] = distinct[0]
+        out.append(update)
+    return out
+
 
 def apply_mind_model_updates(state, updates, turn_idx, floor=0.05,
                              max_per_entity=30, elapsed_seconds=None,
@@ -300,7 +365,8 @@ def apply_mind_model_updates(state, updates, turn_idx, floor=0.05,
 
         best_idx, best_sim = None, 0.0
         for i in group:
-            sim = claim_similarity(claim, str(hyps[i].get("claim") or ""))
+            sim = claim_similarity(claim, str(hyps[i].get("claim") or ""),
+                                   ignore=about)
             if sim > best_sim:
                 best_sim, best_idx = sim, i
 

@@ -26,7 +26,7 @@
 | `character_schema.py` | 1145 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
 | `chat_archive.py` | 1030 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory` |
 | `checkpoints.py` | 673 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
-| `commit.py` | 4125 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind` |
+| `commit.py` | 4143 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind` |
 | `db.py` | 1334 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 193 |  | `db` |
 | `greetings.py` | 252 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
@@ -49,7 +49,7 @@
 | `spatial_frames.py` | 965 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 184 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `survival.py` | 311 |  | `db` |
-| `theory_of_mind.py` | 637 |  | — |
+| `theory_of_mind.py` | 703 |  | — |
 | `updates.py` | 281 |  | — |
 
 ## Largest top-level functions
@@ -280,7 +280,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 3210 | 576 lines |
+| `prepare_memory_commit()` | 3210 | 594 lines |
 | `prepare_scene_commit()` | 1139 | 242 lines |
 | `track_background_presences()` | 1897 | 196 lines |
 | `commit_world_entities()` | 1513 | 163 lines |
@@ -540,14 +540,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_mind_model_updates()` | 257 | 157 lines |
-| `select_active_hypotheses()` | 545 | 62 lines |
-| `mind_models_for_payload()` | 415 | 33 lines |
-| `belief_credence()` | 450 | 33 lines |
-| `claim_similarity()` | 213 | 22 lines |
+| `apply_mind_model_updates()` | 322 | 158 lines |
+| `select_active_hypotheses()` | 611 | 62 lines |
+| `rekey_place_claims()` | 270 | 50 lines |
+| `claim_similarity()` | 213 | 35 lines |
+| `mind_models_for_payload()` | 481 | 33 lines |
+| `belief_credence()` | 516 | 33 lines |
 | `cap_mind_model_updates()` | 99 | 19 lines |
-| `due_for_reappraisal()` | 622 | 16 lines |
-| `effective_kind()` | 180 | 14 lines |
+| `due_for_reappraisal()` | 688 | 16 lines |
 
 ### `updates.py`
 
