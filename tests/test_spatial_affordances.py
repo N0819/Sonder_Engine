@@ -121,3 +121,62 @@ class TestLocationCuedRecall:
                               chronological=False)
         assert len(got) == 2
         assert all("happened here" not in m["retrieval_reasons"] for m in got)
+
+
+class TestDestinationIsNotADeadEnd:
+    """A tavern is a room you enter and leave by the same door.
+
+    `no_route_onward` is a fact about DOORWAYS -- not a way through -- and must
+    never read as a verdict on the place. An earlier name, `led_nowhere`, did:
+    it would have told a character the tavern they were heading for was a dead
+    end. Somewhere they chose to REMAIN is never marked, because dwelling is
+    what going somewhere on purpose looks like, as against passing through and
+    finding a wall.
+    """
+
+    SCENE = {
+        "rooms": {"r1": {"name": "Dead End"}, "r2": {"name": "The Tavern"},
+                  "r3": {"name": "Hall"}},
+        "positions": {"V": "r3"}, "entities": {},
+    }
+    DIGEST = {"ahead": [{"room": "Dead End", "barrier": "open"},
+                        {"room": "The Tavern", "barrier": "open"}]}
+
+    def _exits(self, route):
+        out = _annotate_known_exits(self.DIGEST, self.SCENE, route)
+        return {e["room"]: e for e in out["ahead"]}
+
+    def test_a_dead_end_walked_into_twice_is_marked(self):
+        got = self._exits(["r3", "r1", "r3", "r1", "r3"])
+        assert got["Dead End"]["no_route_onward"] is True
+
+    def test_a_place_he_lingered_in_is_never_marked(self):
+        """Entered four times, reversed out every time -- but he STAYED."""
+        got = self._exits(["r3", "r2", "r2", "r3", "r2", "r2", "r3"])
+        assert "no_route_onward" not in got["The Tavern"]
+        assert got["The Tavern"]["been_there"] is True
+
+    def test_one_reversal_is_not_enough(self):
+        """Turning back once is as easily a change of mind as a wall, and a
+        wrong marker steers him off the real route."""
+        got = self._exits(["r3", "r1", "r3"])
+        assert "no_route_onward" not in got["Dead End"]
+        assert got["Dead End"]["turned_back_here"] == 1
+
+    def test_lingering_is_not_even_a_turn_back(self):
+        """Dwelling breaks the A-B-A pattern outright: he did not turn STRAIGHT
+        back, he stayed and then left. So a place he settles in registers
+        neither the fact nor the inference -- which is the right answer twice
+        over."""
+        got = self._exits(["r3", "r2", "r2", "r3", "r2", "r2", "r3"])
+        assert "turned_back_here" not in got["The Tavern"]
+        assert "no_route_onward" not in got["The Tavern"]
+
+    def test_the_fact_is_reported_when_he_really_did_turn_straight_back(self):
+        got = self._exits(["r3", "r1", "r3"])
+        assert got["Dead End"]["turned_back_here"] == 1
+
+    def test_an_exit_he_passed_through_is_not_marked(self):
+        """Onward movement disqualifies it however often he also came back."""
+        got = self._exits(["r3", "r1", "r2", "r1", "r3", "r1", "r3"])
+        assert "no_route_onward" not in got["Dead End"]
