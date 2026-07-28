@@ -40,3 +40,39 @@ class TestNullMeansOmitted:
         from schemas import CausalRegime
         with pytest.raises(pydantic.ValidationError):
             CausalRegime(regime_id=None)
+
+
+class TestOneItemWhereAListWasDeclared:
+    """Asked for "updates" with exactly one to report, a model returns the
+    object rather than a list of one.
+
+    Observed live: a character agent returned a bare object for both
+    `mind_model_updates` and `relationship_updates`, and the beat was
+    discarded with "value is not a valid list". The singular and the list of
+    one mean the same thing, so this is no more ambiguous than accepting a
+    structured value where prose was declared.
+    """
+
+    def test_a_bare_object_is_accepted_as_a_list_of_one(self):
+        from schemas import CharacterOutput
+        out = CharacterOutput(
+            mind_model_updates={"about_entity": "Mara", "kind": "observation",
+                                "claim": "she flinched", "confidence": 0.4})
+        assert len(out.mind_model_updates) == 1
+        assert out.mind_model_updates[0].about_entity == "Mara"
+
+    def test_a_real_list_is_untouched(self):
+        from schemas import CharacterOutput
+        out = CharacterOutput(mind_model_updates=[
+            {"about_entity": "A", "kind": "observation", "claim": "x"},
+            {"about_entity": "B", "kind": "observation", "claim": "y"}])
+        assert len(out.mind_model_updates) == 2
+
+    def test_a_string_is_not_silently_wrapped(self):
+        """Only an object is unambiguously 'one of these'. A bare string
+        where a list of objects was declared is a real disagreement and must
+        not be papered over."""
+        import pydantic, pytest
+        from schemas import CharacterOutput
+        with pytest.raises(pydantic.ValidationError):
+            CharacterOutput(mind_model_updates="she flinched")

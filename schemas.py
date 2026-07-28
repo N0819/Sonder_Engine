@@ -5,6 +5,7 @@ import json
 import re
 
 from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic.fields import SHAPE_LIST as _SHAPE_LIST
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Any, Union
@@ -229,6 +230,16 @@ class LenientModel(BaseModel):
             return value
         if isinstance(value, (dict, list, tuple)) and field.outer_type_ is str:
             return _flatten_to_text(value)
+        # One item where a list was declared. Asked for "updates" and having
+        # exactly one to report, a model will often return the object rather
+        # than a list of one -- observed live, a character agent returned a
+        # bare object for both `mind_model_updates` and `relationship_updates`
+        # and the whole beat was discarded with "value is not a valid list".
+        # The mirror of the case above, and no more ambiguous: the singular
+        # and the list of one mean the same thing.
+        if (getattr(field, "shape", None) == _SHAPE_LIST
+                and isinstance(value, dict)):
+            return [value]
         return value
 
 

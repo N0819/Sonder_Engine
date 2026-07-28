@@ -505,3 +505,40 @@ class TestCirclingIsVisible:
         route = ["rA", "rB"] * 8
         got = self._exits(route)
         assert got["A"]["entered_recently"] <= got["A"]["times_entered"]
+
+
+class TestLoopDensityNotRoomCount:
+    """The threshold is a ratio because a fixed count missed the real thing.
+
+    A lock observed live started as three rooms and widened to five as he
+    wandered a little further each cycle -- 0001/0002/0001/0000 became
+    0001/0002/0003/0102/0000. A count of four would have stopped reporting
+    exactly as it got worse. Five rooms over twelve beats is every room
+    walked twice over, which is no less stuck than three.
+    """
+
+    SCENE = {"rooms": {f"r{i}": {"name": f"R{i}"} for i in range(30)},
+             "positions": {}, "entities": {}}
+
+    def _exits(self, route, room="R0"):
+        from agents.character import _annotate_known_exits
+        out = _annotate_known_exits(
+            {"ahead": [{"room": room, "barrier": "open"}]}, self.SCENE, route)
+        return out["ahead"][0]
+
+    def test_the_widened_five_room_lock_is_still_caught(self):
+        route = (["r0", "r1", "r2", "r1"] * 2) + ["r0", "r1", "r3", "r4"]
+        assert len(set(route[-12:])) == 5
+        assert self._exits(route).get("circling_here") is True
+
+    def test_covering_ground_never_trips_it(self):
+        """Ratio near 1.0 -- the shape of actually going somewhere."""
+        route = [f"r{i}" for i in range(20)]
+        assert "circling_here" not in self._exits(route + ["r0"], "R0")
+
+    def test_half_the_window_is_the_boundary(self):
+        from agents.character import LOOP_WINDOW, LOOP_DENSITY
+        # exactly half -- each room twice -- counts as stuck
+        route = [f"r{i}" for i in range(LOOP_WINDOW // 2)] * 2
+        assert len(set(route[-LOOP_WINDOW:])) == LOOP_DENSITY * LOOP_WINDOW
+        assert self._exits(route, "R0").get("circling_here") is True
