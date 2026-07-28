@@ -397,9 +397,15 @@ def character_sheet(name="Vesk"):
     sheet["initial_state"]["goals"] = [
         {"goal": "Reach the shrine at the far corner as fast as possible.",
          "priority": 0.9},
-        {"goal": "Keep moving: every single beat, step through one doorway. "
-                 "Never stand still to study a room, never deliberate in "
-                 "place.", "priority": 0.95},
+        # Deliberately NOT "never deliberate". The first version said that and
+        # he obeyed it too well -- the thought stream showed him rejecting
+        # "deliberate on paths" as a norm violation (inhibition 0.8), so he was
+        # optimising for stride rather than for arriving. Both that and the
+        # original devotional room-studying are the sheet distorting the
+        # measurement; what is wanted is a character who thinks WHILE walking.
+        {"goal": "Keep moving -- decide as you walk rather than standing "
+                 "still to decide. Choosing the turn is part of moving, not a "
+                 "pause in it.", "priority": 0.95},
         {"goal": "Beat your own best time on this run.", "priority": 0.6},
     ]
     return normalize_character_data(sheet)
@@ -655,9 +661,17 @@ def _random_agent_handler(walls, name, rng):
     return handler
 
 
-# The four stages the question needs, plus mapping: mapping_quick is what
-# reconciles the beat against world/lore, and leaving it out changes what
-# reaches director_resolve.
+# perception_act runs BEFORE the character, because character_step reads its
+# view from perception_act (agents/character.py) -- NOT from perception_outcome,
+# which renders the aftermath for the next beat. Omitting it meant the character
+# fell through to character.py's "You register nothing new this beat." fallback
+# on every single beat: navigating a maze having never been shown a room,
+# working only from the exit list. Every measurement taken before this was of a
+# blind character.
+_PRE_CHARACTER = ("perception_act",)
+
+# Then the rest of the beat. mapping_quick reconciles against world/lore and
+# changes what reaches director_resolve.
 _LLM_CHAIN = ("mapping_quick", "director_resolve", "perception_outcome", "commit")
 
 
@@ -703,7 +717,7 @@ _scripted_here = [_rid(START)]
 
 def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
              verbose, rng=None, show_grid=False, optimal_path=(),
-             collect_trace=False):
+             collect_trace=False, think_path=None, run_no=0):
     """One traversal. Returns the ordered list of rooms occupied."""
     import db as _db
     from db import qi, wget, wset
@@ -730,9 +744,17 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
             input="",
         )
         # No player this beat: the sequence is empty and flow asks for nothing.
+        # `reactors` is load-bearing, not boilerplate: perception_act builds a
+        # perceiver ONLY for a character listed here, so an empty list meant
+        # the character was never a perceiver and character_step fell through
+        # to "You register nothing new this beat." on every beat. In real play
+        # director_interpret populates this from the player's act; with no
+        # player, the character is the only mind in the scene and always
+        # perceives.
         ctx["director_interpret"] = {
-            "sequence": [], "flow": {"needs_mapping": False, "reactors": [],
-                                     "resolution_flags": {}},
+            "sequence": [],
+            "flow": {"needs_mapping": False, "reactors": [char_id],
+                     "resolution_flags": {}},
             "authorial_offers": [],
         }
 
@@ -752,6 +774,8 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
             # once, then skip it: a skipped beat is a stalled character, which
             # the metrics already record honestly as a step with no move.
             try:
+                for key in _PRE_CHARACTER:
+                    ctx[key] = runtime.compute_step(key, ctx, 0)
                 ctx[f"character:{char_id}"] = runtime.compute_step(
                     f"character:{char_id}", ctx, 0)
                 for key in _LLM_CHAIN:
@@ -761,6 +785,32 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
                 print(f"    step {step + 1:3}  STALLED "
                       f"({type(exc).__name__}: {str(exc)[:120]})", flush=True)
                 continue
+
+        if agent != "random":
+            _out = ctx.get(f"character:{char_id}") or {}
+            _res = ctx.get("director_resolve") or {}
+            if think_path:
+                _dump_thoughts(think_path, run_no, step + 1, visited[-1],
+                               _out, _res)
+            if trace is not None:
+                trace.append({
+                    "beat": step + 1,
+                    "from": visited[-1],
+                    "private_thought": str(_out.get("private_thought") or "")[:300],
+                    "declared": [
+                        {"type": e.get("type"), "verb": e.get("verb"),
+                         "attempt": str(e.get("attempt") or e.get("text") or "")[:200]}
+                        for e in (_out.get("sequence") or []) if isinstance(e, dict)],
+                    "resolved": str(_res.get("summary") or "")[:200],
+                    # The view the character actually navigated on: a
+                    # perception model can return schema-valid output too thin
+                    # to recognise a room from, which surfaces as worse
+                    # navigation rather than as an error.
+                    "view": {
+                        k: str(v)[:400] for k, v in
+                        ((ctx.get("perception_outcome") or {}).get("views")
+                         or {}).items()},
+                })
 
         here = position_of(chat_id, name)
         visited.append(here)
@@ -776,6 +826,42 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
     if stalls:
         print(f"    ({len(stalls)} stalled beats this run)")
     return visited, (trace or [])
+
+
+# Fields worth watching, in the order they make sense to read: what he thought
+# privately, what he weighed, what he chose, what he concluded, how he felt.
+_THINK_FIELDS = (
+    "private_thought", "observations_used", "response_candidates", "sequence",
+    "mind_model_updates", "belief_updates", "association_updates",
+    "active_state", "appraisal", "manifest",
+)
+
+
+def _dump_thoughts(path, run_no, beat, where, out, resolved):
+    """Append one beat of the character's own output, readable rather than raw.
+
+    Everything the character emits is dropped on the floor by this harness --
+    it calls the stages directly, so nothing reaches the steps/variants tables
+    the app would normally render. Watching a navigation experiment without
+    seeing the navigator's reasoning means guessing at motive from a trail of
+    room ids.
+    """
+    lines = [f"\n{'='*72}", f"run {run_no} | beat {beat} | in {where}", "=" * 72]
+    for field in _THINK_FIELDS:
+        value = out.get(field)
+        if value in (None, "", [], {}):
+            continue
+        if isinstance(value, str):
+            lines.append(f"\n-- {field} --\n{value}")
+        else:
+            lines.append(f"\n-- {field} --\n"
+                         + json.dumps(value, indent=2, ensure_ascii=False))
+    summary = str((resolved or {}).get("summary") or "").strip()
+    if summary:
+        lines.append(f"\n-- director resolved --\n{summary}")
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
+        fh.flush()
 
 
 def render_grid(walls, here, seen, path=()):
@@ -879,6 +965,11 @@ def main():
                          "arms are otherwise byte-identical.")
     ap.add_argument("--grid", action="store_true",
                     help="print the maze after every step")
+    ap.add_argument("--think", default=None,
+                    help="write the character's FULL output to this file, one "
+                         "readable block per beat. The harness drives stages "
+                         "directly and never calls save_step, so a character's "
+                         "reasoning otherwise leaves no trace anywhere.")
     ap.add_argument("--out", default=None,
                     help="append per-run results here as JSON lines; written "
                          "and flushed after each run so an interrupted "
@@ -909,7 +1000,7 @@ def main():
           f"mean {dec['mean_depth']}")
 
     if args.agent == "llm" and not args.go:
-        calls = args.runs * args.max_steps * len(_LLM_CHAIN)
+        calls = args.runs * args.max_steps * (len(_LLM_CHAIN) + len(_PRE_CHARACTER))
         print(f"maze: {GRID}x{GRID}, optimal path {optimal} moves")
         print(f"--agent llm would make UP TO ~{calls} LLM calls "
               f"({args.runs} runs x {args.max_steps} steps x "
@@ -944,7 +1035,8 @@ def main():
             max_steps=args.max_steps, turn_base=turn_base,
             verbose=args.verbose, rng=rng, show_grid=args.grid,
             optimal_path=shortest_path(walls),
-            collect_trace=bool(args.out))
+            collect_trace=bool(args.out),
+            think_path=args.think, run_no=run)
         turn_base += len(visited)
         m = metrics(visited, optimal)
         rows.append(m)
