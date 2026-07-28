@@ -746,3 +746,59 @@ class TestASeenCulDeSacIsNotFrontier:
         assert "rPocket" in seen, (
             "standing in Mid, the Pocket is visibly closed -- this is the "
             "fact commit persists as known_dead_ends")
+
+
+class TestEachExitCarriesItsBearing:
+    """The buckets are egocentric; everything else the character reads is
+    compass. Bridging the two was left to the model, and it guessed.
+
+    Read live from a thinking model's own trace, first beat of a run: "two
+    open exits: one to Chamber 0001 (south) and one to Chamber 0100 (south)"
+    -- the same bearing given to two different exits, one of which was east.
+    A beat later: "east is the intended exit, but it's not detailed in
+    spatial_frame; I need to infer it's ahead or something." On a first beat
+    there is no movement history, so every exit is `unclassified` and the
+    bucket carries no direction whatever.
+    """
+
+    SCENE = {"rooms": {
+        "rA": {"name": "A", "adjacent": [
+            {"to": "rB", "barrier": "open", "dir": "e"},
+            {"to": "rC", "barrier": "open", "dir": "s"}]},
+        "rB": {"name": "B", "adjacent": []},
+        "rC": {"name": "C", "adjacent": []},
+    }, "positions": {"V": "rA"}, "entities": {}}
+
+    def test_the_bearing_is_on_every_exit(self):
+        from spatial import spatial_digest
+        got = spatial_digest(self.SCENE, "V")
+        by = {e["room"]: e for edges in got.values()
+              if isinstance(edges, list) for e in edges}
+        assert by["B"]["bearing"] == "e"
+        assert by["C"]["bearing"] == "s"
+
+    def test_two_different_exits_never_share_a_bearing(self):
+        """The exact confusion observed: one bearing on two exits."""
+        from spatial import spatial_digest
+        got = spatial_digest(self.SCENE, "V")
+        bearings = [e["bearing"] for edges in got.values()
+                    if isinstance(edges, list) for e in edges]
+        assert len(bearings) == len(set(bearings))
+
+    def test_it_survives_the_first_beat_with_no_movement_history(self):
+        """The case that motivated it: no history, so every exit is
+        unclassified and the bucket says nothing."""
+        from spatial import spatial_digest
+        got = spatial_digest(self.SCENE, "V")
+        flat = [e for edges in got.values() if isinstance(edges, list)
+                for e in edges]
+        assert flat and all("bearing" in e for e in flat)
+
+    def test_a_scene_without_directions_invents_none(self):
+        from spatial import spatial_digest
+        scene = {"rooms": {"rA": {"name": "A", "adjacent": [
+            {"to": "rB", "barrier": "open"}]}, "rB": {"name": "B"}},
+            "positions": {"V": "rA"}, "entities": {}}
+        flat = [e for edges in spatial_digest(scene, "V").values()
+                if isinstance(edges, list) for e in edges]
+        assert flat and all("bearing" not in e for e in flat)

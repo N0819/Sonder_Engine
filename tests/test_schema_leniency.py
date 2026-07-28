@@ -322,3 +322,49 @@ class TestReasoningIsKeptButQuarantined:
             if message is None:
                 continue          # junk leaves the previous value alone
             assert got == expected, f"{message!r} -> {got!r}"
+
+
+class TestReasoningSurvivesTheStreamingPath:
+    """The pipeline runs on the STREAMING path, so that is the one that had
+    to capture reasoning -- and it was the one that did not.
+
+    Capture was added to the non-streaming branch only. Every engine turn
+    sets a token sink for the live UI and therefore streams, so the feature
+    was dead exactly where it was meant to be used, and it looked from the
+    outside like a model that does not expose a trace. Reasoning arrives on
+    its own delta key and never in `content`.
+    """
+
+    def _stream(self, chunks):
+        import json as _j
+        return [b"data: " + _j.dumps(c).encode() for c in chunks] + [b"data: [DONE]"]
+
+    def test_reasoning_deltas_are_accumulated_and_content_is_not_polluted(
+            self, monkeypatch):
+        import providers
+        sent = []
+        chunks = [
+            {"choices": [{"delta": {"reasoning": "first I look "}}]},
+            {"choices": [{"delta": {"reasoning": "north."}}]},
+            {"choices": [{"delta": {"content": '{"ok":'}}]},
+            {"choices": [{"delta": {"content": "1}"}}]},
+        ]
+
+        class FakeResp:
+            status_code = 200
+            def iter_lines(self):
+                return iter(self._lines)
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        resp = FakeResp(); resp._lines = self._stream(chunks)
+        monkeypatch.setattr(providers, "_session",
+                            lambda: type("S", (), {"post": lambda *a, **k: resp})())
+        token = providers.last_reasoning.set(None)
+        try:
+            out = providers._sse_openai("u", {}, {}, sent.append)
+            assert out == '{"ok":1}', "content must be unchanged"
+            assert providers.last_reasoning.get() == "first I look north."
+        finally:
+            providers.last_reasoning.reset(token)
+        assert "".join(sent) == '{"ok":1}', (
+            "reasoning must never reach the sink -- that is player-facing prose")

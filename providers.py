@@ -1043,7 +1043,7 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
     # the streaming path, which is the one actually used during normal
     # pipeline runs (token_sink is set for the live "stream agents" UI).
     body["stream_options"] = {"include_usage": True}
-    text = ""
+    text, reasoning = "", ""
     usage = None
     t0 = time.time()
     _check_cancel()
@@ -1074,12 +1074,28 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
                 raise LLMError(f"provider stream error: {msg}", 0, True)
             if j.get("usage"):
                 usage = j["usage"]
-            d = (j.get("choices") or [{}])[0].get("delta", {}).get("content")
+            _delta = (j.get("choices") or [{}])[0].get("delta", {})
+            # Reasoning arrives on its OWN delta key, never in `content`, and
+            # it is the pipeline's real path -- the sink is set for the live
+            # UI, so this function serves every engine turn while the
+            # non-streaming branch below serves almost nothing. Capturing
+            # reasoning only there meant the feature was dead in the engine
+            # and looked, from the outside, exactly like a model that does not
+            # expose a trace. It is NOT passed to `sink`: the sink is player-
+            # facing prose, and a model's private thinking is not that.
+            _r = _delta.get("reasoning") or _delta.get("reasoning_content")
+            if isinstance(_r, str) and _r:
+                reasoning += _r
+            d = _delta.get("content")
             if d:
                 text += d
                 sink(d)
     if role:
         _log_usage(role, model, t0, usage)
+    try:
+        last_reasoning.set(reasoning or None)
+    except Exception:
+        pass
     return text
 
 def _sse_anthropic(base, headers, body, sink, role=None, model=None):
@@ -1659,7 +1675,7 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
     # Without this a streamed response reports no token counts at all -- see
     # the matching comment in _sse_openai.
     body["stream_options"] = {"include_usage": True}
-    text = ""
+    text, reasoning = "", ""
     usage = None
     t0 = time.time()
     _check_cancel()
@@ -1691,13 +1707,21 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
                 raise LLMError(f"provider stream error: {msg}", 0, True)
             if j.get("usage"):
                 usage = j["usage"]
-            d = (j.get("choices") or [{}])[0].get("delta", {}).get("content")
+            _delta = (j.get("choices") or [{}])[0].get("delta", {})
+            _r = _delta.get("reasoning") or _delta.get("reasoning_content")
+            if isinstance(_r, str) and _r:
+                reasoning += _r
+            d = _delta.get("content")
             if d:
                 text += d
                 if sink:
                     sink(d)
     if role:
         _log_usage(role, model, t0, usage)
+    try:
+        last_reasoning.set(reasoning or None)
+    except Exception:
+        pass
     return text
 
 async def _sse_anthropic_async(base, headers, body, sink, client, role=None, model=None):
