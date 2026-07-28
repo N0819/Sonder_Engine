@@ -259,13 +259,25 @@ class LenientModel(BaseModel):
                 # Carry the key across when the item has an obvious slot for
                 # it and the model left that slot empty -- the key IS the
                 # subject in this shape.
+                # Which slot the key belongs in is the item's own FIRST
+                # REQUIRED field, not a list of names guessed in advance. A
+                # guessed list of about_entity/name/entity/id looked general
+                # and was not: it missed `belief` on BeliefUpdate and `cue`
+                # on AssociationUpdate, so a map keyed by belief text lost
+                # the text and failed as `belief_updates.0.belief: field
+                # required` -- the same error the map handling existed to
+                # prevent, one model over. The subject of these shapes is
+                # what the model is obliged to supply, which is exactly what
+                # "first required field" names.
+                slot = next(
+                    (n for n, f in
+                     (getattr(field.type_, "__fields__", {}) or {}).items()
+                     if f.required), None)
                 out = []
                 for key, item in value.items():
                     item = dict(item)
-                    for slot in ("about_entity", "name", "entity", "id"):
-                        if slot in item_fields and not item.get(slot):
-                            item[slot] = key
-                            break
+                    if slot and not item.get(slot):
+                        item[slot] = key
                     out.append(item)
                 return out
             return [value]

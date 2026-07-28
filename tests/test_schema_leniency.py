@@ -172,3 +172,43 @@ class TestAMapOfItemsIsNotOneItem:
         from schemas import CharacterOutput
         with pytest.raises(pydantic.ValidationError):
             CharacterOutput(mind_model_updates={"a": 1, "b": 2})
+
+
+class TestTheKeySlotIsTheItemsOwnRequiredField:
+    """Which slot a map's key belongs in must come from the item, not a
+    guessed list of field names.
+
+    A hardcoded about_entity/name/entity/id looked general and was not: it
+    missed `belief` on BeliefUpdate and `cue` on AssociationUpdate, so a map
+    keyed by belief text dropped the text and failed as
+    `belief_updates.0.belief: field required` -- the very error the map
+    handling existed to prevent, one model over. Seen live one resume after
+    the first version shipped.
+    """
+
+    def test_belief_updates_keyed_by_the_belief(self):
+        from schemas import CharacterOutput
+        out = CharacterOutput(belief_updates={
+            "the bridge is watched": {"confidence": 0.6},
+            "Mara lied about the ledger": {"confidence": 0.8}})
+        assert [b.belief for b in out.belief_updates] == [
+            "the bridge is watched", "Mara lied about the ledger"]
+
+    def test_association_updates_keyed_by_the_cue(self):
+        from schemas import CharacterOutput
+        out = CharacterOutput(association_updates={
+            "boots on wet stone": {"amount": 0.2}})
+        assert out.association_updates[0].cue == "boots on wet stone"
+
+    def test_mind_models_still_keyed_by_the_subject(self):
+        """The case the first version did handle must keep working."""
+        from schemas import CharacterOutput
+        out = CharacterOutput(mind_model_updates={
+            "Mara": {"kind": "observation", "claim": "she flinched"}})
+        assert out.mind_model_updates[0].about_entity == "Mara"
+
+    def test_an_explicit_value_still_wins_over_the_key(self):
+        from schemas import CharacterOutput
+        out = CharacterOutput(belief_updates={
+            "shorthand": {"belief": "the bridge is watched", "confidence": 0.6}})
+        assert out.belief_updates[0].belief == "the bridge is watched"
