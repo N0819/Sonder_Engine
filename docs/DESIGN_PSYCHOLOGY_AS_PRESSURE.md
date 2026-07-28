@@ -1,7 +1,16 @@
 # Design: psychology as pressure, not as premises
 
-**Status:** investigation with measurements, no code changed. The measurements
-are the contribution; the proposals are ranked by how sure I am of them.
+**Status:** (a) and (b) implemented (maze sheet values re-authored as ordered
+trade-offs; the WANTS AND GOALS rule no longer instructs derivation; the
+psychology-fill prompt teaches the trade-off form; tests in
+`tests/test_psychology_as_pressure.py`). (c) deliberately deferred, not
+rejected: §5's settling experiment is "(a) and (b) only", and landing (c) in
+the same change would confound the measurement that decides whether (c) is
+needed — also, a deterministic drive×situation function over prose drive
+fields is either restatement or keyword-matching, and the demotion of the raw
+sheet that makes (c) safe is a wide payload restructure. Revisit after the §5
+re-measure. (e) declined as designed. The measurements are the contribution;
+the proposals are ranked by how sure I am of them.
 
 Instrument: 158 beats of one character's full reasoning traces (maze arm A11,
 `arcee-ai/trinity-large-thinking` at medium reasoning). A character agent

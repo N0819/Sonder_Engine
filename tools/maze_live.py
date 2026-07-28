@@ -139,13 +139,17 @@ PAGE = """<!doctype html><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <style>
 :root{--pa:#EDEFF2;--pn:#F7F8FA;--ink:#141A21;--dim:#5C6875;--ln:#C6CDD6;
---wall:#2B3642;--tr:#C0651B;--trs:#F2DCC6;--goal:#1E7A67;--rt:#9AA6B4;--al:#A32B38}
+--wall:#2B3642;--tr:#C0651B;--trs:#F2DCC6;--goal:#1E7A67;--rt:#9AA6B4;--al:#A32B38;
+--glow:rgba(30,122,103,.22)}
 @media(prefers-color-scheme:dark){:root{--pa:#0E1319;--pn:#161D25;--ink:#DFE5EC;
 --dim:#8593A2;--ln:#2A343F;--wall:#B7C6D6;--tr:#E8963F;--trs:#3A2A18;
---goal:#43BFA4;--rt:#3E4C5A;--al:#E4707C}}
+--goal:#43BFA4;--rt:#3E4C5A;--al:#E4707C;--glow:rgba(67,191,164,.42)}}
 :root[data-theme=dark]{--pa:#0E1319;--pn:#161D25;--ink:#DFE5EC;--dim:#8593A2;
 --ln:#2A343F;--wall:#B7C6D6;--tr:#E8963F;--trs:#3A2A18;--goal:#43BFA4;
---rt:#3E4C5A;--al:#E4707C}
+--rt:#3E4C5A;--al:#E4707C;--glow:rgba(67,191,164,.42)}
+:root[data-theme=light]{--pa:#EDEFF2;--pn:#F7F8FA;--ink:#141A21;--dim:#5C6875;
+--ln:#C6CDD6;--wall:#2B3642;--tr:#C0651B;--trs:#F2DCC6;--goal:#1E7A67;
+--rt:#9AA6B4;--al:#A32B38;--glow:rgba(30,122,103,.22)}
 *{box-sizing:border-box}
 body{margin:0;padding:2rem 1rem;background:var(--pa);color:var(--ink);
 font:400 16px/1.6 "Iowan Old Style",Palatino,Georgia,serif}
@@ -172,7 +176,21 @@ color:var(--dim)}
 .opt::after{content:"·";color:var(--rt);font-size:1.2rem}
 .seen{background:var(--trs);color:var(--tr);font-weight:600}
 .here{background:var(--tr);color:var(--pa)}
-.goal{box-shadow:inset 0 0 0 2px var(--goal);color:var(--goal)}
+/* The shrine. The glow is VIEWER-ONLY: it bleeds outward as a box-shadow, so
+   it never paints over a wall, and no such beacon exists in the fiction -- the
+   maze he navigates is uniformly lit and the goal is not visible from a
+   distance. Do not mirror this into `scene_rooms`, or the search stops being a
+   search. */
+.goal{position:relative;color:var(--goal);
+box-shadow:inset 0 0 0 2px var(--goal),0 0 .5rem .05rem var(--glow);
+animation:shrine 3.4s ease-in-out infinite}
+.goal:not(.seen){font-size:.95rem;
+background:radial-gradient(circle,var(--glow),transparent 72%)}
+.goal.here{color:var(--pa)}
+.goal.opt::after{content:none}  /* ✦ already marks it; no stacked dot */
+@keyframes shrine{50%{box-shadow:inset 0 0 0 2px var(--goal),
+0 0 1.2rem .28rem var(--glow)}}
+@media(prefers-reduced-motion:reduce){.goal{animation:none}}
 .start{color:var(--dim)}
 table{border-collapse:collapse;width:100%;font-size:.82rem;background:var(--pn)}
 th,td{padding:.35rem .6rem;border-bottom:1px solid var(--ln);text-align:left}
