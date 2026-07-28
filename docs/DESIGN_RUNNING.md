@@ -87,7 +87,17 @@ sight bound for the same appealing reason, and the docstring has to answer them.
 
 Still stopping a run, because these are the world stopping you rather than a
 decision: `dead_end`, `darkness`, `door` (a closed door does not open itself),
-and `winded`.
+and `full_reach` — the budget stop, originally named `winded`. Renamed after
+A12 measured the word beating its own documentation ("he would be winded? But
+he might not want to be winded if he needs to assess contents" — the best
+offer a run can get, read as a penalty for taking it; a *marginal* deterrent,
+since the same arm took one `winded` run in full at beat 1 and reasoned
+against later ones — a mislabel tips close decisions). The stop reason names
+why the run ENDED, a distance fact; what running COSTS — arriving winded, for
+*every* hard run, whatever ends it — belongs to the Director, and the two must
+not share a word. Third label whose connotation beat its footnote (`closed`,
+`spent` before it); the one fix that has worked each time is changing the
+word, not annotating it.
 
 **One asymmetry the correction introduces, and the implementation keeps.** The
 RUN may cross ground the runner has not seen — they perceive it by being in it.
@@ -138,6 +148,20 @@ behavior."*
 The resolution is not to weaken the directive, which exists for good reasons.
 It is that **a run to its stopping point is one beat-sized behaviour** — the
 smallest unit of running is the whole reach, not the first room.
+
+**Measured update (A12): saying that was not enough.** The paragraph stating
+exactly the above was read and lost — "the sprint reach says he could run 3
+rooms in one beat. But the smallest plausible next behavior might be just the
+first step," and he declared a 1-room "run" named after the first room of the
+offer's `path`. Arguing with a minimizer from inside the same prompt is the
+wrong shape; the working fix is structural. The character-facing offer
+(`sprint_offers`) now presents **nothing to split**: `run_ends_at` names the
+terminal chamber and the intermediate rooms are simply not listed (they were
+all his already, by sight or by feet — nothing epistemic is withheld), and the
+prompt frames running as a **gait, not a distance**: you choose to run and
+which way; how far is the passage's fact. Declaring less than the reach now
+requires inventing a stop the offer never mentioned. The Director's objective
+`sprint_reach` keeps the full `path` for resolution and commit.
 
 A second contributor, worth knowing when authoring: this character's sheet said
 *"never breaking stride"*, and he consistently read that as an argument
