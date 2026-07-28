@@ -515,7 +515,7 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
         "narrator",
         get_prompt("narrator"),
         call_payload,
-        max_tokens=16000,
+        max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
     # Warning-only re-normalization; strict schema+semantic validation
     # (with repair/fallback/raise) already ran inside _agent_json.

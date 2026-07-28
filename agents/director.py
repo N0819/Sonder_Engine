@@ -194,7 +194,7 @@ def director_establish(ctx, nonce):
         get_prompt("director_establish"),
         payload,
         temperature=0.7,
-        max_tokens=16000,
+        max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
     # Warning-only re-normalization; strict schema+semantic validation
     # (with repair/fallback/raise) already ran inside _agent_json.
@@ -374,7 +374,7 @@ def director_interpret(ctx, nonce):
         "director_interpret",
         get_prompt("director_interpret"),
         payload,
-        max_tokens=16000,
+        max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
 
     # Warning-only re-normalization; strict validation already ran inside
@@ -2418,7 +2418,7 @@ def director_resolve(ctx, nonce):
         get_prompt("director_resolve"),
         payload,
         temperature=0.5,
-        max_tokens=16000,
+        max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
 
     # WORLD PRESSURE must-tick floor (F5), enforced. The ledger + prompt rule
@@ -2477,7 +2477,7 @@ def director_resolve(ctx, nonce):
             get_prompt("director_resolve"),
             {**payload, "correction_notes": _wp_note},
             temperature=0.3,
-            max_tokens=16000,
+            max_tokens=None,   # the configured ceiling; see complete_validated_json
         )
         if len(_unticked_pressures(_wp_retry)) < len(_wp_missing):
             out = _wp_retry
@@ -2525,7 +2525,7 @@ def director_resolve(ctx, nonce):
             get_prompt("director_resolve"),
             {**payload, "correction_notes": _note},
             temperature=0.0,
-            max_tokens=16000,
+            max_tokens=None,   # the configured ceiling; see complete_validated_json
         )
         _retry_invented = _check_player_act_authority(
             _retry.get("resolved_event") or "",

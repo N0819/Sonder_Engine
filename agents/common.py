@@ -867,7 +867,7 @@ def _agent_json(
     payload,
     *,
     temperature=None,
-    max_tokens=16000,
+    max_tokens=None,   # the configured ceiling; see complete_validated_json
     sampler=None,
 ):
     """The STRICT validated-JSON path every state-mutating pipeline stage

@@ -93,10 +93,19 @@ def complete_validated_json(
     system: str,
     payload: dict,
     temperature=None,
-    max_tokens: int = 16000,
+    max_tokens: int | None = None,
     sampler=None,
     repair_attempts: int = 1,
 ) -> dict:
+    # None means "the configured ceiling" (providers._clamp_max_tokens). This
+    # used to be a hardcoded 16000, which made max_output_tokens a one-way
+    # knob: the clamp only ever LOWERS, so raising the setting above 16000
+    # changed nothing for the stage that most needs the room. Measured in maze
+    # arm A11 -- a reasoning model's thinking is billed as output, so trinity
+    # spent 11-13k tokens deliberating before emitting any JSON, hit exactly
+    # 16000, and the beat died on `Unterminated string`. The engine's comment
+    # invites raising the ceiling for "a model with a genuinely larger usable
+    # output window"; that invitation did not work.
     user = json.dumps(payload, ensure_ascii=False)
     provider_errored = False
     last_provider_error = None
