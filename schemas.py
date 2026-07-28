@@ -1123,6 +1123,36 @@ class CharacterActiveState(BaseModel):
         extra = "allow"
 
 
+def _coerce_candidate_response(value):
+    """Accept a candidate `response` expressed as a sequence ELEMENT.
+
+    `response` is the prose of one option the character weighed, but "the
+    candidate response" reads just as naturally as the act itself, and models
+    emit it structurally:
+
+        "response": {"type": "action", "attempt": "step through the doorway",
+                     "observable": "steps forward through the doorway", ...}
+
+    Rejecting that failed the ENTIRE character turn -- the beat was lost, the
+    character did nothing, and the only signal was a type error naming a field
+    the author never sees. Reduce it to the prose it contains instead. The
+    surface (`observable`) is preferred over the intent (`attempt`) because
+    these candidates are weighed, not enacted, and the observable is what the
+    other machinery would ever show anyone.
+    """
+    if isinstance(value, dict):
+        for key in ("observable", "attempt", "text", "response", "summary",
+                    "content", "description"):
+            text = str(value.get(key) or "").strip()
+            if text:
+                return text
+        return ""
+    if isinstance(value, (list, tuple)):
+        parts = [str(v).strip() for v in value if str(v or "").strip()]
+        return "; ".join(parts)
+    return value
+
+
 class ResponseCandidate(BaseModel):
     response: str = ""
     serves: list[str] = Field(default_factory=list)
@@ -1134,6 +1164,9 @@ class ResponseCandidate(BaseModel):
 
     _lists = validator("serves", pre=True, allow_reuse=True)(
         lambda cls, value: _coerce_str_list(value)
+    )
+    _coerce_response = validator("response", pre=True, allow_reuse=True)(
+        lambda cls, value: _coerce_candidate_response(value)
     )
     _candidate_axes = validator(
         "risk", "inhibition", pre=True, allow_reuse=True
