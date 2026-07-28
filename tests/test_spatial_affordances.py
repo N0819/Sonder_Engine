@@ -802,3 +802,115 @@ class TestEachExitCarriesItsBearing:
         flat = [e for edges in spatial_digest(scene, "V").values()
                 if isinstance(edges, list) for e in edges]
         assert flat and all("bearing" not in e for e in flat)
+
+
+class TestTheLoopDetectorMustNotTrapHim:
+    """A signal that fires because the character is stuck, and then stops them
+    leaving, is worse than no signal.
+
+    Measured in maze arm A11 run 2. Standing in a pocket with exactly two
+    exits: one `spent`, one `circling`. The `circling` one was the sole route
+    to the only frontier left in the maze, eight rooms off. Both read as "do
+    not go here", so he paced -- and every beat of pacing made the circling
+    verdict truer. `beats_since_new_ground` reached 13.
+    """
+
+    @staticmethod
+    def _room(name, adjacent):
+        return {"name": name, "desc": name, "adjacent": adjacent}
+
+    @staticmethod
+    def _edge(to, direction, barrier="open"):
+        return {"to": to, "dir": direction, "barrier": barrier}
+
+    def _pocket(self):
+        """here -- back <-> onward -> (unexplored). Everything walked."""
+        rooms = {
+            "here": self._room("Here", [self._edge("back", "e"), self._edge("onward", "w")]),
+            "back": self._room("Back", [self._edge("here", "w")]),
+            "onward": self._room("Onward", [self._edge("here", "e"),
+                                       self._edge("fresh", "w")]),
+            "fresh": self._room("Fresh", [self._edge("onward", "e")]),
+        }
+        return {"rooms": rooms, "positions": {}, "entities": {},
+                "attire": {}, "overlays": {}}
+
+    def _annotate(self, sc):
+        # Dense enough that `circling_here` actually fires -- three rooms over
+        # eleven beats. A fixture where the live exit still reads `known` does
+        # not reproduce the trap, because `known` is not discouraging and the
+        # character was never being argued out of it.
+        route = ["here", "onward", "here", "back", "here", "onward", "here",
+                 "back", "here", "onward", "here"]
+        graph = {"nodes": {r: {"basis": "walked"} for r in
+                           ("here", "back", "onward")},
+                 "edges": {"here": {"back": {"taken": True},
+                                    "onward": {"taken": True}},
+                           "onward": {"here": {"taken": True},
+                                      "fresh": {"basis": "seen"}}}}
+        digest = {"behind": [{"room": "Back", "barrier": "open"}],
+                  "ahead": [{"room": "Onward", "barrier": "open"}]}
+        return _annotate_known_exits(
+            digest, sc, route,
+            known_exits={"here": ["back", "onward"],
+                         "back": ["here"],
+                         "onward": ["here", "fresh"]},
+            here_rid="here", place_graph=graph)
+
+    def _find(self, out, room):
+        for edges in out.values():
+            if not isinstance(edges, list):
+                continue
+            for e in edges:
+                if isinstance(e, dict) and e.get("room") == room:
+                    return e
+        return None
+
+    def test_the_only_live_exit_says_so(self):
+        out = self._annotate(self._pocket())
+        onward = self._find(out, "Onward")
+        assert onward and onward.get("only_way_onward") is True
+        assert "way out" in onward["verdict"]
+
+    def test_the_dead_branch_is_not_promoted(self):
+        """Only the exit with frontier beyond it. Marking both would make the
+        signal noise."""
+        out = self._annotate(self._pocket())
+        assert not (self._find(out, "Back") or {}).get("only_way_onward")
+
+    def test_the_distance_survives_a_discouraging_verdict(self):
+        """The bug underneath: the frontier distance only ever attached to
+        `known`, so it went silent on exactly the exits the character was
+        being told to avoid."""
+        out = self._annotate(self._pocket())
+        verdict = self._find(out, "Onward")["verdict"]
+        # At one hop the clause is the singular phrasing; either way the
+        # distance must be SAID on an exit the verdict argues against.
+        assert "never taken" in verdict
+        assert not verdict.startswith("known"), (
+            "fixture must produce a discouraging verdict or it does not "
+            "reproduce the trap")
+
+    def test_it_stays_quiet_when_something_encouraging_remains(self):
+        """With an untried door in the room the character is choosing, not
+        trapped, and choosing is theirs. A marker that fires on an ordinary
+        junction would be an instruction wearing a fact's clothes."""
+        sc = self._pocket()
+        sc["rooms"]["here"]["adjacent"].append(self._edge("virgin", "n"))
+        sc["rooms"]["virgin"] = self._room("Virgin", [self._edge("here", "s")])
+        route = ["here", "back", "here", "onward", "here"]
+        out = _annotate_known_exits(
+            {"behind": [{"room": "Back", "barrier": "open"}],
+             "ahead": [{"room": "Onward", "barrier": "open"}],
+             "left": [{"room": "Virgin", "barrier": "open"}]},
+            sc, route,
+            known_exits={"here": ["back", "onward", "virgin"],
+                         "onward": ["here", "fresh"]},
+            here_rid="here",
+            place_graph={"nodes": {r: {"basis": "walked"}
+                                   for r in ("here", "back", "onward")},
+                         "edges": {}})
+        assert not any(
+            e.get("only_way_onward")
+            for edges in out.values() if isinstance(edges, list)
+            for e in edges if isinstance(e, dict))
