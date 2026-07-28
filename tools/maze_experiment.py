@@ -808,6 +808,23 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
                 stalls.append(f"step {step + 1}: {type(exc).__name__}: {exc}")
                 print(f"    step {step + 1:3}  STALLED "
                       f"({type(exc).__name__}: {str(exc)[:120]})", flush=True)
+                # A stall the run cannot recover from must END it, not be
+                # retried sixty times. Out of credit, a revoked key or a dead
+                # provider fails INSTANTLY, so the beat loop stops being rate
+                # limited by the network and spins at full speed: observed
+                # live, an exhausted OpenRouter balance turned into 272
+                # identical stalls in seconds, burying 26 real beats of
+                # results under them and reporting a stall count that looked
+                # like a model problem.
+                _fatal = ("402", "401", "403", "Insufficient credits",
+                          "No usable model configured")
+                if any(sig in str(exc) for sig in _fatal):
+                    print(f"    ABORTING RUN -- unrecoverable: "
+                          f"{str(exc)[:160]}", flush=True)
+                    raise SystemExit(
+                        "maze: aborting, the provider cannot serve this run "
+                        f"({str(exc)[:200]}). Completed beats and the "
+                        "checkpoint are intact -- fix the cause and --resume.")
                 # Dump whatever the character DID produce before skipping.
                 # This used to `continue` straight past the dump, which made
                 # every stalled beat invisible -- and a stalled beat is the
