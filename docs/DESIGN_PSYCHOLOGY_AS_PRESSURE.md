@@ -111,12 +111,25 @@ wire.
 The engine's own pattern, from `psychology_runtime`: stress **biases the next
 deliberation without selecting behaviour**. Psychology could arrive the same
 way — a derived, short "what pulls at you right now" computed from drive ×
-situation, carrying the salience, with the raw sheet demoted or dropped from the
-payload.
+situation.
 
-The risk is real and I would want it tested rather than assumed: a derived
-inclination is the engine deciding what the character is inclined to, which is
-one step from the engine deciding behaviour. It must stay an inclination the
+**It must RELOCATE salience, not add it.** This is the whole difference between
+the fix working and backfiring. Adding an inclination block while leaving the
+raw sheet at full weight gives the character two heavy citable blocks instead of
+one, and the measurements in §1 are a measurement of weight. The raw sheet has
+to be demoted in the same change that introduces the derived view.
+
+There is a proven template for exactly this shape in `_annotate_known_exits`:
+the **verdict** carries the salience, the raw markers stay underneath as
+evidence, and the prompt says outright that the verdict is a reading the
+character may disagree with — *"disagree deliberately and for a reason you could
+say aloud."* That is precisely the relationship an inclination should have to a
+sheet. It also solves the risk below by construction, because the character is
+told the derived thing is a reading rather than a fact about them.
+
+The residual risk is still real and wants testing rather than assuming: a
+derived inclination is the engine deciding what a character is inclined to,
+which is one step from the engine deciding behaviour. It must stay something the
 character can act against — and, unlike today, sometimes should.
 
 ### (d) A trait as a disposition, not a switch — MEDIUM
@@ -126,15 +139,28 @@ probabilistic and situation-dependent, and the engine already has the machinery
 to express that (stress, hedonic state, absorption). Whether that is worth
 representing explicitly, or emerges once (b) and (c) land, is the open question.
 
-### (e) Permit self-violation — LOW confidence, high value if right
+### (e) Permit self-violation — DECLINED as a feature; expected from (a)
 
-Zero violations in 158 beats. Something should make a character act against a
-stated value under enough pressure and then have to sit with it. But an
-instruction to "sometimes violate your values" would produce random
-inconsistency, which is worse than rigidity and reads as a broken machine. The
-honest position: the *absence* is measured and real; the fix is not obvious, and
-should probably fall out of (a) — a value that names what it beats can lose to
-something else — rather than being built directly.
+Zero violations in 158 beats, and something should make a character act against
+a stated value under enough pressure. But **do not build this**, and the reason
+generalises past this one item.
+
+What is wanted is not unpredictability, it is **legible inconsistency**: a
+character who breaks a value for a reason a reader can see. Those are different
+things. Unpredictability is a human trait that machines imitate badly — a model
+instructed to be occasionally inconsistent produces noise, and noise reads as a
+broken machine, which is strictly worse than rigidity because rigidity at least
+looks like a person with strong principles.
+
+Motivated violation, by contrast, is not unpredictable at all. It is
+deterministic and readable, and it falls out of (a) at no cost: *"speed over
+thoroughness"* means thoroughness **loses when speed is at stake and wins
+otherwise**. That is a value being violated, on purpose, for a visible reason,
+with no randomness anywhere in it.
+
+So the measured absence in §1 is real, and the fix is (a). If violations are
+still zero after (a) and (b) land, revisit — but revisit by asking what pressure
+is missing, never by adding variance.
 
 ## 5. What would settle it
 
