@@ -353,6 +353,91 @@ optimum the headroom is in **excess moves over 28**, which is the metric to
 read here — not reversals, and not room coverage, since a full traversal covers
 most of the grid either way.
 
+### A12 — the same character, given something to want
+
+**In progress.** The rerun is live; every number below marked *baseline* is
+final, everything else is provisional.
+
+A12 is not a new character. It is A11's Vesk continued — same database, same
+46-node place graph, same 211 memories — which makes it the first arm to ask
+whether a mind can *use* a map rather than build one. His snapshot before it
+began is `~/sonder-maze-characters/vesk-a12-pre.db`.
+
+**The reward was paired first, and had never been paired before.** In three
+runs he had reached the shrine once (run 3, 28 moves, excess 0) — and the
+interlude's `reached=True` branch had still never fired, because it is guarded
+by `if run < args.runs` and run 3 was the last. Both interludes he had ever
+received were the consolation branch: *"they fed you anyway, and you ate it
+standing, chewing over where the way had gone wrong,"* valence 0.3. The
+association he actually held was that running the maze ends in a mediocre meal.
+Firing the reached branch by hand (valence 0.8, salience 0.85, eaten sitting
+down) is what makes A12 an arm about a wanted destination at all.
+
+Two errors in doing it by hand, both worth the warning. `--runs 3` made run 3
+the last run and suppressed the interlude entirely. And calling `run_interlude`
+from an imported module leaves `START` at its `(0,0)` default, so the memory was
+location-tagged `r0000` instead of the entrance `r0003` — location-cued recall
+would have surfaced his reward in the wrong corner and stayed silent at the
+threshold where he starts. Set `GRID`/`START`/`GOAL` before calling any harness
+function that reads them.
+
+**The finding: he had no way to use a map he had.** BFS over his own place
+graph — walked edges only — reproduces the true optimal path exactly, 28 rooms.
+While holding that, he spent five beats at the entrance working out which way to
+go, and walked into a wall. The affordance layer answers *"where have I not
+been"* and nothing answers *"how do I reach the room I want."*
+
+For a wanted **known** room that layer is actively wrong-signed. Every step of
+his correct route reads `spent` or `circling` *because* he has walked it, which
+is exactly why it is the route. He was overruling it in prose to move at all —
+*"a known path toward Chamber 0603, despite 0203 being marked 'spent'"* — and
+where he failed to overrule it he drifted backwards. He also could not derive
+the direction by reasoning, placing the shrine back through Chamber 0403,
+sixteen rooms the wrong way. Fixed in `6022d6d`; see the commit for the
+scoping, which turns on `active_state.goal` rather than intentions.
+
+**Only a character who wants something can find this.** Run 3's optimal 28 moves
+were not route knowledge — his run-3 appraisals name Chambers 0606 and 0506 and
+never 0603 at all, because `ia1` was abandoned. He was frontier-following, and
+by run 3 the unexplored ground happened to lie along the optimal route. Every
+prior arm was blind to this gap for the same reason.
+
+| | A12 baseline (pre-`6022d6d`) | run 3, for contrast |
+|---|---|---|
+| beats | 34, never reached | 31, reached |
+| idle / repeats | **14** | 3 |
+| off-route rooms | 3 | 0 |
+| furthest | optimal index 16, ended at 12 | — |
+
+The baseline is the same character, same maze, same goal text, one variable.
+Giving him something to want made him **worse** than the run where he wanted
+nothing, which is the sharpest statement of the gap available.
+
+**Running works, and this arm is where it first fired.** He declared *"Continue
+east through Chamber 0204,"* resolved `r0203 → r0205`, two rooms in one beat —
+and `r0204` was recorded `basis: walked`, a room he never stopped in, via
+`passable_path`. Without that reconstruction the corridor he ran would have
+stayed a hole in his map exactly where his feet went
+([`DESIGN_RUNNING.md`](DESIGN_RUNNING.md) §4).
+
+**Open, and not a navigation problem.** Removing *"never breaking stride"* from
+his sheet did not remove it from him: it survives in 69 of his 222 memories and
+he writes more of them every run. A character can revise a belief about the
+world — that is what `disproven` edges are for — and has no mechanism whatever
+for revising a belief about himself. He did reconcile it rather than obey it
+(*"maintaining running stride"*), so it did not block running; but a sheet edit
+cannot retract a disposition already lived, and that is worth its own design
+note.
+
+Two infrastructure notes. `max_output_tokens = 40000` plus a system prompt that
+has grown to ~17.5k collides with the context ceiling of whichever OpenRouter
+endpoint the request lands on — intermittent by routing, and it worsens as
+memory grows, since the input side climbs every run. It is the far end of the
+`c976385` tension: too low truncates his JSON mid-reasoning, too high collides.
+And the live viewer was reading position out of block-buffered stdout, so it sat
+kilobytes behind a healthy arm and read as a stall — twice. It now reads the
+checkpoint (`17ad2ae`).
+
 ### A8 — the 9×9 replication
 
 Reproduces A2's maze exactly (81 rooms, 21 junctions, 25 dead ends, 16 false
