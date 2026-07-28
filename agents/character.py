@@ -225,8 +225,16 @@ def _verdict(entry, frontier_hops=None):
         if label == "circling" and entry.get("entered_recently"):
             detail = (f"you have been in there {entry['entered_recently']} "
                       "times in your last dozen paces")
-        if label == "known" and isinstance(frontier_hops, int) \
-                and frontier_hops >= 1:
+        # The distance rides ANY verdict that has one, not only `known`.
+        # Restricting it to `known` suppressed it exactly where it mattered
+        # most: measured in maze arm A11, a character stood with both exits
+        # discouraging -- one `spent`, one `circling` -- while the `circling`
+        # one led to the ONLY frontier left in the maze, nine rooms off. He
+        # was told both were bad and given no way to tell them apart, so he
+        # paced the pocket. The verdict describes his history; the distance
+        # describes his prospects, and a room he has circled through can
+        # still be the way out.
+        if isinstance(frontier_hops, int) and frontier_hops >= 1:
             if frontier_hops == 1:
                 detail += ("; the room through it still has a door you have "
                            "never taken")
@@ -497,6 +505,7 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
         str(r) for r, n in g_nodes.items()
         if isinstance(n, dict) and n.get("closed")}
     out = {}
+    all_marked = []
     for bucket, edges in digest.items():
         if not isinstance(edges, list):
             out[bucket] = edges
@@ -596,7 +605,38 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                     and str(entry.get("verdict") or "").startswith("known"):
                 near = hops
             return (_appeal(entry), near)
-        out[bucket] = [pair[0] for pair in sorted(marked, key=_rank)]
+        out[bucket] = sorted(marked, key=_rank)
+        all_marked.extend(out[bucket])
+
+    # THE ONLY WAY ON. When every doorway here argues against itself and
+    # exactly one of them still leads to unexplored ground, say so outright.
+    #
+    # This is where the loop detector turned against the character. Measured
+    # in A11: standing in a pocket, one exit `spent` and one `circling`, and
+    # the `circling` one was the sole route to the only frontier left in the
+    # maze. Both read as "do not go here", so he paced -- and every beat of
+    # pacing made the circling verdict truer. A signal that fires because the
+    # character is stuck, and then prevents them leaving, is worse than no
+    # signal.
+    #
+    # Deterministic and narrow on purpose: it fires only when nothing
+    # encouraging remains AND the choice is unambiguous. With two live
+    # branches the character is choosing, not trapped, and choosing is theirs.
+    live = [pair for pair in all_marked
+            if isinstance(pair[1], int) and pair[1] >= 0]
+    if live and len(live) == 1 and all(
+            _appeal(e) >= _APPEAL_ORDER.index("circling")
+            for e, _ in all_marked if isinstance(e, dict)):
+        entry, hops = live[0]
+        entry["only_way_onward"] = True
+        entry["verdict"] = (
+            str(entry.get("verdict") or "") +
+            "; even so it is the ONLY way you know of that still leads to "
+            "ground you have not walked -- going back through here is not "
+            "circling, it is the way out")
+    for bucket in list(out):
+        if isinstance(out[bucket], list):
+            out[bucket] = [pair[0] for pair in out[bucket]]
     # Whole-route, not per-exit: how long since anywhere was new. The per-exit
     # markers say something about each doorway; this says something about the
     # walk. Only reported once it is worth noticing, since a couple of beats
