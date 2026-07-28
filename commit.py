@@ -32,7 +32,7 @@ from mechanics import mechanics_sweep, news_latency_seconds, stable_event_key
 from spatial import (merge_scene_with_diff,
                      normalize_room_id, spatial_rel, hear_level,
                      normalize_barrier, normalize_bearing, opposite_bearing,
-                     rooms_adjacent, visible_adjacent_rooms)
+                     passable_path, rooms_adjacent, visible_adjacent_rooms)
 from theory_of_mind import (apply_mind_model_updates, rekey_place_claims,
                             select_active_hypotheses, sheet_capacity)
 from survival import vitals_of
@@ -250,7 +250,28 @@ def record_spatial_experience(st, sc, here_room, turn_idx):
     if came_from == here_room:
         came_from = None
     else:
+        # A body that RAN crossed several rooms this beat, and has been in
+        # every one of them. Recording only where they stopped would leave
+        # holes in their map exactly where their feet went, and worse than
+        # holes: the place graph would mint no walked edge at all (came_from
+        # is not adjacent), so a corridor they had sprinted end to end would
+        # keep reading as untrodden and pull them back down it.
+        #
+        # Reconstructed rather than trusted from the Director: the rooms
+        # between are a deterministic fact about the scene, and asking a model
+        # to list them is asking it to be right about geometry -- which is the
+        # thing it is measurably worst at (see A11's bearing errors).
+        #
+        # A move with NO passable route is a teleport, a carry, or a vehicle,
+        # and mints nothing: the character learns a place by being carried
+        # through it about as well as a parcel does.
+        crossed = passable_path(sc, came_from, here_room) if came_from else []
+        for room in (crossed[:-1] if crossed else []):
+            if room and (not visited or visited[-1] != room):
+                visited.append(room)
         visited.append(here_room)
+        if crossed and len(crossed) > 1:
+            came_from = crossed[-2]
     st["visited_rooms"] = visited[-VISITED_ROOMS_CAP:]
     # The exits visible FROM a room they actually stood in. Not oracle
     # knowledge: standing in a room is how you see its doorways.

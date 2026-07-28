@@ -176,7 +176,8 @@ varies, and two samples taken an hour apart are not an experiment.
 | **A8** | **9×9 kruskal** | replication of A2's maze with everything since | `994c815` | **done — 2/5 reached, run 5 an exact optimal traversal** |
 | **A9** | **9×9 kruskal** | can a cheaper character model do the job? | `af92270` | stopped — superseded by A10 after a harness crash and a resume onto carried-over memory |
 | **A10** | **9×9 kruskal** | A9 again from a blank state, all fixes present | `b0d2c13` | stopped at run 2 beat 34, checkpoint intact — run 1 matched grok's run 1 almost exactly |
-| **A11** | **7×7 authored** | does a durable place graph fix the repeat-run opening thrash? | pending Fable's place-graph work | **planned** |
+| **A11** | **7×7 authored** | does a durable place graph fix the repeat-run opening thrash? | `124b717` → `94637dd`+ | **running — development arm; four fixes landed mid-arm, see below** |
+| **A12** | **7×7 authored** | A11's question again, on settled code | pending | **planned** — the clean arm |
 
 ### A6 / A7 — the bearings pair
 
@@ -296,6 +297,34 @@ built to prevent, and what the run-2 opening thrash looks like.
 The cheapness is real but comes from the room count, not the run length: less
 accumulated route history per beat, so a smaller prompt. A successful run is
 *longer* than a 9×9 run, so `--max-steps` should not be cut proportionally.
+
+**A11 is a development arm, not a controlled one.** It was run while the code
+under it was being fixed, and four things landed mid-arm. Recorded here so no
+one later reads its five runs as a series:
+
+| from | change | why it could not wait |
+|---|---|---|
+| run 1, beat 20 | characters get an egocentric heading (`22bbef8`) | the Director was moving him backward and narrating it as the direction he asked for |
+| run 1, beat 40 | `max_output_tokens` reaches the caller (`c976385`) | beats were dying on truncated JSON at exactly 16000 tokens |
+| run 2, beat ~2 | Director gets compass bearings (`94637dd`) | one movement event in seven still named a bearing the rooms contradicted |
+| run 2, beat ~25 | running: multiple rooms per beat | a courier whose craft is speed could only ever walk |
+
+Runs 1 and 2 also differ in an unglamorous way: run 1's first nineteen beats
+were **discarded and restarted from blank**, because the Director's bearing
+errors had taught him the maze rearranged itself ("the maze layout sometimes
+differs from memory") and a mind that has concluded that will discount its own
+true map for the rest of the arm. The place graph was *not* corrupted -- it
+reads the committed scene, not the prose -- but memory and belief are minted
+from the prose, and that is what he reasons with.
+
+So the comparable numbers here are **run 3 onward**, and even those are not
+comparable to A8 or A10: running changes what a move costs, so `moves` and
+`excess` mean something different once it lands. The learning question A11 was
+built to answer -- do repeat-run openings stop oscillating -- wants a clean
+arm on settled code. That is A12.
+
+What A11 is genuinely evidence for is the bugs it found, each of which was
+invisible in ordinary play and none of which any test had caught.
 
 It is a perfect maze (0 loops), so the braiding argument in `build_maze`
 applies: reversing out of a dead end is correct play, and the reversal count
