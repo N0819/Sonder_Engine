@@ -163,7 +163,7 @@ These are architectural guarantees, not stylistic preferences.
   layer. `salience` is deliberately untouched (how much it mattered when formed,
   which drives consolidation) as distinct from `confidence` (how much they credit
   it now).
-- The stored events row is omniscient (for the author/audit trail). `recent_events`/`recent_events_for_observer` in `scene.py` scrub concealed content off the path that feeds mapping's lore query. **Still open (X18):** `director_context` reaches `mapping_stage` (`agents/mapping.py`) raw — the Director is entitled to omniscience, mapping is not.
+- The stored events row is omniscient (for the author/audit trail). `recent_events`/`recent_events_for_observer` in `scene.py` scrub concealed content off the path that feeds mapping's lore query, and `director_context(entitled=False)` scrubs the path that feeds `mapping_stage` (X18 closed). The Director stays entitled to omniscience — it owns objective causality and cannot resolve a beat it may not see; mapping is not, because it emits lore and `scene_patch` room notes that reach every perceiver.
 - Entity state blobs referencing concealed actors are withheld at commit time — the entity's state is only updated when overtly perceived.
 - Portal states for rooms the player cannot see are withheld from the narrator payload.
 - Background-presence co-located character names pass through that presence's OWN `known` ledger entry, not the player's. An unregistered presence has no entry and therefore recognizes nobody; the shared scene-manager payload uses the intersection across its managed cast.
