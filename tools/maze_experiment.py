@@ -54,6 +54,7 @@ import argparse
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import tempfile
@@ -1032,23 +1033,28 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
                 # identical stalls in seconds, burying 26 real beats of
                 # results under them and reporting a stall count that looked
                 # like a model problem.
-                _fatal = ("402", "401", "403", "Insufficient credits",
-                          "No usable model configured")
-                if any(sig in str(exc) for sig in _fatal):
-                    print(f"    ABORTING RUN -- unrecoverable: "
-                          f"{str(exc)[:160]}", flush=True)
-                    raise SystemExit(
-                        "maze: aborting, the provider cannot serve this run "
-                        f"({str(exc)[:200]}). Completed beats and the "
-                        "checkpoint are intact -- fix the cause and --resume.")
-                # Dump whatever the character DID produce before skipping.
-                # This used to `continue` straight past the dump, which made
-                # every stalled beat invisible -- and a stalled beat is the
-                # one worth reading, because it is where a model's output and
-                # the schema disagreed. Diagnosing a director failure meant
-                # inferring the character's output from the beats either side
-                # of it. What exists at this point is exactly what the failing
-                # stage was handed.
+                #
+                # Matched against the PROVIDER's half of the message only.
+                # llm_quality appends `| model sent: <raw>` and the model's
+                # own reasoning to a validation error, so a bare substring
+                # test searched the MODEL's output for HTTP codes -- and this
+                # maze contains Chamber 0403. One ordinary schema failure
+                # killed a five-run arm at run 2 beat 32 and reported it as
+                # the provider being unable to serve the run. Three-digit
+                # codes need a digit boundary for the same reason: 402 must
+                # not match r0402.
+                _provider_part = re.split(r"\| (?:model sent|reasoning):",
+                                          str(exc))[0]
+                _fatal = (re.search(r"(?<!\d)(40[123])(?!\d)", _provider_part)
+                          or any(sig in _provider_part for sig in
+                                 ("Insufficient credits",
+                                  "No usable model configured")))
+                # Dumped BEFORE deciding whether to abort. A stalled beat is
+                # the one worth reading -- it is where a model's output and
+                # the schema disagreed -- and aborting is when that matters
+                # most, yet it was the one path that threw the evidence away.
+                # What exists at this point is exactly what the failing stage
+                # was handed.
                 if think_path:
                     _dump_thoughts(
                         think_path, run_no, step + 1, visited[-1],
@@ -1056,6 +1062,13 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
                         ctx.get("director_resolve") or {},
                         stalled=f"{type(exc).__name__}: {exc}",
                         reasoning=locals().get("char_reasoning", ""))
+                if _fatal:
+                    print(f"    ABORTING RUN -- unrecoverable: "
+                          f"{str(exc)[:160]}", flush=True)
+                    raise SystemExit(
+                        "maze: aborting, the provider cannot serve this run "
+                        f"({str(exc)[:200]}). Completed beats and the "
+                        "checkpoint are intact -- fix the cause and --resume.")
                 continue
 
         if agent != "random":

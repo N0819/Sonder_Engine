@@ -147,3 +147,52 @@ def test_renderer_rebuilds_from_recorded_edges(parsed):
     mz = Maze(meta)
     assert mz.walls == walls
     assert len(mz.opt) - 1 == 28
+
+
+class TestTheAbortGuardOnlyFiresOnProviderFailure:
+    """The harness ends a run outright when the provider cannot serve it --
+    an exhausted balance fails INSTANTLY, so the beat loop stops being rate
+    limited by the network and spins: 272 identical stalls in seconds, burying
+    26 real beats.
+
+    But the test was a bare substring search for "402"/"401"/"403" against the
+    whole exception, and llm_quality appends `| model sent: <raw output>` to a
+    validation error. This maze contains Chamber 0403. One ordinary schema
+    failure killed a five-run arm at run 2 beat 32 and reported it as the
+    provider being down.
+    """
+
+    @staticmethod
+    def _fires(message):
+        """The guard, exactly as tools/maze_experiment.py evaluates it."""
+        import re
+        part = re.split(r"\| (?:model sent|reasoning):", str(message))[0]
+        return bool(re.search(r"(?<!\d)(40[123])(?!\d)", part)) or any(
+            sig in part for sig in ("Insufficient credits",
+                                    "No usable model configured"))
+
+    def test_it_fires_on_a_real_provider_failure(self):
+        assert self._fires("HTTP 402 payment required")
+        assert self._fires("Insufficient credits for this request")
+        assert self._fires("No usable model configured")
+        assert self._fires("provider returned 401 Unauthorized")
+
+    def test_a_room_id_in_the_model_output_does_not_look_like_a_402(self):
+        """The bug that ate the arm."""
+        assert not self._fires(
+            "character failed JSON validation: mind_model_updates.0.kind: "
+            'field required | model sent: {"about": "Chamber 0403"}')
+        assert not self._fires(
+            "character failed JSON validation | reasoning: he considered "
+            "Chamber 0401 and Chamber 0402 before choosing")
+
+    def test_a_room_id_in_the_ERROR_half_is_not_a_code_either(self):
+        """r0402 contains 402. Without a digit boundary the guard fires on
+        any error that merely names a room."""
+        assert not self._fires("character stalled moving into r0402")
+        assert not self._fires("no route from r0401 to r0403")
+
+    def test_a_plain_schema_failure_never_aborts(self):
+        assert not self._fires(
+            "character failed JSON validation: sequence.0.attempt: field "
+            "required")
