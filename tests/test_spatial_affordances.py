@@ -678,3 +678,71 @@ class TestTheRightDoorIsNotTheLightestEntry:
         rooms = [e["room"] for e in got["ahead"]]
         assert rooms == ["New", "Loop"]
         assert got["ahead"][1]["verdict"].startswith("proven")
+
+
+class TestASeenCulDeSacIsNotFrontier:
+    """An untrodden dead end is a door not taken. It is not a ROUTE.
+
+    Observed live: a character spent twenty-four beats in a six-room lobe
+    whose only way out was back where he came from. It never registered as
+    exhausted because one visibly-closed chamber in it was still untrodden,
+    so the frontier search kept reporting a way on. He could see from the
+    doorway that the chamber was closed -- `visible_adjacent_rooms` reports
+    exactly that, live, every beat. The engine knew. It was never written
+    down, so the knowledge died with the beat.
+    """
+
+    #   here — mid — pocket        (pocket is visibly closed)
+    #    |
+    #   out — ...                  (the real way on)
+    SCENE = {"rooms": {
+        "rHere": {"name": "Here", "light": "lit", "desc": "here",
+                  "adjacent": [{"to": "rMid", "barrier": "open", "dir": "e"},
+                               {"to": "rOut", "barrier": "open", "dir": "s"}]},
+        "rMid": {"name": "Mid", "light": "lit", "desc": "mid",
+                 "adjacent": [{"to": "rHere", "barrier": "open", "dir": "w"},
+                              {"to": "rPocket", "barrier": "open", "dir": "e"}]},
+        "rPocket": {"name": "Pocket", "light": "lit", "desc": "pocket",
+                    "adjacent": [{"to": "rMid", "barrier": "open", "dir": "w"}]},
+        "rOut": {"name": "Out", "light": "lit", "desc": "out",
+                 "adjacent": [{"to": "rHere", "barrier": "open", "dir": "n"},
+                              {"to": "rAway", "barrier": "open", "dir": "s"}]},
+        "rAway": {"name": "Away", "light": "lit", "desc": "away",
+                  "adjacent": [{"to": "rOut", "barrier": "open", "dir": "n"}]},
+    }, "positions": {}, "entities": {}, "attire": {}, "overlays": {}}
+
+    KNOWN = {"rHere": ["rMid", "rOut"], "rMid": ["rHere", "rPocket"]}
+    DIGEST = {"ahead": [{"room": "Mid", "barrier": "open"}]}
+
+    def _verdict(self, dead):
+        from agents.character import _annotate_known_exits
+        out = _annotate_known_exits(
+            self.DIGEST, self.SCENE, ["rHere", "rMid", "rHere"],
+            known_exits=self.KNOWN, here_rid="rHere", known_dead_ends=dead)
+        return out["ahead"][0].get("verdict", "")
+
+    def test_without_the_knowledge_the_branch_reads_as_live(self):
+        assert not self._verdict([]).startswith("spent")
+
+    def test_a_seen_dead_end_exhausts_the_branch(self):
+        assert self._verdict(["rPocket"]).startswith("spent")
+
+    def test_an_open_untrodden_room_still_counts_as_a_route(self):
+        """The marker must not fire on a branch that really does lead on --
+        a signal that argues against the right move is worse than none."""
+        from agents.character import _annotate_known_exits
+        out = _annotate_known_exits(
+            {"ahead": [{"room": "Out", "barrier": "open"}]}, self.SCENE,
+            ["rHere", "rOut", "rHere"],
+            known_exits={"rHere": ["rMid", "rOut"], "rOut": ["rHere", "rAway"]},
+            here_rid="rHere", known_dead_ends=["rPocket"])
+        assert not out["ahead"][0].get("verdict", "").startswith("spent")
+
+    def test_commit_records_what_he_could_see(self, temp_db):
+        """The read side is useless if the write side never fills it."""
+        from spatial import visible_adjacent_rooms
+        seen = {str(i["room_id"]) for i in visible_adjacent_rooms(
+            self.SCENE, "rMid") or [] if i.get("onward_exits") == 0}
+        assert "rPocket" in seen, (
+            "standing in Mid, the Pocket is visibly closed -- this is the "
+            "fact commit persists as known_dead_ends")

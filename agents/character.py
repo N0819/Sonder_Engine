@@ -241,7 +241,8 @@ def _appeal(entry):
 
 
 def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
-                          here_rid=None, routes_that_worked=None):
+                          here_rid=None, routes_that_worked=None,
+                          known_dead_ends=None):
     """Mark each exit with whether this character has been through it.
 
     `spatial_digest` renders an exit as {room, barrier} -- identical whether
@@ -396,8 +397,17 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     }
     visited = set(route)
 
+    # Chambers he has SEEN into and found closed. An untrodden cul-de-sac is
+    # a door not taken, but it is not a route, and counting it as frontier
+    # kept a whole branch reading as live forever: observed live, a character
+    # spent twenty-four beats in a six-room lobe whose only way out was back
+    # the way he came, and it never registered as exhausted because one
+    # visibly-closed chamber in it was still untrodden. He could see it was
+    # closed from the doorway. That was simply never written down.
+    dead_ends = {str(r) for r in (known_dead_ends or []) if r}
+
     def _frontier_beyond(first_step, here_rid):
-        """Is there any door left untried down that way."""
+        """Is there any ROUTE left untried down that way."""
         if first_step not in known_exits:
             # Never stood there, so its doors are unknown: everything past it
             # is potentially new.
@@ -406,8 +416,8 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
         while stack:
             cur = stack.pop()
             for nxt in known_exits.get(cur, ()):
-                if nxt not in visited:
-                    return True          # a door seen and never taken
+                if nxt not in visited and nxt not in dead_ends:
+                    return True          # a route seen and never taken
                 if nxt not in seen_here and nxt in known_exits:
                     seen_here.add(nxt)
                     stack.append(nxt)
@@ -726,7 +736,8 @@ def character_step(ctx, cid, nonce):
                 stored_state.get("visited_rooms") or [],
                 known_exits=stored_state.get("known_exits") or {},
                 here_rid=char_room,
-                routes_that_worked=stored_state.get("routes_that_worked") or {}),
+                routes_that_worked=stored_state.get("routes_that_worked") or {},
+                known_dead_ends=stored_state.get("known_dead_ends") or []),
             # Where they are, named. The digest lists what leads OUT of a room
             # without ever naming the room itself, so a character had to
             # re-derive their own location from the view's prose every beat.

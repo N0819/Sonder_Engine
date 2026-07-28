@@ -3788,6 +3788,30 @@ def prepare_memory_commit(ctx, *, scene=None):
                     k: v for k, v in _known.items()
                     if k in set(st["visited_rooms"])
                 }
+                # Which of those neighbours he could SEE were closed. Standing
+                # on a threshold shows whether the chamber beyond has another
+                # way out, and that is ordinary sight -- the same fact
+                # `visible_adjacent_rooms` already reports live. Recording it
+                # is what lets the frontier test tell "a door I have not
+                # taken" from "a route I have not taken".
+                #
+                # Without it a cul-de-sac counts as frontier forever: observed
+                # live, a character sat in a six-room lobe whose only exit was
+                # back the way he came, and the branch never read as exhausted
+                # because one visibly-closed chamber in it was still untrodden.
+                # The engine knew it was closed. It just never wrote it down.
+                try:
+                    from spatial import visible_adjacent_rooms as _vis
+                    _dead = st.get("known_dead_ends")
+                    _dead = set(_dead) if isinstance(_dead, list) else set()
+                    for _item in _vis(sc, _here_room) or []:
+                        if not isinstance(_item, dict):
+                            continue
+                        if _item.get("onward_exits") == 0:
+                            _dead.add(str(_item.get("room_id")))
+                    st["known_dead_ends"] = sorted(_dead)
+                except Exception:
+                    pass
             _mm_updates = own_result.get("mind_model_updates") or []
             # A claim about a PLACE is re-keyed onto that place before it is
             # merged. Hypotheses group by (about_entity, kind) and explain each
