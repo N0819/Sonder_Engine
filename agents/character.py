@@ -149,6 +149,14 @@ def _known_pronouns(cast, persona, recognized, exclude=None):
     return out
 
 
+# How far back "recently" reaches, and how few rooms count as a pocket.
+# Twelve beats is long enough to contain a couple of honest there-and-back
+# trips through a hub and short enough that a genuine lock shows inside it;
+# four rooms is a corridor stub or a small ring, not a region.
+LOOP_WINDOW = 12
+LOOP_POCKET = 4
+
+
 def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                           here_rid=None, routes_that_worked=None):
     """Mark each exit with whether this character has been through it.
@@ -204,6 +212,34 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     counts = {}
     for rid in route:
         counts[rid] = counts.get(rid, 0) + 1
+    # HOW RECENTLY, not merely how often. `times_entered` is a lifetime tally,
+    # and a lifetime tally cannot tell "four times over eighty beats" from
+    # "four times in the last twelve" -- which are the difference between a
+    # thoroughfare and a loop you are stuck in.
+    #
+    # Observed live: on his second attempt at the same maze a character locked
+    # into a period-four cycle, 0001 -> 0002 -> 0001 -> 0000, three times
+    # exactly. He was not blind to the way out -- he GENERATED "south into
+    # 0100" as a candidate, that being real new ground, and rejected it with
+    # `norm_conflict: conflicts with association that east from blue-tile
+    # reset leads toward 0507`. A route learned on the previous run was
+    # outranking the evidence in front of him, and nothing in the payload said
+    # that route had just failed three times running.
+    #
+    # This is the missing fact, and it is his own route, so it crosses no
+    # boundary: a person who has walked the same three rooms four times in a
+    # dozen paces knows it without being told.
+    recent = route[-LOOP_WINDOW:]
+    recent_counts = {}
+    for rid in recent:
+        recent_counts[rid] = recent_counts.get(rid, 0) + 1
+    # A pocket is a handful of rooms that have absorbed a long stretch of the
+    # route. Deliberately conservative: it needs a nearly-full window AND
+    # genuinely few rooms, so that ordinary back-and-forth through a hub does
+    # not read as being stuck.
+    circling = set()
+    if len(recent) >= LOOP_WINDOW and len(set(recent)) <= LOOP_POCKET:
+        circling = set(recent)
     # Which rooms, in this character's OWN experience, they walked into and had
     # to walk straight back out of.
     #
@@ -292,6 +328,13 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
             if rid and rid in counts:
                 entry["been_there"] = True
                 entry["times_entered"] = counts[rid]
+                if recent_counts.get(rid, 0) > 1:
+                    # The one number that separates a thoroughfare from a
+                    # loop. Only emitted above 1, because "you were there
+                    # once recently" is just where you came from.
+                    entry["entered_recently"] = recent_counts[rid]
+                if rid in circling:
+                    entry["circling_here"] = True
                 if returns.get(rid):
                     # The FACT: they went in and came straight back out, N
                     # times. Always reported, because it is simply what

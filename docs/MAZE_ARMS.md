@@ -26,6 +26,33 @@ Arms recorded before that header existed are marked *pre-header* below; their
 maze parameters here are the reconstruction, and the renderer will refuse them
 until a `meta` line is added by hand.
 
+## Fixing code mid-experiment
+
+A Python process cannot reload its own modules, so a bug found at beat 60 used
+to mean choosing between finishing an arm you know is wrong and throwing away
+hours of accumulated memory to fix one line. Neither is a good trade, and the
+second is why `--state` exists.
+
+```bash
+# run with a checkpoint (rewritten after every beat, costs nothing unused)
+python tools/maze_experiment.py ... --state /tmp/arm.json --out /tmp/arm.jsonl
+
+# stop it, fix the code, then carry on from the beat after the last completed one
+python tools/maze_experiment.py ... --state /tmp/arm.json --resume /tmp/arm.json
+```
+
+Everything the character *is* — memory, mind models, `chat_chars.state`, route
+knowledge, his position — already lives in the run's SQLite database, so resume
+only has to rescue this process's own bookkeeping: which run and beat, the
+route so far, finished-run metrics, and the RNG stream. It refuses to resume
+onto a different maze, since that would carry one maze's route knowledge into
+another.
+
+A beat inserts its turn row before any stage runs and checkpoints only once it
+completes, so killing the process in between — exactly what stopping to fix
+code does — leaves a turn for a beat that never happened. Resume discards those
+rather than colliding on them.
+
 ## Standing constraints
 
 - **Maze size is capped at 10×10.** Larger grids cost hours per arm for

@@ -442,3 +442,66 @@ class TestNavigationMarkersAreDocumented:
         from prompts import DEFAULT_PROMPTS
         prompt = DEFAULT_PROMPTS["character"].upper()
         assert "CANNOT TELL" in prompt or "COULD NOT TELL" in prompt
+
+
+class TestCirclingIsVisible:
+    """A lifetime tally cannot tell a thoroughfare from a loop.
+
+    Observed live on a second attempt at the same maze: the character locked
+    into a period-four cycle, 0001 -> 0002 -> 0001 -> 0000, three times
+    exactly. He was not blind to the way out -- he GENERATED "south into
+    0100", real new ground, as a candidate and rejected it with
+    `norm_conflict: conflicts with association that east from blue-tile reset
+    leads toward 0507`. A route learned on the previous run outranked the
+    evidence in front of him, and nothing in the payload said that route had
+    just failed three times running.
+    """
+
+    SCENE = {"rooms": {"rA": {"name": "A"}, "rB": {"name": "B"},
+                       "rC": {"name": "C"}, "rZ": {"name": "Z"}},
+             "positions": {}, "entities": {}}
+    DIGEST = {"ahead": [{"room": "A", "barrier": "open"},
+                        {"room": "Z", "barrier": "open"}]}
+
+    def _exits(self, route):
+        from agents.character import _annotate_known_exits
+        out = _annotate_known_exits(self.DIGEST, self.SCENE, route)
+        return {e["room"]: e for e in out["ahead"]}
+
+    def test_a_tight_cycle_is_reported_as_circling(self):
+        from agents.character import LOOP_WINDOW
+        route = ["rA", "rB", "rC"] * 6          # 18 beats, 3 rooms
+        got = self._exits(route)
+        assert got["A"]["circling_here"] is True
+        assert got["A"]["entered_recently"] >= 2
+        assert got["A"]["entered_recently"] < got["A"]["times_entered"], (
+            "recent must be a window, not the lifetime tally")
+        assert len(route[-LOOP_WINDOW:]) == LOOP_WINDOW
+
+    def test_an_untrodden_exit_is_never_marked(self):
+        """The way OUT of the loop must not be tarred with it."""
+        got = self._exits(["rA", "rB", "rC"] * 6)
+        assert "circling_here" not in got["Z"]
+        assert "entered_recently" not in got["Z"]
+        assert got["Z"]["been_there"] is False
+
+    def test_a_long_wander_is_not_circling(self):
+        """A signal that fires on everything argues against the right move as
+        loudly as the wrong one, which is worse than no signal."""
+        route = [f"r{i:02d}" for i in range(30)] + ["rA"]
+        got = self._exits(route)
+        assert "circling_here" not in got["A"]
+
+    def test_a_busy_hub_crossed_twice_is_not_a_lock(self):
+        """Passing back through a junction is ordinary. Only a nearly-full
+        window confined to a handful of rooms counts."""
+        route = ["rA", "r1", "r2", "r3", "rA", "r4", "r5", "r6",
+                 "r7", "r8", "r9", "r10"]
+        got = self._exits(route)
+        assert "circling_here" not in got["A"]
+        assert got["A"]["entered_recently"] == 2
+
+    def test_recent_never_exceeds_the_lifetime_count(self):
+        route = ["rA", "rB"] * 8
+        got = self._exits(route)
+        assert got["A"]["entered_recently"] <= got["A"]["times_entered"]
