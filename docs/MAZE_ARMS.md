@@ -120,8 +120,8 @@ varies, and two samples taken an hour apart are not an experiment.
 | A5 | 9×9 kruskal + sight arm | do corridor sightlines help? | pre-header | done — best arm; reached the goal |
 | **A6** | **12×12 kruskal** | does it scale, and does `worked_before` stop the run-3 drift? | `f8678f2^` → killed at 70 beats | **baseline** for A7 (bearings absent) |
 | **A7** | **12×12 kruskal** | same maze, bearings fix present | `f8678f2` | stopped at run 2 — cost |
-| **A8** | **9×9 kruskal** | replication of A2's maze with everything since | `994c815` | **running** (restarted on current code) |
-| **A9** | **9×9 kruskal** | can a cheaper character model do the job? | `994c815` | **running** (restarted on current code) |
+| **A8** | **9×9 kruskal** | replication of A2's maze with everything since | `994c815` | **done — 2/5 reached, run 5 an exact optimal traversal** |
+| **A9** | **9×9 kruskal** | can a cheaper character model do the job? | `af92270` | **running** (resumed from checkpoint after a harness crash) |
 
 ### A6 / A7 — the bearings pair
 
