@@ -40,7 +40,7 @@
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 2740 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 2748 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1845 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 352 |  | — |
 | `scene.py` | 1142 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
@@ -428,10 +428,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 2731 | 10 lines |
-| `presets()` | 2722 | 2 lines |
-| `active_preset()` | 2725 | 2 lines |
-| `nsfw_enabled()` | 2728 | 2 lines |
+| `get_prompt()` | 2739 | 10 lines |
+| `presets()` | 2730 | 2 lines |
+| `active_preset()` | 2733 | 2 lines |
+| `nsfw_enabled()` | 2736 | 2 lines |
 
 ### `providers.py`
 

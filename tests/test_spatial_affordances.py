@@ -400,3 +400,45 @@ class TestOnwardBearings:
         entry = marked["ahead"][0]
         assert entry["onward_exits_visible"] == 1
         assert entry["onward_bearings"] == ["n"]
+
+
+class TestNavigationMarkersAreDocumented:
+    """Every marker the character is handed must be explained to it.
+
+    `spatial_frame` shipped SEVEN markers -- onward_exits_visible,
+    visibly_no_way_through, been_there, times_entered, no_route_onward,
+    no_new_ground_that_way, worked_before -- with not one of them mentioned
+    anywhere in the character prompt. Their meanings were being inferred from
+    their key names, which is how a bare count sitting on an egocentric
+    bucket became a compass heading and sent a maze runner west into a wall
+    on four separate beats.
+
+    The character payload is 21 top-level keys deep, so adding a field to it
+    has no natural back-pressure: it feels free, and the cost surfaces
+    hundreds of beats later as a character confabulating what it meant. This
+    test is that back-pressure.
+    """
+
+    def test_every_marker_is_explained_in_the_character_prompt(self):
+        import re
+        from prompts import DEFAULT_PROMPTS
+        src = open("agents/character.py", encoding="utf-8").read()
+        # The keys _annotate_known_exits actually writes onto an exit.
+        emitted = set(re.findall(r'entry\["([a-z_]+)"\]', src))
+        assert emitted, "found no markers -- has the annotator been renamed?"
+        prompt = DEFAULT_PROMPTS["character"]
+        missing = sorted(k for k in emitted if k not in prompt)
+        assert not missing, (
+            "spatial_frame markers handed to the character with no "
+            f"explanation in its prompt: {missing}. A marker whose meaning "
+            "has to be guessed from its key name is worse than no marker, "
+            "because the guess is confident. Document it in the SPATIAL "
+            "FRAME section of DEFAULT_PROMPTS['character'].")
+
+    def test_absent_means_cannot_tell_is_stated(self):
+        """The single most dangerous misreading: absent as 'none'. Every
+        one of these keys is omitted when it cannot be determined, and a
+        character that reads omission as a clear way will walk into things."""
+        from prompts import DEFAULT_PROMPTS
+        prompt = DEFAULT_PROMPTS["character"].upper()
+        assert "CANNOT TELL" in prompt or "COULD NOT TELL" in prompt
