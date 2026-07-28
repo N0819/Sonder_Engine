@@ -1129,7 +1129,7 @@ def _rrf_add(scores, reasons, ranking, weight, reason):
 
 def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
                     current_turn_idx=None, chronological=True, viewer_frame_id=_UNSET,
-                    here=None):
+                    here=None, in_sight=None):
     rows = q("SELECT * FROM memories WHERE chat_id=? AND char_id=? AND (?=1 OR archived=0)",
              (chat_id, char_id, 1 if include_archived else 0))
     if current_turn_idx is not None:
@@ -1150,6 +1150,10 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
             row for row in rows
             if row["turn_idx"] is None or row["turn_idx"] < current_turn_idx
         ]
+    here_set = {str(here).strip().casefold()} if here else set()
+    in_sight_set = {
+        str(p).strip().casefold() for p in (in_sight or ()) if str(p or "").strip()
+    } - here_set
     vf = _active_frame_id.get() if viewer_frame_id is _UNSET else viewer_frame_id
     rows = [r for r in rows if _frames.is_memory_visible(char_id, r["frame_id"], vf, r["turn_idx"])]
     if not rows:
@@ -1221,11 +1225,22 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
         # read. Deliberately modest, and additive rather than a filter: being
         # here makes a memory easier to reach, it does not make everything
         # elsewhere unreachable.
-        if here and str(mem.get("location") or "").strip().casefold() == \
-                str(here).strip().casefold():
+        if here_set and str(mem.get("location") or "").strip().casefold() \
+                in here_set:
             fused[mid] += 0.09
             if "happened here" not in reasons[mid]:
                 reasons[mid].append("happened here")
+        elif in_sight_set and str(mem.get("location") or "").strip().casefold() \
+                in in_sight_set:
+            # A place currently VISIBLE is a retrieval cue too, and it is the
+            # more useful one: recalling what happened in the room you are
+            # standing in confirms where you are, but recalling it about a room
+            # you can SEE lets you decide whether to go there. Weighted below
+            # the here-cue, since standing somewhere is stronger evidence of
+            # relevance than looking at it.
+            fused[mid] += 0.05
+            if "visible from here" not in reasons[mid]:
+                reasons[mid].append("visible from here")
         if mem["category"] == "promise" and any(t in query_text.lower() for t in ("promise", "promised", "swore", "vow", "agreed")):
             fused[mid] += 0.1
             reasons[mid].append("promise category")
@@ -1349,7 +1364,8 @@ def save_memory_summary(chat_id, char_id, summary, *, scope="autobiographical", 
         embedding, embedding_model, embedding_dim, time.time()))
 
 def build_character_memory_context(chat_id, char_id, current_turn_idx, current_view, active_state, *,
-                                   recent_turns=4, recall_limit=8, here=None):
+                                   recent_turns=4, recall_limit=8, here=None,
+                                   in_sight=None):
     active_state = active_state or {}
     recent = recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=recent_turns, limit=12)
     recent_ids = {m["id"] for m in recent}
@@ -1375,7 +1391,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # committed memories while deciding turn N, reroll or not.
     recalled = search_memories(chat_id, char_id, query_text, k=recall_limit,
                                include_archived=True, current_turn_idx=current_turn_idx,
-                               chronological=True, here=here)
+                               chronological=True, here=here, in_sight=in_sight)
     recalled = [m for m in recalled if m["id"] not in recent_ids]
     return {
         "working_memory": {

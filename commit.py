@@ -45,6 +45,13 @@ from spatial_frames import (infer_companion_carry, infer_vehicle_zones,
 # something anyone recalls as a route.
 VISITED_ROOMS_CAP = 60
 
+# How far back a satisfied intention credits the route, and how much weight one
+# room can accrue. Bounded because a goal closed after forty beats says little
+# about the room walked through on beat one, and because a route that worked
+# ten times should not become impossible to abandon when the world changes.
+ROUTE_CREDIT_WINDOW = 25
+ROUTE_CREDIT_CAP = 5
+
 _COMMIT_LOCKS = weakref.WeakValueDictionary()
 _COMMIT_LOCKS_GUARD = threading.Lock()
 
@@ -3435,8 +3442,43 @@ def prepare_memory_commit(ctx, *, scene=None):
                         return False
                     return any(str(e) and str(e) in _t for e in ev) or bool(op.get("why"))
 
+                _before_status = {
+                    str(i.get("id")): i.get("status")
+                    for i in intentions if isinstance(i, dict)
+                }
                 intentions, _iwarn = affect.apply_intent_ops(
                     intentions, own_result.get("intent_ops") or [], turn.idx, _evidence_ok)
+                # OUTCOME FEEDBACK. Everything else in this engine revises a
+                # belief by CONTRADICTION -- another claim -- never by whether
+                # acting on it worked. So a character who concludes something,
+                # acts, and is wrong sees that belief decay from disuse at
+                # exactly the rate a correct one would, and a route that
+                # demonstrably reached a goal accumulates no weight against the
+                # novelty of one that has not been tried.
+                #
+                # An intention reaching `satisfied` is the one success signal
+                # the engine can observe without trusting a bare self-report:
+                # apply_intent_ops gates satisfy behind _evidence_ok, so it
+                # needs on-screen cause. When one closes, the rooms walked
+                # while pursuing it are credited -- their own route, no oracle
+                # knowledge of whether it was the BEST way, only that it was a
+                # way that worked.
+                _satisfied = [
+                    i for i in intentions
+                    if isinstance(i, dict) and i.get("status") == "satisfied"
+                    and _before_status.get(str(i.get("id"))) != "satisfied"
+                ]
+                if _satisfied:
+                    _worked = st.get("routes_that_worked")
+                    if not isinstance(_worked, dict):
+                        _worked = {}
+                    _since = max(
+                        0, len(st.get("visited_rooms") or [])
+                        - ROUTE_CREDIT_WINDOW)
+                    for _r in set((st.get("visited_rooms") or [])[_since:]):
+                        _worked[_r] = min(
+                            ROUTE_CREDIT_CAP, int(_worked.get(_r, 0)) + 1)
+                    st["routes_that_worked"] = _worked
                 for w in _iwarn:
                     ctx.add_warning(f"{cname}: intention -- {w}")
                 valid_ids = {str(i.get("id")) for i in intentions if isinstance(i, dict)}

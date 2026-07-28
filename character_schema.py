@@ -299,7 +299,8 @@ def default_character_data(name: str = "Unnamed") -> dict:
             "pronouns": {"subject": "they", "object": "them", "possessive": "their"},
         },
         "initial_outfit": {"wearing": [], "state": []},
-        "simulation": {"tier": "mid", "temperature": 0.8, "sampler": {}},
+        "simulation": {"tier": "mid", "temperature": 0.8, "sampler": {},
+                       "curiosity": 0.5},
         "embodiment": {
             "senses": [
                 {"channel": "vision", "acuity": "ordinary", "range": "ordinary", "notes": ""},
@@ -913,6 +914,23 @@ def character_name(sheet: dict) -> str:
 
 def character_tier(sheet: dict) -> str:
     return str(normalize_character_data(sheet).get("simulation", {}).get("tier", "mid"))
+
+def character_curiosity(sheet: dict) -> float:
+    """How readily this character leaves something that works to look for
+    something better. 0 = methodical, never abandons a proven way; 1 = restless,
+    always drawn to what it has not tried.
+
+    Observed live: a character that had learned a route perfectly then abandoned
+    it on three consecutive attempts, exploring further each time. That was not
+    malfunction -- exploring after mastery is reasonable -- but the balance was
+    implicit, falling out of which affordances happened to exist rather than
+    from anything an author chose. Willingness to leave a known-good route is a
+    personality property and belongs on the card beside the rest of the
+    psychology.
+    """
+    sim = normalize_character_data(sheet).get("simulation", {})
+    return _profile_float(sim.get("curiosity"), 0.5)
+
 
 def character_temperature(sheet: dict) -> float:
     return _float_or(normalize_character_data(sheet).get("simulation", {}).get("temperature"), 0.8)

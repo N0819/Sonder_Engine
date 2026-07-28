@@ -160,7 +160,60 @@ def normalize_speech_volume(value: Any) -> str:
 
 # ---- Fiction Model ----
 
-class GenreProfile(BaseModel):
+# ---- One coercion for a whole failure family ----
+#
+# Five separate crashes in one session were the same shape: a field typed `str`
+# receiving a structured object, which discards the ENTIRE stage output and
+# costs a whole beat -- observations_used, association_updates, initial_state
+# goals, response_candidates.response, changes_asserted.change. Roughly ninety
+# more str-typed fields in this file carry the same exposure, and fixing them as
+# they crash is a queue rather than a solution.
+#
+# So the coercion lives once, on a base every schema model inherits. It fires
+# only when the declared type is `str` AND the value is a dict or list -- the
+# exact mismatch -- and reduces to the prose the value contains. Anything else
+# passes through untouched, so it cannot mask a genuine type error on a field
+# never meant to hold text.
+#
+# Rejecting these was never protecting anything: a str field has no invariant a
+# nested object violates, and the model plainly meant the words inside it.
+_PROSE_KEYS = ("text", "observable", "attempt", "summary", "description",
+               "content", "value", "claim", "response", "detail", "reason",
+               "name", "id")
+
+
+def _flatten_to_text(value):
+    """The prose inside a structured value, for a field declared `str`."""
+    if isinstance(value, dict):
+        for key in _PROSE_KEYS:
+            got = value.get(key)
+            if isinstance(got, str) and got.strip():
+                return got.strip()
+        parts = [str(v).strip() for v in value.values()
+                 if isinstance(v, (str, int, float)) and str(v).strip()]
+        return "; ".join(parts)
+    if isinstance(value, (list, tuple)):
+        parts = [
+            _flatten_to_text(v) if isinstance(v, (dict, list, tuple))
+            else str(v).strip()
+            for v in value
+        ]
+        return "; ".join(p for p in parts if p)
+    return value
+
+
+class LenientModel(BaseModel):
+    """BaseModel that accepts a structured value where prose was declared."""
+
+    @validator("*", pre=True, allow_reuse=True)
+    def _coerce_structured_into_str(cls, value, field):
+        if isinstance(value, (dict, list, tuple)) and field.outer_type_ is str:
+            return _flatten_to_text(value)
+        return value
+
+
+
+class GenreProfile(LenientModel):
     primary: str = "unspecified"
     secondary: list[str] = Field(default_factory=list)
     tone: list[str] = Field(default_factory=list)
@@ -173,13 +226,13 @@ class GenreProfile(BaseModel):
     technology_level: str = "unspecified"
     content_boundaries: list[str] = Field(default_factory=list)
 
-class CausalRegime(BaseModel):
+class CausalRegime(LenientModel):
     regime_id: str
     scope: str = "default"
     priority: int = 0
     rules: dict[str, Any] = Field(default_factory=dict)
 
-class FictionModel(BaseModel):
+class FictionModel(LenientModel):
     genre: dict[str, Any] = Field(default_factory=dict)
     ontology: dict[str, Any] = Field(default_factory=dict)
     causal_regimes: list[dict] = Field(default_factory=list)
@@ -189,7 +242,7 @@ class FictionModel(BaseModel):
     epistemic_rules: list[dict] = Field(default_factory=list)
     content_rules: list[dict] = Field(default_factory=list)
 
-class FictionFrame(BaseModel):
+class FictionFrame(LenientModel):
     frame_id: str = ""
     world_id: str = ""
     location_id: Optional[str] = None
@@ -202,7 +255,7 @@ class FictionFrame(BaseModel):
     stakes: list[str] = Field(default_factory=list)
     constraints: list[str] = Field(default_factory=list)
 
-class ScenePressure(BaseModel):
+class ScenePressure(LenientModel):
     threat: float = 0.0
     mystery: float = 0.0
     social: float = 0.0
@@ -211,13 +264,13 @@ class ScenePressure(BaseModel):
 
 # ---- Time ----
 
-class SimulationClock(BaseModel):
+class SimulationClock(LenientModel):
     elapsed_seconds: float = 0.0
     calendar: Optional[dict[str, Any]] = None
     display: str = "now"
     time_scale: str = "scene"
 
-class TimeDiff(BaseModel):
+class TimeDiff(LenientModel):
     start_seconds: float = 0.0
     duration_seconds: float = 0.0
     end_seconds: float = 0.0
@@ -225,7 +278,7 @@ class TimeDiff(BaseModel):
     explicit: bool = False
     display_advance: str = ""
 
-class TemporalProperties(BaseModel):
+class TemporalProperties(LenientModel):
     rate_numerator: float = 1.0
     rate_denominator: float = 1.0
     offset_seconds: float = 0.0
@@ -234,17 +287,17 @@ class TemporalProperties(BaseModel):
 
 # ---- Actions ----
 
-class DurationHint(BaseModel):
+class DurationHint(LenientModel):
     value: Optional[float] = None
     unit: str = "seconds"
     explicit: bool = False
 
-class IntendedEffect(BaseModel):
+class IntendedEffect(LenientModel):
     target_id: Optional[str] = None
     kind: str
     details: dict[str, Any] = Field(default_factory=dict)
 
-class ActionElement(BaseModel):
+class ActionElement(LenientModel):
     type: str = "action"
     event_id: str = ""
     actor_id: str = ""
@@ -276,7 +329,7 @@ class ActionElement(BaseModel):
     conceal_from: list[str] = Field(default_factory=list)
     conditions: list[dict] = Field(default_factory=list)
 
-class SpeechElement(BaseModel):
+class SpeechElement(LenientModel):
     type: str = "speech"
     text: str
     volume: SpeechVolume = SpeechVolume.normal
@@ -288,7 +341,7 @@ class SpeechElement(BaseModel):
     visibility: ActionVisibility = ActionVisibility.overt
     conceal_from: list[str] = Field(default_factory=list)
 
-class DiceSpec(BaseModel):
+class DiceSpec(LenientModel):
     # Advisory sub-field of the interpret flow; the Director re-judges
     # difficulty during resolution, so a weak model dropping one key must
     # not hard-crash the whole director_interpret step.
@@ -297,7 +350,7 @@ class DiceSpec(BaseModel):
     ability: str = ""
     difficulty: str = "medium"
 
-class ResolutionCheck(BaseModel):
+class ResolutionCheck(LenientModel):
     check_id: str = ""
     event_id: str = ""
     actor_id: str = ""
@@ -311,7 +364,7 @@ class ResolutionCheck(BaseModel):
     opposing_roll: Optional[int] = None
     outcome: str = ""
 
-class MovementDecl(BaseModel):
+class MovementDecl(LenientModel):
     to_room: str
     why: str = ""
     # WHO relocates. "self" (default) = the player's own body. An entity id
@@ -324,7 +377,7 @@ class MovementDecl(BaseModel):
 
 # ---- Authority ----
 
-class AuthorityClaim(BaseModel):
+class AuthorityClaim(LenientModel):
     claim_id: str = ""
     scope: str = "action"
     subject_id: Optional[str] = None
@@ -333,13 +386,13 @@ class AuthorityClaim(BaseModel):
     commitment: str = "asserted"
     source_text: str = ""
 
-class ClaimDisposition(BaseModel):
+class ClaimDisposition(LenientModel):
     claim_id: str = ""
     status: str = "realized"
     realized_event_ids: list[str] = Field(default_factory=list)
     notes: str = ""
 
-class GenerationRequest(BaseModel):
+class GenerationRequest(LenientModel):
     kind: str
     subject: str = ""
     location_id: Optional[str] = None
@@ -349,7 +402,7 @@ class GenerationRequest(BaseModel):
 
 # ---- Flow ----
 
-class FlowPlan(BaseModel):
+class FlowPlan(LenientModel):
     reactors: list[int] = Field(default_factory=list)
     reactor_refs: list[Any] = Field(default_factory=list)
     addressed_to: list[int] = Field(default_factory=list)
@@ -371,7 +424,7 @@ class FlowPlan(BaseModel):
 
 # ---- Director Interpret ----
 
-class OtherPlayerInterpret(BaseModel):
+class OtherPlayerInterpret(LenientModel):
     """Same-beat declaration for an additional human player, interpreted
     with the same rigor as the primary player's top-level fields above --
     this is a second real player, not an NPC. Deliberately a narrower
@@ -391,7 +444,7 @@ class OtherPlayerInterpret(BaseModel):
         lambda cls, v: normalize_speech_volume(v)
     )
 
-class DirectorInterpret(BaseModel):
+class DirectorInterpret(LenientModel):
     kind: str = "mixed"
     sequence: list[dict] = Field(default_factory=list)
     speech: Optional[str] = None
@@ -416,7 +469,7 @@ class DirectorInterpret(BaseModel):
 
 # ---- Scene Entities ----
 
-class SceneEntityDef(BaseModel):
+class SceneEntityDef(LenientModel):
     name: str
     kind: str = "object"
     description: str = ""
@@ -450,7 +503,7 @@ class SceneEntityDef(BaseModel):
     # standing in the dark holding it.
     light_source: Optional[str] = None
 
-class RoomDef(BaseModel):
+class RoomDef(LenientModel):
     name: str = ""
     desc: str = ""
     adjacent: list[dict] = Field(default_factory=list)
@@ -471,7 +524,7 @@ class RoomDef(BaseModel):
     # means lit, so nothing changes for a scene that never mentions light.
     light: Optional[str] = None
 
-class WorldEntity(BaseModel):
+class WorldEntity(LenientModel):
     entity_id: str
     kind: str
     subtype: str = ""
@@ -485,7 +538,7 @@ class WorldEntity(BaseModel):
     created_turn: Optional[int] = None
     retired_turn: Optional[int] = None
 
-class AggregateEntity(BaseModel):
+class AggregateEntity(LenientModel):
     entity_id: str
     name: str
     aggregate_kind: str
@@ -504,7 +557,7 @@ class AggregateEntity(BaseModel):
     objectives: list[dict] = Field(default_factory=list)
     state: dict[str, Any] = Field(default_factory=dict)
 
-class ComponentState(BaseModel):
+class ComponentState(LenientModel):
     component_id: str
     parent_entity_id: str
     kind: str
@@ -526,7 +579,7 @@ class ComponentState(BaseModel):
 # transit = portal links (entity.state.link) + scheduled_events latency.
 # Kept only so old imports/checkpoint blobs keep tolerating the shapes.
 
-class WorldDef(BaseModel):
+class WorldDef(LenientModel):
     world_id: str
     name: str
     kind: str = "world"
@@ -542,7 +595,7 @@ class WorldDef(BaseModel):
     provenance: dict[str, Any] = Field(default_factory=dict)
 
 # DEPRECATED -- see the WorldDef block comment above.
-class LocationDef(BaseModel):
+class LocationDef(LenientModel):
     location_id: str
     world_id: str
     parent_location_id: Optional[str] = None
@@ -558,7 +611,7 @@ class LocationDef(BaseModel):
     state: dict[str, Any] = Field(default_factory=dict)
     provenance: dict[str, Any] = Field(default_factory=dict)
 
-class SpatialZone(BaseModel):
+class SpatialZone(LenientModel):
     zone_id: str
     location_id: str
     name: str
@@ -567,7 +620,7 @@ class SpatialZone(BaseModel):
     properties: dict[str, Any] = Field(default_factory=dict)
 
 # DEPRECATED -- see the WorldDef block comment above.
-class TransitEdge(BaseModel):
+class TransitEdge(LenientModel):
     edge_id: str
     from_world_id: str
     from_location_id: Optional[str] = None
@@ -582,7 +635,7 @@ class TransitEdge(BaseModel):
     state: dict[str, Any] = Field(default_factory=dict)
     source_entity_id: Optional[str] = None
 
-class StrategicPlacement(BaseModel):
+class StrategicPlacement(LenientModel):
     subject_id: str
     zone_id: str
     posture: str = ""
@@ -593,7 +646,7 @@ class StrategicPlacement(BaseModel):
 
 # ---- Conditions and Scheduling ----
 
-class PersistentCondition(BaseModel):
+class PersistentCondition(LenientModel):
     condition_id: str
     subject_id: str
     kind: str
@@ -605,7 +658,7 @@ class PersistentCondition(BaseModel):
     state: dict[str, Any] = Field(default_factory=dict)
     source_event_id: Optional[str] = None
 
-class ScheduledEvent(BaseModel):
+class ScheduledEvent(LenientModel):
     event_id: str
     due_at_seconds: float
     kind: str
@@ -616,7 +669,7 @@ class ScheduledEvent(BaseModel):
     source_event_id: Optional[str] = None
     status: str = "pending"
 
-class DestructionEffect(BaseModel):
+class DestructionEffect(LenientModel):
     """REVIVED (movement/space Phase 2, item 4) as the Director's
     declaration shape for destruction, carried in StateDiff.destruction.
     The Director owns the causal event -- code never originates a
@@ -653,7 +706,7 @@ class DestructionEffect(BaseModel):
     # mechanics.news_latency_seconds).
     news: list[dict] = Field(default_factory=list)
 
-class Engagement(BaseModel):
+class Engagement(LenientModel):
     engagement_id: str
     world_id: str
     location_id: str
@@ -671,7 +724,7 @@ class Engagement(BaseModel):
 
 # ---- Inventory and Mutations ----
 
-class InventoryOp(BaseModel):
+class InventoryOp(LenientModel):
     op: str
     object_id: str
     from_id: Optional[str] = None
@@ -679,7 +732,7 @@ class InventoryOp(BaseModel):
     relation: str = "held_by"
     details: dict[str, Any] = Field(default_factory=dict)
 
-class ObjectStatePatch(BaseModel):
+class ObjectStatePatch(LenientModel):
     object_id: str
     set_fields: dict[str, Any] = Field(default_factory=dict)
     add_tags: list[str] = Field(default_factory=list)
@@ -687,13 +740,13 @@ class ObjectStatePatch(BaseModel):
 
 # ---- Reactions and Perception ----
 
-class ReactionDeclaration(BaseModel):
+class ReactionDeclaration(LenientModel):
     actor_id: str
     trigger_event_ids: list[str] = Field(default_factory=list)
     sequence: list[dict] = Field(default_factory=list)
     urgency: float = 0.0
 
-class EventAtom(BaseModel):
+class EventAtom(LenientModel):
     atom_id: str
     event_id: str
     kind: str
@@ -705,7 +758,7 @@ class EventAtom(BaseModel):
     channels: dict[str, dict] = Field(default_factory=dict)
     observable: dict[str, Any] = Field(default_factory=dict)
 
-class Observation(BaseModel):
+class Observation(LenientModel):
     observation_id: str
     perceiver_id: str
     source_atom_id: str
@@ -721,7 +774,7 @@ class Observation(BaseModel):
         "intensity", "suddenness", "ambiguity", pre=True, allow_reuse=True
     )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.5))
 
-class SensorChannel(BaseModel):
+class SensorChannel(LenientModel):
     channel_id: str
     owner_id: str
     kind: str
@@ -732,7 +785,7 @@ class SensorChannel(BaseModel):
     limitations: list[str] = Field(default_factory=list)
     state: dict[str, Any] = Field(default_factory=dict)
 
-class ActorDef(BaseModel):
+class ActorDef(LenientModel):
     entity_id: str
     name: str
     kind: str = "creature"
@@ -751,17 +804,17 @@ class ActorDef(BaseModel):
 
 # ---- Establishment and Resolve ----
 
-class AttireState(BaseModel):
+class AttireState(LenientModel):
     wearing: list[str] = Field(default_factory=list)
     state: list[str] = Field(default_factory=list)
 
-class InitialEntityState(BaseModel):
+class InitialEntityState(LenientModel):
     posture: str = ""
     activity: str = ""
     held_items: list[str] = Field(default_factory=list)
     visible_conditions: list[str] = Field(default_factory=list)
 
-class DirectorEstablish(BaseModel):
+class DirectorEstablish(LenientModel):
     location: str = ""
     time: str = "now"
     scene_description: str = ""
@@ -781,7 +834,7 @@ class DirectorEstablish(BaseModel):
     # commit.py's commit_world_pressure.
     world_pressure: list[dict] = Field(default_factory=list)
 
-class DialogueLogEntry(BaseModel):
+class DialogueLogEntry(LenientModel):
     speaker: str
     exact_quote: str
     volume: SpeechVolume = SpeechVolume.normal
@@ -794,12 +847,12 @@ class DialogueLogEntry(BaseModel):
     visibility: ActionVisibility = ActionVisibility.overt
     conceal_from: list[str] = Field(default_factory=list)
 
-class BackgroundReactOutput(BaseModel):
+class BackgroundReactOutput(LenientModel):
     reacts: bool = False
     dialogue_log_entry: Optional[DialogueLogEntry] = None
     action: str = ""
 
-class SceneLifeEntry(BaseModel):
+class SceneLifeEntry(LenientModel):
     """One managed presence's conduct for this beat, attributed by name so the
     commit-side append is a ROUTING operation rather than an authoring one
     (docs/BACKGROUND_LIFE_DESIGN.md §3.11)."""
@@ -812,10 +865,10 @@ class SceneLifeEntry(BaseModel):
     # novel-proper-noun scan backstops omissions.
     asserts: list[str] = Field(default_factory=list)
 
-class SceneLifeOutput(BaseModel):
+class SceneLifeOutput(LenientModel):
     entries: list[SceneLifeEntry] = Field(default_factory=list)
 
-class BlurbMintEntry(BaseModel):
+class BlurbMintEntry(LenientModel):
     """A frozen personality blurb (§3.8). Surface only -- manner, a standing
     concern, a repeatable tic -- never private goals or beliefs about others."""
     name: str
@@ -824,13 +877,13 @@ class BlurbMintEntry(BaseModel):
     tell: str = ""
     look: str = ""
 
-class BackdropPromptOutput(BaseModel):
+class BackdropPromptOutput(LenientModel):
     prompt: str = ""
 
-class BlurbMintOutput(BaseModel):
+class BlurbMintOutput(LenientModel):
     blurbs: list[BlurbMintEntry] = Field(default_factory=list)
 
-class StateDiff(BaseModel):
+class StateDiff(LenientModel):
     positions: dict[str, str] = Field(default_factory=dict)
     rooms: dict[str, RoomDef] = Field(default_factory=dict)
     entities: dict[str, SceneEntityDef] = Field(default_factory=dict)
@@ -880,7 +933,7 @@ class StateDiff(BaseModel):
     # multi-book cascade commit.py enumerates from the lorebook tree.
     destruction: Optional[dict] = None
 
-class AssertedChange(BaseModel):
+class AssertedChange(LenientModel):
     """One entry of director_resolve's own changes-asserted manifest: a
     persistent physical change its resolved_event asserts as completed,
     beyond the player's supplied authority_claims. Reconciled against the
@@ -889,7 +942,7 @@ class AssertedChange(BaseModel):
     subject: str = ""         # room id / entity id / character name concerned
     change: str = ""          # one short sentence stating the persistent change
 
-class DirectorResolve(BaseModel):
+class DirectorResolve(LenientModel):
     resolved_event: str = ""
     summary: str = ""
     dialogue_order: list[str] = Field(default_factory=list)
@@ -917,7 +970,7 @@ class DirectorResolve(BaseModel):
 
 # ---- Resolve reconciliation (agents/director.py's post-resolve seam) ----
 
-class ReconcileOmission(BaseModel):
+class ReconcileOmission(LenientModel):
     """One persistent, physically consequential change asserted as completed
     in resolved_event prose but not encoded anywhere in the state_diff."""
     category: str = "other"   # rooms|adjacency|positions|entities|conditions|attire|inventory|cast_changes|time|other
@@ -930,18 +983,18 @@ class ReconcileOmission(BaseModel):
         lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.5)
     )
 
-class ResolveReconcileOutput(BaseModel):
+class ResolveReconcileOutput(LenientModel):
     omissions: list[ReconcileOmission] = Field(default_factory=list)
     notes: str = ""
 
-class ResolveRepairOutput(BaseModel):
+class ResolveRepairOutput(LenientModel):
     """The Director's own correction delta: a state_diff containing ONLY the
     entries needed to encode the detected omissions (merged additively over
     the original diff by deterministic code -- never applied wholesale)."""
     state_diff: StateDiff = Field(default_factory=StateDiff)
     dispositions: list[dict] = Field(default_factory=list)
 
-class InterpretRepairOutput(BaseModel):
+class InterpretRepairOutput(LenientModel):
     """The Director's own interpret-side correction delta (the structural
     twin of ResolveRepairOutput, for the seam that runs right after
     director_interpret): ONLY the additional sequence elements / movement /
@@ -956,12 +1009,13 @@ class InterpretRepairOutput(BaseModel):
     dispositions: list[dict] = Field(default_factory=list)
     notes: str = ""
 
-class NarratorOutput(BaseModel):
+class NarratorOutput(LenientModel):
     prose: str = ""
     new_specifics: list[str] = Field(default_factory=list)
     text: str = ""
 
 # ---- Character Output ----
+
 
 def _coerce_evidence_refs(value):
     """Accept a bare string where an EvidenceRef was expected.
@@ -992,11 +1046,11 @@ def _coerce_evidence_refs(value):
     return out
 
 
-class EvidenceRef(BaseModel):
+class EvidenceRef(LenientModel):
     event_id: str = ""
     fact: str = ""
 
-class MindHypothesis(BaseModel):
+class MindHypothesis(LenientModel):
     about_entity: str
     kind: str
     claim: str
@@ -1014,7 +1068,7 @@ class MindHypothesis(BaseModel):
         lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.5)
     )
 
-class RelationshipUpdate(BaseModel):
+class RelationshipUpdate(LenientModel):
     target_entity: str
     trust_delta: float = Field(default=0.0, ge=-0.2, le=0.2)
     warmth_delta: float = Field(default=0.0, ge=-0.2, le=0.2)
@@ -1026,7 +1080,7 @@ class RelationshipUpdate(BaseModel):
         lambda cls, v: _clamp_float(v, -0.2, 0.2, 0.0)
     )
 
-class GoalImpact(BaseModel):
+class GoalImpact(LenientModel):
     serves: str = "situational"
     impact: float = Field(default=0.0, ge=-1.0, le=1.0)
     certainty: float = Field(default=0.5, ge=0.0, le=1.0)
@@ -1042,7 +1096,7 @@ class GoalImpact(BaseModel):
     )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.5))
 
 
-class SomaticImpact(BaseModel):
+class SomaticImpact(LenientModel):
     pain: float = Field(default=0.0, ge=0.0, le=1.0)
     pleasure: float = Field(default=0.0, ge=0.0, le=1.0)
     why: str = ""
@@ -1052,7 +1106,7 @@ class SomaticImpact(BaseModel):
     )
 
 
-class CharacterAppraisal(BaseModel):
+class CharacterAppraisal(LenientModel):
     goal_relevance: str = ""
     expectation: str = ""
     emotion: str = ""
@@ -1079,7 +1133,7 @@ class CharacterAppraisal(BaseModel):
         extra = "allow"
 
 
-class StressState(BaseModel):
+class StressState(LenientModel):
     activation: float = Field(default=0.0, ge=0.0, le=1.0)
     # Aversive component of activation, peak-held on its own so a pleasant
     # drive is never re-read as distress next beat (psychology_runtime).
@@ -1093,7 +1147,7 @@ class StressState(BaseModel):
     )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
 
 
-class HedonicState(BaseModel):
+class HedonicState(LenientModel):
     pain: float = Field(default=0.0, ge=0.0, le=1.0)
     pleasure: float = Field(default=0.0, ge=0.0, le=1.0)
     source: str = ""
@@ -1108,7 +1162,7 @@ class HedonicState(BaseModel):
     )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
 
 
-class CharacterActiveState(BaseModel):
+class CharacterActiveState(LenientModel):
     mood: Any = ""
     goal: str = ""
     affect: dict = Field(default_factory=dict)
@@ -1153,7 +1207,7 @@ def _coerce_candidate_response(value):
     return value
 
 
-class ResponseCandidate(BaseModel):
+class ResponseCandidate(LenientModel):
     response: str = ""
     serves: list[str] = Field(default_factory=list)
     expected_outcome: str = ""
@@ -1173,7 +1227,7 @@ class ResponseCandidate(BaseModel):
     )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
 
 
-class BeliefUpdate(BaseModel):
+class BeliefUpdate(LenientModel):
     belief: str
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     evidence: list[EvidenceRef] = Field(default_factory=list)
@@ -1191,7 +1245,7 @@ class BeliefUpdate(BaseModel):
     )
 
 
-class AssociationUpdate(BaseModel):
+class AssociationUpdate(LenientModel):
     cue: str
     appraisal_bias: str = ""
     response_tendency: str = ""
@@ -1207,7 +1261,7 @@ class AssociationUpdate(BaseModel):
     )
 
 
-class InteractionControl(BaseModel):
+class InteractionControl(LenientModel):
     addresses: list[str] = Field(default_factory=list)
     expects_response: bool = False
     yields_floor: bool = True
@@ -1218,7 +1272,7 @@ class InteractionControl(BaseModel):
         lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.0)
     )
 
-class CharacterOutput(BaseModel):
+class CharacterOutput(LenientModel):
     observations_used: list[EvidenceRef] = Field(default_factory=list)
 
     _coerce_observations = validator(
@@ -1281,7 +1335,7 @@ class CharacterOutput(BaseModel):
 
 # ---- Mapping ----
 
-class ScenePatch(BaseModel):
+class ScenePatch(LenientModel):
     rooms: dict[str, dict] = Field(default_factory=dict)
     entities: dict[str, dict] = Field(default_factory=dict)
     positions: dict[str, str] = Field(default_factory=dict)
@@ -1289,7 +1343,7 @@ class ScenePatch(BaseModel):
     remove_rooms: list[str] = Field(default_factory=list)
     remove_adjacent: list[dict] = Field(default_factory=list)
 
-class BookOp(BaseModel):
+class BookOp(LenientModel):
     """A live, per-turn proposal to create ONE new child lorebook,
     mirroring importers.py's book_ops shape (the existing manual
     reinterpret-lorebook flow) but usable during ordinary play. temp_id
@@ -1307,7 +1361,7 @@ class BookOp(BaseModel):
     scope_location_id: Optional[str] = None
     anchor_entity_id: Optional[str] = None
 
-class LoreOp(BaseModel):
+class LoreOp(LenientModel):
     op: str = "create"
     id: Optional[int] = None
     book_id: Optional[Union[int, str]] = None  # an existing book's int id, or a same-turn BookOp's temp_id
@@ -1325,18 +1379,18 @@ class LoreOp(BaseModel):
     source_notes: Optional[str] = None
     reason: str = ""
 
-class ValidatedFact(BaseModel):
+class ValidatedFact(LenientModel):
     fact: str = ""
     ok: bool = False
     conflict_with: str = ""
 
-class ValidatedIntroduction(BaseModel):
+class ValidatedIntroduction(LenientModel):
     who: str = ""
     learns: str = ""
     ok: bool = False
     corrected_learns: Optional[str] = None
 
-class MappingCommit(BaseModel):
+class MappingCommit(LenientModel):
     validated: list[ValidatedFact] = Field(default_factory=list)
     lore_ops: list[LoreOp] = Field(default_factory=list)
     book_ops: list[BookOp] = Field(default_factory=list)
@@ -1348,7 +1402,7 @@ class MappingCommit(BaseModel):
 
 # ---- Lorebook Tree ----
 
-class LorebookDef(BaseModel):
+class LorebookDef(LenientModel):
     id: int
     parent_id: Optional[int] = None
     name: str
@@ -1359,26 +1413,26 @@ class LorebookDef(BaseModel):
     inheritance_mode: str = "inherit"
     sort_order: int = 0
 
-class LoreEntryScope(BaseModel):
+class LoreEntryScope(LenientModel):
     world_ids: list[str] = Field(default_factory=list)
     location_ids: list[str] = Field(default_factory=list)
     entity_ids: list[str] = Field(default_factory=list)
     valid_from: Optional[float] = None
     valid_until: Optional[float] = None
 
-class LoreEntryRelation(BaseModel):
+class LoreEntryRelation(LenientModel):
     supersedes_entry_id: Optional[int] = None
     refines_entry_ids: list[int] = Field(default_factory=list)
     contradicts_entry_ids: list[int] = Field(default_factory=list)
     
-class PerceptionOutput(BaseModel):
+class PerceptionOutput(LenientModel):
     views: dict[str, Optional[str]] = Field(default_factory=dict)
     # Produced by deterministic post-processing from the final scrubbed view,
     # never trusted from model output. This makes structured perception a
     # projection of the already-audited prose channel, not a second leak path.
     observations: dict[str, list[Observation]] = Field(default_factory=dict)
 
-class MappingStageOutput(BaseModel):
+class MappingStageOutput(LenientModel):
     relevant_books: list[int] = Field(default_factory=list)
     relevant_lore: list[dict] = Field(default_factory=list)
     staged_lore: list[dict] = Field(default_factory=list)
@@ -1388,7 +1442,7 @@ class MappingStageOutput(BaseModel):
 
 # ---- Greeting interpretation (ingest-time, per docs/GREETING_IMPORT_DESIGN.md) ----
 
-class GreetingKnowledgeSeed(BaseModel):
+class GreetingKnowledgeSeed(LenientModel):
     content: str = ""
     about_entity: str = "self"      # 'self' = the character
     kind: str = "fact"              # fact|goal|relationship|recent_event
@@ -1401,7 +1455,7 @@ class GreetingKnowledgeSeed(BaseModel):
         lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.6)
     )
 
-class GreetingInterpret(BaseModel):
+class GreetingInterpret(LenientModel):
     location: str = ""
     time: str = "now"
     scene_description: str = ""

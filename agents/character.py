@@ -8,6 +8,7 @@ from affect import CRISIS_STRAIN_MIN, RUPTURE_FORCE_AFTER, ground_tells
 from db import q, wget
 from character_schema import (
     character_abilities,
+    character_curiosity,
     character_interoception,
     character_name,
     character_psychology,
@@ -39,7 +40,8 @@ from scene import (
     sheet_state,
 )
 from schemas import validate_llm_output
-from spatial import corridor_sightlines, room_of, spatial_digest
+from spatial import (corridor_sightlines, room_of, spatial_digest,
+                     visible_adjacent_rooms)
 from survival import vitals_of
 from psychology_runtime import cognitive_absorption
 from theory_of_mind import mind_models_for_payload, sheet_capacity
@@ -148,7 +150,7 @@ def _known_pronouns(cast, persona, recognized, exclude=None):
 
 
 def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
-                          here_rid=None):
+                          here_rid=None, routes_that_worked=None):
     """Mark each exit with whether this character has been through it.
 
     `spatial_digest` renders an exit as {room, barrier} -- identical whether
@@ -187,6 +189,7 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                     seen_onward[str(item.get("room_id"))] = item["onward_exits"]
         except Exception:
             seen_onward = {}
+    worked = routes_that_worked if isinstance(routes_that_worked, dict) else {}
     route = [r for r in (visited_rooms or []) if isinstance(r, str)]
     counts = {}
     for rid in route:
@@ -269,6 +272,11 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                 entry["onward_exits_visible"] = seen_onward[rid]
                 if seen_onward[rid] == 0:
                     entry["visibly_no_way_through"] = True
+            if rid and worked.get(rid):
+                # The counterweight. Every other marker here says where they
+                # have BEEN; this is the only one that says something WORKED,
+                # and without it a proven route reads as merely old.
+                entry["worked_before"] = worked[rid]
             if rid and rid in counts:
                 entry["been_there"] = True
                 entry["times_entered"] = counts[rid]
@@ -364,6 +372,15 @@ def character_step(ctx, cid, nonce):
         current_view=view or "",
         active_state=active,
         here=(sc.get("rooms") or {}).get(char_room, {}).get("name") or char_room,
+        # Rooms currently in sight are cues too. Recalling what happened where
+        # you STAND tells you where you are; recalling it about a room you can
+        # SEE tells you whether to go there -- which is the decision actually
+        # being made.
+        in_sight=[
+            str(item.get("room_name") or item.get("room_id"))
+            for item in (visible_adjacent_rooms(sc, char_room) or [])
+            if isinstance(item, dict)
+        ] if char_room else None,
     )
     known_tags, excl_titles = _char_known_tags(sh)
     knowledge = knowledge_for_character(_books(ctx), char_room, known_tags, excl_titles)
@@ -468,6 +485,10 @@ def character_step(ctx, cid, nonce):
         "public_history": character_public_history(sh),
         "psychology": _psych,
         "stance": stance,
+        # How readily this mind leaves a known-good way for an untried one.
+        # Explicit because the balance was previously implicit -- an artefact of
+        # which navigational markers existed, not an authored trait.
+        "curiosity": character_curiosity(sh),
         "active_state": active,
         "voice": character_voice(sh),
         "senses": senses_as_text(character_senses(sh)),
@@ -517,7 +538,8 @@ def character_step(ctx, cid, nonce):
                 spatial_digest(sc, character_name(sh)), sc,
                 stored_state.get("visited_rooms") or [],
                 known_exits=stored_state.get("known_exits") or {},
-                here_rid=char_room),
+                here_rid=char_room,
+                routes_that_worked=stored_state.get("routes_that_worked") or {}),
             # Where they are, named. The digest lists what leads OUT of a room
             # without ever naming the room itself, so a character had to
             # re-derive their own location from the view's prose every beat.
