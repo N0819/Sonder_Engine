@@ -474,8 +474,14 @@ class TestCirclingIsVisible:
         got = self._exits(route)
         assert got["A"]["circling_here"] is True
         assert got["A"]["entered_recently"] >= 2
-        assert got["A"]["entered_recently"] < got["A"]["times_entered"], (
+        assert got["A"]["entered_recently"] < len(route), (
             "recent must be a window, not the lifetime tally")
+        # `times_entered` is deliberately dropped once circling is set: it,
+        # turned_back_here and last_seen_beats_ago all say the same thing as
+        # the verdict, and together they outweighed the untried door beside
+        # them. The verdict carries the count now.
+        assert "times_entered" not in got["A"]
+        assert got["A"]["verdict"].startswith("circling")
         assert len(route[-LOOP_WINDOW:]) == LOOP_WINDOW
 
     def test_an_untrodden_exit_is_never_marked(self):
@@ -502,7 +508,9 @@ class TestCirclingIsVisible:
         assert got["A"]["entered_recently"] == 2
 
     def test_recent_never_exceeds_the_lifetime_count(self):
-        route = ["rA", "rB"] * 8
+        """On an exit with no discouraging verdict both numbers survive, and
+        the window can never exceed the whole route."""
+        route = ["rA", "rB", "rC", "rD", "rE", "rF", "rG", "rA"]
         got = self._exits(route)
         assert got["A"]["entered_recently"] <= got["A"]["times_entered"]
 
@@ -600,3 +608,73 @@ class TestCorridorPacingIsCaught:
         route = [f"r{i}" for i in range(20)] + ["r18", "r19"]
         f = self._frame(route, "R18")
         assert "beats_since_new_ground" not in f
+
+
+class TestTheRightDoorIsNotTheLightestEntry:
+    """We annotated the doors he should not take and left the one he should
+    take nearly bare.
+
+    Measured at the exact beat a character failed to take it: the right door
+    carried 3 keys and 64 characters -- `been_there: false` among them --
+    while the door he kept taking carried 8 keys and 179. Every good thing
+    about the correct answer was the ABSENCE of something, making it the
+    lightest item in the payload, and it was chosen against nineteen beats
+    running while the payload said `circling_here` and
+    `beats_since_new_ground: 19`.
+
+    Salience follows weight. Ours pointed the wrong way.
+    """
+
+    SCENE = {"rooms": {"rHere": {"name": "Here"}, "rLoop": {"name": "Loop"},
+                       "rNew": {"name": "New"}},
+             "positions": {}, "entities": {}}
+    DIGEST = {"ahead": [{"room": "Loop", "barrier": "open"},
+                        {"room": "New", "barrier": "open"}]}
+
+    def _frame(self):
+        from agents.character import _annotate_known_exits
+        route = ["rHere", "rLoop"] * 8
+        return _annotate_known_exits(self.DIGEST, self.SCENE, route)
+
+    def test_the_untried_door_comes_first(self):
+        """Position is salience and it costs nothing."""
+        assert [e["room"] for e in self._frame()["ahead"]] == ["New", "Loop"]
+
+    def test_the_frontier_is_marked_positively(self):
+        new = self._frame()["ahead"][0]
+        assert new["untried"] is True
+        assert new["verdict"].startswith("UNTRIED")
+
+    def test_the_untried_door_is_no_longer_the_lightest_entry(self):
+        import json
+        by = {e["room"]: e for e in self._frame()["ahead"]}
+        new, loop = json.dumps(by["New"]), json.dumps(by["Loop"])
+        assert len(new) > 100, "the right answer must not be a bare negative"
+        assert len(new) > len(loop) * 0.6, (
+            f"untried {len(new)} chars vs looping {len(loop)} -- the gap was "
+            "2.8x the wrong way when this was found")
+
+    def test_the_redundant_counters_are_gone_from_a_looping_exit(self):
+        loop = {e["room"]: e for e in self._frame()["ahead"]}["Loop"]
+        for redundant in ("times_entered", "turned_back_here",
+                          "last_seen_beats_ago"):
+            assert redundant not in loop
+        assert "entered_recently" in loop, "the informative one stays"
+
+    def test_the_evidence_survives_under_the_verdict(self):
+        """A reading, not a replacement -- a model may disagree with it, and
+        needs what the reading was made from in order to."""
+        loop = {e["room"]: e for e in self._frame()["ahead"]}["Loop"]
+        assert loop["been_there"] is True
+        assert loop["circling_here"] is True
+
+    def test_proven_does_not_outrank_untried(self):
+        """Choosing between a way that worked and a way not yet tried is what
+        curiosity is FOR; ordering must not quietly settle it."""
+        from agents.character import _annotate_known_exits
+        got = _annotate_known_exits(
+            self.DIGEST, self.SCENE, ["rHere", "rLoop"],
+            routes_that_worked={"rLoop": 3})
+        rooms = [e["room"] for e in got["ahead"]]
+        assert rooms == ["New", "Loop"]
+        assert got["ahead"][1]["verdict"].startswith("proven")
