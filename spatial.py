@@ -2483,22 +2483,63 @@ def _onward_exits(scene, all_rooms, target_id, from_room):
     exactly what was observed: a maze runner entered the same one-exit chamber
     six times, having never been given the one fact that would have told him.
 
-    Omitted entirely when the room is too dark to make out, because then you
-    genuinely cannot see its doorways. Absent means "could not tell", never
-    "none" -- a caller must not read a missing key as a dead end.
+    Requires FULL sight of the chamber, not merely some sight. Light spilling
+    through an open doorway makes a dark room read `dim`, which is enough for
+    bulk and movement and nowhere near enough to count doorways or tell which
+    wall they are in -- `corridor_sightlines` already stops its line at
+    anything short of full sight for exactly that reason, and the two must not
+    disagree about what gloom can be read through. Absent means "could not
+    tell", never "none" -- a caller must not read a missing key as a dead end.
+
+    `onward_bearings` names WHICH ways those are, and it is not decoration. A
+    bare count is read as a promise to continue: observed live, a runner given
+    `onward_exits: 1` for the chamber to his west walked west into it four
+    times over nine beats hunting a west exit that never existed -- the one
+    other way out went north. He was not reasoning badly; he was told a number
+    where he needed a bearing. Omitted per-edge when an edge carries no `dir`,
+    and omitted entirely when none do, because a scene without directions has
+    no bearings to give and inventing them would be inventing a sense.
     """
-    if _LIGHT_SIGHT.get(effective_light(scene, target_id), "full") == "none":
+    if _LIGHT_SIGHT.get(effective_light(scene, target_id), "full") != "full":
         return {}
-    room = all_rooms.get(target_id) or {}
-    onward = 0
-    for edge in room.get("adjacent") or []:
+    # Counted by DESTINATION, and over reverse-declared edges too. A doorway
+    # is one doorway whichever room's `adjacent` list happens to name it, and
+    # the director routinely declares only one side: counting `target`'s own
+    # edges alone reported nought for chambers that plainly had a way on, and
+    # nought is what raises `visibly_no_way_through`. Inventing a dead end is
+    # the worse error of the two -- it argues against a real route.
+    ways = {}
+    for edge in (all_rooms.get(target_id) or {}).get("adjacent") or []:
         if not isinstance(edge, dict):
             continue
         if normalize_barrier(edge.get("barrier")) == "wall":
             continue
-        if str(edge.get("to")) != str(from_room):
-            onward += 1
-    return {"onward_exits": onward}
+        dest = str(edge.get("to") or "")
+        if dest and dest != str(from_room):
+            ways.setdefault(dest, normalize_bearing(edge.get("dir")))
+    for other_id, other in all_rooms.items():
+        if str(other_id) in (str(target_id), str(from_room)):
+            continue
+        if not isinstance(other, dict) or str(other_id) in ways:
+            continue
+        for edge in other.get("adjacent") or []:
+            if not isinstance(edge, dict) or str(edge.get("to")) != str(target_id):
+                continue
+            if normalize_barrier(edge.get("barrier")) == "wall":
+                continue
+            # Seen from the far side, so the bearing is the far side's,
+            # reversed. Same doorway, opposite wall.
+            ways[str(other_id)] = opposite_bearing(
+                normalize_bearing(edge.get("dir")))
+            break
+    out = {"onward_exits": len(ways)}
+    bearings = []
+    for heading in ways.values():
+        if heading and heading not in bearings:
+            bearings.append(heading)
+    if bearings:
+        out["onward_bearings"] = bearings
+    return out
 
 
 def visible_adjacent_rooms(
@@ -2606,6 +2647,12 @@ def visible_adjacent_rooms(
                 ),
                 "barrier": barrier,
                 "description": notes[:800],
+                # Sight does not care which room declared the edge. Omitting
+                # this here made a whole class of neighbour permanently
+                # opaque -- absent reads as "cannot tell from here", so a
+                # visibly closed chamber that happened to be reverse-declared
+                # had to be walked into to be ruled out.
+                **_onward_exits(scene, all_rooms, other_id, room_id),
             })
             seen.add(other_id)
 
