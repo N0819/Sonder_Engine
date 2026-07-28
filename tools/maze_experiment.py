@@ -52,6 +52,7 @@ import argparse
 import json
 import os
 import random
+import subprocess
 import sys
 import tempfile
 import time
@@ -1024,6 +1025,36 @@ def main():
     if args.ablate_affordances:
         ablate_affordances()
         print("  ABLATED: visited-exit markers and location-cued recall off")
+    if args.out:
+        # A self-describing header, written before any run. A results file
+        # that records only routes cannot be read six weeks later: the same
+        # `visited` list means different things on a different maze, and an
+        # arm whose maze or code state has to be reconstructed from a shell
+        # history is an arm that will eventually be compared against the
+        # wrong baseline. Everything needed to rebuild the maze and identify
+        # the tree that produced it goes in line one.
+        try:
+            _commit = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True, text=True, timeout=5).stdout.strip()
+            _dirty = bool(subprocess.run(
+                ["git", "status", "--porcelain"],
+                capture_output=True, text=True, timeout=5).stdout.strip())
+        except Exception:
+            _commit, _dirty = "", False
+        with open(args.out, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({
+                "kind": "meta", "run": 0,
+                "grid": GRID, "algo": args.algo, "braid": args.braid,
+                "seed": MAZE_SEED, "goal": list(GOAL), "optimal": optimal,
+                "runs": args.runs, "max_steps": args.max_steps,
+                "agent": args.agent, "preset": args.preset,
+                "ablated": bool(args.ablate_affordances),
+                "maze_stats": st, "traps": dec,
+                "commit": _commit, "dirty_tree": _dirty,
+                "argv": sys.argv[1:],
+            }) + "\n")
+            fh.flush()
     # One stream for the whole experiment, so run 2 is not a replay of run 1.
     rng = random.Random(20260727)
     rows, turn_base = [], 1
