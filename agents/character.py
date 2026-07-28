@@ -149,12 +149,18 @@ def _known_pronouns(cast, persona, recognized, exclude=None):
     return out
 
 
-# How far back "recently" reaches, and how few rooms count as a pocket.
-# Twelve beats is long enough to contain a couple of honest there-and-back
-# trips through a hub and short enough that a genuine lock shows inside it;
-# four rooms is a corridor stub or a small ring, not a region.
+# How far back "recently" reaches. Twelve beats is long enough to contain a
+# couple of honest there-and-back trips through a hub, short enough that a
+# genuine lock shows inside it.
 LOOP_WINDOW = 12
-LOOP_POCKET = 4
+# A pocket is measured as a RATIO, not a room count. A fixed count of four was
+# tried first and immediately missed the real thing: a lock observed live
+# widened from three rooms to five as he wandered a little further each cycle,
+# and five rooms over twelve beats -- every room walked twice over -- is no
+# less stuck than three. Half the window is the threshold because a character
+# genuinely covering ground has a ratio near 1.0, so this cannot fire on
+# exploration however fast it moves.
+LOOP_DENSITY = 0.5
 
 
 def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
@@ -238,7 +244,8 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     # genuinely few rooms, so that ordinary back-and-forth through a hub does
     # not read as being stuck.
     circling = set()
-    if len(recent) >= LOOP_WINDOW and len(set(recent)) <= LOOP_POCKET:
+    if (len(recent) >= LOOP_WINDOW
+            and len(set(recent)) <= LOOP_DENSITY * len(recent)):
         circling = set(recent)
     # Which rooms, in this character's OWN experience, they walked into and had
     # to walk straight back out of.
