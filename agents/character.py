@@ -177,6 +177,10 @@ LOOP_DENSITY = 0.5
 _VERDICTS = (
     ("visibly_no_way_through", "closed",
      "you can see from here it has no other way out"),
+    # Split out below in _verdict when the chamber is also UNTRIED. What a
+    # room LEADS TO and what is IN it are different questions, and `closed`
+    # only ever answered the first.
+
     ("no_route_onward", "no way through",
      "you went in and had to come straight back, more than once"),
     ("no_new_ground_that_way", "spent",
@@ -195,11 +199,16 @@ _VERDICTS = (
 # choosing between a way that worked and a way not yet tried is what
 # curiosity is FOR, and hard-coding it here would quietly settle a question
 # the character is supposed to answer.
-_APPEAL_ORDER = ("UNTRIED", "proven", "known", "circling", "spent",
-                 "no way through", "closed")
+# `unentered` sits just behind `known`: a cul-de-sac you have never looked
+# inside is worse than a route (it goes nowhere) and better than ground you
+# have already covered (it might hold what you are looking for).
+_APPEAL_ORDER = ("UNTRIED", "proven", "unentered", "known", "circling",
+                 "spent", "no way through", "closed")
 # The verdicts that argue AGAINST taking an exit. For these the supporting
 # counters are redundant with the verdict itself and are dropped, so that a
 # discouraged door never outweighs the encouraged one beside it.
+# `unentered` is deliberately absent: its supporting markers are the only
+# evidence the character has about a room they have never been in.
 _DISCOURAGING = frozenset({"circling", "spent", "no way through", "closed"})
 
 
@@ -221,6 +230,26 @@ def _verdict(entry, frontier_hops=None):
     for key, label, because in _VERDICTS:
         if not entry.get(key):
             continue
+        # A cul-de-sac you have NEVER been inside is not a spent one. `closed`
+        # is a fact about where a room LEADS; it says nothing about what is
+        # in it, and it was masking `untried` entirely because it sits first
+        # in the precedence.
+        #
+        # Measured in maze arm A11 run 3. The shrine -- the thing he is in
+        # the maze to reach -- is a cul-de-sac. He walked sixteen optimal
+        # moves to its doorway, SAW it ("a grey-slate room with a toppled
+        # bench and a still water basin, which is a shrine"), read the
+        # verdict "closed -- you can see from here it has no other way out",
+        # concluded "it's a dead end, so that would be a waste of time", and
+        # turned around. Chamber 0603 was never entered in any run of the
+        # arm. Every arrival is a cul-de-sac: you go to the shrine, the
+        # bedroom, the vault BECAUSE of what is in it, not to pass through.
+        if key == "visibly_no_way_through" and entry.get("untried"):
+            label = "unentered"
+            because = ("it has no other way out, but you have never been "
+                       "inside it -- what is IN a room is a different "
+                       "question from what it leads to, and things worth "
+                       "reaching are usually not thoroughfares")
         detail = because
         if label == "circling" and entry.get("entered_recently"):
             detail = (f"you have been in there {entry['entered_recently']} "
