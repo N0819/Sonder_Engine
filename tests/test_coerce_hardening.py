@@ -149,3 +149,58 @@ def test_latent_string_and_custom_summary_separates_outfit():
     assert norm["initial_outfit"]["wearing"] == ["red cloak"]
     caps = [l.get("capability") for l in norm["embodiment"]["latent"]]
     assert "telepathy" in caps and "x" in caps
+
+
+class TestCandidateResponseShape:
+    """A character turn must not be lost to the SHAPE of one weighed option.
+
+    `response` is the prose of an option the character considered, but "the
+    candidate response" reads just as naturally as the act itself, and models
+    emit it structurally. Found live: inception/mercury-2 returned a sequence
+    element there on roughly 40% of beats, and each one failed the entire
+    character step -- the beat lost, the character inert, the only signal a
+    type error naming a field the author never sees.
+    """
+
+    def _one(self, raw_response):
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("character", {
+            "name": "V", "sequence": [],
+            "response_candidates": [{"response": raw_response}]})
+        return out["response_candidates"][0]["response"]
+
+    def test_a_sequence_element_reduces_to_its_surface(self):
+        """The observable is preferred over the attempt: these candidates are
+        weighed, not enacted, and the observable is what anyone would ever
+        actually be shown."""
+        assert self._one({
+            "type": "action", "attempt": "step through the nearest doorway",
+            "observable": "steps forward through the doorway",
+        }) == "steps forward through the doorway"
+
+    def test_it_falls_back_through_the_other_prose_keys(self):
+        assert self._one({"type": "action", "attempt": "wait here"}) == "wait here"
+        assert self._one({"text": "say nothing"}) == "say nothing"
+
+    def test_a_plain_string_is_untouched(self):
+        assert self._one("just wait") == "just wait"
+
+    def test_a_list_joins_rather_than_failing(self):
+        assert self._one(["step out", "look back"]) == "step out; look back"
+
+    def test_an_empty_object_degrades_to_empty_not_an_error(self):
+        assert self._one({}) == ""
+        assert self._one({"type": "action"}) == ""
+
+    def test_the_rest_of_the_turn_survives(self):
+        """The point of the coercion: the beat lives."""
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("character", {
+            "name": "V",
+            "sequence": [{"type": "action", "attempt": "walk on",
+                          "observable": "walks on"}],
+            "response_candidates": [
+                {"response": {"observable": "steps forward"}, "selected": True}],
+        })
+        assert out["sequence"][0]["attempt"] == "walk on"
+        assert out["response_candidates"][0]["selected"] is True
