@@ -748,7 +748,103 @@ def reset_position(chat_id, name):
     sc = wget(chat_id, "scene", {}) or {}
     sc.setdefault("positions", {})[name] = _rid(START)
     sc.pop("crossings", None)
+    # Heading goes with the body. Left standing, `came_from` names the room he
+    # was leaving when the last run ended -- which after the teleport is not
+    # adjacent to where he is, so the Director resolves his first declared
+    # direction of the new run against a frame describing somewhere else.
+    # Harmless until characters were given a heading at all (see
+    # tests/test_director_character_heading.py); actively wrong after.
+    orient = sc.get("orientation")
+    if isinstance(orient, dict):
+        orient.pop(name, None)
     wset(chat_id, "scene", sc)
+
+
+def run_interlude(chat_id, char_id, name, run_no, reached, turn_id):
+    """What happens to him BETWEEN runs, told to him as his own experience.
+
+    Runs used to be separated by a bare teleport: he arrived somewhere, and
+    the next thing in his head was standing at the entrance with no cause.
+    That is a reality-break, and a mind that reasons will explain it -- run 1
+    of the aborted arm produced exactly that shape of belief ("the maze layout
+    sometimes differs from memory") from a smaller discontinuity, and then
+    discounted its own true map for the rest of the run. An experiment about
+    whether a character LEARNS a space cannot afford to teach them the space
+    is unreliable.
+
+    So the boundary is narrated: he finishes, he is fed, he is carried back.
+    Three properties matter and none is decoration:
+
+    * It is his OWN experience -- arrival, a meal, the return trip. It names
+      no room, no doorway, no direction, and nothing about the maze's shape.
+      A reward that leaked layout would hand him by fiat what the arm exists
+      to measure whether he can learn.
+    * The food is a real reward, not flavour text: positive valence and a
+      pleasure reading, so finishing has a felt consequence. He is a courier
+      who is proud of a fast clean run; a hot meal at the end is what that
+      pride is FOR.
+    * The teleport is stated as a fact he was told, not left to be inferred.
+      He knows he was carried back. He does not have to invent a maze that
+      moves.
+    """
+    fed = ("a bowl of hot spiced barley and a cup of dark beer, pressed into "
+           "your hands still steaming")
+    if reached:
+        body = (f"You reached the shrine at the heart of the maze. The "
+                f"keepers fed you well for it -- {fed} -- and you ate sitting "
+                f"down, which you almost never do. Then they walked you back "
+                f"to the entrance and set you at the threshold to run it "
+                f"again.")
+        valence, arousal, salience = 0.8, 0.4, 0.85
+    else:
+        body = (f"The keepers called the run before you reached the shrine. "
+                f"They fed you anyway -- {fed} -- and you ate it standing, "
+                f"chewing over where the way had gone wrong. Then they walked "
+                f"you back to the entrance and set you at the threshold to "
+                f"run it again.")
+        valence, arousal, salience = 0.3, 0.35, 0.8
+
+    try:
+        from memory import add_memory
+        add_memory(chat_id, char_id, turn_id, "episodic", "experienced",
+                   salience, body, category="event",
+                   gist=("Finished a run, was fed, and was carried back to "
+                         "the entrance to start again."),
+                   location=_rid(START), valence=valence, arousal=arousal,
+                   emotional_context="fed and rested; set going again")
+    except Exception as exc:                       # pragma: no cover
+        print(f"    interlude: memory not written ({exc})")
+
+    # The meal as a felt state, not merely a remembered one. Written into
+    # active_state.hedonic where resolve_hedonic keeps it; `charge` is left
+    # alone deliberately -- a satisfied hunger is a RESOLVED state, and
+    # integrating it as unresolved drive is the failure DESIGN_SURFACE_COMFORT
+    # names (a saturated body manufactured out of contentment).
+    try:
+        from db import q, qi
+        import json as _json
+        # chat_chars is keyed on (chat_id, char_id) -- it has no `id`.
+        row = q("SELECT state FROM chat_chars WHERE chat_id=? AND char_id=?",
+                (chat_id, char_id), one=True)
+        if row:
+            st = _json.loads(row["state"] or "{}")
+            active = st.setdefault("active_state", {})
+            hedonic = active.get("hedonic")
+            if not isinstance(hedonic, dict):
+                hedonic = {"pain": 0.0, "pleasure": 0.0, "source": "",
+                           "charge": 0.0, "saturated": False}
+            hedonic["pleasure"] = max(float(hedonic.get("pleasure") or 0.0), 0.45)
+            hedonic["pain"] = 0.0
+            hedonic["source"] = "hot barley and dark beer after the run"
+            active["hedonic"] = hedonic
+            qi("UPDATE chat_chars SET state=? WHERE chat_id=? AND char_id=?",
+               (_json.dumps(st), chat_id, char_id))
+    except Exception as exc:                       # pragma: no cover
+        print(f"    interlude: reward not applied ({exc})")
+
+    print(f"    interlude: run {run_no} ended "
+          f"({'reached the shrine' if reached else 'called short'}), fed, "
+          f"returned to {_rid(START)}")
 
 
 def position_of(chat_id, name):
@@ -1401,6 +1497,15 @@ def main():
               f"idle={m['idle_beats']} unique={m['unique']} "
               f"backtracks={m['backtracks']} reversals={m['reversals']} "
               f"reached={m['reached']} excess={m['excess']}")
+        # Only between runs. On the last one "set you at the threshold to run
+        # it again" would be a lie, and the point of the interlude is that he
+        # is not told things that are not so.
+        if run < args.runs:
+            import db as _db
+            _last = _db.q("SELECT id FROM turns WHERE chat_id=? "
+                          "ORDER BY idx DESC LIMIT 1", (chat_id,), one=True)
+            run_interlude(chat_id, char_id, name, run, m["reached"],
+                          _last["id"] if _last else None)
 
     print("\n" + "=" * 68)
     print(f"{'run':>4} {'beats':>6} {'moves':>6} {'idle':>5} {'unique':>7} "
