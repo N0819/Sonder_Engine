@@ -6,6 +6,15 @@
 Re-reads the harness's own output on every request, so it costs the experiment
 nothing and cannot disturb it. Nothing is cached and nothing is written.
 
+Each field comes from whichever file owns it. Position comes from the `--state`
+CHECKPOINT, rewritten with os.replace after every beat; finished runs come from
+the results file, where they are already recorded as data; only the stall count
+and call latency are scraped from stdout, because nothing else carries them.
+An earlier version took everything from stdout, which is block-buffered when
+redirected -- so the viewer sat kilobytes behind a healthy arm and looked like
+a stall, and finished runs were recovered by regex over the summary line the
+harness prints from numbers it already had in hand.
+
 The maze comes from the results file's `meta` header -- its recorded `edges`,
 its start and its goal. An earlier version of this viewer hardcoded the 9x9
 kruskal seed, which is the same defect `render_maze_runs.py` had: the route
@@ -67,8 +76,53 @@ def load_maze(runs_path):
     return walls, grid, start, goal, meta
 
 
+def read_state(path):
+    """Where he is, from the harness's own checkpoint.
+
+    Preferred over scraping stdout. The harness's prints are block-buffered
+    when redirected to a file, so a log tail can sit kilobytes behind and read
+    as a stall while the arm is running normally -- a false alarm this project
+    has already chased twice. The checkpoint is rewritten with os.replace
+    after every beat, so it is current and never half-read.
+    """
+    try:
+        with open(path, encoding="utf-8") as fh:
+            d = json.load(fh)
+    except Exception:
+        return None
+    route = d.get("visited") or []
+    if not route:
+        return None
+    return {"run": d.get("run"), "beat": d.get("beat"), "route": route}
+
+
+def read_runs(path):
+    """Finished runs from the results file, which records them as data.
+
+    The previous source was a regex over the summary line the harness prints.
+    A number that exists as JSON should not be recovered by parsing its own
+    human-readable rendering.
+    """
+    done = []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if row.get("kind") == "meta":
+                    continue
+                done.append((row.get("steps"), row.get("moves"),
+                             row.get("idle_beats"), row.get("unique"),
+                             row.get("backtracks"), row.get("reversals"),
+                             str(row.get("reached"))))
+    except Exception:
+        pass
+    return done
+
+
 def read_log(path, grid):
-    """Where he is and how it is going, scraped from the harness's stdout."""
+    """Stall count and call latency -- the two things only stdout carries."""
     try:
         text = open(path, encoding="utf-8", errors="replace").read()
     except Exception:
@@ -211,8 +265,29 @@ the filled cell is where he stands, <b>▲</b> the entrance, <b>✦</b> the goal
 </footer></div>"""
 
 
+def progress(state_path, runs_path, log_path, grid):
+    """One view of the arm, each field from whichever source owns it.
+
+    Checkpoint for position (current, atomic), results file for finished runs
+    (recorded as data), stdout only for stalls and latency, which nothing else
+    carries.
+    """
+    d = read_log(log_path, grid)
+    st = read_state(state_path)
+    route = (st or {}).get("route") or d.get("route") or []
+    rev = sum(1 for i in range(1, len(route) - 1)
+              if route[i + 1] == route[i - 1] and route[i + 1] != route[i])
+    beat = (st or {}).get("beat")
+    return {"route": route,
+            "run": (st or {}).get("run") or d.get("run"),
+            "beat": len(route) - 1 if beat is None and route else (beat or 0),
+            "rev": rev,
+            "done": read_runs(runs_path) or d.get("done") or [],
+            "stalls": d.get("stalls", 0), "lat": d.get("lat", 0)}
+
+
 def build_handler(walls, grid, start, goal, optimal, meta, log_path, title,
-                  eyebrow):
+                  eyebrow, state_path, runs_path):
     cells = grid * grid
 
     class H(http.server.BaseHTTPRequestHandler):
@@ -220,9 +295,9 @@ def build_handler(walls, grid, start, goal, optimal, meta, log_path, title,
             pass
 
         def do_GET(self):
-            d = read_log(log_path, grid)
-            route = d.get("route") or []
-            stats = [("Beat", len(route)),
+            d = progress(state_path, runs_path, log_path, grid)
+            route = d["route"]
+            stats = [("Beat", d["beat"]),
                      ("Chambers", f"{len(set(route))}/{cells}"),
                      ("Reversals", d.get("rev", 0)),
                      ("Call", f"{d.get('lat', 0)}s"),
@@ -244,7 +319,7 @@ def build_handler(walls, grid, start, goal, optimal, meta, log_path, title,
             page = PAGE
             for token, val in (
                     ("@@TITLE@@", title), ("@@EYEBROW@@", eyebrow),
-                    ("@@RUN@@", d.get("run", "?")), ("@@BEAT@@", len(route)),
+                    ("@@RUN@@", d.get("run") or "?"), ("@@BEAT@@", d["beat"]),
                     ("@@OPT@@", len(optimal) - 1), ("@@STATS@@", strip),
                     ("@@GRID@@", grid_html(route, walls, grid, start, goal,
                                            optimal)),
@@ -266,8 +341,12 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("runs_jsonl", help="the arm's --out file (for its meta)")
     ap.add_argument("--log", default=None,
-                    help="harness stdout to scrape for position; defaults to "
-                         "the results file with .log in place of .jsonl")
+                    help="harness stdout, for stall count and call latency; "
+                         "defaults to the results file with .log for .jsonl")
+    ap.add_argument("--state", default=None,
+                    help="the arm's --state checkpoint, the authoritative "
+                         "source for position; defaults to the results file "
+                         "with .state.json for .jsonl")
     ap.add_argument("--port", type=int, default=8009)
     ap.add_argument("--title", default=None)
     ap.add_argument("--dump", metavar="PATH",
@@ -280,6 +359,8 @@ def main():
     optimal = [M._rid(c) for c in M.shortest_path(walls, start, goal)]
     optimal_set = set(optimal)
     log_path = a.log or re.sub(r"(_runs)?\.jsonl$", ".log", a.runs_jsonl)
+    state_path = a.state or re.sub(r"(_runs)?\.jsonl$", ".state.json",
+                                   a.runs_jsonl)
     origin = (f"authored {meta['svg']}" if meta.get("svg")
               else f"{meta.get('algo')} seed {meta.get('seed')}")
     eyebrow = f"{grid}×{grid} {origin} · {os.path.basename(a.runs_jsonl)}"
@@ -289,11 +370,11 @@ def main():
         # Same grid_html and same PAGE the server uses, so a dump that looks
         # right is evidence about what the server will show.
         page = PAGE
-        d = read_log(log_path, grid)
-        route = d.get("route") or []
+        d = progress(state_path, a.runs_jsonl, log_path, grid)
+        route = d["route"]
         for token, val in (
                 ("@@TITLE@@", title), ("@@EYEBROW@@", eyebrow),
-                ("@@RUN@@", d.get("run", "?")), ("@@BEAT@@", len(route)),
+                ("@@RUN@@", d.get("run") or "?"), ("@@BEAT@@", d["beat"]),
                 ("@@OPT@@", len(optimal) - 1), ("@@STATS@@", ""),
                 ("@@GRID@@", grid_html(route, walls, grid, start, goal,
                                        optimal_set)),
@@ -304,12 +385,12 @@ def main():
         return
 
     handler = build_handler(walls, grid, start, goal, optimal_set, meta,
-                            log_path, title, eyebrow)
+                            log_path, title, eyebrow, state_path, a.runs_jsonl)
     socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(("127.0.0.1", a.port), handler) as srv:
         print(f"live view on http://localhost:{a.port}  "
-              f"({grid}×{grid}, optimal {len(optimal) - 1}, log {log_path})",
-              flush=True)
+              f"({grid}×{grid}, optimal {len(optimal) - 1}, "
+              f"state {os.path.basename(state_path)})", flush=True)
         srv.serve_forever()
 
 
