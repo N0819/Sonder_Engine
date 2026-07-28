@@ -2326,7 +2326,42 @@ def semantic_output_errors(
             errors.append("positions is empty")
 
     elif step_key == "director_resolve":
-        if not str(output.get("resolved_event") or "").strip():
+        # Only required when there was something to resolve. Doing nothing is
+        # a legitimate thing for a mind to do -- a character may stand still,
+        # stay silent, decline -- and an empty sequence is how that arrives.
+        # Demanding prose about it unconditionally made a character's silence
+        # able to abort the whole turn: observed live, a character agent
+        # returned an empty sequence, the director had nothing to write about
+        # and returned an empty resolved_event, and the beat was discarded.
+        # Non-deterministically, too -- the same model narrated "he stays
+        # where he is; no changes occur" on other beats, so the failure came
+        # and went and looked like the model being unreliable.
+        #
+        # Mirrors director_interpret above, which has always required a
+        # sequence only "despite nonempty player input".
+        def _declared(*keys):
+            for key in keys:
+                block = source_payload.get(key)
+                if isinstance(block, dict) and block.get("sequence"):
+                    return True
+                if isinstance(block, list):
+                    for item in block:
+                        if isinstance(item, dict) and item.get("sequence"):
+                            return True
+                        if isinstance(item, dict) and not {"sequence"} & set(item):
+                            # A declaration shape with no sequence key at all
+                            # still counts if it carries speech or an action.
+                            if item.get("speech") or item.get("action"):
+                                return True
+            return False
+
+        anything_happened = (
+            _declared("player_declaration", "other_players_declarations",
+                      "character_declarations")
+            or bool(source_payload.get("dice_results_final"))
+        )
+        if (anything_happened
+                and not str(output.get("resolved_event") or "").strip()):
             errors.append("resolved_event is empty")
 
         if not isinstance(output.get("state_diff"), dict):
