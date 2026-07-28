@@ -466,9 +466,26 @@ def scene_rooms(walls, goal=None):
             "light": "lit",
             "adjacent": adjacent,
         }
+    # Worth arriving at. Forty-nine chambers of identical grey stone is the
+    # experiment, but it also means the payoff for a 28-move optimal run was
+    # one flat sentence -- and the psychology investigation found his
+    # motivation thin (docs/DESIGN_PSYCHOLOGY_AS_PRESSURE.md). A destination
+    # that is vivid on arrival gives the drive something to land on.
+    #
+    # It is safe to make this beautiful ONLY because it stays in `desc`:
+    # perception strips `desc`/`notes` from adjacent-edge data
+    # (agents/perception.py), and `room_notes` is keyed to the observer's own
+    # room, so none of this reaches him until he is standing in it. `light`
+    # must stay "lit" like every other chamber -- the boundary digest DOES
+    # carry the light of the room being looked into, so a brighter shrine
+    # would be a beacon visible one room out, and the search would stop being
+    # a search.
     rooms[_rid(goal)]["desc"] += (
-        " At the centre stands the shrine, unmistakable: a basin of still "
-        "water under a shaft of daylight."
+        " At the centre stands the shrine, and it is the only thing in this "
+        "maze that is not grey: a wide basin of still water lit from "
+        "somewhere beneath, throwing slow rings of gold up across the vault. "
+        "The air is warm here. It smells of bread and wet stone. Whatever "
+        "the gods keep, they keep it in this room."
     )
     rooms[_rid(goal)]["notes"] += " THE SHRINE IS HERE."
     return rooms
@@ -511,7 +528,47 @@ def character_sheet(name="Vesk"):
     sheet["psychology"]["traits"] = [
         "brisk", "decisive", "impatient with standing still", "sure-footed",
     ]
-    sheet["psychology"]["values"] = ["a fast clean run", "never breaking stride"]
+    # The DRIVE is the floor under the goals, and the first five runs had no
+    # floor: this sheet authored rich traits, values, and goals and no
+    # psychology.drive at all, so effective_drive() served empty strings --
+    # his own reasoning read it back verbatim ("Drive: essence/expression/
+    # taboo are empty"). Every motivation was therefore a GOAL, and goals are
+    # built to be completable and abandonable: when the shrine intention
+    # decayed (150 barren beats against a world bug), nothing was underneath
+    # it, and a courier stopped wanting to arrive. A drive survives goal
+    # death by construction -- apply_intent_ops never touches it, only a
+    # rupture window moves it -- and it outranks intentions in appraisal
+    # (drive-serving weight 1.0 vs 0.8) and is the first-named source of
+    # beat wants. Deliberately NOT "reach the shrine": a drive that can be
+    # satisfied stops being a drive, and he would be hollow the moment he
+    # touched it. Drives are pressure, not destinations.
+    #
+    # `expression` saying he RUNS is load-bearing, not colour: A11 showed
+    # the value "never breaking stride" being read as an argument AGAINST
+    # sprinting (stride as steady walking pace, a sprint as the thing that
+    # breaks it) -- 26 beats with a multi-room run on offer, zero taken.
+    sheet["psychology"]["drive"] = {
+        "essence": "being the one who gets there -- motion as proof of worth",
+        "expression": ("he RUNS: covers open ground at a run rather than a "
+                       "walk, decides while moving, and trusts his feet over "
+                       "studying walls"),
+        "taboo": "standing still, arriving late, being overtaken",
+    }
+    # Values as ordered TRADE-OFFS, each naming what gives way
+    # (DESIGN_PSYCHOLOGY_AS_PRESSURE (a)). The flat list these replace -- "a
+    # fast clean run", "never breaking stride" -- had no ranking, so it could
+    # not be traded against anything and operated as a constraint set; and
+    # its one prohibition was cited 249 times in 158 beats and inverted into
+    # an argument AGAINST running (stride read as steady walking pace, a
+    # sprint as the burst that breaks it), because a prohibition names no
+    # counterweight inside itself. A trade-off makes motivated violation
+    # legible at no cost and with no variance: thoroughness loses when speed
+    # is at stake and wins otherwise, deterministically, for a reason a
+    # reader can see.
+    sheet["psychology"]["values"] = [
+        "speed over thoroughness",
+        "arriving over looking good",
+    ]
     sheet["initial_state"] = dict(sheet.get("initial_state") or {})
     sheet["initial_state"]["goals"] = [
         {"goal": "Reach the shrine at the far corner as fast as possible.",
@@ -761,6 +818,105 @@ def reset_position(chat_id, name):
     wset(chat_id, "scene", sc)
 
 
+def rearm_commission(state, name, turn_idx):
+    """The keepers giving him his work back, as state and not just as prose.
+
+    The interlude's narration already re-issues the commission in fiction
+    ("set you at the threshold to run it again") -- but for five runs the
+    STATE never followed, and the failure that produced was measured, not
+    imagined: by run 5 every speed goal was inert ("reach the shrine"
+    abandoned after 150 barren beats against a world bug, "beat your best
+    time" blocked, "keep moving" dormant), and the character walked sixteen
+    optimal rooms to the shrine's threshold and turned away, because nothing
+    in his active goal structure wanted the shrine any more. The intention
+    system was RIGHT to spend those goals -- a goal yielding nothing for 150
+    beats is spent -- but a world that re-issues the job must re-issue the
+    intention, and the interlude is the world doing exactly that.
+
+    Mechanism judgment, recorded so the next reader need not re-derive it:
+    this is deliberately HARNESS-side, not engine machinery. In live play the
+    engine already has the principled path -- the character perceives the
+    re-issue and their own agent emits an `add` op, and affect.apply_intent_ops
+    deliberately skips satisfied/abandoned rows in its dedupe so a closed
+    goal never blocks the same text forming a NEW one (affect.py, the
+    similarity match). The gap exists only where world events happen OUTSIDE
+    pipeline beats, which is precisely what this interlude is: a memory
+    written between runs, with no decision beat for the character to respond
+    in. So the harness mirrors apply_intent_ops semantics rather than
+    bolting a new op onto the engine:
+
+    * a live row (active/dormant/blocked) matching the commission is revived
+      in place -- status active, progress 0 (a fresh run starts unrun),
+      block/stall bookkeeping cleared, `reissued_turn` stamped;
+    * a commission whose only rows are closed (satisfied/abandoned) gets a
+      NEW row, `reissued_from` naming the closed ancestor -- abandonment
+      stays on the record as the historical fact it is;
+    * the engine's cap on active intentions is respected, ids come from the
+      engine's own minting, and authored provenance (`authored`, `priority`)
+      carries over.
+    """
+    # Engine helpers used deliberately: minting ids any other way would fork
+    # the id namespace the engine's dedupe and serves-resolution key on.
+    from affect import _INTENT_CAP, _next_intent_id
+
+    interior = state.setdefault("interior", {})
+    intentions = interior.get("intentions")
+    if not isinstance(intentions, list):
+        intentions = []
+        interior["intentions"] = intentions
+
+    commission = [
+        (str(g.get("goal") or "").strip(), float(g.get("priority") or 0.5))
+        for g in (character_sheet(name).get("initial_state") or {}).get(
+            "goals") or []
+        if str(g.get("goal") or "").strip()
+    ]
+    notes = []
+    for text, priority in commission:
+        rows = [i for i in intentions if isinstance(i, dict)
+                and str(i.get("intent") or "").strip() == text]
+        live = next((i for i in rows if i.get("status")
+                     in ("active", "dormant", "blocked")), None)
+        actives = sum(1 for i in intentions if isinstance(i, dict)
+                      and i.get("status") == "active")
+        if live is not None:
+            if live.get("status") != "active" and actives >= _INTENT_CAP:
+                notes.append(f"cap holds {live.get('id')!r} un-revived")
+                continue
+            live["status"] = "active"
+            live["progress"] = 0.0
+            live["last_progress_turn"] = turn_idx
+            live["reissued_turn"] = turn_idx
+            for key in ("blocked_why", "blocked_turn", "stalled_turn",
+                        "barren_attempts"):
+                live.pop(key, None)
+            notes.append(f"re-armed {live.get('id')!r}")
+            continue
+        if actives >= _INTENT_CAP:
+            notes.append(f"cap holds commission {text[:32]!r} un-issued")
+            continue
+        closed = next((i for i in rows if i.get("status")
+                       in ("satisfied", "abandoned")), None)
+        fresh = {
+            "id": _next_intent_id(intentions),
+            "intent": text,
+            "serves_drive": "",
+            "status": "active",
+            "formed_turn": turn_idx,
+            "last_progress_turn": turn_idx,
+            "progress": 0.0,
+            "authored": True,
+            "priority": priority,
+        }
+        if closed is not None:
+            fresh["reissued_from"] = str(closed.get("id") or "")
+        intentions.append(fresh)
+        notes.append(
+            f"re-issued {fresh['id']!r}"
+            + (f" (was {fresh['reissued_from']!r})" if closed else ""))
+    return notes
+
+
 def run_interlude(chat_id, char_id, name, run_no, reached, turn_id):
     """What happens to him BETWEEN runs, told to him as his own experience.
 
@@ -838,6 +994,21 @@ def run_interlude(chat_id, char_id, name, run_no, reached, turn_id):
             hedonic["pain"] = 0.0
             hedonic["source"] = "hot barley and dark beer after the run"
             active["hedonic"] = hedonic
+            # The keepers hand back his WORK along with the meal -- the
+            # narration above says so, and the state must say the same
+            # thing or the next run starts with a courier who has eaten
+            # well and wants nothing (see rearm_commission).
+            #
+            # Intention clocks (last_progress_turn, the dormancy sweep) run
+            # on turn IDX; `turn_id` here is a turns ROWID, which add_memory
+            # wants. They coincide in this harness by accident of a single
+            # sequential chat -- resolve the idx rather than lean on the
+            # accident.
+            idx_row = q("SELECT idx FROM turns WHERE id=?", (turn_id,),
+                        one=True)
+            turn_idx = idx_row["idx"] if idx_row else turn_id
+            for note in rearm_commission(st, name, turn_idx):
+                print(f"    interlude: {note}")
             qi("UPDATE chat_chars SET state=? WHERE chat_id=? AND char_id=?",
                (_json.dumps(st), chat_id, char_id))
     except Exception as exc:                       # pragma: no cover

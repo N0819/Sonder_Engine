@@ -9,7 +9,7 @@
 | `affect.py` | 1326 |  | `theory_of_mind` |
 | `agents/__init__.py` | 86 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 809 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/character.py` | 1061 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
+| `agents/character.py` | 1099 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 3476 | Shared normalization, lore, delivery, and perception helpers. | `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/director.py` | 2962 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 552 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
@@ -40,12 +40,12 @@
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 2841 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 2874 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1910 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 352 |  | — |
 | `scene.py` | 1142 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 2504 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 3758 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
+| `spatial.py` | 3804 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 965 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 184 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `survival.py` | 311 |  | `db` |
@@ -84,14 +84,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 678 | 384 lines |
+| `character_step()` | 716 | 384 lines |
 | `_annotate_known_exits()` | 338 | 338 lines |
 | `_verdict()` | 215 | 72 lines |
 | `_recent_self_lines()` | 80 | 36 lines |
+| `sprint_offers()` | 678 | 36 lines |
 | `_frontier_hops()` | 302 | 34 lines |
 | `_known_pronouns()` | 118 | 33 lines |
 | `_merge_standing_intentions()` | 63 | 15 lines |
-| `_appeal()` | 289 | 11 lines |
 
 ### `agents/common.py`
 
@@ -431,10 +431,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 2832 | 10 lines |
-| `presets()` | 2823 | 2 lines |
-| `active_preset()` | 2826 | 2 lines |
-| `nsfw_enabled()` | 2829 | 2 lines |
+| `get_prompt()` | 2865 | 10 lines |
+| `presets()` | 2856 | 2 lines |
+| `active_preset()` | 2859 | 2 lines |
+| `nsfw_enabled()` | 2862 | 2 lines |
 
 ### `providers.py`
 
@@ -492,12 +492,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 3488 | 226 lines |
-| `apply_transit_dock_edges()` | 3152 | 165 lines |
-| `visible_adjacent_rooms()` | 2712 | 117 lines |
+| `merge_scene_with_diff()` | 3534 | 226 lines |
+| `apply_transit_dock_edges()` | 3198 | 165 lines |
+| `sprint_reach()` | 2555 | 133 lines |
+| `visible_adjacent_rooms()` | 2758 | 117 lines |
 | `contacts_from_entity_state()` | 1944 | 106 lines |
 | `hear_level()` | 750 | 100 lines |
-| `sprint_reach()` | 2555 | 87 lines |
 | `corridor_sightlines()` | 2407 | 85 lines |
 | `spatial_facts()` | 2267 | 83 lines |
 

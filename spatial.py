@@ -2552,40 +2552,73 @@ def passable_path(scene, from_room, to_room, limit=12):
     return []
 
 
-def sprint_reach(scene, room_id):
-    """How far a body could RUN out of this room, per straight passage.
+def sprint_reach(scene, room_id, known_rooms=None):
+    """How far a body could RUN out of this room, per passage, bends allowed.
 
     A character could only ever move one room per beat, which makes a courier
     whose whole craft is speed indistinguishable from someone strolling, and
     turns any distance into a queue of identical beats. Running is the obvious
     missing verb.
 
-    The bound is SIGHT, and that is the design rather than a convenience. You
-    can run flat out down a passage you can see along; you slow at a corner
-    because you do not know what is round it. Which means a sprint can never
-    carry a body through ground they could not see -- so it grants no
-    knowledge they had not already earned by looking, and needs no separate
-    firewall argument. The same reason `corridor_sightlines` stops at a turn.
+    The bound is DECISION, not sight -- and the first version got that wrong.
+    It stopped a run at every bend on the reasoning that you cannot see round
+    a corner, and the measurement said what that reasoning was worth: in a
+    live 7x7 perfect maze, 39 of 49 rooms were two-exit corridor cells and
+    almost every corridor cell was a bend, so 72 of 96 runnable passages
+    offered exactly one room, the mean offer was 1.3 rooms, and the
+    SPRINT_BUDGET never once bound. Winding is what makes a maze a maze;
+    a sight-bounded run cannot exist in one. The worry sight was standing in
+    for was never the corner itself -- a body enters a room it has not seen
+    every time it walks through a doorway, and perceives it by being in it.
+    The thing that genuinely costs a beat is a CHOICE: a junction run through
+    at speed is a route picked without looking. So the run follows a corridor
+    round its bends for as long as there is exactly one passable way onward,
+    and stops where a decision (junction), the world (door, darkness,
+    dead end), or the body (winded) stops it. Decision-bounded, the same
+    maze offers a mean of 2.48 rooms and the budget binds 64 times.
 
-    Stricter than sight in one direction: it follows only PASSABLE doorways,
-    where the sightline follows any see-through one. You can see through a
-    barred window and you cannot run through it.
+    A see-through side opening (window, bars) is not a junction: it offers no
+    route, so it forces no choice. And the run itself still follows only
+    PASSABLE doorways -- you can see through bars and you cannot run through
+    them.
+
+    `known_rooms` is the OFFER-side firewall, and it is why this function has
+    two modes. Objectively (known_rooms=None, the Director's resolve ceiling)
+    the reach reports the scene as it is -- the Director owns objective
+    causality and may see it. But handed to a deciding character, that same
+    report would smuggle unearned map: a mind standing still would learn that
+    an unvisited passage winds on for three rooms and ends at a junction,
+    geometry it never perceived. Running through ground teaches it; being
+    TOLD the reach does not. So a character-facing caller passes the rooms
+    that character has legitimately been in, and the offer extends only
+    through what can be vouched for: the straight sightline from here (looking
+    down a passage is ordinary sight, and it ends at the first bend), plus
+    remembered rooms beyond it. Where the passage runs on into ground the
+    view cannot vouch for, the offer stops with `stops: "unknown"` -- the run
+    itself may still be declared open-ended, and resolves against the
+    objective reach. One residue is documented rather than hidden: within
+    remembered ground beyond the sightline, `door`/`darkness` stops read the
+    room's CURRENT state, which anticipates by one beat what the run would
+    discover anyway.
 
     Returns one entry per runnable passage:
 
         {"bearing": "n", "path": [rid, ...], "rooms": 2,
-         "stops": "turn"|"junction"|"dead_end"|"darkness"|"door"|"winded"}
+         "stops": "junction"|"dead_end"|"darkness"|"door"|"winded"|"unknown"}
 
-    `path` is every room crossed, in order, ENDING at the room they finish in
-    -- callers need the whole list, not the destination: a body that runs
-    through three chambers has been in three chambers, and recording only
-    where they stopped would leave holes in their map where their feet went.
-    Empty list when nothing is runnable that way, and the passage is omitted.
+    `bearing` is the doorway taken OUT of this room; the path beyond it may
+    bend. `path` is every room crossed, in order, ENDING at the room they
+    finish in -- callers need the whole list, not the destination: a body
+    that runs through three chambers has been in three chambers, and
+    recording only where they stopped would leave holes in their map where
+    their feet went. Empty list when nothing is runnable that way, and the
+    passage is omitted.
     """
     rooms = (scene or {}).get("rooms") or {}
     start = rooms.get(room_id)
     if not isinstance(start, dict):
         return []
+    known = None if known_rooms is None else {str(r) for r in known_rooms}
     out = []
     for edge in start.get("adjacent") or []:
         if not isinstance(edge, dict) or not edge.get("dir"):
@@ -2594,14 +2627,27 @@ def sprint_reach(scene, room_id):
             continue
         heading = normalize_bearing(edge.get("dir"))
         cur, prev, spent, path, stops = edge.get("to"), room_id, 0, [], None
+        # Whether `cur` is still on the straight line of sight from where the
+        # body stands. The first room always is (you see it through the
+        # doorway); a bend ends the line for good, even if the passage later
+        # resumes the original heading.
+        on_sightline = True
         while cur:
+            cur = str(cur)
             room = rooms.get(cur)
             if not isinstance(room, dict):
                 stops = "unknown"
                 break
+            # The offer-side firewall: past the sightline, only remembered
+            # ground can be vouched for. Checked before light, because the
+            # current darkness of a room you cannot see and have never
+            # entered is exactly the kind of fact this gate exists to hold
+            # back.
+            if known is not None and not on_sightline and cur not in known:
+                stops = "unknown"
+                break
             # Running into a room you cannot see into is how a body breaks an
-            # ankle. Sight stops the line here for the same reason it stops
-            # the sightline, and the two must not disagree.
+            # ankle. The world stopping you, not a decision.
             if _LIGHT_SIGHT.get(effective_light(scene, cur), "full") != "full":
                 stops = "darkness"
                 break
@@ -2611,30 +2657,30 @@ def sprint_reach(scene, room_id):
                 stops = "winded"
                 break
             spent += cost
-            path.append(str(cur))
+            path.append(cur)
             onward = [
                 e for e in (room.get("adjacent") or [])
                 if isinstance(e, dict) and str(e.get("to")) != str(prev)
                 and e.get("to")
             ]
-            passable = [e for e in onward if normalize_barrier(
-                e.get("barrier")) in _PASSABLE_BARRIERS]
             if not onward:
                 stops = "dead_end"
                 break
-            if len(onward) > 1:
+            passable = [e for e in onward if normalize_barrier(
+                e.get("barrier")) in _PASSABLE_BARRIERS]
+            if len(passable) > 1:
                 # A junction is a decision, and a decision is a beat. Running
                 # blind through one would be choosing without looking.
                 stops = "junction"
                 break
-            straight = [e for e in passable
-                        if normalize_bearing(e.get("dir")) == heading]
-            if not straight:
-                # Bends, or the only way on is shut. Either way the run ends
-                # here rather than guessing what is round it.
-                stops = "turn" if passable else "door"
+            if not passable:
+                # The only way on is shut. The world stopping you.
+                stops = "door"
                 break
-            prev, cur = cur, straight[0].get("to")
+            nxt = passable[0]
+            if on_sightline and normalize_bearing(nxt.get("dir")) != heading:
+                on_sightline = False
+            prev, cur = cur, nxt.get("to")
         if path:
             out.append({"bearing": heading, "path": path, "rooms": len(path),
                         "stops": stops or "winded"})

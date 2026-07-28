@@ -15,7 +15,8 @@ traversal, not a teleport"*. Nobody was allowed to **ask** for it.
 
 ## 1. The mechanism
 
-`spatial.sprint_reach(scene, room_id)` reports, per passage out of a room:
+`spatial.sprint_reach(scene, room_id, known_rooms=None)` reports, per passage
+out of a room:
 
 ```json
 {"bearing": "n", "path": ["r0501", "r0502", "r0503"], "rooms": 3,
@@ -88,6 +89,21 @@ Still stopping a run, because these are the world stopping you rather than a
 decision: `dead_end`, `darkness`, `door` (a closed door does not open itself),
 and `winded`.
 
+**One asymmetry the correction introduces, and the implementation keeps.** The
+RUN may cross ground the runner has not seen — they perceive it by being in it.
+The **offer** may not describe such ground: decision-bounded reach handed raw
+to a character would report the winding geometry of passages they never walked,
+unearned map smuggled in as an affordance. So the character-facing view
+(`agents/character.sprint_offers`) passes `known_rooms` — the straight
+sightline plus the engine's remembered-ground union (place-graph nodes +
+visited window) — and truncates with `stops: "unknown"` where its warrant runs
+out; a body's offered reach grows as it learns the ground. The Director's
+resolve ceiling passes nothing and sees the scene as it is, which is what lets
+an open-ended declaration ("run on until something stops me") resolve past the
+runner's own knowledge legitimately. The payload edge also drops offers under
+two rooms: a 1-room "run" is a step with a different verb, and A11 measured 72
+of them teaching the character that runs are trivial.
+
 ## 4. The rooms crossed must be remembered
 
 A multi-room move leaves `came_from` non-adjacent to where the body stopped, and
@@ -123,10 +139,14 @@ The resolution is not to weaken the directive, which exists for good reasons.
 It is that **a run to its stopping point is one beat-sized behaviour** — the
 smallest unit of running is the whole reach, not the first room.
 
-A second contributor, worth knowing when authoring: this character's sheet says
+A second contributor, worth knowing when authoring: this character's sheet said
 *"never breaking stride"*, and he consistently read that as an argument
 **against** running — stride as steady pace, sprinting as a stride-breaking
-burst. Speed-as-identity, phrased that way, generates walking.
+burst. Speed-as-identity, phrased that way, generates walking. The sheet has
+since been re-authored: an explicit `psychology.drive` whose expression is that
+he runs, and values as ordered trade-offs ("speed over thoroughness") — see
+[`DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](DESIGN_PSYCHOLOGY_AS_PRESSURE.md) (a), a
+prohibition names no counterweight inside itself.
 
 ## 6. Risks
 

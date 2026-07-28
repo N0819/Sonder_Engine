@@ -675,6 +675,44 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     return out
 
 
+def sprint_offers(scene, room_id, stored_state):
+    """The RUNNING offers actually worth handing a deciding mind.
+
+    Two gates on the raw `spatial.sprint_reach`, each preventing an observed
+    failure:
+
+    * Knowledge. Decision-bounded reach follows a corridor round its bends,
+      and objectively that is the Director's resolve ceiling -- but handed
+      raw to a character it would report the winding geometry of passages
+      they have never walked, unearned map smuggled in as an affordance
+      (the exact structured-representation leak the perception layer exists
+      to prevent). The gate is the engine's own remembered-ground idiom
+      (commit.record_spatial_experience): durable place-graph nodes plus the
+      visited-rooms recency window. A body's offered reach GROWS as it
+      learns the ground, which is also what is true of real runners.
+    * Worth. A 1-room "run" is a step with a different verb, and listing it
+      taught the model that runs are trivial: measured live (A11), 72 of 96
+      passages offered exactly one room, and the character read offer after
+      offer as "only 1 room, walking is fine" -- then never ran at all. An
+      adjacent visible room needs no affordance entry to be sprinted into;
+      only reach a walk cannot match is worth an entry.
+
+    An omitted passage is still runnable -- open-endedly, "run until
+    something stops me" -- and resolves against the Director's objective
+    ceiling. The prompt says so.
+    """
+    st = stored_state if isinstance(stored_state, dict) else {}
+    graph = st.get("place_graph") or {}
+    nodes = graph.get("nodes") if isinstance(graph, dict) else None
+    remembered = set(nodes if isinstance(nodes, dict) else ()) | {
+        r for r in (st.get("visited_rooms") or []) if isinstance(r, str)}
+    return [
+        offer for offer in sprint_reach(scene, room_id,
+                                        known_rooms=remembered)
+        if int(offer.get("rooms") or 0) >= 2
+    ]
+
+
 def character_step(ctx, cid, nonce):
     chat = ctx.chat
     row = next((c for c in ctx.cast if c["id"] == cid), None)
@@ -916,10 +954,10 @@ def character_step(ctx, cid, nonce):
             # map.
             "corridor_sight": corridor_sightlines(sc, char_room),
             # How far a RUN gets down each passage, and what stops it.
-            # Bounded by sight, so it offers no ground they could not
-            # already see -- and it is an offer, not an instruction: a
-            # body that can run is not a body that must.
-            "sprint_reach": sprint_reach(sc, char_room),
+            # Knowledge-gated and pruned to the offers worth having -- see
+            # sprint_offers. An offer, not an instruction: a body that can
+            # run is not a body that must.
+            "sprint_reach": sprint_offers(sc, char_room, stored_state),
         },
         "memory": memory_context,
         "relationships": relationships,
