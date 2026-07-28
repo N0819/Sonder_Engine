@@ -335,9 +335,106 @@ def _frontier_hops(first_step, here_rid, adj, walked, closed):
     return None
 
 
+def _destination_from_goals(stored_state, place_graph):
+    """The room this character's own goals NAME, resolved against his own map.
+
+    Measured need (A12, run 4): a courier with a re-armed commission and a
+    place graph holding a complete, optimal 28-room route to the shrine spent
+    five beats standing still working out which way he already knew to go --
+    r0003 entered three times, a northward step into a wall -- because every
+    affordance answers "where have I not been" and none answers "how do I
+    reach the room I already want". His own proven route read back to him as
+    "spent Chamber 0003".
+
+    The legitimacy gate is double: the destination must be named by HIS OWN
+    authored text, and he must own a place-graph node for it. Sources are
+    active_state.goal first, then active intentions by priority --
+    goal-first is not a stylistic choice: in the live failure no active
+    intention named a chamber at all except a stale one at progress 1.0
+    naming "Chamber 0401" (actively wrong), while his self-authored goal
+    named "Chamber 0603" from the first pacing beat (right, and current).
+    Resolution is exact node-NAME matching against his own nodes -- both
+    vocabularies closed, so this is identifier recognition, not reading
+    prose. Within a text the last-named room wins: "from the gate to the
+    shrine" is going TO the shrine. Returns {"rid", "name"} or None, and
+    None means silence -- no route is ever computed to a room he has not
+    both wanted and walked.
+    """
+    nodes = (place_graph or {}).get("nodes")
+    nodes = nodes if isinstance(nodes, dict) else {}
+    named = {}
+    for rid, rec in nodes.items():
+        if not isinstance(rec, dict):
+            continue
+        name = str(rec.get("name") or "").strip()
+        if name:
+            named.setdefault(name.casefold(), (str(rid), name))
+    if not named:
+        return None
+    st = stored_state if isinstance(stored_state, dict) else {}
+    texts = []
+    goal = str(((st.get("active_state") or {}).get("goal")) or "").strip()
+    if goal:
+        texts.append(goal)
+    intents = [i for i in ((st.get("interior") or {}).get("intentions") or [])
+               if isinstance(i, dict) and i.get("status") == "active"]
+
+    def _prio(intent):
+        try:
+            return -float(intent.get("priority") or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    texts.extend(str(i.get("intent") or "") for i in sorted(intents, key=_prio))
+    for text in texts:
+        folded = text.casefold()
+        best = None
+        for key, resolved in named.items():
+            pos = folded.rfind(key)
+            if pos >= 0 and (best is None or pos > best[0]):
+                best = (pos, resolved)
+        if best:
+            rid, name = best[1]
+            return {"rid": rid, "name": name}
+    return None
+
+
+def _toward_hops(first_step, here_rid, taken_adj, dest_rid):
+    """Rooms along this character's OWN walked ground from an exit to the
+    destination his goals name: BFS over doorways he has actually taken
+    (never merely seen -- a door seen from across a room is known to exist,
+    not known to pass), minus the disproven. Returns the room count entering
+    the destination, 1 when the exit IS it, None when no remembered route
+    runs that way.
+
+    Deliberately never reads the scene. If his map is wrong, the route is
+    wrong in exactly the way his map is wrong -- a corridor bricked up since
+    he walked it still routes, and he finds out with his feet. That is the
+    property the maze-expansion arm measures, and consulting the true graph
+    here would both leak unearned map and erase the measurement.
+    """
+    if first_step == dest_rid:
+        return 1
+    if first_step not in taken_adj:
+        return None
+    seen = {here_rid, first_step}
+    queue = deque([(first_step, 1)])
+    while queue:
+        cur, depth = queue.popleft()
+        for nxt in taken_adj.get(cur, ()):
+            if nxt in seen:
+                continue
+            if nxt == dest_rid:
+                return depth + 1
+            seen.add(nxt)
+            queue.append((nxt, depth + 1))
+    return None
+
+
 def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                           here_rid=None, routes_that_worked=None,
-                          known_dead_ends=None, place_graph=None):
+                          known_dead_ends=None, place_graph=None,
+                          destination=None):
     """Mark each exit with whether this character has been through it.
 
     `spatial_digest` renders an exit as {room, barrier} -- identical whether
@@ -522,6 +619,31 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     walked = set(route) | set(known_exits) | {
         str(r) for r, n in g_nodes.items()
         if isinstance(n, dict) and n.get("basis") == "walked"}
+    # Doorways actually TAKEN, for routing toward a named destination. A
+    # stricter graph than `adj` on purpose: adjacency includes doors merely
+    # seen from rooms stood in, which is enough to know a frontier exists
+    # and not enough to promise a way through. A route offered to a goal is
+    # a promise his feet made.
+    taken_adj = {}
+    for a, side in g_edges.items():
+        if not isinstance(side, dict):
+            continue
+        for b, rec in side.items():
+            if not isinstance(rec, dict) or rec.get("disproven") \
+                    or not rec.get("taken"):
+                continue
+            taken_adj.setdefault(str(a), set()).add(str(b))
+            taken_adj.setdefault(str(b), set()).add(str(a))
+    for a, b in disproven:
+        taken_adj.get(a, set()).discard(b)
+        taken_adj.get(b, set()).discard(a)
+    dest_rid, dest_name = None, ""
+    if isinstance(destination, dict) and destination.get("rid"):
+        dest_rid = str(destination["rid"])
+        dest_name = str(destination.get("name") or dest_rid)
+        if dest_rid == str(here_rid or ""):
+            # Standing in it. Nothing to route.
+            dest_rid = None
 
     # Chambers he has SEEN into and found closed. An untrodden cul-de-sac is
     # a door not taken, but it is not a route, and counting it as frontier
@@ -542,11 +664,13 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
         marked = []
         for edge in edges:
             if not isinstance(edge, dict):
-                marked.append((edge, None))
+                marked.append((edge, None, None))
                 continue
             rid = name_to_id.get(str(edge.get("room") or ""))
             entry = dict(edge)
-            hops = None
+            hops, toward = None, None
+            if rid and here_rid and dest_rid:
+                toward = _toward_hops(rid, str(here_rid), taken_adj, dest_rid)
             if rid in seen_onward:
                 # Absent means "cannot tell from here" -- never "none".
                 entry["onward_exits_visible"] = seen_onward[rid]
@@ -618,7 +742,24 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                 # running. Salience follows weight, and ours pointed the
                 # wrong way.
                 entry["untried"] = True
-            marked.append((_verdict(entry, frontier_hops=hops), hops))
+            entry = _verdict(entry, frontier_hops=hops)
+            # The destination reading rides the verdict STRING and the
+            # ordering only, exactly as the frontier distance does -- a key
+            # of its own would put weight back on the entries that should
+            # carry the least, which is the failure _annotate_known_exits
+            # exists to not repeat. The raw markers stay underneath as the
+            # evidence a character needs to disagree with the reading.
+            if toward is not None and isinstance(entry, dict) \
+                    and entry.get("verdict"):
+                if toward == 1:
+                    entry["verdict"] += (
+                        f"; through here is {dest_name} itself -- the room "
+                        "your goal names")
+                else:
+                    entry["verdict"] += (
+                        f"; your own remembered ground runs from here to "
+                        f"{dest_name}, about {toward} rooms along this way")
+            marked.append((entry, hops, toward))
         # Untried first, and among `known` exits the one with NEARER new
         # ground first. Position IS salience and it costs nothing; leaving
         # the order to however the digest happened to build it was spending
@@ -626,14 +767,28 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
         # ordering still shows through. The distance rides the sort key and
         # the verdict string only -- adding it as a per-exit key would put
         # weight back on the entries that should carry the least.
-        def _rank(pair):
-            entry, hops = pair
+        def _rank(trio):
+            entry, hops, toward = trio
+            appeal = _appeal(entry)
+            near_dest = 10 ** 6
+            if isinstance(entry, dict) and isinstance(toward, int):
+                # An exit on the remembered way to the room his goals name
+                # must not be buried under its own discouragement:
+                # spent/circling/closed all answer "anything NEW that way?",
+                # which is not the question a named destination asks.
+                # Measured in A12 run 4: every step of his optimal route
+                # read `known`/`spent` BECAUSE he had walked it, which is
+                # exactly why it was the route. Clamped to `known`, never
+                # lifted above untried/proven -- goal against curiosity
+                # stays the character's call, as the appeal order promises.
+                appeal = min(appeal, _APPEAL_ORDER.index("known"))
+                near_dest = toward
             near = 10 ** 6
             if isinstance(entry, dict) and isinstance(hops, int) \
                     and hops >= 1 \
                     and str(entry.get("verdict") or "").startswith("known"):
                 near = hops
-            return (_appeal(entry), near)
+            return (appeal, near_dest, near)
         out[bucket] = sorted(marked, key=_rank)
         all_marked.extend(out[bucket])
 
@@ -651,12 +806,12 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     # Deterministic and narrow on purpose: it fires only when nothing
     # encouraging remains AND the choice is unambiguous. With two live
     # branches the character is choosing, not trapped, and choosing is theirs.
-    live = [pair for pair in all_marked
-            if isinstance(pair[1], int) and pair[1] >= 0]
+    live = [trio for trio in all_marked
+            if isinstance(trio[1], int) and trio[1] >= 0]
     if live and len(live) == 1 and all(
             _appeal(e) >= _APPEAL_ORDER.index("circling")
-            for e, _ in all_marked if isinstance(e, dict)):
-        entry, hops = live[0]
+            for e, _, _ in all_marked if isinstance(e, dict)):
+        entry, hops, _toward = live[0]
         entry["only_way_onward"] = True
         entry["verdict"] = (
             str(entry.get("verdict") or "") +
@@ -665,7 +820,7 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
             "circling, it is the way out")
     for bucket in list(out):
         if isinstance(out[bucket], list):
-            out[bucket] = [pair[0] for pair in out[bucket]]
+            out[bucket] = [trio[0] for trio in out[bucket]]
     # Whole-route, not per-exit: how long since anywhere was new. The per-exit
     # markers say something about each doorway; this says something about the
     # walk. Only reported once it is worth noticing, since a couple of beats
@@ -941,7 +1096,11 @@ def character_step(ctx, cid, nonce):
                 here_rid=char_room,
                 routes_that_worked=stored_state.get("routes_that_worked") or {},
                 known_dead_ends=stored_state.get("known_dead_ends") or [],
-                place_graph=stored_state.get("place_graph") or {}),
+                place_graph=stored_state.get("place_graph") or {},
+                # The room his own goal text names, if he owns a node for
+                # it -- see _destination_from_goals for the double gate.
+                destination=_destination_from_goals(
+                    stored_state, stored_state.get("place_graph") or {})),
             # Where they are, named. The digest lists what leads OUT of a room
             # without ever naming the room itself, so a character had to
             # re-derive their own location from the view's prose every beat.
