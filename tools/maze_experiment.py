@@ -718,7 +718,8 @@ _scripted_here = [_rid(START)]
 
 def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
              verbose, rng=None, show_grid=False, optimal_path=(),
-             collect_trace=False, think_path=None, run_no=0):
+             collect_trace=False, think_path=None, run_no=0,
+             resume_from=0, resume_visited=None, checkpoint=None):
     """One traversal. Returns the ordered list of rooms occupied."""
     import db as _db
     from db import qi, wget, wset
@@ -726,10 +727,12 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
     from scene import active_cast
     import agents.runtime as runtime
 
-    visited = [position_of(chat_id, name)]
+    # On resume the position is already in the DB -- it is where he stopped,
+    # not the start -- so the route is restored rather than begun.
+    visited = list(resume_visited or []) or [position_of(chat_id, name)]
     stalls = []
     trace = [] if collect_trace else None
-    for step in range(max_steps):
+    for step in range(resume_from, max_steps):
         idx = turn_base + step
         turn_id = qi(
             "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
@@ -836,6 +839,14 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
             print(f"    step {step + 1} | at {here} | "
                   f"{len(set(visited))} of {GRID * GRID} chambers seen",
                   flush=True)
+        if checkpoint:
+            # After every beat, because the whole point is that a run
+            # interrupted to fix code loses at most the beat in flight. The
+            # DB already holds everything the character IS -- memory, mind
+            # models, chat_chars.state, his position -- so what has to be
+            # written here is only what lives in this process: which run and
+            # beat, the route so far, and the rng.
+            checkpoint(run_no, step + 1, visited)
         if here == _rid(GOAL):
             break
     if stalls:
@@ -981,6 +992,15 @@ def main():
                     help="DB to copy model/provider settings from "
                          "(read-only; never written to)")
     ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--state", help=(
+        "checkpoint file, rewritten after every beat. Pair with --resume to "
+        "stop an experiment, change code, and carry on from the beat after "
+        "the last one completed. Costs nothing when unused."))
+    ap.add_argument("--resume", help=(
+        "resume from this checkpoint instead of starting over: reuses its "
+        "database, so accumulated memory, mind models and route knowledge "
+        "survive a code change. Refuses to resume onto a different maze. "
+        "Usually the same path as --state."))
     ap.add_argument("--ablate-affordances", action="store_true",
                     help="disable the visited-exit markers and the "
                          "location-cued recall, so the SAME model can be run "
@@ -1033,16 +1053,61 @@ def main():
               "free and validates the harness.")
         return 0
 
-    db_path = args.db or tempfile.mkstemp(suffix=".maze.db")[1]
-    if os.path.exists(db_path):
+    # --- resume -------------------------------------------------------
+    # A Python process cannot reload its own modules, so applying a fix found
+    # mid-experiment means starting a new process. Without this that also
+    # meant starting a new EXPERIMENT: hours of accumulated memory, mind
+    # models and route knowledge thrown away to change one line. Since
+    # everything the character IS already lives in the DB, the only thing
+    # that had to be rescued was this process's own bookkeeping.
+    resume = {}
+    if args.resume:
+        if not os.path.exists(args.resume):
+            print(f"  no checkpoint at {args.resume} -- starting fresh")
+        else:
+            resume = json.load(open(args.resume, encoding="utf-8"))
+            if int(resume.get("grid") or 0) != GRID or \
+                    str(resume.get("algo") or "") != args.algo:
+                raise SystemExit(
+                    f"checkpoint is a {resume.get('grid')}x{resume.get('grid')} "
+                    f"{resume.get('algo')} maze; this invocation is "
+                    f"{GRID}x{GRID} {args.algo}. Resuming across mazes would "
+                    "carry one maze's route knowledge into another.")
+
+    db_path = resume.get("db") or args.db or tempfile.mkstemp(suffix=".maze.db")[1]
+    if not resume and os.path.exists(db_path):
         os.remove(db_path)
     print(f"seed {MAZE_SEED} | agent={args.agent} | db={db_path}")
 
-    chat_id, char_id, name = setup(
-        db_path, walls,
-        source_db=args.settings_from if args.agent == "llm" else None,
-        model=args.model if args.agent == "llm" else None,
-        reasoning=args.reasoning if args.agent == "llm" else None)
+    if resume:
+        import db as _db
+        _db.configure(db_path)
+        row = _db.q("SELECT id FROM chats ORDER BY id LIMIT 1", one=True)
+        crow = _db.q("SELECT id,name FROM characters ORDER BY id LIMIT 1",
+                     one=True)
+        chat_id, char_id, name = row["id"], crow["id"], crow["name"]
+        # A beat inserts its turn row BEFORE any stage runs, and the
+        # checkpoint is written only once the beat completes. Kill the
+        # process in between -- which is exactly what stopping to fix code
+        # does -- and the DB holds a turn for a beat that never happened.
+        # Resuming onto it collides on (chat_id, idx). Those rows belong to
+        # no completed beat, so they go.
+        _next_idx = int(resume.get("turn_base") or 1) + int(resume.get("beat") or 0)
+        _orphans = _db.q("SELECT COUNT(*) AS n FROM turns WHERE chat_id=? "
+                         "AND idx>=?", (chat_id, _next_idx), one=True)["n"]
+        if _orphans:
+            _db.q("DELETE FROM turns WHERE chat_id=? AND idx>=?",
+                  (chat_id, _next_idx))
+        print(f"  RESUMED at run {resume['run']} beat {resume['beat']} "
+              f"-- {resume['beat']} beats and "
+              f"{len(resume.get('rows') or [])} finished runs kept"
+              + (f", {_orphans} incomplete beats discarded" if _orphans else ""))
+    else:
+        chat_id, char_id, name = setup(
+            db_path, walls,
+            source_db=args.settings_from if args.agent == "llm" else None,
+            model=args.model if args.agent == "llm" else None,
+            reasoning=args.reasoning if args.agent == "llm" else None)
     if args.agent == "scripted":
         install_scripted_models(name, walls)
     if args.ablate_affordances:
@@ -1080,17 +1145,48 @@ def main():
             fh.flush()
     # One stream for the whole experiment, so run 2 is not a replay of run 1.
     rng = random.Random(20260727)
-    rows, turn_base = [], 1
-    for run in range(1, args.runs + 1):
-        reset_position(chat_id, name)
-        print(f"\n  run {run}/{args.runs}")
+    rows, turn_base = list(resume.get("rows") or []), int(resume.get("turn_base") or 1)
+    if resume.get("rng_state"):
+        # Restored so the resumed half of the experiment is not a replay of a
+        # stream the first half already consumed.
+        s = resume["rng_state"]
+        rng.setstate((s[0], tuple(s[1]), s[2]))
+    first_run = int(resume.get("run") or 1)
+    resume_beat = int(resume.get("beat") or 0)
+    resume_route = list(resume.get("visited") or [])
+
+    def _write_checkpoint(run_no, beat, visited):
+        if not args.state:
+            return
+        st_ = rng.getstate()
+        tmp = args.state + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump({"db": db_path, "run": run_no, "beat": beat,
+                       "visited": visited, "rows": rows,
+                       "turn_base": turn_base, "grid": GRID,
+                       "algo": args.algo, "seed": MAZE_SEED,
+                       "rng_state": [st_[0], list(st_[1]), st_[2]]}, fh)
+        # Replaced atomically: a checkpoint half-written when the process is
+        # killed is worse than none, because it looks resumable.
+        os.replace(tmp, args.state)
+
+    for run in range(first_run, args.runs + 1):
+        at_resume = (run == first_run and resume_beat > 0)
+        if not at_resume:
+            reset_position(chat_id, name)
+        print(f"\n  run {run}/{args.runs}"
+              + (f" (resuming at beat {resume_beat + 1})" if at_resume else ""))
         visited, trace = run_once(
             chat_id, char_id, name, walls, agent=args.agent,
             max_steps=args.max_steps, turn_base=turn_base,
             verbose=args.verbose, rng=rng, show_grid=args.grid,
             optimal_path=shortest_path(walls),
             collect_trace=bool(args.out),
-            think_path=args.think, run_no=run)
+            think_path=args.think, run_no=run,
+            resume_from=resume_beat if at_resume else 0,
+            resume_visited=resume_route if at_resume else None,
+            checkpoint=_write_checkpoint)
+        resume_beat, resume_route = 0, []
         turn_base += len(visited)
         m = metrics(visited, optimal)
         rows.append(m)
