@@ -61,9 +61,17 @@ from one confused character.
 
 The measurement is **beats to first new chamber**, and then **whether the old
 route degrades gracefully**. A character who has genuinely revised will use the
-known wing as a fast corridor — sprinting it, now that running exists — and
+known wing as a fast corridor — running it, now that running exists — and
 spend his deliberation at the seam. A character who has merely memorised will
-keep running the old optimal path to a shrine that has moved.
+keep walking the old optimal path to a shrine that has moved.
+
+That first half is also the only clean chance to see running work. The known
+wing is exactly the terrain a run is for: no decisions left in it, so under the
+decision bound ([`DESIGN_RUNNING.md`](DESIGN_RUNNING.md) §3) it should be
+crossed in a fraction of the beats it took to learn. **Beats to reach the seam,
+against beats to reach the same room in the previous run, is the cheapest
+measurement of running we will ever get** — same character, same rooms, same
+route, one variable.
 
 That second failure has a name in play: it is the NPC who keeps going to the
 tavern that burned down.
