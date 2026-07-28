@@ -35,8 +35,13 @@ IMPROVE across repeats is not learning. Always run the control first -- it is
 free, and it validates the harness end to end.
 
 Usage:
-    python tools/maze_experiment.py --agent random               # free baseline
-    python tools/maze_experiment.py --agent llm --runs 5 --go    # spends tokens
+    python tools/maze_experiment.py --agent random                    # free
+    python tools/maze_experiment.py --agent llm --preset fast --go    # spends
+
+`--preset fast` is the measured-best split: the character on a strong model
+because it is the only role that DELIBERATES, everything else on a fast one
+because everything else is transformation. ~13.4s per beat against ~39s with a
+strong model everywhere, and no loss of navigation.
 
 Writes to a scratch DB (--db, default a temp file); never touches engine.db.
 """
@@ -298,6 +303,28 @@ def set_reasoning_effort(spec):
        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
        (_json.dumps(cfg),))
     return cfg
+
+
+# The measured-best split. Character is the only role that DELIBERATES -- it
+# chooses which doorway to take -- and it is the only one a fast model failed
+# at: inception/mercury-2 on every role reached the goal 0/2 with 12-15
+# backtracks and only 15-18 unique rooms, churning in one region rather than
+# exploring, while grok-4.20 on every role walked the exact optimal path.
+# Everything else is transformation: perception renders a room, the director
+# resolves a declared move into a position, mapping and utility keep books.
+# Mercury holds those at 0.7-1.6s against grok's 7-12s.
+#
+# Result: ~13.4s per beat against ~39s, with character then accounting for
+# ~95% of what remains -- so it is the only role worth paying for.
+_PRESETS = {
+    "fast": {
+        "model": ["3:inception/mercury-2",
+                  "character_mid=3:x-ai/grok-4.20",
+                  "character_major=3:x-ai/grok-4.20",
+                  "character_bg=3:x-ai/grok-4.20"],
+        "reasoning": "low",
+    },
+}
 
 
 def apply_model_specs(specs):
@@ -629,6 +656,9 @@ def main():
                          "'<role>=<provider>:<model>' for one. Repeatable. "
                          "Without it each role keeps whatever the source DB "
                          "configured, which is usually a mix.")
+    ap.add_argument("--preset", choices=sorted(_PRESETS), default=None,
+                    help="named model/effort configuration; --model and "
+                         "--reasoning override it")
     ap.add_argument("--reasoning", default=None,
                     help="'role=level,...' or a bare level for all")
     ap.add_argument("--settings-from", default="engine.db",
@@ -650,6 +680,13 @@ def main():
     ap.add_argument("--go", action="store_true",
                     help="required for --agent llm; it spends real tokens")
     args = ap.parse_args()
+
+    if args.preset:
+        preset = _PRESETS[args.preset]
+        args.model = args.model or list(preset["model"])
+        args.reasoning = args.reasoning or preset["reasoning"]
+        print(f"preset {args.preset!r}: {len(preset['model'])} model specs, "
+              f"reasoning {preset['reasoning']}")
 
     walls = build_maze()
     optimal = len(shortest_path(walls)) - 1
