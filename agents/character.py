@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import deque
 
 from affect import CRISIS_STRAIN_MIN, RUPTURE_FORCE_AFTER, ground_tells
 from db import q, wget
@@ -202,8 +203,21 @@ _APPEAL_ORDER = ("UNTRIED", "proven", "known", "circling", "spent",
 _DISCOURAGING = frozenset({"circling", "spent", "no way through", "closed"})
 
 
-def _verdict(entry):
-    """One reading of an exit, added alongside its evidence."""
+def _verdict(entry, frontier_hops=None):
+    """One reading of an exit, added alongside its evidence.
+
+    `frontier_hops` grades the `known` verdict: how many rooms down that way
+    the nearest door seen-but-never-taken stands, measured over the
+    character's OWN place graph. The open problem it answers was observed at
+    the start of every repeat maze run: each neighbouring exit `known`, none
+    untried, none proven -- the verdicts had nothing to say and the character
+    thrashed (north, back, north, back). Local history cannot answer "which
+    known exit leads TOWARD ground I have not explored"; the graph can, and
+    where the engine knows the answer it should say the answer. Folded into
+    the verdict STRING and the ordering only, never a key of its own: the
+    salience inversion (the right door as the lightest entry) was fixed once
+    and must not be re-created by decoration.
+    """
     for key, label, because in _VERDICTS:
         if not entry.get(key):
             continue
@@ -211,6 +225,14 @@ def _verdict(entry):
         if label == "circling" and entry.get("entered_recently"):
             detail = (f"you have been in there {entry['entered_recently']} "
                       "times in your last dozen paces")
+        if label == "known" and isinstance(frontier_hops, int) \
+                and frontier_hops >= 1:
+            if frontier_hops == 1:
+                detail += ("; the room through it still has a door you have "
+                           "never taken")
+            else:
+                detail += ("; the nearest door you have never taken lies "
+                           f"about {frontier_hops} rooms down that way")
         entry["verdict"] = f"{label} — {detail}"
         if label in _DISCOURAGING:
             # These numbers all say the same thing as the verdict, and
@@ -240,9 +262,45 @@ def _appeal(entry):
         return len(_APPEAL_ORDER)
 
 
+def _frontier_hops(first_step, here_rid, adj, walked, closed):
+    """How many rooms down that way the nearest door seen-but-never-taken
+    stands: BFS over the character's own knowledge (adjacency they recorded by
+    standing in rooms, walkedness from their durable graph, chambers they saw
+    were closed). Returns None when everything seen down that branch is spent,
+    and 0 when the branch is live but unmeasurable (a room stood in whose
+    exits were never recorded -- pre-graph saves).
+
+    Replaces a boolean. The boolean answered "is there ANY route left untried
+    that way" and went mute at the start of every repeat run, when every
+    neighbouring exit was known and almost every branch still held frontier
+    somewhere: all True is no answer. Distance is the discriminating fact a
+    person who walked the ground actually has -- "the unexplored part is off
+    that way, not far" -- and it crosses no boundary, being computed entirely
+    from where they stood and what they saw from there.
+    """
+    if first_step not in walked:
+        return 0
+    if first_step not in adj:
+        return 0
+    seen = {here_rid, first_step}
+    queue = deque([(first_step, 1)])
+    while queue:
+        cur, depth = queue.popleft()
+        for nxt in adj.get(cur, ()):
+            if nxt in seen:
+                continue
+            seen.add(nxt)
+            if nxt not in walked:
+                if nxt not in closed:
+                    return depth      # a door seen and never taken
+                continue
+            queue.append((nxt, depth + 1))
+    return None
+
+
 def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                           here_rid=None, routes_that_worked=None,
-                          known_dead_ends=None):
+                          known_dead_ends=None, place_graph=None):
     """Mark each exit with whether this character has been through it.
 
     `spatial_digest` renders an exit as {room, barrier} -- identical whether
@@ -393,9 +451,40 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     # bounced between two pass-through rooms for ten beats, since each was a
     # legitimate onward move and the exhausted thing was the whole branch.
     known_exits = {
-        k: set(v) for k, v in (known_exits or {}).items() if isinstance(v, list)
+        str(k): [str(x) for x in v]
+        for k, v in (known_exits or {}).items() if isinstance(v, list)
     }
-    visited = set(route)
+    # The character's own knowledge, three readings of it. Adjacency merges
+    # the legacy known_exits ledger (directed, as recorded from rooms stood
+    # in) with the durable place_graph's edges (undirected -- a doorway works
+    # both ways -- minus the disproven, which present perception has shown
+    # absent; a disproven edge also retracts any stale legacy copy).
+    # Walkedness comes from the graph rather than the recency window, because
+    # a room walked seventy beats ago has rolled off `visited_rooms` and was
+    # reading as untried -- forgetting must never make stale ground look
+    # promising.
+    adj = {k: set(v) for k, v in known_exits.items()}
+    graph = place_graph if isinstance(place_graph, dict) else {}
+    g_nodes = graph.get("nodes")
+    g_nodes = g_nodes if isinstance(g_nodes, dict) else {}
+    g_edges = graph.get("edges")
+    g_edges = g_edges if isinstance(g_edges, dict) else {}
+    disproven = []
+    for a, side in g_edges.items():
+        if not isinstance(side, dict):
+            continue
+        for b, rec in side.items():
+            if isinstance(rec, dict) and rec.get("disproven"):
+                disproven.append((str(a), str(b)))
+                continue
+            adj.setdefault(str(a), set()).add(str(b))
+            adj.setdefault(str(b), set()).add(str(a))
+    for a, b in disproven:
+        adj.get(a, set()).discard(b)
+        adj.get(b, set()).discard(a)
+    walked = set(route) | set(known_exits) | {
+        str(r) for r, n in g_nodes.items()
+        if isinstance(n, dict) and n.get("basis") == "walked"}
 
     # Chambers he has SEEN into and found closed. An untrodden cul-de-sac is
     # a door not taken, but it is not a route, and counting it as frontier
@@ -404,24 +493,9 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     # the way he came, and it never registered as exhausted because one
     # visibly-closed chamber in it was still untrodden. He could see it was
     # closed from the doorway. That was simply never written down.
-    dead_ends = {str(r) for r in (known_dead_ends or []) if r}
-
-    def _frontier_beyond(first_step, here_rid):
-        """Is there any ROUTE left untried down that way."""
-        if first_step not in known_exits:
-            # Never stood there, so its doors are unknown: everything past it
-            # is potentially new.
-            return True
-        stack, seen_here = [first_step], {here_rid, first_step}
-        while stack:
-            cur = stack.pop()
-            for nxt in known_exits.get(cur, ()):
-                if nxt not in visited and nxt not in dead_ends:
-                    return True          # a route seen and never taken
-                if nxt not in seen_here and nxt in known_exits:
-                    seen_here.add(nxt)
-                    stack.append(nxt)
-        return False
+    dead_ends = {str(r) for r in (known_dead_ends or []) if r} | {
+        str(r) for r, n in g_nodes.items()
+        if isinstance(n, dict) and n.get("closed")}
     out = {}
     for bucket, edges in digest.items():
         if not isinstance(edges, list):
@@ -430,10 +504,11 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
         marked = []
         for edge in edges:
             if not isinstance(edge, dict):
-                marked.append(edge)
+                marked.append((edge, None))
                 continue
             rid = name_to_id.get(str(edge.get("room") or ""))
             entry = dict(edge)
+            hops = None
             if rid in seen_onward:
                 # Absent means "cannot tell from here" -- never "none".
                 entry["onward_exits_visible"] = seen_onward[rid]
@@ -446,9 +521,16 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                 # have BEEN; this is the only one that says something WORKED,
                 # and without it a proven route reads as merely old.
                 entry["worked_before"] = worked[rid]
-            if rid and rid in counts:
+            if rid and (rid in counts or rid in walked):
+                # Been-there is a LIFETIME fact read from the durable graph,
+                # not the recency window: a room walked seventy beats ago has
+                # rolled off `visited_rooms`, and reading it as `untried`
+                # would send the character back over old ground as though it
+                # were discovery. The window-scoped counters below are simply
+                # absent for it -- absent means "cannot tell", never "none".
                 entry["been_there"] = True
-                entry["times_entered"] = counts[rid]
+                if rid in counts:
+                    entry["times_entered"] = counts[rid]
                 if recent_counts.get(rid, 0) > 1:
                     # The one number that separates a thoroughfare from a
                     # loop. Only emitted above 1, because "you were there
@@ -476,8 +558,11 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                     if (returns[rid] >= 2 and not onward.get(rid)
                             and rid not in dwelt):
                         entry["no_route_onward"] = True
-                if here_rid and not _frontier_beyond(rid, here_rid):
-                    entry["no_new_ground_that_way"] = True
+                if here_rid:
+                    hops = _frontier_hops(rid, here_rid, adj, walked,
+                                          dead_ends)
+                    if hops is None:
+                        entry["no_new_ground_that_way"] = True
                 for back, seen in enumerate(reversed(route), 1):
                     if seen == rid:
                         entry["last_seen_beats_ago"] = back
@@ -495,12 +580,23 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                 # running. Salience follows weight, and ours pointed the
                 # wrong way.
                 entry["untried"] = True
-            marked.append(_verdict(entry))
-        # Untried first. Position IS salience and it costs nothing; leaving
+            marked.append((_verdict(entry, frontier_hops=hops), hops))
+        # Untried first, and among `known` exits the one with NEARER new
+        # ground first. Position IS salience and it costs nothing; leaving
         # the order to however the digest happened to build it was spending
         # that for no reason. Stable within each group, so a bucket's own
-        # ordering still shows through.
-        out[bucket] = sorted(marked, key=_appeal)
+        # ordering still shows through. The distance rides the sort key and
+        # the verdict string only -- adding it as a per-exit key would put
+        # weight back on the entries that should carry the least.
+        def _rank(pair):
+            entry, hops = pair
+            near = 10 ** 6
+            if isinstance(entry, dict) and isinstance(hops, int) \
+                    and hops >= 1 \
+                    and str(entry.get("verdict") or "").startswith("known"):
+                near = hops
+            return (_appeal(entry), near)
+        out[bucket] = [pair[0] for pair in sorted(marked, key=_rank)]
     # Whole-route, not per-exit: how long since anywhere was new. The per-exit
     # markers say something about each doorway; this says something about the
     # walk. Only reported once it is worth noticing, since a couple of beats
@@ -737,7 +833,8 @@ def character_step(ctx, cid, nonce):
                 known_exits=stored_state.get("known_exits") or {},
                 here_rid=char_room,
                 routes_that_worked=stored_state.get("routes_that_worked") or {},
-                known_dead_ends=stored_state.get("known_dead_ends") or []),
+                known_dead_ends=stored_state.get("known_dead_ends") or [],
+                place_graph=stored_state.get("place_graph") or {}),
             # Where they are, named. The digest lists what leads OUT of a room
             # without ever naming the room itself, so a character had to
             # re-derive their own location from the view's prose every beat.
