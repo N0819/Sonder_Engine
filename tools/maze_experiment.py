@@ -785,6 +785,20 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
                 stalls.append(f"step {step + 1}: {type(exc).__name__}: {exc}")
                 print(f"    step {step + 1:3}  STALLED "
                       f"({type(exc).__name__}: {str(exc)[:120]})", flush=True)
+                # Dump whatever the character DID produce before skipping.
+                # This used to `continue` straight past the dump, which made
+                # every stalled beat invisible -- and a stalled beat is the
+                # one worth reading, because it is where a model's output and
+                # the schema disagreed. Diagnosing a director failure meant
+                # inferring the character's output from the beats either side
+                # of it. What exists at this point is exactly what the failing
+                # stage was handed.
+                if think_path:
+                    _dump_thoughts(
+                        think_path, run_no, step + 1, visited[-1],
+                        ctx.get(f"character:{char_id}") or {},
+                        ctx.get("director_resolve") or {},
+                        stalled=f"{type(exc).__name__}: {exc}")
                 continue
 
         if agent != "random":
@@ -838,7 +852,7 @@ _THINK_FIELDS = (
 )
 
 
-def _dump_thoughts(path, run_no, beat, where, out, resolved):
+def _dump_thoughts(path, run_no, beat, where, out, resolved, stalled=None):
     """Append one beat of the character's own output, readable rather than raw.
 
     Everything the character emits is dropped on the floor by this harness --
@@ -846,8 +860,17 @@ def _dump_thoughts(path, run_no, beat, where, out, resolved):
     the app would normally render. Watching a navigation experiment without
     seeing the navigator's reasoning means guessing at motive from a trail of
     room ids.
+
+    `stalled` marks a beat that raised. Those are the ones worth reading: a
+    stall is where a model's output and a schema disagreed, and the block
+    below is exactly what the failing stage was handed.
     """
-    lines = [f"\n{'='*72}", f"run {run_no} | beat {beat} | in {where}", "=" * 72]
+    head = f"run {run_no} | beat {beat} | in {where}"
+    if stalled:
+        head += f"  ***  STALLED: {stalled}"
+    lines = [f"\n{'='*72}", head, "=" * 72]
+    if stalled and not out:
+        lines.append("\n(the character stage itself raised -- nothing to show)")
     for field in _THINK_FIELDS:
         value = out.get(field)
         if value in (None, "", [], {}):

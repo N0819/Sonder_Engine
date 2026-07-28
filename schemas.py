@@ -203,10 +203,30 @@ def _flatten_to_text(value):
 
 
 class LenientModel(BaseModel):
-    """BaseModel that accepts a structured value where prose was declared."""
+    """BaseModel that accepts a structured value where prose was declared.
+
+    Also treats an explicit `null` on an OPTIONAL field as "the model declined
+    to fill this in", which is what it means. `null` is the natural encoding
+    of absence, and several models reach for it: observed live, a character
+    agent returned `"norm_conflict": null` -- there was no norm conflict --
+    and the whole beat was thrown away with
+    `norm_conflict: none is not an allowed value`. The field's own default is
+    `""`, which means the same thing, so the beat was discarded over spelling.
+
+    A field that ALLOWS None keeps it, because there None is a real value and
+    not an omission. A REQUIRED field with no default is left alone to fail:
+    inventing a value for something the model was obliged to supply would
+    hide the actual error, and that is worth a hard failure.
+    """
 
     @validator("*", pre=True, allow_reuse=True)
     def _coerce_structured_into_str(cls, value, field):
+        if value is None and not field.allow_none:
+            if field.default_factory is not None:
+                return field.default_factory()
+            if field.default is not None:
+                return field.default
+            return value
         if isinstance(value, (dict, list, tuple)) and field.outer_type_ is str:
             return _flatten_to_text(value)
         return value
