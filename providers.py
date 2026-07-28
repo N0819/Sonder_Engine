@@ -1417,6 +1417,18 @@ def _chat_complete_once(
         )
 
     parsed = response.json()
+    # A 200 with no `choices` is not a model answering badly, it is the provider
+    # not answering at all -- observed live at ~2.6% of beats on one endpoint,
+    # surfacing as "'choices'" inside a JSON-validation error that blamed the
+    # model. Retried as a transport failure, which is what it is; a KeyError
+    # here would abort the beat and read as the character having nothing to say.
+    if not (parsed.get("choices") or []):
+        raise LLMError(
+            f"{prov['name']}: response carried no choices "
+            f"({str(parsed)[:200]})",
+            response.status_code,
+            True,
+        )
     content = parsed["choices"][0]["message"]["content"]
     # Some models (nemotron:thinking observed) honour response_format=json_object
     # by returning a syntactically-valid SKELETON with every string value set to

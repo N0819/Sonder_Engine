@@ -99,6 +99,18 @@ These are architectural guarantees, not stylistic preferences.
   and recency, never whether acting on a belief worked. Every navigational
   affordance reports where a character has BEEN; none reports what SUCCEEDED,
   so a proven route accumulates no weight against novelty.
+- **Outcome feedback exists, narrowly.** An intention reaching `satisfied` is
+  the one success signal the engine can observe without trusting a bare
+  self-report (`affect.apply_intent_ops` gates satisfy behind evidence). When
+  one closes, commit credits the rooms walked while pursuing it into
+  `routes_that_worked`, surfaced to the character as `worked_before`. That is
+  the ONLY marker anywhere that says something succeeded rather than that it
+  happened; everything else revises a belief by contradiction.
+- **`schemas.LenientModel`** is the base every schema model inherits. It accepts
+  a structured value where a field is declared `str`, reducing it to the prose
+  inside. Five separate crashes were this one shape, each discarding an entire
+  stage output; ~90 str-typed fields carry the same exposure. It fires ONLY on
+  a `str`-typed field receiving a dict/list, so it cannot mask a real type error.
 - **Sensation constrains cognition.** `psychology_runtime.cognitive_absorption`
   measures how much of a mind its own body is claiming, 0..1 and deliberately
   **blind to valence** — intense pleasure occupies attention exactly as intense

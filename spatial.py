@@ -2457,7 +2457,11 @@ def corridor_sightlines(scene, room_id):
                 terminus = "opening"      # a junction: the line stops being one line
                 break
             if not straight:
-                terminus = "turn"         # the passage bends; sight stops here
+                # The passage bends. You cannot see ROUND a corner, but you can
+                # see that it goes on rather than stopping -- which is the
+                # difference between "bends and continues" and "bends into
+                # who knows what". Nothing beyond the corner is claimed.
+                terminus = "turn"
                 break
             prev, cur, dist = cur, straight[0].get("to"), dist + 1
         if terminus:
