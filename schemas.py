@@ -238,7 +238,36 @@ class LenientModel(BaseModel):
         # The mirror of the case above, and no more ambiguous: the singular
         # and the list of one mean the same thing.
         if (getattr(field, "shape", None) == _SHAPE_LIST
-                and isinstance(value, dict)):
+                and isinstance(value, dict) and value):
+            # Two different things arrive as a bare dict here and they need
+            # opposite treatment. One is a single item -- wrap it. The other
+            # is a MAP of items keyed by name, which models reach for when
+            # the list is "updates about people": {"Mara": {...}, "Vesk":
+            # {...}}. Wrapping that produces a one-element list whose element
+            # is the whole map, and it fails as
+            # `mind_model_updates.0.about_entity: field required` -- an error
+            # that reads like the model omitted a field when in fact we
+            # mangled its structure.
+            #
+            # Told apart by whether the dict's own keys look like the item's
+            # fields. Nothing is guessed: a map whose values are not all
+            # objects is not a map of items, and is wrapped as before.
+            item_fields = set(getattr(field.type_, "__fields__", {}) or {})
+            looks_like_item = bool(item_fields & set(value))
+            if (not looks_like_item and item_fields
+                    and all(isinstance(v, dict) for v in value.values())):
+                # Carry the key across when the item has an obvious slot for
+                # it and the model left that slot empty -- the key IS the
+                # subject in this shape.
+                out = []
+                for key, item in value.items():
+                    item = dict(item)
+                    for slot in ("about_entity", "name", "entity", "id"):
+                        if slot in item_fields and not item.get(slot):
+                            item[slot] = key
+                            break
+                    out.append(item)
+                return out
             return [value]
         return value
 
