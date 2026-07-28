@@ -61,6 +61,10 @@ All arms: same maze, same seed, same models. Each adds one capability.
 The memoryless control never reached the goal and saw 8–9 rooms: the maze is
 genuinely hard, and any arm beating it is doing something.
 
+Move-by-move traces of all five sight-arm runs, with the maze drawn and each
+move annotated, are in [`docs/MAZE_RUNS.md`](MAZE_RUNS.md) — regenerate with
+`python tools/render_maze_runs.py <runs.jsonl>`.
+
 ### 2.1 Retention is real
 
 **Run 2 walked the exact optimal path** — byte-identical to the 20-move shortest
