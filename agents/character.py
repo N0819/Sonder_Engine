@@ -855,17 +855,39 @@ def sprint_offers(scene, room_id, stored_state):
     An omitted passage is still runnable -- open-endedly, "run until
     something stops me" -- and resolves against the Director's objective
     ceiling. The prompt says so.
+
+    The offer names WHERE THE RUN ENDS, never the rooms along the way.
+    Structural, not cosmetic: the first shape listed `path`, and the
+    smallest-plausible directive did to it exactly what a minimizer does to
+    a divisible quantity -- measured in A12, the character read a 3-room
+    reach, reasoned "the smallest plausible next behavior might be just the
+    first step", took the first room off the path list, and declared a
+    1-room "run". Prompt text arguing that the whole reach is one behaviour
+    was read and lost. So the offer no longer presents anything to split:
+    `run_ends_at` names the terminal room, and declaring less than the
+    reach now requires inventing an intermediate stop the offer never
+    mentioned. Nothing epistemic is lost -- every room on a gated path was
+    already the character's, by sight or by feet; the Director's objective
+    reach keeps the full path for resolution and commit.
     """
     st = stored_state if isinstance(stored_state, dict) else {}
     graph = st.get("place_graph") or {}
     nodes = graph.get("nodes") if isinstance(graph, dict) else None
     remembered = set(nodes if isinstance(nodes, dict) else ()) | {
         r for r in (st.get("visited_rooms") or []) if isinstance(r, str)}
-    return [
-        offer for offer in sprint_reach(scene, room_id,
-                                        known_rooms=remembered)
-        if int(offer.get("rooms") or 0) >= 2
-    ]
+    rooms = (scene or {}).get("rooms") or {}
+    out = []
+    for offer in sprint_reach(scene, room_id, known_rooms=remembered):
+        if int(offer.get("rooms") or 0) < 2:
+            continue
+        end = str((offer.get("path") or [""])[-1])
+        out.append({
+            "bearing": offer.get("bearing"),
+            "run_ends_at": str((rooms.get(end) or {}).get("name") or end),
+            "rooms": offer.get("rooms"),
+            "stops": offer.get("stops"),
+        })
+    return out
 
 
 def character_step(ctx, cid, nonce):

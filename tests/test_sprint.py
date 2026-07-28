@@ -67,7 +67,28 @@ def test_a_run_covers_several_rooms():
     run = _one(sprint_reach(_corridor(), "start"))
     assert run and run["rooms"] == SPRINT_BUDGET
     assert run["path"] == ["c1", "c2", "c3"]
-    assert run["stops"] == "winded"
+    assert run["stops"] == "full_reach"
+
+
+def test_the_budget_stop_names_distance_not_physiology():
+    """The stop value was `winded` first, and the word beat its own
+    documentation -- the third label in this engine to do so (`closed` read
+    as "no way through", `spent` read as "do not go"). Observed verbatim in
+    A12: "he would be winded? But he might not want to be winded if he
+    needs to assess contents" -- the best offer a run can get, the passage
+    outlasting the beat, read as a penalty for taking it. A marginal
+    deterrent, not an absolute one -- the same arm took one such run in
+    full and reasoned against later ones -- which is how a mislabel does
+    its damage: it tips close decisions. And the penalty
+    reading was false as a distinguishing fact: EVERY hard run arrives
+    winded (the Director applies that cost whatever ends the run), so the
+    label implied a consequence specific to maximal runs that is not.
+    The stop reason names why the run ENDED; what running COSTS belongs to
+    the Director, and the two must not share a word. A footnote cannot
+    beat a word's plain meaning; the fix that works is changing the word."""
+    run = _one(sprint_reach(_corridor(), "start"))
+    assert run["stops"] == "full_reach"
+    assert "winded" not in str(run)
 
 
 def test_the_path_is_every_room_crossed_not_just_the_destination():
@@ -257,7 +278,7 @@ class TestTheOfferIsGatedByKnowledge:
         corridor is still runnable to the budget."""
         run = _one(sprint_reach(_corridor(), "start", known_rooms=()))
         assert run["rooms"] == SPRINT_BUDGET
-        assert run["stops"] == "winded"
+        assert run["stops"] == "full_reach"
 
     def test_the_warrant_must_cover_every_room_past_the_bend(self):
         """Memory of the room round the bend does not vouch for the one
@@ -326,7 +347,31 @@ class TestOffersHandedToACharacter:
                                            "edges": {}},
                            "visited_rooms": []}
         offers = sprint_offers(sc, "start", walked_long_ago)
-        assert offers and offers[0]["path"] == ["c1", "c2", "c3"]
+        assert offers and offers[0]["rooms"] == 3
+        assert offers[0]["run_ends_at"] == "C3"
+
+    def test_the_offer_is_a_whole_run_with_nothing_to_split(self):
+        """Structural fix for a measured failure: the first offer shape
+        listed `path`, and the smallest-plausible directive did to it what a
+        minimizer does to a divisible quantity -- the character took the
+        first room off the list and declared a 1-room "run" ("the smallest
+        plausible next behavior might be just the first step"). Prompt text
+        arguing the whole reach was one behaviour was read and lost, twice.
+        So the offer names where the run ENDS and nothing along the way:
+        declaring less than the reach now requires inventing a stop the
+        offer never mentioned. The Director's objective sprint_reach keeps
+        the full path for resolution and commit."""
+        from agents.character import sprint_offers
+        sc = _bent_corridor()
+        offers = sprint_offers(sc, "start",
+                               {"visited_rooms": ["c2", "c3"]})
+        assert offers, "the gated bent corridor is runnable end to end"
+        offer = offers[0]
+        assert "path" not in offer, (
+            "a listed path is an invitation to split the run at its first "
+            "room -- the offer must present a whole run or nothing")
+        assert offer["run_ends_at"] == "C3"
+        assert set(offer) == {"bearing", "run_ends_at", "rooms", "stops"}
 
     def test_a_fresh_character_is_not_handed_the_maze(self):
         from agents.character import sprint_offers

@@ -2574,7 +2574,7 @@ def sprint_reach(scene, room_id, known_rooms=None):
     at speed is a route picked without looking. So the run follows a corridor
     round its bends for as long as there is exactly one passable way onward,
     and stops where a decision (junction), the world (door, darkness,
-    dead end), or the body (winded) stops it. Decision-bounded, the same
+    dead end), or the beat (full_reach) stops it. Decision-bounded, the same
     maze offers a mean of 2.48 rooms and the budget binds 64 times.
 
     A see-through side opening (window, bars) is not a junction: it offers no
@@ -2604,7 +2604,25 @@ def sprint_reach(scene, room_id, known_rooms=None):
     Returns one entry per runnable passage:
 
         {"bearing": "n", "path": [rid, ...], "rooms": 2,
-         "stops": "junction"|"dead_end"|"darkness"|"door"|"winded"|"unknown"}
+         "stops": "junction"|"dead_end"|"darkness"|"door"|"full_reach"|"unknown"}
+
+    `full_reach` is the budget stop, and its name is deliberately about
+    DISTANCE, not physiology. It was `winded` first, and the word beat its
+    own documentation -- third label in this engine to do so (`closed` read
+    as "no way through" kept a shrine unentered for five runs; `spent` read
+    as "do not go" turned a courier off his own proven route). Observed
+    verbatim: "he would be winded? But he might not want to be winded if he
+    needs to assess contents" -- the best offer a run can get, the passage
+    outlasting the beat, read as a penalty for taking it. A MARGINAL
+    deterrent, measured precisely: the same character took one such run in
+    full (beat 1 of the same arm) and then reasoned against later ones, so
+    the label tipped close decisions rather than forbidding anything --
+    which is how a mislabel does its damage. Worse, the penalty
+    reading was FALSE as a distinguishing fact: every hard run arrives
+    winded (the Director applies that cost whatever ends the run), so the
+    label implied a consequence specific to maximal runs that is not
+    specific at all. The stop reason names why the run ENDED; what running
+    COSTS is the Director's to narrate, and the two must not share a word.
 
     `bearing` is the doorway taken OUT of this room; the path beyond it may
     bend. `path` is every room crossed, in order, ENDING at the room they
@@ -2654,7 +2672,7 @@ def sprint_reach(scene, room_id, known_rooms=None):
             cost = _ROOM_COST.get(
                 str(room.get("size") or "").strip().lower(), 1)
             if spent + cost > SPRINT_BUDGET:
-                stops = "winded"
+                stops = "full_reach"
                 break
             spent += cost
             path.append(cur)
@@ -2683,7 +2701,7 @@ def sprint_reach(scene, room_id, known_rooms=None):
             prev, cur = cur, nxt.get("to")
         if path:
             out.append({"bearing": heading, "path": path, "rooms": len(path),
-                        "stops": stops or "winded"})
+                        "stops": stops or "full_reach"})
     return out
 
 
