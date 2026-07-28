@@ -351,3 +351,128 @@ def test_reinforcement_preserves_belief_provenance():
     hyp = state["mind_models"]["Vorne"]["hypotheses"][0]
     assert hyp["formed_under"]["turn"] == 1
     assert hyp["first_seen_turn"] == 1
+
+
+class TestPlaceClaimsDoNotCompete:
+    """Hypotheses group by (about_entity, kind) and explain each other away
+    within a group. That is right for a mind -- rival theories about one person
+    genuinely should suppress each other -- and exactly backwards for space.
+
+    Found live: a character mapping a maze filed every room under one umbrella
+    entity ("maze layout in this sector"), so learning about one chamber
+    actively suppressed what it knew about another. Two independent facts
+    treated as rival explanations of one subject, and the map dismantled itself
+    as fast as it was built.
+    """
+
+    ROOMS = ["Chamber 0505", "Chamber 0805", "Private Bedroom"]
+
+    def _rekey(self, updates, protected=()):
+        from theory_of_mind import rekey_place_claims
+        return rekey_place_claims(updates, self.ROOMS, protected=protected)
+
+    def test_two_rooms_become_two_entities(self):
+        got = self._rekey([
+            {"about_entity": "maze layout", "claim": "Chamber 0505 has a bench"},
+            {"about_entity": "maze layout", "claim": "Chamber 0805 has slate"},
+        ])
+        assert [u["about_entity"] for u in got] == ["Chamber 0505", "Chamber 0805"]
+
+    def test_a_claim_about_a_person_stays_with_the_person(self):
+        """Even when it says where they were standing."""
+        got = self._rekey(
+            [{"about_entity": "Vorne",
+              "claim": "was standing in Chamber 0505 and looked afraid"}],
+            protected=["Vorne"])
+        assert got[0]["about_entity"] == "Vorne"
+
+    def test_an_ambiguous_two_room_claim_is_left_alone(self):
+        """Guessing would scatter the belief onto the wrong room."""
+        got = self._rekey([{"about_entity": "maze layout",
+                            "claim": "Chamber 0505 connects to Chamber 0805"}])
+        assert got[0]["about_entity"] == "maze layout"
+
+    def test_a_claim_naming_no_room_is_left_alone(self):
+        got = self._rekey([{"about_entity": "maze layout",
+                            "claim": "the air is colder here"}])
+        assert got[0]["about_entity"] == "maze layout"
+
+    def test_longer_room_names_are_not_shadowed(self):
+        from theory_of_mind import rekey_place_claims
+        got = rekey_place_claims(
+            [{"about_entity": "x", "claim": "Chamber 0505 is lit"}],
+            ["Chamber 05", "Chamber 0505"])
+        assert got[0]["about_entity"] == "Chamber 0505"
+
+    def test_different_rooms_no_longer_suppress_each_other(self):
+        """The property that matters: independent rooms keep independent
+        confidence."""
+        from theory_of_mind import apply_mind_model_updates
+        raw = [
+            {"about_entity": "maze layout", "kind": "observation",
+             "claim": "Chamber 0505 has a toppled bench", "confidence": 0.7},
+            {"about_entity": "maze layout", "kind": "observation",
+             "claim": "Chamber 0805 has grey slate", "confidence": 0.7},
+        ]
+        collided = apply_mind_model_updates({}, list(raw), 1)
+        hyps = collided["mind_models"]["maze layout"]["hypotheses"]
+        suppressed = min(h["confidence"] for h in hyps)
+
+        split = apply_mind_model_updates({}, self._rekey(raw), 1)
+        assert set(split["mind_models"]) == {"Chamber 0505", "Chamber 0805"}
+        kept = min(m["hypotheses"][0]["confidence"]
+                   for m in split["mind_models"].values())
+        assert kept > suppressed
+
+    def test_the_same_room_still_revises(self):
+        """Belief change over time must survive: a later claim about the SAME
+        place still competes with the earlier one."""
+        from theory_of_mind import apply_mind_model_updates
+        state = apply_mind_model_updates({}, self._rekey(
+            [{"about_entity": "maze layout", "kind": "observation",
+              "claim": "Chamber 0505 has a toppled bench", "confidence": 0.8}]), 1)
+        state = apply_mind_model_updates(state, self._rekey(
+            [{"about_entity": "maze layout", "kind": "observation",
+              "claim": "Chamber 0505 is empty and swept", "confidence": 0.9}]), 2)
+        hyps = state["mind_models"]["Chamber 0505"]["hypotheses"]
+        assert len(hyps) == 2, "a competing claim about the same room must persist"
+        bench = next(h for h in hyps if "bench" in h["claim"])
+        assert bench["confidence"] < 0.8, "the displaced claim should be explained away"
+
+
+class TestSubjectIsNotEvidenceOfSameness:
+    """What a claim is ABOUT is carried by about_entity; only what it SAYS
+    should decide whether two claims are the same belief.
+
+    Naming the subject inside the claim is ordinary phrasing, but it inflated
+    every same-subject pair toward a match -- so two distinct facts about one
+    room (or one person) merged and the later silently overwrote the earlier.
+    Surfaced by per-room keying, which puts the room name in every claim about
+    it, but it was always true of people.
+    """
+
+    def test_two_facts_about_one_room_are_not_the_same_belief(self):
+        from theory_of_mind import claim_similarity, _SIMILARITY_THRESHOLD
+        a = "Chamber 0505 has a toppled bench"
+        b = "Chamber 0505 is empty and swept"
+        assert claim_similarity(a, b) >= _SIMILARITY_THRESHOLD, "the old behaviour"
+        assert claim_similarity(a, b, ignore="Chamber 0505") < _SIMILARITY_THRESHOLD
+
+    def test_two_facts_about_one_person_are_not_the_same_belief(self):
+        from theory_of_mind import claim_similarity, _SIMILARITY_THRESHOLD
+        a, b = "Vorne is afraid of the dark", "Vorne wants to leave the city"
+        assert claim_similarity(a, b, ignore="Vorne") < _SIMILARITY_THRESHOLD
+
+    def test_a_genuine_restatement_still_matches(self):
+        """The point is not to stop matching -- reinforcement must survive."""
+        from theory_of_mind import claim_similarity, _SIMILARITY_THRESHOLD
+        assert claim_similarity(
+            "Vorne is hiding something",
+            "Vorne seems to be hiding something about the letter",
+            ignore="Vorne") >= _SIMILARITY_THRESHOLD
+
+    def test_dropping_the_subject_never_empties_a_claim(self):
+        """A claim that is ONLY its subject must still compare, not divide by
+        zero."""
+        from theory_of_mind import claim_similarity
+        assert claim_similarity("Vorne", "Vorne", ignore="Vorne") == 1.0

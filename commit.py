@@ -31,8 +31,8 @@ from scene import set_char_state, set_char_status, seed_initial_attire
 from mechanics import mechanics_sweep, news_latency_seconds, stable_event_key
 from spatial import (merge_scene_with_diff,
                      normalize_room_id, spatial_rel, hear_level)
-from theory_of_mind import (apply_mind_model_updates, sheet_capacity,
-                            select_active_hypotheses)
+from theory_of_mind import (apply_mind_model_updates, rekey_place_claims,
+                            select_active_hypotheses, sheet_capacity)
 from survival import vitals_of
 from paradox import check_and_apply_paradox
 from spatial_frames import detect_and_reconcile as detect_and_reconcile_spatial
@@ -3729,6 +3729,24 @@ def prepare_memory_commit(ctx, *, scene=None):
                     _visited.append(_here_room)
                 st["visited_rooms"] = _visited[-VISITED_ROOMS_CAP:]
             _mm_updates = own_result.get("mind_model_updates") or []
+            # A claim about a PLACE is re-keyed onto that place before it is
+            # merged. Hypotheses group by (about_entity, kind) and explain each
+            # other away within a group -- correct for a mind, backwards for
+            # space -- so a character filing every room under one umbrella
+            # entity had each new room suppress the last. People are protected:
+            # a claim about someone stays about them even when it says where
+            # they were standing.
+            if _mm_updates:
+                _place_names = [
+                    str((room or {}).get("name") or rid)
+                    for rid, room in (sc.get("rooms") or {}).items()
+                ]
+                from scene import persona_of as _persona_of
+                _people = [character_name(json.loads(_r["sheet"]))
+                           for _r in ctx.cast]
+                _people.append(persona_name(_persona_of(chat)))
+                _mm_updates = rekey_place_claims(
+                    _mm_updates, _place_names, protected=_people)
             # Absorption is read off the state we just settled, so it reflects
             # the body at the END of the beat -- the state the character
             # actually comes out of it in, which is what governs what they can
