@@ -163,6 +163,83 @@ LOOP_WINDOW = 12
 LOOP_DENSITY = 0.5
 
 
+# The verdicts, most decisive first. A character was being handed eight
+# separate facts per doorway and left to aggregate them into a decision --
+# work the deterministic layer can already do, and do reliably. This is the
+# same principle as re-deriving perception's structured observations from the
+# scrubbed prose rather than trusting the model to have agreed with itself:
+# where the engine knows the answer, it should say the answer.
+#
+# The raw markers stay underneath. This adds a reading, it does not replace
+# the evidence, and a model that wants to disagree with the reading still has
+# everything it needs to.
+_VERDICTS = (
+    ("visibly_no_way_through", "closed",
+     "you can see from here it has no other way out"),
+    ("no_route_onward", "no way through",
+     "you went in and had to come straight back, more than once"),
+    ("no_new_ground_that_way", "spent",
+     "every door you have seen down that way is one you have taken"),
+    ("circling_here", "circling",
+     "you have been going round these same few rooms"),
+    ("untried", "UNTRIED",
+     "you have never been through this doorway"),
+    ("worked_before", "proven",
+     "that way once took you somewhere you meant to get to"),
+    ("been_there", "known",
+     "you have been through here before"),
+)
+# Ordering only. `untried` leads and the discouraging verdicts trail, but
+# `proven` deliberately sits just behind `untried` rather than ahead of it:
+# choosing between a way that worked and a way not yet tried is what
+# curiosity is FOR, and hard-coding it here would quietly settle a question
+# the character is supposed to answer.
+_APPEAL_ORDER = ("UNTRIED", "proven", "known", "circling", "spent",
+                 "no way through", "closed")
+# The verdicts that argue AGAINST taking an exit. For these the supporting
+# counters are redundant with the verdict itself and are dropped, so that a
+# discouraged door never outweighs the encouraged one beside it.
+_DISCOURAGING = frozenset({"circling", "spent", "no way through", "closed"})
+
+
+def _verdict(entry):
+    """One reading of an exit, added alongside its evidence."""
+    for key, label, because in _VERDICTS:
+        if not entry.get(key):
+            continue
+        detail = because
+        if label == "circling" and entry.get("entered_recently"):
+            detail = (f"you have been in there {entry['entered_recently']} "
+                      "times in your last dozen paces")
+        entry["verdict"] = f"{label} — {detail}"
+        if label in _DISCOURAGING:
+            # These numbers all say the same thing as the verdict, and
+            # together they were three times the text of the untried door
+            # beside them. The verdict carries the reading; the rest were
+            # crowding out the answer. Applies to every discouraging verdict,
+            # not only circling -- scoped to circling alone at first, which
+            # left a `no way through` exit carrying eight keys against an
+            # untried one carrying four, the same imbalance one label over.
+            for redundant in ("times_entered", "turned_back_here",
+                              "last_seen_beats_ago"):
+                entry.pop(redundant, None)
+        break
+    return entry
+
+
+def _appeal(entry):
+    # Non-dict junk is passed through untouched elsewhere, so it must sort
+    # too. It trails, and `sorted` being stable keeps whatever order it
+    # arrived in.
+    if not isinstance(entry, dict):
+        return len(_APPEAL_ORDER)
+    label = str(entry.get("verdict") or "").split(" — ")[0]
+    try:
+        return _APPEAL_ORDER.index(label)
+    except ValueError:
+        return len(_APPEAL_ORDER)
+
+
 def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                           here_rid=None, routes_that_worked=None):
     """Mark each exit with whether this character has been through it.
@@ -397,8 +474,23 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                         break
             else:
                 entry["been_there"] = False
-            marked.append(entry)
-        out[bucket] = marked
+                # POSITIVELY marked, because the frontier was the one thing
+                # here described only by an absence. Measured at the moment a
+                # character failed to take it: the door he should have used
+                # carried three keys and 64 characters, `been_there: false`
+                # among them, while the door he kept taking instead carried
+                # eight keys and 179. Every good thing about the right answer
+                # was the lack of something, so it was the lightest item in
+                # the payload -- and it was chosen against, nineteen beats
+                # running. Salience follows weight, and ours pointed the
+                # wrong way.
+                entry["untried"] = True
+            marked.append(_verdict(entry))
+        # Untried first. Position IS salience and it costs nothing; leaving
+        # the order to however the digest happened to build it was spending
+        # that for no reason. Stable within each group, so a bucket's own
+        # ordering still shows through.
+        out[bucket] = sorted(marked, key=_appeal)
     # Whole-route, not per-exit: how long since anywhere was new. The per-exit
     # markers say something about each doorway; this says something about the
     # walk. Only reported once it is worth noticing, since a couple of beats
