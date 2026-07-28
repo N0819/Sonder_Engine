@@ -2491,6 +2491,156 @@ def corridor_sightlines(scene, room_id):
     return out
 
 
+# What one beat of running buys, in small-room units. A pace of three ordinary
+# chambers is brisk without being a teleport; a large hall eats two of them and
+# a vast one the whole budget, so a run crosses distance rather than room COUNT.
+# Deliberately coarse: the engine is not simulating gait, it is answering "does
+# a body cross this much ground in one beat" well enough that the answer is
+# never absurd.
+SPRINT_BUDGET = 3
+_ROOM_COST = {"tiny": 1, "small": 1, "": 1, "medium": 1,
+              "large": 2, "huge": 3, "vast": 3}
+
+
+def passable_path(scene, from_room, to_room, limit=12):
+    """The shortest walk of passable doorways from one room to another, as a
+    list of rooms EXCLUDING the start and ending at `to_room` -- or [] when
+    there is none.
+
+    `passable_route_exists` answers whether; this answers which rooms. A body
+    that crosses several rooms in one beat has been in every one of them, and
+    a caller recording only where they stopped leaves holes in their memory
+    exactly where their feet went. Adjacent rooms give a one-element path, so
+    an ordinary step needs no special case.
+
+    `limit` bounds the search: past a dozen rooms a single-beat "walk" is a
+    teleport wearing a route, and reconstructing a path for it would dress the
+    teleport up as ground covered.
+    """
+    if not from_room or not to_room or from_room == to_room:
+        return []
+    rooms = scene.get("rooms") or {}
+    neighbors: dict[str, set] = {}
+    for room_id, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            if normalize_barrier(edge.get("barrier")) not in _PASSABLE_BARRIERS:
+                continue
+            neighbors.setdefault(str(room_id), set()).add(str(edge["to"]))
+            neighbors.setdefault(str(edge["to"]), set()).add(str(room_id))
+
+    from collections import deque
+    prev = {str(from_room): None}
+    queue = deque([(str(from_room), 0)])
+    while queue:
+        cur, depth = queue.popleft()
+        if cur == str(to_room):
+            path = []
+            while cur is not None and prev[cur] is not None:
+                path.append(cur)
+                cur = prev[cur]
+            return list(reversed(path))
+        if depth >= limit:
+            continue
+        for nxt in sorted(neighbors.get(cur, ())):
+            if nxt not in prev:
+                prev[nxt] = cur
+                queue.append((nxt, depth + 1))
+    return []
+
+
+def sprint_reach(scene, room_id):
+    """How far a body could RUN out of this room, per straight passage.
+
+    A character could only ever move one room per beat, which makes a courier
+    whose whole craft is speed indistinguishable from someone strolling, and
+    turns any distance into a queue of identical beats. Running is the obvious
+    missing verb.
+
+    The bound is SIGHT, and that is the design rather than a convenience. You
+    can run flat out down a passage you can see along; you slow at a corner
+    because you do not know what is round it. Which means a sprint can never
+    carry a body through ground they could not see -- so it grants no
+    knowledge they had not already earned by looking, and needs no separate
+    firewall argument. The same reason `corridor_sightlines` stops at a turn.
+
+    Stricter than sight in one direction: it follows only PASSABLE doorways,
+    where the sightline follows any see-through one. You can see through a
+    barred window and you cannot run through it.
+
+    Returns one entry per runnable passage:
+
+        {"bearing": "n", "path": [rid, ...], "rooms": 2,
+         "stops": "turn"|"junction"|"dead_end"|"darkness"|"door"|"winded"}
+
+    `path` is every room crossed, in order, ENDING at the room they finish in
+    -- callers need the whole list, not the destination: a body that runs
+    through three chambers has been in three chambers, and recording only
+    where they stopped would leave holes in their map where their feet went.
+    Empty list when nothing is runnable that way, and the passage is omitted.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    start = rooms.get(room_id)
+    if not isinstance(start, dict):
+        return []
+    out = []
+    for edge in start.get("adjacent") or []:
+        if not isinstance(edge, dict) or not edge.get("dir"):
+            continue
+        if normalize_barrier(edge.get("barrier")) not in _PASSABLE_BARRIERS:
+            continue
+        heading = normalize_bearing(edge.get("dir"))
+        cur, prev, spent, path, stops = edge.get("to"), room_id, 0, [], None
+        while cur:
+            room = rooms.get(cur)
+            if not isinstance(room, dict):
+                stops = "unknown"
+                break
+            # Running into a room you cannot see into is how a body breaks an
+            # ankle. Sight stops the line here for the same reason it stops
+            # the sightline, and the two must not disagree.
+            if _LIGHT_SIGHT.get(effective_light(scene, cur), "full") != "full":
+                stops = "darkness"
+                break
+            cost = _ROOM_COST.get(
+                str(room.get("size") or "").strip().lower(), 1)
+            if spent + cost > SPRINT_BUDGET:
+                stops = "winded"
+                break
+            spent += cost
+            path.append(str(cur))
+            onward = [
+                e for e in (room.get("adjacent") or [])
+                if isinstance(e, dict) and str(e.get("to")) != str(prev)
+                and e.get("to")
+            ]
+            passable = [e for e in onward if normalize_barrier(
+                e.get("barrier")) in _PASSABLE_BARRIERS]
+            if not onward:
+                stops = "dead_end"
+                break
+            if len(onward) > 1:
+                # A junction is a decision, and a decision is a beat. Running
+                # blind through one would be choosing without looking.
+                stops = "junction"
+                break
+            straight = [e for e in passable
+                        if normalize_bearing(e.get("dir")) == heading]
+            if not straight:
+                # Bends, or the only way on is shut. Either way the run ends
+                # here rather than guessing what is round it.
+                stops = "turn" if passable else "door"
+                break
+            prev, cur = cur, straight[0].get("to")
+        if path:
+            out.append({"bearing": heading, "path": path, "rooms": len(path),
+                        "stops": stops or "winded"})
+    return out
+
+
 def _onward_exits(scene, all_rooms, target_id, from_room):
     """How many ways out of `target_id` lead somewhere other than back here.
 

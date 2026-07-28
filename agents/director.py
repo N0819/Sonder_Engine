@@ -54,6 +54,7 @@ from spatial import (
     passable_route_exists,
     room_of,
     spatial_rel,
+    sprint_reach,
 )
 
 from .common import (
@@ -2336,6 +2337,13 @@ def director_resolve(ctx, nonce):
         if not declaration.get("name"):
             continue
         declaration["exits"] = _egocentric_exits(sc, declaration["name"])
+        # What a RUN buys this mover, per passage: the engine's own figure,
+        # from room size and how far the passage can be seen along. Given
+        # here so a declared sprint resolves against a computed ceiling
+        # rather than the Director's sense of how fast a person is.
+        here = room_of(sc, declaration["name"])
+        if here:
+            declaration["sprint_reach"] = sprint_reach(sc, here)
     raw_intents = wget(chat["id"], "standing_intentions", []) or []
     # Lazy import: commit.py owns the ledger's deterministic semantics
     # (OBLIGATION_OVERDUE_AGE, the commit-side re-deferral reminder); the

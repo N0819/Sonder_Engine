@@ -42,7 +42,7 @@ from scene import (
 )
 from schemas import validate_llm_output
 from spatial import (corridor_sightlines, room_of, spatial_digest,
-                     visible_adjacent_rooms)
+                     sprint_reach, visible_adjacent_rooms)
 from survival import vitals_of
 from psychology_runtime import cognitive_absorption
 from theory_of_mind import mind_models_for_payload, sheet_capacity
@@ -846,6 +846,11 @@ def character_step(ctx, cid, nonce):
             # count -- and it stops at corners, so it is sight rather than a
             # map.
             "corridor_sight": corridor_sightlines(sc, char_room),
+            # How far a RUN gets down each passage, and what stops it.
+            # Bounded by sight, so it offers no ground they could not
+            # already see -- and it is an offer, not an instruction: a
+            # body that can run is not a body that must.
+            "sprint_reach": sprint_reach(sc, char_room),
         },
         "memory": memory_context,
         "relationships": relationships,
