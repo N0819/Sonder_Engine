@@ -78,7 +78,7 @@ rather than colliding on them.
 | A4 | 9×9 kruskal + frontier arm | does `no_new_ground_that_way` break dead-end corridors? | pre-header | done |
 | A5 | 9×9 kruskal + sight arm | do corridor sightlines help? | pre-header | done — best arm; reached the goal |
 | **A6** | **12×12 kruskal** | does it scale, and does `worked_before` stop the run-3 drift? | `f8678f2^` → killed at 70 beats | **baseline** for A7 (bearings absent) |
-| **A7** | **12×12 kruskal** | same maze, bearings fix present | `f8678f2` | **running** |
+| **A7** | **12×12 kruskal** | same maze, bearings fix present | `f8678f2` | stopped at run 2 — cost |
 | **A8** | **9×9 kruskal** | replication of A2's maze with everything since | `f8678f2` | **running** |
 | **A9** | **9×9 kruskal** | can a cheaper character model do the job? | `e005100` | **running** |
 
@@ -104,6 +104,29 @@ Matched-beat comparison through beat 20:
 | rooms found | 12 | 14 |
 
 A6 in full, before it was stopped: 70 beats, 31 rooms, 18 reversals (26%).
+
+At 47 beats, the fullest matched comparison the pair reached:
+
+| | A6 (no bearings) | A7 (bearings) |
+|---|---|---|
+| immediate reversals | 10 (22%) | **3 (7%)** |
+| rooms found | 22 | **26** |
+| new-ground rate | 47% | **55%** |
+| beats in the `0505` pocket | 19 of 70 | 0 of 47 |
+
+Reversals fell by two thirds while discovery ROSE, which is the signature
+worth having: not a more cautious character, but one no longer spending beats
+re-deciding what sight had already settled. The pocket figure is weaker
+evidence than it looks — he routed elsewhere entirely and never faced that
+trap, so he did not resist it.
+
+**A7 was stopped during run 2, on cost.** Final: run 1 85 beats / 33 rooms /
+24% reversals; run 2 29 beats / 8 rooms / 37% reversals, locked. 114 character
+calls and 60 minutes of generation time for those two runs. A 12×12 costs
+roughly triple a 9×9 per run and, at the same mean trap depth, buys endurance
+rather than navigation — which is why the standing cap is 10×10. The bearings
+result above was already banked; run 2 was buying nothing but a demonstration
+of the circling lock, which is now reproduced far more cheaply as a unit test.
 
 ### A9 — the cheap-character arm
 
