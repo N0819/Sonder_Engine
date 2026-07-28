@@ -300,8 +300,14 @@ def test_spatial_digest_renders_left_right():
     sc = _scene({"P": "hub"},
                 {"P": {"came_from": "back", "facing": "n"}}, HUB_BEARINGS)
     d = spatial_digest(sc, "P")
-    assert d["left"] == [{"room": "west_wing", "barrier": "open_door"}]
-    assert d["right"] == [{"room": "east_wing", "barrier": "open_door"}]
+    # `bearing` is additive: the bucket stays egocentric (left/right relative
+    # to facing) and the bearing says which way the doorway itself faces.
+    # Both are needed -- a character reading only buckets had to guess the
+    # compass, and did, giving two different exits the same heading.
+    assert d["left"] == [
+        {"room": "west_wing", "barrier": "open_door", "bearing": "w"}]
+    assert d["right"] == [
+        {"room": "east_wing", "barrier": "open_door", "bearing": "e"}]
 
 
 # ---- reciprocity reconciliation ------------------------------------------
@@ -451,5 +457,9 @@ def test_full_pipeline_walk_produces_left_right():
     assert new["orientation"]["P"]["came_from"] == "lobby"
     assert new["orientation"]["P"]["facing"] == "n"
     d = spatial_digest(new, "P")
-    assert d["behind"] == [{"room": "Lobby", "barrier": "open"}]
-    assert d["right"] == [{"room": "Office", "barrier": "open_door"}]
+    # Bucket and bearing are different facts and both are carried: facing
+    # north, the Lobby is BEHIND you and the doorway faces SOUTH.
+    assert d["behind"] == [
+        {"room": "Lobby", "barrier": "open", "bearing": "s"}]
+    assert d["right"] == [
+        {"room": "Office", "barrier": "open_door", "bearing": "e"}]

@@ -791,6 +791,17 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
                     ctx[key] = runtime.compute_step(key, ctx, 0)
                 ctx[f"character:{char_id}"] = runtime.compute_step(
                     f"character:{char_id}", ctx, 0)
+                # Grabbed HERE, not at the end of the beat. The ContextVar
+                # holds whichever call set it last, and the four stages below
+                # are all mercury -- which returns no reasoning, so it
+                # overwrites the character's with nothing. Read at dump time
+                # it was always empty, which looked like the model not
+                # exposing a trace rather than us reading the wrong moment.
+                try:
+                    from providers import last_reasoning as _lr
+                    char_reasoning = str(_lr.get() or "")
+                except Exception:
+                    char_reasoning = ""
                 for key in _LLM_CHAIN:
                     ctx[key] = runtime.compute_step(key, ctx, 0)
             except Exception as exc:
@@ -810,7 +821,8 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
                         think_path, run_no, step + 1, visited[-1],
                         ctx.get(f"character:{char_id}") or {},
                         ctx.get("director_resolve") or {},
-                        stalled=f"{type(exc).__name__}: {exc}")
+                        stalled=f"{type(exc).__name__}: {exc}",
+                        reasoning=locals().get("char_reasoning", ""))
                 continue
 
         if agent != "random":
@@ -818,7 +830,7 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
             _res = ctx.get("director_resolve") or {}
             if think_path:
                 _dump_thoughts(think_path, run_no, step + 1, visited[-1],
-                               _out, _res)
+                               _out, _res, reasoning=char_reasoning)
             if trace is not None:
                 trace.append({
                     "beat": step + 1,
@@ -872,7 +884,8 @@ _THINK_FIELDS = (
 )
 
 
-def _dump_thoughts(path, run_no, beat, where, out, resolved, stalled=None):
+def _dump_thoughts(path, run_no, beat, where, out, resolved, stalled=None,
+                   reasoning=""):
     """Append one beat of the character's own output, readable rather than raw.
 
     Everything the character emits is dropped on the floor by this harness --
@@ -891,6 +904,14 @@ def _dump_thoughts(path, run_no, beat, where, out, resolved, stalled=None):
     lines = [f"\n{'='*72}", head, "=" * 72]
     if stalled and not out:
         lines.append("\n(the character stage itself raised -- nothing to show)")
+    # The thinking model's own trace, which for such a model is where the
+    # decision actually happens -- the structured output below is only its
+    # conclusion. The harness drives stages directly and never calls
+    # save_step, so the engine's variants.reasoning column never fills here
+    # and this is the only place it can be read.
+    _think = str(reasoning or "").strip()
+    if _think:
+        lines.append(f"\n-- reasoning --\n{_think}")
     for field in _THINK_FIELDS:
         value = out.get(field)
         if value in (None, "", [], {}):

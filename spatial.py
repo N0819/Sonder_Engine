@@ -1011,8 +1011,25 @@ def spatial_digest(scene, observer):
 
     def ref(edge):
         rid = edge.get("to")
-        return {"room": (rooms.get(rid) or {}).get("name") or rid,
-                "barrier": edge.get("barrier")}
+        out = {"room": (rooms.get(rid) or {}).get("name") or rid,
+               "barrier": edge.get("barrier")}
+        # Which way the doorway itself faces. The buckets are EGOCENTRIC and
+        # relative to the last move, so on a first beat -- no movement history
+        # -- every exit lands in `unclassified` and carries no direction at
+        # all, while `corridor_sight` beside it speaks in compass points. A
+        # character holding both frames has to bridge them by guessing, and
+        # does: read live from a thinking model's own trace, "two open exits:
+        # one to Chamber 0001 (south) and one to Chamber 0100 (south)" -- the
+        # same bearing given to two different exits, one of which was east.
+        # And a beat later, "east is the intended exit, but it's not detailed
+        # in spatial_frame; I need to infer it's ahead or something."
+        #
+        # The bearing is on the edge already. Omitted when the edge carries
+        # none, since a scene without directions has none to give.
+        bearing = normalize_bearing(edge.get("dir"))
+        if bearing:
+            out["bearing"] = bearing
+        return out
 
     out = {}
     for bucket in ("behind", "ahead", "left", "right", "aside",
