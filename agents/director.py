@@ -2298,6 +2298,20 @@ def director_resolve(ctx, nonce):
                 char_actions.setdefault(cname, []).append(dk_act)
 
     sc = get_scene(chat["id"], chat)
+    # Each declaring character's own heading, exactly as the player already
+    # gets one in director_interpret. The room graph is undirected, so
+    # "steps through the doorway" and "turns west" name a set of doorways
+    # without saying which -- and resolving that without a heading is the
+    # coin flip _egocentric_exits was written to end. It was only ever
+    # wired to the player: a character declaring "turn west and step
+    # through" was measured (maze arm A11, beat 11) being moved NORTH,
+    # back the way he came, into the room he had just left, while the
+    # resolved event still narrated it as west. He then reasoned from that
+    # prose, so one coin flip corrupts every beat after it.
+    for declaration in decls:
+        if not declaration.get("name"):
+            continue
+        declaration["exits"] = _egocentric_exits(sc, declaration["name"])
     raw_intents = wget(chat["id"], "standing_intentions", []) or []
     # Lazy import: commit.py owns the ledger's deterministic semantics
     # (OBLIGATION_OVERDUE_AGE, the commit-side re-deferral reminder); the
