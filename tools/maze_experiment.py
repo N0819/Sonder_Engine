@@ -618,6 +618,27 @@ def _orrin_sheet(name="Orrin"):
     through-line and to proving it, unseen ground is instrumental only while
     it might BE the way through, and wandering -- moving without a working
     theory -- is the taboo rather than standing still.
+
+    A trap it FAILED to be authored around, measured in A13 runs 1 and 3.
+    `expression` first read "reads every wall as information the moment he
+    sees it", meaning connectivity. He read it as every SURFACE is a clue,
+    which for a solving drive is the same sentence. Run 1 cost fourteen
+    consecutive beats standing under a rope ladder at 0.95 drive-serving
+    urgency. By run 3 it had generalised into a full symbolic theory of the
+    maze -- goal "conclude the mirror's significance in the sequence" at 0.90,
+    beating the navigation want at 0.85, with concerns spanning a shattered
+    mirror, yellow feathers, a herringbone floor and whether the sequence was
+    keyed on room numbers, direction or feature type. Three unique rooms in
+    nine beats.
+
+    Worth stating plainly because the behaviour is not stupid: a maze full of
+    authored detail is a reasonable place to look for encoded meaning, and a
+    puzzle-solver looking for it is in character. It is wrong only because
+    THIS maze's meaning is entirely topological. The sheet, not the model,
+    pointed him at the walls -- so `expression` now says CONNECTIVITY and the
+    taboo covers studying a room instead of testing a corridor. This is the
+    same class of error as the very first arm's "notice and remember what
+    makes each chamber different", one drive-weight louder.
     """
     from character_schema import default_character_data, normalize_character_data
     sheet = default_character_data(name)
@@ -669,12 +690,16 @@ def _orrin_sheet(name="Orrin"):
                     "is not a maze any more, and the solving was the only "
                     "part he wanted"),
         "expression": ("he theorises constantly and tests immediately, reads "
-                       "every wall as information the moment he sees it, and "
-                       "once he knows the way through he RUNS it -- running "
-                       "the proved line is the finish, and the finish is the "
+                       "walls and openings as CONNECTIVITY -- which rooms "
+                       "join, and how -- the moment he sees them, and once "
+                       "he knows the way through he RUNS it: running the "
+                       "proved line is the finish, and the finish is the "
                        "best part"),
         "taboo": ("wandering: being inside a maze with no working theory of "
-                  "it, moving because he does not know what else to do"),
+                  "it, moving because he does not know what else to do. And "
+                  "studying a room instead of testing a corridor -- a maze "
+                  "is made of connections, and what is painted on a wall is "
+                  "not one of them"),
     }
     # Ordered trade-offs, each naming what gives way
     # (DESIGN_PSYCHOLOGY_AS_PRESSURE (a)). The first is the whole experiment
