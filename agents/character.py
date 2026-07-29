@@ -5,13 +5,15 @@ from __future__ import annotations
 import json
 from collections import deque
 
-from affect import CRISIS_STRAIN_MIN, RUPTURE_FORCE_AFTER, ground_tells
+from affect import (CRISIS_STRAIN_MIN, INTENT_DORMANT_AFTER,
+                    RUPTURE_FORCE_AFTER, ground_tells)
 from db import q, wget
 from character_schema import (
     character_abilities,
     character_curiosity,
     character_interoception,
     character_name,
+    character_projects,
     character_psychology,
     character_standing_intentions,
     effective_drive,
@@ -382,7 +384,8 @@ def _destination_from_goals(stored_state, place_graph, here_rid=None,
 
     The legitimacy gate is double: the destination must be named by HIS OWN
     authored text, and he must own a place-graph node for it. Sources are
-    active_state.goal first, then active intentions by priority --
+    active_state.goal first, then active intentions by priority, then held
+    projects (interior.projects) as the durable fallback --
     goal-first is not a stylistic choice: in the live failure no active
     intention named a chamber at all except a stale one at progress 1.0
     naming "Chamber 0401" (actively wrong), while his self-authored goal
@@ -421,6 +424,17 @@ def _destination_from_goals(stored_state, place_graph, here_rid=None,
             return 0.0
 
     texts.extend(str(i.get("intent") or "") for i in sorted(intents, key=_prio))
+    # PROJECTS last: the durable fallback. This is the measured hole the
+    # project tier closes on the routing side -- when the beat goal names
+    # nothing and every intention naming the aim has been satisfied once,
+    # decayed dormant, or died with its tactic, a standing commitment that
+    # names a room ("every run ends at the shrine in Chamber 0603") still
+    # routes. Behind goal and intentions on purpose: a project is what he is
+    # about, not necessarily where he is going THIS beat.
+    texts.extend(
+        str(p.get("project") or "")
+        for p in ((st.get("interior") or {}).get("projects") or [])
+        if isinstance(p, dict))
     for text in texts:
         folded = text.casefold()
         best = None
@@ -530,6 +544,111 @@ def _toward_hops(first_step, here_rid, taken_adj, dest_rid):
             seen.add(nxt)
             queue.append((nxt, depth + 1))
     return None
+
+
+# An active intention idle for two-thirds of the dormancy fuse is surfaced
+# as `fading` in the payload. Decay itself is right -- an aim yielding
+# nothing for thirty turns should lose its grip -- but until now it was
+# silent bookkeeping: the status flipped in commit and the character
+# discovered, beats later, that they no longer wanted something. A courier
+# walked sixteen optimal rooms to the shrine's threshold and turned away
+# because the goal underneath had been spent by a sweep he was never party
+# to (A11/A12). Surfacing the burning fuse lets the giving-up happen BY the
+# character -- renew by acting, revise, or abandon with a stated reason --
+# with the sweep remaining only as the backstop for an unanswered question.
+_FADING_AFTER = (INTENT_DORMANT_AFTER * 2) // 3
+
+
+def _annotate_fading(intentions, now_turn):
+    """Mark each active intention that is near the dormancy sweep with how
+    many beats it has yielded nothing. Read-side only, non-mutating: the
+    stored rows and the sweep in affect.apply_intent_ops are untouched, so
+    this adds a legible question, not a new lifecycle."""
+    if not isinstance(now_turn, int):
+        return intentions
+    out = []
+    for intent in intentions or []:
+        if not isinstance(intent, dict):
+            out.append(intent)
+            continue
+        intent = dict(intent)
+        if intent.get("status") == "active":
+            try:
+                idle = now_turn - int(intent.get("last_progress_turn"))
+            except (TypeError, ValueError):
+                idle = None
+            if idle is not None and idle >= _FADING_AFTER:
+                intent["fading"] = idle
+        out.append(intent)
+    return out
+
+
+def _en_route(stored_state, here_rid, destination):
+    """The journey he is already on, read back to him: the room his own
+    goals name, how many rooms of his own walked ground remain to it, and
+    whether the last room he stood in was nearer or farther than this one.
+
+    Measured need (A14, post-completeness-fix): with routing, verdicts and
+    run offers all naming his destination, a character 9 rooms from the
+    chamber he had himself chosen closed to 7 and gave it all back -- trail
+    9 9 7 8 9, four beats, net zero. The previous goal TEXT is already in
+    the payload (self.active_state.goal), but a nine-room journey still
+    needs the same intent to win the beat auction nine independent times,
+    and incumbency carried no weight because it was nowhere stated as a
+    STATUS: not how far in he was, not that the last beat closed distance.
+    This states it. A fact, never a leash: continuation stays the model's
+    decision, and the prompt frames leaving a journey as the deliberate
+    act.
+
+    Derived entirely at payload time: the destination is the one
+    _destination_from_goals already resolved from his OWN previous goal and
+    live intentions, and the distance runs over doorways his feet actually
+    took (_hops_to on _taken_adjacency -- the same graph the exit verdicts
+    and run offers are judged against, so the payload cannot argue with
+    itself, and the same firewall: his map, never the scene). Nothing
+    persists, so nothing needs cancel machinery -- every ending the journey
+    can have is a change in the derivation itself next beat: arriving
+    empties the destination, renaming the aim moves it, a disproven doorway
+    breaks the remembered way into silence.
+
+    Silence also under two rooms out: a neighbouring destination is already
+    fully carried by its exit's "through here is X itself" verdict, and a
+    character crossing a house to answer a door does not need a status line
+    about the hallway.
+    """
+    if not (isinstance(destination, dict) and destination.get("rid")
+            and here_rid):
+        return None
+    dest_rid = str(destination["rid"])
+    here = str(here_rid)
+    st = stored_state if isinstance(stored_state, dict) else {}
+    graph = st.get("place_graph")
+    graph = graph if isinstance(graph, dict) else {}
+    taken = _taken_adjacency(graph.get("edges") or {})
+    left = _hops_to(here, dest_rid, taken)
+    if left is None or left < 2:
+        return None
+    out = {"to": str(destination.get("name") or dest_rid),
+           "rooms_left": left}
+    # The last DIFFERENT room stood in, off his own route window. By room
+    # rather than by beat, because a run crosses several rooms in one beat
+    # and dwelling crosses none; the SIGN is the fact that matters -- nine
+    # rooms walked and given back is not nine rooms walked. Neither key
+    # when the distance held or the window cannot say: absent means cannot
+    # tell, never "no progress".
+    prev = None
+    for r in reversed(st.get("visited_rooms") or []):
+        if isinstance(r, str) and r and r != here:
+            prev = r
+            break
+    if prev:
+        was = _hops_to(prev, dest_rid, taken)
+        if was is not None:
+            if left < was:
+                out["closer_than_last_room"] = True
+            elif left > was:
+                out["further_than_last_room"] = True
+    return out
 
 
 def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
@@ -1304,8 +1423,23 @@ def character_step(ctx, cid, nonce):
         # with EMERGENT intentions formed at runtime via intent_ops. An emergent
         # intention that restates an authored one wins (it carries live
         # progress/status). Read-only context for deriving this beat's wants.
-        "intentions": _merge_standing_intentions(
-            character_standing_intentions(sh), _interior.get("intentions") or []),
+        "intentions": _annotate_fading(
+            _merge_standing_intentions(
+                character_standing_intentions(sh),
+                _interior.get("intentions") or []),
+            ctx.turn.idx),
+        # PROJECTS (Tier 1.5): at most two standing commitments -- what this
+        # character is ABOUT right now. The live ledger once commit has
+        # seeded it; the authored card list only on beats before the first
+        # commit, and never once any live or former project exists, so a
+        # project given up with a stated reason does not read as held again.
+        "projects": (
+            _interior.get("projects")
+            if (_interior.get("projects") or _interior.get("former_projects"))
+            else character_projects(sh)) or [],
+        # What was given up or finished, with the stated reason --
+        # continuity, like former_drives, not obligation.
+        "former_projects": _interior.get("former_projects") or [],
         # Former drives (scars) give continuity to a character who has changed.
         "former_drives": _interior.get("former_drives") or [],
         "learned_beliefs": _interior.get("beliefs") or [],
@@ -1325,6 +1459,11 @@ def character_step(ctx, cid, nonce):
         _self["recent_tells"] = _recent_tells
     if _tell_grounds:
         _self["tell_grounds"] = _tell_grounds
+    # The journey already underway, as a stated status -- see _en_route.
+    # Same destination the exit verdicts and run offers are judged against.
+    _underway = _en_route(stored_state, char_room, _goal_destination)
+    if _underway:
+        _self["en_route"] = _underway
     payload = {
         "self": _self,
         "perception": {

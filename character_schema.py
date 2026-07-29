@@ -1079,6 +1079,43 @@ def character_standing_intentions(sheet: dict) -> list[dict]:
         })
     return out
 
+def character_projects(sheet: dict) -> list[dict]:
+    """Authored PROJECTS (Tier 1.5) -- durable-but-not-eternal commitments,
+    read from the card's psychology.projects in the runtime shape. The tier
+    between the drive (eternal, placeless) and intentions (completable,
+    abandonable, swept when dormant): a project can name a room and survives
+    barren stretches, single successes, and the death of the tactics that
+    serve it. See docs/DESIGN_LONG_TERM_GOALS.md.
+
+    At most two, because scarcity is what makes the tier mean anything --
+    the runtime cap (affect.PROJECT_CAP) holds the same line. Ids are
+    namespaced 'pa<n>' so they never collide with runtime-adopted 'p<n>'.
+    Accepts plain strings as well as dicts, for the same reason
+    character_standing_intentions does: a card written the obvious way must
+    not silently get nothing.
+    """
+    psych = normalize_character_data(sheet).get("psychology", {})
+    out = []
+    for i, p in enumerate(psych.get("projects") or [], 1):
+        if isinstance(p, str):
+            p = {"project": p}
+        if not isinstance(p, dict):
+            continue
+        text = str(p.get("project") or p.get("goal") or "").strip()
+        if not text:
+            continue
+        about = str(p.get("about") or "").strip().casefold()
+        out.append({
+            "id": f"pa{i}", "project": text,
+            "about": about if about in ("world", "self") else "",
+            "satisfied_when": str(p.get("satisfied_when") or "").strip(),
+            "authored": True, "adopted_turn": 0,
+        })
+        if len(out) >= 2:
+            break
+    return out
+
+
 def character_initial_stance(sheet: dict) -> dict:
     social = normalize_character_data(sheet).get("social", {})
     if isinstance(social.get("legacy_stance"), dict):

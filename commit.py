@@ -24,6 +24,7 @@ from character_schema import (character_name, new_uid, character_psychology,
                               character_initial_outfit,
                               character_initial_active_state, effective_drive,
                               character_standing_intentions,
+                              character_projects,
                               normalize_character_data, persona_name,
                               character_appearance as _char_appearance)
 from frames import is_recognized_in_frame
@@ -3683,6 +3684,35 @@ def prepare_memory_commit(ctx, *, scene=None):
                 for _a in character_standing_intentions(sh):
                     if str(_a.get("intent") or "").strip().casefold() not in _seen_intent:
                         intentions = intentions + [_a]
+                # PROJECTS (Tier 1.5): durable-but-not-eternal commitments,
+                # capped at two -- see affect.apply_project_ops and
+                # docs/DESIGN_LONG_TERM_GOALS.md. Authored ones seed from
+                # the card exactly as standing intentions do, deduped
+                # against live AND former so a project the character gave
+                # up (with a stated reason) never silently re-seeds over
+                # that decision. NOTE: _interior_out below is rebuilt from
+                # scratch each beat, so both ledgers must be carried
+                # through it explicitly or a beat would erase them.
+                projects = [dict(p) for p in (interior.get("projects") or [])
+                            if isinstance(p, dict)]
+                former_projects = [
+                    dict(p) for p in (interior.get("former_projects") or [])
+                    if isinstance(p, dict)]
+                _seen_proj = {
+                    str(p.get("project") or "").strip().casefold()
+                    for p in projects + former_projects}
+                for _p in character_projects(sh):
+                    if len(projects) >= affect.PROJECT_CAP:
+                        break
+                    if str(_p.get("project") or "").strip().casefold() \
+                            not in _seen_proj:
+                        projects = projects + [_p]
+                projects, former_projects, _pwarn = affect.apply_project_ops(
+                    projects, former_projects,
+                    own_result.get("project_ops") or [], turn.idx)
+                for w in _pwarn:
+                    ctx.add_warning(f"{cname}: project -- {w}")
+                _project_ids = {str(p.get("id") or "") for p in projects}
                 drive = (character_psychology(sh) or {}).get("drive") or {}
 
                 # this beat's evidence pool: resolved event + spoken lines, for
@@ -3749,17 +3779,19 @@ def prepare_memory_commit(ctx, *, scene=None):
                 # goal still weigh as a goal when scoring mood.
                 _steering = affect.steering_intent_ids(intentions, turn.idx)
 
-                def _priority(serves, _ids=_steering, _intents=intentions):
-                    # Models emit serves as "intention:<id-or-text>"; resolve
-                    # it to the bare id so a goal-serving impact scores at
-                    # intention priority, not the situational default.
-                    serves = affect.normalize_serves(serves, _intents)
-                    if serves == "drive":
-                        return 1.0
-                    return 0.8 if str(serves) in _ids else 0.4
+                def _priority(serves, _ids=_steering, _intents=intentions,
+                              _projs=projects, _pids=_project_ids):
+                    # Models emit serves as "intention:<id-or-text>" or
+                    # "project:<id-or-text>"; resolve to the bare id so a
+                    # goal-serving impact scores at its tier's priority, not
+                    # the situational default. A held project weighs at
+                    # DRIVE priority (1.0) -- the 1.0-vs-0.8 loss is the
+                    # measured failure the project tier exists to close.
+                    serves = affect.normalize_serves(serves, _intents, _projs)
+                    return affect.serves_priority(str(serves), _ids, _pids)
 
                 wants, enacted, suppressed = affect.normalize_wants(
-                    asv.get("wants") or [], valid_ids)
+                    asv.get("wants") or [], valid_ids | _project_ids)
 
                 appraisal_input = own_result.get("appraisal") or {}
                 appraisal_out = affect.appraise(
@@ -3922,6 +3954,11 @@ def prepare_memory_commit(ctx, *, scene=None):
                         rupture = None
                 _interior_out = {
                     "intentions": intentions,
+                    # Both project ledgers, every beat: this dict is rebuilt
+                    # from scratch, and a key not carried here is a key
+                    # silently erased.
+                    "projects": projects,
+                    "former_projects": former_projects,
                     "drive_strain": round(float(strain), 4),
                     "strain_log": strain_log,
                     "former_drives": former,
