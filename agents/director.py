@@ -26,6 +26,7 @@ from scene import (
     IMMOBILIZING_RESTRAINTS,
     NON_AWAKE_GATED,
     apply_restraint_diff,
+    awareness_conditions,
     restraint_map,
     restraint_of,
     _ability_mod,
@@ -1136,6 +1137,359 @@ def _unsupported_player_awareness(conditions, player_name, player_input,
     return unsupported
 
 
+# ---------------------------------------------------------------------------
+# WAKING (awareness Phase 1, exit side).
+#
+# The two floors above police the ONSET of a non-awake state -- one catches a
+# knockout the diff forgot, the other catches a mind the diff took away on
+# nothing. Neither of them can end one, and until this block nothing else could
+# either except the Director choosing to.
+#
+# Measured against the author's live corpus (engine.db, 1483 director
+# resolve/establish variants across 44 chats): 24 `awareness` conditions were
+# ever emitted and NOT ONE of them carried `active: 0`. The Director has never
+# once ended an awareness condition in real play. The four that ever stopped
+# gating stopped because they were born with `expires_at_seconds` and
+# mechanics.py's clock expiry closed them; every condition without that field is
+# still active, up to 75 turns after it was created. The reported incident is
+# the whole class: chat 40 'Hmmm', turn 9 the player declared going to sleep
+# (legitimate onset), turn 10 declared "You eventually wake when morning comes",
+# turn 11 "You open your eyes and look around" -- and both resolves returned
+# state_diff.conditions == {}. Turn 10's own `changes_asserted` said
+# "conditions / Hinami / transitions from asleep to awake"; the Tier-1 manifest
+# check caught the omission and the Tier-2 self-repair answered
+# `already_encoded`, pointing at entities.hinami.state.posture =
+# "awake_stirring_in_nest" -- a field nothing reads for awareness. The repair's
+# word was taken and the condition stayed on.
+#
+# Two reasons, and both are fixed here:
+#   1. The resolve payload never told the Director that anyone was under, or
+#      under which condition_id. It cannot re-emit an id it was never given,
+#      and after a context window it cannot remember one either. `_awareness_view`
+#      puts the live rows in the payload.
+#   2. Nothing deterministic enforced the exit. `_awareness_exits` is that
+#      floor, and it covers only the cases where waking is not a judgement call.
+#
+# Whose call waking is: the WORLD's, never the sleeping mind's. A gated
+# character runs no character step at all (agents/character.py's consciousness
+# gate), which is correct -- a mind that is out does not deliberate -- but it
+# also means an NPC generates no pressure to be woken, so a stuck sleeper reads
+# as a quiet one. Every rule below is therefore driven by something outside the
+# sleeper: their own player's declaration, another body's hands, or the clock.
+_NATURAL_SLEEP_SECONDS = 8 * 3600  # ordinary sleep, on the simulation clock
+
+# A deliberate act of rousing, aimed at a named sleeper. Deliberately narrower
+# than "anything loud": attribution is by nearest name in the same clause (the
+# `_untracked_unconsciousness_subjects` idiom), which cannot tell "shouts at the
+# sleeper" from "shouts across the room the sleeper is in", so shouting/calling
+# out is left to the Director rather than made deterministic. Hands on a body,
+# or the word "wake" aimed at it, is unambiguous.
+_ROUSE_CUE = re.compile(
+    r"\b(?:"
+    r"wakes?|waking|woke|woken|awakens?|awakened|awakening|"
+    r"rouses?|rousing|roused|"
+    r"shakes?|shaking|shook|shaken|"
+    r"nudges?|nudging|nudged|"
+    r"jostles?|jostling|jostled|"
+    r"prods?|prodding|prodded|pokes?|poking|poked|"
+    r"shoves?|shoving|shoved|"
+    r"slaps?|slapping|slapped|"
+    r"splash\w*|douses?|dousing|doused|"
+    r"hauls?|hauling|hauled|drags?|dragging|dragged|"
+    r"lifts?|lifting|lifted|pulls?|pulling|pulled"
+    r")\b"
+)
+# What a PLAYER can say that means "leave me under". `_SLEEP_CUE` plus the
+# stayings it does not cover. Kept separate from `_SLEEP_CUE` on purpose:
+# that one decides whether to KEEP an onset and errs toward keeping, so
+# widening it would make prose more likely to put the player under -- the
+# direction the original bug came from.
+_STAY_UNDER_CUE = re.compile(
+    # _SLEEP_CUE's alternatives, minus its closing `)\b`, plus the stayings.
+    _SLEEP_CUE.pattern[:-len(r")\b")] + r"|"
+    r"dream\w*|"
+    r"stays?\s+(?:under|out|asleep)|stayed\s+(?:under|out|asleep)|"
+    r"keeps?\s+sleeping|kept\s+sleeping|"
+    r"remains?\s+(?:under|asleep|unconscious)|remained\s+(?:under|asleep|unconscious)|"
+    r"snor\w+|"
+    r"do(?:es)?\s+not\s+wake|don'?t\s+wake|doesn'?t\s+wake|"
+    r"without\s+waking"
+    r")\b"
+)
+
+
+def _clause_attributed_subjects(text_units, cue_re, subject_names,
+                                prefer_object=False):
+    """Names from `subject_names` that `cue_re` fires on in the same clause.
+
+    The high-precision attribution `_untracked_unconsciousness_subjects` uses,
+    lifted so the rouse scan reads the same way: a cue is pinned to the nearest
+    candidate name in the same sentence within `_MAX_UNCONSCIOUSNESS_GAP` word
+    tokens, so a bystander merely co-mentioned is never picked up.
+
+    `prefer_object` flips which side of the cue wins, and the two scans need
+    opposite answers. An unconsciousness cue is INTRANSITIVE -- "Hinami passes
+    out" -- so its subject precedes it. A rouse cue is TRANSITIVE -- "Kaede
+    shakes Tamamo awake" -- so the body being woken FOLLOWS it, and the nearest
+    name is the waker. With the flag set, a name after the cue wins whenever
+    the clause has one, and the preceding name is used only as a fallback ("she
+    is shaken awake")."""
+    name_res = [(name, re.compile(r"\b" + re.escape(name.casefold()) + r"(?:'s)?\b"))
+                for name in subject_names if name]
+    if not name_res:
+        return set()
+    flagged = set()
+    for text in text_units:
+        low = str(text or "").casefold()
+        if not low:
+            continue
+        name_hits = [(m.start(), m.end(), name)
+                     for name, rx in name_res for m in rx.finditer(low)]
+        if not name_hits:
+            continue
+        breaks = _sentence_break_positions(low)
+        for cm in cue_re.finditer(low):
+            cs, ce = cm.start(), cm.end()
+            best = None  # (side_rank, word_gap, name)
+            for ns, ne, name in name_hits:
+                if ne <= cs:            # name before the cue
+                    lo, hi, side = ne, cs, 1 if prefer_object else 0
+                elif ns >= ce:          # name after the cue
+                    lo, hi, side = ce, ns, 0
+                else:                   # overlaps the cue span; skip
+                    continue
+                if any(lo <= p < hi for p in breaks):
+                    continue            # a sentence break separates them
+                gap = len(re.findall(r"\w+", low[lo:hi]))
+                if gap > _MAX_UNCONSCIOUSNESS_GAP:
+                    continue
+                if best is None or (side, gap) < best[:2]:
+                    best = (side, gap, name)
+            if best is not None:
+                flagged.add(best[2])
+    return flagged
+
+
+def _declared_act_texts(interp, char_actions):
+    """Every declared act in this beat, as text: the player's sequence and each
+    character's actions. A rouse is an INTENTION by an agent, so the
+    declarations are the primary evidence -- the resolved prose is scanned too,
+    but a Director that narrated the shake without encoding it still counts."""
+    texts = []
+    for event in ((interp or {}).get("sequence") or []):
+        if not isinstance(event, dict):
+            continue
+        texts.append(str(event.get("attempt") or ""))
+        texts.append(str(event.get("observable") or ""))
+    for _who, acts in (char_actions or {}).items():
+        for act in (acts if isinstance(acts, list) else [acts]):
+            if isinstance(act, dict):
+                texts.append(str(act.get("attempt") or ""))
+                texts.append(str(act.get("observable") or ""))
+    return [t for t in texts if t]
+
+
+def _rouse_attempts(interp, char_actions, resolved_event, gated_names):
+    """Gated subjects somebody deliberately tried to wake this beat."""
+    if not gated_names:
+        return set()
+    units = _declared_act_texts(interp, char_actions) + [str(resolved_event or "")]
+    return _clause_attributed_subjects(units, _ROUSE_CUE, gated_names,
+                                       prefer_object=True)
+
+
+def _sleep_elapsed(record, clock, diff_time):
+    """Simulation seconds this condition has been in force at the END of this
+    beat, or None when the clock cannot say. `started_at_seconds` is
+    model-authored, so a negative or absurd span is treated as unknown."""
+    end = None
+    if isinstance(diff_time, dict):
+        for key in ("end_seconds", "start_seconds"):
+            try:
+                if diff_time.get(key) is not None:
+                    end = float(diff_time[key])
+                    break
+            except (TypeError, ValueError):
+                end = None
+        if end is not None and diff_time.get("end_seconds") is None:
+            try:
+                end += float(diff_time.get("duration_seconds") or 0.0)
+            except (TypeError, ValueError):
+                pass
+    if end is None:
+        try:
+            end = float((clock or {}).get("elapsed_seconds") or 0.0)
+        except (TypeError, ValueError):
+            return None
+    try:
+        started = float(record.get("started_at_seconds") or 0.0)
+    except (TypeError, ValueError):
+        return None
+    elapsed = end - started
+    return elapsed if elapsed >= 0 else None
+
+
+def _awareness_view(chat_id, clock, interp, char_actions, sd_time=None):
+    """The `active_awareness` block the resolve payload carries.
+
+    The Director has never once ended an awareness condition, and the first
+    reason is that it was never shown one. Each entry names the condition_id it
+    must re-emit with active:0, what put the subject under, whether someone is
+    trying to wake them THIS beat, and whether the clock says an ordinary sleep
+    is over."""
+    records = awareness_conditions(chat_id)
+    if not records:
+        return []
+    gated = [r for r in records if r["level"] in NON_AWAKE_GATED]
+    roused = _rouse_attempts(interp, char_actions, "",
+                             [r["subject"] for r in gated])
+    view = []
+    for record in records:
+        elapsed = _sleep_elapsed(record, clock, sd_time)
+        view.append({
+            "condition_id": record["condition_id"],
+            "subject": record["subject"],
+            "level": record["level"],
+            "cause": record["cause"],
+            "rousable_by": record["rousable_by"],
+            "gates_this_mind": record["level"] in NON_AWAKE_GATED,
+            "under_for_seconds": None if elapsed is None else round(elapsed),
+            "natural_wake_due": bool(
+                record["level"] == "asleep" and elapsed is not None
+                and elapsed >= _NATURAL_SLEEP_SECONDS),
+            "someone_is_trying_to_wake_them": record["subject"] in roused,
+        })
+    return view
+
+
+def _already_ended(cond_value):
+    """Did the diff itself close this condition? Any entry with a falsy
+    `active` counts; a re-assertion (active truthy, or absent, which defaults
+    to active) does not."""
+    for cond in (cond_value if isinstance(cond_value, list) else [cond_value]):
+        if not isinstance(cond, dict):
+            continue
+        try:
+            if not int(cond.get("active", 1)):
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _ending_condition(record, reason):
+    """The same condition, closed. Built from the stored payload so nothing
+    authored on it is lost, and keyed by the SAME condition_id -- commit
+    UPDATEs on that id, and a fresh one would open a second row."""
+    ended = dict(record.get("payload") or {})
+    ended["condition_id"] = record["condition_id"]
+    ended["subject_id"] = record["subject"]
+    ended["kind"] = "awareness"
+    ended["active"] = 0
+    ended["ended_reason"] = reason
+    return ended
+
+
+def _awareness_exits(chat_id, conditions, player_name, player_input,
+                     interp, char_actions, resolved_event, clock, sd_time):
+    """Awareness conditions the world has ENDED this beat, whatever the diff says.
+
+    Returns (endings, warnings): endings is {condition_id: [ending_condition]}
+    to merge into state_diff.conditions, warnings is prose for ctx.
+
+    Three rules, each driven from outside the sleeping mind, and each covering
+    only the part of waking that is not a judgement call:
+
+    1. THE PLAYER DECLARED SOMETHING. Any non-empty player declaration that is
+       not itself a request to stay under ends EVERY gated awareness condition
+       on the player, at any level. This is the strong rule and it is meant to
+       be: the player owns the declaration of their character's conduct
+       (AGENTS.md, authority boundaries), the onset floor already refuses to put
+       them under without their own input or unmistakable beat prose, and the
+       Director keeps every other lever -- it may narrate the attempt failing,
+       or impose the condition again with a fresh cause. Being wrong in this
+       direction costs one beat the Director can re-narrate. Being wrong in the
+       other direction is a chat that cannot be played, which is what the corpus
+       actually contains.
+    2. SOMEBODY TRIED TO WAKE THEM. A deliberate rouse aimed at a subject who
+       is `asleep` ends it -- shaking a shoulder is the world at its least
+       ambiguous, and it is the commonest beat in fiction. It does NOT end
+       `sedated` or `unconscious`: those bodies do not sit up because they were
+       shaken, and the refusal is a fact the Director should narrate, so it
+       becomes a warning rather than an ending.
+    3. THE NIGHT ENDED. A subject who has been `asleep` for a full ordinary
+       sleep on the simulation clock wakes. Only `asleep`: a sedative wearing
+       off is dosage, and unconsciousness resolving is medicine -- both belong
+       to the Director, which the payload now equips to decide.
+    """
+    endings, warnings = {}, []
+    if not conditions:
+        return endings, warnings
+
+    target = re.sub(r"[^a-z0-9]", "", str(player_name or "").casefold())
+    gated = [r for r in conditions if r["level"] in NON_AWAKE_GATED]
+    if not gated:
+        return endings, warnings
+
+    # 1. the player's own declaration
+    declared = str(player_input or "").strip()
+    player_acts = bool(declared) and not _STAY_UNDER_CUE.search(declared.casefold())
+    if target and player_acts:
+        for record in gated:
+            subject = re.sub(r"[^a-z0-9]", "", record["subject"].casefold())
+            if subject != target:
+                continue
+            endings[record["condition_id"]] = [
+                _ending_condition(record, "player declared conduct while gated")]
+            warnings.append(
+                f"Ended awareness '{record['level']}' on the player "
+                f"({player_name}): they declared conduct this beat, and a "
+                "player's declaration of their own character cannot be "
+                "overruled by a gate they are given no way to leave. Narrate "
+                "the waking, or re-impose the condition with a stated cause. "
+                "To stay under deliberately, the player's own input says so "
+                "(\"you stay under\", \"you sleep on\", \"you dream of ...\").")
+
+    # 2. somebody deliberately rousing them
+    roused = _rouse_attempts(interp, char_actions, resolved_event,
+                             [r["subject"] for r in gated])
+    for record in gated:
+        if record["subject"] not in roused:
+            continue
+        if record["condition_id"] in endings:
+            continue
+        if record["level"] == "asleep":
+            endings[record["condition_id"]] = [
+                _ending_condition(record, "roused by another character")]
+            warnings.append(
+                f"Ended awareness 'asleep' on {record['subject']}: someone "
+                "deliberately woke them this beat and the diff did not record "
+                "it. A rouse aimed at a sleeper works.")
+        else:
+            warnings.append(
+                f"A rouse was aimed at {record['subject']}, who is "
+                f"'{record['level']}' -- not sleeping. They do not wake from "
+                "being shaken, and the resolved_event should say so as a fact "
+                "rather than leave the attempt unanswered.")
+
+    # 3. the clock
+    for record in gated:
+        if record["condition_id"] in endings or record["level"] != "asleep":
+            continue
+        elapsed = _sleep_elapsed(record, clock, sd_time)
+        if elapsed is None or elapsed < _NATURAL_SLEEP_SECONDS:
+            continue
+        endings[record["condition_id"]] = [
+            _ending_condition(record, "a full night's sleep elapsed")]
+        warnings.append(
+            f"Ended awareness 'asleep' on {record['subject']}: "
+            f"{round(elapsed / 3600.0, 1)}h of simulation time have passed "
+            "since they went under, which is a full sleep. Nothing else in the "
+            "engine wakes a sleeper, so an unended sleep is permanent.")
+
+    return endings, warnings
+
+
 def _untracked_unconsciousness_subjects(resolved_event, dialogue_log, conditions,
                                         tracked_names):
     """Named, tracked characters narrated as losing consciousness with no
@@ -1156,36 +1510,8 @@ def _untracked_unconsciousness_subjects(resolved_event, dialogue_log, conditions
             if isinstance(c, dict) and c.get("kind") == "awareness":
                 aware_subjects.add(str(c.get("subject_id") or "").casefold())
 
-    name_res = [(name, re.compile(r"\b" + re.escape(name.casefold()) + r"(?:'s)?\b"))
-                for name in tracked_names if name]
-
-    flagged = set()
-    for text in text_units:
-        low = str(text).casefold()
-        name_hits = [(m.start(), m.end(), name)
-                     for name, rx in name_res for m in rx.finditer(low)]
-        if not name_hits:
-            continue
-        breaks = _sentence_break_positions(low)
-        for cm in _UNCONSCIOUSNESS_CUE.finditer(low):
-            cs, ce = cm.start(), cm.end()
-            best = None  # (word_gap, name) -- the closest same-clause subject
-            for ns, ne, name in name_hits:
-                if ne <= cs:            # name before the cue
-                    lo, hi = ne, cs
-                elif ns >= ce:          # name after the cue
-                    lo, hi = ce, ns
-                else:                   # overlaps the cue span; skip
-                    continue
-                if any(lo <= p < hi for p in breaks):
-                    continue            # a sentence break separates them
-                gap = len(re.findall(r"\w+", low[lo:hi]))
-                if gap > _MAX_UNCONSCIOUSNESS_GAP:
-                    continue
-                if best is None or gap < best[0]:
-                    best = (gap, name)
-            if best is not None:
-                flagged.add(best[1])
+    flagged = _clause_attributed_subjects(
+        text_units, _UNCONSCIOUSNESS_CUE, tracked_names)
     return [n for n in sorted(flagged) if n.casefold() not in aware_subjects]
 
 # Destruction tripwire (movement/space Phase 3b follow-up). Observed live:
@@ -1884,6 +2210,40 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
             "move."
         )
 
+    # The exit side of the same floor (see the WAKING block above). The onset
+    # guard above only ever refused to START a gate; nothing could END one, and
+    # across the author's whole corpus the Director never once did. Runs AFTER
+    # the onset drop so a condition dropped this beat is not also "ended", and
+    # writes only where waking is not a judgement call.
+    _live_awareness = awareness_conditions(ctx.chat["id"])
+    if _live_awareness:
+        _exits, _exit_warnings = _awareness_exits(
+            ctx.chat["id"], _live_awareness, player_name, ctx.input,
+            interp, char_actions, resolved_event,
+            simulation_clock(ctx.chat["id"]), sd.get("time"),
+        )
+        if _exits:
+            sd.setdefault("conditions", {})
+            for _cond_id, _cond in _exits.items():
+                # An ending the Director DID write wins -- it carries the
+                # Director's own cause and is already consistent with the
+                # prose. A RE-ASSERTION does not: re-emitting the same id as
+                # still active is precisely how a gate the world has ended
+                # survives, so the floor overwrites that.
+                _existing = sd["conditions"].get(_cond_id)
+                if _existing is not None and _already_ended(_existing):
+                    continue
+                sd["conditions"][_cond_id] = _cond
+        for _w in _exit_warnings:
+            ctx.add_warning(_w)
+        # Surfaced on the step itself, not only in ctx.warnings, which is
+        # accumulated pipeline-wide and never shown (the lesson the player-act
+        # authority retry above records). A refused rouse -- someone shaking a
+        # sedated body that does not wake -- writes NO diff at all, so the step
+        # inspector is the only place it can be seen.
+        if _exit_warnings:
+            out["awareness_warnings"] = list(_exit_warnings)
+
     # Restraint, enforced rather than merely detected. The omission scan below
     # has always asked the Director to RECORD a binding; nothing ever read the
     # result, so a character bound hand and foot could still walk out. A
@@ -2386,6 +2746,12 @@ def director_resolve(ctx, nonce):
             "time": sc.get("time"),
         },
         "simulation_clock": clock,
+        # Who is currently under, and the condition_id each one must be
+        # re-emitted with to END it (see the WAKING block). Without this the
+        # Director could not close a condition even when it wanted to: it was
+        # never shown the id, and across 1483 live resolves it never once did.
+        "active_awareness": _awareness_view(
+            chat["id"], clock, interp, char_actions),
         "paradox": paradox_visible_to(chat["id"], ctx.turn.frame_id),
         "fiction_model": fm,
         "fiction_frame": _dict(flow.get("fiction_frame")),
