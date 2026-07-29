@@ -4,6 +4,20 @@ Known defects and unfinished work, carried out of the alpha 6.0 session.
 Newest first. Delete an entry when it lands — this file is a worklist, not a
 history; the history is `CHANGELOG.md` and the git log.
 
+## 0. Watch: arousal now has a ceiling where it had a floor
+
+**Found:** alpha 6.0.1, while fixing the satisfaction stand-down.
+
+Withdrawing the false stand-down exposes the somatic lift that was underneath
+it (`novelty * 0.12 + max(pain, pleasure) * 0.12`). A body at saturated,
+unreleased appetite now climbs to the arousal ceiling in about five beats and
+pins there until release.
+
+That is probably right — a high-arousal label over high arousal is coherent
+where the old behaviour was not, and the arc has a designed exit — but it is
+the same missing-equilibrium shape as the bug it replaced, pointing the other
+way. Watch whether a long unreleased stretch reads as sustained or as stuck.
+
 ## 1. Nothing validates the geometry of an asserted doorway
 
 **Found:** live, alpha 6.0 session. **Priority: do this before any

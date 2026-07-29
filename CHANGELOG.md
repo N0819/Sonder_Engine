@@ -1,5 +1,76 @@
 # Changelog
 
+## alpha 6.0.1 — What is happening now
+
+Four fixes, all found by reading one turn of live play rather than by
+testing. Each is the same shape: a stage faithfully rendering something
+it was told, where what it was told had quietly stopped being true.
+
+### Fixed
+
+- **A contact nobody re-asserts now retires.** `scene.contacts` had two
+  retirement paths — a position change, and an explicit `remove` op — so in a
+  scene where nobody leaves the room, contact was append-only. Measured across
+  one live story: **147 adds against 3 removes**, ending with fifteen
+  simultaneous holds, one body's tongue recorded in four places at once, and
+  single touches from four beats earlier still asserted as current. Perception
+  reads the scene as present truth, so a long-finished act was narrated as
+  happening now — and the character answered it as a live advance. The signal
+  needed was already in the Director's behaviour (it re-asserts a hold that
+  persists and stops naming one that ended) and nothing read it. Contacts now
+  age on every beat that says anything about contact, and retire after two
+  such beats without re-assertion. Deliberately **not** on a beat with no
+  contact ops: the Director routinely emits none, and ageing on those would
+  retire a whole arrangement over a couple of quiet exchanges. Simultaneity is
+  untouched — it is the point of the ledger. Replayed against the live op
+  stream: five contacts standing, every one real, peaking at ten instead of
+  hitting the 40-record cap.
+
+- **An act is no longer stored as a state.** `manner` carried two kinds of
+  word with one storage rule: `kiss`, `bite` and `strike` sat in the durable
+  vocabulary beside `rest` and `hold` and were stored identically, so a moment
+  became a permanent fact about two bodies. `CONTACT_MOMENTARY_MANNERS` names
+  the acts; they retire a beat sooner and render as the touch they left behind
+  rather than as the act, and the act itself reaches perceivers through the
+  beat's declared sequence — the representation that carries *when*.
+  `contact_phrase` is now explicitly the standing form, which also fixes its
+  inflection (it emitted "press" and "kiss" bare to dodge "presss").
+
+- **A speech element can no longer swallow the raw input's narration.**
+  `director_interpret` could return the player's entire input as one speech
+  element, stage directions included. Perception injects speech verbatim as
+  dialogue, so the narration was delivered as words the player spoke — and
+  because player prose is second person, the "you" in it landed on the
+  *listener*, who was told they said it. The repair fires only when quoted
+  spans coexist with narration residue, so an ordinary line is untouched and a
+  spoken line quoting someone else survives intact.
+
+- **A drive being fed is no longer scored as a drive that completed.** Every
+  confirmed positive impact is tagged `satisfaction`, and satisfaction stands
+  the body down. Correct for a goal, which completes; never correct for a
+  drive, which by construction cannot be satisfied — so a character succeeding
+  continuously at what they most want had arousal driven **down** every beat of
+  it, with no equilibrium anywhere. Surface arousal fell 0.72 → 0.17 across
+  five beats of one character's strongest appetite, passing their own 0.70
+  baseline into the deactivated quadrant the lexicon calls *subdued* and
+  *numb*, while their mood label stayed a high-arousal word. Five of
+  thirty-six live characters sat >0.3 below their own baseline across four
+  unrelated stories. `resolve_hedonic` already computed the missing
+  distinction — `charge`, the slow integral of appetite that has not gone
+  anywhere — and `appraise` never saw it. It now withdraws the satisfaction
+  stand-down in proportion to the carried charge. Only that term: fear and
+  anger still mobilize, sadness still deactivates, and the correction can only
+  remove a false stand-down, never manufacture arousal. On release the
+  stand-down resumes at full strength, which is the settling the arc wants.
+
+- **A character sees six beats of its own dialogue, not three.**
+  `_recent_self_lines` exists so a character can notice its own refrain and
+  vary it. Three beats was measurably too short: a live character reissued a
+  line verbatim from four beats back, which the window could not show it —
+  while the narrator's repetition check caught it downstream, where nothing
+  can act on it, since dialogue fidelity requires rendering quotes exactly as
+  declared.
+
 ## alpha 6.0 — Knowing where you are, and why you are going
 
 A character can now learn a space by walking it, want a particular room in
