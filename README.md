@@ -135,9 +135,9 @@ standard rather than a library:
   [`docs/RESEARCH.md`](docs/RESEARCH.md) §1.5 for what carries over and what
   deliberately does not.
 
-  Attribution only: citing or independently implementing a public SRIP implies
-  no certification, endorsement, partnership, or official compatibility, and no
-  Sigma marks are used as product identity.
+  Implemented independently from the public specification, with thanks. Sonder
+  isn't an official or certified Sigma integration, and nothing here speaks for
+  Sigma Stratum — the good idea is theirs, any mistakes in using it are ours.
 
 ## License
 

@@ -47,8 +47,9 @@ Every fix below was found by reading live play, not by testing.
   provenance and cross-runtime exchange, none of which may reach a character
   context here, so the contrast is drawn from the character's own memory and
   crosses no boundary ordinary recall does not already cross. See
-  [`docs/RESEARCH.md`](docs/RESEARCH.md) §1.5. Attribution only — no
-  certification, endorsement, or compatibility is implied.
+  [`docs/RESEARCH.md`](docs/RESEARCH.md) §1.5. Built independently from the
+  public spec, with thanks — the insight is theirs, the adaptation is ours,
+  and Sonder speaks only for itself.
 
 - **An engineering reference.** [`docs/ENGINEERING.md`](docs/ENGINEERING.md)
   explains how the system operates layer by layer and why each boundary sits
