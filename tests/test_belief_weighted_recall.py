@@ -19,7 +19,9 @@ import time
 import pytest
 
 from memory import (
+    _ABANDONED_BELIEF_DECAY,
     _ABANDONED_BELIEF_FLOOR,
+    _abandoned_confidence,
     reconcile_inference_confidence,
 )
 from theory_of_mind import apply_mind_model_updates, belief_credence
@@ -179,3 +181,125 @@ def test_recall_prefers_the_belief_the_character_still_holds(temp_db):
     assert order.index(held) < order.index(abandoned)
     held_row = next(m for m in results if m["id"] == held)
     assert "belief the character still holds" in held_row["retrieval_reasons"]
+
+
+# ---- abandonment is one-shot, not compounding -----------------------------
+#
+# mind_models is a small working set (per-entity capacity, per-kind half-life
+# decay, pruning at the floor) while the memory bank is an archive, so in any
+# long chat most inference rows eventually have no stored hypothesis without
+# the character ever concluding they were wrong. Measured live 2026-07-29:
+# under a compounding x0.55-per-turn demotion, 76-80% of the whole inference
+# bank in the two active chats reached the floor within 7-18 played turns, and
+# late-turn top-8 retrieval returned 0-1 inference memories vs 13-15 at mint
+# confidence. These tests pin the repaired semantics.
+
+
+def test_abandonment_is_idempotent_across_repeated_passes(temp_db):
+    """Reconciling the same abandoned row on five consecutive turns lands on
+    the same number every time -- never a per-turn compounding decay."""
+    chat_id, char_id = _chat_and_char(temp_db)
+    mid = _inference(temp_db, chat_id, char_id, "Vorne",
+                     "intends to betray the crew", 0.70)
+    expected = _abandoned_confidence(0.45 + 0.3 * 0.70)
+    assert expected == pytest.approx(0.70 * _ABANDONED_BELIEF_DECAY, abs=1e-6)
+    assert reconcile_inference_confidence(chat_id, char_id, {}, 5) == 1
+    first = _confidence_of(temp_db, mid)
+    for turn in range(6, 10):
+        reconcile_inference_confidence(chat_id, char_id, {}, turn)
+    assert _confidence_of(temp_db, mid) == pytest.approx(first, abs=1e-6)
+    assert first == pytest.approx(expected, abs=1e-3)
+    assert first > _ABANDONED_BELIEF_FLOOR
+
+
+def test_a_crushed_row_self_heals_on_the_next_pass(temp_db):
+    """Rows previously compounded to the floor recover to the one-shot resting
+    place from their (untouched) salience -- no migration required."""
+    chat_id, char_id = _chat_and_char(temp_db)
+    mid = _inference(temp_db, chat_id, char_id, "Vorne",
+                     "intends to betray the crew", 0.70)
+    temp_db.qi("UPDATE memories SET confidence=? WHERE id=?",
+               (_ABANDONED_BELIEF_FLOOR, mid))
+    reconcile_inference_confidence(chat_id, char_id, {}, 9)
+    assert _confidence_of(temp_db, mid) == pytest.approx(
+        0.70 * _ABANDONED_BELIEF_DECAY, abs=1e-3)
+
+
+def test_a_held_belief_never_ranks_below_an_abandoned_one(temp_db):
+    """Held >= abandoned, always -- including when the surviving hypothesis
+    has half-life-decayed to near nothing. Staleness is not disbelief."""
+    chat_id, char_id = _chat_and_char(temp_db)
+    held = _inference(temp_db, chat_id, char_id, "Vorne",
+                      "is frightened of the dark", 0.70, turn_idx=1)
+    abandoned = _inference(temp_db, chat_id, char_id, "Vorne",
+                           "intends to betray the crew", 0.70, turn_idx=1)
+    # An emotion hypothesis formed at turn 1, reconciled at turn 60: its live
+    # credence has decayed far below the abandoned resting place.
+    state = apply_mind_model_updates(
+        {}, [{"about_entity": "Vorne", "claim": "is frightened of the dark",
+              "kind": "emotion", "confidence": 0.8}], turn_idx=1)
+    live = belief_credence(state, "Vorne", "is frightened of the dark", 60)
+    assert live is not None and live < _abandoned_confidence(0.45 + 0.3 * 0.70)
+    reconcile_inference_confidence(chat_id, char_id, state, 60)
+    held_conf = _confidence_of(temp_db, held)
+    abandoned_conf = _confidence_of(temp_db, abandoned)
+    assert held_conf >= abandoned_conf
+    assert abandoned_conf == pytest.approx(0.70 * _ABANDONED_BELIEF_DECAY,
+                                           abs=1e-3)
+
+
+def test_a_genuinely_explained_away_belief_is_still_demoted(temp_db):
+    """The fix must not disable the feature: a claim displaced by a live rival
+    still rests well below its mint confidence, below the rival's credence."""
+    chat_id, char_id = _chat_and_char(temp_db)
+    mid = _inference(temp_db, chat_id, char_id, "Vorne",
+                     "intends to betray the crew", 0.85)
+    rival = _inference(temp_db, chat_id, char_id, "Vorne",
+                       "is protecting his sister", 0.85)
+    state = apply_mind_model_updates(
+        {}, [{"about_entity": "Vorne", "claim": "is protecting his sister",
+              "kind": "goal", "confidence": 0.9}], turn_idx=5)
+    reconcile_inference_confidence(chat_id, char_id, state, 5)
+    demoted = _confidence_of(temp_db, mid)
+    assert demoted < 0.85
+    assert demoted >= _ABANDONED_BELIEF_FLOOR
+    assert demoted < _confidence_of(temp_db, rival)
+
+
+def test_an_abandoned_inference_stays_retrievable_at_k8(temp_db):
+    """The property the corpus actually lost: an inference no hypothesis
+    carries any more, when it is the memory that best answers the query,
+    must still surface in a k=8 recall against a bank of unrelated
+    higher-confidence witnessed rows. At the compounding floor it did not."""
+    from memory import add_memory, search_memories
+    chat_id, char_id = _chat_and_char(temp_db)
+    fillers = [
+        "The kettle boiled over on the old stove",
+        "Rain drummed the tin roof through the night",
+        "A grey cat slept on the warm windowsill",
+        "The market stalls closed early before the storm",
+        "Lantern oil ran low in the back cupboard",
+        "The ferry horn sounded twice across the bay",
+        "Fresh bread cooled on the long wooden counter",
+        "A loose shutter banged against the north wall",
+        "The well rope frayed near the iron ring",
+        "Snow settled on the orchard past the fence",
+    ]
+    for i, text in enumerate(fillers):
+        add_memory(chat_id, char_id, None, "episodic", "witnessed", 0.7,
+                   text, turn_idx=i + 1, confidence=1.0)
+    mint = 0.7
+    target = add_memory(
+        chat_id, char_id, None, "inference", "inferred",
+        0.45 + 0.3 * mint,
+        "About the stranger: the limping courier is smuggling letters "
+        "for the garrison captain",
+        turn_idx=2, confidence=mint, category="inference")
+    reconcile_inference_confidence(chat_id, char_id, {}, 20)
+    assert _confidence_of(temp_db, target) == pytest.approx(
+        mint * _ABANDONED_BELIEF_DECAY, abs=1e-3)
+    results = search_memories(
+        chat_id, char_id,
+        "why would the limping courier be smuggling letters",
+        k=8, current_turn_idx=20, chronological=False)
+    assert target in [m["id"] for m in results]

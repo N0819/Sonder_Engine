@@ -1,5 +1,68 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A belief that aged out of mind was being demoted as though it had been
+  disproved — and demoted again every turn.** `reconcile_inference_confidence`
+  (landed 2026-07-27) treated "no surviving hypothesis carries this claim" as
+  "explained away" and multiplied the memory's confidence by 0.55 on every
+  reconciled turn toward a 0.08 floor. But `mind_models` is a small working
+  set — per-kind half-lives, per-entity capacity, pruning — while the memory
+  bank is an archive, so in a long chat nearly every inference row inevitably
+  loses its stored hypothesis without the character ever concluding anything.
+  Measured across the live corpus (2026-07-29): every chat last played before
+  the rule landed had **0%** of inference rows at the floor; the two chats
+  played after had **76% and 80%** at the floor within 7 and 18 played turns,
+  and replayed late-turn retrieval returned **0–1** inference memories in the
+  top 8 against **13–15** at mint confidence — a character's own conclusions
+  had dropped out of recall wholesale. The demotion is now a **one-shot,
+  idempotent re-anchoring** to `mint_confidence × 0.55` (mint confidence is
+  reconstructible from `salience = 0.45 + 0.3·confidence`, which
+  reconciliation deliberately never touches), clamped never to exceed the
+  mint value; a still-stored hypothesis's live credence is floored at the
+  same resting place, so a held belief never ranks below an abandoned one.
+  Already-crushed banks self-heal to the new resting places on their next
+  reconcile pass — no migration.
+- **A place claim's memory and its hypothesis now share one subject key.**
+  `prepare_memory_commit` minted inference memories from the *raw*
+  `mind_model_updates` while merging the *rekeyed* ones into `mind_models`
+  (`rekey_place_claims` moves a claim about a place onto that place), so a
+  place-claim memory's subject never existed in `mind_models` and
+  reconciliation demoted it as abandoned from the moment it formed. Rekeying
+  now happens once, before anything reads the updates.
+- **A silent embedding downgrade now says so.** With no embeddings provider
+  configured (or one failing), every stored vector silently fell back to the
+  local character-trigram hash and semantic recall degraded to fuzzy lexical
+  matching — an audit found 100% of a live corpus's 4,624 memory rows on the
+  fallback with no signal anywhere. `prepare_memory_commit` now surfaces a
+  turn warning when the batch embedded through the fallback.
+
+### Added
+
+- **Unbidden recall: one contrasting memory for a measurably stuck mind.**
+  The existing repetition mechanisms all say "not that"; nothing said "here
+  is something else you own." When the same deterministic signals that
+  measure stuck-ness fire — a reused sentence skeleton, a verbatim repeat
+  that survived its rewrite (persisted one beat on `cstate.unbidden`), an
+  ungoverned goal held past its tenure threshold, a sustained bodily
+  plateau — `memory.contrast_memory` surfaces exactly one high-salience
+  memory *dissimilar* to the current beat (structural dissimilarity: tokens,
+  location, entities, turn distance — deliberately not embedding cosine, and
+  deliberately confidence-blind) into the character's memory context, keyed
+  `surfaces_unbidden.it_comes_back_to_me` so the field itself carries the
+  epistemic status: it arrived on its own and answers no question asked. It
+  substitutes for one ordinary recall slot (constant payload budget), is a
+  pure read at character-stage time, and mints nothing — only what the
+  character then does is canonical. Edge-triggered with a 5-beat cooldown
+  and hysteresis; two injections that measurably move nothing suppress the
+  mechanism until the trigger is observed fully clear. Absorption at the
+  place-recall-zero tier, an open drive-rupture window, or a gated mind
+  suppress it outright. Documented in the character prompt beside
+  `recalled_places`, whose contract it shares: the option must exist, the
+  refusal may be theirs.
+
 ## alpha 6.0.2 — Room to have a second thought
 
 Three fixes, all from reading live play. The first two are the same

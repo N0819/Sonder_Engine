@@ -3525,6 +3525,26 @@ def prepare_memory_commit(ctx, *, scene=None):
         room_name = room_data.get("name") or char_room or ""
         own_result = ctx.character_results.get(ccid) or {}
         own_result = _normalize_character_output(own_result)
+        # Place claims are re-keyed onto their place ONCE, up here, before
+        # ANYTHING reads mind_model_updates. The inference memory minted for a
+        # claim (below) and the hypothesis it is merged under (further down,
+        # via apply_mind_model_updates) must share one subject key: minting
+        # from the raw updates while merging the rekeyed ones stamped the
+        # memory's entities[0] with a subject that never exists in
+        # mind_models, so reconcile_inference_confidence could never find the
+        # live hypothesis and demoted the row as abandoned from the start.
+        _mm_updates = own_result.get("mind_model_updates") or []
+        if _mm_updates:
+            _place_names = [
+                str((room or {}).get("name") or rid)
+                for rid, room in (sc.get("rooms") or {}).items()
+            ]
+            from scene import persona_of as _persona_of
+            _people = [character_name(json.loads(_r["sheet"]))
+                       for _r in ctx.cast]
+            _people.append(persona_name(_persona_of(chat)))
+            _mm_updates = rekey_place_claims(
+                _mm_updates, _place_names, protected=_people)
         active_state = own_result.get("active_state") or {}
         mood = str(active_state.get("mood") or "")
         # The character's blended surface affect this beat carries the numeric
@@ -3538,6 +3558,68 @@ def prepare_memory_commit(ctx, *, scene=None):
             _mem_arousal = float(_surface.get("arousal") or 0.0)
         except (TypeError, ValueError):
             _mem_valence, _mem_arousal = 0.0, 0.0
+        # --- Unbidden-recall ledger: the character stage proposed this beat's
+        # probe on its step output (deterministic trigger state, and whether a
+        # contrasting memory was surfaced); commit is the only writer of the
+        # durable ledger, exactly like recent_tells. Placed BEFORE any st
+        # mutation below so the previous beat's goal is still readable for
+        # the same-beat "did it help" check. Nothing here ever mints a memory
+        # row: a surfaced memory is context handed to the character, and only
+        # what the character then DOES (speech, mind-model claims) is
+        # canonical.
+        _probe = own_result.get("unbidden_probe")
+        if isinstance(_probe, dict):
+            _led = dict(st.get("unbidden") or {})
+            _goal_before = str(((st.get("active_state") or {}).get("goal"))
+                               or "")
+            _goal_now = str((active_state.get("goal")
+                             if isinstance(active_state, dict) else "") or "")
+            _pending = (_led.get("pending")
+                        if isinstance(_led.get("pending"), dict) else None)
+            if _pending is not None and turn.idx > int(_pending.get("turn")
+                                                       or -1):
+                # The beat AFTER an injection: it helped if the stuckness
+                # cleared or the goal moved off its snapshot.
+                _helped = (not _probe.get("stuck")
+                           or _goal_now != str(_pending.get("goal") or ""))
+                _outs = [o for o in (_led.get("outcomes") or [])
+                         if isinstance(o, dict)]
+                _outs = (_outs + [{"turn": turn.idx,
+                                   "helped": bool(_helped)}])[-4:]
+                _led["outcomes"] = _outs
+                if (len(_outs) >= 2 and not _outs[-1]["helped"]
+                        and not _outs[-2]["helped"]):
+                    # Two consecutive injections that moved nothing: the
+                    # character is stuck for a reason contrast cannot reach.
+                    # Suppressed until the trigger is observed fully clear.
+                    _led["suppressed"] = True
+                _led.pop("pending", None)
+            if not _probe.get("stuck"):
+                _led["clear_seen"] = True
+                _led["suppressed"] = False
+            if _probe.get("fired") and _probe.get("memory_id") is not None:
+                try:
+                    _mid = int(_probe["memory_id"])
+                except (TypeError, ValueError):
+                    _mid = None
+                if _mid is not None:
+                    _led["last_turn"] = turn.idx
+                    _led["last_trigger"] = str(_probe.get("trigger") or "")
+                    _rids = [i for i in (_led.get("recent_ids") or [])
+                             if isinstance(i, int) and i != _mid]
+                    _led["recent_ids"] = (_rids + [_mid])[-8:]
+                    _led["clear_seen"] = False
+                    if _goal_now and _goal_now != _goal_before:
+                        # Helped on the injection beat itself.
+                        _led["outcomes"] = ([
+                            o for o in (_led.get("outcomes") or [])
+                            if isinstance(o, dict)]
+                            + [{"turn": turn.idx, "helped": True}])[-4:]
+                    else:
+                        _led["pending"] = {"turn": turn.idx,
+                                           "goal": _goal_now}
+            _led["repeat_flag"] = bool(_probe.get("repeat_survived"))
+            st["unbidden"] = _led
         if est and not v:
             room_label = char_room or "the scene"
             room_data2 = (sc.get("rooms") or {}).get(room_label, {})
@@ -3643,7 +3725,10 @@ def prepare_memory_commit(ctx, *, scene=None):
                     "valence": _mem_valence, "arousal": _mem_arousal,
                     "event_key": _stable_event_key(turn.id, ccid, "own_acts"),
                 })
-            for update in own_result.get("mind_model_updates") or []:
+            # The REKEYED updates (see the top of this loop body), so the
+            # memory row's subject matches the key the hypothesis will live
+            # under in mind_models.
+            for update in _mm_updates:
                 confidence = _clamp(update.get("confidence", 0.5))
                 evidence = "; ".join(
                     str(item.get("fact") or "")
@@ -4205,25 +4290,13 @@ def prepare_memory_commit(ctx, *, scene=None):
             # standing room's node exists. Never the event row.
             import place_purpose
             place_purpose.witness_affords(st, sc, cname, turn.idx)
-            _mm_updates = own_result.get("mind_model_updates") or []
-            # A claim about a PLACE is re-keyed onto that place before it is
-            # merged. Hypotheses group by (about_entity, kind) and explain each
-            # other away within a group -- correct for a mind, backwards for
-            # space -- so a character filing every room under one umbrella
-            # entity had each new room suppress the last. People are protected:
-            # a claim about someone stays about them even when it says where
-            # they were standing.
-            if _mm_updates:
-                _place_names = [
-                    str((room or {}).get("name") or rid)
-                    for rid, room in (sc.get("rooms") or {}).items()
-                ]
-                from scene import persona_of as _persona_of
-                _people = [character_name(json.loads(_r["sheet"]))
-                           for _r in ctx.cast]
-                _people.append(persona_name(_persona_of(chat)))
-                _mm_updates = rekey_place_claims(
-                    _mm_updates, _place_names, protected=_people)
+            # _mm_updates was rekeyed once at the top of this loop body (a
+            # claim about a PLACE is re-keyed onto that place before it is
+            # merged, because hypotheses group by (about_entity, kind) and
+            # explain each other away within a group -- correct for a mind,
+            # backwards for space; people stay protected). The SAME rekeyed
+            # list minted this turn's inference memories above, so memory
+            # subject and hypothesis key cannot drift apart.
             # Absorption is read off the state we just settled, so it reflects
             # the body at the END of the beat -- the state the character
             # actually comes out of it in, which is what governs what they can
@@ -4280,8 +4353,21 @@ def prepare_memory_commit(ctx, *, scene=None):
         "event": res.get("resolved_event") or "",
         "dialogue_log": dlog,
     })
+    memory_batch = prepare_memories_batch(pending_memories)
+    # A missing or failing embeddings provider silently downgrades every
+    # vector to the local character-trigram hash, which then scores as a
+    # fuzzy-lexical signal forever (an audit of a live corpus found 100% of
+    # rows on the fallback with nothing anywhere saying so). The batch already
+    # records the downgrade; surface it where every other turn anomaly goes.
+    _embedded = memory_batch.get("embedded")
+    if _embedded is not None and getattr(_embedded, "fallback", False):
+        ctx.add_warning(
+            "memory embeddings fell back to local hashing "
+            f"({getattr(_embedded, 'error', '') or 'no embeddings provider'});"
+            " semantic recall is degraded until an embeddings provider is "
+            "configured")
     return {
-        "memory_batch": prepare_memories_batch(pending_memories),
+        "memory_batch": memory_batch,
         "state_updates": state_updates,
         "relationship_ops": relationship_ops,
         "belief_reconciles": belief_reconciles,

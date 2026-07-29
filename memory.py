@@ -1293,6 +1293,116 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
         qi(f"UPDATE memories SET access_count=access_count+1, last_accessed=? WHERE id IN ({ph})", (now, *ids))
     return result
 
+# ---- Contrast retrieval (unbidden recall) ----
+#
+# Ordinary recall asks "what is most like this beat". A character measurably
+# stuck -- reissuing a sentence shape, holding the same ungoverned goal for a
+# dozen beats, plateaued on a sustained stimulus -- needs the opposite
+# question answered once: "what that mattered is LEAST like this beat".
+# The selection is a second scoring pass over the same character-scoped,
+# turn-cutoff, frame-filtered rows ordinary recall reads; it crosses no
+# information boundary ordinary recall doesn't already cross, and it is a
+# pure read -- unlike search_memories it must never touch access_count,
+# because it runs mid-pipeline at character-stage time.
+
+# Below this many rows, "far from the recent window" barely means anything.
+_CONTRAST_MIN_BANK = 20
+# Obligation-tier categories never intrude as texture: surfacing a promise
+# "unbidden" reads as the engine nagging, and those tiers have their own
+# governance (fading/adrift clocks).
+_CONTRAST_EXCLUDED_CATEGORIES = ("promise", "intention", "relationship")
+# The salience backbone: what returns unbidden is what MATTERED. This floor
+# also happens to exclude the unplaced-perception boilerplate rows (minted at
+# salience 0.469 by the deterministic salience rule), which are noise here.
+_CONTRAST_MIN_SALIENCE = 0.5
+
+
+def contrast_memory(chat_id, char_id, query_text, current_turn_idx, *,
+                    here=None, exclude_ids=(), k=1, viewer_frame_id=_UNSET):
+    """Up to `k` high-salience memories DISSIMILAR to the current beat.
+
+    Deliberately ignores `confidence`: a belief the character has since set
+    aside is exactly the sort of thing that returns unprompted. Deliberately
+    does not use embedding cosine as the dissimilarity axis -- on a corpus
+    embedded with the local-hash fallback that is a fuzzy-lexical signal, so
+    the structural fields (tokens, location, entities, turn distance) carry
+    the contrast instead; they are exact.
+
+    Same epistemic envelope as search_memories: this character's own rows
+    only, hard turn cutoff, frame visibility. No writes.
+    """
+    rows = q("SELECT * FROM memories WHERE chat_id=? AND char_id=?",
+             (chat_id, char_id))
+    if current_turn_idx is not None:
+        rows = [r for r in rows
+                if r["turn_idx"] is None or r["turn_idx"] < current_turn_idx]
+    vf = _active_frame_id.get() if viewer_frame_id is _UNSET else viewer_frame_id
+    rows = [r for r in rows
+            if _frames.is_memory_visible(char_id, r["frame_id"], vf, r["turn_idx"])]
+    if len(rows) < _CONTRAST_MIN_BANK:
+        return []
+    excluded = set()
+    for i in exclude_ids or ():
+        try:
+            excluded.add(int(i))
+        except (TypeError, ValueError):
+            continue
+    here_cf = str(here or "").strip().casefold()
+    query_cf = str(query_text or "").casefold()
+    scored = []
+    for r in rows:
+        if r["id"] in excluded:
+            continue
+        mem = _row_memory(r)
+        if mem["category"] in _CONTRAST_EXCLUDED_CATEGORIES:
+            continue
+        if not (mem["gist"] or "").strip():
+            continue
+        sal = float(mem["salience"] or 0.0)
+        if sal < _CONTRAST_MIN_SALIENCE:
+            continue
+        score = sal
+        score += 0.5 * abs(float(mem["valence"] or 0.0))
+        score += 0.3 * float(mem["arousal"] or 0.0)
+        ti = mem["turn_idx"]
+        if ti is not None and current_turn_idx:
+            score += 0.4 * _clamp((current_turn_idx - ti)
+                                  / max(current_turn_idx, 1))
+        else:
+            # No place in play order (imported/authored past): as far from
+            # the present as a memory gets.
+            score += 0.4
+        score -= 0.8 * _jaccard_text(
+            query_text,
+            f"{mem['gist']} {' '.join(mem['key_phrases'] or [])}")
+        if here_cf and str(mem["location"] or "").strip().casefold() == here_cf:
+            score -= 0.3
+        ents = [str(e) for e in (mem["entities"] or []) if str(e).strip()]
+        if ents and query_cf:
+            present = sum(1 for e in ents if e.casefold() in query_cf)
+            score -= 0.4 * (present / len(ents))
+        scored.append((score, mem["id"], mem))
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    out = []
+    for score, _mid, mem in scored[:max(1, int(k))]:
+        entry = dict(mem)
+        entry["contrast_score"] = round(score, 4)
+        out.append(entry)
+    return out
+
+
+def provenance_context_label(provenance):
+    """The label a character's own context uses for this provenance class --
+    'what_i_experienced' / 'what_i_was_told' / 'what_i_concluded' -- shared
+    with the summary scopes so an unbidden memory speaks the same epistemic
+    vocabulary the summaries already taught."""
+    scope = summary_scope_for(provenance)
+    for s, _field, label in _SUMMARY_SCOPES:
+        if s == scope:
+            return label
+    return "what_i_experienced"
+
+
 def recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=4, limit=12, viewer_frame_id=_UNSET):
     # Fetch newest-first so a memory-dense window (many self/episodic/
     # inference rows in a short span) truncates its OLDEST rows against
@@ -2251,8 +2361,50 @@ def search_memories_vec(chat_id, char_id, query_vec, k=8):
 # floor it stops at. Not zero: a belief that was explained away is still a
 # belief they once had, and "I was sure of this and I was wrong" is a thing a
 # character should be able to recall. It just must not outrank what replaced it.
+#
+# The demotion is a ONE-SHOT re-anchoring to a fraction of the confidence the
+# character declared at mint time -- never a compounding per-turn decay on the
+# current value. The predicate "no surviving hypothesis expresses it" is met by
+# per-entity pruning and half-life expiry as well as by genuine explaining-away,
+# and mind_models is a small working set while the memory bank is an archive:
+# under the compounding rule, 76-80% of a long chat's entire inference bank
+# reached the floor within 7-18 played turns of the rule landing (measured
+# 2026-07-29 across the live corpus), at which point the belief-weighted
+# ranking term removed inferences from recall almost completely (0-1 of top-8
+# vs 13-15 at mint confidence in replayed late-turn retrievals). A belief that
+# merely aged out of the working set was never concluded WRONG, and must not
+# rank as though it was.
 _ABANDONED_BELIEF_DECAY = 0.55
 _ABANDONED_BELIEF_FLOOR = 0.08
+
+
+def _mint_confidence_of(salience):
+    """The confidence an inference row was minted with, recovered from its
+    salience. commit.py mints inference memories with
+    salience = 0.45 + 0.3 * confidence, and reconciliation deliberately never
+    touches salience (it records how much the inference mattered when formed),
+    so the mint-time confidence stays reconstructible without a second column.
+    Rows whose salience was authored/imported outside that rule get a
+    conservative low anchor rather than a crash."""
+    try:
+        return max(0.0, min(1.0, (float(salience) - 0.45) / 0.3))
+    except (TypeError, ValueError):
+        return 0.5
+
+
+def _abandoned_confidence(salience):
+    """The resting confidence for an inference no live hypothesis carries.
+
+    A pure function of the row's (untouched) salience, which is what makes
+    reconciliation idempotent: reconciling the same abandoned row on every
+    subsequent turn lands on the same number instead of compounding it into
+    unretrievability -- and a corpus previously crushed by the compounding
+    rule self-heals to this value on its next reconcile pass, no migration.
+    Clamped to never exceed the mint confidence, so a belief the character
+    barely credited when they formed it is not lifted to the floor."""
+    mint = _mint_confidence_of(salience)
+    return min(mint, max(_ABANDONED_BELIEF_FLOOR,
+                         mint * _ABANDONED_BELIEF_DECAY))
 
 
 def reconcile_inference_confidence(chat_id, char_id, state, turn_idx,
@@ -2288,7 +2440,7 @@ def reconcile_inference_confidence(chat_id, char_id, state, turn_idx,
     Returns the number of rows whose confidence changed.
     """
     rows = q(
-        "SELECT id, entities, gist, confidence FROM memories "
+        "SELECT id, entities, gist, salience, confidence FROM memories "
         "WHERE chat_id=? AND char_id=? AND kind='inference'",
         (chat_id, char_id),
     )
@@ -2304,15 +2456,21 @@ def reconcile_inference_confidence(chat_id, char_id, state, turn_idx,
             continue
         credence = belief_credence(
             state, subject, claim, turn_idx, elapsed_seconds)
+        abandoned = _abandoned_confidence(row["salience"])
         if credence is None:
-            current = float(row["confidence"] or 0.0)
-            revised = max(_ABANDONED_BELIEF_FLOOR,
-                          current * _ABANDONED_BELIEF_DECAY)
-            # Only ever pushed DOWN by abandonment -- a memory already at or
-            # below the floor is left where it is rather than lifted to it.
-            revised = min(current, revised) if current else current
+            # No live hypothesis carries this claim. That is NOT proof the
+            # character concluded they were wrong -- mind_models prunes on
+            # capacity and half-life as well as on displacement -- so the row
+            # rests at a fixed fraction of its mint confidence (idempotent;
+            # see _abandoned_confidence) rather than compounding downward on
+            # every reconciled turn.
+            revised = abandoned
         else:
-            revised = credence
+            # A claim STILL STORED must never rank below one that was pruned:
+            # half-life decay on a surviving hypothesis measures staleness,
+            # not disbelief, so the live credence is floored at the abandoned
+            # resting place. Held >= abandoned, always.
+            revised = max(credence, abandoned)
         if abs(revised - float(row["confidence"] or 0.0)) > 1e-6:
             updates.append((round(revised, 4), row["id"]))
 
