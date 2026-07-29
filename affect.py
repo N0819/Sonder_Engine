@@ -707,7 +707,16 @@ def normalize_wants(wants, valid_intention_ids):
         want["urgency"] = _clamp01(raw.get("urgency"), fallback=0.5)
         serves = str(raw.get("serves") or "situational").strip()
         if serves != "drive" and serves not in valid_ids:
-            serves = "situational"
+            # Models emit "intention:i2" / "project:pa1" here exactly as they
+            # do in goal_impacts, and until now that silently demoted the
+            # want to situational -- the same demotion normalize_serves
+            # exists to prevent one field over.
+            stripped = serves
+            for prefix in ("intention:", "project:"):
+                if stripped.casefold().startswith(prefix):
+                    stripped = stripped[len(prefix):].strip()
+                    break
+            serves = stripped if stripped in valid_ids else "situational"
         want["serves"] = serves
         want.pop("enacted", None)
         want.pop("suppressed", None)
@@ -1119,9 +1128,126 @@ def apply_project_ops(projects, former, ops, turn_idx):
             "about": about if about in ("world", "self") else "",
             "satisfied_when": str(op.get("satisfied_when") or "").strip(),
             "adopted_turn": turn_idx,
+            # Fresh adoption counts as service: the drift clock starts now,
+            # not at some notional zero that would read as instantly adrift.
+            "last_served_turn": turn_idx,
         })
 
     return (live, ended[-_FORMER_PROJECTS_CAP:], warnings)
+
+
+def _last_named_room(text, named_rooms):
+    """The last room a text names, resolved against {casefolded node name:
+    rid}. Last-named wins for the same reason as _destination_from_goals:
+    'from the gate to the shrine' is going TO the shrine. None when the text
+    names no known room -- both vocabularies closed, identifier recognition,
+    never prose reading."""
+    folded = str(text or "").casefold()
+    best = None
+    for key, rid in (named_rooms or {}).items():
+        if not key:
+            continue
+        pos = folded.rfind(str(key))
+        if pos >= 0 and (best is None or pos > best[0]):
+            best = (pos, str(rid))
+    return best[1] if best else None
+
+
+def projects_served_this_beat(projects, wants, goal_text, impact_serves=(),
+                              named_rooms=None):
+    """The project ids this beat's declared interior actually served.
+
+    The measured failure this feeds (A15, run 5): `pa1` held at weight 1.0
+    while, twenty beats in, nothing the character emitted served it -- top
+    want serves 'drive', goal 'Reorient and test connectivity', and no
+    marker anywhere for the gap between HOLDING a project and SERVING it.
+    The tier stopped failing by being outranked and started failing by
+    being forgotten. This is the ledger the drift marker reads.
+
+    Three channels, most explicit first:
+      * a want whose `serves` resolves to the project id;
+      * a goal-impact `serves` resolving to it (caller pre-normalizes);
+      * the beat goal naming the SAME room the project text names, over the
+        character's own place-graph names -- the substance channel, because
+        a character routinely serves a project without citing it ('Move
+        west along proven route toward Chamber 0603' never says pa1).
+        Text similarity was measured and rejected for this: it scored the
+        chalk-circle detour (0.2) ABOVE 'walk the proved line to the
+        shrine' (0.167). Naming the same destination is the honest test,
+        and for projects about people rather than places the two explicit
+        channels still carry.
+    """
+    rows = [(str(p.get("id") or ""), str(p.get("project") or ""))
+            for p in (projects or []) if isinstance(p, dict)]
+    ids = {rid for rid, _ in rows if rid}
+    served = set()
+    for w in wants or []:
+        if isinstance(w, dict) and str(w.get("serves") or "") in ids:
+            served.add(str(w["serves"]))
+    for s in impact_serves or ():
+        if str(s) in ids:
+            served.add(str(s))
+    goal_room = _last_named_room(goal_text, named_rooms)
+    if goal_room:
+        for rid, text in rows:
+            if rid not in served \
+                    and _last_named_room(text, named_rooms) == goal_room:
+                served.add(rid)
+    return served
+
+
+def project_boundary(projects, intentions, before_status, new_room,
+                     prev_room, scene_marker, location, frame_id,
+                     named_rooms=None):
+    """The engine-detectable moments that re-ask a held project. Returns a
+    why-string, or None when no boundary passed this beat.
+
+    v1 left boundary review prompt-normative and it did not hold (A15 run
+    5: nine perfect beats, then drift, with no moment that ever re-asked
+    what the project meant for the next move). These are the boundaries the
+    engine can actually SEE, each one honest:
+
+      * arrival -- the character's committed position just became the room
+        a project's own text names, over their own place-graph names;
+      * a task ending -- an intention entered satisfied/abandoned/blocked
+        this commit (the closing ops are the one lifecycle edge commit can
+        observe without trusting a self-report);
+      * the scene or frame changing -- against the scene_marker persisted
+        last beat; no marker (first beat) is silence, never a boundary.
+
+    NOT detectable, deliberately absent rather than faked: 'run end' (a
+    harness concept the engine has no row for) and 'major Director event'
+    (events carry no uniform salience field; memory salience is a different
+    ledger). Detection is a fact; what the review MEANS stays the
+    character's -- the flag invites project_ops, it never applies any.
+    """
+    if not projects:
+        return None
+    reasons = []
+    if new_room and str(new_room) != str(prev_room or ""):
+        for p in projects:
+            if not isinstance(p, dict):
+                continue
+            proom = _last_named_room(str(p.get("project") or ""), named_rooms)
+            if proom and proom == str(new_room):
+                reasons.append("you have arrived where your project "
+                               f"{str(p.get('id') or '')} points")
+                break
+    closed = ("satisfied", "abandoned", "blocked")
+    for intent in intentions or []:
+        if not isinstance(intent, dict):
+            continue
+        sid = str(intent.get("id") or "")
+        if intent.get("status") in closed \
+                and (before_status or {}).get(sid) not in closed:
+            reasons.append(f"your task {sid} closed this beat")
+            break
+    if isinstance(scene_marker, dict):
+        if str(location or "") != str(scene_marker.get("location") or ""):
+            reasons.append("the scene has changed")
+        elif str(frame_id or "") != str(scene_marker.get("frame") or ""):
+            reasons.append("the frame has changed")
+    return "; ".join(reasons) if reasons else None
 
 
 def serves_priority(serves, steering_ids, project_ids=()):

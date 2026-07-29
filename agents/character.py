@@ -583,6 +583,44 @@ def _annotate_fading(intentions, now_turn):
     return out
 
 
+# Beats a held project may go unserved before the payload says so. Above
+# the fading threshold's granularity on purpose being a different clock:
+# eight beats is long enough for a scene to legitimately demand other
+# things (a project can REST), short enough to catch the measured mid-run
+# drift (A15 run 5: visibly adrift by beat 10, twenty beats before anything
+# could have said so). The marker only ever grows in wording, never in
+# mechanism -- a project must not decay, and never-noticing is the failure
+# mode this closes.
+_ADRIFT_AFTER = 8
+
+
+def _annotate_project_drift(projects, now_turn):
+    """Mark each held project with how many beats since anything the
+    character did served it -- commit's last_served_turn ledger read back.
+    The gap between HOLDING a project and SERVING it was invisible: pa1 sat
+    in the payload as a static string while the top want served the drive,
+    and nothing anywhere marked the distance between the two. Read-side and
+    non-mutating, exactly like _annotate_fading: a fact the character can
+    notice, never a mechanism that acts. A project with no ledger entry yet
+    (authored, pre-first-commit) is silent -- absent means cannot tell."""
+    if not isinstance(now_turn, int):
+        return projects
+    out = []
+    for p in projects or []:
+        if not isinstance(p, dict):
+            out.append(p)
+            continue
+        p = dict(p)
+        try:
+            idle = now_turn - int(p.get("last_served_turn"))
+        except (TypeError, ValueError):
+            idle = None
+        if idle is not None and idle >= _ADRIFT_AFTER:
+            p["adrift"] = idle
+        out.append(p)
+    return out
+
+
 def _en_route(stored_state, here_rid, destination):
     """The journey he is already on, read back to him: the room his own
     goals name, how many rooms of his own walked ground remain to it, and
@@ -1433,10 +1471,12 @@ def character_step(ctx, cid, nonce):
         # seeded it; the authored card list only on beats before the first
         # commit, and never once any live or former project exists, so a
         # project given up with a stated reason does not read as held again.
-        "projects": (
-            _interior.get("projects")
-            if (_interior.get("projects") or _interior.get("former_projects"))
-            else character_projects(sh)) or [],
+        "projects": _annotate_project_drift(
+            (_interior.get("projects")
+             if (_interior.get("projects")
+                 or _interior.get("former_projects"))
+             else character_projects(sh)) or [],
+            ctx.turn.idx),
         # What was given up or finished, with the stated reason --
         # continuity, like former_drives, not obligation.
         "former_projects": _interior.get("former_projects") or [],
@@ -1464,6 +1504,20 @@ def character_step(ctx, cid, nonce):
     _underway = _en_route(stored_state, char_room, _goal_destination)
     if _underway:
         _self["en_route"] = _underway
+    # A boundary passed at last commit (arrival where a project points, a
+    # task closing, the scene or frame changing -- affect.project_boundary).
+    # Shown for the one beat after it fired: the moment to re-ask what each
+    # held project means for what happens next. An invitation, never a
+    # mechanism -- no op is ever applied by the engine.
+    _preview = _interior.get("project_review")
+    if isinstance(_preview, dict) and _self.get("projects"):
+        try:
+            _fresh = ctx.turn.idx <= int(_preview.get("turn")) + 1
+        except (TypeError, ValueError):
+            _fresh = False
+        if _fresh:
+            _self["project_review"] = {
+                "why": str(_preview.get("why") or "")}
     payload = {
         "self": _self,
         "perception": {

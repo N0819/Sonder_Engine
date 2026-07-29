@@ -174,9 +174,35 @@ replaced.
 - **Both slots full and the world insists:** the adopt is refused
   deterministically with a warning; the engine never evicts. Refusing — or
   displacing one out loud and feeling the cost — is the character moment.
-- **Boundary review:** prompt-normative in v1 ("review only at boundaries"),
-  not engine-gated. An engine-opened review window (the `drive_rupture`
-  precedent) remains available if models review per-beat anyway.
+- **Boundary review:** prompt-normative in v1 — and measured NOT to hold
+  (A15 run 5: nine perfect beats, then mid-run drift with no moment that
+  re-asked). v2 is engine-gated: `affect.project_boundary` detects the
+  boundaries the engine can actually see — arrival at the room a project's
+  own text names (over the character's own place-graph names), an intention
+  entering satisfied/abandoned/blocked this commit, and the scene or frame
+  changing against the `scene_marker` persisted last beat. Commit stores a
+  one-beat `interior.project_review = {turn, why}` (self-clearing, since
+  `_interior_out` is rebuilt each commit) and the payload shows
+  `self.project_review = {why}` for the following beat. Deliberately NOT
+  detectable, absent rather than faked: "run end" (a harness concept with
+  no engine row) and "major Director event" (events carry no uniform
+  salience field). The flag invites `project_ops`; the engine never applies
+  one.
+- **Drift legibility (v2, the mid-run half):** commit keeps a per-project
+  `last_served_turn` ledger (`affect.projects_served_this_beat`): a beat
+  serves a project when a want or goal-impact `serves` resolves to its id,
+  or when the beat goal names the same room the project's text names, over
+  the character's own place-graph names. Text similarity was measured and
+  rejected for the substance channel — it scored the chalk-circle detour
+  (0.2) above "walk the proved line to the shrine" (0.167). The payload
+  reads the ledger back as `adrift: <beats>` after 8 unserved beats
+  (`agents/character._annotate_project_drift`, read-side, non-mutating).
+  Escalation is wording, never mechanism: past a dozen beats the prompt
+  calls it "a choice you have not admitted — serve it, or displace it with
+  the reason stated". A project still never decays; noticing is the
+  character's half of that bargain, and the resident clause holds — under
+  the threshold the payload says nothing, and a resting project is not
+  nagged.
 - **Second-slot kind:** not enforced. `about: world|self` is declared, and
   one structural fact already prevents the two-spatial oscillation worry:
   `_destination_from_goals` resolves exactly one destination, goal first,
@@ -192,6 +218,14 @@ replaced.
 
 - Whether a renewed intention should cost something, so renewal is a
   decision rather than a reflex.
-- Whether boundary review needs the engine-gated window, or the norm holds.
 - Whether displacement should feed the drive-strain ledger (giving up a
   drive-serving project is plausibly a strain event).
+- Whether drive and project both weighing 1.0 needs revisiting. Current
+  position: no — the weight is an *appraisal* weight, not a want-selection
+  weight, so raising it cannot conjure the missing project-serving want;
+  the drift failure was absence, and absence is fixed by legibility.
+  Putting projects *above* the lived drive would also reopen the objection
+  that killed psychology proposal (c) twice: authored text outranking
+  lived conduct. Revisit only if a measured run shows a project-serving
+  want being *emitted and then losing* to a drive want, which is a
+  different failure from the one observed.
