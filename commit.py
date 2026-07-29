@@ -3698,12 +3698,25 @@ def prepare_memory_commit(ctx, *, scene=None):
                 former_projects = [
                     dict(p) for p in (interior.get("former_projects") or [])
                     if isinstance(p, dict)]
+                # Deduped on ID as well as text. Text alone is not enough:
+                # a project's wording can legitimately CHANGE after adoption
+                # -- the maze harness appends the goal room's name the beat
+                # the character first stands in it, which is the moment that
+                # identifier becomes legitimately his -- and a text-keyed
+                # check then stops recognising the authored source and seeds
+                # a second copy of the same project. Measured live: `pa1`
+                # held twice, one project occupying both slots, which defeats
+                # the cap that is the entire point of the tier.
                 _seen_proj = {
                     str(p.get("project") or "").strip().casefold()
                     for p in projects + former_projects}
+                _seen_pids = {str(p.get("id") or "")
+                              for p in projects + former_projects}
                 for _p in character_projects(sh):
                     if len(projects) >= affect.PROJECT_CAP:
                         break
+                    if str(_p.get("id") or "") in _seen_pids:
+                        continue
                     if str(_p.get("project") or "").strip().casefold() \
                             not in _seen_proj:
                         projects = projects + [_p]
