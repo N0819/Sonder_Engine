@@ -3899,6 +3899,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                 # one-beat review flag when a boundary the engine can
                 # actually see has passed. Facts only -- nothing here writes
                 # a want or applies an op.
+                from agents.common import character_room as _char_room_of
                 _named_rooms = {}
                 for _nrid, _nrec in (((st.get("place_graph") or {})
                                       .get("nodes")) or {}).items():
@@ -3907,6 +3908,17 @@ def prepare_memory_commit(ctx, *, scene=None):
                         if _nname:
                             _named_rooms.setdefault(_nname.casefold(),
                                                     str(_nrid))
+                # Beat-goal slot currency: the slot is rewritten every
+                # commit from the enacted want, but the CLAIM inside it is
+                # whatever the model re-emits, and nothing above counts its
+                # tenure or notices its named room has been reached. Stamp
+                # both facts here (goal_since / goal_room /
+                # goal_room_reached); agents/character reads them back as
+                # `goal_held` / `goal_reached` and stops ROUTING on a spent
+                # claim -- see affect.goal_slot_currency.
+                st["active_state"].update(affect.goal_slot_currency(
+                    prev_as, str(enacted_goal or ""), _named_rooms,
+                    _char_room_of(sc, sh), turn.idx))
                 for _p in projects:
                     # One-shot backfill for projects that predate the ledger
                     # (a live pa1 exists): grace from here, never instantly
@@ -3948,7 +3960,6 @@ def prepare_memory_commit(ctx, *, scene=None):
                 # (below, line ~4100), so st["visited_rooms"] still ends at
                 # the previous position while sc already holds the new one
                 # -- which is exactly the arrival comparison needed.
-                from agents.common import character_room as _char_room_of
                 _prev_room = next(
                     (str(r) for r in reversed(st.get("visited_rooms") or [])
                      if isinstance(r, str) and r), None)

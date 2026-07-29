@@ -1302,6 +1302,73 @@ def projects_served_this_beat(projects, wants, goal_text, impact_serves=(),
     return served
 
 
+def goal_slot_currency(prev_active, goal_text, named_rooms, here_rid,
+                       turn_idx):
+    """Tenure and spend stamps for the beat-goal slot, computed at commit.
+
+    `active_state.goal` is rewritten every commit from the enacted want, so
+    the SLOT is per-beat -- but the CLAIM inside it is whatever the model
+    re-emits, and re-emission is free: the en_route continuation-default
+    deliberately made goals sticky, and stickiness serves whatever holds the
+    slot. Measured (maze, turns 370-385): "Compare chalk circle patterns
+    across chambers" survived a run boundary and a process restart with no
+    cap, criterion, or visibility; "Run east to Chamber 0206 along the
+    proved line" kept steering for beats after he had stood in Chamber 0206
+    and moved on -- a claim the engine could SEE was spent, tethering him
+    back to the room it named (visited tail ... 0306 0206 0205 0206 0306
+    0206). The goal was functioning as an ungoverned project.
+
+    Two deterministic facts, stamped here at the single active_state write
+    point and read back by agents/character._annotate_goal_currency:
+
+      * `goal_since` -- the turn the slot last CHANGED words. Same words
+        carried forward keep the stamp; any re-wording is a re-authoring
+        and restarts the clock. Tenure is what a run boundary the engine
+        cannot see (no engine row) still shows up as.
+      * `goal_room` / `goal_room_reached` -- the room the goal's own text
+        names over the character's OWN place-graph names (identifier
+        recognition, never prose reading), and the turn the character's
+        committed position first became that room while these exact words
+        held. A reached claim stays reached only while the words stand:
+        "return to the kitchen", said fresh, is a new claim and routes.
+
+    Facts only -- nothing here rewrites the goal, and the payload marker
+    plus the routing exclusion (_destination_from_goals) are the read side.
+    Pure and total on junk inputs. Returns the stamps to merge into the
+    freshly rebuilt active_state; an empty slot holds nothing and gets
+    nothing.
+    """
+    text = str(goal_text or "").strip()
+    if not text or not isinstance(turn_idx, int):
+        return {}
+    prev = prev_active if isinstance(prev_active, dict) else {}
+    same_claim = (text.casefold()
+                  == str(prev.get("goal") or "").strip().casefold())
+    since = None
+    if same_claim:
+        try:
+            since = int(prev.get("goal_since"))
+        except (TypeError, ValueError):
+            since = None
+    out = {"goal_since": since if since is not None else turn_idx}
+    room = _last_named_room(text, named_rooms)
+    if not room:
+        return out
+    out["goal_room"] = room
+    reached = None
+    if same_claim:
+        try:
+            reached = int(prev.get("goal_room_reached"))
+        except (TypeError, ValueError):
+            reached = None
+    if reached is None and here_rid is not None \
+            and str(here_rid) == room:
+        reached = turn_idx
+    if reached is not None:
+        out["goal_room_reached"] = reached
+    return out
+
+
 def project_boundary(projects, intentions, before_status, new_room,
                      prev_room, scene_marker, location, frame_id,
                      named_rooms=None):

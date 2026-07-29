@@ -6,7 +6,10 @@
 `interior.former_projects` on `chat_chars.state`), `agents/character.py`
 (payload `self.projects` / `self.former_projects`, destination fallback in
 `_destination_from_goals`), prompt contract (`project_ops`, PROJECTS block).
-Tests: `tests/test_projects.py`. Boundary review is prompt-normative in v1,
+Tests: `tests/test_projects.py`. Goal-slot currency (the last Decided
+bullet): `affect.goal_slot_currency`,
+`agents/character._annotate_goal_currency`, tests in
+`tests/test_goal_currency.py`. Boundary review is prompt-normative in v1,
 not engine-gated — see below. Measurements that motivated it:
 [`MAZE_ARMS.md`](MAZE_ARMS.md) A11–A13 for the raw observations and
 [`DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](DESIGN_PSYCHOLOGY_AS_PRESSURE.md) for
@@ -245,16 +248,40 @@ replaced.
   what keeps a live `pa1` untouched by the change. The stated-reason
   displacement floor now applies exactly where it belongs: to projects a
   character has actually lived by.
-- **The goal slot functioning as an ungoverned project: named, not yet
-  built.** Measured: "Compare chalk circle patterns across chambers"
-  survived a run boundary and a process restart in `active_state.goal`,
-  with no cap, criterion, or visibility — partly a *consequence* of the
-  en_route continuation-default, which makes goals sticky by design. But
-  turn-370 live data shows the shipped machinery bending it back (goal
-  returned to the proved line; pa1 served; the fascination demoted to
-  trailing concerns). Decision: measure before governing. The trigger for
-  building goal-slot aging: a non-serving goal surviving `adrift >= 12`
-  AND a boundary review without re-deriving toward the project.
+- **The goal slot functioning as an ungoverned project: built, as
+  goal-slot currency.** Measured: "Compare chalk circle patterns across
+  chambers" survived a run boundary and a process restart in
+  `active_state.goal`, with no cap, criterion, or visibility — partly a
+  *consequence* of the en_route continuation-default, which makes goals
+  sticky by design. Turn-370 live data showed the shipped machinery
+  bending it back, so the decision was: measure before governing, with
+  the trigger for building goal-slot aging set at a non-serving goal
+  surviving `adrift >= 12` AND a boundary review without re-deriving
+  toward the project. **The trigger then fired** (live, turns 377–385):
+  pa1 unserved since turn 369 (`adrift` 15 at the turn-384 commit), a
+  boundary review at 384 ("your task ia1 closed this beat"), and the goal
+  still "Run east to Chamber 0206 along the proved line" — a room whose
+  visit tail read `… 0306 0206 0205 0206 0306 0206`, the spent claim
+  tethering him back to the room it named because one step out of 0206
+  re-made 0206 the destination. Built as the same legible-not-forced
+  shape as the rest of the tier: commit stamps `goal_since` /
+  `goal_room` / `goal_room_reached` on the slot
+  (`affect.goal_slot_currency` — word-keyed: verbatim re-emission
+  carries a stamp, any re-wording is re-authoring and resets it), the
+  payload reads them back as `goal_reached` {room, beats_ago} and
+  `goal_held` <beats> (`agents/character._annotate_goal_currency`,
+  read-side, non-mutating, `_GOAL_HELD_AFTER = 12`), and
+  `_destination_from_goals` declines to route on a SPENT claim exactly
+  as it already declines one naming the room he stands in — intentions
+  and projects speak instead. Division of labor: room-naming goals are
+  governed by reach (tenure never nags a journey en_route is carrying);
+  room-less goals by tenure, suppressed while the enacted want serves a
+  live intention or project (those tiers' own clocks burn instead) but
+  NOT by a self-declared `serves:"drive"` label. The goal text itself is
+  never rewritten, and a restart survives WITH its tenure, so the marker
+  is present on the first beat after — which is exactly when the slot
+  was measured presenting a dead scene's want as current. Tests:
+  `tests/test_goal_currency.py`.
 
 ## Not yet decided
 
