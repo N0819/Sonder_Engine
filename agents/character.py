@@ -830,6 +830,39 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     return out
 
 
+def _run_end_note(end_rid, nodes, closed_rids):
+    """What the character already knows about the chamber a run finishes in.
+
+    The exits digest carries a verdict for every doorway; the run offers
+    carried nothing but a room NAME, so the same chamber could read as
+    discouraging when walked to and as a bare destination when run to. The
+    decision is made where the offer is, so what the character knows has to
+    be stated there too.
+
+    Split exactly as `_verdict` splits `closed` from `unentered`, and for the
+    same measured reason: the shrine is a cul-de-sac. A run that finishes in
+    a dead end the character has SEARCHED buys nothing, but a run finishing
+    in one they have never been inside may be the whole point of the maze --
+    A11 run 3 lost the shrine to precisely that conflation, the character
+    reading "no other way out" off the thing he was sent to reach and
+    turning around at its doorway. So `visits` decides the wording, and a
+    never-entered cul-de-sac is never discouraged.
+
+    Returns "" when there is nothing the character knows to say, which keeps
+    the key absent from the offer rather than present and empty -- an
+    encouraged run stays as short to read as it was before.
+    """
+    node = nodes.get(end_rid)
+    node = node if isinstance(node, dict) else {}
+    if not (node.get("closed") or end_rid in closed_rids):
+        return ""
+    if int(node.get("visits") or 0) > 0:
+        return ("a dead end you have already been inside -- its only way out "
+                "is the doorway you would go in by")
+    return ("no other way out of it, but you have never been inside -- what "
+            "is IN a room is a different question from what it leads to")
+
+
 def sprint_offers(scene, room_id, stored_state):
     """The RUNNING offers actually worth handing a deciding mind.
 
@@ -873,20 +906,27 @@ def sprint_offers(scene, room_id, stored_state):
     st = stored_state if isinstance(stored_state, dict) else {}
     graph = st.get("place_graph") or {}
     nodes = graph.get("nodes") if isinstance(graph, dict) else None
-    remembered = set(nodes if isinstance(nodes, dict) else ()) | {
+    nodes = nodes if isinstance(nodes, dict) else {}
+    remembered = set(nodes) | {
         r for r in (st.get("visited_rooms") or []) if isinstance(r, str)}
+    closed_rids = {r for r in (st.get("known_dead_ends") or [])
+                   if isinstance(r, str)}
     rooms = (scene or {}).get("rooms") or {}
     out = []
     for offer in sprint_reach(scene, room_id, known_rooms=remembered):
         if int(offer.get("rooms") or 0) < 2:
             continue
         end = str((offer.get("path") or [""])[-1])
-        out.append({
+        entry = {
             "bearing": offer.get("bearing"),
             "run_ends_at": str((rooms.get(end) or {}).get("name") or end),
             "rooms": offer.get("rooms"),
             "stops": offer.get("stops"),
-        })
+        }
+        note = _run_end_note(end, nodes, closed_rids)
+        if note:
+            entry["ends_in"] = note
+        out.append(entry)
     return out
 
 
