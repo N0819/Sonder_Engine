@@ -1,5 +1,73 @@
 # Changelog
 
+## alpha 6.0.2 — Room to have a second thought
+
+Three fixes, all from reading live play. The first two are the same
+finding twice: a state the engine holds at its ceiling stops carrying
+information, and everything downstream keeps reading it as though it
+still does.
+
+### Fixed
+
+- **A plateau stops arresting a mind; a peak still does.** The pain/pleasure
+  level is peak-held, so a body under continuous strong stimulus reads at the
+  ceiling indefinitely — and `cognitive_absorption` read that level directly,
+  handing back full absorption forever with it. Measured live: a character held
+  there sat at absorption **1.000** with a hypothesis-sheet capacity of **1**,
+  produced **zero** new wants across three consecutive beats with an identical
+  goal string and mood, and said the same sentence shape every time. There was
+  nothing else in her to say. `resolve_hedonic` now tracks `sustained_beats` —
+  how long the body has been held at a strong level with nothing new happening
+  to it — and absorption decays the level term across it, floored, with the
+  existing saturated floor underneath, so a saturated body habituates to *busy,
+  three thoughts* rather than to *free*. **A peak still claims the mind
+  completely**: a fresh escalation, a genuinely novel beat, or the release
+  resets the clock, and the rise is measured against the raw appraisal proposal
+  because the stored level is clamped and cannot express one. Replayed against
+  the live appraisals: capacity holds at 3 across the plateau, and the beat
+  where the stimulus jumps 0.30 → 0.80 snaps it back to full arrest. `charge`
+  is untouched — that is the drive, and only the character ends it.
+
+- **A repeated sentence shape is repetition.** AVOID SELF-REPETITION targets
+  repeated *content* and explicitly exempts a consistent register — rightly,
+  since a character with a habitual tag is being themselves. A template walks
+  straight through that exemption: measured live, one character opened **nine
+  consecutive lines** on the same word and closed six of eight on the same
+  word, with genuinely fresh content in between every time. Every line passed
+  the content test; the page read as a stuck record. Widening the recent-lines
+  window in 6.0.1 made this *worse*, not better — more examples of a skeleton
+  read as stronger evidence of the register the rule blesses. The skeleton is
+  now computed instead of left to the character to notice about itself:
+  `_self_line_refrain` reports the first and last significant word when one
+  recurs across at least three recent lines and at least half of them,
+  collapsing repeated letters so "Mmm" and "Mmmm" are one opener rather than
+  the near-miss that feels like variety.
+
+- **A bodiless voice is bodiless whatever the position table says.** The
+  exemption that lets the Director speak for a ship AI was gated on the speaker
+  having no room — which one stale `positions` entry falsifies, and the
+  artifact the exemption was written for *is* such an entry, cited in its own
+  docstring. Measured live: a ship's computer correctly flagged `ubiquitous`,
+  still carrying a position from the room it was first voiced in, was asked a
+  direct question from another deck. A complete, correct answer was generated
+  and recorded in full; `hear_level` returned `none` and every word was
+  dropped, leaving the narrator to render a voice with no words. Addressed
+  twice across that story, heard once — and that once only because the stale
+  position happened to match the player's room. Being bodiless is a fact about
+  the thing; a position on one is the category error, not a reason to disbelieve
+  the flag. `prune_bodiless_positions` also removes the record at merge, the way
+  a position change prunes an impossible contact, because no author can delete
+  it by hand.
+
+- **Standing-contact clauses are written for their reader.** The clause added in
+  6.0.1 was third-person and named the perceiver canonically, in that
+  perceiver's own payload where they must be "you" — the same
+  objective-state-into-a-subjective-context pattern the engine forbids
+  elsewhere. It also had no number agreement, and body parts are routinely
+  plural ("her fingers is against"). `contact_phrase` now takes `you` and
+  renders that side in the second person, and every state verb carries a plural
+  form.
+
 ## alpha 6.0.1 — What is happening now
 
 Four fixes, all found by reading one turn of live play rather than by

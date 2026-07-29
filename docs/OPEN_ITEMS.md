@@ -4,6 +4,26 @@ Known defects and unfinished work, carried out of the alpha 6.0 session.
 Newest first. Delete an entry when it lands — this file is a worklist, not a
 history; the history is `CHANGELOG.md` and the git log.
 
+## 0a. The Director can put words in a character's mouth
+
+**Found:** live, alpha 6.0.2 session. **Not fixed.**
+
+A character agent declared silence — empty sequence, `stop_reason: "natural
+silence"`, no `dialogue_log` entry — and the Director's `resolved_event` said
+"<the character> adds a further comment" anyway. Perception rendered a speech
+event with no content, and the narrator, having nothing to quote, dressed the
+absence as inaudibility: the character "murmurs something" whose "words don't
+quite carry". Read as a muffling bug; was a fabrication.
+
+The player side of this boundary has a guard (`_check_player_act_authority`).
+Characters have none, so nothing anywhere objects when the Director authors
+conduct for a mind that owns it.
+
+The fix is the mirror of the player check, at `director_resolve`: speech
+attributed to a character who declared none this beat is stripped and warned.
+It generalises past this case — it catches every content-free "X says
+something", whatever produced it.
+
 ## 0. Watch: arousal now has a ceiling where it had a floor
 
 **Found:** alpha 6.0.1, while fixing the satisfaction stand-down.
