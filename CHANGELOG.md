@@ -3,12 +3,16 @@
 ## alpha 6.0 — Knowing where you are, and why you are going
 
 A character can now learn a space by walking it, want a particular room in
-it, hold that wanting across dozens of beats, and be relied upon to go
-there — without losing the curiosity that makes them worth reading. Most of
-this release was found rather than designed: a maze harness ran the same
+it, and hold that wanting long enough to arrive — without losing the
+curiosity that makes them worth reading. Getting there is no longer a
+coincidence, though it is not yet a guarantee: what this release removes
+is the long list of ways the engine used to talk a character out of it.
+
+Most of it was found rather than designed. A maze harness ran the same
 character through the same seven-by-seven maze until the engine's own
 assumptions broke in front of us, and thirteen documented arms
-(`docs/MAZE_ARMS.md`) are the evidence for nearly every entry below.
+(`docs/MAZE_ARMS.md`) are the evidence for nearly every entry below. The
+pattern that produced almost every fix: state the fact, leave the choice.
 
 ### Added
 
