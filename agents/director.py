@@ -81,6 +81,7 @@ from .common import (
     norm_sequence,
     normalize_character_refs,
     player_speech_lines,
+    repair_narrated_speech_elements,
 )
 
 def _cast_match_forms(cast):
@@ -409,6 +410,15 @@ def director_interpret(ctx, nonce):
     ctx.warnings.extend(warnings)
 
     norm_sequence(out)
+    # A speech element that swallowed the raw input's narration is repaired
+    # BEFORE anything reads it: perception injects these texts verbatim as
+    # dialogue, so narration left here is delivered to every hearer as words
+    # the player spoke -- in the player's own second person, which points it
+    # at the listener.
+    for _before, _after in repair_narrated_speech_elements(out):
+        ctx.add_warning(
+            "director_interpret: speech element carried narration; reduced to "
+            f"the spoken words ({len(_before)} -> {len(_after)} chars)")
     _route_authorial_npc_beat(
         ctx, out, [str(pers.get("name") or persona_name(pers) or "").casefold()])
     # Bind the acts the model left unbound BEFORE anything downstream asks
@@ -430,6 +440,7 @@ def director_interpret(ctx, nonce):
             entry = {}
             other_players[pid] = entry
         norm_sequence(entry)
+        repair_narrated_speech_elements(entry)
         bind_sequence_targets(entry.get("sequence"), target_forms)
         entry["sequence"] = assign_event_ids(
             entry.get("sequence"), f"turn:{ctx.turn.id}:extra:{pid}")
