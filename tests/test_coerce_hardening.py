@@ -149,3 +149,135 @@ def test_latent_string_and_custom_summary_separates_outfit():
     assert norm["initial_outfit"]["wearing"] == ["red cloak"]
     caps = [l.get("capability") for l in norm["embodiment"]["latent"]]
     assert "telepathy" in caps and "x" in caps
+
+
+class TestCandidateResponseShape:
+    """A character turn must not be lost to the SHAPE of one weighed option.
+
+    `response` is the prose of an option the character considered, but "the
+    candidate response" reads just as naturally as the act itself, and models
+    emit it structurally. Found live: inception/mercury-2 returned a sequence
+    element there on roughly 40% of beats, and each one failed the entire
+    character step -- the beat lost, the character inert, the only signal a
+    type error naming a field the author never sees.
+    """
+
+    def _one(self, raw_response):
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("character", {
+            "name": "V", "sequence": [],
+            "response_candidates": [{"response": raw_response}]})
+        return out["response_candidates"][0]["response"]
+
+    def test_a_sequence_element_reduces_to_its_surface(self):
+        """The observable is preferred over the attempt: these candidates are
+        weighed, not enacted, and the observable is what anyone would ever
+        actually be shown."""
+        assert self._one({
+            "type": "action", "attempt": "step through the nearest doorway",
+            "observable": "steps forward through the doorway",
+        }) == "steps forward through the doorway"
+
+    def test_it_falls_back_through_the_other_prose_keys(self):
+        assert self._one({"type": "action", "attempt": "wait here"}) == "wait here"
+        assert self._one({"text": "say nothing"}) == "say nothing"
+
+    def test_a_plain_string_is_untouched(self):
+        assert self._one("just wait") == "just wait"
+
+    def test_a_list_joins_rather_than_failing(self):
+        assert self._one(["step out", "look back"]) == "step out; look back"
+
+    def test_an_empty_object_degrades_to_empty_not_an_error(self):
+        assert self._one({}) == ""
+        assert self._one({"type": "action"}) == ""
+
+    def test_the_rest_of_the_turn_survives(self):
+        """The point of the coercion: the beat lives."""
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("character", {
+            "name": "V",
+            "sequence": [{"type": "action", "attempt": "walk on",
+                          "observable": "walks on"}],
+            "response_candidates": [
+                {"response": {"observable": "steps forward"}, "selected": True}],
+        })
+        assert out["sequence"][0]["attempt"] == "walk on"
+        assert out["response_candidates"][0]["selected"] is True
+
+
+class TestEmptyChoicesIsTransport:
+    """A 200 carrying no `choices` is the provider not answering, not the model
+    answering badly.
+
+    Observed live at ~2.6% of beats on one endpoint. It surfaced as "'choices'"
+    inside a JSON-validation error that blamed the model, and a KeyError there
+    aborts the beat -- which reads to a player as the character having nothing
+    to say. Retried as the transport failure it is.
+    """
+
+    def test_it_is_flagged_retryable(self):
+        import providers
+        err = providers.LLMError("x: response carried no choices ({})", 200, True)
+        assert err.retryable is True
+
+    def test_the_guard_exists_at_the_access_site(self):
+        """The raise must precede the subscript, or the KeyError wins."""
+        import inspect, providers, re
+        src = inspect.getsource(providers)
+        i = src.index("carried no choices")
+        j = src.index('content = parsed["choices"][0]["message"]["content"]')
+        assert i < j, "the empty-choices guard must come before the subscript"
+
+
+class TestLenientStrFields:
+    """One coercion for a whole failure family.
+
+    Five separate crashes in a single session were the same shape: a field typed
+    `str` receiving a structured object, discarding the ENTIRE stage output and
+    costing a beat. Roughly ninety more str-typed fields carry the same
+    exposure, so the coercion lives once on a base every schema model inherits
+    rather than being added field-by-field as each one crashes.
+    """
+
+    def test_a_dict_reduces_to_the_prose_it_contains(self):
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("director_resolve", {
+            "resolved_event": {"text": "Vesk walks on."},
+            "dialogue_log": [], "state_diff": {}})
+        assert out["resolved_event"] == "Vesk walks on."
+
+    def test_a_list_joins(self):
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("director_resolve", {
+            "resolved_event": "x", "summary": ["A step", "deeper"],
+            "dialogue_log": [], "state_diff": {}})
+        assert out["summary"] == "A step; deeper"
+
+    def test_the_last_open_crash_of_the_family(self):
+        """changes_asserted.change was still failing live when this landed."""
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("director_resolve", {
+            "resolved_event": "x", "dialogue_log": [], "state_diff": {},
+            "changes_asserted": [
+                {"change": {"kind": "moved", "detail": "door opened"}}]})
+        assert out["changes_asserted"][0]["change"] == "door opened"
+
+    def test_a_dict_with_no_prose_key_still_yields_something(self):
+        from schemas import _flatten_to_text
+        assert _flatten_to_text({"kind": "moved", "n": 3}) == "moved; 3"
+
+    def test_it_only_fires_on_str_fields(self):
+        """A structured value bound for a structured field must pass through
+        untouched, or this masks real type errors instead of fixing one."""
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("director_resolve", {
+            "resolved_event": "x", "dialogue_log": [], "state_diff": {},
+            "obligations": [{"id": "o1", "text": "return the letter"}]})
+        assert isinstance(out["state_diff"], dict)
+        assert isinstance(out["obligations"], list)
+
+    def test_plain_strings_are_untouched(self):
+        from schemas import _flatten_to_text
+        assert _flatten_to_text("already prose") == "already prose"
+        assert _flatten_to_text(7) == 7

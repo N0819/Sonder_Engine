@@ -209,6 +209,8 @@ def tick_vitals(scene: dict, elapsed_seconds, *, asleep=(), exerting=()) -> dict
     if not isinstance(table, dict) or not table:
         return scene
 
+    from comfort import rest_affording
+
     try:
         seconds = max(0.0, float(elapsed_seconds or 0))
     except (TypeError, ValueError):
@@ -237,6 +239,13 @@ def tick_vitals(scene: dict, elapsed_seconds, *, asleep=(), exerting=()) -> dict
         if key in resting:
             current["stamina"] = _clamp(
                 current["stamina"] + hours * _SLEEP_STAMINA_PER_HOUR)
+        elif key not in working and rest_affording(scene, name):
+            # Lying on a rest-affording surface recovers, derived -- like air
+            # -- from what the scene itself asserts, so rest works without the
+            # Director remembering to say the word. Declared exertion wins:
+            # you are not resting if the beat says you are straining.
+            current["stamina"] = _clamp(
+                current["stamina"] + hours * _REST_STAMINA_PER_HOUR)
         else:
             drain = _PER_HOUR["stamina"] * (2.0 if key in working else 1.0)
             current["stamina"] = _clamp(current["stamina"] + hours * drain)

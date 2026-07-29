@@ -13,31 +13,300 @@ from memory import (
     knowledge_for_character, get_relationships,
     save_relationships, update_relationships_from_inference,
     apply_relationship_updates, maybe_consolidate_character_memory,
+    reconcile_inference_confidence,
 )
 from providers import embed_texts
 from prompts import get_prompt
 import affect
 import psychology_runtime
-import re as _re
 from character_schema import (character_name, new_uid, character_psychology,
                               character_interoception,
                               character_initial_outfit,
                               character_initial_active_state, effective_drive,
                               character_standing_intentions,
+                              character_projects,
                               normalize_character_data, persona_name,
                               character_appearance as _char_appearance)
 from frames import is_recognized_in_frame
 from scene import set_char_state, set_char_status, seed_initial_attire
 from mechanics import mechanics_sweep, news_latency_seconds, stable_event_key
 from spatial import (merge_scene_with_diff,
-                     normalize_room_id, spatial_rel, hear_level)
-from theory_of_mind import apply_mind_model_updates
+                     normalize_room_id, spatial_rel, hear_level,
+                     normalize_barrier, normalize_bearing, opposite_bearing,
+                     passable_path, rooms_adjacent, visible_adjacent_rooms)
+from theory_of_mind import (apply_mind_model_updates, rekey_place_claims,
+                            select_active_hypotheses, sheet_capacity)
 from survival import vitals_of
+from comfort import comfort_level
 from paradox import check_and_apply_paradox
 from spatial_frames import detect_and_reconcile as detect_and_reconcile_spatial
 from spatial_frames import (infer_companion_carry, infer_vehicle_zones,
                             infer_came_from, infer_focus, infer_facing,
                             infer_threshold_crossings)
+
+# How much of a body's own route it carries. Bounded because it rides
+# chat_chars.state, and because a route from four hundred beats ago is not
+# something anyone recalls as a route.
+VISITED_ROOMS_CAP = 60
+
+# How far back a satisfied intention credits the route, and how much weight one
+# room can accrue. Bounded because a goal closed after forty beats says little
+# about the room walked through on beat one, and because a route that worked
+# ten times should not become impossible to abandon when the world changes.
+ROUTE_CREDIT_WINDOW = 25
+ROUTE_CREDIT_CAP = 5
+
+# How many places one mind's durable map may hold. Unlike VISITED_ROOMS_CAP
+# this is not a recency window -- the graph is the thing that must survive a
+# long walk -- but it is still a MEMORY, and an unbounded one would grow with
+# every campaign forever. Eviction is by (last_turn, visits): the places
+# forgotten first are the ones least revisited and longest unseen, which is
+# forgetting, and forgetting is the point.
+PLACE_GRAPH_NODE_CAP = 400
+
+
+def update_place_graph(graph, scene, here_rid, turn_idx, came_from=None,
+                       visible=None):
+    """Fold one committed beat of standing in a room into this character's
+    durable place graph ({"nodes": {rid: ...}, "edges": {rid: {rid: ...}}} on
+    chat_chars.state.place_graph).
+
+    Firewall discipline, in order of temptation:
+
+    * Nodes/edges come ONLY from (a) the room the character is standing in --
+      its doorways are perceivable from inside, whichever side declared the
+      edge; (b) the step they just took (`came_from`, guarded by
+      rooms_adjacent so a teleport/carry mints no walked edge); (c) the
+      `visible` list, which is `visible_adjacent_rooms` output for a room
+      they actually stood in. A room seen through a doorway contributes its
+      NAME and its visible closedness and nothing else: `_onward_exits`
+      returns counts and bearings, never destinations, so the neighbour's own
+      doorways are structurally unavailable here -- do not "fix" that by
+      reading scene["rooms"][neighbour]["adjacent"], which would quietly turn
+      the remembered map into the objective one.
+    * The standing room is also the ONLY place objective state may correct
+      the graph: a remembered doorway of THIS room that present perception
+      shows absent or walled is stamped `disproven` (both directions, since a
+      doorway is one doorway). A room absent from the scene entirely -- moved
+      on from, retired, destroyed -- keeps its nodes and edges untouched: the
+      character learns a place is gone by standing where it was, not by the
+      registry telling their memory.
+    * Nothing here reads another character's state, and nothing writes
+      anything the character did not walk, see, or step through.
+
+    `basis` is "walked" (stood there) or "seen" (looked into it); "told" is
+    an accepted value for a future testimony-derived writer, but no code path
+    writes it yet -- there is currently no deterministic source for it.
+    Mutates and returns the normalized graph.
+    """
+    graph = graph if isinstance(graph, dict) else {}
+    nodes = graph.get("nodes")
+    nodes = nodes if isinstance(nodes, dict) else {}
+    edges = graph.get("edges")
+    edges = edges if isinstance(edges, dict) else {}
+    graph = {"nodes": nodes, "edges": edges}
+    if not here_rid:
+        return graph
+    here_rid = str(here_rid)
+    turn_idx = int(turn_idx or 0)
+    rooms = (scene or {}).get("rooms") or {}
+
+    def _node(rid, name=None, basis="seen"):
+        rec = nodes.get(rid)
+        if not isinstance(rec, dict):
+            rec = {"basis": basis, "visits": 0, "first_turn": turn_idx}
+            nodes[rid] = rec
+        if basis == "walked":
+            rec["basis"] = "walked"          # never downgraded
+        rec.setdefault("basis", basis)
+        if name:
+            rec["name"] = str(name)
+        rec["last_turn"] = turn_idx
+        return rec
+
+    def _confirm(a, b, bearing=None, taken=False):
+        side = edges.get(a)
+        if not isinstance(side, dict):
+            side = {}
+            edges[a] = side
+        rec = side.get(b)
+        if not isinstance(rec, dict):
+            rec = {}
+            side[b] = rec
+        rec.pop("disproven", None)
+        rec["last_confirmed"] = turn_idx
+        if bearing:
+            rec["bearing"] = bearing
+        if taken:
+            rec["taken"] = True
+            rec["basis"] = "walked"
+        else:
+            rec.setdefault("basis", "seen")
+        return rec
+
+    here_room = rooms.get(here_rid) or {}
+    here_node = _node(here_rid, name=here_room.get("name"), basis="walked")
+    if came_from or not here_node.get("visits"):
+        here_node["visits"] = int(here_node.get("visits") or 0) + 1
+
+    # Every doorway of the standing room, from either side's declaration. A
+    # wall is visible adjacency but not a doorway, so it earns no edge.
+    doorways = {}
+    for e in here_room.get("adjacent") or []:
+        if isinstance(e, dict) and e.get("to") \
+                and normalize_barrier(e.get("barrier")) != "wall":
+            doorways.setdefault(str(e["to"]), normalize_bearing(e.get("dir")))
+    for oid, other in rooms.items():
+        oid = str(oid)
+        if oid == here_rid or oid in doorways or not isinstance(other, dict):
+            continue
+        for e in other.get("adjacent") or []:
+            if isinstance(e, dict) and str(e.get("to")) == here_rid \
+                    and normalize_barrier(e.get("barrier")) != "wall":
+                doorways.setdefault(
+                    oid, opposite_bearing(normalize_bearing(e.get("dir"))))
+                break
+    for to_rid, bearing in doorways.items():
+        _confirm(here_rid, to_rid, bearing=bearing)
+        far = (edges.get(to_rid) or {}).get(here_rid)
+        if isinstance(far, dict):
+            far.pop("disproven", None)
+
+    # Contradiction correction -- standing room only. A doorway remembered
+    # here that present perception does not show is disproven, both ways.
+    for to_rid, rec in list((edges.get(here_rid) or {}).items()):
+        if to_rid in doorways or not isinstance(rec, dict):
+            continue
+        rec["disproven"] = turn_idx
+        far = (edges.get(to_rid) or {}).get(here_rid)
+        if isinstance(far, dict):
+            far["disproven"] = turn_idx
+
+    if came_from and str(came_from) != here_rid \
+            and rooms_adjacent(scene, came_from, here_rid):
+        _confirm(str(came_from), here_rid, taken=True)
+
+    for item in visible or []:
+        if not isinstance(item, dict):
+            continue
+        rid_seen = str(item.get("room_id") or "")
+        if not rid_seen or rid_seen == here_rid:
+            continue
+        rec = _node(rid_seen, name=item.get("room_name"), basis="seen")
+        onward = item.get("onward_exits")
+        if onward == 0:
+            rec["closed"] = True
+        elif isinstance(onward, int) and onward > 0:
+            rec.pop("closed", None)
+        _confirm(here_rid, rid_seen, bearing=doorways.get(rid_seen))
+
+    overflow = len(nodes) - PLACE_GRAPH_NODE_CAP
+    if overflow > 0:
+        order = sorted(
+            (rid for rid in nodes if rid != here_rid),
+            key=lambda rid: (
+                int((nodes[rid] or {}).get("last_turn") or 0)
+                if isinstance(nodes[rid], dict) else 0,
+                int((nodes[rid] or {}).get("visits") or 0)
+                if isinstance(nodes[rid], dict) else 0))
+        evicted = set(order[:overflow])
+        for rid in evicted:
+            nodes.pop(rid, None)
+            edges.pop(rid, None)
+        for side in edges.values():
+            if isinstance(side, dict):
+                for gone in [b for b in side if b in evicted]:
+                    side.pop(gone, None)
+    return graph
+
+
+def record_spatial_experience(st, sc, here_room, turn_idx):
+    """Everything one committed beat of standing somewhere earns a character:
+    the route window, the exits of rooms stood in, visibly-closed chambers,
+    and the durable place graph. Mutates and returns `st`.
+
+    `visited_rooms` stays a bounded RECENCY window (the loop detectors need
+    it), but it is no longer allowed to bound knowledge: `known_exits` used
+    to be pruned to rooms still inside the window, which erased spatial
+    knowledge past VISITED_ROOMS_CAP -- and worse than erased it, since
+    _frontier_beyond read a room with no recorded exits as "never stood
+    there, everything past it is potentially new". Forgetting made stale
+    ground look PROMISING, on maze runs that sit exactly on the cap.
+    Durability now belongs to place_graph, and the legacy keys follow its
+    memory (bounded by the same eviction) rather than the window's.
+
+    Persistence decision (docs/DATABASE.md checklist): all of this rides the
+    chat_chars.state JSON blob, which checkpoints snapshot/restore whole
+    (checkpoints.snapshot_state/restore), chat_archive exports/imports
+    verbatim, and the branch path copies row-for-row -- so no schema, remap,
+    or archive change is needed. Room ids are frame-scoped scene rids, which
+    those paths preserve as-is.
+    """
+    if not here_room:
+        return st
+    visited = [
+        r for r in (st.get("visited_rooms") or [])
+        if isinstance(r, str) and r
+    ]
+    came_from = visited[-1] if visited else None
+    if came_from == here_room:
+        came_from = None
+    else:
+        # A body that RAN crossed several rooms this beat, and has been in
+        # every one of them. Recording only where they stopped would leave
+        # holes in their map exactly where their feet went, and worse than
+        # holes: the place graph would mint no walked edge at all (came_from
+        # is not adjacent), so a corridor they had sprinted end to end would
+        # keep reading as untrodden and pull them back down it.
+        #
+        # Reconstructed rather than trusted from the Director: the rooms
+        # between are a deterministic fact about the scene, and asking a model
+        # to list them is asking it to be right about geometry -- which is the
+        # thing it is measurably worst at (see A11's bearing errors).
+        #
+        # A move with NO passable route is a teleport, a carry, or a vehicle,
+        # and mints nothing: the character learns a place by being carried
+        # through it about as well as a parcel does.
+        crossed = passable_path(sc, came_from, here_room) if came_from else []
+        for room in (crossed[:-1] if crossed else []):
+            if room and (not visited or visited[-1] != room):
+                visited.append(room)
+        visited.append(here_room)
+        if crossed and len(crossed) > 1:
+            came_from = crossed[-2]
+    st["visited_rooms"] = visited[-VISITED_ROOMS_CAP:]
+    # The exits visible FROM a room they actually stood in. Not oracle
+    # knowledge: standing in a room is how you see its doorways.
+    known = st.get("known_exits")
+    if not isinstance(known, dict):
+        known = {}
+    room = (sc.get("rooms") or {}).get(here_room) or {}
+    known[here_room] = sorted({
+        str(e.get("to")) for e in (room.get("adjacent") or [])
+        if isinstance(e, dict) and e.get("to")
+    })
+    # Which of those neighbours he could SEE were closed -- the same fact
+    # visible_adjacent_rooms reports live, written down so the frontier test
+    # can tell "a door I have not taken" from "a route I have not taken".
+    try:
+        visible = visible_adjacent_rooms(sc, here_room) or []
+    except Exception:
+        visible = []
+    dead = st.get("known_dead_ends")
+    dead = set(dead) if isinstance(dead, list) else set()
+    for item in visible:
+        if isinstance(item, dict) and item.get("onward_exits") == 0:
+            dead.add(str(item.get("room_id")))
+    st["known_dead_ends"] = sorted(dead)
+    st["place_graph"] = update_place_graph(
+        st.get("place_graph"), sc, here_room, turn_idx,
+        came_from=came_from, visible=visible)
+    # Legacy keys bounded by the graph's memory, not the recency window.
+    remembered = set(st["place_graph"]["nodes"]) | set(st["visited_rooms"])
+    st["known_exits"] = {k: v for k, v in known.items() if k in remembered}
+    st["known_dead_ends"] = [r for r in st["known_dead_ends"]
+                             if r in remembered]
+    return st
 
 _COMMIT_LOCKS = weakref.WeakValueDictionary()
 _COMMIT_LOCKS_GUARD = threading.Lock()
@@ -1524,55 +1793,50 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
         diff = res.get("state_diff") or {}
     turn_id = ctx.turn.id
 
-    # S3-A8: Build the set of actors who were concealed during this beat.
-    # An entity state blob that references a concealed actor leaks their
-    # presence/position to anyone who later reads the entity state.  The
-    # entity's position/state is only updated when overtly perceived.
-    _concealed_actors = set()
-    res = ctx.director_resolve or ctx.director_establish or {}
-    for d in (res.get("dialogue_log") or []):
-        if str(d.get("visibility") or "").casefold() == "concealed":
-            _concealed_actors.add(str(d.get("speaker") or "").casefold())
-    # Also check the director_interpret for concealed player actions.
-    interp = ctx.director_interpret or {}
-    try:
-        from scene import persona_of as _persona_of
-        _p_name = (_persona_of(chat) or {}).get("name") or ""
-    except Exception:
-        _p_name = ""
-    for a in (interp.get("actions") or
-              ([interp["action"]] if interp.get("action") else [])):
-        if isinstance(a, dict) and a.get("visibility") == "concealed":
-            _concealed_actors.add(str(_p_name).casefold())
-    # Check character results for concealed actions.
-    for _cid, _result in (ctx.character_results or {}).items():
-        if not isinstance(_result, dict):
-            continue
-        for a in (_result.get("actions") or _result.get("sequence") or []):
-            if isinstance(a, dict) and a.get("visibility") == "concealed":
-                _cname = _result.get("name") or ""
-                if _cname:
-                    _concealed_actors.add(str(_cname).casefold())
+    # S3-A8 is the STALE-POSTURE symptom, not a concealment leak: the resolve
+    # payload hands the model the complete pre-beat `scene.entities`, so a free-
+    # text `posture`/`description` clause gets copied forward verbatim even when
+    # this beat's own prose contradicts it, and `_PROTECTED_STATE_KEYS` then
+    # shields it from normalization so the stale clause wins downstream.
+    #
+    # An earlier attempt at this finding read it as a leak and skipped any
+    # entity whose JSON contained a concealed actor's name as a SUBSTRING
+    # (so an actor named Al matched "small"), dropping the update permanently
+    # with nothing to re-apply it. That silently diverged `world_entities` from
+    # the `world.scene` blob it is a projection of -- durable corruption traded
+    # for a leak that was never the finding. Detect and report the copy-forward
+    # instead; the entity still commits, because a stale clause is a narration
+    # problem and a missing row is a world-model problem.
+    _prior_entities = (wget(cid, "scene", {}) or {}).get("entities") or {}
+    _beat_prose = str(
+        (ctx.director_resolve or ctx.director_establish or {}).get(
+            "resolved_event") or "").casefold()
 
-    def _entity_references_concealed(entity_def):
-        """True if the entity_def's state blob mentions a concealed actor."""
-        if not _concealed_actors or not isinstance(entity_def, dict):
+    def _copied_forward_unchanged(entity_id, entity_def):
+        prior = _prior_entities.get(entity_id)
+        if not isinstance(prior, dict) or not isinstance(entity_def, dict):
             return False
-        # Check the entity's state sub-dict for concealed actor names.
-        state = entity_def.get("state") or {}
-        blob = json.dumps(entity_def, ensure_ascii=False).casefold()
-        return any(name in blob for name in _concealed_actors)
+        name = str(entity_def.get("name") or "").casefold()
+        if not name or name not in _beat_prose:
+            return False
+        prior_state = prior.get("state") if isinstance(prior.get("state"), dict) else {}
+        new_state = entity_def.get("state") if isinstance(entity_def.get("state"), dict) else {}
+        return any(
+            key in prior_state and key in new_state
+            and prior_state[key] == new_state[key]
+            and str(new_state[key] or "").strip()
+            for key in ("posture", "description")
+        )
 
     with transaction() as c:
         for entity_id, entity_def in (diff.get("entities") or {}).items():
             if not isinstance(entity_def, dict):
                 continue
-            # S3-A8: skip entity state blobs that reference concealed actors.
-            if _entity_references_concealed(entity_def):
+            if _copied_forward_unchanged(entity_id, entity_def):
                 ctx.add_warning(
-                    f"entity {entity_id}: state blob references a concealed "
-                    f"actor; withholding update until overtly perceived")
-                continue
+                    f"entity {entity_id}: this beat's prose names it, but its "
+                    f"posture/description came through byte-identical to the "
+                    f"pre-beat blob -- possible stale clause (S3-A8)")
             existing = q("SELECT entity_id FROM world_entities WHERE entity_id=? AND chat_id=?",
                          (entity_id, cid), one=True)
             payload = json.dumps(entity_def, ensure_ascii=False)
@@ -1667,7 +1931,12 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
                          cond.get("started_at_seconds", 0.0),
                          cond.get("expires_at_seconds"),
                          cond.get("next_tick_seconds"),
-                         payload, 1),
+                         # The row's own `active`, not a hardcoded 1. An
+                         # ENDING that names an id no row carries yet (a
+                         # Director closing a condition under a rekeyed id, an
+                         # imported chat) was being inserted as ACTIVE, so the
+                         # act of waking someone put them under.
+                         payload, int(cond.get("active", 1))),
                     )
 
     return {"entities_committed": len(diff.get("entities") or {}),
@@ -3231,6 +3500,7 @@ def prepare_memory_commit(ctx, *, scene=None):
     pending_memories = []
     state_updates = []
     relationship_ops = []
+    belief_reconciles = []
     _clock = wget(
         cid, "simulation_clock",
         {"elapsed_seconds": 0.0, "display": "now"},
@@ -3291,24 +3561,30 @@ def prepare_memory_commit(ctx, *, scene=None):
                     spk = "the player"
                 if spk == cname:
                     continue
-                # Recognition gate: use canonical name only if the hearer
-                # knows the speaker; otherwise use appearance label or
-                # "a voice".
+                # Recognition gate: the canonical name only if the hearer knows
+                # the speaker. The label comes from _unknown_actor_label, the
+                # same helper every perception path uses, rather than a second
+                # hand-rolled copy of it -- the copy truncated at a fixed 60
+                # characters and cut mid-word, and two implementations of the
+                # identity floor drift apart exactly where it matters.
                 if spk != "the player" and spk not in _hearer_known:
-                    # Find the speaker's sheet for appearance text
-                    _spk_sheet = None
-                    for _cr in ctx.cast:
-                        if character_name(json.loads(_cr["sheet"])) == spk:
-                            _spk_sheet = json.loads(_cr["sheet"])
-                            break
-                    _app = _char_appearance(_spk_sheet) if _spk_sheet else ""
-                    _app = _app.strip() if isinstance(_app, str) else ""
-                    if _app:
-                        # Strip leading name tokens (like _unknown_actor_label)
-                        _app = _re.sub(r'^(?:[A-Z][\w\'-]+,?\s+)+', '', _app)
-                        _app = _re.sub(r'^(a|an|the)\s+', '', _app, flags=_re.I)
-                        spk_label = f"the {_app[:60]}" if _app else "a voice"
-                    else:
+                    from agents.common import (
+                        _unknown_actor_label, character_scene_keys)
+                    _spk_sheet = next(
+                        (sheet for sheet in
+                         (json.loads(_cr["sheet"]) for _cr in ctx.cast)
+                         if character_name(sheet) == spk),
+                        None)
+                    spk_label = _unknown_actor_label(
+                        spk,
+                        _char_appearance(_spk_sheet) if _spk_sheet else None,
+                        character_scene_keys(_spk_sheet)[1:] if _spk_sheet else None,
+                    )
+                    # This memory is HEARD. When there is no appearance to
+                    # describe, _unknown_actor_label falls back to "the
+                    # unfamiliar person" -- which claims the hearer saw a body.
+                    # What they have is a voice.
+                    if spk_label == "the unfamiliar person":
                         spk_label = "a voice"
                     tgt = None  # drop intended_target -- it names the speaker
                 else:
@@ -3414,6 +3690,58 @@ def prepare_memory_commit(ctx, *, scene=None):
                 for _a in character_standing_intentions(sh):
                     if str(_a.get("intent") or "").strip().casefold() not in _seen_intent:
                         intentions = intentions + [_a]
+                # PROJECTS (Tier 1.5): durable-but-not-eternal commitments,
+                # capped at two -- see affect.apply_project_ops and
+                # docs/DESIGN_LONG_TERM_GOALS.md. Authored ones seed from
+                # the card exactly as standing intentions do, deduped
+                # against live AND former so a project the character gave
+                # up (with a stated reason) never silently re-seeds over
+                # that decision. NOTE: _interior_out below is rebuilt from
+                # scratch each beat, so both ledgers must be carried
+                # through it explicitly or a beat would erase them.
+                projects = [dict(p) for p in (interior.get("projects") or [])
+                            if isinstance(p, dict)]
+                former_projects = [
+                    dict(p) for p in (interior.get("former_projects") or [])
+                    if isinstance(p, dict)]
+                # Deduped on ID as well as text. Text alone is not enough:
+                # a project's wording can legitimately CHANGE after adoption
+                # -- the maze harness appends the goal room's name the beat
+                # the character first stands in it, which is the moment that
+                # identifier becomes legitimately his -- and a text-keyed
+                # check then stops recognising the authored source and seeds
+                # a second copy of the same project. Measured live: `pa1`
+                # held twice, one project occupying both slots, which defeats
+                # the cap that is the entire point of the tier.
+                _seen_proj = {
+                    str(p.get("project") or "").strip().casefold()
+                    for p in projects + former_projects}
+                _seen_pids = {str(p.get("id") or "")
+                              for p in projects + former_projects}
+                for _p in character_projects(sh):
+                    if len(projects) >= affect.PROJECT_CAP:
+                        break
+                    if str(_p.get("id") or "") in _seen_pids:
+                        continue
+                    if str(_p.get("project") or "").strip().casefold() \
+                            not in _seen_proj:
+                        # Seeding counts as service: the drift clock starts
+                        # at the seeding beat, never at authored turn 0.
+                        projects = projects + [
+                            dict(_p, last_served_turn=turn.idx)]
+                projects, former_projects, _pwarn = affect.apply_project_ops(
+                    projects, former_projects,
+                    own_result.get("project_ops") or [], turn.idx)
+                for w in _pwarn:
+                    ctx.add_warning(f"{cname}: project -- {w}")
+                _project_ids = {str(p.get("id") or "") for p in projects}
+                # Probationary vs established, as the character SAW them at
+                # the start of this beat (pre-settlement, like valid_ids
+                # for intentions): a probationary project weighs at
+                # intention level until service establishes it.
+                _probation_ids = {str(p.get("id") or "") for p in projects
+                                  if p.get("probation")}
+                _established_ids = _project_ids - _probation_ids
                 drive = (character_psychology(sh) or {}).get("drive") or {}
 
                 # this beat's evidence pool: resolved event + spoken lines, for
@@ -3427,8 +3755,43 @@ def prepare_memory_commit(ctx, *, scene=None):
                         return False
                     return any(str(e) and str(e) in _t for e in ev) or bool(op.get("why"))
 
+                _before_status = {
+                    str(i.get("id")): i.get("status")
+                    for i in intentions if isinstance(i, dict)
+                }
                 intentions, _iwarn = affect.apply_intent_ops(
                     intentions, own_result.get("intent_ops") or [], turn.idx, _evidence_ok)
+                # OUTCOME FEEDBACK. Everything else in this engine revises a
+                # belief by CONTRADICTION -- another claim -- never by whether
+                # acting on it worked. So a character who concludes something,
+                # acts, and is wrong sees that belief decay from disuse at
+                # exactly the rate a correct one would, and a route that
+                # demonstrably reached a goal accumulates no weight against the
+                # novelty of one that has not been tried.
+                #
+                # An intention reaching `satisfied` is the one success signal
+                # the engine can observe without trusting a bare self-report:
+                # apply_intent_ops gates satisfy behind _evidence_ok, so it
+                # needs on-screen cause. When one closes, the rooms walked
+                # while pursuing it are credited -- their own route, no oracle
+                # knowledge of whether it was the BEST way, only that it was a
+                # way that worked.
+                _satisfied = [
+                    i for i in intentions
+                    if isinstance(i, dict) and i.get("status") == "satisfied"
+                    and _before_status.get(str(i.get("id"))) != "satisfied"
+                ]
+                if _satisfied:
+                    _worked = st.get("routes_that_worked")
+                    if not isinstance(_worked, dict):
+                        _worked = {}
+                    _since = max(
+                        0, len(st.get("visited_rooms") or [])
+                        - ROUTE_CREDIT_WINDOW)
+                    for _r in set((st.get("visited_rooms") or [])[_since:]):
+                        _worked[_r] = min(
+                            ROUTE_CREDIT_CAP, int(_worked.get(_r, 0)) + 1)
+                    st["routes_that_worked"] = _worked
                 for w in _iwarn:
                     ctx.add_warning(f"{cname}: intention -- {w}")
                 valid_ids = {str(i.get("id")) for i in intentions if isinstance(i, dict)}
@@ -3445,17 +3808,23 @@ def prepare_memory_commit(ctx, *, scene=None):
                 # goal still weigh as a goal when scoring mood.
                 _steering = affect.steering_intent_ids(intentions, turn.idx)
 
-                def _priority(serves, _ids=_steering, _intents=intentions):
-                    # Models emit serves as "intention:<id-or-text>"; resolve
-                    # it to the bare id so a goal-serving impact scores at
-                    # intention priority, not the situational default.
-                    serves = affect.normalize_serves(serves, _intents)
-                    if serves == "drive":
-                        return 1.0
-                    return 0.8 if str(serves) in _ids else 0.4
+                def _priority(serves, _ids=_steering, _intents=intentions,
+                              _projs=projects, _pids=_established_ids,
+                              _probs=_probation_ids):
+                    # Models emit serves as "intention:<id-or-text>" or
+                    # "project:<id-or-text>"; resolve to the bare id so a
+                    # goal-serving impact scores at its tier's priority, not
+                    # the situational default. An ESTABLISHED project weighs
+                    # at DRIVE priority (1.0) -- the 1.0-vs-0.8 loss is the
+                    # measured failure the project tier exists to close; a
+                    # probationary one at intention priority (0.8) -- drive
+                    # weight is earned by service, never by adoption.
+                    serves = affect.normalize_serves(serves, _intents, _projs)
+                    return affect.serves_priority(str(serves), _ids, _pids,
+                                                  _probs)
 
                 wants, enacted, suppressed = affect.normalize_wants(
-                    asv.get("wants") or [], valid_ids)
+                    asv.get("wants") or [], valid_ids | _project_ids)
 
                 appraisal_input = own_result.get("appraisal") or {}
                 appraisal_out = affect.appraise(
@@ -3472,6 +3841,12 @@ def prepare_memory_commit(ctx, *, scene=None):
                     prev_affect, appraisal_out, baseline, elapsed_units,
                     proposed=asv.get("affect") or asv.get("mood"))
                 body_state = vitals_of(sc, cname)
+                # World-side comfort, from the settled scene: what this body
+                # is verifiably against (station/contact/posture, closed
+                # vocabulary). Feeds the pleasure LEVEL floor only -- by
+                # construction it never reaches the charge term, because a
+                # warm bench is a resolved state, not an unresolved drive.
+                _comfort, _comfort_src = comfort_level(sc, cname)
                 proposed_hedonic = (
                     asv.get("hedonic") if isinstance(asv.get("hedonic"), dict)
                     else {}
@@ -3483,6 +3858,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                     # event to have, so the declaration is theirs; how it built
                     # up in the first place stays the runtime's.
                     released=bool(proposed_hedonic.get("released")),
+                    ambient_comfort=_comfort, comfort_source=_comfort_src,
                 )
                 proposed_stress = (
                     asv.get("stress") if isinstance(asv.get("stress"), dict) else {}
@@ -3527,6 +3903,87 @@ def prepare_memory_commit(ctx, *, scene=None):
                         or []
                     ),
                 }
+                # --- Project service ledger + boundary review (Tier 1.5).
+                # A held project stopped failing by being outranked and
+                # started failing by being FORGOTTEN (A15 run 5: pa1 held at
+                # weight 1.0, twenty beats in, nothing emitted serving it).
+                # Two deterministic facts close that gap: last_served_turn
+                # per project (read back as `adrift` in the payload), and a
+                # one-beat review flag when a boundary the engine can
+                # actually see has passed. Facts only -- nothing here writes
+                # a want or applies an op.
+                from agents.common import character_room as _char_room_of
+                _named_rooms = {}
+                for _nrid, _nrec in (((st.get("place_graph") or {})
+                                      .get("nodes")) or {}).items():
+                    if isinstance(_nrec, dict):
+                        _nname = str(_nrec.get("name") or "").strip()
+                        if _nname:
+                            _named_rooms.setdefault(_nname.casefold(),
+                                                    str(_nrid))
+                # Beat-goal slot currency: the slot is rewritten every
+                # commit from the enacted want, but the CLAIM inside it is
+                # whatever the model re-emits, and nothing above counts its
+                # tenure or notices its named room has been reached. Stamp
+                # both facts here (goal_since / goal_room /
+                # goal_room_reached); agents/character reads them back as
+                # `goal_held` / `goal_reached` and stops ROUTING on a spent
+                # claim -- see affect.goal_slot_currency.
+                st["active_state"].update(affect.goal_slot_currency(
+                    prev_as, str(enacted_goal or ""), _named_rooms,
+                    _char_room_of(sc, sh), turn.idx))
+                for _p in projects:
+                    # One-shot backfill for projects that predate the ledger
+                    # (a live pa1 exists): grace from here, never instantly
+                    # adrift on the deploy beat. NOT setdefault -- the live
+                    # pa1 was measured carrying an explicit
+                    # last_served_turn: null, which setdefault preserves,
+                    # leaving the ledger dead and the drift marker silent
+                    # forever.
+                    try:
+                        int(_p.get("last_served_turn"))
+                    except (TypeError, ValueError):
+                        _p["last_served_turn"] = turn.idx
+                _impact_serves = [
+                    affect.normalize_serves(
+                        str((gi or {}).get("serves") or ""),
+                        intentions, projects)
+                    for gi in (appraisal_input.get("goal_impacts") or [])
+                    if isinstance(gi, dict)]
+                for _pid in affect.projects_served_this_beat(
+                        projects, wants, str(enacted_goal or ""),
+                        _impact_serves, _named_rooms):
+                    for _p in projects:
+                        if str(_p.get("id") or "") == _pid:
+                            _p["last_served_turn"] = turn.idx
+                            # Distinct serving beats, for establishment:
+                            # probation is left by service, never survival.
+                            _p["served_beats"] = 1 + int(
+                                _p.get("served_beats") or 0)
+                # Probation settles AFTER this beat's service counted:
+                # runtime adoptions establish once lived into (drive weight
+                # from the NEXT beat) or lapse quietly once unserved past
+                # the fuse. Authored/harness projects carry no probation
+                # flag and pass through untouched.
+                projects, former_projects, _probw = affect.settle_probation(
+                    projects, former_projects, turn.idx)
+                for w in _probw:
+                    ctx.add_warning(f"{cname}: project -- {w}")
+                # Boundary detection runs BEFORE record_spatial_experience
+                # (below, line ~4100), so st["visited_rooms"] still ends at
+                # the previous position while sc already holds the new one
+                # -- which is exactly the arrival comparison needed.
+                _prev_room = next(
+                    (str(r) for r in reversed(st.get("visited_rooms") or [])
+                     if isinstance(r, str) and r), None)
+                _scene_marker = (interior.get("scene_marker")
+                                 if isinstance(interior.get("scene_marker"),
+                                               dict) else None)
+                _loc_now = str(sc.get("location") or "")
+                _review_why = affect.project_boundary(
+                    projects, intentions, _before_status,
+                    _char_room_of(sc, sh), _prev_room, _scene_marker,
+                    _loc_now, turn.frame_id, _named_rooms)
                 # --- Drive rupture (Tier 1): a deterministic strain ledger and
                 # two-key gate that can, rarely and earned, crack the core drive.
                 def _serves_of(i):
@@ -3618,6 +4075,17 @@ def prepare_memory_commit(ctx, *, scene=None):
                         rupture = None
                 _interior_out = {
                     "intentions": intentions,
+                    # Both project ledgers, every beat: this dict is rebuilt
+                    # from scratch, and a key not carried here is a key
+                    # silently erased.
+                    "projects": projects,
+                    "former_projects": former_projects,
+                    # Where and in which frame this beat committed -- what
+                    # project_boundary compares against next beat. Written
+                    # unconditionally so a project adopted later still meets
+                    # a fresh marker.
+                    "scene_marker": {"location": _loc_now,
+                                     "frame": str(turn.frame_id or "")},
                     "drive_strain": round(float(strain), 4),
                     "strain_log": strain_log,
                     "former_drives": former,
@@ -3639,6 +4107,11 @@ def prepare_memory_commit(ctx, *, scene=None):
                     _interior_out["drive_rupture"] = rupture
                 if override is not None:
                     _interior_out["drive_override"] = override
+                if _review_why:
+                    # One-beat flag: _interior_out is rebuilt each commit,
+                    # so this clears itself unless a new boundary fires.
+                    _interior_out["project_review"] = {
+                        "turn": turn.idx, "why": _review_why}
                 st["interior"] = _interior_out
             # --- Recent-tell ledger: the last few physical cues this
             # character has shown, kept on cstate and fed back into the
@@ -3679,8 +4152,18 @@ def prepare_memory_commit(ctx, *, scene=None):
                     continue
                 try:
                     stance.setdefault("axes", {})
+                    # P9: the schema clamps each DELTA, but the running total
+                    # was unbounded -- a character nudged the same direction
+                    # every beat walked past the [-1, 1] the axes are read as
+                    # (character_schema seeds them from baseline_stances in
+                    # that range), and every consumer downstream then compared
+                    # against a scale the value had left. Clamped here because
+                    # this is the only place the accumulation happens; a reroll
+                    # re-applying a delta is P2's problem, not this one.
                     stance["axes"][ax] = round(
-                        float(stance["axes"].get(ax, 0)) + float(u.get("delta", 0)),
+                        max(-1.0, min(1.0,
+                            float(stance["axes"].get(ax, 0))
+                            + float(u.get("delta", 0)))),
                         3,
                     )
                     stance.setdefault("log", []).append({
@@ -3690,10 +4173,84 @@ def prepare_memory_commit(ctx, *, scene=None):
                 except Exception:
                     pass
             st["stance"] = stance
+            # Rooms this body has actually walked through, the exits of rooms
+            # stood in, visibly-closed chambers, and the durable place graph
+            # -- everything a beat of standing somewhere earns, recorded in
+            # one place (see record_spatial_experience). Their OWN traversal
+            # history and sight, so it crosses no information boundary.
+            # Lazy, like the other agents.common uses in this module: importing
+            # it at module scope would close an import cycle.
+            from agents.common import character_room as _character_room
+            record_spatial_experience(
+                st, sc, _character_room(sc, sh), turn.idx)
+            # Place purpose, witnessed basis: their OWN vitals rising across
+            # consecutive commits settled in this room (they ate here; they
+            # rested here), or their body verifiably lying on a soft support
+            # (comfort.rest_affording -- the seam comfort.py left for exactly
+            # this writer). Runs after record_spatial_experience so the
+            # standing room's node exists. Never the event row.
+            import place_purpose
+            place_purpose.witness_affords(st, sc, cname, turn.idx)
+            _mm_updates = own_result.get("mind_model_updates") or []
+            # A claim about a PLACE is re-keyed onto that place before it is
+            # merged. Hypotheses group by (about_entity, kind) and explain each
+            # other away within a group -- correct for a mind, backwards for
+            # space -- so a character filing every room under one umbrella
+            # entity had each new room suppress the last. People are protected:
+            # a claim about someone stays about them even when it says where
+            # they were standing.
+            if _mm_updates:
+                _place_names = [
+                    str((room or {}).get("name") or rid)
+                    for rid, room in (sc.get("rooms") or {}).items()
+                ]
+                from scene import persona_of as _persona_of
+                _people = [character_name(json.loads(_r["sheet"]))
+                           for _r in ctx.cast]
+                _people.append(persona_name(_persona_of(chat)))
+                _mm_updates = rekey_place_claims(
+                    _mm_updates, _place_names, protected=_people)
+            # Absorption is read off the state we just settled, so it reflects
+            # the body at the END of the beat -- the state the character
+            # actually comes out of it in, which is what governs what they can
+            # still hold in mind going into the next one.
+            _settled = st.get("active_state") or {}
+            _absorption = psychology_runtime.cognitive_absorption(
+                _settled.get("hedonic"), _settled.get("stress"))
             st = apply_mind_model_updates(
-                st, own_result.get("mind_model_updates") or [], turn.idx,
-                elapsed_seconds=_clock_seconds,
+                st, _mm_updates, turn.idx, elapsed_seconds=_clock_seconds,
+                absorption=_absorption,
             )
+            # Place purpose, told basis: stated-fact place beliefs (already
+            # re-keyed onto place names above) mirrored onto this character's
+            # OWN place-graph nodes, and every existing told entry's sureness
+            # re-asked from belief_credence -- the node entry is a read-model
+            # of the belief, and a belief explained away must stop steering
+            # (docs/DESIGN_PLACE_PURPOSE.md, mandatory drift rule). Runs
+            # AFTER the merge so it reads reconciled beliefs, mirroring how
+            # reconcile_inference_confidence treats memories.
+            place_purpose.mirror_told_affords(st, turn.idx, _clock_seconds)
+            # Re-selected on every beat this character acted in, not only when
+            # `_mm_updates` is non-empty: capacity tracks the BODY, so someone
+            # merely in more pain than last beat holds fewer open questions
+            # even though they concluded nothing new.
+            _sheet, _sheet_keys = select_active_hypotheses(
+                st.get("mind_models") or {},
+                st.get("active_hypothesis_keys"),
+                sheet_capacity(_absorption),
+                turn.idx,
+                elapsed_seconds=_clock_seconds,
+                absorption=_absorption,
+            )
+            st["active_hypotheses"] = _sheet
+            st["active_hypothesis_keys"] = _sheet_keys
+            if _mm_updates:
+                # Only characters whose beliefs actually moved this turn are
+                # reconciled: the reconcile scans that character's whole
+                # inference bank, and a belief cannot be abandoned on a turn
+                # nothing was claimed about it.
+                belief_reconciles.append(
+                    (cid, ccid, st, _clock_seconds))
             explicit_updates = own_result.get("relationship_updates") or []
             if explicit_updates:
                 relationship_ops.append(("explicit", ccid, explicit_updates))
@@ -3713,6 +4270,7 @@ def prepare_memory_commit(ctx, *, scene=None):
         "memory_batch": prepare_memories_batch(pending_memories),
         "state_updates": state_updates,
         "relationship_ops": relationship_ops,
+        "belief_reconciles": belief_reconciles,
         "event_content": event_content,
     }
 
@@ -3772,6 +4330,18 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
         for chat_id, char_id, state_json in prepared["state_updates"]:
             set_char_state(
                 chat_id, char_id, state_json, frame_id=turn.frame_id,
+            )
+        # After the batch insert AND after the state write, so this turn's own
+        # freshly-minted inference rows are re-weighted by the same reconciled
+        # mind_models everything else now reads -- a claim minted at the
+        # model's declared confidence and then blended/suppressed by
+        # apply_mind_model_updates would otherwise sit in the bank at the
+        # pre-blend number forever.
+        for chat_id, char_id, char_state, clock_seconds in prepared.get(
+                "belief_reconciles") or []:
+            reconcile_inference_confidence(
+                chat_id, char_id, char_state, turn.idx,
+                elapsed_seconds=clock_seconds,
             )
         qi(
             """INSERT INTO events(chat_id,turn_id,content) VALUES(?,?,?)

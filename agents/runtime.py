@@ -601,11 +601,6 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
         input=turn_row["player_input"],
         extra_players=_load_extra_players(chat_id, turn_row["idx"], turn_row["frame_id"]),
     )
-    # F1: flag reroll runs so downstream consumers (memory search in
-    # character steps) can apply a turn cutoff and exclude stale memories
-    # minted by the original run of this turn.
-    if from_key is not None or only_key is not None:
-        ctx["_reroll"] = True
 
     def _restore_and_refresh():
         """Restore durable state and invalidate the pre-restore cast cache."""

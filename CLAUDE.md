@@ -92,5 +92,37 @@ Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` lo
   receive its own interoception/body state and its final scrubbed observations,
   never another character's vitals or raw Director event. Run the adversarial
   perception and self-knowledge tests when adding any new cognition field.
+- **Author psychology with great care, and fill every field — an empty one
+  fails silently.** These parameters do not error, do not warn at runtime, and
+  do not show up in any test; they show up as a character who behaves wrongly
+  fifty beats later, by which time the cause looks like a model problem.
+  Measured cases, all from the maze arms
+  ([`docs/MAZE_ARMS.md`](docs/MAZE_ARMS.md),
+  [`docs/DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](docs/DESIGN_PSYCHOLOGY_AS_PRESSURE.md)):
+  - **`psychology.drive` empty is the worst of them.** A sheet with rich
+    traits, values and goals but `{"essence": "", "expression": "", "taboo":
+    ""}` reads as complete and is not. Every motivation then lives in
+    `initial_state.goals`, and goals are built to be completable and
+    abandonable — so when they decay the character simply stops wanting
+    things. A courier walked sixteen optimal rooms to his destination and
+    turned away, because nothing underneath the spent goals wanted it. A drive
+    survives goal decay; author one that cannot be satisfied, or it becomes a
+    goal wearing the word.
+  - **It fails invisibly because `serves: "drive"` stays valid against an
+    empty drive.** The character emitted drive-serving wants for 150 beats
+    against three empty strings, and nothing anywhere objected.
+    `importers.character_import_warnings` catches this, but only on the import
+    path — a card built or edited any other way gets no warning.
+  - **Phrase `values` as trade-offs that name what yields** ("speed over
+    thoroughness"), not as a flat list of virtues or prohibitions. A flat list
+    has no ranking, so it cannot be traded against anything and operates as a
+    constraint set. Bare prohibitions invert: `"never breaking stride"` was
+    read by its own character as an argument *against* running.
+  - **Authoring is not retraction.** A sheet edit does not remove a
+    disposition the character has already lived — the phrase above survived in
+    69 of his 222 memories after it was deleted from the sheet, and he kept
+    writing more. Fix a sheet before a long run, not during one.
+  - Treat sheet-authored values as *unproven until observed in conduct*. Two
+    separate correct sheet edits have so far failed to change behaviour.
 - Run `make check` before considering a change complete; it will catch a stale `docs/CODE_MAP.md`, duplicate top-level symbols, and leftover patch-debris markers as hard failures.
 - Never commit `engine.db*`, `*.sqlite*`, `backdrops/`, `__pycache__/`, Python bytecode, or content-bearing `*.trace.json` diagnostics.

@@ -16,17 +16,17 @@ from db import q
 from llm_quality import complete_validated_json
 from memory import chat_lorebook_ids, chat_lorebook_weights
 from providers import chat_complete
-from scene import get_scene, persona_of, awareness_of, awareness_map, NON_AWAKE_GATED
+from scene import get_scene, persona_of, NON_AWAKE_GATED
 from schemas import normalize_speech_volume
 from spatial import (
     ambient_scope,
     containment_conceals,
+    entity_arc,
     has_visual,
     hear_level,
     nearby_rooms,
     normalize_room_id,
     room_of,
-    spatial_rel,
 )
 from theory_of_mind import _TOM_CONFIDENCE_CAPS, cap_mind_model_updates
 
@@ -100,13 +100,38 @@ def _stem_token(tok):
     return tok
 
 
+# Where one subject's predicate ends. Used to scope the autonomy test to the
+# clause that actually belongs to the named character -- see
+# _predicate_after_name.
+_CLAUSE_BREAKS = re.compile(
+    r"\b(?:and|but|as|while|then|so|because|before|after|until|when|though)\b"
+    r"|[,;:—]")
+
+
+def _predicate_after_name(text_cf, end):
+    """The clause remainder belonging to a subject whose name ends at `end`.
+
+    The autonomy vocabulary is deliberately made of ordinary words ('relax',
+    'agree', 'enjoy'), so testing for them ANYWHERE in an attempt made any
+    sentence containing one read as puppeting: 'Sarah steps back and I enjoy
+    the view' rerouted the player's own step-back into an offer for Sarah, and
+    'her grip doesn't yield as I push against Sarah' rerouted a push. Cutting
+    at the first coordinator or clause break keeps the test on the predicate
+    the character is actually the subject of -- 'steps back', not '...and I
+    enjoy the view'."""
+    tail = text_cf[end:].lstrip(" '’,")
+    cut = _CLAUSE_BREAKS.search(tail)
+    return tail[:cut.start()] if cut else tail
+
+
 def _is_autonomous_response(verb, text):
     """True when the described outcome is a volitional or involuntary response
     that belongs to the person having it -- submitting, panicking, giving in.
-    Checked on the declared verb and anywhere in the text (unlike
-    _is_mental_action's leading-token rule) because the construction that
-    matters here routinely buries the verb: 'the strain finally pushes her
-    over the edge'."""
+
+    `text` must already be scoped to ONE subject's predicate (see
+    _predicate_after_name); this scans all of it rather than only the leading
+    token, because the construction that matters routinely buries the verb
+    ('...pushes Dr. Moon over the edge')."""
     v = str(verb or "").strip().casefold()
     if v in _AUTONOMY_VERBS or _stem_token(v) in _AUTONOMY_VERBS:
         return True
@@ -535,39 +560,66 @@ def authored_other_subject(elem, name_forms, actor_forms=()):
     is rerouted -- 'stabs Sarah' stays the player's act and Sarah's response
     is resolved through the reaction phase. A physical NPC beat with no
     interior or autonomous outcome ('Dr. Moon steps back') is likewise left
-    for the world/perception path."""
+    for the world/perception path.
+
+    The autonomy test is applied to the clause the named character is the
+    SUBJECT of, never to the whole attempt -- dropping a player-declared act
+    because a later clause happens to contain an ordinary word like 'enjoy'
+    would violate the Director's own floor against silently replacing the
+    player's declared action (AGENTS.md)."""
     if not isinstance(elem, dict) or elem.get("type") != "action":
         return None
     att = str(elem.get("attempt") or "").strip()
     low = att.casefold()
     if not low:
         return None
-    autonomous = _is_mental_action(
-        elem.get("verb"), att) or _is_autonomous_response(
-            elem.get("verb"), f"{att} {_element_effect_text(elem)}")
-    if not autonomous:
-        return None
+
+    def _predicate_is_autonomous(predicate):
+        return (_is_mental_action(None, predicate)
+                or _is_autonomous_response(None, predicate))
+
+    # Shape 1: the attempt OPENS with a cast member's name, so the declared
+    # verb and the clause that follows are both that character's predicate.
     for cid, forms in (name_forms or {}).items():
         for form in forms:
-            if any(low.startswith(form + suf) for suf in (" ", "'", "’")):
+            if not any(low.startswith(form + suf) for suf in (" ", "'", "’")):
+                continue
+            if (_is_mental_action(elem.get("verb"), "")
+                    or _is_autonomous_response(
+                        elem.get("verb"), _element_effect_text(elem))
+                    or _predicate_is_autonomous(
+                        _predicate_after_name(low, len(form)))):
                 return cid
+            return None
+
+    # Shape 2: a noun/pronoun-led clause names exactly one cast member as the
+    # experiencer. The declared verb belongs to the leading noun here, not to
+    # the character, so ONLY the clause following their name can qualify --
+    # otherwise 'I remember Dr. Moon's face' (verb: remember) would reroute the
+    # player's own recall into an offer for Dr. Moon.
     lead_tokens = re.split(r"[^\w']+", low, maxsplit=1)
     lead = lead_tokens[0] if lead_tokens else ""
     if lead in {str(f).casefold() for f in (actor_forms or ())}:
         return None
     if lead not in _SUBJECT_LEADS:
         return None
-    named = {
-        cid for cid, forms in (name_forms or {}).items()
-        if any(re.search(rf"\b{re.escape(form)}\b", low) for form in forms)
-    }
-    return named.pop() if len(named) == 1 else None
+    named = []
+    for cid, forms in (name_forms or {}).items():
+        for form in forms:
+            hit = re.search(rf"\b{re.escape(form)}\b", low)
+            if hit:
+                named.append((cid, hit.end()))
+                break
+    if len(named) != 1:
+        return None
+    cid, name_end = named[0]
+    return cid if _predicate_is_autonomous(
+        _predicate_after_name(low, name_end)) else None
 
 
 def bind_sequence_targets(sequence, target_forms):
     """Fill an action element's EMPTY `targets` with the display names of the
-    cast members its own text names, and mirror those names onto effects that
-    left `target_id` null.
+    cast members its own text names.
 
     The director routinely emits an act that plainly lands on a character with
     `targets: []` -- and every downstream seam that asks "does this land on
@@ -576,7 +628,15 @@ def bind_sequence_targets(sequence, target_forms):
     all of them. Binding is by NAME because `ActionElement.targets` is typed as
     display names and perception matches them casefolded. Only ever ADDS a
     binding the text already supports; an element the director bound itself is
-    left untouched."""
+    left untouched.
+
+    Deliberately does NOT mirror the name onto effects that left `target_id`
+    null. A mention is evidence the act CONCERNS that character, which is all
+    `targets` claims; an effect's `target_id` is the stronger claim that the
+    outcome LANDS on them, and inferring it from the same mention manufactured
+    authority claims the director never authored ('dodge away from Sarah' does
+    not put an effect on Sarah). `_extract_authority_claims` reads the same
+    name evidence through its own `target_forms` guard instead."""
     bound = 0
     for elem in _dict_list(sequence):
         if elem.get("type") != "action" or elem.get("targets"):
@@ -593,11 +653,6 @@ def bind_sequence_targets(sequence, target_forms):
             continue
         elem["targets"] = names
         bound += 1
-        if len(names) == 1:
-            for eff in _dict_list(elem.get("intended_effects")) + _dict_list(
-                    elem.get("asserted_effects")):
-                if not eff.get("target_id"):
-                    eff["target_id"] = names[0]
     return bound
 
 
@@ -812,7 +867,7 @@ def _agent_json(
     payload,
     *,
     temperature=None,
-    max_tokens=16000,
+    max_tokens=None,   # the configured ceiling; see complete_validated_json
     sampler=None,
 ):
     """The STRICT validated-JSON path every state-mutating pipeline stage
@@ -1279,63 +1334,45 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
             return "the " + " ".join(words).rstrip(".;:").lower()
     return "the unfamiliar person"
 
-def _delivery_ok(scene, observer_name, source_name, channel,
-                volume="normal", proximity=None, behind_sources=None,
-                awareness=None):
-    """Unified delivery gate (Pattern 3): consolidate the scattered
-    per-observer delivery checks into one predicate so every call site
-    applies the same containment, awareness, sight, and hearing gates.
+def _delivery_ok(relation, scene, observer_name, source_name, channel,
+                 volume="normal", proximity=None, behind_sources=None,
+                 awareness=None):
+    """Can this observer receive this source through this channel?
 
-    Returns True if the source's channel reaches this observer.
+    Cross-seam pattern 3: the deterministic delivery paths each grew their own
+    partial gate, so every one of them skipped a rule the perception model path
+    honours -- the micro-loop skipped containment and graded sight, the outcome
+    action backstop skipped the rear arc, the background channel skipped
+    station. This is the one predicate all of them call, so a rule added here
+    reaches every deterministic delivery site at once.
 
-    - **containment_conceals**: a sealed container blocks sight and
-      hearing for non-carriers.
-    - **awareness**: a non-awake mind receives nothing.
-    - **sight**: has_visual + not in rear blind spot + not concealed.
-    - **hearing**: hear_level with proximity; sealed containers block.
-    - **action**: requires sight (an action is visible or it is nothing).
+    `relation` is the caller's own `spatial_rel` result (built from ROOM ids,
+    which only the caller can resolve uid/alias-tolerantly). Everything else is
+    derived here:
+
+    - **awareness** -- a non-awake mind receives nothing.
+    - **containment** -- a sealed enclosure blocks sight AND sound, in both
+      directions (`containment_conceals` is symmetric).
+    - **hearing** -- `hear_level` including the `proximity` downgrade, so a
+      muttered aside does not carry to an arbitrarily large room.
+    - **sight/action** -- `has_visual` plus the rear-arc blind spot. An action
+      is visible or it is nothing.
     """
-    # Awareness gate: non-awake = no delivery.
     if awareness is not None and awareness in NON_AWAKE_GATED:
         return False
-
-    # Containment gate: a concealed (sealed) container blocks both sight
-    # and sound for a non-carrier observer.
+    if observer_name == source_name:
+        return True
     if containment_conceals(scene, observer_name, source_name):
-        if channel == "hearing":
-            # Sound through a sealed container is blocked entirely.
-            return False
-        # Sight through a sealed container is also blocked.
         return False
 
-    if channel == "sight":
-        # Rear-arc blind spot: a source behind the observer is not visible
-        # even if same-room.
-        if behind_sources and source_name in behind_sources:
-            return False
-        return True
-
-    if channel == "action":
-        # Actions require sight: same visual gate as 'sight' channel.
-        if behind_sources and source_name in behind_sources:
-            return False
-        return True
-
     if channel == "hearing":
-        # Compute spatial relation for hear_level.
-        from character_schema import character_name as _cn
-        # The caller should pass the relation-derived hear level result;
-        # but if not, we can compute it here.
-        # For the unified gate, we expect the caller to have already
-        # determined the spatial relation; here we just check that hearing
-        # is not blocked by containment (already checked above).
-        # The actual hear_level computation requires spatial_rel, which
-        # needs room info; callers pass the result via the 'level' return.
-        # This gate returns True if hearing is not blocked by containment
-        # or awareness; the caller still needs hear_level for volume/distance.
-        return True
+        return hear_level(relation, volume, proximity=proximity) != "none"
 
-    return True
+    if behind_sources and source_name in behind_sources:
+        return False
+    if entity_arc(scene, observer_name, source_name) == "rear":
+        return False
+    return bool(has_visual(relation))
 
 def _strip_identity_tokens(text, forms):
     """Remove an actor's name/alias forms from engine-supplied prose (an
@@ -1777,20 +1814,62 @@ def _cap_repeated_quotes(prose, view, exclude_bodies=()):
 def _quote_body(quote):
     return (quote or "").strip().strip('"' + "'" + "\u201c\u201d\u2018\u2019")
 
-def _inject_dialogue(view, display, quote, level, volume, can_see):
+# What survives muffling: stressed, longer words. Function words are the first
+# thing lost, which is why an overheard fragment is a scatter of nouns and verbs
+# rather than a summary.
+_MUFFLE_KEEP_MIN = 4
+_MUFFLE_MAX_WORDS = 3
+
+
+def _muffled_fragment(body):
+    """A partial transcript of what actually carried, not a description of it.
+
+    This used to render "...something about <three middle words>...", which
+    narrates the ACT of half-hearing instead of delivering the percept: the view
+    said the perceiver heard something about a thing rather than letting them
+    hear the pieces. It also read badly in prose and gave the narrator a stock
+    phrase to echo.
+
+    Each surviving word is emitted as its own ellipsis-separated chunk, and only
+    ever verbatim -- `_scrub_invented_dialogue` validates a muffled line by
+    checking every chunk against the lines actually spoken, so a chunk stitched
+    across punctuation ("climax, squeeze" -> "climax squeeze") would fail that
+    check and get the whole line dropped.
+    """
+    words = [w.strip(".,;:!?\"'\u201c\u201d\u2018\u2019") for w in (body or "").split()]
+    kept = [w for w in words if len(w) >= _MUFFLE_KEEP_MIN]
+    if not kept:
+        return "...something indistinct..."
+    if len(kept) > _MUFFLE_MAX_WORDS:
+        # The longest carry best; original order is preserved so the fragment
+        # still tracks the shape of the sentence.
+        strongest = set(sorted(kept, key=len, reverse=True)[:_MUFFLE_MAX_WORDS])
+        seen, kept2 = set(), []
+        for w in kept:
+            if w in strongest and w not in seen:
+                seen.add(w)
+                kept2.append(w)
+        kept = kept2
+    return "..." + "... ".join(kept) + "..."
+
+
+def _inject_dialogue(view, display, quote, level, volume, can_see,
+                    conducted=False):
     if level == "none":
         return view
     body = _quote_body(quote)
     if not body or _contains_quote(view, body):
         return view
     if level == "fragment":
-        words = body.split()
-        if len(words) <= 3:
-            frag = "...something indistinct..."
-        else:
-            mid = len(words) // 2
-            frag = "...something about " + " ".join(words[mid:mid + 3]) + "..."
-        return _append_once(view, f"A muffled voice: {frag}")
+        return _append_once(
+            view, f"A muffled voice: {_muffled_fragment(body)}")
+    if conducted:
+        # Heard from inside the speaker: the mass around the listener is the
+        # medium, so it arrives low and close rather than across a distance.
+        return _append_once(
+            view,
+            f"{display}'s voice carries through everything around you, "
+            f'low and close: "{body}"')
     if volume == "shout":
         verb = "shouts"
     elif volume in ("whisper", "mutter"):

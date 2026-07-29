@@ -10,6 +10,7 @@ from prompts import get_prompt
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 import frames as _frames
+from theory_of_mind import belief_credence
 from db import active_frame_id as _active_frame_id
 
 _UNSET = object()
@@ -60,6 +61,46 @@ MEMORY_PROVENANCE = [
     "witnessed", "heard", "told", "read",
     "inferred", "remembered",
 ]
+
+# P8: which rolling summary a memory folds into.
+#
+# Consolidation used to melt every provenance into ONE autobiographical string
+# that was then fed back wholesale each turn -- so the distinction this engine's
+# thesis rests on, between what a character SAW, what they were TOLD, and what
+# they GUESSED, did not survive the summary layer. A belief they inferred came
+# back a few turns later indistinguishable from something they had witnessed,
+# which is belief laundering into knowledge inside a single mind.
+#
+# Three scopes rather than a provenance tag per sentence, because the summary is
+# prose written by a model and a tag inside prose is a convention it can drop.
+# A separate row cannot be dropped. `memory_summaries` is already keyed
+# (chat_id, char_id, scope) and every dump/restore/archive path iterates rows
+# generically, so this needs no migration and rides existing round-trips.
+SUMMARY_SCOPE_FIRSTHAND = "autobiographical"
+SUMMARY_SCOPE_HEARSAY = "hearsay"
+SUMMARY_SCOPE_SURMISE = "surmise"
+
+_PROVENANCE_SCOPE = {
+    "witnessed": SUMMARY_SCOPE_FIRSTHAND,
+    "remembered": SUMMARY_SCOPE_FIRSTHAND,
+    "heard": SUMMARY_SCOPE_HEARSAY,
+    "told": SUMMARY_SCOPE_HEARSAY,
+    "read": SUMMARY_SCOPE_HEARSAY,
+    "inferred": SUMMARY_SCOPE_SURMISE,
+}
+
+# Keyed by scope: the model field carrying it, and how the character's own
+# context labels it back to them.
+_SUMMARY_SCOPES = (
+    (SUMMARY_SCOPE_FIRSTHAND, "summary", "what_i_experienced"),
+    (SUMMARY_SCOPE_HEARSAY, "hearsay_summary", "what_i_was_told"),
+    (SUMMARY_SCOPE_SURMISE, "surmise_summary", "what_i_concluded"),
+)
+
+
+def summary_scope_for(provenance):
+    return _PROVENANCE_SCOPE.get(
+        str(provenance or "").strip().casefold(), SUMMARY_SCOPE_FIRSTHAND)
 
 try:
     import sqlite_vec
@@ -1088,27 +1129,31 @@ def _rrf_add(scores, reasons, ranking, weight, reason):
 
 def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
                     current_turn_idx=None, chronological=True, viewer_frame_id=_UNSET,
-                    max_turn_idx=None):
+                    here=None, in_sight=None):
     rows = q("SELECT * FROM memories WHERE chat_id=? AND char_id=? AND (?=1 OR archived=0)",
              (chat_id, char_id, 1 if include_archived else 0))
     if current_turn_idx is not None:
-        # An onset-time reroll must not retrieve the discarded outcome memory
-        # for the very turn it is deciding again. Exclude both the current and
-        # any future play-order rows before semantic/lexical ranking.
+        # Audit F1, and the SOLE defence against it: a mind deciding turn N
+        # must never retrieve a memory of how turn N turned out. That is not
+        # hypothetical -- a reroll or a rerun-from-stage replays the onset of
+        # a turn whose outcome memories are already committed, so without this
+        # cutoff the character reads the discarded future of the very beat it
+        # is being asked to decide. current_turn_idx used to feed only the
+        # recency scoring below, which RANKED those rows highly instead of
+        # dropping them; it is now a hard filter applied before any
+        # semantic/lexical ranking, so no scoring path can resurrect them.
+        # Strictly `<`: turn N itself and every later play-order turn go.
+        # turn_idx IS NULL rows (imported or authored memories with no place
+        # in play order) are deliberately kept -- they belong to no turn, so
+        # they cannot be this turn's leaked outcome.
         rows = [
             row for row in rows
             if row["turn_idx"] is None or row["turn_idx"] < current_turn_idx
         ]
-    # F1: reroll turn cutoff -- a reroll of a mid-pipeline step must not
-    # retrieve memories minted by the stale run of this same turn (or any
-    # later turn). Unlike current_turn_idx (which excludes the turn itself
-    # with <), max_turn_idx is inclusive: memories from turn_idx ==
-    # max_turn_idx are kept, only turn_idx > max_turn_idx is excluded.
-    if max_turn_idx is not None:
-        rows = [
-            row for row in rows
-            if row["turn_idx"] is None or row["turn_idx"] <= max_turn_idx
-        ]
+    here_set = {str(here).strip().casefold()} if here else set()
+    in_sight_set = {
+        str(p).strip().casefold() for p in (in_sight or ()) if str(p or "").strip()
+    } - here_set
     vf = _active_frame_id.get() if viewer_frame_id is _UNSET else viewer_frame_id
     rows = [r for r in rows if _frames.is_memory_visible(char_id, r["frame_id"], vf, r["turn_idx"])]
     if not rows:
@@ -1145,6 +1190,21 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
     for mid, mem in memories.items():
         fused[mid] += 0.08 * mem["salience"]
         fused[mid] += 0.04 * mem["confidence"]
+        if mem["kind"] == "inference":
+            # Belief-weighted recall. Confidence on an inference row is no
+            # longer a mint-time constant -- reconcile_inference_confidence
+            # tracks it to what the character currently believes -- so it is
+            # the signal that separates a live belief from one they have since
+            # explained away. Signed around 0.5 so a held belief is promoted
+            # and an abandoned one demoted; magnitude is deliberately in the
+            # same band as the salience term above rather than larger, because
+            # this should break a tie between competing inferences, not
+            # outrank an actual semantic match.
+            fused[mid] += 0.10 * (mem["confidence"] - 0.5)
+            if mem["confidence"] >= 0.6:
+                reasons[mid].append("belief the character still holds")
+            elif mem["confidence"] <= 0.25:
+                reasons[mid].append("belief the character has since revised")
         fused[mid] += 0.08 * _exact_cue_score(mem, query_text)
         ti = mem["turn_idx"]
         if ti is not None and max_turn:
@@ -1157,6 +1217,30 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
                 fused[mid] += 0.12 * (1.0 - age)
                 if "recent-memory cue" not in reasons[mid]:
                     reasons[mid].append("recent-memory cue")
+        # Where you are is a retrieval cue. Ranking was semantic + lexical +
+        # recency only, so "what happened in THIS room" -- and the navigational
+        # form of it, "which way did I go from here last time" -- had no index
+        # behind it at all: the one memory that answers it competes purely on
+        # wording. `location` was already stored on every row and simply never
+        # read. Deliberately modest, and additive rather than a filter: being
+        # here makes a memory easier to reach, it does not make everything
+        # elsewhere unreachable.
+        if here_set and str(mem.get("location") or "").strip().casefold() \
+                in here_set:
+            fused[mid] += 0.09
+            if "happened here" not in reasons[mid]:
+                reasons[mid].append("happened here")
+        elif in_sight_set and str(mem.get("location") or "").strip().casefold() \
+                in in_sight_set:
+            # A place currently VISIBLE is a retrieval cue too, and it is the
+            # more useful one: recalling what happened in the room you are
+            # standing in confirms where you are, but recalling it about a room
+            # you can SEE lets you decide whether to go there. Weighted below
+            # the here-cue, since standing somewhere is stronger evidence of
+            # relevance than looking at it.
+            fused[mid] += 0.05
+            if "visible from here" not in reasons[mid]:
+                reasons[mid].append("visible from here")
         if mem["category"] == "promise" and any(t in query_text.lower() for t in ("promise", "promised", "swore", "vow", "agreed")):
             fused[mid] += 0.1
             reasons[mid].append("promise category")
@@ -1280,17 +1364,34 @@ def save_memory_summary(chat_id, char_id, summary, *, scope="autobiographical", 
         embedding, embedding_model, embedding_dim, time.time()))
 
 def build_character_memory_context(chat_id, char_id, current_turn_idx, current_view, active_state, *,
-                                   recent_turns=4, recall_limit=8, max_turn_idx=None):
+                                   recent_turns=4, recall_limit=8, here=None,
+                                   in_sight=None):
     active_state = active_state or {}
     recent = recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=recent_turns, limit=12)
     recent_ids = {m["id"] for m in recent}
     summary = get_memory_summary(chat_id, char_id)
+    # P8: the other two epistemic classes travel as their own labelled fields
+    # rather than being melted into the first-hand paragraph. A character must
+    # be able to tell what they saw from what they were told from what they
+    # worked out -- collapsing them is the same layer-collapse the engine
+    # polices between minds, happening inside one.
+    provenance_summaries = {}
+    for scope, _field, label in _SUMMARY_SCOPES:
+        if scope == SUMMARY_SCOPE_FIRSTHAND:
+            continue
+        text = str(get_memory_summary(chat_id, char_id, scope).get("summary") or "").strip()
+        if text:
+            provenance_summaries[label] = text
     query_parts = [current_view or "", str(active_state.get("goal") or ""), str(active_state.get("mood") or ""),
                    " ".join(summary.get("unresolved_threads") or [])]
     query_text = " ".join(p for p in query_parts if p)
+    # current_turn_idx is required here (recent_memory_buffer arithmetic above
+    # would already fail on None), so search_memories' F1 turn cutoff always
+    # fires on this path -- the character context can never see turn N's own
+    # committed memories while deciding turn N, reroll or not.
     recalled = search_memories(chat_id, char_id, query_text, k=recall_limit,
-                               include_archived=True, current_turn_idx=current_turn_idx, chronological=True,
-                               max_turn_idx=max_turn_idx)
+                               include_archived=True, current_turn_idx=current_turn_idx,
+                               chronological=True, here=here, in_sight=in_sight)
     recalled = [m for m in recalled if m["id"] not in recent_ids]
     return {
         "working_memory": {
@@ -1315,9 +1416,13 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         },
         "recent_episodes": recent,
         "recalled_old_memories": recalled,
+        # First-hand only. What reached this character through someone else's
+        # account, and what they worked out for themselves, are carried
+        # separately below and must not be folded in here.
         "autobiographical_summary": summary.get("summary") or "",
         "summary_key_phrases": summary.get("key_phrases") or [],
         "unresolved_threads": summary.get("unresolved_threads") or [],
+        **provenance_summaries,
     }
 
 def consolidate_character_memory(chat_id, char_id, *, through_turn_idx=None, archive_old=True,
@@ -1378,10 +1483,23 @@ def consolidate_character_memory(chat_id, char_id, *, through_turn_idx=None, arc
         result = json.loads(re.sub(r",\s*([}\]])", r"\1", match.group(0)))
     start_turn = min(m["turn_idx"] for m in memories)
     end_turn = max(m["turn_idx"] for m in memories)
-    save_memory_summary(chat_id, char_id, result.get("summary") or "",
-                        start_turn_idx=start_turn, end_turn_idx=end_turn,
-                        key_phrases=result.get("key_phrases") or [],
-                        unresolved_threads=result.get("unresolved_threads") or [])
+    # One row per epistemic class. The first-hand row is written
+    # unconditionally, even when this window produced nothing first-hand,
+    # because maybe_consolidate_character_memory reads ITS end_turn_idx as the
+    # cursor -- skip it on a hearsay-only window and the same memories
+    # re-consolidate forever.
+    present = {summary_scope_for(m.get("provenance")) for m in memories}
+    for scope, field, _label in _SUMMARY_SCOPES:
+        text = str(result.get(field) or "").strip()
+        if scope != SUMMARY_SCOPE_FIRSTHAND and not text and scope not in present:
+            continue
+        save_memory_summary(
+            chat_id, char_id, text, scope=scope,
+            start_turn_idx=start_turn, end_turn_idx=end_turn,
+            key_phrases=(result.get("key_phrases") or []
+                         if scope == SUMMARY_SCOPE_FIRSTHAND else []),
+            unresolved_threads=(result.get("unresolved_threads") or []
+                                if scope == SUMMARY_SCOPE_FIRSTHAND else []))
     if archive_old:
         cutoff = max(start_turn, end_turn - 12)
         # Archive ONLY memories that were part of THIS (frame-visible)
@@ -2127,3 +2245,77 @@ def search_memories_vec(chat_id, char_id, query_vec, k=8):
     )
     return [{"kind": r["kind"], "provenance": r["provenance"], "turn": r["turn_id"],
              "salience": r["salience"], "content": r["content"], "distance": r["distance"]} for r in rows]
+
+
+# How far an inference the character no longer holds is pushed down, and the
+# floor it stops at. Not zero: a belief that was explained away is still a
+# belief they once had, and "I was sure of this and I was wrong" is a thing a
+# character should be able to recall. It just must not outrank what replaced it.
+_ABANDONED_BELIEF_DECAY = 0.55
+_ABANDONED_BELIEF_FLOOR = 0.08
+
+
+def reconcile_inference_confidence(chat_id, char_id, state, turn_idx,
+                                   elapsed_seconds=None):
+    """Re-weight this character's inference memories to what they believe NOW.
+
+    An inference memory is minted with the confidence the character declared
+    the moment they formed it, and nothing ever revisited it. Meanwhile their
+    mind_models kept moving -- theory_of_mind.apply_mind_model_updates blends a
+    restated belief upward, partially explains away the competitor it displaces,
+    decays the unreinforced, and prunes what falls through the floor. So a
+    character could hold one belief and preferentially RECALL the one they had
+    already abandoned, because recall ranked on a number frozen at mint time.
+
+    This projects the reconciled credence back onto the memories that expressed
+    it: a claim still carried by a live hypothesis takes that hypothesis's
+    decay-adjusted confidence; a claim no hypothesis carries any more is pushed
+    toward _ABANDONED_BELIEF_FLOOR.
+
+    Information-firewall note, because this is the part that matters: the only
+    inputs are this character's OWN memory rows and their OWN mind_models, both
+    already built from what they legitimately perceived. Nothing here consults
+    the objective record, another mind's state, or whether the belief was
+    actually TRUE -- a character revises because of what they later perceived,
+    never because they were graded against reality. Reconciling against truth
+    would collapse the belief layer into the truth layer, which is the one
+    distinction this engine exists to keep.
+
+    `salience` is deliberately untouched: it records how much the inference
+    mattered when it was formed (and drives consolidation/archiving), which is
+    a different question from how much the character credits it now.
+
+    Returns the number of rows whose confidence changed.
+    """
+    rows = q(
+        "SELECT id, entities, gist, confidence FROM memories "
+        "WHERE chat_id=? AND char_id=? AND kind='inference'",
+        (chat_id, char_id),
+    )
+    if not rows:
+        return 0
+
+    updates = []
+    for row in rows:
+        subjects = _json_list(row["entities"])
+        subject = str(subjects[0]).strip() if subjects else ""
+        claim = str(row["gist"] or "").strip()
+        if not subject or not claim:
+            continue
+        credence = belief_credence(
+            state, subject, claim, turn_idx, elapsed_seconds)
+        if credence is None:
+            current = float(row["confidence"] or 0.0)
+            revised = max(_ABANDONED_BELIEF_FLOOR,
+                          current * _ABANDONED_BELIEF_DECAY)
+            # Only ever pushed DOWN by abandonment -- a memory already at or
+            # below the floor is left where it is rather than lifted to it.
+            revised = min(current, revised) if current else current
+        else:
+            revised = credence
+        if abs(revised - float(row["confidence"] or 0.0)) > 1e-6:
+            updates.append((round(revised, 4), row["id"]))
+
+    for confidence, mid in updates:
+        qi("UPDATE memories SET confidence=? WHERE id=?", (confidence, mid))
+    return len(updates)

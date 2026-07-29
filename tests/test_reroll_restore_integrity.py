@@ -154,3 +154,66 @@ def test_rerun_cast_state_is_the_restored_state(temp_db):
     assert cstate.get("active_state", {}).get("mood") == "calm", (
         "rerun deliberated with the discarded run's post-turn interior"
     )
+
+
+class TestRestoreMembershipGuards:
+    """P4 removes cast membership added since the checkpoint, but the sweep
+    that does it can destroy more than the promotion it was written for."""
+
+    def _chat_with_snapshot(self, temp_db, blob):
+        import json as _json
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("T", "", time.time()))
+        temp_db.qi(
+            "INSERT INTO checkpoints(chat_id,turn_idx,blob,created) "
+            "VALUES(?,?,?,?)",
+            (chat_id, 1, _json.dumps(blob), time.time()))
+        return chat_id
+
+    def _attach(self, temp_db, chat_id, name, sheet=None):
+        char_id = temp_db.qi(
+            "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
+            (name, "{}", "{}", time.time()))
+        temp_db.qi(
+            "INSERT INTO chat_chars(chat_id,char_id,status,state,sheet) "
+            "VALUES(?,?,'active','{}',?)",
+            (chat_id, char_id, sheet))
+        return char_id
+
+    def test_auto_promoted_member_is_removed(self, temp_db):
+        import checkpoints
+        chat_id = self._chat_with_snapshot(temp_db, {"world": {}, "chars": {}})
+        promoted = self._attach(temp_db, chat_id, "Promoted")
+        checkpoints.restore_checkpoint(chat_id, 1)
+        rows = temp_db.q(
+            "SELECT char_id FROM chat_chars WHERE chat_id=?", (chat_id,))
+        assert [r["char_id"] for r in rows] == []
+        assert promoted
+
+    def test_a_legacy_blob_without_a_chars_key_does_not_wipe_the_cast(
+            self, temp_db):
+        """`b.get("chars") or {}` reads identically for 'no cast' and 'no such
+        key', so an unguarded sweep deleted every cast member of any chat whose
+        checkpoint predates the chars field."""
+        import checkpoints
+        chat_id = self._chat_with_snapshot(temp_db, {"world": {}})
+        kept = self._attach(temp_db, chat_id, "Established")
+        checkpoints.restore_checkpoint(chat_id, 1)
+        rows = temp_db.q(
+            "SELECT char_id FROM chat_chars WHERE chat_id=?", (chat_id,))
+        assert [r["char_id"] for r in rows] == [kept]
+
+    def test_an_authored_per_story_card_is_not_destroyed(self, temp_db):
+        """chat_chars.sheet is Cast-tab authoring, is not in the snapshot, and
+        DELETE has nothing to restore it from."""
+        import checkpoints
+        chat_id = self._chat_with_snapshot(temp_db, {"world": {}, "chars": {}})
+        carded = self._attach(
+            temp_db, chat_id, "Carded", sheet='{"identity": {"name": "Carded"}}')
+        checkpoints.restore_checkpoint(chat_id, 1)
+        row = temp_db.q(
+            "SELECT sheet FROM chat_chars WHERE chat_id=? AND char_id=?",
+            (chat_id, carded), one=True)
+        assert row is not None
+        assert "Carded" in row["sheet"]

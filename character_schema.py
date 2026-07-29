@@ -299,7 +299,8 @@ def default_character_data(name: str = "Unnamed") -> dict:
             "pronouns": {"subject": "they", "object": "them", "possessive": "their"},
         },
         "initial_outfit": {"wearing": [], "state": []},
-        "simulation": {"tier": "mid", "temperature": 0.8, "sampler": {}},
+        "simulation": {"tier": "mid", "temperature": 0.8, "sampler": {},
+                       "curiosity": 0.5},
         "embodiment": {
             "senses": [
                 {"channel": "vision", "acuity": "ordinary", "range": "ordinary", "notes": ""},
@@ -914,6 +915,23 @@ def character_name(sheet: dict) -> str:
 def character_tier(sheet: dict) -> str:
     return str(normalize_character_data(sheet).get("simulation", {}).get("tier", "mid"))
 
+def character_curiosity(sheet: dict) -> float:
+    """How readily this character leaves something that works to look for
+    something better. 0 = methodical, never abandons a proven way; 1 = restless,
+    always drawn to what it has not tried.
+
+    Observed live: a character that had learned a route perfectly then abandoned
+    it on three consecutive attempts, exploring further each time. That was not
+    malfunction -- exploring after mastery is reasonable -- but the balance was
+    implicit, falling out of which affordances happened to exist rather than
+    from anything an author chose. Willingness to leave a known-good route is a
+    personality property and belongs on the card beside the rest of the
+    psychology.
+    """
+    sim = normalize_character_data(sheet).get("simulation", {})
+    return _profile_float(sim.get("curiosity"), 0.5)
+
+
 def character_temperature(sheet: dict) -> float:
     return _float_or(normalize_character_data(sheet).get("simulation", {}).get("temperature"), 0.8)
 
@@ -1042,6 +1060,13 @@ def character_standing_intentions(sheet: dict) -> list[dict]:
     goals = state.get("goals") or []
     out = []
     for i, g in enumerate(goals, 1):
+        # A plain string is the obvious way to author a goal, normalization
+        # preserves it, and this used to skip it -- so a card written that way
+        # got NO standing intentions at all and behaved purely reactively, with
+        # nothing anywhere saying why. Accept both shapes rather than leaving a
+        # silent gap between what the card format takes and what this reads.
+        if isinstance(g, str):
+            g = {"goal": g}
         if not isinstance(g, dict):
             continue
         text = str(g.get("goal") or "").strip()
@@ -1053,6 +1078,43 @@ def character_standing_intentions(sheet: dict) -> list[dict]:
             "priority": _float_or(g.get("priority"), 0.5),
         })
     return out
+
+def character_projects(sheet: dict) -> list[dict]:
+    """Authored PROJECTS (Tier 1.5) -- durable-but-not-eternal commitments,
+    read from the card's psychology.projects in the runtime shape. The tier
+    between the drive (eternal, placeless) and intentions (completable,
+    abandonable, swept when dormant): a project can name a room and survives
+    barren stretches, single successes, and the death of the tactics that
+    serve it. See docs/DESIGN_LONG_TERM_GOALS.md.
+
+    At most two, because scarcity is what makes the tier mean anything --
+    the runtime cap (affect.PROJECT_CAP) holds the same line. Ids are
+    namespaced 'pa<n>' so they never collide with runtime-adopted 'p<n>'.
+    Accepts plain strings as well as dicts, for the same reason
+    character_standing_intentions does: a card written the obvious way must
+    not silently get nothing.
+    """
+    psych = normalize_character_data(sheet).get("psychology", {})
+    out = []
+    for i, p in enumerate(psych.get("projects") or [], 1):
+        if isinstance(p, str):
+            p = {"project": p}
+        if not isinstance(p, dict):
+            continue
+        text = str(p.get("project") or p.get("goal") or "").strip()
+        if not text:
+            continue
+        about = str(p.get("about") or "").strip().casefold()
+        out.append({
+            "id": f"pa{i}", "project": text,
+            "about": about if about in ("world", "self") else "",
+            "satisfied_when": str(p.get("satisfied_when") or "").strip(),
+            "authored": True, "adopted_turn": 0,
+        })
+        if len(out) >= 2:
+            break
+    return out
+
 
 def character_initial_stance(sheet: dict) -> dict:
     social = normalize_character_data(sheet).get("social", {})

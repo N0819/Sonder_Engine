@@ -405,18 +405,29 @@ def _normalize_awareness_level(raw):
     return level
 
 
-def awareness_map(chat_id):
-    """Active `awareness` conditions for chat_id, keyed by casefolded subject
-    name -> {subject, level, cause, rousable_by}. Mirrors active_disguises.
-    Only non-awake subjects appear; everyone else is awake by absence."""
-    out = {}
+def awareness_conditions(chat_id):
+    """EVERY active non-awake `awareness` condition row, in id order.
+
+    `awareness_map` below collapses these to one record per subject, which is
+    right for asking "is this mind present?" and wrong for ENDING the state: a
+    subject can carry several active rows at once (live: chat 23 'Elevator
+    Adventure' holds two `unconscious` and one `dazed` on the same person), and
+    waking them means deactivating all of them. A caller that ends only the one
+    the map surfaced leaves the others in force. Each record carries its
+    `condition_id` and raw `payload` so the ending can be re-emitted as the SAME
+    condition (commit UPDATEs by condition_id; a fresh id would INSERT a second
+    row instead of closing the first)."""
+    rows = []
     for row in q(
-        "SELECT subject_id, payload FROM world_conditions WHERE chat_id=? "
-        "AND kind='awareness' AND active=1", (chat_id,),
+        "SELECT condition_id, subject_id, payload, started_at FROM world_conditions "
+        "WHERE chat_id=? AND kind='awareness' AND active=1 ORDER BY rowid",
+        (chat_id,),
     ):
         try:
             payload = json.loads(row["payload"])
         except (TypeError, ValueError):
+            payload = {}
+        if not isinstance(payload, dict):
             payload = {}
         subject = str(payload.get("subject_id") or row["subject_id"] or "").strip()
         if not subject:
@@ -425,11 +436,38 @@ def awareness_map(chat_id):
         level = _normalize_awareness_level(state.get("level") or payload.get("level"))
         if level == "awake":
             continue
-        out[subject.casefold()] = {
+        try:
+            started = float(payload.get("started_at_seconds")
+                            if payload.get("started_at_seconds") is not None
+                            else row["started_at"] or 0.0)
+        except (TypeError, ValueError):
+            started = 0.0
+        rows.append({
+            "condition_id": str(row["condition_id"]),
             "subject": subject,
             "level": level,
             "cause": str(state.get("cause") or payload.get("cause") or "").strip(),
             "rousable_by": str(state.get("rousable_by") or "").strip(),
+            "started_at_seconds": started,
+            "payload": payload,
+        })
+    return rows
+
+
+def awareness_map(chat_id):
+    """Active `awareness` conditions for chat_id, keyed by casefolded subject
+    name -> {subject, level, cause, rousable_by, condition_id}. Mirrors
+    active_disguises. Only non-awake subjects appear; everyone else is awake by
+    absence. Several rows may name one subject; the last wins, unchanged --
+    `awareness_conditions` is the un-collapsed view."""
+    out = {}
+    for record in awareness_conditions(chat_id):
+        out[record["subject"].casefold()] = {
+            "subject": record["subject"],
+            "level": record["level"],
+            "cause": record["cause"],
+            "rousable_by": record["rousable_by"],
+            "condition_id": record["condition_id"],
         }
     return out
 
@@ -586,57 +624,91 @@ def abilities_of(sheet):
     return persona_abilities(sheet)
 
 def recent_events(chat_id, n=5, frame_id=_UNSET):
-    """Recent narrative beats for the mapping stage's context. Frame-
+    """Recent narrative beats for the mapping stages' lore query. Frame-
     filtered (via a join through events.turn_id -> turns.frame_id): a
     concurrently-played OTHER frame's beats must never leak into this
     frame's "what just happened" context -- that's an information-
     boundary leak across frames, not just noise. frame_id defaults to
     whatever frame the CURRENT pipeline run is in (see db.py's
     active_frame_id), matching every other frame-scoped default in this
-    codebase; pass it explicitly only from outside a pipeline run."""
-    fid = active_frame_id.get() if frame_id is _UNSET else frame_id
-    rows = q(
-        "SELECT e.content FROM events e "
-        "LEFT JOIN turns t ON t.id=e.turn_id "
-        "WHERE e.chat_id=? AND (e.turn_id IS NULL OR t.frame_id IS ?) "
-        "ORDER BY e.id DESC LIMIT ?",
-        (chat_id, fid, n),
-    )
+    codebase; pass it explicitly only from outside a pipeline run.
 
-    results = []
+    Concealment-scrubbed, because its callers are not entitled to the
+    omniscient row (audit X18). Both of them -- mapping_stage and
+    mapping_quick -- feed these strings straight into search_lore, and what
+    that retrieval selects becomes a lore entry or a scene_patch room note
+    served in every perceiver's payload. A concealed whisper steering that
+    selection is the middle hop of the laundering chain, so it is redacted
+    here rather than at the far end. Mapping is nobody's vantage, hence the
+    None observer below: no mind, no entitlement.
+    """
+    return recent_events_for_observer(chat_id, None, n=n, frame_id=frame_id)
 
-    for row in reversed(rows):
-        try:
-            payload = json.loads(row["content"])
-        except (TypeError, ValueError, json.JSONDecodeError):
+
+def _concealed_entries(dialogue_log, observer_cf):
+    """The concealed dialogue entries `observer_cf` is not entitled to, in the
+    shape `_redact_concealed_from_event` expects.
+
+    `observer_cf` is a casefolded name, or None for a caller with no vantage at
+    all (a routing stage, the mapping context) -- for which EVERY concealed
+    entry counts, since a stage that is nobody has no claim on any of it.
+    """
+    out = []
+    for d in (dialogue_log or []):
+        if not isinstance(d, dict):
             continue
-
-        if not isinstance(payload, dict):
+        if str(d.get("visibility") or "").casefold() != "concealed":
             continue
+        cf = [str(c).casefold() for c in (d.get("conceal_from") or [])]
+        if observer_cf is None or not cf or observer_cf in cf:
+            out.append({
+                "actor": d.get("speaker", ""),
+                "attempt": d.get("exact_quote", ""),
+                "conceal_from": d.get("conceal_from") or [],
+            })
+    return out
 
-        summary = payload.get("summary")
-        if isinstance(summary, str):
-            summary = summary.strip()
-            if summary:
-                results.append(summary)
 
-    return results
+def _redact_for_observer(text, concealed):
+    """Re-apply perception's concealed-action redaction to stored prose.
+
+    Imported lazily because agents.perception imports this module. Fails
+    CLOSED: if the redactor cannot run, the beat is withheld rather than
+    replayed raw, since the entire premise of this path is that the stored
+    text is omniscient.
+    """
+    try:
+        from agents.perception import _redact_concealed_from_event
+        return _redact_concealed_from_event(text, concealed)
+    except Exception:
+        return "[Some parts of the event are not perceptible to you.]"
 
 
 def recent_events_for_observer(chat_id, observer_name, n=5, frame_id=_UNSET):
-    """Recent narrative beats with per-observer concealed-action redaction
-    (Pattern 4).
+    """``recent_events`` narrowed to what one mind is entitled to (Pattern 4).
 
-    The stored events row is omniscient (for the author/audit trail), but
-    what's LOADED into character context must be per-observer redacted:
-    a concealed action that the observer wasn't party to is stripped
-    from the event text before it enters their context.  Mirrors
-    ``agents/perception.py:_redact_concealed_from_event`` but operates
-    on the stored event row's structured fields rather than the live
-    beat's ``concealed`` list.
+    The stored events row is omniscient: commit persists the resolved event
+    together with the FULL dialogue_log, concealed entries included, because
+    that row is the author/audit trail. Anything replaying it into a model
+    context has to re-apply concealment first, which is what this does.
 
-    Returns a list of redacted summary strings, like ``recent_events``
-    but with concealed content withheld per-observer.
+    ``observer_name`` is the mind the text is destined for; entries concealed
+    from it, plus entries concealed from everyone (empty ``conceal_from``),
+    are redacted out. Pass None for a stage that is nobody -- lore routing,
+    retrieval queries -- and EVERY concealed entry is redacted: a stage with
+    no vantage has no claim on concealed content, so the per-observer test
+    would be answering the wrong question.
+
+    Redaction is applied to the SUMMARY. The first version of this redacted
+    ``payload["event"]`` and then returned ``payload["summary"] or
+    event_text``; commit writes a summary on every real events row, so the
+    redacted text was always thrown away and the function was a no-op in
+    production. The summary is the Director's own prose written from the
+    omniscient frame -- exactly as leaky as ``event`` -- so it gets exactly
+    the same treatment. There is deliberately no ``event`` fallback: falling
+    back would replace a dropped summary with MORE omniscient prose, and it
+    would break the summary-only contract ``recent_events`` is tested
+    against (a row with no usable summary is dropped, not backfilled).
     """
     fid = active_frame_id.get() if frame_id is _UNSET else frame_id
     rows = q(
@@ -646,7 +718,7 @@ def recent_events_for_observer(chat_id, observer_name, n=5, frame_id=_UNSET):
         "ORDER BY e.id DESC LIMIT ?",
         (chat_id, fid, n),
     )
-    observer_cf = str(observer_name or "").casefold()
+    observer_cf = str(observer_name).casefold() if observer_name else None
     results = []
 
     for row in reversed(rows):
@@ -656,46 +728,45 @@ def recent_events_for_observer(chat_id, observer_name, n=5, frame_id=_UNSET):
             continue
         if not isinstance(payload, dict):
             continue
-        event_text = str(payload.get("event") or payload.get("summary") or "")
-        dlog = payload.get("dialogue_log") or []
-        # Build the concealed-actor list for this observer: any entry
-        # with visibility:"concealed" that is concealed FROM this
-        # observer (or globally concealed via empty conceal_from).
-        concealed_for_observer = []
-        for d in dlog:
-            if not isinstance(d, dict):
-                continue
-            if str(d.get("visibility") or "").casefold() != "concealed":
-                continue
-            cf = [str(c).casefold() for c in (d.get("conceal_from") or [])]
-            if not cf or observer_cf in cf:
-                concealed_for_observer.append({
-                    "actor": d.get("speaker", ""),
-                    "attempt": d.get("exact_quote", ""),
-                    "conceal_from": d.get("conceal_from") or [],
-                })
-        # Apply redaction: if any concealed entries apply to this
-        # observer, redact the event text.
+        summary = payload.get("summary")
+        if not isinstance(summary, str):
+            continue
+        summary = summary.strip()
+        if not summary:
+            continue
+
+        concealed_for_observer = _concealed_entries(
+            payload.get("dialogue_log"), observer_cf)
         if concealed_for_observer:
-            # Import lazily to avoid a circular dependency.
-            try:
-                from agents.perception import _redact_concealed_from_event
-                event_text = _redact_concealed_from_event(
-                    event_text, concealed_for_observer)
-            except Exception:
-                event_text = "[Some parts of the event are not perceptible to you.]"
-        summary = str(payload.get("summary") or event_text or "").strip()
+            summary = _redact_for_observer(summary, concealed_for_observer).strip()
         if summary:
             results.append(summary)
 
     return results
 
-def director_context(chat_id, n=5, frame_id=_UNSET):
+def director_context(chat_id, n=5, frame_id=_UNSET, *, entitled=True):
     """Recent turns for the Director/mapping's own context. Frame-
     filtered exactly like recent_events above -- a concurrently-played
     OTHER frame's player declarations and resolved outcomes must never
     leak into this frame's Director, since he interprets/resolves
-    causality partly from this history."""
+    causality partly from this history.
+
+    `entitled` is the audit-X18 gate. The Director genuinely is entitled to
+    the omniscient record -- it owns objective causality, and withholding a
+    concealed act from it would make it resolve a beat it cannot see. Mapping
+    is NOT: it reads the same history and emits lore entries and scene_patch
+    room notes, and `room_notes` is served into every perceiver's payload. That
+    is the laundering chain the audit traced -- concealed whisper -> resolved
+    event -> events row -> next turn's mapping context -> lore/room note ->
+    everyone -- with two model hops and, until now, no deterministic guard on
+    the middle one.
+
+    So an unentitled caller gets the concealment-scrubbed resolved text, and
+    gets no `player_input` at all for a turn that carried concealed player
+    speech: the raw declaration is the player's own words, which is precisely
+    where the concealed line appears verbatim, unscrubbed by anything that
+    happened downstream of it.
+    """
     fid = active_frame_id.get() if frame_id is _UNSET else frame_id
     rows = q(
         "SELECT t.idx,t.player_input,e.content AS ev FROM turns t "
@@ -713,10 +784,17 @@ def director_context(chat_id, n=5, frame_id=_UNSET):
             ev = {}
         if not isinstance(ev, dict):
             ev = {}
+        resolved = ev.get("summary") or ev.get("event", "")
+        player_input = r["player_input"]
+        if not entitled:
+            concealed = _concealed_entries(ev.get("dialogue_log"), None)
+            if concealed:
+                resolved = _redact_for_observer(resolved, concealed)
+                player_input = ""
         out.append({
             "turn": r["idx"],
-            "player_input": r["player_input"],
-            "resolved": ev.get("summary") or ev.get("event", ""),
+            "player_input": player_input,
+            "resolved": resolved,
         })
     return out
 
@@ -1034,7 +1112,15 @@ def dialogue_budget(chat, turn, cid, nonce):
         target = rng.randint(lo, hi)
     else:
         target = min(max(1, round((lo + hi) / 2)), hi)
-    return {"style": style, "suggested_lines": target, "hard_max": hi, "may_stay_silent": lo == 0}
+    # `min_lines` rides along as itself. It used to be consumed here and
+    # discarded: the only thing derived from it was `may_stay_silent`, a boolean
+    # that a SINGLE line already satisfies, so an author setting min_lines 2
+    # sent the character agent no number it could honour. Measured across the
+    # author's live chats, line counts did not track the setting at all -- a
+    # chat at min_lines 2 produced one line in 28 of 28 declarations while a
+    # chat at min_lines 0 produced two or more in 43% of them.
+    return {"style": style, "suggested_lines": target, "min_lines": lo,
+            "hard_max": hi, "may_stay_silent": lo == 0}
 
 def cast_scene_context(cast_rows):
     """Build scene-relevant character dossiers for mapping and director."""

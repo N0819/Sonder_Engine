@@ -515,9 +515,22 @@ def crossing_visible_from(scene: dict, observer_room, name: str) -> bool:
     Only from the room they LEFT. The room they are entering has them
     arriving, which is ordinary presence and needs no special case; the room
     behind is the one that would otherwise lose them the instant they crossed.
+
+    The grace does NOT apply to a body-parented interior. It exists because
+    going through a doorway takes time a position field cannot express, so a
+    body would otherwise blink out mid-step -- but entry into the inside of a
+    BODY is not a threshold anyone stands part-way through, and there is no
+    shape to watch once it is done. Left as a doorway, this kept a body fully
+    inside another rendering as `shapes` to the very body containing them for
+    two more beats, which is the concealment failing at exactly the moment it
+    matters most. What the surrounding body has instead is the touch channel,
+    which containment already grants and which tells them far more than a
+    silhouette would.
     """
     rec = crossing_of(scene, name)
-    return bool(rec) and bool(observer_room) and rec.get("from") == observer_room
+    if not rec or not observer_room or rec.get("from") != observer_room:
+        return False
+    return _body_interior_holder(scene, name) is None
 
 
 def spatial_rel_between(scene: dict, observer: str, target: str) -> dict:
@@ -531,6 +544,9 @@ def spatial_rel_between(scene: dict, observer: str, target: str) -> dict:
                            room_of(scene, target)))
     if crossing_visible_from(scene, room_of(scene, observer), target):
         rel["crossing"] = True
+    holder = _body_interior_holder(scene, observer)
+    if holder and holder.casefold() == str(target or "").strip().casefold():
+        rel["inside_source"] = True
     # A carried body's position derives to its carrier's, so a body enclosed in
     # something standing right here reads as `same_room` -- which answers sight
     # before barriers or light are consulted at all.
@@ -741,6 +757,21 @@ def hear_level(
     barrier = _material_shifted_barrier(
         normalize_barrier(rel.get("barrier")), rel.get("material"))
     distance = rel.get("distance")
+
+    # Sound CONDUCTED rather than transmitted. A body inside another body's
+    # interior is not listening through a wall: the enclosing body is the
+    # medium, and its voice arrives through the mass around them -- close and
+    # low rather than faint. Treating that as an ordinary opaque barrier left
+    # an occupant unable to make out the one voice they are physically closest
+    # to in the world.
+    #
+    # Strictly one-way. `inside_source` says the LISTENER is inside the
+    # speaker; the reverse direction is a voice trying to get OUT through that
+    # same mass, which is the muffling the barrier already models correctly.
+    if rel.get("inside_source"):
+        if volume in ("mutter", "whisper"):
+            return "fragment"
+        return "full"
 
     if rel.get("same_room"):
         # A whisper (mutter) only fully reaches someone WITHIN REACH; it carries
@@ -980,8 +1011,25 @@ def spatial_digest(scene, observer):
 
     def ref(edge):
         rid = edge.get("to")
-        return {"room": (rooms.get(rid) or {}).get("name") or rid,
-                "barrier": edge.get("barrier")}
+        out = {"room": (rooms.get(rid) or {}).get("name") or rid,
+               "barrier": edge.get("barrier")}
+        # Which way the doorway itself faces. The buckets are EGOCENTRIC and
+        # relative to the last move, so on a first beat -- no movement history
+        # -- every exit lands in `unclassified` and carries no direction at
+        # all, while `corridor_sight` beside it speaks in compass points. A
+        # character holding both frames has to bridge them by guessing, and
+        # does: read live from a thinking model's own trace, "two open exits:
+        # one to Chamber 0001 (south) and one to Chamber 0100 (south)" -- the
+        # same bearing given to two different exits, one of which was east.
+        # And a beat later, "east is the intended exit, but it's not detailed
+        # in spatial_frame; I need to infer it's ahead or something."
+        #
+        # The bearing is on the edge already. Omitted when the edge carries
+        # none, since a scene without directions has none to give.
+        bearing = normalize_bearing(edge.get("dir"))
+        if bearing:
+            out["bearing"] = bearing
+        return out
 
     out = {}
     for bucket in ("behind", "ahead", "left", "right", "aside",
@@ -1496,29 +1544,84 @@ def containment_hides(mode) -> bool:
     return str(mode or "").strip().casefold() not in _OPEN_CONTAINMENT_MODES
 
 
+def _body_interior_holder(scene: dict, name: str):
+    """The body whose INSIDE `name` is currently standing in, if any.
+
+    A scene can express one body being inside another two ways. The
+    `contained` ledger is one: an explicit record that a body is held in
+    something. The other is a room -- an interior space parented to a body,
+    which the occupant simply has as their position, exactly like any other
+    room.
+
+    Only the ledger was ever consulted, so the room form concealed nothing.
+    A body fully inside another read as an ordinary occupant of an ordinary
+    adjacent room: `containment_conceals` returned False in both directions,
+    which left the observer outside with a sight channel to them and left the
+    body inside with no touch channel to the body around it -- seen when they
+    should not be, and not felt when they should be.
+
+    A parent that holds a POSITION is a body; a parent that does not is a bag,
+    a ship, a jar -- already handled by `_is_carried_interior` for a different
+    question (whether you take its inside in as ambience).
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    positions = (scene or {}).get("positions") or {}
+    room_id = _ci_get(positions, name)
+    room = rooms.get(room_id) if room_id else None
+    if not isinstance(room, dict):
+        return None
+    parent = str(room.get("parent_entity") or "").strip()
+    if not parent:
+        return None
+    if _ci_get(positions, parent) is None:
+        return None
+    if parent.casefold() == str(name or "").strip().casefold():
+        return None
+    return parent
+
+
 def _hiding_holders(scene: dict, name: str) -> list:
     """Holders that conceal `name`, innermost first. Cycle-safe."""
     contained = (scene or {}).get("contained") or {}
     if not isinstance(contained, dict):
-        return []
+        contained = {}
     out = []
     current = name
     seen = {str(name or "").strip().casefold()}
     while True:
+        holder = None
         record = _ci_get(contained, current)
-        if not isinstance(record, dict):
-            break
-        holder = record.get("in")
+        if isinstance(record, dict) and record.get("in"):
+            if not containment_hides(record.get("mode")):
+                # Carried in the open: not a hiding holder, but keep walking
+                # the chain -- its own holder may still be one.
+                holder = record.get("in")
+                key = str(holder).strip().casefold()
+                if key in seen:
+                    break
+                seen.add(key)
+                current = holder
+                continue
+            holder = record.get("in")
+        else:
+            holder = _body_interior_holder(scene, current)
         if not holder:
             break
         key = str(holder).strip().casefold()
         if key in seen:
             break
         seen.add(key)
-        if containment_hides(record.get("mode")):
-            out.append(holder)
+        out.append(holder)
         current = holder
     return out
+
+
+def hiding_holders_of(scene: dict, name: str) -> list:
+    """Public form of `_hiding_holders` -- the enclosures around one body,
+    innermost first, whether expressed as a `contained` record or as a
+    body-parented interior room. Read it rather than `scene['contained']`
+    directly, or the room form is invisible to the caller."""
+    return list(_hiding_holders(scene, name))
 
 
 def _innermost_hiding_holder(scene: dict, name: str):
@@ -2284,6 +2387,416 @@ def _is_carried_interior(scene, room_id):
         container_of(scene, str(entity.get("name") or "")) is not None
 
 
+# How far a straight passage can be read, and how the reading coarsens. Sight
+# down a corridor is real -- you see that it ends before you walk it -- but it
+# degrades with distance into "somewhere along there", which is the form worth
+# handing a character.
+CORRIDOR_SIGHT_LIMIT = 6
+_CORRIDOR_VAGUENESS = ((1, "just ahead"), (2, "a short way"),
+                       (4, "some way"), (99, "far"))
+# How many rooms down a line are NAMED. Beyond this the passage is reported as
+# running on, without contents -- which is both what sight gives you and what
+# keeps this from becoming a page per beat.
+_CORRIDOR_NAMED = 2
+
+
+def _reverse_dir(d):
+    return {"n": "s", "s": "n", "e": "w", "w": "e"}.get(str(d or "").lower())
+
+
+def corridor_sightlines(scene, room_id):
+    """What can be seen looking STRAIGHT along each passage out of a room.
+
+    A character could previously see one room and no further, so a corridor
+    ending three rooms north was indistinguishable from one running on -- he
+    had to walk it. But you can see down a straight passage, and that you
+    cannot see round the corner is what makes it worth having: sight follows
+    the line until the passage turns, a door blocks it, or the dark swallows
+    it.
+
+    Deliberately coarse, and coarser with distance. The useful percept is "some
+    way north the passage comes to an end", not a room count -- so `distance`
+    is carried for ordering and `vagueness` for rendering, and a caller should
+    prefer the latter.
+
+    Returns [] when the scene's edges carry no `dir`, since without direction
+    there is no line to follow and guessing one would invent a sense.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    start = rooms.get(room_id)
+    if not isinstance(start, dict):
+        return []
+    out = []
+    for edge in start.get("adjacent") or []:
+        if not isinstance(edge, dict) or not edge.get("dir"):
+            continue
+        heading = str(edge["dir"]).lower()
+        if normalize_barrier(edge.get("barrier")) not in _SIGHT_BARRIERS:
+            continue
+        cur, prev, dist, terminus = edge.get("to"), room_id, 1, None
+        # What is made out ALONG the line, not merely where it ends. Detail
+        # decays the way sight does: the near chamber is read plainly, the next
+        # by its one memorable feature, past that only that something is there.
+        # Capped at _CORRIDOR_NAMED because a full description per room per
+        # direction would be a page of prose every beat -- and because nobody
+        # reads the far end of a corridor in that much detail anyway.
+        along = []
+        while cur and dist <= CORRIDOR_SIGHT_LIMIT:
+            room = rooms.get(cur)
+            if not isinstance(room, dict):
+                terminus = None
+                break
+            # Anything short of full sight stops the line. Light spills
+            # through an open doorway, so a dark room beside a lit one reads
+            # `dim` -- and shapes are enough to know something is there, not
+            # enough to read whether a passage ends. Reporting a terminus
+            # through gloom would be inventing detail.
+            if _LIGHT_SIGHT.get(effective_light(scene, cur), "full") != "full":
+                terminus = "darkness"
+                break
+            onward = [
+                e for e in (room.get("adjacent") or [])
+                if isinstance(e, dict) and str(e.get("to")) != str(prev)
+                and normalize_barrier(e.get("barrier")) not in ("wall",)
+            ]
+            if not onward:
+                terminus = "dead_end"
+                break
+            if len(along) < _CORRIDOR_NAMED:
+                along.append({
+                    "room": room.get("name") or cur,
+                    "detail": "clear" if dist == 1 else "landmark",
+                })
+            straight = [e for e in onward
+                        if str(e.get("dir") or "").lower() == heading
+                        and normalize_barrier(e.get("barrier")) in _SIGHT_BARRIERS]
+            if len(onward) > 1:
+                terminus = "opening"      # a junction: the line stops being one line
+                break
+            if not straight:
+                # The passage bends. You cannot see ROUND a corner, but you can
+                # see that it goes on rather than stopping -- which is the
+                # difference between "bends and continues" and "bends into
+                # who knows what". Nothing beyond the corner is claimed.
+                terminus = "turn"
+                break
+            prev, cur, dist = cur, straight[0].get("to"), dist + 1
+        if terminus:
+            out.append({
+                "dir": heading, "distance": dist, "terminus": terminus,
+                "vagueness": next(v for lim, v in _CORRIDOR_VAGUENESS
+                                  if dist <= lim),
+                "along": along,
+            })
+    return out
+
+
+# What one beat of running buys, in small-room units. A pace of three ordinary
+# chambers is brisk without being a teleport; a large hall eats two of them and
+# a vast one the whole budget, so a run crosses distance rather than room COUNT.
+# Deliberately coarse: the engine is not simulating gait, it is answering "does
+# a body cross this much ground in one beat" well enough that the answer is
+# never absurd.
+SPRINT_BUDGET = 3
+_ROOM_COST = {"tiny": 1, "small": 1, "": 1, "medium": 1,
+              "large": 2, "huge": 3, "vast": 3}
+
+
+def passable_path(scene, from_room, to_room, limit=12):
+    """The shortest walk of passable doorways from one room to another, as a
+    list of rooms EXCLUDING the start and ending at `to_room` -- or [] when
+    there is none.
+
+    `passable_route_exists` answers whether; this answers which rooms. A body
+    that crosses several rooms in one beat has been in every one of them, and
+    a caller recording only where they stopped leaves holes in their memory
+    exactly where their feet went. Adjacent rooms give a one-element path, so
+    an ordinary step needs no special case.
+
+    `limit` bounds the search: past a dozen rooms a single-beat "walk" is a
+    teleport wearing a route, and reconstructing a path for it would dress the
+    teleport up as ground covered.
+    """
+    if not from_room or not to_room or from_room == to_room:
+        return []
+    rooms = scene.get("rooms") or {}
+    neighbors: dict[str, set] = {}
+    for room_id, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            if normalize_barrier(edge.get("barrier")) not in _PASSABLE_BARRIERS:
+                continue
+            neighbors.setdefault(str(room_id), set()).add(str(edge["to"]))
+            neighbors.setdefault(str(edge["to"]), set()).add(str(room_id))
+
+    from collections import deque
+    prev = {str(from_room): None}
+    queue = deque([(str(from_room), 0)])
+    while queue:
+        cur, depth = queue.popleft()
+        if cur == str(to_room):
+            path = []
+            while cur is not None and prev[cur] is not None:
+                path.append(cur)
+                cur = prev[cur]
+            return list(reversed(path))
+        if depth >= limit:
+            continue
+        for nxt in sorted(neighbors.get(cur, ())):
+            if nxt not in prev:
+                prev[nxt] = cur
+                queue.append((nxt, depth + 1))
+    return []
+
+
+def sprint_reach(scene, room_id, known_rooms=None):
+    """How far a body could RUN out of this room, per passage, bends allowed.
+
+    A character could only ever move one room per beat, which makes a courier
+    whose whole craft is speed indistinguishable from someone strolling, and
+    turns any distance into a queue of identical beats. Running is the obvious
+    missing verb.
+
+    The bound is DECISION, not sight -- and the first version got that wrong.
+    It stopped a run at every bend on the reasoning that you cannot see round
+    a corner, and the measurement said what that reasoning was worth: in a
+    live 7x7 perfect maze, 39 of 49 rooms were two-exit corridor cells and
+    almost every corridor cell was a bend, so 72 of 96 runnable passages
+    offered exactly one room, the mean offer was 1.3 rooms, and the
+    SPRINT_BUDGET never once bound. Winding is what makes a maze a maze;
+    a sight-bounded run cannot exist in one. The worry sight was standing in
+    for was never the corner itself -- a body enters a room it has not seen
+    every time it walks through a doorway, and perceives it by being in it.
+    The thing that genuinely costs a beat is a CHOICE: a junction run through
+    at speed is a route picked without looking. So the run follows a corridor
+    round its bends for as long as there is exactly one passable way onward,
+    and stops where a decision (junction), the world (door, darkness,
+    dead end), or the beat (full_reach) stops it. Decision-bounded, the same
+    maze offers a mean of 2.48 rooms and the budget binds 64 times.
+
+    A see-through side opening (window, bars) is not a junction: it offers no
+    route, so it forces no choice. And the run itself still follows only
+    PASSABLE doorways -- you can see through bars and you cannot run through
+    them.
+
+    `known_rooms` is the OFFER-side firewall, and it is why this function has
+    two modes. Objectively (known_rooms=None, the Director's resolve ceiling)
+    the reach reports the scene as it is -- the Director owns objective
+    causality and may see it. But handed to a deciding character, that same
+    report would smuggle unearned map: a mind standing still would learn that
+    an unvisited passage winds on for three rooms and ends at a junction,
+    geometry it never perceived. Running through ground teaches it; being
+    TOLD the reach does not. So a character-facing caller passes the rooms
+    that character has legitimately been in, and the offer extends only
+    through what can be vouched for: the straight sightline from here (looking
+    down a passage is ordinary sight, and it ends at the first bend), plus
+    remembered rooms beyond it. Where the passage runs on into ground the
+    view cannot vouch for, the offer stops with `stops: "unknown"` -- the run
+    itself may still be declared open-ended, and resolves against the
+    objective reach. One residue is documented rather than hidden: within
+    remembered ground beyond the sightline, `door`/`darkness` stops read the
+    room's CURRENT state, which anticipates by one beat what the run would
+    discover anyway.
+
+    Returns one entry per runnable passage:
+
+        {"bearing": "n", "path": [rid, ...], "rooms": 2,
+         "stops": "junction"|"dead_end"|"darkness"|"door"|"full_reach"|"unknown"}
+
+    `bearing` is ABSENT when the doorway carries no `dir` -- the world gives
+    no compass there, and the run is declared by destination instead. Such a
+    passage's sightline ends at its first room: with no heading there is no
+    straight line to certify, so everything beyond is remembered ground only.
+
+    `full_reach` is the budget stop, and its name is deliberately about
+    DISTANCE, not physiology. It was `winded` first, and the word beat its
+    own documentation -- third label in this engine to do so (`closed` read
+    as "no way through" kept a shrine unentered for five runs; `spent` read
+    as "do not go" turned a courier off his own proven route). Observed
+    verbatim: "he would be winded? But he might not want to be winded if he
+    needs to assess contents" -- the best offer a run can get, the passage
+    outlasting the beat, read as a penalty for taking it. A MARGINAL
+    deterrent, measured precisely: the same character took one such run in
+    full (beat 1 of the same arm) and then reasoned against later ones, so
+    the label tipped close decisions rather than forbidding anything --
+    which is how a mislabel does its damage. Worse, the penalty
+    reading was FALSE as a distinguishing fact: every hard run arrives
+    winded (the Director applies that cost whatever ends the run), so the
+    label implied a consequence specific to maximal runs that is not
+    specific at all. The stop reason names why the run ENDED; what running
+    COSTS is the Director's to narrate, and the two must not share a word.
+
+    `bearing` is the doorway taken OUT of this room; the path beyond it may
+    bend. `path` is every room crossed, in order, ENDING at the room they
+    finish in -- callers need the whole list, not the destination: a body
+    that runs through three chambers has been in three chambers, and
+    recording only where they stopped would leave holes in their map where
+    their feet went. Empty list when nothing is runnable that way, and the
+    passage is omitted.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    start = rooms.get(room_id)
+    if not isinstance(start, dict):
+        return []
+    known = None if known_rooms is None else {str(r) for r in known_rooms}
+    out = []
+    for edge in start.get("adjacent") or []:
+        if not isinstance(edge, dict) or not edge.get("to"):
+            continue
+        if normalize_barrier(edge.get("barrier")) not in _PASSABLE_BARRIERS:
+            continue
+        # A doorway with no bearing is still a doorway, and a run through it
+        # is still a run. Requiring `dir` here silently deleted the passage
+        # from every run offer -- measured live (maze arm) as a shrine whose
+        # ONLY approach could never be run, and beats of "fails to move east
+        # due to missing bearing" while the character re-declared a compass
+        # the world could not bind. The offer carries no `bearing` key
+        # (absent means the world gives no compass here, per the
+        # _onward_exits convention); `run_ends_at`/`path` still name it, so
+        # a run is declared by its destination instead of a heading.
+        heading = normalize_bearing(edge.get("dir"))
+        cur, prev, spent, path, stops = edge.get("to"), room_id, 0, [], None
+        # Whether `cur` is still on the straight line of sight from where the
+        # body stands. The first room always is (you see it through the
+        # doorway); a bend ends the line for good, even if the passage later
+        # resumes the original heading.
+        on_sightline = True
+        while cur:
+            cur = str(cur)
+            room = rooms.get(cur)
+            if not isinstance(room, dict):
+                stops = "unknown"
+                break
+            # The offer-side firewall: past the sightline, only remembered
+            # ground can be vouched for. Checked before light, because the
+            # current darkness of a room you cannot see and have never
+            # entered is exactly the kind of fact this gate exists to hold
+            # back.
+            if known is not None and not on_sightline and cur not in known:
+                stops = "unknown"
+                break
+            # Running into a room you cannot see into is how a body breaks an
+            # ankle. The world stopping you, not a decision.
+            if _LIGHT_SIGHT.get(effective_light(scene, cur), "full") != "full":
+                stops = "darkness"
+                break
+            cost = _ROOM_COST.get(
+                str(room.get("size") or "").strip().lower(), 1)
+            if spent + cost > SPRINT_BUDGET:
+                stops = "full_reach"
+                break
+            spent += cost
+            path.append(cur)
+            onward = [
+                e for e in (room.get("adjacent") or [])
+                if isinstance(e, dict) and str(e.get("to")) != str(prev)
+                and e.get("to")
+            ]
+            if not onward:
+                stops = "dead_end"
+                break
+            passable = [e for e in onward if normalize_barrier(
+                e.get("barrier")) in _PASSABLE_BARRIERS]
+            if len(passable) > 1:
+                # A junction is a decision, and a decision is a beat. Running
+                # blind through one would be choosing without looking.
+                stops = "junction"
+                break
+            if not passable:
+                # The only way on is shut. The world stopping you.
+                stops = "door"
+                break
+            nxt = passable[0]
+            # No heading means no straight line to certify: the first room
+            # is vouched by ordinary sight through the doorway, everything
+            # beyond it must be remembered ground. Without this, a chain of
+            # bearingless edges would hold `on_sightline` open forever and
+            # walk the offer through ground the character never earned.
+            if on_sightline and (heading is None
+                                 or normalize_bearing(nxt.get("dir"))
+                                 != heading):
+                on_sightline = False
+            prev, cur = cur, nxt.get("to")
+        if path:
+            entry = {"path": path, "rooms": len(path),
+                     "stops": stops or "full_reach"}
+            if heading:
+                entry["bearing"] = heading
+            out.append(entry)
+    return out
+
+
+def _onward_exits(scene, all_rooms, target_id, from_room):
+    """How many ways out of `target_id` lead somewhere other than back here.
+
+    Looking through a doorway into a chamber, you see whether it has another
+    way out -- that is ordinary sight, not deduction. Without it a character
+    has to physically walk into a dead end to discover it is one, which is
+    exactly what was observed: a maze runner entered the same one-exit chamber
+    six times, having never been given the one fact that would have told him.
+
+    Requires FULL sight of the chamber, not merely some sight. Light spilling
+    through an open doorway makes a dark room read `dim`, which is enough for
+    bulk and movement and nowhere near enough to count doorways or tell which
+    wall they are in -- `corridor_sightlines` already stops its line at
+    anything short of full sight for exactly that reason, and the two must not
+    disagree about what gloom can be read through. Absent means "could not
+    tell", never "none" -- a caller must not read a missing key as a dead end.
+
+    `onward_bearings` names WHICH ways those are, and it is not decoration. A
+    bare count is read as a promise to continue: observed live, a runner given
+    `onward_exits: 1` for the chamber to his west walked west into it four
+    times over nine beats hunting a west exit that never existed -- the one
+    other way out went north. He was not reasoning badly; he was told a number
+    where he needed a bearing. Omitted per-edge when an edge carries no `dir`,
+    and omitted entirely when none do, because a scene without directions has
+    no bearings to give and inventing them would be inventing a sense.
+    """
+    if _LIGHT_SIGHT.get(effective_light(scene, target_id), "full") != "full":
+        return {}
+    # Counted by DESTINATION, and over reverse-declared edges too. A doorway
+    # is one doorway whichever room's `adjacent` list happens to name it, and
+    # the director routinely declares only one side: counting `target`'s own
+    # edges alone reported nought for chambers that plainly had a way on, and
+    # nought is what raises `visibly_no_way_through`. Inventing a dead end is
+    # the worse error of the two -- it argues against a real route.
+    ways = {}
+    for edge in (all_rooms.get(target_id) or {}).get("adjacent") or []:
+        if not isinstance(edge, dict):
+            continue
+        if normalize_barrier(edge.get("barrier")) == "wall":
+            continue
+        dest = str(edge.get("to") or "")
+        if dest and dest != str(from_room):
+            ways.setdefault(dest, normalize_bearing(edge.get("dir")))
+    for other_id, other in all_rooms.items():
+        if str(other_id) in (str(target_id), str(from_room)):
+            continue
+        if not isinstance(other, dict) or str(other_id) in ways:
+            continue
+        for edge in other.get("adjacent") or []:
+            if not isinstance(edge, dict) or str(edge.get("to")) != str(target_id):
+                continue
+            if normalize_barrier(edge.get("barrier")) == "wall":
+                continue
+            # Seen from the far side, so the bearing is the far side's,
+            # reversed. Same doorway, opposite wall.
+            ways[str(other_id)] = opposite_bearing(
+                normalize_bearing(edge.get("dir")))
+            break
+    out = {"onward_exits": len(ways)}
+    bearings = []
+    for heading in ways.values():
+        if heading and heading not in bearings:
+            bearings.append(heading)
+    if bearings:
+        out["onward_bearings"] = bearings
+    return out
+
+
 def visible_adjacent_rooms(
     scene: dict,
     room_id: str,
@@ -2345,6 +2858,7 @@ def visible_adjacent_rooms(
             ),
             "barrier": barrier,
             "description": notes[:800],
+            **_onward_exits(scene, all_rooms, adjacent_id, room_id),
         })
         seen.add(adjacent_id)
 
@@ -2388,6 +2902,12 @@ def visible_adjacent_rooms(
                 ),
                 "barrier": barrier,
                 "description": notes[:800],
+                # Sight does not care which room declared the edge. Omitting
+                # this here made a whole class of neighbour permanently
+                # opaque -- absent reads as "cannot tell from here", so a
+                # visibly closed chamber that happened to be reverse-declared
+                # had to be walked into to be ruled out.
+                **_onward_exits(scene, all_rooms, other_id, room_id),
             })
             seen.add(other_id)
 
@@ -2433,9 +2953,24 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
         if isinstance(edge, dict) and edge.get("to")
     }
 
+    # Edge FIELDS get the same silence-vs-erasure doctrine the edges
+    # themselves already have. A model re-mentioning a doorway ("r0503
+    # connects to r0603, open") has no reliable way to also echo back the
+    # bearing it never thinks about, and wholesale replacement here was
+    # erasing authored `dir`s every time -- measured live (maze arm): 18 of
+    # 98 edge-sides stripped bare, including the shrine's ONLY approach,
+    # after which every declared "run east" through them failed and
+    # sprint_reach stopped offering the passage at all. An absent field is
+    # silence; a value (barrier changes, a re-bearing) still lands.
     for edge in (incoming.get("adjacent") or []):
         if isinstance(edge, dict) and edge.get("to"):
-            existing_edges[edge["to"]] = dict(edge)
+            prior = existing_edges.get(edge["to"])
+            if prior:
+                spoken = {k: v for k, v in edge.items()
+                          if v is not None and v != ""}
+                existing_edges[edge["to"]] = {**prior, **spoken}
+            else:
+                existing_edges[edge["to"]] = dict(edge)
 
     merged_room["adjacent"] = list(existing_edges.values())
 
@@ -3053,6 +3588,69 @@ def _dedup_duplicate_entity_keys(entities, incoming_entities=None):
     return entities
 
 
+def _shield_standing_bearings(prior_rooms, incoming_rooms):
+    """Refuse a ONE-SIDED re-bearing of a doorway both sides already agree on.
+
+    A doorway whose two declared sides carry opposite-consistent bearings is
+    a standing agreement -- usually authored world geometry. A model
+    re-declaring one room routinely emits a wrong `dir` for an edge it is
+    only mentioning in passing, and letting that single claim through
+    destroys the agreement twice over: normalize_scene_bearings sees the
+    contradiction and drops BOTH sides ("dropped rather than guessed"), and
+    its reciprocal inference then faithfully rebuilds whatever wrong bearing
+    gets asserted next. Measured live (maze arm): five doorway pairs carried
+    internally-consistent bearings that were geometrically FALSE, and a
+    runner was walked north on a declared "west" -- model noise laundered
+    into scene truth by the engine's own repair machinery.
+
+    So: an incoming `dir` that contradicts a standing opposite-consistent
+    pair is stripped (the edge itself still merges -- barrier and distance
+    changes land) unless the SAME diff re-declares the reciprocal side with
+    the matching opposite. Changing settled geometry takes a two-sided
+    declaration; a one-sided one falls back to the incumbent. Returns a
+    sanitized copy; never mutates the caller's diff.
+    """
+    if not isinstance(incoming_rooms, dict) or not isinstance(
+            prior_rooms, dict):
+        return incoming_rooms
+
+    def _edge_dir(rooms, room_id, to_id):
+        room = rooms.get(room_id)
+        if not isinstance(room, dict):
+            return None
+        for e in room.get("adjacent") or []:
+            if isinstance(e, dict) and str(e.get("to")) == str(to_id):
+                return normalize_bearing(e.get("dir"))
+        return None
+
+    out = {}
+    for room_id, room in incoming_rooms.items():
+        if not isinstance(room, dict) or not room.get("adjacent"):
+            out[room_id] = room
+            continue
+        edges = []
+        touched = False
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict) or not edge.get("to"):
+                edges.append(edge)
+                continue
+            new_dir = normalize_bearing(edge.get("dir"))
+            to_id = edge["to"]
+            if new_dir:
+                fwd = _edge_dir(prior_rooms, room_id, to_id)
+                back = _edge_dir(prior_rooms, to_id, room_id)
+                standing = (fwd and back
+                            and opposite_bearing(fwd) == back)
+                if standing and new_dir != fwd:
+                    recip = _edge_dir(incoming_rooms, to_id, room_id)
+                    if recip != opposite_bearing(new_dir):
+                        edge = {k: v for k, v in edge.items() if k != "dir"}
+                        touched = True
+            edges.append(edge)
+        out[room_id] = {**room, "adjacent": edges} if touched else room
+    return out
+
+
 def merge_scene_with_diff(
     scene: dict,
     diff: dict | None,
@@ -3071,7 +3669,9 @@ def merge_scene_with_diff(
     merged["entities"] = dict(merged.get("entities") or {})
     merged["positions"] = dict(merged.get("positions") or {})
 
-    incoming_rooms = diff.get("rooms") or {}
+    incoming_rooms = _shield_standing_bearings(
+        merged["rooms"] if isinstance(merged.get("rooms"), dict) else {},
+        diff.get("rooms") or {})
     incoming_entities = diff.get("entities") or {}
     incoming_positions = diff.get("positions") or {}
     incoming_stations = diff.get("stations") or {}

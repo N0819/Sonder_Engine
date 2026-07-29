@@ -68,7 +68,17 @@ def test_filtered_declaration_passes_public_raw_input(temp_db):
     assert _filtered_player_declaration(ctx) == "I wave at the crowd."
 
 
-def test_beat_drops_concealed_dialogue_and_redacts_prose():
+def _scene_with(rooms_by_name):
+    """A scene placing each speaker in a room, all mutually audible."""
+    return {
+        "rooms": {r: {"name": r, "adjacent": []} for r in set(rooms_by_name.values())},
+        "positions": dict(rooms_by_name),
+        "entities": {}, "attire": {}, "overlays": {},
+    }
+
+
+def test_beat_drops_concealed_dialogue_and_surfaces_an_audible_one():
+    sc = _scene_with({"Player": "bar", "Guard": "bar", "Doc": "bar"})
     dr = {
         "resolved_event": "A hush falls. The shipment arrives at midnight, or so it seems.",
         "dialogue_log": [
@@ -77,10 +87,48 @@ def test_beat_drops_concealed_dialogue_and_redacts_prose():
             {"speaker": "Guard", "exact_quote": "Move along.", "visibility": "overt"},
         ],
     }
-    beat = _beat_for_presence(dr, None, None, "Doc")
+    beat = _beat_for_presence(dr, sc, "bar", "Doc")
     assert "midnight" not in beat
-    # An overt, audible line is preferred and surfaced.
+    # An overt line Doc is placed to hear is surfaced.
     assert "Move along." in beat
+
+
+def test_an_unplaced_presence_receives_nothing(temp_db=None):
+    """X1: the hearing check ran only `if station_room and sc`, so a presence
+    tracked from a dialogue_log speaker alone -- which has no station room --
+    fell through it and got every audible quote of the beat verbatim, then
+    replied into public canon. This test previously asserted that leak
+    ('Move along.' in beat) with `sc=None, station_room=None`; co-presence is
+    not the default, and the no-audible-line fallback to resolved_event would
+    have handed an unplaced presence the omniscient prose besides."""
+    dr = {
+        "resolved_event": "A hush falls. The shipment arrives at midnight.",
+        "dialogue_log": [
+            {"speaker": "Guard", "exact_quote": "Move along.", "visibility": "overt"},
+        ],
+    }
+    assert _beat_for_presence(dr, None, None, "Doc") == ""
+
+
+def test_a_half_heard_line_is_not_quotable():
+    """X2: a line was dropped only at hear_level 'none', so 'fragment' handed
+    over the whole exact_quote -- commit._character_address_of requires 'full'
+    to count the same line as addressed, and the two disagreeing is the bug."""
+    sc = {
+        "rooms": {"bar": {"name": "bar", "adjacent": [{"to": "yard", "barrier": "open_door"}]},
+                  "yard": {"name": "yard", "adjacent": [{"to": "bar", "barrier": "open_door"}]}},
+        "positions": {"Guard": "yard", "Doc": "bar"},
+        "entities": {}, "attire": {}, "overlays": {},
+    }
+    from spatial import hear_level, spatial_rel
+    level = hear_level(spatial_rel(sc, "yard", "bar"), "normal")
+    dr = {"resolved_event": "", "dialogue_log": [
+        {"speaker": "Guard", "exact_quote": "Move along.", "visibility": "overt"}]}
+    beat = _beat_for_presence(dr, sc, "bar", "Doc")
+    if level == "full":
+        assert "Move along." in beat
+    else:
+        assert "Move along." not in beat
 
 
 def test_beat_concealed_from_this_presence_only():
