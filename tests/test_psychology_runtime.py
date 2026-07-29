@@ -34,7 +34,8 @@ def test_ungrounded_hedonic_proposal_is_ignored():
     )
 
     assert result == {"pain": 0.0, "pleasure": 0.0, "source": "",
-                      "charge": 0.0, "saturated": False}
+                      "charge": 0.0, "saturated": False,
+                      "sustained_beats": 0.0, "stimulus": 0.0}
 
 
 def _sustained(beats, previous=None, released_on=None, pleasure=0.9):
@@ -182,3 +183,102 @@ def test_association_extinction_is_bounded_and_evidence_gated():
     )
 
     assert result[0]["strength"] == 0.55
+
+
+class TestSustainedLevelHabituation:
+    """The pain/pleasure LEVEL is peak-held, so a body under continuous strong
+    stimulus reads at the ceiling indefinitely -- and cognitive_absorption read
+    that level, handing back full absorption forever with it. Measured live: a
+    character held there could hold exactly one open question, produced no new
+    want for three straight beats, and said the same sentence shape every time.
+
+    Beat twelve of maximum stimulation does not claim a mind the way beat one
+    does. But a PEAK still does, so habituation covers the plateau and never
+    the spike.
+    """
+
+    def _beat(self, previous, pleasure, novelty=0.0, released=False):
+        return psych.resolve_hedonic(
+            previous,
+            {"somatic_impact": {"pain": 0.0, "pleasure": pleasure,
+                                "why": "sustained contact"},
+             "novelty": novelty},
+            {"pleasure_sensitivity": 0.5}, {}, 1.0, released=released,
+        )
+
+    def test_a_plateau_stops_being_arresting(self):
+        state = self._beat({}, 0.9)
+        first = psych.cognitive_absorption(state)
+        for _ in range(6):
+            state = self._beat(state, 0.9)
+
+        assert state["sustained_beats"] > 0
+        assert psych.cognitive_absorption(state) < first
+
+    def test_habituation_settles_at_busy_not_free(self):
+        """A saturated body habituates to "three thoughts", never to "free"."""
+        state = self._beat({}, 0.95)
+        for _ in range(20):
+            state = self._beat(state, 0.95)
+
+        assert state["saturated"] is True
+        assert psych.cognitive_absorption(state) >= psych._ABSORPTION_SATURATED_FLOOR
+
+    def test_a_fresh_escalation_is_fully_arresting_again(self):
+        state = self._beat({}, 0.6)
+        for _ in range(8):
+            state = self._beat(state, 0.6)
+        plateaued = psych.cognitive_absorption(state)
+
+        state = self._beat(state, 0.95)          # the spike
+
+        assert state["sustained_beats"] == 0.0
+        assert psych.cognitive_absorption(state) > plateaued
+
+    def test_a_novel_beat_also_resets_the_clock(self):
+        state = self._beat({}, 0.9)
+        for _ in range(6):
+            state = self._beat(state, 0.9)
+        assert state["sustained_beats"] > 0
+
+        state = self._beat(state, 0.9, novelty=0.85)
+        assert state["sustained_beats"] == 0.0
+
+    def test_release_resets_the_clock(self):
+        state = self._beat({}, 0.9)
+        for _ in range(6):
+            state = self._beat(state, 0.9)
+
+        state = self._beat(state, 0.9, released=True)
+        assert state["sustained_beats"] == 0.0
+        assert state["charge"] == 0.0
+
+    def test_jitter_on_the_plateau_is_not_a_peak(self):
+        """Small wobble is the same plateau, not a new event."""
+        state = self._beat({}, 0.88)
+        for pleasure in (0.85, 0.9, 0.86, 0.92, 0.89):
+            state = self._beat(state, pleasure)
+
+        assert state["sustained_beats"] > 0
+
+    def test_a_level_that_falls_away_clears_the_clock(self):
+        state = self._beat({}, 0.9)
+        for _ in range(5):
+            state = self._beat(state, 0.9)
+
+        for _ in range(8):
+            state = self._beat(state, 0.0)
+        assert state["sustained_beats"] == 0.0
+
+    def test_a_state_saved_before_habituation_existed_reads_as_fresh(self):
+        legacy = {"pain": 0.0, "pleasure": 0.95, "charge": 0.9,
+                  "saturated": True}
+        assert psych.cognitive_absorption(legacy) == psych.cognitive_absorption(
+            {**legacy, "sustained_beats": 0.0})
+
+    def test_absorption_is_total_on_junk(self):
+        for junk in (None, "lots", -4, {"sustained_beats": "many"}):
+            value = psych.cognitive_absorption(
+                junk if isinstance(junk, dict) else {"pleasure": 0.5,
+                                                     "sustained_beats": junk})
+            assert 0.0 <= value <= 1.0

@@ -251,7 +251,8 @@ def test_leaving_the_surface_clears_the_habituation_state():
 def test_no_comfort_keeps_the_hedonic_dict_shape_unchanged():
     state = psych.resolve_hedonic({}, {}, {}, {}, 1)
     assert state == {"pain": 0.0, "pleasure": 0.0, "source": "",
-                     "charge": 0.0, "saturated": False}
+                     "charge": 0.0, "saturated": False,
+                     "sustained_beats": 0.0, "stimulus": 0.0}
 
 
 # --- rest: tick_vitals spends the lying-on-a-soft-surface fact -------------
@@ -313,5 +314,9 @@ def test_thirty_beats_parked_on_a_bed():
     assert state["charge"] == 0.0                              # unchanged
     assert state["saturated"] is False
     assert psych.cognitive_absorption(state) < 0.25            # mind intact
+    # sustained_beats/stimulus are resolve_hedonic's own habituation record,
+    # written on every beat regardless of comfort. The property under test is
+    # that COMFORT adds nothing beyond its two habituation keys.
     assert set(state) <= {"pain", "pleasure", "source", "charge",
-                          "saturated", "comfort_beats", "comfort_source"}
+                          "saturated", "comfort_beats", "comfort_source",
+                          "sustained_beats", "stimulus"}
