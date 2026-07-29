@@ -1,6 +1,60 @@
 # Changelog
 
-## Unreleased
+## alpha 6.1 — Something else you own
+
+A character stops being interesting the moment it runs out of things to
+be. This release fixes the two ways that was happening — one that
+silenced what characters had concluded, one that let them repeat
+themselves in a shape no check was looking at — and then adds the first
+mechanism that answers the question the others only ever refused.
+
+Every fix below was found by reading live play, not by testing.
+
+### Added
+
+- **Unbidden recall — one contrasting memory for a measurably stuck mind.**
+  Every repetition mechanism shipped this week says *not that*: the refrain
+  detector, the verbatim-repeat rewrite, plateau habituation. None of them says
+  *here is something else you own*, and a mind holding one want and one open
+  question has nothing to reach for. When the existing deterministic
+  stuck-ness signals fire — a reused sentence skeleton, a verbatim repeat that
+  survived its rewrite, an ungoverned goal held past its tenure, a sustained
+  bodily plateau — `memory.contrast_memory` surfaces exactly one high-salience
+  memory *dissimilar* to the current beat.
+
+  Structural dissimilarity (tokens, location, entities, turn distance), not
+  embedding cosine, because on a fallback-embedded corpus cosine is
+  fuzzy-lexical. Deliberately **confidence-blind**: what a character no longer
+  credits is exactly the sort of thing that returns unprompted. Keyed
+  `surfaces_unbidden.it_comes_back_to_me` so the field itself carries the
+  epistemic status — it arrived on its own and answers no question asked, the
+  same trick `active_hypotheses` uses with `i_suspect`. It substitutes for one
+  ordinary recall slot so the payload budget is constant, is a pure read, and
+  mints nothing: only what the character then *does* is canonical.
+  Edge-triggered with a five-beat cooldown and two-strike suppression;
+  absorption at the place-recall-zero tier, an open drive-rupture window, or a
+  gated mind suppress it outright.
+
+  **Design credit.** The idea that retrieval can serve divergence as well as
+  recall is adapted from **[SIGMA SRIP-14 §XXII, *Retrieval as Perturbation
+  Source*](https://github.com/sigmastratum/documentation)** (Sigma Stratum
+  Research Group; public SRIPs are CC BY 4.0 with an Independent
+  Implementation Safe Harbor). Their framing — that standard retrieval
+  reinforces whatever a system is already doing, so a bounded second mode is
+  needed when it has converged — named a hole we had approached from the other
+  end and only ever patched negatively. What does *not* carry over is most of
+  the surrounding specification: it governs external retrieval, cross-origin
+  provenance and cross-runtime exchange, none of which may reach a character
+  context here, so the contrast is drawn from the character's own memory and
+  crosses no boundary ordinary recall does not already cross. See
+  [`docs/RESEARCH.md`](docs/RESEARCH.md) §1.5. Attribution only — no
+  certification, endorsement, or compatibility is implied.
+
+- **An engineering reference.** [`docs/ENGINEERING.md`](docs/ENGINEERING.md)
+  explains how the system operates layer by layer and why each boundary sits
+  where it does, with ten diagram placeholders. Connective tissue between
+  `AGENTS.md`, `PIPELINE.md` and `DATABASE.md` rather than a restatement of
+  them.
 
 ### Fixed
 
@@ -38,30 +92,20 @@
   matching — an audit found 100% of a live corpus's 4,624 memory rows on the
   fallback with no signal anywhere. `prepare_memory_commit` now surfaces a
   turn warning when the batch embedded through the fallback.
+- **A repeated line is now caught by checking the answer, not just giving the
+  advice.** `recent_self_lines` and the AVOID SELF-REPETITION rule are
+  advisory, and advice is not a guarantee: measured live, a character was
+  handed its own previous line in that very field — the window pulled the right
+  six turns and the line was in it — and returned it back word for word on the
+  next beat. The character step now screens its own draft. A line matching
+  recent speech on normalized equality (punctuation and case are not variation)
+  or on two shared six-word runs buys one rewrite naming the line; if the
+  second draft still repeats, it is kept with a warning, because a character
+  who says nothing is worse than one who says it twice. Deliberately distinct
+  from the 6.0.2 refrain detector, which catches a reused sentence *shape*
+  carrying fresh content — each is blind to the other's failure, and a test
+  pins that so neither is later mistaken for covering both.
 
-### Added
-
-- **Unbidden recall: one contrasting memory for a measurably stuck mind.**
-  The existing repetition mechanisms all say "not that"; nothing said "here
-  is something else you own." When the same deterministic signals that
-  measure stuck-ness fire — a reused sentence skeleton, a verbatim repeat
-  that survived its rewrite (persisted one beat on `cstate.unbidden`), an
-  ungoverned goal held past its tenure threshold, a sustained bodily
-  plateau — `memory.contrast_memory` surfaces exactly one high-salience
-  memory *dissimilar* to the current beat (structural dissimilarity: tokens,
-  location, entities, turn distance — deliberately not embedding cosine, and
-  deliberately confidence-blind) into the character's memory context, keyed
-  `surfaces_unbidden.it_comes_back_to_me` so the field itself carries the
-  epistemic status: it arrived on its own and answers no question asked. It
-  substitutes for one ordinary recall slot (constant payload budget), is a
-  pure read at character-stage time, and mints nothing — only what the
-  character then does is canonical. Edge-triggered with a 5-beat cooldown
-  and hysteresis; two injections that measurably move nothing suppress the
-  mechanism until the trigger is observed fully clear. Absorption at the
-  place-recall-zero tier, an open drive-rupture window, or a gated mind
-  suppress it outright. Documented in the character prompt beside
-  `recalled_places`, whose contract it shares: the option must exist, the
-  refusal may be theirs.
 
 ## alpha 6.0.2 — Room to have a second thought
 

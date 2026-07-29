@@ -1,10 +1,10 @@
 # Findings — The Drowned Hare
 
-Ten turns, one room, two characters, nothing dramatic. Run on the 6.0.3 dev
-tree (`b41053d`) to check in live play what the 6.0.1–6.0.3 fixes had only been
+Ten turns, one room, two characters, nothing dramatic. Run on the 6.1 dev
+tree (`b41053d`) to check in live play what the 6.0.1–6.1 fixes had only been
 shown to do in tests.
 
-**Why an inn and not a maze.** Every defect fixed across 6.0.1–6.0.3 came out
+**Why an inn and not a maze.** Every defect fixed across 6.0.1–6.1 came out
 of ordinary conversation, not navigation: repeated dialogue, a contact ledger
 that never retired anything, a mind pinned at saturation, inference memories
 crushed to a floor. `docs/OPEN_ITEMS.md` already recorded that the maze arms
@@ -31,7 +31,7 @@ lines. The refrain check looks for a shared opening or closing word across at
 least three of them — the template failure that passes a content check while
 reading as a stuck record.
 
-### Memory — the 6.0.3 reconciliation fix
+### Memory — the 6.1 reconciliation fix
 
 ```
 inference   n=13   floored (<=0.09): 0/13   avg confidence 0.374
@@ -71,7 +71,7 @@ Stated plainly so the pass is not read as broader than it is:
 - **Bodiless voices** (6.0.2) — no ship AI or PA system present.
 - **Narration-in-speech repair** (6.0.1) — the scripted player inputs were
   cleanly quoted, so the Director never had messy prose to mis-parse.
-- **Unbidden recall** (6.0.3) — the trigger requires a measurably stuck mind.
+- **Unbidden recall** (6.1) — the trigger requires a measurably stuck mind.
   Nothing got stuck, which is itself the result, but it means the mechanism
   went unobserved.
 
