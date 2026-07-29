@@ -43,7 +43,8 @@ class TestTheCapIsTheMechanism:
         live, former, warn = apply_project_ops(
             [_proj("p1", "Master the deep maze"),
              _proj("p2", "Keep the courier commission alive")],
-            [], [{"op": "adopt", "project": "Catalogue every shrine symbol"}],
+            [], [{"op": "adopt", "project": "Catalogue every shrine symbol",
+                  "satisfied_when": "the keepers publish the record"}],
             10)
         assert len(live) == PROJECT_CAP == 2
         assert all("shrine symbol" not in str(p.get("project"))
@@ -57,8 +58,10 @@ class TestTheCapIsTheMechanism:
         for ops in (
             [{"op": "displace", "id": "p1",
               "why": "the maze is mapped; mastery has nothing left to ask"},
-             {"op": "adopt", "project": "Catalogue every shrine symbol"}],
-            [{"op": "adopt", "project": "Catalogue every shrine symbol"},
+             {"op": "adopt", "project": "Catalogue every shrine symbol",
+              "satisfied_when": "the keepers publish the record"}],
+            [{"op": "adopt", "project": "Catalogue every shrine symbol",
+              "satisfied_when": "the keepers publish the record"},
              {"op": "displace", "id": "p1",
               "why": "the maze is mapped; mastery has nothing left to ask"}],
         ):
@@ -246,6 +249,130 @@ class TestDecayIsReasonedNotSilent:
         assert _FADING_AFTER < INTENT_DORMANT_AFTER
 
 
+class TestAdoptionIsADeliberation:
+    """'Can they reliably deliberate this is worthy as a project?' -- made
+    mechanical. satisfied_when IS the deliberation: state what would end
+    this OTHER than doing it once. The discriminator was measured before
+    being trusted: circular/task criteria restate their project text
+    (similarity 0.5-0.75), genuine external conditions do not
+    (0.125-0.25). What the gate cannot catch -- an insincere but external
+    criterion -- is what probation is for."""
+
+    def _adopt(self, project, satisfied_when=None):
+        op = {"op": "adopt", "project": project}
+        if satisfied_when is not None:
+            op["satisfied_when"] = satisfied_when
+        return apply_project_ops([], [], [op], 10)
+
+    def test_no_criterion_no_project(self):
+        """The chalk-circle shape: a bare fascination, adopted. Refused --
+        the articulation the op forces is the deliberation."""
+        live, _, warn = self._adopt(
+            "Understand the symbolic sequence running through this maze")
+        assert live == []
+        assert any("deliberation" in w for w in warn)
+
+    def test_a_circular_criterion_is_a_task_pretending(self):
+        live, _, warn = self._adopt(
+            "Understand the symbolic sequence running through this maze",
+            "when I understand the symbolic sequence")
+        assert live == []
+        assert any("circular" in w for w in warn)
+
+    def test_fetch_the_physician_is_caught_as_what_it_is(self):
+        """Nathan's framing, verbatim: a task's completion restates the
+        task, so the same gate refuses it the tier."""
+        live, _, warn = self._adopt("Fetch the physician",
+                                    "the physician is here")
+        assert live == []
+        assert any("circular" in w for w in warn)
+
+    def test_an_external_end_is_a_real_project(self):
+        for project, crit in (
+            ("Keep this village alive through the winter",
+             "spring comes and the village still stands"),
+            ("Understand the symbolic sequence running through this maze",
+             "the keepers confirm the sequence's purpose, or the maze "
+             "is decommissioned"),
+        ):
+            live, _, warn = self._adopt(project, crit)
+            assert len(live) == 1, (project, warn)
+
+    def test_authored_projects_are_exempt(self):
+        """The author's deliberation already happened; a card needs no
+        gate. This is also what keeps the live pa1 untouched."""
+        sheet = {"identity": {"name": "T"}, "psychology": {"projects": [
+            "Every run I make ends at the shrine"]}}
+        got = character_projects(sheet)
+        assert len(got) == 1
+        assert "probation" not in got[0]
+
+
+class TestTimeFiltersInsteadOfJudgement:
+    """Probation: nobody knows on day one that something is their life's
+    work. A runtime adoption weighs as an intention until SERVICE
+    establishes it -- never survival, because the measured failure mode of
+    this tier is inattention, and establishment by surviving ignored
+    boundary reviews would make the pathology permanent. What probation
+    buys over an intention: barren tolerance to the lapse fuse, slot
+    scarcity, drift visibility, review invitations, and the path to drive
+    weight."""
+
+    def _adopted(self, turn=10, **over):
+        live, _, _ = apply_project_ops(
+            [], [], [{"op": "adopt", "project": "Learn the low passages",
+                      "satisfied_when": "the guild grants the survey "
+                                        "seal"}], turn)
+        live[0].update(over)
+        return live
+
+    def test_adoption_starts_on_probation_at_intention_weight(self):
+        from affect import settle_probation
+        live = self._adopted()
+        assert live[0]["probation"] is True
+        assert serves_priority(live[0]["id"], set(), set(),
+                               {live[0]["id"]}) == 0.8
+
+    def test_service_plus_time_establishes(self):
+        from affect import settle_probation
+        live = self._adopted(served_beats=3, last_served_turn=22)
+        live, former, warn = settle_probation(live, [], 22)
+        assert "probation" not in live[0]
+        assert any("established" in w for w in warn)
+
+    def test_service_alone_does_not_establish_a_same_day_enthusiasm(self):
+        from affect import settle_probation
+        live = self._adopted(served_beats=3, last_served_turn=13)
+        live, _, warn = settle_probation(live, [], 13)
+        assert live[0].get("probation") is True
+
+    def test_age_alone_is_establishment_by_neglect_and_refused(self):
+        from affect import settle_probation
+        live = self._adopted(served_beats=2, last_served_turn=30)
+        live, _, _ = settle_probation(live, [], 30)
+        assert live[0].get("probation") is True
+
+    def test_an_unserved_probationary_project_lapses_quietly(self):
+        """The chalk-circle counterfactual: adopted, then never served --
+        it leaves without ceremony, recorded, freeing the slot."""
+        from affect import settle_probation
+        live = self._adopted(served_beats=1, last_served_turn=10)
+        live, former, warn = settle_probation(live, [], 34)
+        assert live == []
+        assert former[0]["end"] == "lapsed"
+        assert "unserved for 24 beats" in former[0]["why"]
+
+    def test_an_established_project_never_lapses(self):
+        """The stated-reason floor stays where it matters: on projects a
+        character has actually lived by. Only displacement or its own
+        criterion ends one -- however long unserved."""
+        from affect import settle_probation
+        held = [dict(_proj("pa1", "Every run ends at the shrine"),
+                     last_served_turn=10)]
+        live, former, warn = settle_probation(held, [], 500)
+        assert len(live) == 1 and former == [] and warn == []
+
+
 class TestServingIsObservable:
     """A15 run 5: pa1 held at weight 1.0 while, twenty beats in, nothing
     emitted served it. The tier stopped failing by being outranked and
@@ -335,7 +462,8 @@ class TestDriftIsLegible:
     def test_adoption_and_seeding_start_the_clock_at_now(self):
         """A fresh commitment must not read as instantly adrift."""
         live, _, _ = apply_project_ops(
-            [], [], [{"op": "adopt", "project": "Learn the low passages"}],
+            [], [], [{"op": "adopt", "project": "Learn the low passages",
+                      "satisfied_when": "the guild grants the survey seal"}],
             50)
         assert live[0]["last_served_turn"] == 50
 

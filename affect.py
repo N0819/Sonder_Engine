@@ -1013,6 +1013,10 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok):
 
 PROJECT_CAP = 2
 _PROJECT_SIMILARITY = 0.4
+# A satisfied_when at or above this similarity to its own project text is
+# circular ("done when I have done it"). Measured gap on real strings:
+# circular/task criteria 0.5-0.75, genuine external conditions 0.125-0.25.
+_CRITERION_RESTATES_SIM = 0.4
 _FORMER_PROJECTS_CAP = 6
 
 
@@ -1115,6 +1119,34 @@ def apply_project_ops(projects, former, ops, turn_idx):
                 f"project adopt rejected: restates {dup.get('id')!r} -- a "
                 "project is held, not re-adopted")
             continue
+        # THE DELIBERATION GATE. "Can a mind reliably deliberate that this
+        # is worthy as a project?" is answered by making the deliberation
+        # mechanical: state what would END this other than doing it once.
+        # A criterion that RESTATES the project is not a criterion --
+        # measured cleanly separable on real strings: circular criteria
+        # ("understand the symbols" -> "when I understand the symbols")
+        # score 0.5-0.75 against their project text, genuine external
+        # conditions ("the keepers withdraw the commission", "spring comes
+        # and the village still stands") score 0.125-0.25. The same gate
+        # catches a TASK wearing the word, because a task's completion
+        # restates the task ("fetch the physician" -> "the physician is
+        # here", 0.5). What it cannot catch is an insincere-but-external
+        # criterion; that residue is what probation below is for.
+        crit = str(op.get("satisfied_when") or "").strip()
+        if not crit:
+            warnings.append(
+                "project adopt rejected: adoption is a deliberation -- "
+                "state satisfied_when, what would end this project OTHER "
+                "than doing it once. No statable end beyond the doing "
+                "means it is a task or a fascination, not a project")
+            continue
+        if claim_similarity(text, crit) >= _CRITERION_RESTATES_SIM:
+            warnings.append(
+                "project adopt rejected: satisfied_when restates the "
+                "project, which is circular -- 'done when I have done it' "
+                "is what a TASK says. Name the condition OUTSIDE the doing "
+                "that would end it, or serve it as an intention instead")
+            continue
         if len(live) >= PROJECT_CAP:
             warnings.append(
                 "project adopt rejected: both slots full -- adopting a "
@@ -1126,13 +1158,87 @@ def apply_project_ops(projects, former, ops, turn_idx):
             "id": _next_project_id(live, ended),
             "project": text,
             "about": about if about in ("world", "self") else "",
-            "satisfied_when": str(op.get("satisfied_when") or "").strip(),
+            "satisfied_when": crit,
             "adopted_turn": turn_idx,
             # Fresh adoption counts as service: the drift clock starts now,
             # not at some notional zero that would read as instantly adrift.
             "last_served_turn": turn_idx,
+            # PROBATION: a runtime adoption weighs at intention level and
+            # may lapse quietly until it is lived into -- see
+            # settle_probation. Nobody knows on day one that something is
+            # their life's work; time filters instead of judgement.
+            "probation": True,
+            "served_beats": 0,
         })
 
+    return (live, ended[-_FORMER_PROJECTS_CAP:], warnings)
+
+
+# Establishment is EARNED BY SERVICE, never by survival. The obvious rule
+# ("survives N boundary reviews") was considered and rejected: the measured
+# failure mode of this tier is precisely that the model stops referring to
+# what it holds, so passive survival would establish a project by
+# inattention -- the exact pathology, made permanent. Both floors are
+# needed: service alone lets a three-beat enthusiasm establish same-day;
+# age alone is establishment by neglect. Served on three distinct beats
+# across at least a dozen turns is a commitment that lasted AND was acted
+# on.
+_PROBATION_SERVED_MIN = 3
+_PROBATION_AGE_MIN = 12
+# A probationary project unserved this long lapses -- quietly, because you
+# can drop something you took up last week without ceremony; the stated-
+# reason floor stays where it matters, on projects a character has actually
+# lived by. Three times the drift-marker threshold: the character has been
+# SHOWN the drift for two-thirds of the fuse before the lapse lands, so a
+# lapse is never the first notice. Deliberately wider than the intention
+# stall (2 barren attempts) -- probationary barren-tolerance is most of
+# what adoption buys before establishment.
+_LAPSE_AFTER = 24
+
+
+def settle_probation(projects, former, turn_idx):
+    """Establish or lapse probationary projects. Returns (projects, former,
+    warnings). Deterministic, runs every commit AFTER the service ledger so
+    this beat's service counts.
+
+    Establishment removes the probation flag: the project now weighs at
+    drive level and can no longer lapse -- from here only its own
+    satisfied_when or a displacement with a stated reason ends it. A lapse
+    moves it to former_projects with end 'lapsed' and an auto-stated why:
+    recorded continuity, no ceremony. Authored and harness-written projects
+    never pass through here at all (no probation flag -- the author's
+    deliberation already happened), which is what keeps the live pa1
+    untouched by this change."""
+    live, ended, warnings = [], list(former or []), []
+    turn_idx = int(_float_or(turn_idx))
+    for p in projects or []:
+        if not (isinstance(p, dict) and p.get("probation")):
+            live.append(p)
+            continue
+        p = dict(p)
+        served = int(_float_or(p.get("served_beats")))
+        age = turn_idx - int(_float_or(p.get("adopted_turn"), turn_idx))
+        idle = turn_idx - int(_float_or(p.get("last_served_turn"), turn_idx))
+        if served >= _PROBATION_SERVED_MIN and age >= _PROBATION_AGE_MIN:
+            p.pop("probation", None)
+            warnings.append(
+                f"project {p.get('id')!r} established -- served "
+                f"{served} beats over {age} turns; it now weighs with the "
+                "drive and ends only by its criterion or out loud")
+        elif idle >= _LAPSE_AFTER:
+            ended.append({
+                "id": str(p.get("id") or ""),
+                "project": str(p.get("project") or ""),
+                "why": f"lapsed on probation: unserved for {idle} beats",
+                "turn": turn_idx,
+                "end": "lapsed",
+            })
+            warnings.append(
+                f"project {p.get('id')!r} lapsed -- adopted turn "
+                f"{p.get('adopted_turn')}, unserved for {idle} beats; a "
+                "fascination that passed, recorded without ceremony")
+            continue
+        live.append(p)
     return (live, ended[-_FORMER_PROJECTS_CAP:], warnings)
 
 
@@ -1250,23 +1356,33 @@ def project_boundary(projects, intentions, before_status, new_room,
     return "; ".join(reasons) if reasons else None
 
 
-def serves_priority(serves, steering_ids, project_ids=()):
-    """The appraisal weight of a `serves` key: drive 1.0, a held PROJECT
-    1.0, a steering intention 0.8, anything else situational 0.4.
+def serves_priority(serves, steering_ids, project_ids=(), probation_ids=()):
+    """The appraisal weight of a `serves` key: drive 1.0, an ESTABLISHED
+    project 1.0, a probationary project or steering intention 0.8, anything
+    else situational 0.4.
 
-    Projects score AT DRIVE WEIGHT deliberately -- this is the whole answer
-    to the measured loss: the shrine commission, expressed as an intention,
-    lost the beat auction to drive-serving wants at 1.0-vs-0.8 every time,
-    in three arms. A project is what a character is ABOUT right now; a want
-    serving it must not weigh less than a want serving what they eternally
-    are. The scarcity cap (two slots) is what makes that weight safe to
-    grant -- seven intentions at 1.0 would just move the soup up a tier.
+    Established projects score AT DRIVE WEIGHT deliberately -- this is the
+    whole answer to the measured loss: the shrine commission, expressed as
+    an intention, lost the beat auction to drive-serving wants at
+    1.0-vs-0.8 every time, in three arms. A project is what a character is
+    ABOUT right now; a want serving it must not weigh less than a want
+    serving what they eternally are. The scarcity cap (two slots) is what
+    makes that weight safe to grant -- seven intentions at 1.0 would just
+    move the soup up a tier.
+
+    A PROBATIONARY project weighs exactly as an intention does, on purpose:
+    adoption alone must buy no appraisal power, or a nine-beat fascination
+    adopted into the free slot becomes privileged the moment it is named.
+    Drive weight is earned by service (settle_probation), never by the act
+    of adopting.
     """
     key = str(serves or "")
     if key == "drive":
         return 1.0
     if key in {str(p) for p in (project_ids or ())}:
         return 1.0
+    if key in {str(p) for p in (probation_ids or ())}:
+        return 0.8
     return 0.8 if key in (steering_ids or ()) else 0.4
 
 

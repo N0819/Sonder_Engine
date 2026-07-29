@@ -3729,6 +3729,13 @@ def prepare_memory_commit(ctx, *, scene=None):
                 for w in _pwarn:
                     ctx.add_warning(f"{cname}: project -- {w}")
                 _project_ids = {str(p.get("id") or "") for p in projects}
+                # Probationary vs established, as the character SAW them at
+                # the start of this beat (pre-settlement, like valid_ids
+                # for intentions): a probationary project weighs at
+                # intention level until service establishes it.
+                _probation_ids = {str(p.get("id") or "") for p in projects
+                                  if p.get("probation")}
+                _established_ids = _project_ids - _probation_ids
                 drive = (character_psychology(sh) or {}).get("drive") or {}
 
                 # this beat's evidence pool: resolved event + spoken lines, for
@@ -3796,15 +3803,19 @@ def prepare_memory_commit(ctx, *, scene=None):
                 _steering = affect.steering_intent_ids(intentions, turn.idx)
 
                 def _priority(serves, _ids=_steering, _intents=intentions,
-                              _projs=projects, _pids=_project_ids):
+                              _projs=projects, _pids=_established_ids,
+                              _probs=_probation_ids):
                     # Models emit serves as "intention:<id-or-text>" or
                     # "project:<id-or-text>"; resolve to the bare id so a
                     # goal-serving impact scores at its tier's priority, not
-                    # the situational default. A held project weighs at
-                    # DRIVE priority (1.0) -- the 1.0-vs-0.8 loss is the
-                    # measured failure the project tier exists to close.
+                    # the situational default. An ESTABLISHED project weighs
+                    # at DRIVE priority (1.0) -- the 1.0-vs-0.8 loss is the
+                    # measured failure the project tier exists to close; a
+                    # probationary one at intention priority (0.8) -- drive
+                    # weight is earned by service, never by adoption.
                     serves = affect.normalize_serves(serves, _intents, _projs)
-                    return affect.serves_priority(str(serves), _ids, _pids)
+                    return affect.serves_priority(str(serves), _ids, _pids,
+                                                  _probs)
 
                 wants, enacted, suppressed = affect.normalize_wants(
                     asv.get("wants") or [], valid_ids | _project_ids)
@@ -3920,6 +3931,19 @@ def prepare_memory_commit(ctx, *, scene=None):
                     for _p in projects:
                         if str(_p.get("id") or "") == _pid:
                             _p["last_served_turn"] = turn.idx
+                            # Distinct serving beats, for establishment:
+                            # probation is left by service, never survival.
+                            _p["served_beats"] = 1 + int(
+                                _p.get("served_beats") or 0)
+                # Probation settles AFTER this beat's service counted:
+                # runtime adoptions establish once lived into (drive weight
+                # from the NEXT beat) or lapse quietly once unserved past
+                # the fuse. Authored/harness projects carry no probation
+                # flag and pass through untouched.
+                projects, former_projects, _probw = affect.settle_probation(
+                    projects, former_projects, turn.idx)
+                for w in _probw:
+                    ctx.add_warning(f"{cname}: project -- {w}")
                 # Boundary detection runs BEFORE record_spatial_experience
                 # (below, line ~4100), so st["visited_rooms"] still ends at
                 # the previous position while sc already holds the new one
