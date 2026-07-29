@@ -1,7 +1,13 @@
 # Long-term goals (projects)
 
-**Status: designed, not built.** Nothing in the engine implements this yet.
-Written down while the measurements that motivate it are fresh; see
+**Status: v1 built.** `affect.apply_project_ops` / `affect.serves_priority`
+(lifecycle, cap, weights), `character_schema.character_projects` (authored),
+`commit.py` (seeding, ops, persistence in `interior.projects` /
+`interior.former_projects` on `chat_chars.state`), `agents/character.py`
+(payload `self.projects` / `self.former_projects`, destination fallback in
+`_destination_from_goals`), prompt contract (`project_ops`, PROJECTS block).
+Tests: `tests/test_projects.py`. Boundary review is prompt-normative in v1,
+not engine-gated — see below. Measurements that motivated it:
 [`MAZE_ARMS.md`](MAZE_ARMS.md) A11–A13 for the raw observations and
 [`DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](DESIGN_PSYCHOLOGY_AS_PRESSURE.md) for
 the prior art this revives.
@@ -145,11 +151,47 @@ may answer that objection: a project does not overwrite what a character has
 lived, it competes for two slots and must be given up out loud to be
 replaced.
 
+## Decided in v1
+
+- **Persistence:** `interior.projects` + `interior.former_projects` on the
+  `chat_chars.state` blob — the `place_graph` precedent: checkpoints,
+  `chat_archive`, and branching carry that blob verbatim, so no schema,
+  remap, or archive change. Not derivable: durability across evidence decay
+  is the *defining* property, and anything derived from decaying rows
+  inherits their decay. Note `commit.py` rebuilds `interior` from scratch
+  each beat, so both ledgers are carried through `_interior_out` explicitly.
+- **The bias:** a want or goal-impact whose `serves` names a held project id
+  scores at **drive weight (1.0)** — `affect.serves_priority`. The scarcity
+  cap is what makes that weight safe to grant; seven intentions at 1.0
+  would just move the soup up a tier.
+- **Assign vs offer:** the world (Director, another character, the harness
+  prompt) can only *offer*; adoption is always the character's own
+  `project_ops.adopt`. The two exceptions are author-level, not world-level:
+  cards author projects in `psychology.projects` (seeded at commit, deduped
+  against live *and former* so a project given up never silently re-seeds),
+  and the maze harness may hand-write `interior.projects` exactly as it
+  hand-writes beliefs.
+- **Both slots full and the world insists:** the adopt is refused
+  deterministically with a warning; the engine never evicts. Refusing — or
+  displacing one out loud and feeling the cost — is the character moment.
+- **Boundary review:** prompt-normative in v1 ("review only at boundaries"),
+  not engine-gated. An engine-opened review window (the `drive_rupture`
+  precedent) remains available if models review per-beat anyway.
+- **Second-slot kind:** not enforced. `about: world|self` is declared, and
+  one structural fact already prevents the two-spatial oscillation worry:
+  `_destination_from_goals` resolves exactly one destination, goal first,
+  then intentions, then projects — two room-naming projects cannot both
+  route. Measure before legislating further.
+- **Decay legibility (v1 of the section above):** an active intention idle
+  for two-thirds of the fuse carries `fading: <beats>` in the payload
+  (`agents/character._annotate_fading`), with prompt text framing it as a
+  question to answer — renew by acting, revise, or abandon with a stated
+  reason. The sweep is unchanged and remains the backstop.
+
 ## Not yet decided
 
-- Where projects persist (`interior.projects`? a status on an intention?)
-  and therefore the full `docs/DATABASE.md` checklist, or whether they can
-  be derived from existing rows the way `en_route` is.
-- How appraisal expresses the bias without recreating the 1.0-vs-0.8 loss.
-- Whether the world can *assign* a project (a commission) or only offer one.
-- What a character does when both slots are full and the world insists.
+- Whether a renewed intention should cost something, so renewal is a
+  decision rather than a reflex.
+- Whether boundary review needs the engine-gated window, or the norm holds.
+- Whether displacement should feed the drive-strain ledger (giving up a
+  drive-serving project is plausibly a strain event).

@@ -31,7 +31,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agents.character import (_annotate_known_exits, _destination_from_goals,
-                              _toward_hops)
+                              _en_route, _toward_hops)
 
 
 def _room(name, adjacent=(), light="lit"):
@@ -219,6 +219,94 @@ class TestStaleIntentionsDoNotSteer:
 
     def test_without_a_turn_nothing_is_aged_out(self):
         assert _destination_from_goals(self._state(), self._pg())["rid"] == "rS"
+
+
+class TestEnRoute:
+    """Being underway is a stated status, not a coincidence that must recur.
+
+    Measured (A14, after the completeness fix): a character 9 rooms from a
+    destination he had himself chosen closed to 7 and gave it all back --
+    trail 9 9 7 8 9, four beats, net zero. His previous goal text was in
+    the payload every beat; what nothing stated was that he was ALREADY
+    UNDERWAY, how far in, or that the last beat had closed distance, so a
+    nine-room journey needed the same intent to win the beat auction nine
+    independent times. Derived at payload time from rows that already
+    exist: nothing persists, so every way a journey can end is a change in
+    the derivation itself -- arrival empties the destination, renaming the
+    aim moves it, a disproven doorway breaks the way into silence.
+    """
+
+    #  Gate -- Hall -- Stair -- Landing -- Shrine, every doorway taken.
+    def _pg(self):
+        return _graph(
+            [("rA", "rB"), ("rB", "rC"), ("rC", "rD"), ("rD", "rE")],
+            {"rA": "Gate", "rB": "Hall", "rC": "Stair",
+             "rD": "Landing", "rE": "Shrine"})
+
+    def _state(self, route, pg=None):
+        return {"visited_rooms": route, "place_graph": pg or self._pg()}
+
+    DEST = {"rid": "rE", "name": "Shrine"}
+
+    def test_the_journey_is_stated_with_his_own_distance(self):
+        got = _en_route(self._state(["rA", "rB"]), "rB", self.DEST)
+        assert got == {"to": "Shrine", "rooms_left": 3,
+                       "closer_than_last_room": True}
+
+    def test_giving_ground_reads_as_giving_ground(self):
+        """The oscillation fact itself: nine rooms walked and given back is
+        not nine rooms walked."""
+        got = _en_route(self._state(["rC", "rB"]), "rB", self.DEST)
+        assert got["rooms_left"] == 3
+        assert got.get("further_than_last_room") is True
+        assert "closer_than_last_room" not in got
+
+    def test_holding_distance_states_neither(self):
+        """A sidestep neither spends nor buys; absent means nothing to say."""
+        pg = _graph(
+            [("rA", "rB"), ("rA", "rC"), ("rB", "rD"), ("rC", "rD"),
+             ("rD", "rE")],
+            {"rA": "Gate", "rB": "West", "rC": "East", "rD": "Join",
+             "rE": "Shrine"})
+        got = _en_route(self._state(["rC", "rB"], pg), "rB", self.DEST)
+        assert got["rooms_left"] == 2
+        assert "closer_than_last_room" not in got
+        assert "further_than_last_room" not in got
+
+    def test_no_remembered_way_is_silence(self):
+        """The firewall: doorways his feet took, never the scene. A node
+        merely known to exist earns no journey to it."""
+        pg = _graph([("rA", "rB")],
+                    {"rA": "Gate", "rB": "Hall", "rE": "Shrine"})
+        assert _en_route(self._state(["rA", "rB"], pg), "rB",
+                         self.DEST) is None
+
+    def test_a_disproven_doorway_breaks_the_journey_into_silence(self):
+        """One of the endings that needs no cancel machinery: the world
+        retracting a doorway retracts the journey that ran through it."""
+        pg = self._pg()
+        pg["edges"]["rD"]["rE"] = {"taken": True, "disproven": 9}
+        assert _en_route(self._state(["rA", "rB"], pg), "rB",
+                         self.DEST) is None
+
+    def test_a_neighbouring_destination_needs_no_status_line(self):
+        """Under two rooms out the exit verdict already says 'through here
+        is X itself'; a character crossing a house to answer a door is not
+        on a journey."""
+        assert _en_route(self._state(["rC", "rD"]), "rD", self.DEST) is None
+
+    def test_standing_in_it_is_arrival_not_a_journey(self):
+        assert _en_route(self._state(["rD", "rE"]), "rE", self.DEST) is None
+
+    def test_no_destination_is_silence(self):
+        assert _en_route(self._state(["rA", "rB"]), "rB", None) is None
+
+    def test_the_scene_is_never_consulted_by_construction(self):
+        """Pinned so a future signature change has to argue with a test:
+        the derivation has no scene parameter to leak from."""
+        import inspect
+        params = set(inspect.signature(_en_route).parameters)
+        assert params == {"stored_state", "here_rid", "destination"}
 
 
 class TestTowardHops:

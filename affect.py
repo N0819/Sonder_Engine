@@ -70,6 +70,11 @@ _INTENT_CAP = 4
 _INTENT_SIMILARITY = 0.4
 _INTENT_EVIDENCE_WINDOW = 3
 _INTENT_DORMANT_AFTER = 30
+# Public: agents/character.py surfaces an active intention as `fading` once
+# it has gone two-thirds of the dormancy fuse without progress, so the
+# giving-up can happen BY the character instead of TO them (see
+# docs/DESIGN_LONG_TERM_GOALS.md, "Decay should be reasoned, not silent").
+INTENT_DORMANT_AFTER = _INTENT_DORMANT_AFTER
 _INTENT_PROGRESS_STEP = 0.2
 # Consecutive attempts at FULL progress -- the beat spent on a goal that has
 # nothing left to give -- before it stops steering. Two, not more: one barren
@@ -294,35 +299,42 @@ def label_matches(label, v, a):
 
 _SERVES_INTENT_SIMILARITY = 0.4
 
-def normalize_serves(serves, intentions):
-    """Resolve a model-emitted `serves` key to "drive" or an intention id.
+def normalize_serves(serves, intentions, projects=None):
+    """Resolve a model-emitted `serves` key to "drive", an intention id, or
+    a project id.
 
     Models routinely emit serves as "intention:i2" — or "intention:<the
     goal's own text>" — instead of the bare id the commit priority lookup
     expects, which silently scores a goal-serving impact at situational
-    priority (0.4 instead of 0.8). Strips an "intention:" prefix and
-    resolves the remainder: an exact id match wins, else the intention
-    whose text is most similar (claim_similarity >=
-    _SERVES_INTENT_SIMILARITY). Unprefixed keys ("drive", bare ids,
-    "situational") pass through untouched, and an unresolvable remainder
-    is returned stripped so the caller's situational fallback still
-    applies. Pure and total on junk inputs.
+    priority (0.4 instead of 0.8). Strips an "intention:" or "project:"
+    prefix and resolves the remainder against the matching ledger: an exact
+    id match wins, else the entry whose text is most similar
+    (claim_similarity >= _SERVES_INTENT_SIMILARITY). Unprefixed keys
+    ("drive", bare ids, "situational") pass through untouched, and an
+    unresolvable remainder is returned stripped so the caller's situational
+    fallback still applies. Pure and total on junk inputs.
     """
     key = str(serves or "").strip()
-    if not key.casefold().startswith("intention:"):
+    folded = key.casefold()
+    if folded.startswith("project:"):
+        rows = [(str(p.get("id") or ""), str(p.get("project") or ""))
+                for p in (projects or []) if isinstance(p, dict)]
+        rest = key[len("project:"):].strip()
+    elif folded.startswith("intention:"):
+        rows = [(str(i.get("id") or ""), str(i.get("intent") or ""))
+                for i in (intentions or []) if isinstance(i, dict)]
+        rest = key[len("intention:"):].strip()
+    else:
         return key
-    rest = key[len("intention:"):].strip()
     if not rest:
         return rest
-    intents = [i for i in (intentions or []) if isinstance(i, dict)]
-    ids = {str(i.get("id") or "") for i in intents}
-    if rest in ids:
+    if rest in {rid for rid, _ in rows}:
         return rest
     best_id, best_sim = "", 0.0
-    for intent in intents:
-        sim = claim_similarity(rest, str(intent.get("intent") or ""))
+    for rid, text in rows:
+        sim = claim_similarity(rest, text)
         if sim > best_sim:  # strict > keeps first-wins ties deterministic
-            best_id, best_sim = str(intent.get("id") or ""), sim
+            best_id, best_sim = rid, sim
     if best_id and best_sim >= _SERVES_INTENT_SIMILARITY:
         return best_id
     return rest
@@ -674,7 +686,8 @@ def normalize_wants(wants, valid_intention_ids):
 
     Caps to 3, merges near-duplicates (claim_similarity >= 0.4, higher
     urgency wins), rewrites unknown `serves` (neither "drive" nor a known
-    intention id) to "situational", and lets at most one situational want
+    intention/project id -- the caller passes the union) to "situational",
+    and lets at most one situational want
     survive — weak models otherwise multiply free-floating urges that
     serve nothing. Picks enacted = highest-urgency want and suppressed =
     highest-urgency remaining want with `conflicts_with` set (the desire
@@ -967,6 +980,169 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok):
                 f"({turn_idx - last} turns without progress)")
 
     return (result, warnings)
+
+# ---- Projects (Tier 1.5) ----
+#
+# The tier between the eternal drive and the completable intention: durable
+# but not eternal, able to name a room, and structurally immune to every
+# mechanism above that correctly spends intentions. Four measured failures
+# motivate it (docs/DESIGN_LONG_TERM_GOALS.md): a life's-work aim marked
+# satisfied the beat after its first success; a commission decayed dormant by
+# 150 barren beats the world had not withdrawn; aims abandoned along with the
+# tactic that served them; and a standing purpose out-competed every beat by
+# whatever the current room offered, because it scored 0.8 against
+# drive-serving wants at 1.0.
+#
+# The cap IS the mechanism. Two slots, never more: with seven live
+# intentions there is no answer to "what is this person about right now",
+# with two there always is. Adoption over a full ledger is refused, so
+# taking on a third has a price -- something must be given up, by name, with
+# the reason stated. That displacement is deliberately the ONLY way a
+# project ends other than meeting its own criterion: no dormancy sweep, no
+# stall counter, no progress field. A hundred barren beats is a normal week
+# inside a project.
+
+PROJECT_CAP = 2
+_PROJECT_SIMILARITY = 0.4
+_FORMER_PROJECTS_CAP = 6
+
+
+def _next_project_id(projects, former):
+    """Deterministic p<n>, never reusing an id a former project carried --
+    a displaced project's id coming back on an unrelated adoption would make
+    the former ledger read as the history of the new one."""
+    highest = 0
+    for rec in list(projects or []) + list(former or []):
+        raw = str((rec or {}).get("id") or "") if isinstance(rec, dict) else ""
+        if raw.startswith("p"):
+            try:
+                highest = max(highest, int(raw.lstrip("pa")))
+            except ValueError:
+                pass
+    return f"p{highest + 1}"
+
+
+def apply_project_ops(projects, former, ops, turn_idx):
+    """Apply a turn's project operations under the cap and the legibility
+    floor. Returns (projects, former, warnings).
+
+    Ops: `adopt` {project, about?, satisfied_when?} takes one on while a
+    slot is free; `displace` {id, why} gives one up -- why is REQUIRED,
+    because the giving-up is the act: it is the one revision of a belief
+    about the self the engine supports, and it must happen out loud, never
+    as silent eviction; `satisfy` {id, why} closes one whose OWN
+    satisfied_when criterion has been met -- a project with no criterion is
+    not completable at all (it re-arms at every occasion by construction)
+    and satisfy on it is refused.
+
+    Closures are applied before adoptions whatever order the model emitted,
+    so displace-and-adopt lands in one beat without the model having to know
+    the processing order. Ends land in `former` with the stated reason and
+    the turn -- continuity, like former_drives, not obligation.
+
+    What is deliberately ABSENT here is most of the point: no dormancy
+    sweep, no barren counter, no progress ceiling. Nothing in this function
+    or any other touches a project the model did not explicitly close.
+    """
+    live = [dict(p) for p in (projects or []) if isinstance(p, dict)]
+    ended = [dict(p) for p in (former or []) if isinstance(p, dict)]
+    warnings: list[str] = []
+    turn_idx = int(_float_or(turn_idx))
+    ops = [op for op in (ops or []) if isinstance(op, dict)]
+
+    def _find(pid):
+        pid = str(pid or "")
+        for p in live:
+            if str(p.get("id") or "") == pid:
+                return p
+        return None
+
+    for op in ops:
+        kind = str(op.get("op") or "").strip().casefold()
+        if kind not in ("displace", "satisfy"):
+            continue
+        target = _find(op.get("id"))
+        if target is None:
+            warnings.append(f"project {kind} rejected: unknown id "
+                            f"{str(op.get('id') or '')!r}")
+            continue
+        why = str(op.get("why") or "").strip()
+        if not why:
+            warnings.append(
+                f"project {kind} rejected for {target.get('id')!r}: a "
+                "project ends by a stated reason or not at all")
+            continue
+        if kind == "satisfy" and not str(
+                target.get("satisfied_when") or "").strip():
+            warnings.append(
+                f"project satisfy rejected for {target.get('id')!r}: it has "
+                "no satisfied_when criterion, so it is not completable -- "
+                "it re-arms at every occasion; displace it with a reason if "
+                "it no longer speaks for the character")
+            continue
+        live.remove(target)
+        ended.append({
+            "id": str(target.get("id") or ""),
+            "project": str(target.get("project") or ""),
+            "why": why, "turn": turn_idx,
+            "end": "satisfied" if kind == "satisfy" else "displaced",
+        })
+
+    for op in ops:
+        kind = str(op.get("op") or "").strip().casefold()
+        if kind in ("displace", "satisfy"):
+            continue
+        if kind != "adopt":
+            warnings.append(f"unknown project op {kind!r}")
+            continue
+        text = str(op.get("project") or "").strip()
+        if not text:
+            warnings.append("project adopt rejected: empty project text")
+            continue
+        dup = next((p for p in live if claim_similarity(
+            text, str(p.get("project") or "")) >= _PROJECT_SIMILARITY), None)
+        if dup is not None:
+            warnings.append(
+                f"project adopt rejected: restates {dup.get('id')!r} -- a "
+                "project is held, not re-adopted")
+            continue
+        if len(live) >= PROJECT_CAP:
+            warnings.append(
+                "project adopt rejected: both slots full -- adopting a "
+                "third requires displacing one by name, with the reason "
+                "stated (a displace op in the same beat frees the slot)")
+            continue
+        about = str(op.get("about") or "").strip().casefold()
+        live.append({
+            "id": _next_project_id(live, ended),
+            "project": text,
+            "about": about if about in ("world", "self") else "",
+            "satisfied_when": str(op.get("satisfied_when") or "").strip(),
+            "adopted_turn": turn_idx,
+        })
+
+    return (live, ended[-_FORMER_PROJECTS_CAP:], warnings)
+
+
+def serves_priority(serves, steering_ids, project_ids=()):
+    """The appraisal weight of a `serves` key: drive 1.0, a held PROJECT
+    1.0, a steering intention 0.8, anything else situational 0.4.
+
+    Projects score AT DRIVE WEIGHT deliberately -- this is the whole answer
+    to the measured loss: the shrine commission, expressed as an intention,
+    lost the beat auction to drive-serving wants at 1.0-vs-0.8 every time,
+    in three arms. A project is what a character is ABOUT right now; a want
+    serving it must not weigh less than a want serving what they eternally
+    are. The scarcity cap (two slots) is what makes that weight safe to
+    grant -- seven intentions at 1.0 would just move the soup up a tier.
+    """
+    key = str(serves or "")
+    if key == "drive":
+        return 1.0
+    if key in {str(p) for p in (project_ids or ())}:
+        return 1.0
+    return 0.8 if key in (steering_ids or ()) else 0.4
+
 
 # ---- Drive rupture ----
 
