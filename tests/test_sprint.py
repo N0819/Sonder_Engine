@@ -200,14 +200,28 @@ def test_a_dead_end_is_reported_as_one():
     assert run["path"] == ["c1", "c2"] and run["stops"] == "dead_end"
 
 
-def test_a_scene_without_directions_offers_no_runs():
-    """No `dir` means no line to follow, and inventing one would invent a
-    sense -- the same rule corridor_sightlines keeps."""
+def test_a_scene_without_directions_still_offers_the_passage():
+    """REVERSED pin. The old rule ("no `dir` means no line to follow, and
+    inventing one would invent a sense") conflated two different things: the
+    SIGHTLINE, which genuinely needs a heading to certify straightness, and
+    the PASSAGE, which is runnable compass or no compass -- the walk loop
+    itself never needed `dir`. Measured cost of the old rule, live maze arm:
+    the shrine's only approach lost its bearings to a merge bug and could
+    then never be offered at a run, while the character burned beats
+    declaring "east" at a doorway the world could not bind ("fails to move
+    east due to missing bearing", turns 130-133, 338-341, 406-408). The
+    offer now appears WITHOUT a bearing key -- nothing is invented, the
+    absence is the fact -- and the sightline half of the old rationale is
+    kept exactly: see test_bearing_integrity's
+    test_no_heading_certifies_no_sightline."""
     sc = _scene({
         "start": _room("Start", [{"to": "c1", "barrier": "open"}]),
         "c1": _room("C1", [{"to": "start", "barrier": "open"}]),
     })
-    assert sprint_reach(sc, "start") == []
+    reach = sprint_reach(sc, "start")
+    assert len(reach) == 1
+    assert "bearing" not in reach[0]
+    assert reach[0]["path"] == ["c1"]
 
 
 def test_junk_does_not_crash_it():

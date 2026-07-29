@@ -2606,6 +2606,11 @@ def sprint_reach(scene, room_id, known_rooms=None):
         {"bearing": "n", "path": [rid, ...], "rooms": 2,
          "stops": "junction"|"dead_end"|"darkness"|"door"|"full_reach"|"unknown"}
 
+    `bearing` is ABSENT when the doorway carries no `dir` -- the world gives
+    no compass there, and the run is declared by destination instead. Such a
+    passage's sightline ends at its first room: with no heading there is no
+    straight line to certify, so everything beyond is remembered ground only.
+
     `full_reach` is the budget stop, and its name is deliberately about
     DISTANCE, not physiology. It was `winded` first, and the word beat its
     own documentation -- third label in this engine to do so (`closed` read
@@ -2639,10 +2644,19 @@ def sprint_reach(scene, room_id, known_rooms=None):
     known = None if known_rooms is None else {str(r) for r in known_rooms}
     out = []
     for edge in start.get("adjacent") or []:
-        if not isinstance(edge, dict) or not edge.get("dir"):
+        if not isinstance(edge, dict) or not edge.get("to"):
             continue
         if normalize_barrier(edge.get("barrier")) not in _PASSABLE_BARRIERS:
             continue
+        # A doorway with no bearing is still a doorway, and a run through it
+        # is still a run. Requiring `dir` here silently deleted the passage
+        # from every run offer -- measured live (maze arm) as a shrine whose
+        # ONLY approach could never be run, and beats of "fails to move east
+        # due to missing bearing" while the character re-declared a compass
+        # the world could not bind. The offer carries no `bearing` key
+        # (absent means the world gives no compass here, per the
+        # _onward_exits convention); `run_ends_at`/`path` still name it, so
+        # a run is declared by its destination instead of a heading.
         heading = normalize_bearing(edge.get("dir"))
         cur, prev, spent, path, stops = edge.get("to"), room_id, 0, [], None
         # Whether `cur` is still on the straight line of sight from where the
@@ -2696,12 +2710,22 @@ def sprint_reach(scene, room_id, known_rooms=None):
                 stops = "door"
                 break
             nxt = passable[0]
-            if on_sightline and normalize_bearing(nxt.get("dir")) != heading:
+            # No heading means no straight line to certify: the first room
+            # is vouched by ordinary sight through the doorway, everything
+            # beyond it must be remembered ground. Without this, a chain of
+            # bearingless edges would hold `on_sightline` open forever and
+            # walk the offer through ground the character never earned.
+            if on_sightline and (heading is None
+                                 or normalize_bearing(nxt.get("dir"))
+                                 != heading):
                 on_sightline = False
             prev, cur = cur, nxt.get("to")
         if path:
-            out.append({"bearing": heading, "path": path, "rooms": len(path),
-                        "stops": stops or "full_reach"})
+            entry = {"path": path, "rooms": len(path),
+                     "stops": stops or "full_reach"}
+            if heading:
+                entry["bearing"] = heading
+            out.append(entry)
     return out
 
 
@@ -2929,9 +2953,24 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
         if isinstance(edge, dict) and edge.get("to")
     }
 
+    # Edge FIELDS get the same silence-vs-erasure doctrine the edges
+    # themselves already have. A model re-mentioning a doorway ("r0503
+    # connects to r0603, open") has no reliable way to also echo back the
+    # bearing it never thinks about, and wholesale replacement here was
+    # erasing authored `dir`s every time -- measured live (maze arm): 18 of
+    # 98 edge-sides stripped bare, including the shrine's ONLY approach,
+    # after which every declared "run east" through them failed and
+    # sprint_reach stopped offering the passage at all. An absent field is
+    # silence; a value (barrier changes, a re-bearing) still lands.
     for edge in (incoming.get("adjacent") or []):
         if isinstance(edge, dict) and edge.get("to"):
-            existing_edges[edge["to"]] = dict(edge)
+            prior = existing_edges.get(edge["to"])
+            if prior:
+                spoken = {k: v for k, v in edge.items()
+                          if v is not None and v != ""}
+                existing_edges[edge["to"]] = {**prior, **spoken}
+            else:
+                existing_edges[edge["to"]] = dict(edge)
 
     merged_room["adjacent"] = list(existing_edges.values())
 
@@ -3549,6 +3588,69 @@ def _dedup_duplicate_entity_keys(entities, incoming_entities=None):
     return entities
 
 
+def _shield_standing_bearings(prior_rooms, incoming_rooms):
+    """Refuse a ONE-SIDED re-bearing of a doorway both sides already agree on.
+
+    A doorway whose two declared sides carry opposite-consistent bearings is
+    a standing agreement -- usually authored world geometry. A model
+    re-declaring one room routinely emits a wrong `dir` for an edge it is
+    only mentioning in passing, and letting that single claim through
+    destroys the agreement twice over: normalize_scene_bearings sees the
+    contradiction and drops BOTH sides ("dropped rather than guessed"), and
+    its reciprocal inference then faithfully rebuilds whatever wrong bearing
+    gets asserted next. Measured live (maze arm): five doorway pairs carried
+    internally-consistent bearings that were geometrically FALSE, and a
+    runner was walked north on a declared "west" -- model noise laundered
+    into scene truth by the engine's own repair machinery.
+
+    So: an incoming `dir` that contradicts a standing opposite-consistent
+    pair is stripped (the edge itself still merges -- barrier and distance
+    changes land) unless the SAME diff re-declares the reciprocal side with
+    the matching opposite. Changing settled geometry takes a two-sided
+    declaration; a one-sided one falls back to the incumbent. Returns a
+    sanitized copy; never mutates the caller's diff.
+    """
+    if not isinstance(incoming_rooms, dict) or not isinstance(
+            prior_rooms, dict):
+        return incoming_rooms
+
+    def _edge_dir(rooms, room_id, to_id):
+        room = rooms.get(room_id)
+        if not isinstance(room, dict):
+            return None
+        for e in room.get("adjacent") or []:
+            if isinstance(e, dict) and str(e.get("to")) == str(to_id):
+                return normalize_bearing(e.get("dir"))
+        return None
+
+    out = {}
+    for room_id, room in incoming_rooms.items():
+        if not isinstance(room, dict) or not room.get("adjacent"):
+            out[room_id] = room
+            continue
+        edges = []
+        touched = False
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict) or not edge.get("to"):
+                edges.append(edge)
+                continue
+            new_dir = normalize_bearing(edge.get("dir"))
+            to_id = edge["to"]
+            if new_dir:
+                fwd = _edge_dir(prior_rooms, room_id, to_id)
+                back = _edge_dir(prior_rooms, to_id, room_id)
+                standing = (fwd and back
+                            and opposite_bearing(fwd) == back)
+                if standing and new_dir != fwd:
+                    recip = _edge_dir(incoming_rooms, to_id, room_id)
+                    if recip != opposite_bearing(new_dir):
+                        edge = {k: v for k, v in edge.items() if k != "dir"}
+                        touched = True
+            edges.append(edge)
+        out[room_id] = {**room, "adjacent": edges} if touched else room
+    return out
+
+
 def merge_scene_with_diff(
     scene: dict,
     diff: dict | None,
@@ -3567,7 +3669,9 @@ def merge_scene_with_diff(
     merged["entities"] = dict(merged.get("entities") or {})
     merged["positions"] = dict(merged.get("positions") or {})
 
-    incoming_rooms = diff.get("rooms") or {}
+    incoming_rooms = _shield_standing_bearings(
+        merged["rooms"] if isinstance(merged.get("rooms"), dict) else {},
+        diff.get("rooms") or {})
     incoming_entities = diff.get("entities") or {}
     incoming_positions = diff.get("positions") or {}
     incoming_stations = diff.get("stations") or {}

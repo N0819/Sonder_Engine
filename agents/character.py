@@ -1345,7 +1345,10 @@ def sprint_offers(scene, room_id, stored_state, destination=None):
             continue
         end = str((offer.get("path") or [""])[-1])
         entry = {
-            "bearing": offer.get("bearing"),
+            # Absent when the doorway carries no bearing -- the world gives
+            # no compass there, and a null would read as one to fill in.
+            # Such a run is declared by its `run_ends_at` name instead.
+            **({"bearing": offer["bearing"]} if offer.get("bearing") else {}),
             "run_ends_at": str((rooms.get(end) or {}).get("name") or end),
             "rooms": offer.get("rooms"),
             "stops": offer.get("stops"),
