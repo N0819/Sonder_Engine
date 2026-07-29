@@ -16,11 +16,10 @@ an owner, this file points at it:
 | Philosophy and conformance status | [`Design.md`](../Design.md) |
 | Known defects | [`OPEN_ITEMS.md`](OPEN_ITEMS.md) |
 
-> **A note on the diagrams.** Each placeholder below carries an image prompt.
-> Current image models render *shapes* well and *text* badly, so treat a
-> generated image as a composition to letter afterwards — or as a reference for
-> drawing the real thing in a diagram tool. Prompts are written to be pasted
-> whole.
+> **A note on the diagrams.** They are Mermaid, rendered natively by GitHub and
+> by most Markdown viewers. Being source rather than images, they diff, review
+> and edit like the rest of the file — when a boundary moves, the diagram moves
+> with it in the same commit.
 
 ---
 
@@ -56,17 +55,26 @@ Six consequences run through everything below:
 6. **The engine reports rather than hides.** Warnings and fidelity checks
    record what looked wrong instead of silently repairing it.
 
-> ### Diagram 1 — The information layers
-> *(placeholder)*
->
-> **Image prompt:** "A clean technical diagram on a white background showing
-> five stacked horizontal bands, each a distinct muted colour, labelled from
-> bottom to top: OBJECTIVE TRUTH, PERCEPTION, MEMORY, BELIEF, NARRATION.
-> Between each pair of bands draw a horizontal dashed line representing a
-> boundary, with a small padlock icon on it. On the left, a vertical arrow
-> labelled 'what is true' points up; on the right, a vertical arrow labelled
-> 'what a mind may use' points down but stops at the boundary. Flat vector
-> style, thin lines, generous whitespace, no gradients, no 3D."
+### Diagram 1 — The information layers
+
+Each arrow is a narrowing. Nothing skips a step, and nothing flows back down.
+
+```mermaid
+flowchart BT
+    T["<b>OBJECTIVE TRUTH</b><br/>what actually happened"]
+    P["<b>PERCEPTION</b><br/>what legitimately reached this observer"]
+    M["<b>MEMORY</b><br/>what they retained of it"]
+    B["<b>BELIEF</b><br/>what they credit now"]
+    N["<b>NARRATION</b><br/>the player-facing slice"]
+
+    T -->|"barriers, channels,<br/>per-observer calls"| P
+    P -->|"minted at commit"| M
+    M -->|"reconciled to<br/>current credence"| B
+    B -->|"rendered — never revealed"| N
+
+    style T fill:#eceff1,stroke:#546e7a
+    style N fill:#e8f0fe,stroke:#3367d6
+```
 
 ---
 
@@ -130,29 +138,57 @@ logging — it is the mechanism that makes reroll, rerun-from-stage, and manual
 editing possible, and it is why an author can inspect why a character did
 something.
 
-> ### Diagram 2 — The normal turn
-> *(placeholder)*
->
-> **Image prompt:** "A horizontal technical flowchart on white, left to right,
-> of a processing pipeline. Boxes in order: 'director_interpret', 'mapping',
-> 'perception_act', then a stacked group labelled 'character agents (parallel)'
-> drawn as three small overlapping boxes, then 'director_resolve',
-> 'background_react', 'perception_outcome', 'narrator', and finally a distinct
-> heavier box labelled 'commit'. Draw two optional branches above the main line
-> as dashed boxes: 'reaction_loop' and 'interaction_loop'. Under each box place
-> a tiny cylinder icon labelled 'step + variant'. Flat vector, thin lines, one
-> accent colour for the commit box, everything else grey. No 3D, no shadows."
+### Diagram 2 — The normal turn
 
-> ### Diagram 3 — Opening turn vs normal turn
-> *(placeholder)*
->
-> **Image prompt:** "Two parallel horizontal flow lines on white, labelled
-> 'OPENING TURN (idx 0)' and 'NORMAL TURN'. Top line has four boxes:
-> mapping_stage, director_establish, perception_establish, narrator, commit.
-> Bottom line has the longer normal sequence. Draw a light vertical divider and
-> annotate the difference with a short caption: 'no player action to interpret;
-> the world is established rather than changed'. Flat vector, minimal, thin
-> grey lines, single accent colour."
+Dashed stages are conditional: the plan is built per beat from
+`director_interpret.flow`. In practice `interaction_loop` is the norm, not the
+exception — measured across ~1,250 live turns, 1,180 used it and only 2
+materialised standalone `character:<id>` steps.
+
+```mermaid
+flowchart LR
+    DI["director_interpret<br/><i>interpret + plan</i>"] --> MAP["mapping<br/><i>full or cached</i>"]
+    MAP --> PA["perception_act<br/><i>onset, per observer</i>"]
+    PA -.->|"contested physical"| RL["reaction_loop"]
+    PA --> CH{{"character agents"}}
+    RL --> CH
+    CH -->|"turn-taking"| IL["interaction_loop"]
+    CH -->|"autonomy 0"| PAR["character:id<br/>in parallel"]
+    IL --> DR["director_resolve<br/><i>what actually happened</i>"]
+    PAR --> DR
+    DR -.->|"gated, usually skipped"| BG["background_react"]
+    DR --> PO["perception_outcome<br/><i>outcome, per observer</i>"]
+    BG --> PO
+    PO --> NAR["narrator<br/><i>player-facing slice</i>"]
+    NAR --> CM["<b>commit</b><br/><i>the only writer</i>"]
+
+    style CM fill:#e8f0fe,stroke:#3367d6,stroke-width:2px
+    style CH fill:#fff8e1,stroke:#f9a825
+```
+
+Every box above persists a `steps` row and one active `variants` row — which is
+what makes reroll, rerun-from-stage and hand-editing possible.
+
+### Diagram 3 — Opening turn vs normal turn
+
+There is no player action to interpret on turn 0 and no prior world to change,
+so the world is *established* rather than resolved — and no character acts.
+
+```mermaid
+flowchart LR
+    subgraph O["OPENING TURN — turn.idx == 0"]
+        direction LR
+        O1["mapping_stage"] --> O2["director_establish"] --> O3["perception_establish"] --> O4["narrator"] --> O5["commit"]
+    end
+    subgraph N["NORMAL TURN"]
+        direction LR
+        N1["director_interpret"] --> N2["mapping"] --> N3["perception_act"] --> N4["characters"] --> N5["director_resolve"] --> N6["perception_outcome"] --> N7["narrator"] --> N8["commit"]
+    end
+    O -.->|"every turn after"| N
+
+    style O5 fill:#e8f0fe,stroke:#3367d6
+    style N8 fill:#e8f0fe,stroke:#3367d6
+```
 
 ---
 
@@ -192,17 +228,25 @@ to render quoted dialogue verbatim.
 
 **Commit** (`commit.py`) — the sole persistence boundary. Detail in §8.
 
-> ### Diagram 4 — Who may see what
-> *(placeholder)*
->
-> **Image prompt:** "A matrix diagram on white. Rows are pipeline roles:
-> Director, Perception, Character agent, Background presence, Narrator, Commit.
-> Columns are information sources: Objective world state, Resolved event,
-> Other characters' interiors, Own memory, Own body state, Player declaration.
-> Fill each cell with either a filled dot (permitted), a hollow dot (partial),
-> or an empty cell (forbidden). Director row is nearly all filled; Character
-> agent row has filled dots only under Own memory and Own body state. Flat
-> vector, thin grid lines, restrained palette, clear legend below."
+### Diagram 4 — Who may see what
+
+A matrix reads better as a table than as a picture. ● permitted · ◐ partial or
+scrubbed · ○ never.
+
+| | World state | Resolved event | Others' interiors | Own memory | Own body | Player declaration |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|
+| **Director** | ● | ● | ○ | ○ | ● | ● |
+| **Perception** | ◐ | ● | ○ | ○ | ○ | ● |
+| **Character agent** | ○ | ○ | ○ | ● | ● | ◐ |
+| **Background presence** | ○ | ◐ | ○ | ○ | ○ | ◐ |
+| **Narrator** | ◐ | ○ | ○ | ○ | ○ | ● |
+| **Commit** | ● | ● | ● | ● | ● | ● |
+
+The Director is entitled to omniscience because it cannot resolve a beat it may
+not see. A character agent gets its **own** memory and body and nothing else —
+the player's declaration reaches it only as a scrubbed perception view, never as
+the raw text. Commit sees everything because it is the layer deciding what
+becomes true.
 
 ---
 
@@ -238,17 +282,35 @@ quoted spans only, and reports what it scrubbed rather than silently fixing it.
 undercurrent and unenacted intentions (`affect.leak_scan`) — an interior leak
 becomes a warning.
 
-> ### Diagram 5 — Perceptual channels and barriers
-> *(placeholder)*
->
-> **Image prompt:** "A cutaway floor-plan style technical diagram on white
-> showing two rooms separated by a wall with a window and a closed door. A
-> figure in each room. Four coloured arrow types travel between them, each
-> labelled in a legend: SIGHT, SOUND, SCENT, TOUCH. The sight arrow passes
-> through the window; sound passes through the door as a dashed 'muffled'
-> arrow; scent is blocked at the wall with a small X; touch has no arrow at all
-> and is marked 'requires contact'. Flat vector, architectural line-drawing
-> feel, four muted accent colours, clear legend."
+### Diagram 5 — Perceptual channels and barriers
+
+Each channel is gated by its own barrier table, so one wall can pass sight and
+stop scent. The four questions are answered separately and never collapsed.
+
+```mermaid
+flowchart LR
+    A["actor<br/><i>speaks and acts</i>"]
+
+    A --> S["<b>sight</b><br/>_SIGHT_BARRIERS"]
+    A --> H["<b>sound</b><br/>_AMBIENT_BARRIERS"]
+    A --> C["<b>scent</b><br/>_SCENT_BARRIERS"]
+    A --> TCH["<b>touch</b><br/>containment / contact"]
+
+    S -->|"window: passes<br/>wall: blocks"| O["observer's view"]
+    H -->|"closed door: muffled<br/>bars: passes"| O
+    C -->|"membrane: muffled<br/>window: blocks"| O
+    TCH -->|"surface sensation only —<br/><b>cause-blind</b>"| O
+
+    O --> D{"_delivery_ok<br/><i>unified gate</i>"}
+    D -->|"passes"| V["delivered"]
+    D -->|"fails"| X["never sent"]
+
+    style X fill:#fdecea,stroke:#c62828
+    style V fill:#e6f4ea,stroke:#1e8e3e
+```
+
+Touch is deliberately **cause-blind**: a body you can feel but not see delivers
+pressure and movement, never the act producing them.
 
 ---
 
@@ -285,19 +347,36 @@ momentary acts (`kiss`, `pinch`) retiring a beat sooner than durable states
 timelines — separate scenes, separate memory visibility — sharing one global
 play order.
 
-> ### Diagram 6 — Scene state and its projections
-> *(placeholder)*
->
-> **Image prompt:** "A data-flow diagram on white. Centre: a large rounded box
-> labelled 'world.scene (JSON, per frame)' listing inside it: rooms, positions,
-> entities, contacts, contained, scales, attire, vitals. Arrows out to three
-> smaller boxes on the right: 'world_entities (derived projection)',
-> 'room_registry (cross-frame identity)', and 'perception payloads (per
-> observer)'. An arrow in from the left from a box labelled 'state_diff (one
-> beat)' passing through a narrow vertical bar labelled 'merge + hygiene'. Mark
-> the deprecated tables in pale grey at the bottom with a strikethrough:
-> world_placements, fiction_worlds, fiction_locations, transit_edges. Flat
-> vector, thin lines, one accent colour."
+### Diagram 6 — Scene state and its projections
+
+One authority, several read-only projections. Merge order is load-bearing:
+scale invalidates contacts *before* the beat's own contact ops, so a hold
+re-established at the new size survives.
+
+```mermaid
+flowchart LR
+    SD["state_diff<br/><i>one beat</i>"] --> MERGE
+
+    subgraph MERGE["merge_scene_with_diff — ordered hygiene"]
+        direction TB
+        M1["rooms, adjacency, barriers, bearings"] --> M2["stations"]
+        M2 --> M3["scale — and the contacts it cancels"]
+        M3 --> M4["containment, derived positions"]
+        M4 --> M5["contact ops, then contact hygiene"]
+        M5 --> M6["vitals"]
+    end
+
+    MERGE --> SC[("<b>world.scene</b><br/>per frame — the authority<br/>rooms · positions · entities<br/>contacts · contained · scales<br/>attire · vitals")]
+
+    SC --> WE["world_entities<br/><i>derived projection</i>"]
+    SC --> RR["room_registry<br/><i>cross-frame identity</i>"]
+    SC --> PP["perception payloads<br/><i>per observer, scoped</i>"]
+
+    DEP["deprecated: world_placements ·<br/>fiction_worlds · fiction_locations · transit_edges"]
+
+    style SC fill:#e8f0fe,stroke:#3367d6,stroke-width:2px
+    style DEP fill:#f5f5f5,stroke:#bdbdbd,color:#9e9e9e
+```
 
 ---
 
@@ -350,31 +429,61 @@ clear, and shrinks the active hypothesis sheet from five entries to one. It
 gates **formation, not reinforcement** — recognising what you already think is
 automatic and survives; building a theory is controlled and does not.
 
-> ### Diagram 7 — One character's beat
-> *(placeholder)*
->
-> **Image prompt:** "A vertical flow diagram on white for a single agent's
-> processing. Top: three input boxes feeding in — 'scrubbed perception view',
-> 'own memory + mind-models', 'own body state'. They converge into a box
-> labelled 'character agent (model call)'. Out of it, one arrow to 'declared
-> behaviour: sequence, speech, wants'. That arrow passes through a horizontal
-> bar labelled 'commit — deterministic resolution' below which sit four small
-> boxes side by side: appraise, resolve_affect, resolve_hedonic, resolve_stress.
-> Their outputs converge to a cylinder labelled 'persisted active_state'. A
-> feedback arrow curves from that cylinder back up to the input side, labelled
-> 'next beat'. Flat vector, thin lines, one accent colour on the deterministic
-> bar."
+### Diagram 7 — One character's beat
 
-> ### Diagram 8 — Motivation tiers
-> *(placeholder)*
->
-> **Image prompt:** "A pyramid or stacked-tier diagram on white with four
-> levels, widest at the bottom. From top to bottom: 'DRIVE — never ends',
-> 'PROJECTS — max 2', 'INTENTIONS — decay', 'WANTS — this beat only'. To the
-> right of each tier show its weight as a number: 1.0, 1.0, 0.8, 0.4. Add a
-> downward arrow on the left labelled 'more permanent' and an upward arrow on
-> the right labelled 'more situational'. Flat vector, muted palette with the
-> top tier in the accent colour, thin lines, no 3D."
+The model **declares**; the runtime **resolves**. A character never authors its
+own success, and never authors the numbers that govern it next beat.
+
+```mermaid
+flowchart TB
+    V["scrubbed perception view<br/><i>this beat only</i>"] --> AG
+    MEM["own memory + mind-models<br/><i>turn-cutoff enforced</i>"] --> AG
+    BODY["own body state<br/><i>interoception, attire, vitals</i>"] --> AG
+    GOALS["drive · projects · intentions"] --> AG
+
+    AG["<b>character agent</b><br/>one model call"] --> DECL["declared: sequence, speech,<br/>candidates, appraisal, wants"]
+
+    DECL --> RESOLVE
+
+    subgraph RESOLVE["commit — deterministic, not negotiable"]
+        direction LR
+        R1["appraise<br/><i>→ dV, dA</i>"]
+        R2["resolve_affect<br/><i>mood, undercurrent</i>"]
+        R3["resolve_hedonic<br/><i>pain, pleasure, charge</i>"]
+        R4["resolve_stress<br/><i>activation, strain</i>"]
+    end
+
+    RESOLVE --> ST[("persisted active_state")]
+    ST --> ABS["cognitive_absorption<br/><i>gates hypothesis formation</i>"]
+    ABS -.->|"next beat"| MEM
+    ST -.->|"next beat"| GOALS
+
+    style RESOLVE fill:#e8f0fe,stroke:#3367d6,stroke-width:2px
+    style AG fill:#fff8e1,stroke:#f9a825
+```
+
+### Diagram 8 — Motivation tiers
+
+A want `serves` something above it. What a beat's impact is *worth* depends on
+which tier it lands on — that weight is exactly what `appraise` multiplies by.
+
+```mermaid
+flowchart BT
+    W["<b>WANTS</b> — 0.4<br/><i>this beat only</i>"]
+    I["<b>INTENTIONS</b> — 0.8<br/><i>satisfied, abandoned, or decayed</i>"]
+    P["<b>PROJECTS</b> — 1.0 established, 0.8 probationary<br/><i>max two · own criterion, or displacement with a reason</i>"]
+    D["<b>DRIVE</b> — 1.0<br/><i>never ends; one that can be satisfied<br/>is a goal wearing the word</i>"]
+
+    W -->|"serves"| I
+    I -->|"serves"| P
+    P -->|"serves"| D
+
+    style D fill:#e8f0fe,stroke:#3367d6,stroke-width:2px
+    style W fill:#fafafa,stroke:#bdbdbd
+```
+
+Drive weight is **earned by service, never by adoption** — a newly adopted
+project sits at intention weight until it has been served.
 
 ---
 
@@ -410,17 +519,40 @@ to fuzzy-lexical.
 transaction, because they are reconstructible: a consolidation failure must
 never roll back an otherwise valid turn.
 
-> ### Diagram 9 — A memory's life
-> *(placeholder)*
->
-> **Image prompt:** "A left-to-right lifecycle diagram on white. Stages as
-> rounded boxes: 'MINT (at commit)', 'RECONCILE (re-weighted to current
-> belief)', 'RETRIEVE (hybrid rank, turn-cutoff)', 'CONSOLIDATE (summary)',
-> 'ARCHIVE'. Above the RECONCILE box draw a small side box labelled
-> 'mind_models' with a dashed arrow down into it. Below the RETRIEVE box show
-> four small stacked bars labelled lexical, vector, RRF, MMR. Mark the
-> turn-cutoff as a vertical dashed red line labelled 'cannot see turn N or
-> later'. Flat vector, thin lines, restrained palette."
+### Diagram 9 — A memory's life
+
+`salience` is fixed at mint and drives consolidation; `confidence` moves and
+drives ranking. Keeping them separate is what lets a character recall having
+believed something they no longer credit.
+
+```mermaid
+flowchart LR
+    OBS["observation · dialogue heard · inference drawn"] --> MINT["<b>mint</b> at commit<br/><i>salience fixed · stable event key</i>"]
+
+    MM["own mind_models"] -.->|"belief_credence"| REC
+    MINT --> REC["<b>reconcile</b><br/><i>confidence → what they credit now</i>"]
+
+    REC --> RET
+    subgraph RET["retrieve — search_memories"]
+        direction TB
+        L["lexical"] --> RRF["reciprocal rank fusion"]
+        VEC["vector"] --> RRF
+        RRF --> MMR["MMR diversify"]
+        MMR --> WT["re-weight: recency · salience · confidence"]
+    end
+
+    CUT{{"hard cutoff:<br/>never a memory stamped<br/>turn N or later"}} --> RET
+
+    RET --> CONS["<b>consolidate</b><br/><i>after the transaction —<br/>reconstructible, never rolls back a turn</i>"]
+    CONS --> ARCH["archive"]
+
+    style CUT fill:#fdecea,stroke:#c62828
+    style MINT fill:#e8f0fe,stroke:#3367d6
+```
+
+An abandoned belief is demoted **once**, to a fixed fraction of its mint
+confidence — not multiplied on every pass. Aging out of the working set is not
+the same as concluding you were wrong.
 
 ---
 
@@ -447,20 +579,40 @@ branch/clone id remapping, and a regression test. The checklist is in
 [`DATABASE.md`](DATABASE.md) and it is not optional — a field that survives
 play but not a branch is a bug that appears weeks later.
 
-> ### Diagram 10 — Commit transaction lifecycle
-> *(placeholder)*
->
-> **Image prompt:** "A vertical swimlane diagram on white with two lanes:
-> 'OUTSIDE THE WRITE LOCK' and 'INSIDE ONE TRANSACTION'. In the top lane, boxes:
-> 'lore preparation', 'memory bodies', 'embeddings'. A wide horizontal bar
-> labelled 'BEGIN TRANSACTION' separates the lanes. In the lower lane, boxes:
-> 'scene commit', 'entity projection', 'room registry', 'memories',
-> 'psychology state', 'relationships'. Below them a bar labelled 'COMMIT' with
-> a branch arrow to the side labelled 'any domain failure → full rollback'.
-> Beneath everything, outside both lanes, a detached box labelled
-> 'autobiographical consolidation (reconstructible — never rolls back the
-> turn)'. Flat vector, two muted lane fills, thin lines, one accent colour on
-> the rollback arrow."
+### Diagram 10 — Commit transaction lifecycle
+
+Slow provider work happens *before* the write lock; every primary mutation
+lands inside one transaction; only reconstructible work runs after it.
+
+```mermaid
+flowchart TB
+    subgraph PREP["outside the write lock — slow, retryable"]
+        direction LR
+        P1["lore preparation"] --- P2["memory bodies"] --- P3["embeddings"]
+    end
+
+    PREP --> BEGIN["<b>BEGIN TRANSACTION</b>"]
+
+    subgraph TX["one transaction — all or nothing"]
+        direction TB
+        T1["scene commit"] --> T2["entity projection"]
+        T2 --> T3["room registry"]
+        T3 --> T4["memories"]
+        T4 --> T5["psychology state"]
+        T5 --> T6["relationships"]
+    end
+
+    BEGIN --> TX
+    TX --> OK{"domain checks"}
+    OK -->|"pass"| DONE["<b>COMMIT</b>"]
+    OK -->|"any failure"| RB["<b>ROLLBACK</b><br/><i>the whole turn, no partial state</i>"]
+
+    DONE --> AFTER["autobiographical consolidation<br/><i>outside the transaction — reconstructible,<br/>so a failure here never rolls back the turn</i>"]
+
+    style RB fill:#fdecea,stroke:#c62828,stroke-width:2px
+    style DONE fill:#e6f4ea,stroke:#1e8e3e,stroke-width:2px
+    style AFTER fill:#f5f5f5,stroke:#bdbdbd
+```
 
 ---
 
@@ -543,12 +695,14 @@ like a model problem. See the authoring notes in
 
 ## Diagram index
 
+All Mermaid except #4, which is a permission matrix and reads better as a table.
+
 | # | Subject | Section |
 |---|---|---|
 | 1 | The information layers | §1 |
 | 2 | The normal turn | §3 |
 | 3 | Opening turn vs normal turn | §3 |
-| 4 | Who may see what | §4 |
+| 4 | Who may see what _(table)_ | §4 |
 | 5 | Perceptual channels and barriers | §5 |
 | 6 | Scene state and its projections | §6 |
 | 7 | One character's beat | §7 |
