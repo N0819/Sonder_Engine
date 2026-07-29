@@ -2215,16 +2215,28 @@ def perception_outcome(ctx, nonce):
                     continue
             rel = spatial.get(d_speaker)
             if rel is None:
-                sp_room = d.get("speaker_room") or room_of(sc, d_speaker)
-                if sp_room is None and str(d_speaker).strip().casefold() in _ubiq:
+                if str(d_speaker).strip().casefold() in _ubiq:
                     # A bodiless voice (ship AI, station PA) has no room, and
                     # spatial_rel(None, ...) yields barrier='unknown' ->
                     # hear_level 'none', so the Director could voice the ship's
                     # computer and NOBODY would hear it. Treat it as present.
+                    #
+                    # Asked of the ENTITY, never of whether a position record
+                    # happens to exist. This used to be gated on the speaker
+                    # having no room, which meant one stale `positions` entry
+                    # disabled the rescue entirely -- and the artifact that
+                    # motivated it is exactly such an entry. Measured live: a
+                    # ship's computer flagged `ubiquitous` still pinned to the
+                    # room it was first voiced in answered a direct question
+                    # from four decks away, and the answer was dropped at
+                    # hear_level 'none'. Being bodiless is a fact about the
+                    # thing; a position on it is the category error, not a
+                    # reason to stop believing the flag.
                     rel = {"same_room": True, "barrier": "open",
                            "distance": "near",
                            "note": "bodiless voice, present throughout"}
                 else:
+                    sp_room = d.get("speaker_room") or room_of(sc, d_speaker)
                     rel = spatial_rel(sc, sp_room, p.get("room"))
                     # This fallback builds its own rel and so misses the
                     # concealment `_source_channels` applies to the map above.
