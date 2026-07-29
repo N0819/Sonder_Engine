@@ -335,7 +335,41 @@ def _frontier_hops(first_step, here_rid, adj, walked, closed):
     return None
 
 
-def _destination_from_goals(stored_state, place_graph):
+def _intent_is_live(intent, now_turn):
+    """Whether an active intention still speaks for what the character wants.
+
+    `status == "active"` is not enough on its own. Intentions outlive their
+    usefulness by design -- they are spent by the world rather than closed by
+    a decision -- so a character carries rows that were true fifty beats ago
+    and are merely not yet swept. That is harmless for motivation, where a
+    dormant row simply loses, and harmful here, because naming a chamber is
+    all it takes to redirect every routed move.
+
+    Measured in A13 run 4: `i3`, "Explore connectivity from Chamber 0504 via
+    western passage", sat active at progress 0.2 long after the exploration
+    it described was over, while the character's own goal named the shrine.
+    Stalled and blocked rows are excluded for the same reason -- an intention
+    the world has already refused is the worst possible thing to steer by.
+    """
+    if intent.get("stalled_turn") or intent.get("blocked_turn"):
+        return False
+    if not isinstance(now_turn, int):
+        return True
+    try:
+        last = int(intent.get("last_progress_turn"))
+    except (TypeError, ValueError):
+        return True
+    return (now_turn - last) <= _INTENT_STALE_TURNS
+
+
+# How many turns an intention may go without progress and still be trusted to
+# name a destination. Deliberately generous: this gate exists to drop rows the
+# character has plainly moved on from, not to second-guess a long patient aim.
+_INTENT_STALE_TURNS = 40
+
+
+def _destination_from_goals(stored_state, place_graph, here_rid=None,
+                            now_turn=None):
     """The room this character's own goals NAME, resolved against his own map.
 
     Measured need (A12, run 4): a courier with a re-armed commission and a
@@ -377,7 +411,8 @@ def _destination_from_goals(stored_state, place_graph):
     if goal:
         texts.append(goal)
     intents = [i for i in ((st.get("interior") or {}).get("intentions") or [])
-               if isinstance(i, dict) and i.get("status") == "active"]
+               if isinstance(i, dict) and i.get("status") == "active"
+               and _intent_is_live(i, now_turn)]
 
     def _prio(intent):
         try:
@@ -395,6 +430,16 @@ def _destination_from_goals(stored_state, place_graph):
                 best = (pos, resolved)
         if best:
             rid, name = best[1]
+            # A route to the room you are standing in is not information, and
+            # claiming the slot with it silences the destination that would
+            # have been. Characters phrase goals as the next step far more
+            # often than as the aim -- "Run east to Chamber 0004 to progress
+            # toward the shrine" names only the waypoint, because the shrine
+            # is not a chamber NAME -- so the nearest text wins the match and
+            # the real destination never gets looked for. Skipping to the
+            # next text is what lets the standing intention be heard.
+            if here_rid is not None and str(rid) == str(here_rid):
+                continue
             return {"rid": rid, "name": name}
     return None
 
@@ -1162,7 +1207,9 @@ def character_step(ctx, cid, nonce):
                 # The room his own goal text names, if he owns a node for
                 # it -- see _destination_from_goals for the double gate.
                 destination=_destination_from_goals(
-                    stored_state, stored_state.get("place_graph") or {})),
+                    stored_state, stored_state.get("place_graph") or {},
+                    here_rid=char_room,
+                    now_turn=getattr(ctx, "turn_idx", None))),
             # Where they are, named. The digest lists what leads OUT of a room
             # without ever naming the room itself, so a character had to
             # re-derive their own location from the view's prose every beat.

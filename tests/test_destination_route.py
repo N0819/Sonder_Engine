@@ -120,6 +120,107 @@ class TestDestinationFromGoals:
         assert dest["rid"] == "rD"
 
 
+class TestTheWaypointDoesNotEatTheDestination:
+    """A13 run 4. Characters phrase a goal as the NEXT STEP far more often
+    than as the aim, and the aim is frequently not a chamber name at all:
+    "Run east to Chamber 0004 to progress toward the shrine". The only room
+    NAMED there is the waypoint he is walking into, so the goal text won the
+    match and the standing shrine intention was never consulted -- the
+    affordance answered "your remembered ground runs from here to Chamber
+    0004", a route of length zero, in the most salient slot he has.
+    """
+
+    def _pg(self):
+        return _graph([], {"rD": "Chamber 0603", "rH": "Chamber 0004"})
+
+    def test_a_route_to_where_he_stands_yields_to_the_next_text(self):
+        state = {
+            "active_state": {"goal": "Run east to Chamber 0004 to progress "
+                                     "toward the shrine"},
+            "interior": {"intentions": [
+                {"id": "ia4", "status": "active", "priority": 0.98,
+                 "intent": "Walk the proved line to the shrine at "
+                           "Chamber 0603, clean and fast."},
+            ]},
+        }
+        dest = _destination_from_goals(state, self._pg(), here_rid="rH")
+        assert dest == {"rid": "rD", "name": "Chamber 0603"}, (
+            "standing in the room his goal names must not silence the "
+            "intention that names where he is actually going")
+
+    def test_without_a_position_the_old_reading_is_unchanged(self):
+        """here_rid is optional, and absent it nothing may change: every
+        caller that does not know where the character stands must still get
+        the goal-first answer it got before."""
+        state = {"active_state": {"goal": "Run east to Chamber 0004"}}
+        assert _destination_from_goals(state, self._pg())["rid"] == "rH"
+
+    def test_it_is_the_room_not_the_wording_that_disqualifies(self):
+        """Standing elsewhere, the same goal text resolves as it always
+        did -- this gate is about position, not about phrasing."""
+        state = {"active_state": {"goal": "Run east to Chamber 0004"}}
+        dest = _destination_from_goals(state, self._pg(), here_rid="rD")
+        assert dest["rid"] == "rH"
+
+
+class TestStaleIntentionsDoNotSteer:
+    """`status == "active"` is not enough. Intentions are spent by the world
+    rather than closed by a decision, so a character carries rows that were
+    true fifty beats ago and are merely not yet swept. Harmless for
+    motivation, where a dormant row simply loses; harmful here, where naming
+    a chamber is the whole qualification.
+
+    Measured in A13 run 4: `i3`, "Explore connectivity from Chamber 0504 via
+    western passage", active at progress 0.2 long after that exploration was
+    over, routed seventeen beats' worth of salience to Chamber 0504 while
+    the character's own goal named the shrine.
+    """
+
+    def _pg(self):
+        return _graph([], {"rD": "Chamber 0603", "rS": "Chamber 0504"})
+
+    def _state(self, **extra):
+        stale = {"id": "i3", "status": "active", "priority": 0.5,
+                 "intent": "Explore connectivity from Chamber 0504",
+                 "last_progress_turn": 120}
+        stale.update(extra)
+        return {"active_state": {"goal": "Keep moving"},
+                "interior": {"intentions": [
+                    stale,
+                    {"id": "ia4", "status": "active", "priority": 0.4,
+                     "intent": "Walk the proved line to Chamber 0603",
+                     "last_progress_turn": 200},
+                ]}}
+
+    def test_an_intention_long_past_progress_is_not_a_destination(self):
+        dest = _destination_from_goals(self._state(), self._pg(),
+                                       now_turn=200)
+        assert dest["rid"] == "rD", (
+            "a row eighty turns without progress must not outrank a live "
+            "one, even at higher priority")
+
+    def test_a_stalled_row_is_dropped_however_recent(self):
+        dest = _destination_from_goals(
+            self._state(stalled_turn=199, last_progress_turn=199),
+            self._pg(), now_turn=200)
+        assert dest["rid"] == "rD"
+
+    def test_a_blocked_row_is_dropped(self):
+        dest = _destination_from_goals(
+            self._state(blocked_turn=199, last_progress_turn=199),
+            self._pg(), now_turn=200)
+        assert dest["rid"] == "rD"
+
+    def test_a_recent_row_still_steers(self):
+        """The gate drops what he has moved on from, not a patient aim."""
+        dest = _destination_from_goals(
+            self._state(last_progress_turn=190), self._pg(), now_turn=200)
+        assert dest["rid"] == "rS", "priority still decides among live rows"
+
+    def test_without_a_turn_nothing_is_aged_out(self):
+        assert _destination_from_goals(self._state(), self._pg())["rid"] == "rS"
+
+
 class TestTowardHops:
     def test_a_route_over_taken_doorways_is_counted_in_rooms(self):
         adj = {"rB": {"rA", "rC"}, "rC": {"rB", "rD"}, "rD": {"rC"},
