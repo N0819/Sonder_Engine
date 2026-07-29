@@ -1,7 +1,46 @@
 # Design: what a place is FOR
 
-**Status:** designed, not built. Depends on the durable place graph
-(`chat_chars.state.place_graph`) landing first — purpose attaches to its nodes.
+**Status: v1 built** (`place_purpose.py`; commit writers wired beside
+`record_spatial_experience` and after `apply_mind_model_updates` in
+`commit.py`; payload wiring in `agents/character.py`
+(`perception.here_affords`, `memory.recalled_places`); PLACES AND WHAT THEY
+ARE FOR prompt block; tests in `tests/test_place_purpose.py`). Build
+decisions beyond this doc, each argued in `place_purpose.py`'s module
+docstring:
+
+- **`assumed` is derived at read time from the character's own place-graph
+  node names and never stored** — a departure from the JSON example below,
+  in service of the firewall rule beside it: an unperceived name cannot
+  reach the lexicon because a graph node name exists only by walking,
+  seeing, or (future basis) being told. Deriving also removes the need for
+  displacement machinery — stored `witnessed`/`told` entries shadow the
+  assumption by construction — and lets a lexicon fix reach every character
+  retroactively.
+- The type-inference line, drawn: trigger tokens only from own node NAMES
+  (never prose); output is PURPOSE keys only, never structure or contents;
+  membership requires story-free genericity; rendered as expectation.
+- Witnessed v1 = own-vitals rise across consecutive commits settled in the
+  same room (food/rest), plus `comfort.rest_affording` (rest — the seam
+  comfort.py documented, taken deliberately; comfort itself still never
+  pulls). The own-memory-row heuristic (signal 2) is deferred as the doc
+  allows.
+- `told` mirrors reconciled `stated_fact` beliefs onto EXISTING own nodes
+  only; hearsay about a nodeless place stays in mind_models (no rid, no
+  route — the same gate `_destination_from_goals` enforces). `sureness` is
+  re-asked from `belief_credence` on every commit touch and a dead belief's
+  entry is dropped (the mandatory drift rule below).
+- Recall triggers at the 0.4 tier ("very hungry"/"tiring badly"), routes
+  only over walked doorways (the en_route taken-edge firewall), caps at two
+  entries, narrows to one then none under `cognitive_absorption`
+  (0.5/0.85), and is suppressed when the standing room itself answers the
+  need.
+- Not built, plainly: witnessed drink/water/warmth (no thirst or cold vital
+  → no deterministic signal), told-basis node minting, negative entries,
+  and the "repair"/"social" affordances (no consumer; dead weight becomes a
+  to-do list, risk 4).
+- Persistence rides `chat_chars.state` (`affords` on graph nodes +
+  `last_vitals`), the place-graph precedent — no schema/remap/archive
+  change (decision recorded at `record_spatial_experience`).
 
 A character should know that a tavern is where you get food, drink and
 conversation; that a bedroom is where you rest; that a bed or a couch anywhere

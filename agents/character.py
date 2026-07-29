@@ -46,6 +46,8 @@ from schemas import validate_llm_output
 from spatial import (corridor_sightlines, room_of, spatial_digest,
                      sprint_reach, visible_adjacent_rooms)
 from survival import vitals_of
+from place_purpose import (affords_here, felt_needs, here_affords,
+                           place_options)
 from psychology_runtime import cognitive_absorption
 from theory_of_mind import mind_models_for_payload, sheet_capacity
 
@@ -1616,6 +1618,9 @@ def character_step(ctx, cid, nonce):
         # Own-body interoception only. Other characters' vitals never enter
         # this payload; their outward signs must cross perception normally.
         _self["body_state"] = _body_state
+    # What the room they stand in visibly affords, computed once for the
+    # perception block below.
+    _here_affords_now = here_affords(sc, character_name(sh))
     if _window_open:
         _self["rupture"] = {"why": _rupture.get("why"), "direction": _rupture.get("direction"),
                             "forced": _rupture_forced}
@@ -1644,11 +1649,60 @@ def character_step(ctx, cid, nonce):
         if _fresh:
             _self["project_review"] = {
                 "why": str(_preview.get("why") or "")}
+    # Place purpose, the recall half (docs/DESIGN_PLACE_PURPOSE.md): a felt
+    # need remembers the option. Triggered only by this character's OWN felt
+    # vitals at the pressing tier, drawn only from their OWN place-graph
+    # ledger plus name-derived expectation, routed only over their own
+    # walked doorways (the en_route firewall), capped at two entries and
+    # narrowed further by absorption -- a body screaming for attention
+    # leaves less room to remember where the good bread was. Suppressed
+    # when the room they stand in already answers the need. The engine
+    # guarantees the mind REMEMBERS THE OPTION; hunger becoming an
+    # intention, and the intention movement, stays the character's --
+    # the URGENT rule's shape: the option must exist, the refusal may be
+    # theirs. Never a want, never an op.
+    _recalled = []
+    _needs = felt_needs(_body_state)
+    if _needs and char_room:
+        _pg = stored_state.get("place_graph") or {}
+        _here_answers = affords_here(_pg, char_room)
+        _recall_cap = 2 if absorption < 0.5 else (1 if absorption < 0.85
+                                                  else 0)
+        _walked = _taken_adjacency(_pg.get("edges") or {})
+        for _need in _needs:
+            if len(_recalled) >= _recall_cap or _need in _here_answers:
+                continue
+            for _opt in place_options(_pg, char_room, _need, _walked):
+                if len(_recalled) >= _recall_cap:
+                    break
+                _place = {
+                    "name": _opt["name"], "affords": _need,
+                    "basis": _opt["basis"],
+                    "as_you_remember_it": (
+                        "the next room" if _opt["hops"] == 1
+                        else f"about {_opt['hops']} rooms from here"),
+                }
+                if _opt.get("sureness") is not None:
+                    _place["sureness"] = _opt["sureness"]
+                if _opt.get("note"):
+                    _place["note"] = _opt["note"]
+                _recalled.append(_place)
+    if _recalled and isinstance(memory_context, dict):
+        memory_context["recalled_places"] = _recalled
     payload = {
         "self": _self,
         "perception": {
             "view": view or "You register nothing new this beat.",
             "observations": observations,
+            # What THIS room visibly affords -- "rest (the bed)" -- a
+            # structured echo of what the view already shows, from anchors
+            # and co-present unconcealed entities under full light. Never
+            # memory, never the room's name: expecting food of a tavern is
+            # the ledger's business (memory.recalled_places), not
+            # perception's. Omitted when nothing in the closed vocabulary
+            # is visibly here.
+            **({"here_affords": _here_affords_now}
+               if _here_affords_now else {}),
             # This character's OWN egocentric exits (ahead/behind/left/right of
             # the way THEY face) -- grounding for their movement/positioning
             # choices, not a script to narrate. Empty when they have no
