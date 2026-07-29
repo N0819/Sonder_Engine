@@ -381,6 +381,71 @@ class TestOffersHandedToACharacter:
             "is unearned map, and the room before it is a mere step")
 
 
+class TestTheOfferSaysWhatItKnowsAboutTheEnd:
+    """The exits digest carries a verdict per doorway; the run offers carried
+    a bare room NAME, so one chamber could read as discouraging when walked
+    to and as a neutral destination when run to. The decision is made where
+    the offer is, so the knowledge has to be stated there.
+
+    The split between the two notes is the load-bearing part, and it is the
+    same split `_verdict` makes between `closed` and `unentered`: the shrine
+    is a cul-de-sac. Discouraging every dead-end run would aim this straight
+    at the thing the character is in the maze to reach -- the A11 run 3
+    failure, where he read "no other way out" off the shrine itself and
+    turned around at its doorway.
+    """
+
+    def _walked(self, c3):
+        return {"place_graph": {"nodes": {"c2": {}, "c3": c3}, "edges": {}},
+                "visited_rooms": []}
+
+    def test_a_searched_dead_end_says_so(self):
+        from agents.character import sprint_offers
+        offer = _one(sprint_offers(_bent_corridor(), "start",
+                                   self._walked({"closed": True,
+                                                 "visits": 2})))
+        assert "already been inside" in offer["ends_in"]
+
+    def test_a_cul_de_sac_never_entered_is_not_discouraged(self):
+        """The shrine case. It has no way out and that is not a reason to
+        stay away from it."""
+        from agents.character import sprint_offers
+        offer = _one(sprint_offers(_bent_corridor(), "start",
+                                   self._walked({"closed": True,
+                                                 "visits": 0})))
+        assert "never been inside" in offer["ends_in"]
+        assert "already been inside" not in offer["ends_in"], (
+            "a room the character has never entered must never read as "
+            "one they have already searched")
+
+    def test_known_dead_ends_counts_as_well_as_the_node_flag(self):
+        """Two records of the same fact, written by different paths; reading
+        only one leaves the offer silent exactly when the character knows
+        most."""
+        from agents.character import sprint_offers
+        st = self._walked({"visits": 3})
+        st["known_dead_ends"] = ["c3"]
+        offer = _one(sprint_offers(_bent_corridor(), "start", st))
+        assert "already been inside" in offer["ends_in"]
+
+    def test_an_encouraged_run_stays_as_short_as_it_was(self):
+        """No key rather than an empty one: a run with nothing to warn about
+        must not grow text, or the note becomes decoration and the salience
+        inversion comes back one field over."""
+        from agents.character import sprint_offers
+        offer = _one(sprint_offers(_bent_corridor(), "start",
+                                   self._walked({})))
+        assert "ends_in" not in offer
+        assert set(offer) == {"bearing", "run_ends_at", "rooms", "stops"}
+
+    def test_junk_in_the_graph_does_not_crash_the_offer(self):
+        from agents.character import sprint_offers
+        st = {"place_graph": {"nodes": {"c2": {}, "c3": "not a dict"},
+                              "edges": {}},
+              "visited_rooms": ["c2", "c3"], "known_dead_ends": None}
+        assert _one(sprint_offers(_bent_corridor(), "start", st))["rooms"] == 3
+
+
 class TestRunningIsRemembered:
     """The rooms crossed at a run must land in memory, or the map gets holes
     exactly where the feet went -- and worse than holes: the place graph mints
