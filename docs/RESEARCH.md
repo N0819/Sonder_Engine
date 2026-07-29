@@ -99,6 +99,41 @@ The hybrid memory retriever names and implements three standard IR techniques.
   [Anthropic](https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching)
   · [OpenAI](https://platform.openai.com/docs/guides/prompt-caching).
 
+### 1.5 Runtime specifications (external standards)
+
+- **SIGMA Runtime Standard (SRS) — SRIP-14, "Retrieval and Memory Integration
+  Layer (RMI)", §XXII *Retrieval as Perturbation Source*.** Sigma Stratum
+  Research Group, Public Draft v0.3 (2026-05-20). Licensed **CC BY 4.0**, with
+  an Independent Implementation Safe Harbor permitting independent
+  implementation of the public normative requirements.
+  <https://sigmastratum.org/> · Architecture reference: Tsaliev, E. (2025),
+  *SIGMA Runtime Architecture v0.1*,
+  doi:[10.5281/zenodo.17703667](https://doi.org/10.5281/zenodo.17703667).
+
+  The idea taken: standard retrieval fetches what is most relevant *now*, which
+  by construction reinforces whatever a mind is already doing — so a second,
+  bounded mode exists for when a runtime detects sustained convergence and low
+  behavioural variance, retrieving *contrasting* rather than matching material
+  and marking it non-authoritative. Sonder's repetition guards
+  (`agents/character.py`'s `_self_line_refrain` and `_first_verbatim_repeat`,
+  `psychology_runtime.cognitive_absorption`'s plateau habituation) are all
+  suppressive: they tell a stuck character "not that" and never "how about
+  this". SRIP-14 §XXII names the missing half.
+
+  What is NOT taken, and why: the bulk of SRIP-14 governs *external* retrieval
+  — RAG sources, cross-origin provenance, cross-runtime exchange artifacts —
+  which the information firewall forbids reaching a character context at all.
+  Any adaptation here draws contrast from the character's own memory, so the
+  provenance machinery that dominates the spec is inapplicable rather than
+  merely unimplemented. SIGMA's control vocabulary ("attractor", "drift",
+  "semantic load budget") is also deliberately not adopted: this repo names
+  only quantities it can compute, and Sonder's equivalents already exist as
+  measured state (absorption, `sustained_beats`, stress activation).
+
+  *Attribution only.* Citing or independently implementing a public SRIP does
+  not imply certification, endorsement, partnership, or official
+  compatibility, and no Sigma marks are used as product identity.
+
 Apart from the above, the repo contains no bibliography, arXiv links, DOIs, or
 "inspired by" attributions — including throughout `Design.md`, `AGENTS.md`, and
 `docs/`. Everything in Part 2 is a reconstructed mapping.
@@ -219,3 +254,7 @@ domain failure (`commit.py`).
   CAMEL / MetaGPT; Kosinski 2023; Gray & Reuter 1992; Robertson & Zaragoza 2009.
 - **Industry practice / no academic citation:** JSON repair-loop validation;
   lorebook/World Info format; provider ecosystem.
+- **External specification, read directly:** SIGMA SRS / SRIP-14 (RMI),
+  documentation set dated 2026-05-28 — license terms and §XXII read from the
+  document itself. Recorded as an influence under consideration; see
+  `docs/OPEN_ITEMS.md` for whether it has been built.

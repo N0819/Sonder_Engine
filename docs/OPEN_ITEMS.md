@@ -4,6 +4,29 @@ Known defects and unfinished work, carried out of the alpha 6.0 session.
 Newest first. Delete an entry when it lands — this file is a worklist, not a
 history; the history is `CHANGELOG.md` and the git log.
 
+## 0b. Every repetition guard is suppressive; none offers an alternative
+
+**Raised:** alpha 6.0.2 session. **Design under review, nothing built.**
+
+Three guards now catch a character saying the same thing — a reused sentence
+shape (`_self_line_refrain`), a verbatim reissue (`_first_verbatim_repeat`),
+and absorption that never habituated across a plateau
+(`cognitive_absorption`). All three are negative. They tell a stuck character
+"not that" and never "how about this", and a character with one want, one mood
+and one open question has nothing else to reach for.
+
+The candidate fix is a contrast mode for `search_memories`: when the existing
+deterministic markers say a mind has converged, retrieve a memory of high
+salience but LOW similarity to the current beat, marked unmistakably as
+exploratory (the `i_suspect` precedent in `select_active_hypotheses`) and never
+written back as canonical memory. Adapted from SIGMA SRIP-14 §XXII — see
+`docs/RESEARCH.md` §1.5 for the citation, licence, and what deliberately does
+not carry over.
+
+Open questions the design has to answer: whether a contrast re-rank is
+possible with existing indexing; and how a contrast memory competes for a
+recall slot when `_recall_cap` is 1.
+
 ## 0a. The Director can put words in a character's mouth
 
 **Found:** live, alpha 6.0.2 session. **Not fixed.**
