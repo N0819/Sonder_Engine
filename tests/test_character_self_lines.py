@@ -136,3 +136,71 @@ class TestSelfLineRefrain:
         assert _self_line_refrain([]) is None
         assert _self_line_refrain([{}, {}, {}]) is None
         assert _self_line_refrain(["", "   ", None]) is None
+
+
+class TestVerbatimReissueIsCaughtDeterministically:
+    """recent_self_lines and the prompt rule are advisory, and advice is not a
+    guarantee: measured live, a character was handed its own previous line in
+    that very field and returned it word for word on the next beat. The window
+    worked; nothing checked the answer.
+
+    Distinct from the refrain check, which catches a reused sentence SHAPE
+    carrying fresh content. Each is blind to the other's failure.
+    """
+
+    LINE = "Time machine means the nebulae can wait centuries. Your mingling plan?"
+
+    def test_an_exact_reissue_is_caught(self):
+        from agents.character import _first_verbatim_repeat
+
+        assert _first_verbatim_repeat([self.LINE], [self.LINE]) == self.LINE
+
+    def test_punctuation_and_case_are_not_variation(self):
+        from agents.character import _first_verbatim_repeat
+
+        disguised = ("TIME MACHINE means the nebulae can wait centuries! "
+                     "Your mingling plan")
+        assert _first_verbatim_repeat([disguised], [self.LINE]) == self.LINE
+
+    def test_a_genuinely_new_line_passes(self):
+        from agents.character import _first_verbatim_repeat
+
+        assert _first_verbatim_repeat(
+            ["Right, the console room then."], [self.LINE]) is None
+
+    def test_a_short_echoed_fragment_is_not_a_reissue(self):
+        """Echoing a few words is speech, not a stuck record."""
+        from agents.character import _first_verbatim_repeat
+
+        assert _first_verbatim_repeat(
+            ["East it is."], ["Century? Tempting. East it is."]) is None
+
+    def test_the_refrain_check_does_not_cover_this_case(self):
+        """Guarding the regression: these two catch different things, and the
+        template detector is silent on a plain verbatim repeat between two
+        lines that share no opener or closer."""
+        from agents.character import _self_line_refrain, _first_verbatim_repeat
+
+        window = [{"said": "Century? Tempting. East it is."},
+                  {"said": self.LINE}]
+        assert _self_line_refrain(window) is None
+        assert _first_verbatim_repeat([self.LINE],
+                                      [w["said"] for w in window]) == self.LINE
+
+    def test_speech_is_read_from_either_shape(self):
+        from agents.character import _speech_texts
+
+        assert _speech_texts({"sequence": [{"type": "speech", "text": "hi"},
+                                           {"type": "action"}]}) == ["hi"]
+        assert _speech_texts({"speech": "hello"}) == ["hello"]
+        assert _speech_texts({"sequence": []}) == []
+
+    def test_total_on_junk(self):
+        from agents.character import _first_verbatim_repeat, _speech_texts
+
+        assert _first_verbatim_repeat([], ["x"]) is None
+        assert _first_verbatim_repeat(["x"], []) is None
+        assert _first_verbatim_repeat(None, None) is None
+        assert _first_verbatim_repeat(["  "], ["  "]) is None
+        assert _speech_texts(None) == []
+        assert _speech_texts("not a dict") == []
