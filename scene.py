@@ -405,18 +405,29 @@ def _normalize_awareness_level(raw):
     return level
 
 
-def awareness_map(chat_id):
-    """Active `awareness` conditions for chat_id, keyed by casefolded subject
-    name -> {subject, level, cause, rousable_by}. Mirrors active_disguises.
-    Only non-awake subjects appear; everyone else is awake by absence."""
-    out = {}
+def awareness_conditions(chat_id):
+    """EVERY active non-awake `awareness` condition row, in id order.
+
+    `awareness_map` below collapses these to one record per subject, which is
+    right for asking "is this mind present?" and wrong for ENDING the state: a
+    subject can carry several active rows at once (live: chat 23 'Elevator
+    Adventure' holds two `unconscious` and one `dazed` on the same person), and
+    waking them means deactivating all of them. A caller that ends only the one
+    the map surfaced leaves the others in force. Each record carries its
+    `condition_id` and raw `payload` so the ending can be re-emitted as the SAME
+    condition (commit UPDATEs by condition_id; a fresh id would INSERT a second
+    row instead of closing the first)."""
+    rows = []
     for row in q(
-        "SELECT subject_id, payload FROM world_conditions WHERE chat_id=? "
-        "AND kind='awareness' AND active=1", (chat_id,),
+        "SELECT condition_id, subject_id, payload, started_at FROM world_conditions "
+        "WHERE chat_id=? AND kind='awareness' AND active=1 ORDER BY rowid",
+        (chat_id,),
     ):
         try:
             payload = json.loads(row["payload"])
         except (TypeError, ValueError):
+            payload = {}
+        if not isinstance(payload, dict):
             payload = {}
         subject = str(payload.get("subject_id") or row["subject_id"] or "").strip()
         if not subject:
@@ -425,11 +436,38 @@ def awareness_map(chat_id):
         level = _normalize_awareness_level(state.get("level") or payload.get("level"))
         if level == "awake":
             continue
-        out[subject.casefold()] = {
+        try:
+            started = float(payload.get("started_at_seconds")
+                            if payload.get("started_at_seconds") is not None
+                            else row["started_at"] or 0.0)
+        except (TypeError, ValueError):
+            started = 0.0
+        rows.append({
+            "condition_id": str(row["condition_id"]),
             "subject": subject,
             "level": level,
             "cause": str(state.get("cause") or payload.get("cause") or "").strip(),
             "rousable_by": str(state.get("rousable_by") or "").strip(),
+            "started_at_seconds": started,
+            "payload": payload,
+        })
+    return rows
+
+
+def awareness_map(chat_id):
+    """Active `awareness` conditions for chat_id, keyed by casefolded subject
+    name -> {subject, level, cause, rousable_by, condition_id}. Mirrors
+    active_disguises. Only non-awake subjects appear; everyone else is awake by
+    absence. Several rows may name one subject; the last wins, unchanged --
+    `awareness_conditions` is the un-collapsed view."""
+    out = {}
+    for record in awareness_conditions(chat_id):
+        out[record["subject"].casefold()] = {
+            "subject": record["subject"],
+            "level": record["level"],
+            "cause": record["cause"],
+            "rousable_by": record["rousable_by"],
+            "condition_id": record["condition_id"],
         }
     return out
 

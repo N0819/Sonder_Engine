@@ -4178,6 +4178,14 @@ def prepare_memory_commit(ctx, *, scene=None):
             from agents.common import character_room as _character_room
             record_spatial_experience(
                 st, sc, _character_room(sc, sh), turn.idx)
+            # Place purpose, witnessed basis: their OWN vitals rising across
+            # consecutive commits settled in this room (they ate here; they
+            # rested here), or their body verifiably lying on a soft support
+            # (comfort.rest_affording -- the seam comfort.py left for exactly
+            # this writer). Runs after record_spatial_experience so the
+            # standing room's node exists. Never the event row.
+            import place_purpose
+            place_purpose.witness_affords(st, sc, cname, turn.idx)
             _mm_updates = own_result.get("mind_model_updates") or []
             # A claim about a PLACE is re-keyed onto that place before it is
             # merged. Hypotheses group by (about_entity, kind) and explain each
@@ -4208,6 +4216,15 @@ def prepare_memory_commit(ctx, *, scene=None):
                 st, _mm_updates, turn.idx, elapsed_seconds=_clock_seconds,
                 absorption=_absorption,
             )
+            # Place purpose, told basis: stated-fact place beliefs (already
+            # re-keyed onto place names above) mirrored onto this character's
+            # OWN place-graph nodes, and every existing told entry's sureness
+            # re-asked from belief_credence -- the node entry is a read-model
+            # of the belief, and a belief explained away must stop steering
+            # (docs/DESIGN_PLACE_PURPOSE.md, mandatory drift rule). Runs
+            # AFTER the merge so it reads reconciled beliefs, mirroring how
+            # reconcile_inference_confidence treats memories.
+            place_purpose.mirror_told_affords(st, turn.idx, _clock_seconds)
             # Re-selected on every beat this character acted in, not only when
             # `_mm_updates` is non-empty: capacity tracks the BODY, so someone
             # merely in more pain than last beat holds fewer open questions
