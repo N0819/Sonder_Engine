@@ -766,3 +766,104 @@ def test_normalize_serves_is_total_on_junk():
     assert normalize_serves("intention:i1", None) == "i1"  # stripped, no crash
     assert normalize_serves(5, ["junk", None]) == "5"
     assert normalize_serves("intention:x", ["junk", {"id": None}]) == "x"
+
+
+# ---- Appraisal: a fed drive is not a finished one ------------------------
+
+def _sustained_win():
+    """A confirmed positive impact on the character's own drive, every beat --
+    the shape a character produces while succeeding continuously at what they
+    most want."""
+    return [{"serves": "drive", "impact": 0.9, "certainty": 0.9,
+             "agency": "self", "why": "it is going well"}]
+
+
+def test_a_completed_goal_still_stands_the_body_down():
+    """The OCC mapping is correct where it applies, and must keep applying."""
+    out = appraise(_sustained_win(), _priority_of, unresolved_drive=0.0)
+    assert out["emotions"] == ["satisfaction"]
+    assert out["dA"] < 0
+
+
+def test_an_unreleased_appetite_withdraws_the_stand_down():
+    """A drive cannot be satisfied by construction; feeding it is not
+    completing it, and must not deactivate the body that is doing it."""
+    settled = appraise(_sustained_win(), _priority_of, unresolved_drive=0.0)
+    charged = appraise(_sustained_win(), _priority_of, unresolved_drive=1.0)
+
+    assert charged["dA"] > settled["dA"]
+    assert charged["dA"] == pytest.approx(0.0)
+    assert charged["emotions"] == ["satisfaction"], (
+        "the emotion is unchanged -- only its arousal direction is withdrawn")
+
+
+def test_the_withdrawal_is_proportional_to_the_charge():
+    readings = [appraise(_sustained_win(), _priority_of, unresolved_drive=c)["dA"]
+                for c in (0.0, 0.25, 0.5, 0.75, 1.0)]
+    assert readings == sorted(readings), "monotonic in the carried charge"
+    assert readings[0] < readings[-1]
+
+
+def test_the_correction_never_manufactures_arousal():
+    """It can only remove a false stand-down, never invent activation."""
+    for charge in (0.0, 0.5, 1.0):
+        out = appraise(_sustained_win(), _priority_of, unresolved_drive=charge)
+        assert out["dA"] <= appraise(_sustained_win(), _priority_of,
+                                     unresolved_drive=1.0)["dA"] + 1e-9
+        assert out["dA"] <= 0.0 + 1e-9
+
+
+def test_other_emotions_keep_their_own_direction_under_charge():
+    """Only satisfaction is touched. Fear must still mobilize and sadness
+    must still deactivate, whatever appetite the body is carrying."""
+    fear = appraise([{"serves": "drive", "impact": -0.6, "certainty": 0.5,
+                      "agency": "none", "why": "footsteps"}],
+                    _priority_of, unresolved_drive=1.0)
+    sad = appraise([{"serves": "drive", "impact": -0.5, "certainty": 0.9,
+                     "agency": "none", "why": "the storm took it"}],
+                   _priority_of, unresolved_drive=1.0)
+
+    assert fear["dA"] == pytest.approx(0.12)   # unchanged by the charge
+    assert sad["dA"] < 0                       # still stands down
+
+
+def test_a_sustained_appetite_no_longer_drains_below_baseline():
+    """The regression itself, played forward.
+
+    Before: dA stayed at roughly -0.39 regardless of current arousal, so there
+    was no equilibrium -- arousal fell past a 0.70 baseline and kept going into
+    the deactivated quadrant while the character was at the height of their
+    strongest appetite.
+    """
+    from affect import resolve_affect
+
+    dims = {"novelty": 0.6, "intrinsic_pleasantness": 0.9,
+            "self_congruence": 0.9,
+            "somatic_impact": {"pain": 0.0, "pleasure": 0.8, "why": "contact"},
+            "goal_impacts": _sustained_win()}
+    out = appraise(dims["goal_impacts"], _priority_of, dimensions=dims,
+                   unresolved_drive=1.0)
+
+    baseline = {"valence": 0.3, "arousal": 0.7}
+    surface = {"label": "hunger", "valence": 0.95, "arousal": 0.72}
+    for _ in range(12):
+        surface = resolve_affect(
+            {"surface": surface, "undercurrent": None, "baseline": baseline},
+            out, baseline, 1, {"surface": dict(surface)})["surface"]
+
+    assert surface["arousal"] > 0.0, "must not cross into deactivation"
+    assert surface["arousal"] >= 0.5, (
+        "a body at the height of its appetite stays activated")
+
+
+def test_unresolved_drive_is_reported_for_inspection():
+    dims = {"novelty": 0.0, "goal_impacts": _sustained_win()}
+    out = appraise(dims["goal_impacts"], _priority_of, dimensions=dims,
+                   unresolved_drive=0.8)
+    assert out["unresolved_drive"] == pytest.approx(0.8)
+
+
+def test_unresolved_drive_is_total_on_junk():
+    for junk in (None, "", "lots", float("nan"), -3, 17):
+        out = appraise(_sustained_win(), _priority_of, unresolved_drive=junk)
+        assert -1.0 <= out["dA"] <= 1.0

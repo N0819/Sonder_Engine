@@ -3827,9 +3827,27 @@ def prepare_memory_commit(ctx, *, scene=None):
                     asv.get("wants") or [], valid_ids | _project_ids)
 
                 appraisal_input = own_result.get("appraisal") or {}
+                proposed_hedonic = (
+                    asv.get("hedonic") if isinstance(asv.get("hedonic"), dict)
+                    else {}
+                )
+                # The appetite this body carried INTO the beat, so appraisal can
+                # tell a goal that completed from a drive that is being fed --
+                # a confirmed win on an unreleased drive is not a reason to
+                # stand down. Read before resolve_hedonic recomputes it, and
+                # zeroed the moment the character declares the release, which
+                # is the beat satisfaction becomes true.
+                _prev_hedonic = (prev_as.get("hedonic")
+                                 if isinstance(prev_as.get("hedonic"), dict)
+                                 else {})
+                _unresolved_drive = (
+                    0.0 if bool(proposed_hedonic.get("released"))
+                    else _prev_hedonic.get("charge") or 0.0
+                )
                 appraisal_out = affect.appraise(
                     appraisal_input.get("goal_impacts") or [], _priority,
                     dimensions=appraisal_input,
+                    unresolved_drive=_unresolved_drive,
                 )
                 prev_affect = prev_as.get("affect") if isinstance(prev_as, dict) else None
                 baseline = ((prev_affect or {}).get("baseline")
@@ -3847,10 +3865,6 @@ def prepare_memory_commit(ctx, *, scene=None):
                 # construction it never reaches the charge term, because a
                 # warm bench is a resolved state, not an unresolved drive.
                 _comfort, _comfort_src = comfort_level(sc, cname)
-                proposed_hedonic = (
-                    asv.get("hedonic") if isinstance(asv.get("hedonic"), dict)
-                    else {}
-                )
                 new_hedonic = psychology_runtime.resolve_hedonic(
                     prev_as.get("hedonic"), appraisal_out,
                     character_interoception(sh), body_state, elapsed_units,

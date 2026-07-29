@@ -381,7 +381,7 @@ _AROUSAL_DIRECTION = {
     "satisfaction": -1.0, "hope": 0.5,
 }
 
-def appraise(goal_impacts, priority_of, dimensions=None):
+def appraise(goal_impacts, priority_of, dimensions=None, unresolved_drive=0.0):
     """OCC-style appraisal of this beat's goal impacts into a mood delta.
 
     `goal_impacts` is a list of {serves, impact[-1,1], certainty[0,1],
@@ -390,10 +390,40 @@ def appraise(goal_impacts, priority_of, dimensions=None):
     impact contributes weight = |impact| * certainty * priority to a
     valence/arousal delta and votes for one emotion tag. Deterministic and
     total: an empty/None list appraises to zeros with no emotions.
+
+    `unresolved_drive` is the character's carried hedonic `charge` (0..1) --
+    `psychology_runtime.resolve_hedonic`'s slow integral of appetite that has
+    built up and not yet gone anywhere -- and 0 when they declared release this
+    beat. It exists to answer one question this function otherwise cannot ask:
+    is this goal DONE, or is it being fed?
+
+    `_emotion_for` tags every confirmed positive impact `satisfaction`, and
+    satisfaction stands the body down. That is correct for a goal, which
+    completes. It is never correct for a drive, which by construction cannot be
+    satisfied -- so a character succeeding continuously at what they most want
+    had arousal driven DOWN on every beat of it. Measured live: -0.39 per beat
+    against a +0.17 somatic lift, with nothing anywhere providing an
+    equilibrium, so surface arousal fell from 0.72 to 0.17 across five beats of
+    a character's own strongest appetite, passing their baseline of 0.70 on the
+    way to the deactivated quadrant the lexicon calls subdued and numb. It was
+    not one character or one kind of scene: five of the author's thirty-six
+    live characters sat more than 0.3 below their own baseline, in four
+    unrelated stories.
+
+    So while the charge stands unreleased, the satisfaction stand-down is
+    withdrawn in proportion to it -- fully at saturation, not at all at zero.
+    Only that term is touched: fear and anger still mobilize, sadness still
+    deactivates, and the correction can only REMOVE a false stand-down, never
+    manufacture arousal that no appraisal produced. When the character declares
+    release, `unresolved_drive` is 0 and satisfaction resumes at full strength,
+    which is the settling the arc actually wants.
     """
     extended = isinstance(dimensions, dict)
     dimensions = dimensions if extended else {}
     d_v, d_a = 0.0, 0.0
+    # The satisfaction-tagged share of d_a, kept separately so it alone can be
+    # withdrawn below without disturbing any other emotion's contribution.
+    d_a_satisfaction = 0.0
     tag_weights: dict[str, float] = {}
     dominant, dominant_weight = None, -1.0
     # The DRIVE-serving impact is tracked separately from the overall dominant:
@@ -413,7 +443,10 @@ def appraise(goal_impacts, priority_of, dimensions=None):
         tag = _emotion_for(norm["impact"], norm["certainty"], norm["agency"])
         weight = norm["weight"]
         d_v += _KV * norm["impact"] * norm["certainty"] * norm["priority"]
-        d_a += _KA * weight * _AROUSAL_DIRECTION[tag]
+        arousal_term = _KA * weight * _AROUSAL_DIRECTION[tag]
+        d_a += arousal_term
+        if tag == "satisfaction":
+            d_a_satisfaction += arousal_term
         tag_weights[tag] = tag_weights.get(tag, 0.0) + weight
         if weight > dominant_weight:  # strict > keeps first-wins ties deterministic
             dominant, dominant_weight = norm, weight
@@ -435,6 +468,13 @@ def appraise(goal_impacts, priority_of, dimensions=None):
     d_v += pleasure * 0.2 - pain * 0.25
     d_a += novelty * 0.12 + max(pain, pleasure) * 0.12
 
+    # An appetite still carrying its charge has not been satisfied, whatever
+    # the goal ledger says it just achieved. Withdraw that share of the
+    # stand-down (d_a_satisfaction is <= 0, so this only ever adds back).
+    unresolved = _clamp01(unresolved_drive)
+    if unresolved > 0.0 and d_a_satisfaction < 0.0:
+        d_a -= d_a_satisfaction * unresolved
+
     # sorted() is stable, so equal-weight tags keep first-seen order.
     emotions = [t for t, _ in sorted(tag_weights.items(), key=lambda kv: -kv[1])]
     result = {
@@ -446,6 +486,7 @@ def appraise(goal_impacts, priority_of, dimensions=None):
     }
     if extended:
         result.update({
+            "unresolved_drive": unresolved,
             "novelty": novelty,
             "controllability": _clamp01(
                 dimensions.get("controllability"), fallback=0.5),

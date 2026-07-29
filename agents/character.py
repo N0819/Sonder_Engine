@@ -81,7 +81,7 @@ def _merge_standing_intentions(authored, emergent):
     return kept_authored + emergent
 
 
-def _recent_self_lines(chat_id, char_name, current_turn_idx, n_turns=3, cap=4,
+def _recent_self_lines(chat_id, char_name, current_turn_idx, n_turns=6, cap=6,
                        frame_id=None):
     """The character's own most-recent spoken lines, verbatim, oldest->newest,
     from the last few committed turns' director_resolve dialogue_log.
@@ -92,7 +92,14 @@ def _recent_self_lines(chat_id, char_name, current_turn_idx, n_turns=3, cap=4,
     turn after turn -- verbatim repetition reads as a broken machine. Feeding
     its own recent lines lets it notice the refrain and vary or escalate
     (through specificity/consequence, per the character prompt), never as an
-    emotional-volume spike."""
+    emotional-volume spike.
+
+    The window is six beats because three was measurably too short: a live
+    character reissued a line verbatim from four beats back, which the window
+    could not show it, while the narrator's own repetition check (which reads
+    four turns of prose) caught it downstream, where nothing can act on it --
+    dialogue fidelity requires the narrator to render quotes exactly as
+    declared."""
     if current_turn_idx is None:
         return []
     rows = q(
