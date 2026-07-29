@@ -1,79 +1,122 @@
 # Sonder Engine
 
-Sonder Engine is a local multi-agent interactive-fiction system built around explicit information boundaries. The Director resolves objective causality, Perception creates observer-specific views, character agents act from private context, the Narrator renders the player-facing slice, and deterministic commit code decides what becomes persistent state.
+A local, single-player interactive-fiction engine in which the characters are
+separate minds rather than voices of one narrator.
+
+Its defining constraint: **no fictional mind may use information it did not
+legitimately perceive, learn, remember, or infer.** Objective truth, perception,
+memory, belief, and narration are kept as distinct layers that never collapse
+into one context — which is what lets a character be wrong, be surprised, or be
+deceived, and mean it.
+
+## How a turn works
+
+Each stage is a separate model call over a separate context. The Director owns
+objective causality; Perception decides what each observer legitimately
+receives; character agents choose behaviour from private context and never
+their own success; the Narrator renders only the player-facing slice; and
+`commit.py` is the sole boundary where model output becomes persistent state.
+
+```text
+director_interpret → mapping → perception_act
+    → [reactions] → [character agents, in parallel or in an interaction loop]
+    → director_resolve → background_react → perception_outcome
+    → narrator → commit
+```
+
+Every stage's output is stored as a step/variant pair, so any turn can be
+rerolled, rerun from a stage, or hand-edited. `docs/PIPELINE.md` has the exact
+flow, including the different opening-turn path.
 
 ## Start here
 
-Read these in order when orienting yourself:
-
-1. [`AGENTS.md`](AGENTS.md) — practical edit routing, invariants, and source-of-truth rules.
-2. [`docs/PIPELINE.md`](docs/PIPELINE.md) — exact opening-turn and normal-turn execution flow.
-3. [`docs/CODE_MAP.md`](docs/CODE_MAP.md) — generated modules, routes, large functions, tables, and frontend sections.
-4. [`Design.md`](Design.md) — product philosophy, current architecture, known weaknesses, and roadmap.
-5. [`docs/RESEARCH.md`](docs/RESEARCH.md) — sourced bibliography of the research the engine draws on.
+1. [`AGENTS.md`](AGENTS.md) — edit routing, invariants, source-of-truth order.
+   **Read first for any behavioural change.**
+2. [`docs/PIPELINE.md`](docs/PIPELINE.md) — stage-by-stage execution.
+3. [`docs/DATABASE.md`](docs/DATABASE.md) — schema, write helpers, and the
+   checklist every new persistent field must satisfy.
+4. [`docs/CODE_MAP.md`](docs/CODE_MAP.md) — generated index of modules,
+   functions, routes, and tables. Regenerate with `make map`; never hand-edit.
+5. [`docs/TESTING.md`](docs/TESTING.md) — test tiers and CI policy.
+6. [`Design.md`](Design.md) — philosophy, architecture, and a verified
+   built / partial / not-built conformance table.
+7. [`docs/OPEN_ITEMS.md`](docs/OPEN_ITEMS.md) — known defects and unfinished
+   work. [`CHANGELOG.md`](CHANGELOG.md) is the history.
 
 ## Run locally
 
-Python 3.11 or newer is recommended.
+Python 3.11 or newer.
 
-### Windows (Quick Start)
-Double-click `Start Sonder.bat`. This automatically sets up the environment, installs dependencies and opens the app in your browser.
+**Windows:** double-click `Start Sonder.bat` — it creates the environment,
+installs dependencies, and opens the app.
 
-### Manual / Mac / Linux
+**macOS / Linux:**
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app:app --host 127.0.0.1 --port 8008 --reload
 ```
 
-Open http://127.0.0.1:8008. The default SQLite database is engine.db; set ENGINE_DB before startup to use another path.
+Then open <http://127.0.0.1:8008>. The database is `engine.db` by default; set
+`ENGINE_DB` before startup to use another path.
 
-## Development commands
+## Development
 
 ```bash
 pip install -c constraints.txt -r requirements-dev.txt
-make test-fast  # broad suite without explicitly slow integration tests
-make test-full  # every Python regression test
-make check      # compile, regenerate/verify the map, structure check, full test
-make map        # regenerate docs/CODE_MAP.md
-make run        # start the local server
+
+make check       # compile + map freshness + structure + full tests — run before calling a change done
+make check-fast  # the same, with the database-backed slow tests skipped
+make test-fast   # broad suite, no database-backed tests
+make test-full   # every Python regression test
+make structure   # duplicate symbols, patch debris, stale map
+make map         # regenerate docs/CODE_MAP.md
+make run         # start the server
 ```
 
-Real-browser tests are optional; see [`docs/TESTING.md`](docs/TESTING.md) for
-their isolated install and for the dependency/CI policy.
+`make check` treats a stale `docs/CODE_MAP.md`, a duplicated top-level symbol,
+or leftover patch-debris markers as hard failures. Real-browser tests are
+optional (`make test-browser`); see [`docs/TESTING.md`](docs/TESTING.md).
 
-The application intentionally uses top-level imports such as `from db import q`. Run commands from the repository root rather than treating the directory as an installed package.
+Run everything from the repository root — the app uses top-level imports such
+as `from db import q` and is not an installed package.
 
-## Project layout
+## Layout
 
 ```text
-agents/               role-specific agents, shared helpers, and pipeline runtime
-app.py                 FastAPI assembly, remaining routes, and streaming API
-auth_routes.py         typed host-authentication routes
-chat_archive.py        portable chat archive service and routes
-commit.py              validated persistence boundary
-schemas.py             model-output contracts and validation
-character_schema.py     versioned character-card schema and migration
-psychology_runtime.py   bounded stress, hedonic, belief, and association state
-prompts.py             system prompts
-providers.py           LLM providers, streaming, retries, embeddings
-memory.py              lore, memory, relationships, retrieval
-scene.py / spatial.py  deterministic scene and perception support
-spatial_orientation.py bearing math and reciprocal edge normalization
-pipeline_trace.py      private-by-default persisted-history diagnostics
-db.py                  SQLite schema, migrations, transactions
-static/                 browser UI
-tests/                  invariant and regression tests
-browser_tests/          optional real Chromium behavior tests
-docs/                   practical architecture documentation
-tools/                  maintenance scripts
-archive/                inactive historical files retained for reference
+agents/          pipeline stages (director, perception, character, narration,
+                 background) plus runtime, plan building, and shared helpers
+app.py           FastAPI assembly, routes, streaming
+commit.py        the sole persistence boundary; validates before anything sticks
+db.py            SQLite schema, migrations, transactions
+schemas.py       model-output contracts       prompts.py    system prompts
+providers.py     LLM providers, streaming, retries, embeddings
+
+world            scene.py · spatial.py · spatial_frames.py ·
+                 spatial_orientation.py · mechanics.py · survival.py · comfort.py
+minds            character_schema.py · psychology_runtime.py (stress, pain and
+                 pleasure, absorption) · affect.py (mood, wants, intentions,
+                 projects) · theory_of_mind.py (belief) · memory.py (memory,
+                 lore, retrieval)
+services         auth_routes.py · guest_access.py · chat_archive.py ·
+                 checkpoints.py · pipeline_trace.py · importers.py
+
+static/          browser UI — browser globals, not ES modules; load order matters
+tests/           invariant and regression tests
+docs/            architecture documentation
+tools/           maintenance scripts and experiment harnesses
 ```
 
-## Dependency notes
+## Providers and data
 
-`sqlite-vec` is used when available for vector search. Providers can point to OpenAI-compatible endpoints, Anthropic, Ollama, KoboldCpp, and configured remote services. API keys and provider settings are stored in the local database, so do not commit a populated `engine.db`.
+Providers can target OpenAI-compatible endpoints, Anthropic, Ollama, KoboldCpp,
+and configured remote services. `sqlite-vec` is used for vector search when
+available; without an embeddings provider configured, semantic recall falls back
+to a cheap lexical hash and quality drops accordingly.
+
+API keys, provider settings, and all story content live in the local database —
+**never commit a populated `engine.db`.**
 
 ## Credits
 
