@@ -444,6 +444,62 @@ def _destination_from_goals(stored_state, place_graph, here_rid=None,
     return None
 
 
+def _taken_adjacency(g_edges):
+    """Doorways this character has actually TAKEN, as an undirected map.
+
+    Stricter than plain adjacency on purpose: adjacency includes doors merely
+    seen from rooms stood in, which is enough to know a frontier exists and
+    not enough to promise a way through. A route offered toward a goal is a
+    promise his feet made.
+
+    Shared by the exit annotator and the run offers so the two cannot drift.
+    A run judged against a different graph than the exits beside it would
+    give the character two irreconcilable answers inside one payload.
+    """
+    taken, disproven = {}, []
+    for a, side in (g_edges or {}).items():
+        if not isinstance(side, dict):
+            continue
+        for b, rec in side.items():
+            if not isinstance(rec, dict):
+                continue
+            if rec.get("disproven"):
+                disproven.append((str(a), str(b)))
+                continue
+            if not rec.get("taken"):
+                continue
+            taken.setdefault(str(a), set()).add(str(b))
+            taken.setdefault(str(b), set()).add(str(a))
+    # A doorway disproven from either side is disproven, and the recording
+    # is one-sided as often as not.
+    for a, b in disproven:
+        taken.get(a, set()).discard(b)
+        taken.get(b, set()).discard(a)
+    return taken
+
+
+def _hops_to(rid, dest_rid, taken_adj):
+    """Rooms from here to there over ground he has walked. 0 standing in it,
+    None when no remembered route runs there at all.
+
+    Same firewall as `_toward_hops`: his own graph, never the scene.
+    """
+    if rid == dest_rid:
+        return 0
+    seen = {rid}
+    queue = deque([(rid, 0)])
+    while queue:
+        cur, depth = queue.popleft()
+        for nxt in taken_adj.get(cur, ()):
+            if nxt in seen:
+                continue
+            if nxt == dest_rid:
+                return depth + 1
+            seen.add(nxt)
+            queue.append((nxt, depth + 1))
+    return None
+
+
 def _toward_hops(first_step, here_rid, taken_adj, dest_rid):
     """Rooms along this character's OWN walked ground from an exit to the
     destination his goals name: BFS over doorways he has actually taken
@@ -664,21 +720,8 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     walked = set(route) | set(known_exits) | {
         str(r) for r, n in g_nodes.items()
         if isinstance(n, dict) and n.get("basis") == "walked"}
-    # Doorways actually TAKEN, for routing toward a named destination. A
-    # stricter graph than `adj` on purpose: adjacency includes doors merely
-    # seen from rooms stood in, which is enough to know a frontier exists
-    # and not enough to promise a way through. A route offered to a goal is
-    # a promise his feet made.
-    taken_adj = {}
-    for a, side in g_edges.items():
-        if not isinstance(side, dict):
-            continue
-        for b, rec in side.items():
-            if not isinstance(rec, dict) or rec.get("disproven") \
-                    or not rec.get("taken"):
-                continue
-            taken_adj.setdefault(str(a), set()).add(str(b))
-            taken_adj.setdefault(str(b), set()).add(str(a))
+    # Doorways actually TAKEN, for routing toward a named destination.
+    taken_adj = _taken_adjacency(g_edges)
     for a, b in disproven:
         taken_adj.get(a, set()).discard(b)
         taken_adj.get(b, set()).discard(a)
@@ -908,7 +951,7 @@ def _run_end_note(end_rid, nodes, closed_rids):
             "is IN a room is a different question from what it leads to")
 
 
-def sprint_offers(scene, room_id, stored_state):
+def sprint_offers(scene, room_id, stored_state, destination=None):
     """The RUNNING offers actually worth handing a deciding mind.
 
     Two gates on the raw `spatial.sprint_reach`, each preventing an observed
@@ -957,6 +1000,24 @@ def sprint_offers(scene, room_id, stored_state):
     closed_rids = {r for r in (st.get("known_dead_ends") or [])
                    if isinstance(r, str)}
     rooms = (scene or {}).get("rooms") or {}
+    # What the run does to the distance he still has to cover. Measured in
+    # A13 run 4: the exits carried "your remembered ground runs from here to
+    # Chamber 0603, about 26 rooms along this way" on the correct one-room
+    # step, and the run offers carried nothing at all -- so the choice he
+    # actually faced was a 1-room step that mentioned his destination against
+    # a 3-room `full_reach` run that did not. For a character whose sheet
+    # says running the proved line is the finish, that is not close. He took
+    # the run; it ended four rooms further out. Every affordance was locally
+    # correct and none of them talked to each other.
+    dest_rid = dest_name = None
+    here_hops = None
+    taken_adj = {}
+    if isinstance(destination, dict) and destination.get("rid"):
+        dest_rid = str(destination["rid"])
+        dest_name = str(destination.get("name") or dest_rid)
+        taken_adj = _taken_adjacency(
+            graph.get("edges") if isinstance(graph, dict) else {})
+        here_hops = _hops_to(str(room_id), dest_rid, taken_adj)
     out = []
     for offer in sprint_reach(scene, room_id, known_rooms=remembered):
         if int(offer.get("rooms") or 0) < 2:
@@ -968,9 +1029,20 @@ def sprint_offers(scene, room_id, stored_state):
             "rooms": offer.get("rooms"),
             "stops": offer.get("stops"),
         }
+        notes = []
         note = _run_end_note(end, nodes, closed_rids)
         if note:
-            entry["ends_in"] = note
+            notes.append(note)
+        if here_hops is not None:
+            end_hops = _hops_to(end, dest_rid, taken_adj)
+            if end_hops is not None and end_hops != here_hops:
+                gap = end_hops - here_hops
+                notes.append(
+                    f"it ends {gap} rooms further from {dest_name} than you "
+                    f"stand now" if gap > 0 else
+                    f"it ends {-gap} rooms closer to {dest_name}")
+        if notes:
+            entry["ends_in"] = "; ".join(notes)
         out.append(entry)
     return out
 
@@ -1141,6 +1213,11 @@ def character_step(ctx, cid, nonce):
         for g in (stored_state.get("tell_grounds") or [])
         if isinstance(g, dict) and str(g.get("cue") or "").strip()
     ]
+    # Resolved once and shared: the exits and the run offers must be judged
+    # against the SAME destination, or the payload argues with itself.
+    _goal_destination = _destination_from_goals(
+        stored_state, stored_state.get("place_graph") or {},
+        here_rid=char_room, now_turn=getattr(ctx, "turn_idx", None))
     _self = {
         "entity_id": f"character:{cid}",
         "name": character_name(sh),
@@ -1206,10 +1283,7 @@ def character_step(ctx, cid, nonce):
                 place_graph=stored_state.get("place_graph") or {},
                 # The room his own goal text names, if he owns a node for
                 # it -- see _destination_from_goals for the double gate.
-                destination=_destination_from_goals(
-                    stored_state, stored_state.get("place_graph") or {},
-                    here_rid=char_room,
-                    now_turn=getattr(ctx, "turn_idx", None))),
+                destination=_goal_destination),
             # Where they are, named. The digest lists what leads OUT of a room
             # without ever naming the room itself, so a character had to
             # re-derive their own location from the view's prose every beat.
@@ -1225,7 +1299,12 @@ def character_step(ctx, cid, nonce):
             # Knowledge-gated and pruned to the offers worth having -- see
             # sprint_offers. An offer, not an instruction: a body that can
             # run is not a body that must.
-            "sprint_reach": sprint_offers(sc, char_room, stored_state),
+            # The destination rides here too, so a run that carries him AWAY
+            # from where he is going says so. Without it the exits named his
+            # goal and the runs did not, and the loudest option was the one
+            # with the least context.
+            "sprint_reach": sprint_offers(sc, char_room, stored_state,
+                                          destination=_goal_destination),
         },
         "memory": memory_context,
         "relationships": relationships,

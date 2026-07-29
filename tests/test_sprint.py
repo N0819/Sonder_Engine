@@ -498,3 +498,71 @@ class TestRunningIsRemembered:
         record_spatial_experience(st, sc, "c1", 2)
         assert st["visited_rooms"] == ["start", "c1"]
         assert st["place_graph"]["edges"]["start"]["c1"]["taken"] is True
+
+
+class TestTheRunKnowsWhereHeIsGoing:
+    """A13 run 4, the last of the affordance-isolation failures.
+
+    The exits carried the route -- "your remembered ground runs from here to
+    Chamber 0603, about 26 rooms along this way" -- on the correct one-room
+    step. The run offers carried nothing about it at all. So the choice he
+    actually faced was a 1-room step that mentioned his destination against a
+    3-room `full_reach` run that did not, and for a character whose sheet says
+    running the proved line is the finish, that is not close. He ran, and the
+    run ended four rooms further out.
+
+    Every affordance was locally correct. None of them talked to each other.
+    """
+
+    def _state(self, taken):
+        edges = {}
+        for a, b in taken:
+            edges.setdefault(a, {})[b] = {"taken": True}
+            edges.setdefault(b, {})[a] = {"taken": True}
+        return {"place_graph": {"nodes": {r: {} for pair in taken for r in pair},
+                                "edges": edges},
+                "visited_rooms": []}
+
+    def test_a_run_away_from_the_destination_says_so(self):
+        from agents.character import sprint_offers
+        # He has walked the whole corridor, and the shrine lies back at start.
+        st = self._state([("start", "c1"), ("c1", "c2"), ("c2", "c3")])
+        offer = _one(sprint_offers(
+            _bent_corridor(), "start", st,
+            destination={"rid": "c3", "name": "C3"}))
+        assert "closer to C3" in offer["ends_in"], offer
+
+    def test_the_cost_is_counted_in_rooms(self):
+        from agents.character import sprint_offers
+        st = self._state([("start", "c1"), ("c1", "c2"), ("c2", "c3")])
+        offer = _one(sprint_offers(
+            _bent_corridor(), "start", st,
+            destination={"rid": "start", "name": "Start"}))
+        assert "3 rooms further from Start" in offer["ends_in"], offer
+
+    def test_no_destination_is_silence(self):
+        """Optional-argument shaped: a caller with no destination gets
+        exactly the payload it got before."""
+        from agents.character import sprint_offers
+        st = self._state([("start", "c1"), ("c1", "c2"), ("c2", "c3")])
+        assert "ends_in" not in _one(sprint_offers(_bent_corridor(), "start", st))
+
+    def test_a_destination_off_his_walked_graph_is_silence(self):
+        """Same firewall as the route: no remembered way there, nothing
+        said. Never computed from the scene."""
+        from agents.character import sprint_offers
+        st = self._state([("start", "c1"), ("c1", "c2"), ("c2", "c3")])
+        offer = _one(sprint_offers(
+            _bent_corridor(), "start", st,
+            destination={"rid": "rNowhere", "name": "Chamber 9999"}))
+        assert "ends_in" not in offer
+
+    def test_the_dead_end_note_and_the_route_note_coexist(self):
+        from agents.character import sprint_offers
+        st = self._state([("start", "c1"), ("c1", "c2"), ("c2", "c3")])
+        st["place_graph"]["nodes"]["c3"] = {"closed": True, "visits": 2}
+        offer = _one(sprint_offers(
+            _bent_corridor(), "start", st,
+            destination={"rid": "start", "name": "Start"}))
+        assert "already been inside" in offer["ends_in"]
+        assert "further from Start" in offer["ends_in"]
