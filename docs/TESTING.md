@@ -10,7 +10,7 @@ make test-fast     # broad Python suite, excluding explicitly marked slow tests
 make test-full     # every Python regression test
 make test-browser  # optional Chromium behavior tests
 make check-fast    # compile, structure/map freshness, then test-fast
-make check         # compile, regenerate/check the code map, then test-full
+make check         # compile, code map, structure checks, then test-full
 ```
 
 `make test` remains an alias for the full Python suite. Tests requesting the

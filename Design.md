@@ -19,8 +19,9 @@ worse than a row that is missing. The previous edition is in git history.
 
 `AGENTS.md` is the operational guide (edit routing, invariants, workflow).
 `docs/PIPELINE.md` is the stage-by-stage execution reference. `docs/DATABASE.md`
-is the schema and change checklist. This file is the *why*, the status, and the
-roadmap — do not duplicate the other three here.
+is the schema and change checklist. `docs/UNBUILT.md` is the single register of
+everything not yet built. This file is the *why* and the status — do not
+duplicate the other four here.
 
 ---
 
@@ -79,7 +80,7 @@ what it legitimately earned, and a filter decides what crosses.**
 ## Status at a glance
 
 Conformance against the founding architecture, re-verified against source at
-alpha5.1.
+alpha 6.1.
 
 | Founding commitment | Status | Evidence / gap |
 |---|---|---|
@@ -98,6 +99,10 @@ alpha5.1.
 | Event-grounded live psychology | **Built** | v4 character schema plus `psychology_runtime.py`: stress split into aversive strain and non-distressing drive, mixed pain/pleasure outside survival with a slow-integrating unresolved `charge`, protected beliefs, learned cue associations, and simulation-time recovery. Ambient comfort from surfaces (`comfort.py` + `resolve_hedonic`'s `ambient_comfort` floor) is built: it raises the pleasure level only — never `charge` — habituates on a sustained source, and lets `tick_vitals` derive passive rest from lying on a soft support |
 | Authored initial outfit with live story attire | **Built** | Character/persona `initial_outfit` is kept separate from stable body appearance and seeds `scene.attire` once; later clothing changes remain mutable story state |
 | Place purpose (what a place is FOR) | **Built (v1)** | `place_purpose.py` per `docs/DESIGN_PLACE_PURPOSE.md`: live `perception.here_affords` echo; `affords` ledger on the character's own place-graph nodes — `witnessed` from own vitals/`comfort.rest_affording`, `told` mirrored from reconciled beliefs with `belief_credence`-refreshed sureness, `assumed` derived read-side from own node names (never stored); `memory.recalled_places` surfaces at most two walked-route options on a felt need. Witnessed drink/water/warmth, told-basis node minting, and negative entries deliberately not built |
+| Durable place graph (a mind's own map of walked ground) | **Built** | `commit.update_place_graph` writes per-character nodes and edges onto `chat_chars.state` with `basis: walked\|seen`, `disproven` retraction both ways, and `PLACE_GRAPH_NODE_CAP` eviction; read back as navigational verdicts and `_frontier_hops` distance in `agents/character.py`. `basis: "told"` is an accepted value with no writer, deliberately |
+| Long-term goals (the project tier) | **Built (v3)** | `affect.apply_project_ops` / `serves_priority` / `project_boundary` / `settle_probation`; persisted in `interior.projects` / `former_projects`. Caps at two, adoption requires a non-circular `satisfied_when`, probation weighs at intention level until served on ≥3 beats over ≥12 turns, drift surfaces as `adrift`. Per `docs/DESIGN_LONG_TERM_GOALS.md` |
+| Multi-room movement (running) | **Built** | `spatial.sprint_reach` bounded by decision (one way onward), not sight; `spatial.passable_path` reconstructs the rooms crossed so a sprinted corridor is remembered; `agents/character.sprint_offers` truncates the *offer* to known ground. Per `docs/DESIGN_RUNNING.md` |
+| Retrieval as perturbation (unbidden recall) | **Built** | `memory.contrast_memory` surfaces one high-salience, structurally *dissimilar* memory when deterministic stuck-ness signals fire; confidence-blind, edge-triggered, substitutes for one ordinary recall slot. Adapted from SIGMA SRIP-14 §XXII — see `docs/RESEARCH.md` §1.5 |
 | Checkpoint / rollback | **Built** | `checkpoints.py`; branching depends on it |
 | Consolidation, salience-weighted hybrid retrieval | **Built** | `consolidate_character_memory`; keyword + embedding search in `memory.py` |
 | Commit as sole persistence boundary | **Built** | `commit.py`; one outer transaction, any domain failure rolls the turn back |
@@ -323,7 +328,19 @@ Subsystems the original architecture never imagined, now load-bearing:
   contracts deliberately are not.
 - **Spatial model** (`spatial.py`, `scene.py`). Rooms, adjacency with bearings,
   egocentric frames (ahead/behind/came_from), barriers, hearing and visibility
-  gating, zones and carry inference.
+  gating, zones and carry inference. Multi-room movement (`sprint_reach`,
+  `passable_path`) is bounded by decision rather than sight, and the rooms
+  crossed are reconstructed deterministically so a sprinted corridor is
+  remembered rather than left as a hole in the map.
+- **A mind's own map** (`commit.update_place_graph`, `place_purpose.py`).
+  Per-character nodes and edges earned by walking or seeing, with retraction,
+  bounded eviction, frontier distance, and an `affords` ledger recording what a
+  remembered place is *for*. Kept on `chat_chars.state`, so checkpoints,
+  archives and branching carry it with no schema change.
+- **Durable wanting** (`affect.py`). Drives, intentions, beat wants, and the
+  project tier between them — capped at two, adopted only against a
+  non-circular criterion, weighed at drive strength once established, and made
+  legible when the mind drifts from one rather than decayed behind its back.
 - **Deterministic mechanics sweep** (`mechanics.py`). Timed arrivals, expiry,
   dock edges, news latency — LLM-free, seeded, idempotent.
 - **Scene backdrops** (`backdrops.py`). Generated images of the room, built from
@@ -426,110 +443,20 @@ for a schema with roughly 30 tables and a long migration chain, while
 
 ## Roadmap
 
-Ordered by value per unit of risk. Items 1–3 repay the debt above.
+The roadmap now lives in [`docs/UNBUILT.md`](docs/UNBUILT.md), together with
+every other list of unfinished work this repository was keeping separately —
+known defects, deferred audit findings, and the residuals of each design note.
+There is one register, and an entry is deleted from it in the commit that lands
+it.
 
-### 1. Give the present beat a real event id
+Items 1-3 of that register repay the structural debt above, in order:
+a first-class event id for the present beat (debt #1), a `relationship_events`
+table (debt #2), and a `description` fallback in the heuristic import (debt #3).
 
-Removes the last instruction-shaped patch from the character path. Declarations
-already mint ids (`turn:<id>:character:<cid>:<n>:action`); the current beat's
-perception should mint one the same way, so `observations_used` cites structure
-rather than obeying a sentence. **Closes debt #1.**
-
-### 2. Make stance auditable
-
-Move relationships out of the KV blob into a `relationship_events` table: one
-row per delta, with target, axis, magnitude, trigger event id and turn. Keep the
-current graph as a derived projection, exactly as `world_entities` is derived
-from the scene. Then make `trigger_event_ids` mandatory and tighten the clamp
-toward the specified ±0.05. Makes "why does she distrust him?" a query, and the
-grudge inspectable rather than merely persistent. **Closes debt #2.**
-
-### 3. Teach the heuristic import to read `description`
-
-No LLM required: fall back to `description` for `self_model.summary` and voice
-notes when `personality` is empty, and warn specifically when a heuristic import
-lands below a populated-field threshold. The opt-in v3 gap-filler mitigates
-sparse old cards but does not remove the value of a better deterministic first
-pass. **Closes debt #3.**
-
-### 4. Hard mode — enforce `PlayerAuthorityMode`
-
-Wire the existing enum: per-chat setting, adjudication of assertions in
-`director_interpret`, and a refusal path that translates rather than discards
-(see [Player authority](#player-authority)). This is the most interesting item
-on the list, because it is the one that lets the engine's original thesis be
-played *as written* without taking the dial away from anyone who prefers
-otherwise.
-
-### 5. Complete automatic canon lock
-
-Age-based locking is built: chat-canon entries older than 20 turns lock
-automatically, and locked entries reject in-place mapping updates. Add the
-remaining specified rule so facts referenced multiple times lock before the age
-threshold. Cheap, and it is what stops long-run lore drift.
-
-### 6. Scene-boundary coherence pass
-
-Established-earlier wins unless the later fact is load-bearing for an active
-thread, in which case the older is retconned *with a logged entry*. The logging
-is the point: a silent retcon is the failure mode.
-
-### 7. Reactivation negotiation
-
-Design note: [`docs/OFFSCREEN_LIFE_DESIGN.md`](docs/OFFSCREEN_LIFE_DESIGN.md).
-
-The largest unbuilt subsystem, and the one that makes a large cast feel alive
-rather than merely stored. It decomposes: gap-history plus delta-summary is the
-valuable 80% and is the same generator as roadmap #10; the negotiation protocol
-is the hard, novel half and can trail behind it. Mapping proposes the gap; the
-character may refuse on integrity grounds only; refusals are capped and tagged
-(identity-violation counts half, preference counts full); on exhaustion the last
-proposal becomes canon. *Conservative defaults, costly exceptions.*
-
-### 8. Predictive staging
-
-Pre-stage lore and plausible NPCs for likely-next locations. Pure latency win,
-no correctness implication, which is why it ranks below the integrity work.
-
-### 9. Session digest
-
-A short end-of-session synthesis that re-anchors on resume. Small, and it
-directly addresses the "coming back after a week" experience.
-
-### 10. Richer off-screen life
-
-Design note: [`docs/OFFSCREEN_LIFE_DESIGN.md`](docs/OFFSCREEN_LIFE_DESIGN.md).
-
-Deterministic scheduling exists; what is missing is the world visibly having
-moved while you were away. Most of the cast needs no tick at all — the gap is
-generated at re-contact, so cost stays `O(re-contact)`. The exception is the
-character advancing a plan whose consequences the player meets *before* meeting
-them: you cannot lose a race that was never run. `BehaviorController` already
-exists in `schemas.py`, unconsumed, and is exactly that opt-in ladder.
-
-### Further ideas, less certain
-
-- **A conformance test for this document.** The status table above is prose. A
-  test asserting each "Built" row still resolves to real code — symbol exists,
-  module imports, field present — would make this file self-checking, the way
-  `make structure` keeps `CODE_MAP.md` honest. Highest-leverage idea here: it
-  prevents the exact failure that made this rewrite necessary.
-- **A leak-injection suite.** Deliberately plant a forbidden fact in a
-  character's world record and assert it never surfaces in that character's
-  output across N turns. The firewall is the engine's central claim and is
-  currently protected by construction plus targeted tests.
-- **Salience-driven personal lore.** "This reminds you of a festival you walked,
-  long ago" — fired on genuine resonance, silent otherwise. Fired every beat it
-  is a tic; fired rarely and on-key it reads as soul.
-- **Per-character retrieval depth** as an explicit dial beside tier and
-  temperature — spend deep retrieval only on pivotal beats.
-- **Belief-revision salience.** Provenance makes revision *possible*; making the
-  moment of revision itself high-salience is what lets a betrayal recontextualise
-  forty turns and land as betrayal rather than confusion.
-- **Perception prose bound by the audibility layer.** Live data shows perception
-  narrating "difficult to parse from this distance" while the deterministic layer
-  had already ruled the speech fully audible. The deterministic layer is right;
-  the prose should be constrained by it rather than free to contradict it.
+Ideas that are parked rather than scheduled — a conformance test for this
+document, a leak-injection suite, salience-driven personal lore, per-character
+retrieval depth, belief-revision salience, an epistemic minimap — are in that
+file's final section.
 
 ---
 
@@ -541,7 +468,7 @@ exists in `schemas.py`, unconsumed, and is exactly that opt-in ladder.
 | NPC treats private thought as dialogue | Thought and speech entered the same window | Separate channels: speech → director event; thought → routed nowhere |
 | NPC reacts to something it wasn't present for | Presence was a sentence, not a router rule | Perception routes the beat only to minds that were there |
 | Narrator mentions what the player can't see | Narrator knows more than the player | Deny the narrator everything but the player's perception object |
-| Character answers the *previous* line | Present beat unreachable; only the past was citable | Give the present a first-class id (roadmap #1) |
+| Character answers the *previous* line | Present beat unreachable; only the past was citable | Give the present a first-class id (`docs/UNBUILT.md` §2.1) |
 | Cast feels lifeless, nobody acts | Variance too low | Raise per-character temperature |
 | A character is spookily prescient | Context leak | Firewall plus strict character context hygiene |
 | World heals — door un-breaks, trap vanishes | Off-screen state dropped | Commit-up plus standing intentions with triggers |
@@ -550,7 +477,7 @@ exists in `schemas.py`, unconsumed, and is exactly that opt-in ladder.
 | Betrayal reads as confusion | Flat beliefs, no provenance | Provenance tags; revision as high salience |
 | Trust silently erodes | Clock-driven numeric drift | Stance axes event-linked; only mood decays |
 | Two characters share one position and one set of clothes | A model authored an identity key | Mint engine keys in code; never read them from model output |
-| The world cannot tell the player "no" | `world_author` authority by default | Hard mode (roadmap #4) |
+| The world cannot tell the player "no" | `world_author` authority by default | Hard mode (`docs/UNBUILT.md` §2.4) |
 
 ---
 
@@ -559,8 +486,8 @@ exists in `schemas.py`, unconsumed, and is exactly that opt-in ladder.
 1. Change a status row in the same commit that changes the behaviour.
 2. Prefer "Partial" with a precise gap over "Built" with a caveat buried in
    prose. The gap sentence is the useful part.
-3. When a roadmap item ships, move it into the status table and delete it from
-   the roadmap. Do not leave it in both.
+3. When something in `docs/UNBUILT.md` ships, add its row here and delete the
+   entry there. Do not leave it in both.
 4. If this file passes roughly 500 lines, something belongs in `AGENTS.md`,
    `docs/PIPELINE.md` or `docs/DATABASE.md` instead. Length is how the last
    edition died.

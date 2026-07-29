@@ -8,8 +8,10 @@ Each file owns one clear part of the turn pipeline:
   observations are deterministically re-derived from each final scrubbed view.
 - `character.py` — one character's private decision step, including appraisal
   proposals consumed by deterministic live-psychology commit code.
-- `background.py` — one stateless reaction for a deterministically selected,
-  named background presence.
+- `background.py` — background presences, two paths: the batched scene manager
+  (`scene_life`, one call voicing every managed presence in a room) when
+  enabled, otherwise one stateless reaction for a single deterministically
+  selected, named presence.
 - `loops.py` — physical reactions, dialogue rounds, and deterministic micro-perception.
 - `narration.py` — player-facing prose.
 - `common.py` — shared normalization, delivery, lore, and validation helpers.

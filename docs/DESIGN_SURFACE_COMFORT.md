@@ -3,10 +3,15 @@
 **Status:** built — `comfort.py` (derivation), `resolve_hedonic`'s
 `ambient_comfort` argument (`psychology_runtime.py`), the `tick_vitals` rest
 derivation (`survival.py`), wired at the single hedonic call site in
-`commit.py`; pinned by `tests/test_surface_comfort.py`. Independent of the
-place graph, but its most interesting effect (a remembered warm corner) only
-exists once place purpose does — see §5, still not built; `rest_affording`
-is the seam its future writer should read.
+`commit.py`; pinned by `tests/test_surface_comfort.py`. §5's remembered warm
+corner is built too, as of place purpose v1: `place_purpose.witness_affords`
+reads `comfort.rest_affording` and writes `affords.rest {basis: witnessed}`
+onto the character's own place-graph node, surfaced later through
+`memory.recalled_places`. Comfort still never pulls navigationally — the route
+is a remembered fact surfaced at need and mediated by a decision, exactly as §5
+requires.
+
+Remaining: the §7 property test (30 beats on a bed) has not been run.
 
 Two implementation deviations from §1 as written, both deliberate: the
 `relief` multiplier (and `pleasure_sensitivity`) apply *under* an absolute

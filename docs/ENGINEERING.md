@@ -14,7 +14,7 @@ an owner, this file points at it:
 | Generated symbol/route/table index | [`CODE_MAP.md`](CODE_MAP.md) |
 | Test tiers and CI policy | [`TESTING.md`](TESTING.md) |
 | Philosophy and conformance status | [`Design.md`](../Design.md) |
-| Known defects | [`OPEN_ITEMS.md`](OPEN_ITEMS.md) |
+| Known defects and unbuilt work | [`UNBUILT.md`](UNBUILT.md) |
 
 > **A note on the diagrams.** They are Mermaid, rendered natively by GitHub and
 > by most Markdown viewers. Being source rather than images, they diff, review
@@ -203,7 +203,7 @@ actually happened. It is entitled to omniscience because it cannot resolve a
 beat it may not see. It must **not** silently replace the player's declared
 speech or action, and must not author character psychology or conduct. The
 player-side guard is `_check_player_act_authority`; a character-side equivalent
-is a known gap ([`OPEN_ITEMS.md`](OPEN_ITEMS.md)).
+is a known gap ([`UNBUILT.md`](UNBUILT.md) §1.1).
 
 **Perception** (`agents/perception.py`) — a stateless filter deciding what each
 observer legitimately receives. Runs twice per beat: once on the action *onset*

@@ -1624,9 +1624,10 @@ def _redact_concealed_from_event(event_text, concealed_for_this_perceiver):
     explicit subject ("the vial disappears into a sleeve") names nobody and
     reads as a new subject, so nothing here catches it. Prose matching cannot
     close that -- the structural answer is to carry the actor's id on the event
-    element and redact on identity, never on text (pipeline_audit.md, cross-seam
-    pattern 1). Until the Director emits that, this is a floor, not a proof, and
-    the perception prompt's own instruction remains the second layer.
+    element and redact on identity, never on text (docs/UNBUILT.md §3.1, and
+    §4.2 for the primitive). Until the Director emits that, this is a floor,
+    not a proof, and the perception prompt's own instruction remains the second
+    layer.
 
     Deliberately over-redacts in one direction: a concealed actor's OVERT acts
     in the same beat are stripped too, because "this sentence names Mara" does

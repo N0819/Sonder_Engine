@@ -27,13 +27,14 @@ kind of fact and was under concurrent bearing/orientation work when this was
 written -- and rather than psychology_runtime.py, which is deliberately
 import-free pure state math and must not grow a scene dependency.
 
-SEAM, deliberately left open: the design's most interesting effect -- a
-remembered warm corner pulling a tired body back at need -- requires place
-purpose (`affords.rest {basis: witnessed}` on a place-graph node, surfaced
-through recalled places and mediated by a decision). Place purpose is not
-built, so nothing here writes toward it. When it exists, `rest_affording` is
-the witnessed-basis fact its commit-side writer should read; comfort must
-never become navigational pull directly.
+SEAM, now taken up: the design's most interesting effect -- a remembered warm
+corner pulling a tired body back at need -- lives in place purpose
+(`affords.rest {basis: witnessed}` on a place-graph node, surfaced through
+recalled places and mediated by a decision). `place_purpose.witness_affords`
+reads `rest_affording` as exactly that witnessed-basis fact. Nothing here
+writes it, and comfort must never become navigational pull directly: the pull
+is a remembered fact the character may act on or ignore, never a gradient in
+the hedonic engine.
 """
 
 from __future__ import annotations

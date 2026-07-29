@@ -1,5 +1,5 @@
 """Regression tests for the world-pressure ledger (F5 -- THE WORLD ACTS,
-docs/FABLE_REVIEW_FOLLOWUPS.md): the Enterprise run's environmental failure
+adversarial review, alpha3.3): the Enterprise run's environmental failure
 mode, where an actively scanned alien Array produced zero world response
 across 12 beats because nothing ever forced the Director to even decline to
 act.

@@ -1,0 +1,925 @@
+# Unbuilt work — the register
+
+Everything designed, proposed, or found-and-deferred that is **not in the code
+today**, in one place. Compiled 2026-07-29 against alpha 6.1 by re-verifying
+every claim in every design and audit document against source.
+
+**This file is the only worklist.** `CHANGELOG.md` and the git log are the
+history; the surviving design notes keep the *argument* for an item and are
+linked from it, but they no longer carry their own status lists — those drifted,
+which is why this file exists.
+
+It also **replaces five audit documents**, which were erased once their live
+findings were folded in here: the 2026-07-19 architecture audit, the
+information-pipeline leak sweep, the enterprise_d_v2 audit backlog, the
+Fable adversarial-review follow-ups (all six closed), and the place-graph review.
+Roughly 60% of the pipeline sweep and all six review items had already shipped,
+and a reader taking those documents at face value would have chased about forty
+closed findings. What survived is below, with enough mechanism detail to act on
+without them. Their reasoning is in git history and in `CHANGELOG.md`.
+
+Rules that keep it honest:
+
+1. Delete an entry in the same commit that lands it. Do not mark it done here.
+2. Cite a symbol, not a line number. Line citations in this repo's docs went
+   stale within days — that is most of why the audits had to go.
+3. If an entry has sat untouched through three releases, either promote it or
+   admit it is parked and move it to §8.
+4. Findings keep their original ids (P-, F-, S3-, X-, Gap-) so old commit
+   messages and test docstrings still resolve.
+
+---
+
+## 1. Known defects
+
+Live bugs and unfinished corrections — places the engine is currently wrong,
+not places it is merely thin.
+
+### 1.1 The Director can put words in a character's mouth
+
+**Found:** live, alpha 6.0.2 session.
+
+A character agent declared silence — empty sequence, `stop_reason: "natural
+silence"`, no `dialogue_log` entry — and the Director's `resolved_event` said
+"<the character> adds a further comment" anyway. Perception rendered a speech
+event with no content; the narrator, having nothing to quote, dressed the
+absence as inaudibility. Read as a muffling bug; was a fabrication.
+
+The player side of this boundary has a guard
+(`agents/common._check_player_act_authority`, used at two sites in
+`agents/director.py`). Characters have none, so nothing objects when the
+Director authors conduct for a mind that owns it.
+
+**Fix.** The mirror of the player check, at `director_resolve`: speech
+attributed to a character who declared none this beat is stripped and warned. It
+generalises past this case — it catches every content-free "X says something",
+whatever produced it.
+
+### 1.2 Nothing validates the geometry of an asserted doorway
+
+**Found:** live, alpha 6.0 session. **Do this before any multi-location story
+with several characters.**
+
+The scene merge accepts an adjacency a model asserts, with no check that the two
+rooms *could* be adjacent. Measured: `r0204 <-> r0303` in the maze scene — a
+diagonal in a grid maze, geometrically impossible by construction — sat in the
+world model for hundreds of turns and was walked as a real doorway.
+
+`spatial._shield_standing_bearings` protects the bearings of *existing* edges.
+Nothing guards the creation of a *new* one.
+
+Why it matters beyond mazes: a Director inventing a connection between two
+locations is what happens in a village or a household when a model reaches for a
+shortcut, and a fabricated doorway becomes part of every character's map and
+every route computed over it. The maze has coordinates to check against; a
+general scene may not, so the honest fix may be "require a stated basis for a
+new edge" rather than a geometric test.
+
+### 1.3 `survival.py`'s sleep-recovery branch is dead
+
+`tick_vitals(..., asleep=)` is derived from `scene.contained[x]["mode"] ==
+"asleep"` — a **containment** mode ("carried", "pocket", …), never an awareness
+level. The set is always effectively empty: **nobody has ever recovered stamina
+by sleeping.**
+
+Consequence already paid: natural waking had to be keyed on the simulation clock
+(eight hours) rather than on the rest a body actually needed, because "rested" is
+not currently computable. Fix the source and the better rule becomes available.
+
+### 1.4 A character cannot revise a bearing they learned wrong
+
+`disproven` fires when a doorway fails to exist. Nothing fires when a doorway
+exists but the character remembers the wrong heading for it. After a bearing
+corruption was fixed in the world, one character kept oscillating in exactly the
+pockets whose bearings had been wrong while he learned them — the world was
+corrected, his map of it was not.
+
+Related to the broader gap: a character can revise a belief about the world and
+has almost no mechanism for revising a belief about themselves. Project
+displacement is currently the only one.
+
+### 1.5 See-through barriers mint walkable edges
+
+**Real in story play; cannot affect the maze arms** (generated and authored
+mazes have only `open` edges).
+
+`update_place_graph`'s doorway filter (`commit.py`, two sites) excludes only
+`wall`. But `spatial._SIGHT_BARRIERS` is `{"open", "open_door", "window",
+"bars"}`, so a barred window or a pane of glass between two rooms records a
+walkable graph edge. You can see through a barred window; you cannot walk
+through one. Confirmed directly: a `window` between A and B yields
+`edges from A: {'B': {'last_confirmed': 1, 'bearing': 'e', 'basis': 'seen'}}`.
+
+This matters more since `_frontier_hops` replaced `_frontier_beyond`: the old
+answer was a boolean ("is there new ground that way"), and a wrong boolean is
+merely vague. The new one is a distance rendered to the character as *"the
+nearest door you have never taken lies about 3 rooms down that way"*. A wrong
+distance is a specific falsehood about their own remembered ground, and the kind
+a character acts on.
+
+**Not a one-line filter** — it requires deciding what a *route* means to a
+remembering mind, and neither existing set answers that question:
+
+| set | means | wrong here because |
+|---|---|---|
+| `_SIGHT_BARRIERS` | can be seen through | includes glass and bars |
+| `_PASSABLE_BARRIERS` | passable **this beat** | excludes `closed_door`, which a character can simply open |
+
+The set wanted is roughly `_PASSABLE_BARRIERS | {"closed_door"}` — *a way I could
+go through, now or by opening it* — and possibly `locked_door` too, since a
+remembered route past a locked door is still a route if you expect to get a key.
+That is a judgement about the character's model of a route, so it wants deciding
+rather than defaulting.
+
+**Scope note.** The legacy `known_exits` ledger is worse and always has been: it
+records every declared adjacency including solid `wall` edges, and
+`_annotate_known_exits` merges it into the same BFS adjacency. The graph is a
+strict improvement rather than a regression, and this predates it. Any fix must
+also cover the legacy writer in `record_spatial_experience`, or the wall edges
+simply re-enter through the merge.
+
+### 1.6 JSON validation stalls cost beats
+
+Six-plus across one experiment arm: `mind_model_updates` missing required
+fields, `sequence` emitted as a non-list, occasionally prose instead of JSON.
+Model-side, and the harness skips the beat and continues — but each one is a lost
+turn, and in a story it would be a character who simply did nothing.
+
+The character step already has a bounded retry, but only for *verbatim
+self-repetition* (`agents/character.py`, the `_first_verbatim_repeat` path), not
+for schema failure. Worth deciding whether a bounded retry belongs there too.
+
+### 1.7 Promotion seeds are minted from the objective event (P5)
+
+`importers.py`'s promotion path uses the full `resolved_event` of every turn
+mentioning the name — **including concealed acts, with no perception filter** —
+and `commit.py` writes the result with `provenance: "witnessed"`. The autonomous
+promotion path has no reviewer, so a promoted background character begins life
+holding entitled information tagged as though they had seen it.
+
+The widest surviving instance of "the omniscient record re-enters a later
+context".
+
+### 1.8 Consolidation flattens provenance (P8)
+
+`memory.consolidate_character_memory` melts `heard` / `inferred` / `told` rows
+into one flat autobiographical string, fed back wholesale each turn. **The
+provenance distinction the engine's thesis rests on does not survive the summary
+layer.**
+
+### 1.9 Entity `state` staleness is instrumented, not fixed (S3-A8)
+
+Nothing reconciles an entity's free-text `state` / `description` against the
+beat's resolution. An earlier "skip the update" fix was **reverted** as durable
+corruption; `commit.py` now only emits a `"possible stale clause (S3-A8)"`
+warning and commits the blob anyway. `tests/test_pipeline_audit_leak_gaps.py`
+pins this deliberately as *a signal, not a fix*. Root cause — free-text state
+blobs with omission-only reconciliation and `_PROTECTED_STATE_KEYS` — untouched.
+
+### 1.10 `ctx.warnings` is write-only in production (X15)
+
+Warnings are appended across `agents/background.py` and `agents/character.py`;
+the only readers are tests. Every deterministic guard that "warns rather than
+fails" reports into a channel nothing in production consumes.
+
+### 1.11 Watch items
+
+Not defects yet. Each is a measured shape that will become one silently.
+
+- **Arousal now has a ceiling where it had a floor.** Withdrawing the false
+  satisfaction stand-down exposed the somatic lift underneath it. A body at
+  saturated, unreleased appetite climbs to the arousal ceiling in about five
+  beats and pins there until release. Probably right — the arc has a designed
+  exit — but it is the same missing-equilibrium shape as the bug it replaced,
+  pointing the other way. Watch whether a long unreleased stretch reads as
+  sustained or as stuck.
+- **`circling` fires on routine movement in familiar space.** Honest for a maze;
+  likely wrong for a resident crossing their own home several times in a scene.
+- **Nine payload keys is an attention budget.** `projects`, `en_route`,
+  `adrift`, `ends_in`, `ground_fully_known`, `goal_reached`/`goal_held`,
+  `fading`, `project_review`. Each is something a model must notice and act on,
+  and attention is finite — at some point adding the tenth marker makes the ninth
+  less likely to be read.
+- **The place graph's distinct contribution is narrower than proposed.** With
+  pruning gone, unpruned `known_exits` + `known_dead_ends` carry most of the
+  routing information by themselves; the graph's remaining unique contributions
+  are `disproven` retraction, walkedness surviving the recency window,
+  reverse-declared `seen` edges, and bounded eviction. They are kept as
+  graph-bounded *views* rather than a second authority, which is right while both
+  exist — but two representations of one fact is the shape that produced
+  `rekey_place_claims` and `reconcile_inference_confidence`. **If a third
+  consumer appears, collapse them.**
+
+---
+
+## 2. Roadmap
+
+Features the architecture intends and has not built. Ordered by value per unit
+of risk; items 2.1–2.3 repay the structural debt in
+[`../Design.md`](../Design.md) § Structural debt.
+
+### 2.1 Give the present beat a real event id
+
+**Closes debt #1.** Removes the last instruction-shaped patch from the character
+path. Declarations already mint ids (`turn:<id>:character:<cid>:<n>:action`); the
+current beat's perception should mint one the same way, so `observations_used`
+cites structure rather than obeying a sentence.
+
+Today `observations_used` *instructs* the character to cite evidence in a payload
+where only memory rows carry ids and the current beat is an uncitable prose
+string. Measured: 15 citations of a previous turn and zero of the current one
+across one 61-turn chat — a character reliably answering the previous line.
+
+**Rule this generalises:** whenever a prompt asks a model to prefer X over Y,
+check whether the payload makes X *harder to reach* than Y. If it does, the
+prompt will lose.
+
+This is also the same primitive §4.2 and §3's headline want, from the other
+direction.
+
+### 2.2 Make stance auditable
+
+**Closes debt #2.** Move relationships out of the `world` KV blob into a
+`relationship_events` table: one row per delta, with target, axis, magnitude,
+trigger event id and turn. Keep the current graph as a derived projection,
+exactly as `world_entities` is derived from the scene. Then make
+`trigger_event_ids` mandatory and tighten the clamp toward the specified ±0.05.
+
+Today `apply_relationship_updates` accepts `trigger_event_ids` but treats them as
+optional, with explicit handling for "a routine trigger-less delta"; there is no
+change log, only the current value plus a `salient_event` string. There is no way
+to answer "why does she distrust him?" from the record. The founding design
+specifies ~0.05 per ordinary interaction; the schema clamps at ±0.2.
+
+Verified absent: no `relationship_events` table exists.
+
+### 2.3 Teach the heuristic import to read `description`
+
+**Closes debt #3.** No LLM required: fall back to `description` for
+`self_model.summary` and voice notes when `personality` is empty, and warn
+specifically when a heuristic import lands below a populated-field threshold.
+
+The heuristic path derives psychology from the card's `personality` field, so a
+v2 card that puts everything in `description` — common — yields a sparse first
+pass. The opt-in v3 gap-filler mitigates sparse old cards but does not remove the
+value of a better deterministic first pass.
+`importers.character_import_warnings` exists but fires only on the import path.
+
+### 2.4 Hard mode — enforce `PlayerAuthorityMode`
+
+The most interesting item on the list: it is the one that lets the engine's
+original thesis be played *as written* without taking the dial away from anyone
+who prefers otherwise.
+
+`schemas.PlayerAuthorityMode` exists as an enum and is **consumed nowhere** —
+verified, one site in the whole tree. Wire it: per-chat setting, adjudication of
+assertions in `director_interpret`, and a refusal path.
+
+| Mode | The player controls |
+|---|---|
+| `actor_only` | The protagonist's attempts, speech, and immediate bodily conduct. Assertions become *claims* the director adjudicates and may refuse |
+| `explicit_outcomes` | The above, plus declared completed effects on the protagonist's own actions |
+| `world_author` | The above, plus external events, entities, time, and world assertions (**today's behaviour**) |
+
+Two design notes to settle before building:
+
+1. **A refused assertion must not silently vanish.** The player wrote it for a
+   reason. The honest behaviours are to translate it into an attempt ("you reach
+   for the key") or to surface the refusal explicitly. Silently dropping player
+   text is the one thing the engine's authority contract has never done, and hard
+   mode must not become the exception.
+2. **Mode is per-chat, not global**, and a mid-story change should be recorded,
+   since it changes what earlier turns meant.
+
+### 2.5 Complete automatic canon lock
+
+Age-based locking is built (`commit.py` locks chat-canon entries older than 20
+turns; locked entries reject in-place mapping updates). Add the remaining
+specified rule so facts **referenced multiple times** lock before the age
+threshold. Verified absent: no reference counter on `lore_entries`.
+
+Cheap, and it is what stops long-run lore drift.
+
+### 2.6 Scene-boundary coherence pass
+
+Established-earlier wins unless the later fact is load-bearing for an active
+thread, in which case the older is retconned *with a logged entry*. The logging
+is the point: a silent retcon is the failure mode. Verified absent.
+
+### 2.7 Reactivation negotiation
+
+The largest unbuilt subsystem, and the one that makes a large cast feel alive
+rather than merely stored. Argument:
+[`OFFSCREEN_LIFE_DESIGN.md`](OFFSCREEN_LIFE_DESIGN.md).
+
+It decomposes: gap-history plus delta-summary is the valuable 80% and is the same
+generator as §2.8; the negotiation protocol is the hard, novel half and can trail
+behind it. Mapping proposes the gap; the character may refuse on integrity
+grounds only; refusals are capped and tagged (identity-violation counts half,
+preference counts full); on exhaustion the last proposal becomes canon.
+*Conservative defaults, costly exceptions.*
+
+Build order, none of it built:
+
+1. **The gap generator** — one subject-agnostic "what changed about X since turn
+   N" generator, shared by characters and rooms.
+2. **Wire `BehaviorController`** — per-character, default `inert`.
+   `schemas.BehaviorController` is declared at one site and consumed nowhere.
+3. **`stochastic` at scene boundaries.**
+4. **`character_agent` ticks** — villain, count cap, knowledge firewall.
+5. **Reactivation proposal.**
+6. **Negotiation** — refusal budgets, tagging, stalemate-eats-canon.
+
+Precedent that did not exist when the note was written: `background_claims.py`
+is exactly the "commit invention as claims, not facts" mechanism its decision 3
+asks for, built for background presences.
+
+### 2.8 Richer off-screen life
+
+Deterministic scheduling exists; what is missing is the world visibly having
+moved while you were away. Most of the cast needs no tick at all — the gap is
+generated at re-contact, so cost stays `O(re-contact)`. The exception is the
+character advancing a plan whose consequences the player meets *before* meeting
+them: you cannot lose a race that was never run.
+
+`offscreen_log` exists as a reserved frame-scoped key whose only writer is the
+spatial-split notice in `spatial_frames.py` — nothing advances it.
+
+### 2.9 Predictive staging
+
+Pre-stage lore and plausible NPCs for likely-next locations. Pure latency win, no
+correctness implication, which is why it ranks below the integrity work.
+
+### 2.10 Session digest
+
+A short end-of-session synthesis that re-anchors on resume. Small, and it
+directly addresses the "coming back after a week" experience.
+
+---
+
+## 3. Information-pipeline leaks still open
+
+Ids are the erased pipeline sweep's own. Severity vocabulary: **leak** (a mind
+receives what it did not earn) / **degradation** (a mind is denied what it did
+earn, or is told something false about its own perception) / **corruption**
+(durable state made wrong) / **latent** (mechanism real, crossing model-gated).
+
+**The single largest item in this file**, on which the pipeline sweep and the
+architecture audit converged independently: **structured signals with stable
+identity, rather than prose matching, as the concealment and identity boundary.**
+Everything in §3.1 is a symptom of its absence, and `grep signal_id` returns
+nothing repo-wide. See §4.2.
+
+### 3.1 Prose matching as a boundary
+
+Materially improved — `_surface_translate_event` now fails closed, speaker
+attribution is structured, `_redact_concealed_from_event` is casefolded,
+word-anchored and pronoun-continuation-aware — but **not eliminated**.
+
+- **C1 — quoted spans are an identity smuggling channel.** Quotes are exempt
+  from the identity scrub by design, and the act pass has **no invented-dialogue
+  scrub at all** (only the outcome pass has one). At outcome, quotes with no
+  attribution cue are kept as environmental text, and the whitelist match is
+  `body == L or body in L or L in body` — so any short genuine line ("yes")
+  whitelists every fabricated quote containing it.
+- **C2 — short and common-word names escape the identity floor.** Forms under
+  three characters and single-token are never scrubbed. `_COMMON_WORD_NAMES` is a
+  separate, exact-case mitigation, not a fix for this.
+- **D1 residual — a paraphrase with a fresh explicit subject still escapes**
+  `_redact_concealed_from_event`. The function's own docstring names this
+  residual and names the structural answer: carry identity on the event.
+- **E1 — `knows_identity` uses strict membership** where `_scrub_view_for` uses
+  the title-tolerant `_recognizes`. Inconsistent; over-anonymizes.
+- **E2 — `_unknown_actor_label` strips only name and alias tokens**, so a unique
+  identity-bearing epithet in the appearance survives into the label. By design,
+  but it is the same channel.
+
+### 3.2 Concealment gates not applied everywhere
+
+- **A8 — disguise `concealed_truth` still ships to everyone in the act pass.**
+  The outcome pass now scopes `subject_disguise` to the subject or a `known_to`
+  perceiver; `_act_payload` sets it unconditionally and never removes it.
+  `_disguise_leak_check` remains warn-only. *Latent.*
+- **B1 residual — no `proximity` in the outcome dialogue path.**
+  `_dialogue_hear_level` calls `hear_level(rel, volume)` with no proximity, where
+  the act pass and the micro-loop now both pass it.
+- **B4 residual — `_ensure_environment` does not check darkness** on the "is here
+  with you" branch. Containment is now gated; light is not. *No dedicated test.*
+- **B5 residual — the micro-view append is still post-scrub**, running after the
+  identity and invented-dialogue scrubs.
+- **C3 — stray view keys survive normalization.** `_normalise_views` writes
+  through any unmatched key, so a view keyed by a non-awake character's name is
+  neither folded nor overwritten by the residue. *Plausible.*
+- **X3 — `conceal_from` without `visibility: "concealed"` bypasses the
+  background declaration filter**, which consults `visibility` only. Every other
+  guard in `agents/background.py` fail-closes on `conceal_from` independently,
+  precisely because models half-comply. *Latent, no test.*
+- **X7 — gate salience reads raw input.** `commit.py` counts `resolved_event`
+  mentions with no concealment gate, so a concealed declaration naming a presence
+  still raises its pick priority.
+- **X19 — `_llm_resolve_player_room` receives the private thought**, for a call
+  whose only output is a position key.
+
+### 3.3 Sense and awareness gaps
+
+- **F4 residual — the micro-loop never reads the observer's authored sense
+  profile**, and action delivery there is boolean visual rather than graded.
+- **F6 / S3-A5 residual — `spatial.spatial_digest` is still ungated** and
+  renders every edge's authored room name, including rooms never visited. The
+  perception payload was fixed (unseen edges keep their barrier, lose
+  `to`/`to_name`); the digest that reaches the **narrator** was not.
+- **F7 — `known_pronouns` releases pronouns on unverified mind-model keys.**
+  `agents/character.py` keys off `set(relationships) | set(mind_models)`, which
+  is the unvalidated set.
+
+### 3.4 Multiplayer
+
+All multiplayer-only, which is why they survived.
+
+- **S3-A6 — `narrator_extra` lacks the consciousness gate and fidelity facts.**
+  It ships `spatial_frame` unconditionally and its payload has no
+  `player_awareness` key, unlike the primary narrator path.
+- **S3-B2 — extra players' speech has neither speaker guard.** `_player_aliases`
+  covers the primary persona only.
+- **S3-B4 — the interpret-stage split is unchecked for extras.**
+  `_reconcile_interpretation` coverage-checks only the primary input.
+- **X11 — extra-player concealed speech has only one defence.** Perception's
+  concealment list gets extras' concealed *actions* but not their concealed
+  *speech*, and the dialogue-fidelity floor whitelists all extras' speech
+  including concealed — so a leaked co-player whisper would not be scrubbed.
+  *Plausible.*
+- **X12 — the onset pass is primary-player-only**, so the reaction-gate and
+  `targets` guarantees never run for extras' sequences at onset. *Degradation.*
+- **X9 — the host reads co-players' private thoughts.** Full step content streams
+  to the initiator (always the host) and is embedded in archives. Not a code bug
+  — the host is the trust root — but an unstated product boundary, recorded so it
+  stays a decision.
+
+### 3.5 Persistence
+
+- **P6 — the knowledge-tag door is the widest lore-to-mind channel.**
+  `knowledge_for_character` delivers any `knowledge`-category entry with
+  `range='global'` and a matching coarse tag to every tag-holder, with zero
+  encounter tracking; category, tag and range are model-proposed at
+  `mapping_commit` with only vocabulary validation. **One mis-filed secret is
+  instantly in every character's `world_knowledge`.**
+- **P7 — `known` introductions are validated by model judgment** over the
+  objective log: `validated_introductions` is applied with only roster resolution
+  and a frame gate, while the mapping model judges from `beat_dialogue_log` /
+  `beat_resolved_event` including concealed lines. Recognition never decays or
+  retracts. *Plausible.*
+- **X24 — the legacy-archive raw-id fallback grafts interior state.**
+  `chat_archive.py` resolves an archive integer against whatever local row holds
+  that id, then attaches the archive's `chat_chars.state` to it. Memories are
+  safe. Legacy path only.
+- **P5 / P8** are defects, filed at §1.7 and §1.8.
+
+### 3.6 Deliberately kept
+
+Recorded so nobody "fixes" them by accident. Each is pinned by a test asserting
+the current behaviour.
+
+- **B1 (sound half) — opaque is not soundproof.** Containment gates sight and
+  scent, deliberately not sound.
+- **B2 — the comm/shape floor delivers across any barrier on `intended_target`.**
+  The residual risk lives in director tagging, not here.
+- **F5 — `observable` falls back to the raw `attempt`.**
+- **A7 — the one-reaching-perceiver rule** in `_state_reaches_anyone`. Now moot
+  in the live path: per-observer payloads mean the perceiver set is one name.
+- **X5 — the scene-manager `full`-mode `audience[name]="none"` annotation** is an
+  annotation on a shared context rather than structure. `ambient` correctly
+  refuses divergence.
+- **E3 — outcome extra players get `knows_identity: True` hardcoded.** Advisory
+  only.
+
+### 3.7 Test gaps
+
+`tests/test_pipeline_audit_leak_gaps.py` covers D1, D2, B3, B5, X14, F1, F2/P1,
+S3-A4, S3-A5, S3-A8, X18 and X4. **A1 and B4 still have no dedicated test**, and
+A1 is a confirmed leak class.
+
+### 3.8 A structural risk, not a finding
+
+`agents/perception.py` does **not** call `common._delivery_ok`; it uses
+`hear_level` and `_in_plain_view` directly, while `agents/loops.py` routes
+everything through `_delivery_ok`. Two families of delivery gate now exist and
+can drift apart. Consolidating them is the cheap insurance.
+
+---
+
+## 4. Architecture gaps
+
+From the erased 2026-07-19 audit. Its Gap 1 was conceptual, Gap 2 and Gap 7 are
+now largely closed, and Gap 4 is partial. These are what remain. Its Priority 3
+is done bar one item, and Priority 4 is done — the suite it measured at 527 tests
+now stands at 3,112.
+
+### 4.1 Gap 3 / Priority 0 — overlapping physical authorities
+
+Immediate state is split between the `world.scene` JSON document and the
+normalized world/entity tables. Both are useful, but *durable* is not the same as
+*authoritative*: when they disagree, downstream code can select different
+realities. `commit.py` already records a case where the two diverged and the
+divergence was judged the greater harm (§1.9).
+
+**Recommended direction: publish a field-level authority matrix**, then add
+assertions preventing two systems from independently owning one fact. Begin with
+positions, entity existence, room containment, time and conditions.
+
+- normalized tables — identity, containment, durable entity existence,
+  conditions, scheduled events;
+- scene projection — current render-oriented room graph, transient overlays,
+  attire presentation, cached adjacency;
+- lore — descriptive and historical canon, never immediate placement;
+- events — append-only causal ledger;
+- checkpoints — recovery snapshots, never a live authority.
+
+Eventually, generate the scene projection from normalized state plus presentation
+caches instead of maintaining two independently mutable world models.
+
+Verified absent: no authority matrix exists anywhere in the tree.
+
+### 4.2 Gap 4 residual / Priority 1 — evidence-carrying perception
+
+**The headline item.** Mind models carry confidence and evidence text, but
+confidence can blend smoothly while resting on duplicated, circular or mutually
+dependent evidence. `EvidenceRef` carries an `event_id` and provenance is tracked
+per memory row, but `MindHypothesis.evidence` is still unverified free text, and
+there is no circular-report discounting.
+
+**Recommended direction: make evidence references first-class rows or stable
+event/signal IDs.** Track whether evidence was witnessed, reported, inferred, or
+copied from another belief, so revision can discount circular reports and
+preserve explicit competing hypotheses.
+
+The same primitive is what §3.1 needs to stop matching on prose, and what §2.1
+mints for the present beat. **Three of this file's largest items are one missing
+structure.** The adversarial-test half of this priority has shipped.
+
+### 4.3 Gap 5 — canon validation needs provenance tiers
+
+Mapping is privileged and can turn proposals into durable lore. Player
+assertions, resolved objective events, imported canon, staged spatial
+necessities, character beliefs and narrator wording should not enter the same
+"proposed fact" pool. §3.5's P6 and P7 are this gap seen from the other side.
+
+**Recommended direction: assign every canon proposal a provenance and an allowed
+disposition:**
+
+- `imported_canon` — update only through explicit edit/reinterpretation;
+- `resolved_fact` — may create or update objective canon;
+- `player_claim` — remains a claim unless Director Resolve accepts it;
+- `spatial_generation` — may establish only the minimum required geometry;
+- `character_belief` — belongs in memory/mind models, never objective lore;
+- `narrator_audit` — reject from canon;
+- `inferred_mapping` — provisional until corroborated.
+
+Verified absent.
+
+### 4.4 Gap 6 / Priority 2 — frame/global conflict control
+
+Frame-scoped world keys, memory visibility and character overlays permit genuine
+concurrent play. Lorebooks, entities, placements, conditions and scheduled events
+remain chat-global, so two frames may prepare against different snapshots and
+merge into one shared domain later.
+
+**Recommended direction:** decide domain by domain whether it is frame-local,
+immutable across frames, append-only with temporal coordinates, shared but
+revision-checked, or merged through an explicit paradox rule. **At minimum,
+prepared commits touching shared canon should carry a base revision and reject or
+reprepare when the revision changed before commit.**
+
+Verified absent: no revision concept in `db.py`, `commit.py` or `frames.py`.
+
+### 4.5 Gap 8 — uniform cost against non-uniform uncertainty
+
+The engine self-gates background reactions and caches mapping, but stage
+selection is otherwise coarse. A quiet continuation and a multi-party spatially
+contested action do not need the same validation budget.
+
+**Recommended direction:** a deterministic risk score from action complexity,
+observer count, spatial novelty, authority claims, contradiction count and
+state-diff breadth — used to select validation depth, model tier, repair count,
+and whether a sanity pass is worth its cost. Any such checker validates
+invariants and deltas; it never rewrites prose or decides story outcomes.
+
+Verified absent.
+
+### 4.6 Priority 3 residual — request-size limits
+
+Decompression-bomb limits are in `importers.py`. There is no upload or
+content-length guard in `app.py`. Needed before the service is treated as safe
+beyond a trusted local environment.
+
+---
+
+## 5. Deferred backlog
+
+From the erased enterprise_d_v2 40-turn audit backlog. Its P1 (pronoun fidelity)
+and P3 (dialogue dedupe) shipped, as did the variant/alias half of P7. Each entry
+below is written to be resumable cold: symptom, root cause, fix, test.
+
+### 5.1 P2 — ambient repetition, deterministic
+
+**Symptom.** "The bridge hums" recurs across a run. An AMBIENT RESTRAINT prompt
+rule reduced but did not eliminate it — **reworded variants slip the exact-word-run
+diff** in `_already_established_phrases`, which is still exact six-word shingles.
+
+**Adjacent mechanism that is not this.** `_overused_phrases` (exact 3-gram
+cross-block tic ban, wired into the narrator) now catches literal recurrence. It
+does not catch the reworded variant, which is the whole point of this item.
+
+**Fix.** Extend recent-cue dedupe to ambient set-dressing: a small per-chat ledger
+of recently-used ambient sensation lemmas (hum/thrum, klaxon, flicker,
+door-open), fuzzy-matched by stem/lemma rather than exact word-run against the
+draft; drop or warn on a re-mention not flagged as changed. Sits beside
+`already_established_phrases` in `agents/narration.py` / `agents/common.py`.
+
+**Test.** "The bridge hums." established in recent prose; a new draft "the ambient
+hum of the bridge" is caught despite the reworded surface.
+
+### 5.2 P4 — `established_facts` continuity ledger
+
+**Symptom.** Second-act amnesia: a character contradicts a fact the whole room
+established — one character said "I can't translate it" nine turns after the log
+was translated in front of them; another's relief flipped to fear across adjacent
+turns.
+
+**Fix.** A world-KV `established_facts` ledger. Emit from `director_resolve` as a
+new optional list op, like `obligations`; persist in `commit.py` with dedup and a
+cap, mirroring `commit_obligations`; inject the recent N into every co-present
+character payload alongside `world_knowledge`, with a prompt rule: *settled
+on-page facts may be disputed, never forgotten or contradicted.*
+
+Note the existing `world_facts` path feeds lore, not character payloads — this is
+a separate, always-included ledger.
+
+**Test.** Establish a fact at turn N; assert it appears in a later turn's
+character payload and that the prompt carries the no-contradict rule.
+
+Verified absent: zero occurrences of `established_facts` in source.
+
+### 5.3 P5 — route player-authored NPC acts through the character reaction
+
+**State.** Director-prompt rules (NPC acts belong to the NPC; being acted upon is
+not passive) make the resolve *render* the reaction. It is not routed through the
+actual `reaction_loop`, so the NPC gets no genuine agent-generated interiority or
+choice for the beat.
+
+**Root cause.** `_requires_reaction_phase` gates a reaction on
+`commitment == "contestable"` — still literally `if event.get("commitment") !=
+"contestable": return False`. A player physical act on an NPC is `asserted`
+(player authority), so the NPC never enters the reaction loop. Separately, a
+player-*authored* NPC volitional act executes as an objective event with no
+character-agent call at all. Reactor derivation remains spatial-only.
+
+**Fix.** (a) In `director_interpret`, when a player action targets a present,
+volitional, sheeted character with a conflict verb, add that character to the
+beat's reactors **even when the player's act is `asserted`** — the reaction is the
+NPC's *response*, not a contest over whether the player's act succeeded. (b) When
+the player declares a volitional act *by* an NPC, hand it to that NPC's character
+agent to adopt (supplying interiority and voice) or refuse. Both touch the
+delicate director/reaction seam — go test-first, small.
+
+**Test.** A player "grab X" beat produces a reaction step for X; a player-authored
+"X lunges" beat calls X's character agent.
+
+### 5.4 P6 — room-boundary scene-truth
+
+**Symptom.** A door closed at turn 31 silently reopened at 32; by 33, characters
+in the adjacent room were speaking *into* the closed room and one was effectively
+inside it. An information-integrity failure in an engine whose premise is the
+information barrier.
+
+**Root cause.** Not the perception *rules* — they gate same-room, closed-door and
+wall correctly. It is scene *state*: door state and positions drift, so perception
+is fed a wrong co-present set.
+
+**Adjacent coverage that is not this.** Portal state is now first-class in the
+scene blob, `apply_transit_dock_edges` recomputes edges from hatch/transit phase
+with authored-barrier preservation, and the narrator receives `portal_states`
+plus a fidelity check. That is narrator-render fidelity, not the scene-state drift
+and co-present-set construction this item specifies.
+
+**Fix.** Build the perceiver's co-present set strictly from `world.scene` room
+membership plus open-door adjacency; ensure a door's closed state persists across
+turns unless an action changes it; ensure a character led into a room has their
+position updated. Add a hard invariant check in the commit path.
+
+**Test.** Close a door at turn N; at N+1 assert it is still closed and that a
+character in the adjacent room is not in the occupant's co-present set.
+
+### 5.5 P7 remainder — promotion-turn identity binding
+
+*Low severity, cosmetic.*
+
+**Symptom.** On the turn a background presence promotes to cast, the player's view
+can render it "the unfamiliar person" for one turn.
+
+**Root cause.** Autonomous promotion runs at commit, *after* that turn's
+perception, so the promoted character's canonical name is not yet in the
+observer's `known` set during that turn — compounded by a name-variant mismatch
+(seeded "Data" vs promoted "Lt. Commander Data").
+
+**What shipped.** The alias/variant fallback (`_recognizes`), and
+`promote_background_character` now seeds a full mutual roster.
+
+**What remains.** It registers only the canonical `character_name(sheet)` with no
+aliases or variants, and the **attach** path in `app.py` seeds only
+player↔character, never cast↔cast.
+
+**Test.** Promote a presence the player addressed by name; assert the observer's
+view of it that turn is not anonymized.
+
+---
+
+## 6. Design-note residuals
+
+Features their design notes argue for that are not built. The note holds the
+argument; only the gap is listed here.
+
+### 6.1 Background life — [`BACKGROUND_LIFE_DESIGN.md`](BACKGROUND_LIFE_DESIGN.md)
+
+Most of §3 shipped in alpha 4.0. What did not:
+
+- **The digest lifecycle (§3.5)** — the largest piece. Only the raw `recent` ring
+  buffer exists (`BACKGROUND_RECENT_TAIL = 4`). No `digest`, no compaction, no
+  freeze-while-unobserved, no prune, no `last_seen_clock`.
+- **Promotion conversion (§3.6)** — `importers.draft_promoted_character` never
+  reads `blurb` or `recent`, so a promoted presence loses everything it was. No
+  `ambient_turns` counter guards `AUTO_PROMOTE_DIALOGUE_THRESHOLD = 3`, which
+  still counts manager conduct. **An active defect, not just backlog.**
+- **Interim filler on return (§3.9)** — no `interim` field, no `last_seen_clock`.
+- **Canon-referenced blurbs (§3.8.1)** — no `canon_ref` field; substituted by a
+  style-guide-level canon licence.
+- **The separation eval (§3.3.1)** — the deterministic leak floor is built; the
+  proposed measurement of real cross-presence leak rate has no artifact in-tree.
+- **Location-themed population and the chorus presence (§4).** `AggregateEntity`
+  is declared in `schemas.py` and unconsumed.
+- **The narrator dilution clause (§5)** — no tension-gated ambient suppression.
+- **The `digest`/`interim` tier typology (§3.1)** — only `blurb` was built.
+- **The prompt fix for §3.8** — a blurb tell should be available colour, not a
+  required beat.
+
+### 6.2 Extensions — [`EXTENSIONS_DESIGN.md`](EXTENSIONS_DESIGN.md)
+
+Nothing built. The seams it builds on all exist (`runtime.register_step`,
+`build_plan`, `establishment_plan`, prompt presets, per-chat world-KV config).
+Missing: the plan-splice registry at named anchors, pre/post hooks on
+`compute_step`, `register_commit_domain`, the UI surface registries,
+`extensions/<name>/manifest.json` discovery and `enabled_extensions`, the
+`ext:<id>` key namespace, the `/api/extensions` routes, and all four rungs of the
+escalation ladder including story packs.
+
+### 6.3 Greeting-seeded openings — [`GREETING_IMPORT_DESIGN.md`](GREETING_IMPORT_DESIGN.md)
+
+About 60% shipped in alpha 1.4, under a materially different architecture — the
+narrator **does** run on turn 0 and its prose is overridden afterwards, rather
+than the design's pre-baked variants plus resume. Still unbuilt and still wanted:
+
+- **Ingest-time extraction caching.** `importers.py` always writes
+  `"extraction": None`; extraction runs lazily at launch and is discarded, not
+  persisted. No `extractor_version` stamping.
+- **Idempotent knowledge routing.** Seeds route to character memory with plain
+  `add_memory` — no `private_history` write and no stable
+  `greeting:{cid}:{char}:{gid}:{i}` event keys, so re-launch is not idempotent.
+- **`player_slot` and escalation.** `GreetingInterpret` has only a flat
+  `player_room`; no `hard_attributes`, no `pronoun_tokens`, no conflict detection.
+- **Turn-0 greeting swipe** (`greeting_swipe`, `refresh_checkpoint(cid, 0)`).
+- **Two named invariant tests** — verbatim preservation and knowledge boundary —
+  do not exist.
+
+### 6.4 Place purpose — [`DESIGN_PLACE_PURPOSE.md`](DESIGN_PLACE_PURPOSE.md)
+
+v1 is built. Deliberately not built, each for a stated reason: witnessed
+drink/water/warmth (no thirst or cold vital, so no deterministic signal),
+told-basis node minting, negative entries, and the `repair`/`social` affordances
+(no consumer — dead weight becomes a to-do list). The own-memory-row heuristic
+(signal 2) is deferred as the doc allows.
+
+### 6.5 Place graph
+
+The walkable-edge defect is §1.5; the redundancy watch is §1.11.
+
+- **`basis: "told"` has no writer**, deliberately. The approved design derived
+  hearsay edges from `stated_fact` place claims, and implementing it revealed
+  that deriving *connectivity* from free text means text-mining it — the
+  non-deterministic derivation this engine refuses everywhere else. `told`
+  remains an accepted value with no code path. **A future testimony writer needs
+  a structured claim field naming the two places and the direction, not a parser
+  over prose.** Recorded because someone reading the node shape will otherwise
+  assume hearsay edges exist. This was the design document being wrong, not the
+  implementation.
+- **Do not remove the three-valued frontier semantics.** `_frontier_hops` returns
+  `None` (spent), `0` (live but unmeasurable), or `N`. The middle value exists for
+  saves written before the graph — a walked room with no recorded exits can
+  honestly be called neither spent nor near. It is not defensive padding; removing
+  it would make old saves read as exhausted.
+- **Live sight correctly outranks the remembered gradient.** Recorded because it
+  looked like a gap and was not: `visibly_no_way_through` pre-empts the distance
+  verdict via the existing `_VERDICTS` precedence, which is the right order.
+
+### 6.6 Psychology as pressure — [`DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](DESIGN_PSYCHOLOGY_AS_PRESSURE.md)
+
+(a) and (b) shipped; (e) declined by design. Open:
+
+- **(c) Deterministic inclination beside the raw sheet.** Deferred, not
+  rejected — landing it alongside (a)/(b) would confound the measurement that
+  decides whether it is needed. It must **relocate** salience, not add it: the raw
+  sheet has to be demoted in the same change that introduces the derived view, or
+  the character gets two heavy citable blocks instead of one.
+- **(d) A trait as a disposition, not a switch.** Whether this needs explicit
+  representation or emerges once (b) and (c) land is the open question.
+
+### 6.7 Long-term goals — [`DESIGN_LONG_TERM_GOALS.md`](DESIGN_LONG_TERM_GOALS.md)
+
+v1–v3 are built, including goal-slot currency. Undecided:
+
+- Whether a renewed intention should **cost** something, so renewal is a decision
+  rather than a reflex. Without a cost, "renew" is always the cheapest answer and
+  nothing is ever given up.
+- Whether **displacement should feed the drive-strain ledger** — giving up a
+  drive-serving project is plausibly a strain event.
+- Whether drive and project both weighing 1.0 needs revisiting. Current position:
+  no. Revisit only if a measured run shows a project-serving want being *emitted
+  and then losing* to a drive want, which is a different failure from the one
+  observed.
+
+---
+
+## 7. Experiments not yet run
+
+Measurements the design notes name as the thing that would settle a question. An
+unrun experiment is unfinished work, not a broken thing.
+
+- **The gods expand the maze** —
+  [`DESIGN_MAZE_EXPANSION.md`](DESIGN_MAZE_EXPANSION.md). Designed, not built;
+  depends on nothing not already in the engine. Needs a second SVG whose western
+  7×7 is byte-identical to `maze7x7-a11.svg`, an explicit `--expand` flag so
+  `--resume`'s fingerprint guard is overridden rather than weakened, a
+  deterministic seam check, and an interlude variant carrying the announcement.
+  The question is the one never asked: **can a mind revise a map it already
+  trusts?** Two arms from one snapshot, one announced and one silent.
+- **A14 — one configuration end to end without intervention.** The A11–A13 rows
+  cannot support a clean before/after performance claim because the configuration
+  changed underneath them. The only thing missing from that table.
+- **The psychology-as-pressure re-measure** — the same maze arm with (a) and (b)
+  only, re-counting *"Given his X"* per beat, *"torn between"* per beat, and
+  violations of a stated value. Gates §6.6's proposal (c).
+- **A village-scale run** — several characters, thirty turns, ordinary places. A
+  different instrument from the maze, which is saturated and stopped producing
+  new findings after A13. §1.2, §1.3 and the `circling` watch item are the ones
+  most likely to bite it.
+- **A town-scale place-purpose fixture** — 20 named rooms, 3 affordance sites.
+  Measure beats from hunger onset to reaching food, with and without
+  `recalled_places`. It works if the number falls and the route still reads like a
+  person walking rather than a solver.
+- **The running ablation** — a map with a genuine long corridor and a `large`
+  hall, run twice by one character, once with `sprint_reach` ablated. It works if
+  beats-to-goal falls while **moves**-to-goal does not.
+- **The surface-comfort property test** — a body parked on a bed for 30 beats ends
+  with stamina up, `charge` unchanged, absorption below 0.25, and at least one
+  departure-capable want intact. If any of the four fails, the anti-attractor
+  design is wrong and no amount of constant-tweaking fixes it.
+
+---
+
+## 8. Parked
+
+Not scheduled, not committed to a phase. Kept so they are not lost and not
+accidentally built.
+
+- **A conformance test for `Design.md`.** Its status table is prose. A test
+  asserting each "Built" row still resolves to real code — symbol exists, module
+  imports, field present — would make that file self-checking the way `make
+  structure` keeps `CODE_MAP.md` honest. Highest-leverage idea here: it prevents
+  exactly the drift this compilation had to repair.
+- **A leak-injection suite.** Deliberately plant a forbidden fact in a character's
+  world record and assert it never surfaces in that character's output across N
+  turns. The firewall is the engine's central claim and is currently protected by
+  construction plus targeted tests.
+- **Salience-driven personal lore.** *"This reminds you of a festival you walked,
+  long ago"* — fired on genuine resonance, silent otherwise. Fired every beat it
+  is a tic; fired rarely and on-key it reads as soul.
+- **Per-character retrieval depth** as an explicit dial beside tier and
+  temperature — spend deep retrieval only on pivotal beats. Today the only depth
+  control is the absorption-driven `_recall_cap`.
+- **Belief-revision salience.** Provenance makes revision *possible*; making the
+  moment of revision itself high-salience is what lets a betrayal recontextualise
+  forty turns and land as betrayal rather than confusion.
+- **Perception prose bound by the audibility layer.** Live data shows perception
+  narrating "difficult to parse from this distance" while the deterministic layer
+  had already ruled the speech fully audible. The deterministic layer is right;
+  the prose should be constrained by it rather than free to contradict it.
+- **An optional minimap.** A read of the ledger the spatial architecture already
+  maintains — nodes are rooms, edges are adjacency with barrier state, plus a
+  containment breadcrumb. **The one non-negotiable constraint: it must be an
+  epistemic view, not an omniscient one** — the character's own mental map, i.e.
+  fog-of-war. A minimap drawn from objective truth would be a spatial information
+  leak, the exact failure the perception firewall exists to prevent, rendered
+  visually. Topological, not geometric; opt-in; degrades to nothing when the space
+  is not well-structured. Doubles as a coherence/debug view.
+- **Remove the deprecated macro schema.** `fiction_worlds`, `fiction_locations`
+  and `transit_edges` are dead — nothing in the runtime reads or writes them — but
+  they are still created, snapshotted, restored and exported. Removal is planned
+  and needs a migration.

@@ -176,8 +176,11 @@ varies, and two samples taken an hour apart are not an experiment.
 | **A8** | **9×9 kruskal** | replication of A2's maze with everything since | `994c815` | **done — 2/5 reached, run 5 an exact optimal traversal** |
 | **A9** | **9×9 kruskal** | can a cheaper character model do the job? | `af92270` | stopped — superseded by A10 after a harness crash and a resume onto carried-over memory |
 | **A10** | **9×9 kruskal** | A9 again from a blank state, all fixes present | `b0d2c13` | stopped at run 2 beat 34, checkpoint intact — run 1 matched grok's run 1 almost exactly |
-| **A11** | **7×7 authored** | does a durable place graph fix the repeat-run opening thrash? | `124b717` → `94637dd`+ | **running — development arm; four fixes landed mid-arm, see below** |
-| **A12** | **7×7 authored** | A11's question again, on settled code | pending | **planned** — the clean arm |
+| **A11** | **7×7 authored** | does a durable place graph fix the repeat-run opening thrash? | `124b717` → `94637dd`+ | **done — development arm; four fixes landed mid-arm, see below** |
+| **A12** | **7×7 authored** | A11's question again, on settled code | `94637dd`+ | **done** — the clean arm; see below |
+| **A13** | **7×7 authored** | a second subject, and cross-affordance interaction | post-A12 | **done** — the richest arm for psychology; see below |
+| **A15** | **7×7 authored** | project tier under boundary review | post-A13 | **done** — run 5 measured prompt-normative boundary review NOT holding, which is why v2 is engine-gated |
+| **A14** | **7×7 authored** | one configuration end to end, no mid-arm fixes | — | **not run** — the only thing missing from this table ([`UNBUILT.md`](UNBUILT.md) §7) |
 
 ### A6 / A7 — the bearings pair
 
