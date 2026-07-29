@@ -106,6 +106,7 @@ The hybrid memory retriever names and implements three standard IR techniques.
   Research Group, Public Draft v0.3 (2026-05-20). Licensed **CC BY 4.0**, with
   an Independent Implementation Safe Harbor permitting independent
   implementation of the public normative requirements.
+  Documentation set: <https://github.com/sigmastratum/documentation> ·
   <https://sigmastratum.org/> · Architecture reference: Tsaliev, E. (2025),
   *SIGMA Runtime Architecture v0.1*,
   doi:[10.5281/zenodo.17703667](https://doi.org/10.5281/zenodo.17703667).
