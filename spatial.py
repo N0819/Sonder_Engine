@@ -1860,17 +1860,37 @@ CONTACT_MOMENTARY_MANNERS = (
 )
 _MOMENTARY_SET = frozenset(CONTACT_MOMENTARY_MANNERS)
 
-# How a standing contact READS. Durable manners keep their own verb (correctly
-# inflected -- the old renderer emitted "press" and "kiss" bare to dodge
-# "presss"); a momentary one renders as the touch it left behind.
+# How a standing contact READS, as (singular subject, plural subject). Durable
+# manners keep their own verb (correctly inflected -- the old renderer emitted
+# "press" and "kiss" bare to dodge "presss"); a momentary one renders as the
+# touch it left behind. The pair is needed because the subject is usually a
+# BODY PART, and body parts are routinely plural: "her fingers is against" is
+# what a single form produces.
 _CONTACT_STATE_VERBS = {
-    "touch": "is against", "hold": "holds", "grip": "grips",
-    "press": "presses against", "rest": "rests against",
-    "lean": "leans against", "wrap": "is wrapped around",
-    "coil": "is coiled around", "straddle": "straddles", "pin": "pins",
-    "carry": "carries", "support": "supports",
+    "touch": ("is against", "are against"),
+    "hold": ("holds", "hold"),
+    "grip": ("grips", "grip"),
+    "press": ("presses against", "press against"),
+    "rest": ("rests against", "rest against"),
+    "lean": ("leans against", "lean against"),
+    "wrap": ("is wrapped around", "are wrapped around"),
+    "coil": ("is coiled around", "are coiled around"),
+    "straddle": ("straddles", "straddle"),
+    "pin": ("pins", "pin"),
+    "carry": ("carries", "carry"),
+    "support": ("supports", "support"),
 }
-_CONTACT_RESIDUE_VERB = "is against"
+_CONTACT_RESIDUE_VERB = ("is against", "are against")
+
+# Parts that end in `s` while naming one thing. Everything else ending in `s`
+# is taken as plural, which is right far more often than not for anatomy.
+_SINGULAR_S_PARTS = frozenset({"abs", "iris", "solar plexus", "biceps",
+                               "triceps", "forceps"})
+
+
+def _part_is_plural(part: str) -> bool:
+    part = str(part or "").strip().casefold()
+    return bool(part) and part.endswith("s") and part not in _SINGULAR_S_PARTS
 
 # A momentary contact is over the moment the story moves on, so it retires on
 # the very next beat that says anything about contact at all -- one evidence
@@ -2370,7 +2390,7 @@ def contacts_of(scene: dict, name: str) -> list:
     return out
 
 
-def contact_phrase(contact: dict, *, subject_first=True) -> str:
+def contact_phrase(contact: dict, *, subject_first=True, you=None) -> str:
     """One STANDING contact as a plain clause -- state, never event.
 
     'Bramwell's hand grips Hinami's waist'. Every consumer of this phrase
@@ -2384,6 +2404,13 @@ def contact_phrase(contact: dict, *, subject_first=True) -> str:
     Measured live, before this: a forehead kiss from four beats earlier was
     still rendered in the active present into a perceiver's view, and the
     character answered it as a live advance.
+
+    `you` names the observer this phrase is FOR, when there is one. Their side
+    renders in the second person ("your palm presses against her sternum"),
+    because handing a perceiver a third-person clause about their own body --
+    naming them canonically, in a view that must be written as "you" -- is the
+    same objective-state-into-a-subjective-context pattern the engine forbids
+    everywhere else, and it invites exactly the person drift it sounds like.
     """
     if not isinstance(contact, dict):
         return ""
@@ -2395,19 +2422,31 @@ def contact_phrase(contact: dict, *, subject_first=True) -> str:
     actor_part = str(contact.get("actor_part") or "").strip()
     target_part = str(contact.get("target_part") or "").strip()
 
-    left = f"{actor}'s {actor_part}" if actor_part else actor
-    right = f"{target}'s {target_part}" if target_part else target
+    observer = str(you or "").strip().casefold()
+    actor_is_you = bool(observer) and actor.casefold() == observer
+    target_is_you = bool(observer) and target.casefold() == observer
+
+    def _side(who, part, is_you):
+        if is_you:
+            return f"your {part}" if part else "you"
+        return f"{who}'s {part}" if part else who
+
+    left = _side(actor, actor_part, actor_is_you)
+    right = _side(target, target_part, target_is_you)
     if not subject_first:
         return f"{right} is under {left} ({manner})"
+    # "You" always takes the plural verb form ("you are", "you hold"), and a
+    # bare name the singular; with a part, the part decides.
+    plural = _part_is_plural(actor_part) if actor_part else actor_is_you
     if manner in _MOMENTARY_SET:
-        verb = _CONTACT_RESIDUE_VERB
+        verb = _CONTACT_RESIDUE_VERB[plural]
     elif manner in _CONTACT_STATE_VERBS:
-        verb = _CONTACT_STATE_VERBS[manner]
+        verb = _CONTACT_STATE_VERBS[manner][plural]
     else:
         # Outside both vocabularies the fiction is on its own: inflect only
         # when the model has not already done it ("throttles" must not become
-        # "throttleses").
-        verb = manner if manner.endswith("s") else f"{manner}s"
+        # "throttleses"), and never for a plural subject.
+        verb = manner if (plural or manner.endswith("s")) else f"{manner}s"
     return f"{left} {verb} {right}"
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import deque
 
 from affect import (CRISIS_STRAIN_MIN, INTENT_DORMANT_AFTER,
@@ -124,6 +125,53 @@ def _recent_self_lines(chat_id, char_name, current_turn_idx, n_turns=6, cap=6,
                     lines.append({"turn": r["idx"], "said": quote})
     lines.sort(key=lambda x: x["turn"])
     return lines[-cap:]
+
+
+# Repeated letters collapse so "Mmm" and "Mmmm" are one opener, which is
+# exactly the kind of near-miss a model uses to feel like it varied.
+_REFRAIN_RUN_RE = re.compile(r"(.)\1{2,}")
+_REFRAIN_WORD_RE = re.compile(r"[a-z']+")
+_REFRAIN_MIN_LINES = 3
+
+
+def _self_line_tokens(line):
+    return _REFRAIN_WORD_RE.findall(
+        _REFRAIN_RUN_RE.sub(r"\1\1", str(line or "").lower()))
+
+
+def _self_line_refrain(lines):
+    """The SHAPE this character's recent lines keep reusing, or None.
+
+    AVOID SELF-REPETITION in the character prompt targets repeated content,
+    and explicitly exempts a consistent register -- rightly, since a character
+    who says "pet" is being themselves. But that exemption is a hole a
+    template walks straight through: measured live, one character opened nine
+    consecutive lines the same way and closed six of eight the same way, with
+    genuinely fresh content in between every time. Each line passed the
+    content test; the effect on the page was a stuck record, and it got worse
+    when the window widened, because more examples of a skeleton read as
+    stronger evidence of the register the rule blesses.
+
+    So the skeleton is computed here rather than left to the model to notice
+    about itself: the first and last significant word of each line, reported
+    when one recurs across at least `_REFRAIN_MIN_LINES` of them and at least
+    half. Deterministic, and stated read-side -- it names the pattern and
+    leaves what to do about it to the character.
+    """
+    tokenized = [t for t in (_self_line_tokens(x.get("said") if isinstance(x, dict)
+                                               else x) for x in (lines or [])) if t]
+    if len(tokenized) < _REFRAIN_MIN_LINES:
+        return None
+    total = len(tokenized)
+    out = {}
+    for slot, index in (("opening", 0), ("closing", -1)):
+        counts = {}
+        for t in tokenized:
+            counts[t[index]] = counts.get(t[index], 0) + 1
+        word, hits = max(counts.items(), key=lambda kv: (kv[1], kv[0]))
+        if hits >= _REFRAIN_MIN_LINES and hits * 2 >= total:
+            out[slot] = {"word": word, "lines": hits, "of": total}
+    return out or None
 
 
 def _known_pronouns(cast, persona, recognized, exclude=None):
@@ -1565,6 +1613,8 @@ def character_step(ctx, cid, nonce):
          if isinstance(p, dict)}
         | {str(i.get("id") or "") for i in (_interior.get("intentions") or [])
            if isinstance(i, dict)}) - {""}
+    _self_lines = _recent_self_lines(
+        chat.id, character_name(sh), ctx.turn.idx, frame_id=ctx.turn.frame_id)
     _self = {
         "entity_id": f"character:{cid}",
         "name": character_name(sh),
@@ -1588,9 +1638,11 @@ def character_step(ctx, cid, nonce):
         "interoception": character_interoception(sh),
         "abilities": character_abilities(sh),
         "attire": sc.get("attire", {}).get(character_name(sh)),
-        "recent_self_lines": _recent_self_lines(
-            chat.id, character_name(sh), ctx.turn.idx,
-            frame_id=ctx.turn.frame_id),
+        "recent_self_lines": _self_lines,
+        # The SHAPE those lines keep reusing, computed rather than left to the
+        # character to notice about itself -- see _self_line_refrain. Absent
+        # when there is no template, so its presence is the whole signal.
+        "recent_self_refrain": _self_line_refrain(_self_lines),
         # Tier-2 goal hierarchy: the character's AUTHORED standing intentions
         # (its defining goals, always present so it acts proactively) merged
         # with EMERGENT intentions formed at runtime via intent_ops. An emergent

@@ -697,7 +697,7 @@ class TestAnActIsNotAState:
     def test_a_momentary_manner_renders_as_the_touch_it_left(self):
         assert contact_phrase(_hold(actor_part="lips", target_part="forehead",
                                     manner="kiss")) == (
-            "Bramwell's lips is against Hinami's forehead")
+            "Bramwell's lips are against Hinami's forehead")
 
     def test_a_durable_manner_keeps_its_own_verb(self):
         assert contact_phrase(_hold(manner="rest")) == (
@@ -756,3 +756,51 @@ class TestAnActIsNotAState:
         assert contact_is_momentary(_hold(manner="rest")) is False
         assert contact_is_momentary({}) is False
         assert contact_is_momentary(None) is False
+
+
+class TestStandingContactIsWrittenForItsReader:
+    """The clause goes into a perceiver's own payload, where that perceiver is
+    "you". Handing them a third-person sentence naming themselves canonically
+    is the objective-state-into-a-subjective-context pattern the engine
+    forbids elsewhere, and it invites the person drift it sounds like. Body
+    parts are also routinely plural, which one verb form cannot serve."""
+
+    def test_the_observers_own_side_is_second_person(self):
+        assert contact_phrase(_hold(actor_part="palm", target_part="sternum",
+                                    manner="press"), you="Hinami") == (
+            "Bramwell's palm presses against your sternum")
+        assert contact_phrase(_hold(actor_part="palm", target_part="sternum",
+                                    manner="press"), you="Bramwell") == (
+            "your palm presses against Hinami's sternum")
+
+    def test_a_bare_name_becomes_you_and_takes_the_plural_verb(self):
+        assert contact_phrase(_hold(actor_part="", target_part="",
+                                    manner="hold"), you="Bramwell") == (
+            "you hold Hinami")
+
+    def test_no_observer_keeps_the_third_person(self):
+        assert contact_phrase(_hold(manner="rest")) == (
+            "Bramwell's hand rests against Hinami's waist")
+
+    def test_a_plural_body_part_takes_a_plural_verb(self):
+        assert contact_phrase(_hold(actor_part="fingers", manner="touch")) == (
+            "Bramwell's fingers are against Hinami's waist")
+        assert contact_phrase(_hold(actor_part="thighs", manner="rest")) == (
+            "Bramwell's thighs rest against Hinami's waist")
+
+    def test_a_singular_part_ending_in_s_is_not_mistaken_for_plural(self):
+        assert contact_phrase(_hold(actor_part="solar plexus",
+                                    manner="press")) == (
+            "Bramwell's solar plexus presses against Hinami's waist")
+
+    def test_an_unknown_manner_is_not_double_inflected_for_either_number(self):
+        assert contact_phrase(_hold(actor_part="hand", manner="throttles")) == (
+            "Bramwell's hand throttles Hinami's waist")
+        assert contact_phrase(_hold(actor_part="hands", manner="throttle")) == (
+            "Bramwell's hands throttle Hinami's waist")
+
+    def test_an_unknown_observer_name_changes_nothing(self):
+        plain = contact_phrase(_hold())
+        assert contact_phrase(_hold(), you="Somebody Else") == plain
+        assert contact_phrase(_hold(), you="") == plain
+        assert contact_phrase(_hold(), you=None) == plain
