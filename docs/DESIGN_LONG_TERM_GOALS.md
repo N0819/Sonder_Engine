@@ -84,6 +84,53 @@ different *kind* (one about the world, one about the self), or whether two
 of a kind is allowed. Two spatial projects at once may simply reproduce the
 oscillation this tier exists to fix.
 
+## Decay should be reasoned, not silent
+
+This applies to ordinary intentions too, not only to projects, and it may be
+the more valuable half.
+
+Today decay is bookkeeping. `affect.py`:
+
+```
+_INTENT_DORMANT_AFTER = 30    # turns without progress -> dormant
+_INTENT_STALL_AFTER   = 2     # barren attempts at full progress -> dormant
+```
+
+When either trips, `intent["status"]` is set to `dormant` and the reason is
+appended to a `warnings` list — which is **log output**. The character is
+never told. The aim stops steering and nothing in their mind records that it
+stopped, or why.
+
+So a character cannot think *"this isn't working out."* They can only
+discover, some beats later, that they no longer want something. That is
+precisely the shape of the A11/A12 failure: a courier walked sixteen optimal
+rooms to the shrine's threshold and turned away, because the goal underneath
+had been spent by a sweep he was never party to.
+
+The decay itself is right — an aim yielding nothing for thirty turns SHOULD
+lose its grip, and a character who never gives up is not a character. What
+is wrong is that the giving-up happens *to* them rather than *by* them.
+
+Proposed shape, the same legible-not-silent move used for
+`ground_fully_known` and `en_route`:
+
+- As an intention approaches decay, surface the fact in the payload rather
+  than flipping the status underneath: *this aim has returned nothing for N
+  beats.*
+- Let the character answer it. Renew it, revise it into something narrower,
+  or abandon it **with a stated reason** — which is the self-revision they
+  currently cannot perform at all.
+- Only sweep silently as a backstop, when the character has been offered the
+  question and has not answered it.
+- Revisit the constants once the question exists. Thirty turns is short for
+  an aim a character would describe as theirs, and two barren attempts is
+  very short; but a longer fuse is only safe if the character can see it
+  burning.
+
+Open: whether a renewed intention should cost something, so that renewal is
+a decision rather than a reflex. Without a cost, "renew" is always the
+cheapest answer and nothing is ever given up.
+
 ## Relationship to work in flight
 
 `en_route` (see `agents/character.py`, payload) is the same missing axis at
