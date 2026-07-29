@@ -157,13 +157,37 @@ These are architectural guarantees, not stylistic preferences.
   `theory_of_mind.belief_credence`, and `search_memories` ranks on it. A belief
   they have since explained away is pushed toward a floor rather than erased --
   they can still recall having held it, it just no longer outranks what replaced
-  it. Reconciliation reads ONLY that character's own memory rows and own
+  it. **Aged out is not explained away.** `mind_models` is a small working set
+  (per-kind half-lives, per-entity capacity, pruning at the floor) while the
+  memory bank is an archive, so "no surviving hypothesis carries this claim"
+  is usually expiry, not revision -- the demotion is therefore a ONE-SHOT,
+  idempotent re-anchoring to a fraction of the mint-time confidence
+  (recovered from `salience = 0.45 + 0.3*confidence`), never a compounding
+  per-turn decay; a still-stored hypothesis's credence is floored at that same
+  resting place so held >= abandoned always. A compounding decay was measured
+  (2026-07-29) crushing 76-80% of a long chat's entire inference bank to the
+  floor within 7-18 played turns, removing inferences from recall wholesale.
+  Reconciliation reads ONLY that character's own memory rows and own
   mind_models: it must never consult the objective record or ask whether a belief
   was TRUE, because a character revises from what they later perceived, and
   grading beliefs against reality collapses the belief layer into the truth
   layer. `salience` is deliberately untouched (how much it mattered when formed,
   which drives consolidation) as distinct from `confidence` (how much they credit
-  it now).
+  it now) -- and it is also what makes the mint confidence reconstructible.
+- **Unbidden recall says "here is something else you own."** The repetition
+  mechanisms (refrain skeleton, verbatim-repeat rewrite, plateau habituation)
+  all say "not that"; `memory.contrast_memory` +
+  `agents/character.py` (`_unbidden_trigger`) surface at most ONE
+  high-salience memory DISSIMILAR to the current beat into a measurably stuck
+  character's memory context, keyed `surfaces_unbidden.it_comes_back_to_me`
+  so the field itself says it arrived on its own. Same epistemic envelope as
+  ordinary recall (own rows, turn cutoff, frame filter), deliberately
+  confidence-blind, a pure read (never `access_count`), substituting for one
+  of the ordinary recall slots so the payload budget is constant.
+  Deterministically edge-triggered with cooldown and two-strikes suppression;
+  commit is the sole writer of the `cstate.unbidden` ledger. Absorption at
+  the place-recall-zero tier, an open drive-rupture window, or a gated mind
+  suppress it outright -- engine-crisis machinery outranks texture.
 - The stored events row is omniscient (for the author/audit trail). `recent_events`/`recent_events_for_observer` in `scene.py` scrub concealed content off the path that feeds mapping's lore query, and `director_context(entitled=False)` scrubs the path that feeds `mapping_stage` (X18 closed). The Director stays entitled to omniscience — it owns objective causality and cannot resolve a beat it may not see; mapping is not, because it emits lore and `scene_patch` room notes that reach every perceiver.
 - Entity state blobs referencing concealed actors are withheld at commit time — the entity's state is only updated when overtly perceived.
 - Portal states for rooms the player cannot see are withheld from the narrator payload.

@@ -158,3 +158,60 @@ def test_episode_does_not_append_dialogue_again(
 
     assert len(promises) == 1
     assert promises[0]["gist"] == "a voice: I promise I will return."
+
+def test_embedding_fallback_is_surfaced_as_a_warning(temp_db):
+    """A missing embeddings provider silently downgrades every stored vector
+    to the local character-trigram hash. The downgrade was recorded on the
+    EmbeddingBatch and read by nobody -- an audited live corpus had 100% of
+    rows on the fallback with no signal anywhere. prepare_memory_commit must
+    say so through the same warning channel every other turn anomaly uses."""
+    import commit
+
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Test", "", time.time()),
+    )
+    sheet = default_character_data("Alice")
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        ("Alice", json.dumps(sheet), "{}", time.time(), "char_alice"),
+    )
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+        (chat_id, char_id, "active", "{}"),
+    )
+    temp_db.wset(chat_id, "scene", {
+        "rooms": {"kitchen": {"name": "Kitchen"}},
+        "positions": {"Alice": "kitchen"},
+        "entities": {}, "attire": {}, "overlays": {},
+    })
+    cast = temp_db.q(
+        "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
+        (chat_id,),
+    )
+    turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (chat_id, 1, "test", time.time()),
+    )
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Test", persona_id=None,
+                      lorebook_id=None, scenario="", created=time.time()),
+        turn=TurnData(id=turn_id, chat_id=chat_id, idx=1,
+                      player_input="test", created=time.time()),
+        cast=cast,
+        input="test",
+    )
+    ctx.director_resolve = {
+        "summary": "", "resolved_event": "", "dialogue_log": []}
+    ctx.perception_outcome = {
+        "views": {str(char_id): "The kettle boils over on the stove."}}
+
+    # No embeddings provider is configured in a temp DB, so the batch embeds
+    # through the deterministic local fallback.
+    prepared = commit.prepare_memory_commit(ctx)
+
+    assert prepared["memory_batch"]["prepared"], "a view must mint a memory"
+    assert getattr(prepared["memory_batch"]["embedded"], "fallback", False)
+    assert any("embeddings" in w for w in ctx.warnings), ctx.warnings

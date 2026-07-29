@@ -106,6 +106,85 @@ def test_commit_memories_reinforces_existing_mind_model(temp_db, monkeypatch):
         "new value the way the old max()-only merge did"
     )
 
+def test_place_claim_memory_and_hypothesis_share_one_subject_key(temp_db):
+    """A claim about a PLACE is re-keyed onto that place before ANYTHING reads
+    it -- including the inference-memory mint. Minting from the raw updates
+    while merging the rekeyed ones stamped the memory's entities[0] with a
+    subject that never exists in mind_models, so
+    reconcile_inference_confidence could never find the live hypothesis and
+    demoted the row as abandoned from the moment it was formed."""
+    import commit
+    from theory_of_mind import belief_credence
+
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Test", "", time.time()),
+    )
+    sheet = default_character_data("Mara")
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        ("Mara", json.dumps(sheet), "{}", time.time(), "char_mara"),
+    )
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+        (chat_id, char_id, "active", "{}"),
+    )
+    temp_db.wset(chat_id, "scene", {
+        "rooms": {"lamp_room": {"name": "Lamp Room"}},
+        "positions": {"Mara": "lamp_room"},
+        "entities": {}, "attire": {}, "overlays": {},
+    })
+    cast = temp_db.q(
+        "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
+        (chat_id,),
+    )
+    turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (chat_id, 1, "test", time.time()),
+    )
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Test", persona_id=None, lorebook_id=None,
+                      scenario="", created=time.time()),
+        turn=TurnData(id=turn_id, chat_id=chat_id, idx=1, player_input="test",
+                      created=time.time()),
+        cast=cast,
+        input="test",
+    )
+    ctx.director_resolve = {"summary": "", "resolved_event": "", "dialogue_log": []}
+    claim = "the Lamp Room floor is scorched near the door"
+    ctx.character_results = {
+        char_id: {
+            "sequence": [],
+            "mind_model_updates": [{
+                "about_entity": "this floor of the lighthouse",
+                "kind": "stated_fact", "claim": claim,
+                "confidence": 0.8, "evidence": [],
+            }],
+        }
+    }
+
+    prepared = commit.prepare_memory_commit(ctx)
+
+    minted = [m for m in prepared["memory_batch"]["prepared"]
+              if m["kind"] == "inference"]
+    assert len(minted) == 1
+    assert minted[0]["entities"][0] == "Lamp Room", (
+        "the inference memory must carry the REKEYED place subject, not the "
+        "raw umbrella entity"
+    )
+    state = next(json.loads(s) for c, cc, s in prepared["state_updates"]
+                 if cc == char_id)
+    assert "Lamp Room" in (state.get("mind_models") or {}), (
+        "the hypothesis must be stored under the same place key"
+    )
+    # The coherence the ordering exists for: reconciliation resolves the
+    # memory's subject+claim to the LIVE hypothesis.
+    assert belief_credence(state, minted[0]["entities"][0],
+                           minted[0]["gist"], 1) is not None
+
+
 def test_character_payload_surfaces_competing_hypotheses(temp_db):
     import agents.character as character_mod
 

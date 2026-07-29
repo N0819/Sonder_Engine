@@ -29,7 +29,9 @@ from character_schema import (
 from frames import is_recognized_in_frame
 from memory import (
     build_character_memory_context,
+    contrast_memory,
     knowledge_for_character,
+    provenance_context_label,
     relationships_for_payload,
 )
 from prompts import get_prompt
@@ -224,6 +226,118 @@ def _first_verbatim_repeat(new_texts, recent_texts):
             if len(shingles & prev_shingles) >= 2:
                 return original
     return None
+
+
+# ---- Unbidden recall: one contrasting memory for a measurably stuck mind ----
+#
+# The three repetition mechanisms above (`recent_self_lines`, the refrain
+# skeleton, the verbatim-repeat rewrite) all say "not that". This is the one
+# mechanism that says "here is something else you own": when the SAME
+# deterministic signals that measure stuck-ness fire, exactly one high-salience
+# memory DISSIMILAR to the current beat is surfaced into the memory context,
+# marked as arriving on its own (`it_comes_back_to_me`), substituting for one
+# ordinary recall slot so the payload budget stays constant. What to do with
+# it -- or whether to ignore it -- stays the character's, the recalled_places
+# contract: the option must exist, the refusal may be theirs.
+
+# Beats that must pass after an injection before another may fire.
+_UNBIDDEN_COOLDOWN_BEATS = 5
+# Above this absorption the mind has no room for reminiscence -- the same
+# tier where _recall_cap grants place-recall zero slots. A long PLATEAU
+# habituates absorption back under this bar (psychology_runtime), so the
+# stuck-and-saturated case this exists for regains eligibility on its own.
+_UNBIDDEN_ABSORPTION_CEILING = 0.85
+# Bodily plateau length that reads as stuck (the measured live case: a
+# sustained stimulus with zero new wants across this many beats).
+_UNBIDDEN_PLATEAU_BEATS = 3
+
+
+def _unbidden_trigger(stored_state, active_annotated, refrain, turn_idx,
+                      absorption):
+    """(stuck_reason or None, fire: bool) -- fully deterministic, no model.
+
+    Edge-triggered with hysteresis: after an injection the trigger must have
+    been observed CLEAR before it may fire again (`clear_seen`), on top of a
+    flat cooldown -- a level-triggered version would re-fire every beat of a
+    long stuck stretch and become wallpaper. Two consecutive injections that
+    measurably helped nothing set `suppressed` (commit's ledger), because a
+    character stuck for a reason contrast cannot reach -- usually the scene
+    itself offering nothing -- should stop receiving reminiscence and let the
+    real cause surface. Engine-crisis machinery outranks texture: an open
+    drive-rupture window suppresses unconditionally, and an awareness-gated
+    mind never reaches this code because it runs no character step at all.
+    """
+    st = stored_state if isinstance(stored_state, dict) else {}
+    active = active_annotated if isinstance(active_annotated, dict) else {}
+    ledger = st.get("unbidden") if isinstance(st.get("unbidden"), dict) else {}
+    hedonic = active.get("hedonic") if isinstance(active.get("hedonic"), dict) else {}
+    reason = None
+    if refrain:
+        reason = "refrain"
+    elif ledger.get("repeat_flag"):
+        reason = "verbatim_repeat"
+    elif active.get("goal_held"):
+        reason = "goal_held"
+    else:
+        try:
+            if float(hedonic.get("sustained_beats") or 0.0) \
+                    >= _UNBIDDEN_PLATEAU_BEATS:
+                reason = "plateau"
+        except (TypeError, ValueError):
+            pass
+    if not reason:
+        return None, False
+    if absorption >= _UNBIDDEN_ABSORPTION_CEILING:
+        return reason, False
+    interior = st.get("interior") if isinstance(st.get("interior"), dict) else {}
+    rupture = interior.get("drive_rupture")
+    if isinstance(rupture, dict):
+        try:
+            if int(turn_idx) <= int(rupture.get("window_expires") or -1):
+                return reason, False
+        except (TypeError, ValueError):
+            pass
+    if ledger.get("suppressed"):
+        return reason, False
+    last = ledger.get("last_turn")
+    if isinstance(last, int):
+        if turn_idx - last <= _UNBIDDEN_COOLDOWN_BEATS:
+            return reason, False
+        if not ledger.get("clear_seen"):
+            return reason, False
+    return reason, True
+
+
+def _unbidden_entry(mem, turn_idx):
+    """The payload shape: the KEY carries the epistemic status (the
+    `i_suspect` precedent) -- this arrived on its own and answers no question
+    the character asked. Gist only, provenance in the same three labels the
+    summary scopes already teach, no id, no score, no instruction."""
+    entry = {
+        "it_comes_back_to_me": mem.get("gist") or "",
+        "from": provenance_context_label(mem.get("provenance")),
+    }
+    ti = mem.get("turn_idx")
+    if isinstance(ti, int) and isinstance(turn_idx, int) and turn_idx > ti:
+        entry["when"] = f"about {turn_idx - ti} beats ago"
+    if str(mem.get("location") or "").strip():
+        entry["where"] = str(mem["location"]).strip()
+    return entry
+
+
+def _attach_unbidden(memory_context, entry, recall_limit=8):
+    """Substitute, never add: the unbidden entry pays for itself out of the
+    ordinary recall budget, so total recalled material per payload is
+    constant. When recall came back under budget it simply takes the spare
+    slot; when full, the lowest-ranked ordinary recall yields."""
+    if not isinstance(memory_context, dict):
+        return
+    recalled = list(memory_context.get("recalled_old_memories") or [])
+    if len(recalled) >= recall_limit:
+        drop = min(recalled, key=lambda m: float(m.get("score") or 0.0))
+        recalled = [m for m in recalled if m is not drop]
+        memory_context["recalled_old_memories"] = recalled
+    memory_context["surfaces_unbidden"] = entry
 
 
 def _known_pronouns(cast, persona, recognized, exclude=None):
@@ -1533,12 +1647,58 @@ def character_step(ctx, cid, nonce):
     # Resolved before the memory context, not after: where the character is
     # standing is a retrieval cue, and the recall is built here.
     char_room = character_room(sc, sh)
+    stored_state = json.loads(row["cstate"] or "{}")
+    # How much of this mind its own body currently has. Own interoceptive state
+    # only -- another character's pain is never an input to this character's
+    # cognition (see AGENTS.md's own-body isolation rule). Resolved up here
+    # because both the hypothesis sheet below and the unbidden-recall trigger
+    # read it.
+    absorption = cognitive_absorption(
+        (active or {}).get("hedonic"), (active or {}).get("stress"))
+    _interior = stored_state.get("interior") or {}
+    # The goal slot's currency, resolved once and reused: the trigger below
+    # and the `_self` payload must judge the SAME annotated goal, or the
+    # payload argues with itself. His own node names for display (the closed
+    # vocabulary the stamp was resolved over -- never the scene's), and the
+    # ids of his live intentions and projects, whose service suppresses the
+    # tenure marker.
+    _node_names = {
+        str(rid): str((rec or {}).get("name") or rid)
+        for rid, rec in (((stored_state.get("place_graph") or {})
+                          .get("nodes")) or {}).items()
+        if isinstance(rec, dict)}
+    _governed_ids = (
+        {str(p.get("id") or "") for p in (_interior.get("projects") or [])
+         if isinstance(p, dict)}
+        | {str(i.get("id") or "") for i in (_interior.get("intentions") or [])
+           if isinstance(i, dict)}) - {""}
+    _active_annotated = _annotate_goal_currency(
+        active, ctx.turn.idx, _node_names, _governed_ids)
+    _self_lines = _recent_self_lines(
+        chat.id, character_name(sh), ctx.turn.idx, frame_id=ctx.turn.frame_id)
+    _refrain = _self_line_refrain(_self_lines)
+    _here_name = (sc.get("rooms") or {}).get(char_room, {}).get("name") \
+        or char_room
+    # Unbidden recall, decided BEFORE the memory context is built and entirely
+    # deterministically: a measurably stuck mind gets one contrasting memory
+    # of its own surfaced into that context (see _unbidden_trigger).
+    # A dialogue micro-round is not a new beat: if an earlier round of this
+    # SAME turn already fired (its result is merged latest-probe-wins), this
+    # round must not fire a second intrusion -- the prior round's outcome is
+    # carried forward onto this round's probe below instead.
+    _prior_probe = ((getattr(ctx, "character_results", None) or {})
+                    .get(cid) or {}).get("unbidden_probe")
+    _prior_probe = _prior_probe if isinstance(_prior_probe, dict) else {}
+    _unbidden_reason, _unbidden_fire = _unbidden_trigger(
+        stored_state, _active_annotated, _refrain, ctx.turn.idx, absorption)
+    if _prior_probe.get("fired"):
+        _unbidden_fire = False
     memory_context = build_character_memory_context(
         chat_id=chat.id, char_id=cid,
         current_turn_idx=ctx.turn.idx,
         current_view=view or "",
         active_state=active,
-        here=(sc.get("rooms") or {}).get(char_room, {}).get("name") or char_room,
+        here=_here_name,
         # Rooms currently in sight are cues too. Recalling what happened where
         # you STAND tells you where you are; recalling it about a room you can
         # SEE tells you whether to go there -- which is the decision actually
@@ -1549,9 +1709,32 @@ def character_step(ctx, cid, nonce):
             if isinstance(item, dict)
         ] if char_room else None,
     )
+    _unbidden_mem_id = None
+    if _unbidden_fire:
+        # Everything already in mind is excluded -- the recent buffer, this
+        # beat's ordinary recall, and the ledger of recently intruded rows
+        # (a memory that returns every few beats is a haunting, which is an
+        # authored effect, not a fallback behavior).
+        _in_mind = {m.get("id") for m in
+                    (memory_context.get("recent_episodes") or [])}
+        _in_mind |= {m.get("id") for m in
+                     (memory_context.get("recalled_old_memories") or [])}
+        _in_mind |= {i for i in
+                     ((stored_state.get("unbidden") or {}).get("recent_ids")
+                      or [])}
+        _contrast = contrast_memory(
+            chat.id, cid,
+            " ".join(p for p in (
+                view or "", str((active or {}).get("goal") or ""),
+                str((active or {}).get("mood") or "")) if p),
+            ctx.turn.idx, here=_here_name,
+            exclude_ids=[i for i in _in_mind if i is not None])
+        if _contrast:
+            _unbidden_mem_id = _contrast[0]["id"]
+            _attach_unbidden(
+                memory_context, _unbidden_entry(_contrast[0], ctx.turn.idx))
     known_tags, excl_titles = _char_known_tags(sh)
     knowledge = knowledge_for_character(_books(ctx), char_room, known_tags, excl_titles)
-    stored_state = json.loads(row["cstate"] or "{}")
 
     _interp = _dict(ctx.director_interpret)
     _flow = _dict(_interp.get("flow"))
@@ -1566,11 +1749,6 @@ def character_step(ctx, cid, nonce):
         stored_state.get("mind_models") or {}, ctx.turn.idx,
         elapsed_seconds=(_sim_clock or {}).get("elapsed_seconds"),
     )
-    # How much of this mind its own body currently has. Own interoceptive state
-    # only -- another character's pain is never an input to this character's
-    # cognition (see AGENTS.md's own-body isolation rule).
-    absorption = cognitive_absorption(
-        (active or {}).get("hedonic"), (active or {}).get("stress"))
     # The stable sheet is SELECTED at commit (where the reconciled beliefs and
     # the settled end-of-beat body state both exist) and simply read here, so
     # what the character holds in mind this turn is what they came out of the
@@ -1605,7 +1783,8 @@ def character_step(ctx, cid, nonce):
             if is_recognized_in_frame(name_to_id.get(name, -1), frame_id)
         }
 
-    _interior = stored_state.get("interior") or {}
+    # _interior was resolved above, before the memory context, where the
+    # unbidden-recall trigger also reads it.
     _psych = character_psychology(sh)
     # Tier-1: show the EFFECTIVE (possibly rupture-shifted) drive, read-only.
     _psych["drive"] = effective_drive(_psych, _interior)
@@ -1651,22 +1830,9 @@ def character_step(ctx, cid, nonce):
     _goal_destination = _destination_from_goals(
         stored_state, stored_state.get("place_graph") or {},
         here_rid=char_room, now_turn=getattr(ctx, "turn_idx", None))
-    # The goal slot's currency, read back beside the goal itself: his own
-    # node names for display (the same closed vocabulary the stamp was
-    # resolved over -- never the scene's), and the ids of his live
-    # intentions and projects, whose service suppresses the tenure marker.
-    _node_names = {
-        str(rid): str((rec or {}).get("name") or rid)
-        for rid, rec in (((stored_state.get("place_graph") or {})
-                          .get("nodes")) or {}).items()
-        if isinstance(rec, dict)}
-    _governed_ids = (
-        {str(p.get("id") or "") for p in (_interior.get("projects") or [])
-         if isinstance(p, dict)}
-        | {str(i.get("id") or "") for i in (_interior.get("intentions") or [])
-           if isinstance(i, dict)}) - {""}
-    _self_lines = _recent_self_lines(
-        chat.id, character_name(sh), ctx.turn.idx, frame_id=ctx.turn.frame_id)
+    # _node_names, _governed_ids, _self_lines and the annotated goal currency
+    # were all resolved above, before the memory context -- the unbidden
+    # trigger and this payload must judge the SAME annotated goal.
     _self = {
         "entity_id": f"character:{cid}",
         "name": character_name(sh),
@@ -1682,8 +1848,7 @@ def character_step(ctx, cid, nonce):
         # claim is spent and no longer routes), `goal_held` when the same
         # room-less words have held the slot past the tenure threshold
         # while serving nothing governed. See _annotate_goal_currency.
-        "active_state": _annotate_goal_currency(
-            active, ctx.turn.idx, _node_names, _governed_ids),
+        "active_state": _active_annotated,
         "voice": character_voice(sh),
         "senses": senses_as_text(character_senses(sh)),
         "sense_profile": character_senses(sh),
@@ -1694,7 +1859,7 @@ def character_step(ctx, cid, nonce):
         # The SHAPE those lines keep reusing, computed rather than left to the
         # character to notice about itself -- see _self_line_refrain. Absent
         # when there is no template, so its presence is the whole signal.
-        "recent_self_refrain": _self_line_refrain(_self_lines),
+        "recent_self_refrain": _refrain,
         # Tier-2 goal hierarchy: the character's AUTHORED standing intentions
         # (its defining goals, always present so it acts proactively) merged
         # with EMERGENT intentions formed at runtime via intent_ops. An emergent
@@ -1970,6 +2135,7 @@ def character_step(ctx, cid, nonce):
     # returned it word for word. ONE rewrite, naming the line; if the second
     # draft still repeats we keep it and warn rather than lose the beat, since
     # a character who says nothing is worse than one who says it twice.
+    _repeat_survived = False
     _repeated = _first_verbatim_repeat(
         _speech_texts(out), [str(l.get("said") or "") for l in (_self_lines or [])])
     if _repeated:
@@ -1994,6 +2160,11 @@ def character_step(ctx, cid, nonce):
             ctx.add_warning(
                 f"character {character_name(sh)}: reissued its own earlier "
                 f"line after a rewrite -- {_repeated[:80]!r}")
+            # Known only HERE, after the model call, so it cannot trigger
+            # anything this beat -- commit persists it on the unbidden ledger
+            # (cstate.unbidden.repeat_flag) and the NEXT beat's trigger reads
+            # it as a stuck signal.
+            _repeat_survived = True
         else:
             out = _retry
 
@@ -2021,4 +2192,23 @@ def character_step(ctx, cid, nonce):
         out.get("sequence"), f"turn:{ctx.turn.id}:character:{cid}")
     out["name"] = character_name(sh)
     out["char_id"] = cid
+    # Unbidden-recall telemetry, riding the step output the same way name/
+    # char_id do: the stage proposes, commit persists (the cstate.unbidden
+    # ledger). No durable write happens here -- the character stage stays
+    # read-only, which search_memories' own mid-pipeline access_count update
+    # regrettably does not, and this code must not copy that.
+    # An earlier micro-round's injection and repeat-screen outcome are carried
+    # forward, because _merge_character_results keeps the LATEST probe: the
+    # last round's probe must therefore tell the whole beat's story.
+    out["unbidden_probe"] = {
+        "stuck": bool(_unbidden_reason),
+        "trigger": _unbidden_reason or "",
+        "fired": (_unbidden_mem_id is not None
+                  or bool(_prior_probe.get("fired"))),
+        "memory_id": (_unbidden_mem_id
+                      if _unbidden_mem_id is not None
+                      else _prior_probe.get("memory_id")),
+        "repeat_survived": (_repeat_survived
+                            or bool(_prior_probe.get("repeat_survived"))),
+    }
     return out
