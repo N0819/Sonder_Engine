@@ -743,6 +743,46 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     dead_ends = {str(r) for r in (known_dead_ends or []) if r} | {
         str(r) for r, n in g_nodes.items()
         if isinstance(n, dict) and n.get("closed")}
+    # THE GLOBAL FACT the per-branch markers cannot state: does ANY doorway
+    # anywhere in his own map still lead to ground he has not walked?
+    # `no_new_ground_that_way` is a comparative claim -- "this branch is
+    # exhausted" is only information while some other branch is not -- and
+    # when the whole map is walked it degrades into the same discouragement
+    # on every exit, everywhere, forever. Measured live (Orrin, shrine-maze,
+    # turn 228): 49 chambers all walked, a 0.95 belief in his own state that
+    # "there is no unexplored ground left in this maze", and both exits of
+    # his room reading "spent -- every door you have seen down that way is
+    # one you have taken" with beats_since_new_ground at 26 and climbing.
+    # Every direction read as failure, nothing said the map was COMPLETE, and
+    # a mind in failure reaches for the thing that would fix it: his beliefs
+    # from turns 215-219 invented "unexplored eastern corridor" out of a
+    # sightline that "bends out of sight", and his goals chased it. The
+    # payload made a finished maze illegible as anything but a maze where
+    # every choice is wrong.
+    frontier_anywhere = any(
+        n not in walked and n not in dead_ends
+        for side in adj.values() for n in side)
+    # A door in THIS room he has never taken counts as frontier too: on a
+    # first beat somewhere new the commit-recorded adjacency has not caught
+    # up yet, and completeness must never be claimed across an untried door.
+    untried_here = False
+    for edges in digest.values():
+        if not isinstance(edges, list):
+            continue
+        for e in edges:
+            if not isinstance(e, dict):
+                continue
+            _rid = name_to_id.get(str(e.get("room") or ""))
+            if not (_rid and (_rid in counts or _rid in walked)):
+                untried_here = True
+    # A POSITIVE claim, never an absence: it needs recorded adjacency to
+    # stand on (a bare route window says nothing about doors), and one
+    # untried door anywhere defeats it. Everything below that softens a
+    # discouraging signal is gated on this, not on frontier_anywhere alone,
+    # because "I cannot tell whether new ground exists" must never read as
+    # "none exists".
+    fully_known = bool(adj) and bool(walked) \
+        and not frontier_anywhere and not untried_here
     out = {}
     all_marked = []
     for bucket, edges in digest.items():
@@ -811,7 +851,13 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                 if here_rid:
                     hops = _frontier_hops(rid, here_rid, adj, walked,
                                           dead_ends)
-                    if hops is None:
+                    # `spent` only while it discriminates: with no frontier
+                    # left ANYWHERE the marker is true of every exit at once,
+                    # which brands familiarity as failure -- for a maze
+                    # finished, or simply for a character who lives here and
+                    # has walked their whole home. The completeness fact
+                    # rides `ground_fully_known` below instead.
+                    if hops is None and not fully_known:
                         entry["no_new_ground_that_way"] = True
                 for back, seen in enumerate(reversed(route), 1):
                     if seen == rid:
@@ -909,11 +955,26 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     for bucket in list(out):
         if isinstance(out[bucket], list):
             out[bucket] = [trio[0] for trio in out[bucket]]
+    # The completeness fact, stated once and positively. Every marker above
+    # answers "where have I not been", and when the answer is NOWHERE the
+    # absence of that statement was the bug: forty-nine local "nothing new
+    # that way"s never sum, in a model's reading, to "there is nothing new
+    # ANYWHERE" -- they sum to "I am in the wrong part of the maze". Only
+    # claimed off his own recorded adjacency (`adj` non-empty), never off a
+    # bare route window, and never across an untried door in this room.
+    # Rooms seen-closed but never entered do NOT break completeness: they
+    # carry `unentered` where they stand, and what is IN them is a different
+    # question from where anything leads.
+    if fully_known:
+        out["ground_fully_known"] = True
     # Whole-route, not per-exit: how long since anywhere was new. The per-exit
     # markers say something about each doorway; this says something about the
     # walk. Only reported once it is worth noticing, since a couple of beats
-    # retracing your steps is ordinary movement, not being lost.
-    if since_new >= LOOP_WINDOW // 2:
+    # retracing your steps is ordinary movement, not being lost -- and never
+    # on a POSITIVELY complete map: there the counter can never reset again,
+    # so it would brand every future beat as failure, including every step of
+    # a proven route walked on purpose.
+    if since_new >= LOOP_WINDOW // 2 and not fully_known:
         out["beats_since_new_ground"] = since_new
     return out
 
