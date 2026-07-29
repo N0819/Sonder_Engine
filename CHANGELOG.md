@@ -1,8 +1,102 @@
 # Changelog
 
-## Unreleased — Concealment for parented interior rooms
+## alpha 6.0 — Knowing where you are, and why you are going
+
+A character can now learn a space by walking it, want a particular room in
+it, hold that wanting across dozens of beats, and be relied upon to go
+there — without losing the curiosity that makes them worth reading. Most of
+this release was found rather than designed: a maze harness ran the same
+character through the same seven-by-seven maze until the engine's own
+assumptions broke in front of us, and thirteen documented arms
+(`docs/MAZE_ARMS.md`) are the evidence for nearly every entry below.
 
 ### Added
+
+- **Projects — the durable tier between drive and intention.** A drive is
+  eternal and placeless, so it cannot name a room. An intention names a room and
+  is built to be completable and abandonable, which is right for a task and
+  wrong for a life's work. Four measured failures lived in that gap: a goal
+  marked *satisfied* by the character the beat after his first arrival; a
+  commission decayed dormant after 150 barren beats; two intentions abandoned
+  along with the tactic they served; and beat wants re-authored from perception,
+  so a nine-room journey needed the same intent to win nine consecutive
+  independent auctions. Cap of two, weight 1.0, no dormancy, closed only by
+  their own criterion or a displacement with a stated reason — because giving up
+  is the one revision of a belief about the SELF this engine supports.
+
+
+- **Adoption guards for projects.** `satisfied_when` is required, and a
+  criterion that merely restates the project is refused: a circular criterion
+  restates its own text at 0.5–0.75 similarity, a genuine one names an external
+  condition at 0.125–0.25. "Fetch the physician" ends when the physician is here
+  — that is a task. New adoptions are probationary at intention weight and
+  establish only by SERVICE (three served beats over twelve turns), never by
+  surviving reviews, because establishment by surviving reviews is establishment
+  by inattention.
+
+
+- **A durable place graph.** `chat_chars.state.place_graph` records rooms a
+  character has walked, seen or been told of, and the doorways between them,
+  with a basis for each. It is their map, not the world's: if it is wrong, they
+  are wrong in exactly the way their map is wrong, and they find out with their
+  feet.
+
+
+- **Routing toward a room you already want.** Every affordance answered "where
+  have I not been" and none answered "how do I reach the room I want". Measured:
+  a courier with a complete, optimal 28-room remembered route to the shrine
+  spent five beats standing still, entering the same chamber three times and
+  stepping once into a wall, while his own proven route read back to him as
+  "spent". `_destination_from_goals` resolves the room a character's OWN text
+  names against their OWN graph, and the route rides the exit verdict.
+
+
+- **Running.** A body crosses several rooms in one beat. Bounded by DECISION,
+  not by sight: follow while there is exactly one passable way on, stop at a
+  junction, a dead end, darkness, a shut door, or the budget. The first rule
+  bounded runs by sight and was worth almost nothing in a maze — 39 of 49
+  rooms are corridor cells and a corridor cell is usually a bend, so 72 of 96
+  passages offered exactly one room and no character ever ran. Winding is what
+  makes a maze a maze; a sight-bounded run cannot exist in one.
+
+
+- **Legibility markers, which are most of this release.** Each states a fact and
+  removes no option: `ground_fully_known` (there is nothing new ANYWHERE, which
+  49 local "nothing new that way"s never add up to), `en_route` (the journey
+  already underway, how far in, nearer or further than last beat), `ends_in` (what
+  a run's destination is, and what the run does to the distance still ahead),
+  `adrift` (a project you have stopped serving), `fading` (an intention nearing
+  the sweep), `goal_reached`/`goal_held` (a beat-goal's currency), and
+  `unentered` (a cul-de-sac you have never been inside is not one you have
+  searched). The evidence they work is one unforced sentence a character wrote
+  after being told he had moved further away: *"Rejoin the proven route to the
+  shrine."*
+
+
+- **What a place is FOR** (`place_purpose.py`). Survival gave a character hunger
+  and the hunger had nowhere to go. Places now carry affordances on three bases:
+  `witnessed` (own vitals rose here), `told` (a credited claim, dropped the
+  moment the belief is explained away), and `assumed` — the cultural prior,
+  which is NEVER STORED. It is derived at read time from the character's own
+  graph node names, so a place they have not perceived cannot reach the lexicon;
+  there is no code path. The lexicon yields purpose keys only, never structure:
+  you may expect food at an inn, and learn nothing of its layout.
+
+
+- **Comfort from surfaces** (`comfort.py`). Pain had a deterministic floor and
+  pleasure had no counterpart, so a character on a featherbed felt what a
+  character on flagstones felt. Now a verifiably seated or lying body gets a
+  small ambient ease, scaled by fatigue — a chair is worth more to a spent body
+  — capped absolutely, and habituating to a barely-felt floor so nobody is
+  permanently at ease. It never touches `charge`: a warm bench raises what the
+  body registers, never what demands resolution.
+
+
+- **A maze harness** (`tools/maze_experiment.py`), authored mazes from SVG, two
+  authored subjects, checkpoint/resume that survives a mid-experiment code fix,
+  and a live view that draws the real walls.
+
+
 
 - **Conducted hearing, one way only.** A body inside another body's interior is
   not listening through a wall — the enclosing body is the medium, so its voice
@@ -15,6 +109,28 @@
 
 ### Changed
 
+- **The offer of a run names where it ENDS, and nothing along the way.** The
+  first shape listed the path, and the "smallest plausible next behaviour"
+  directive did to it what a minimiser does to any divisible quantity: the
+  character read a 3-room reach, reasoned that the smallest plausible behaviour
+  might be just the first step, and declared a 1-room "run". Prompt text arguing
+  the whole reach was one behaviour was read and lost, twice.
+
+- **The budget stop is `full_reach`, not `winded`.** The best offer a run can
+  get — the passage outlasting the beat — read as a penalty for taking it. Every
+  hard run arrives winded whatever ended it, so the label implied a consequence
+  specific to maximal runs that does not exist. The third word in this engine to
+  beat its own documentation.
+
+- **`spent` appears only while it discriminates.** On a fully-walked map every
+  exit read `spent` — which also outranks `proven` and `known` — with a
+  stuck-counter that could never reset. A finished maze was indistinguishable
+  from being lost in an unfinished one, and a character told every direction was
+  bad went looking for a frontier that did not exist, inventing one out of a
+  sightline that merely bends. The same defect reached any resident who had
+  walked their whole home: their kitchen door read as exhausted ground.
+
+
 - **A muffled line is now a partial transcript, not a description of one.**
   Fragment rendering emitted `"...something about <three middle words>..."`,
   which narrated the act of half-hearing instead of delivering the percept, read
@@ -26,6 +142,42 @@
   punctuation would get the whole line dropped as invented.
 
 ### Fixed
+
+- **The engine was destroying its own bearings at runtime.** `_merge_room`
+  upserted edges with wholesale replacement, so a model re-mentioning a doorway
+  it had no reason to restate the bearing for erased that bearing — the exact
+  silence-vs-erasure doctrine `_merge_entity` already applied to entity fields,
+  missing one level down. `normalize_scene_bearings` then dropped both sides on
+  a contradiction, letting an intruder destroy the correct incumbent, and
+  reciprocal inference laundered the survivor into a consistent pair of lies.
+  Audit of one live scene: of 98 edge-sides, 70 correct, 18 stripped bare and 10
+  geometrically false. Any story with authored bearings has been shedding them
+  on every room re-declaration. Bearingless passages are now offered rather than
+  deleted from the run offers, taken by naming their room, and the Director is
+  told never to fail a declared move solely because no compass word matches.
+
+- **A stale intention and a waypoint could each steal the route.** Characters
+  phrase a goal as the next step far more often than as the aim — "run east to
+  Chamber 0004 to progress toward the shrine" names only the waypoint — so the
+  goal won the match and the standing intention was never consulted. And
+  `status == "active"` was the only gate on intentions, so a row true fifty
+  beats ago pointed seventeen beats of salience at the wrong room.
+
+- **A goal claim now carries its own currency.** The slot is rewritten every
+  beat, but the claim inside it is whatever the model re-emits, and re-emission
+  is free. A goal survived a scene reset and a process restart; another kept
+  routing a character back to a room he had reached and left, tethering him to
+  spent ground. Word-keyed, so a deliberately restated aim is a new claim and
+  routes again.
+
+- **`serves: "project:pa1"` was silently demoted to situational.** A want that
+  genuinely served a project was scored as serving nothing — the tier had a hole
+  in it from the beat it shipped.
+
+- **`character_import_warnings` now runs on the harness's own sheets.** An empty
+  `psychology.drive` fails silently: a character emitted drive-serving wants for
+  150 beats against three empty strings and nothing anywhere objected.
+
 
 - **An occupant of a room parented to another entity was concealed by nothing.**
   Found live. A scene can express one entity inside another two ways — the
