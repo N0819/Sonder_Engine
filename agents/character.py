@@ -396,6 +396,12 @@ def _destination_from_goals(stored_state, place_graph, here_rid=None,
     shrine" is going TO the shrine. Returns {"rid", "name"} or None, and
     None means silence -- no route is ever computed to a room he has not
     both wanted and walked.
+
+    A goal whose claim commit has stamped SPENT (goal_room_reached: he has
+    stood in the room it names since first stating it in these words) is
+    not consulted at all -- it is not evidence of going anywhere, and
+    routing on it was the measured 0206 oscillation tether. His intentions
+    and projects speak instead.
     """
     nodes = (place_graph or {}).get("nodes")
     nodes = nodes if isinstance(nodes, dict) else {}
@@ -410,8 +416,25 @@ def _destination_from_goals(stored_state, place_graph, here_rid=None,
         return None
     st = stored_state if isinstance(stored_state, dict) else {}
     texts = []
-    goal = str(((st.get("active_state") or {}).get("goal")) or "").strip()
-    if goal:
+    _active = st.get("active_state") if isinstance(
+        st.get("active_state"), dict) else {}
+    goal = str(_active.get("goal") or "").strip()
+    # A SPENT goal claim never routes. Commit stamps goal_room_reached the
+    # beat his committed position becomes the room his own goal text names,
+    # and carries it only while the words stand unchanged (see
+    # affect.goal_slot_currency). Without this, a verbatim re-emitted goal
+    # tethered him to the room it named: one step out of Chamber 0206 made
+    # 0206 the destination again -- exits, en_route and run offers all
+    # steering him BACK -- measured live as the oscillation ... 0306 0206
+    # 0205 0206 0306 0206. Skipping falls through to his live intentions
+    # and projects, exactly like the standing-in-it skip below; re-wording
+    # the aim ("go back to Chamber 0206", said fresh) is a new claim and
+    # routes again.
+    try:
+        _goal_spent = int(_active.get("goal_room_reached"))
+    except (TypeError, ValueError):
+        _goal_spent = None
+    if goal and _goal_spent is None:
         texts.append(goal)
     intents = [i for i in ((st.get("interior") or {}).get("intentions") or [])
                if isinstance(i, dict) and i.get("status") == "active"
@@ -618,6 +641,86 @@ def _annotate_project_drift(projects, now_turn):
         if idle is not None and idle >= _ADRIFT_AFTER:
             p["adrift"] = idle
         out.append(p)
+    return out
+
+
+# Beats the goal slot may hold the SAME words, serving no intention or
+# project, before the payload says so. Above the nine-beat journey scale on
+# purpose: en_route deliberately made goals sticky, and a destination goal
+# rightly holds its words for a whole walk -- which is why room-naming goals
+# are governed by `goal_reached` instead and never by tenure. Twelve aligns
+# with the adrift escalation ("past a dozen beats it is a choice you have
+# not admitted"): a beat want held that long is doing a project's job with
+# none of a project's governance -- no criterion, no cap, no probation.
+_GOAL_HELD_AFTER = 12
+
+
+def _annotate_goal_currency(active, now_turn, node_names=None,
+                            governed_ids=()):
+    """Read the goal slot's commit-side currency stamps back as facts.
+
+    The measured failure (maze, turns 370-385): the goal slot behaved as an
+    ungoverned project. "Compare chalk circle patterns across chambers"
+    survived a run boundary and a process restart -- durable, steering,
+    occupying the slot, with no satisfied_when, cap, displacement rule, or
+    visibility. And "Run east to Chamber 0403 along the proved line" was
+    still the stated goal EIGHT ROOMS past Chamber 0403 -- a claim the
+    engine could see was spent, holding the slot because re-emission is
+    free and stickiness serves whatever holds the slot.
+
+    Two markers, read-side and non-mutating exactly like _annotate_fading
+    and _annotate_project_drift -- facts the character can notice, never a
+    mechanism that acts:
+
+      * `goal_reached` {room, beats_ago} -- he has stood in the room this
+        goal names since he first stated it in these words. As a movement
+        claim it is spent, and routing already declines it; the marker is
+        the character's half. A room-naming goal NOT yet reached carries
+        nothing: the journey is underway and en_route owns it.
+      * `goal_held` <beats> -- how long the slot has held these same words
+        while the enacted want serves no live intention or project of his.
+        A goal in explicit service of a governed tier is that tier's
+        business (its fading / adrift clocks already burn); tenure marks
+        only the free-floating claim quietly doing a project's job.
+
+    Ordinary non-maze blast radius, stated loudly: a conversation goal
+    names no room (no reached marker, routing untouched), is rewritten as
+    wants shift (tenure never accumulates), or serves an intention (tenure
+    suppressed). A character whose goals do none of those for twelve beats
+    is holding an ungoverned commitment, and being told so is the point.
+    """
+    if not isinstance(active, dict) or not isinstance(now_turn, int):
+        return active
+    out = dict(active)
+    try:
+        reached = int(out.get("goal_room_reached"))
+    except (TypeError, ValueError):
+        reached = None
+    room = str(out.get("goal_room") or "")
+    if reached is not None and room:
+        out["goal_reached"] = {
+            "room": str((node_names or {}).get(room) or room),
+            "beats_ago": max(0, now_turn - reached)}
+        return out
+    if room:
+        return out
+    if not str(out.get("goal") or "").strip():
+        return out
+    try:
+        held = now_turn - int(out.get("goal_since"))
+    except (TypeError, ValueError):
+        return out
+    if held < _GOAL_HELD_AFTER:
+        return out
+    wants = out.get("wants") if isinstance(out.get("wants"), list) else []
+    enacted = out.get("enacted_want")
+    serves = ""
+    if isinstance(enacted, int) and 0 <= enacted < len(wants) \
+            and isinstance(wants[enacted], dict):
+        serves = str(wants[enacted].get("serves") or "")
+    if serves and serves in {str(g) for g in governed_ids or ()}:
+        return out
+    out["goal_held"] = held
     return out
 
 
@@ -1436,6 +1539,20 @@ def character_step(ctx, cid, nonce):
     _goal_destination = _destination_from_goals(
         stored_state, stored_state.get("place_graph") or {},
         here_rid=char_room, now_turn=getattr(ctx, "turn_idx", None))
+    # The goal slot's currency, read back beside the goal itself: his own
+    # node names for display (the same closed vocabulary the stamp was
+    # resolved over -- never the scene's), and the ids of his live
+    # intentions and projects, whose service suppresses the tenure marker.
+    _node_names = {
+        str(rid): str((rec or {}).get("name") or rid)
+        for rid, rec in (((stored_state.get("place_graph") or {})
+                          .get("nodes")) or {}).items()
+        if isinstance(rec, dict)}
+    _governed_ids = (
+        {str(p.get("id") or "") for p in (_interior.get("projects") or [])
+         if isinstance(p, dict)}
+        | {str(i.get("id") or "") for i in (_interior.get("intentions") or [])
+           if isinstance(i, dict)}) - {""}
     _self = {
         "entity_id": f"character:{cid}",
         "name": character_name(sh),
@@ -1446,7 +1563,13 @@ def character_step(ctx, cid, nonce):
         # Explicit because the balance was previously implicit -- an artefact of
         # which navigational markers existed, not an authored trait.
         "curiosity": character_curiosity(sh),
-        "active_state": active,
+        # The goal slot carries its currency: `goal_reached` when he has
+        # stood in the room these words name since first saying them (the
+        # claim is spent and no longer routes), `goal_held` when the same
+        # room-less words have held the slot past the tenure threshold
+        # while serving nothing governed. See _annotate_goal_currency.
+        "active_state": _annotate_goal_currency(
+            active, ctx.turn.idx, _node_names, _governed_ids),
         "voice": character_voice(sh),
         "senses": senses_as_text(character_senses(sh)),
         "sense_profile": character_senses(sh),
