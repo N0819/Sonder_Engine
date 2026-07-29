@@ -37,6 +37,7 @@ from spatial import (merge_scene_with_diff,
 from theory_of_mind import (apply_mind_model_updates, rekey_place_claims,
                             select_active_hypotheses, sheet_capacity)
 from survival import vitals_of
+from comfort import comfort_level
 from paradox import check_and_apply_paradox
 from spatial_frames import detect_and_reconcile as detect_and_reconcile_spatial
 from spatial_frames import (infer_companion_carry, infer_vehicle_zones,
@@ -3835,6 +3836,12 @@ def prepare_memory_commit(ctx, *, scene=None):
                     prev_affect, appraisal_out, baseline, elapsed_units,
                     proposed=asv.get("affect") or asv.get("mood"))
                 body_state = vitals_of(sc, cname)
+                # World-side comfort, from the settled scene: what this body
+                # is verifiably against (station/contact/posture, closed
+                # vocabulary). Feeds the pleasure LEVEL floor only -- by
+                # construction it never reaches the charge term, because a
+                # warm bench is a resolved state, not an unresolved drive.
+                _comfort, _comfort_src = comfort_level(sc, cname)
                 proposed_hedonic = (
                     asv.get("hedonic") if isinstance(asv.get("hedonic"), dict)
                     else {}
@@ -3846,6 +3853,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                     # event to have, so the declaration is theirs; how it built
                     # up in the first place stays the runtime's.
                     released=bool(proposed_hedonic.get("released")),
+                    ambient_comfort=_comfort, comfort_source=_comfort_src,
                 )
                 proposed_stress = (
                     asv.get("stress") if isinstance(asv.get("stress"), dict) else {}

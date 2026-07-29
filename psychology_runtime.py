@@ -24,6 +24,32 @@ _CHARGE_GAIN = 0.18
 _CHARGE_HALF_LIFE = 12.0
 _CHARGE_SATURATION = 0.85
 
+# Ambient comfort: the world-side pleasure floor (comfort.py derives it,
+# docs/DESIGN_SURFACE_COMFORT.md designed it). Two hard rules, neither of
+# them tuning:
+#
+#   1. Comfort feeds the pleasure LEVEL only, never the `drive` term that
+#      accumulates `charge`. Comfort is a RESOLVED, self-limiting state --
+#      the opposite of a drive demanding release -- and integrating it would
+#      manufacture saturated bodies out of sitting quietly, holding
+#      cognitive_absorption at the saturated floor: the couch literally
+#      eating the mind. `drive` below is computed from the appraisal-proposed
+#      value alone, and a regression test pins `charge` invariant under pure
+#      ambient comfort so a refactor cannot fold it back in silently.
+#   2. Comfort habituates. Consecutive beats on the SAME source (tracked as
+#      comfort_beats/comfort_source inside this already-persisted dict -- no
+#      new state surface) halve the contribution every ~4 psych units toward
+#      a floor that is barely felt. The tenth beat on the cushion registers
+#      almost nothing; leaving and returning resets it.
+#
+# The ceiling is absolute -- applied after fatigue relief and sensitivity --
+# because 0.3 ** 1.3 ~= 0.21 absorption is the design's promise that a
+# comfortable character still thinks clearly.
+_AMBIENT_COMFORT_CEILING = 0.3
+_COMFORT_HABITUATION_HALF_LIFE = 4.0
+_COMFORT_HABITUATED_FLOOR = 0.05
+_COMFORT_RELIEF_GAIN = 0.8
+
 
 def _clamp(value, low=0.0, high=1.0, default=0.0):
     return max(low, min(high, _float(value, default)))
@@ -47,7 +73,8 @@ def elapsed_psych_units(previous_seconds, current_seconds, fallback_turns=1):
 
 
 def resolve_hedonic(previous, appraisal, interoception, body_state,
-                    elapsed_units, released=False):
+                    elapsed_units, released=False,
+                    ambient_comfort=0.0, comfort_source=""):
     """Resolve transient pain/pleasure from this beat's grounded appraisal,
     plus the sustained charge those levels leave behind.
 
@@ -55,6 +82,14 @@ def resolve_hedonic(previous, appraisal, interoception, body_state,
     ignored. Survival vitals may add a pain floor, but are never required.
     Pain and pleasure are independent because real mixed states can contain
     both.
+
+    `ambient_comfort` is the world's deterministic pleasure counterpart to
+    the injury/air pain floor: what the body is verifiably against
+    (comfort.comfort_level), scaled by fatigue -- a chair is worth more to a
+    spent body -- and by the character's own pleasure_sensitivity, so a stoic
+    and a sybarite do not feel the same bench. It raises the pleasure LEVEL
+    only and never the charge (see the _AMBIENT_COMFORT_* comment above), and
+    it habituates on a sustained source.
 
     `pain`/`pleasure` are LEVELS: peak-held and fast-decaying, they say what
     the body registers right now. A level alone cannot represent a stimulus
@@ -87,13 +122,42 @@ def resolve_hedonic(previous, appraisal, interoception, body_state,
     proposed_pain = max(proposed_pain, injury * 0.8, (1.0 - air) * 0.75)
 
     elapsed = max(0.0, _float(elapsed_units))
+
+    # Ambient comfort -> a floor on the pleasure LEVEL. Never on `drive`.
+    comfort = _clamp(ambient_comfort, 0.0, _AMBIENT_COMFORT_CEILING)
+    comfort_key = str(comfort_source or "").strip()[:120]
+    ambient = 0.0
+    comfort_beats = 0.0
+    if comfort > 0.0 and comfort_key:
+        prev_key = str(previous.get("comfort_source") or "").strip()
+        if prev_key and prev_key.casefold() == comfort_key.casefold():
+            comfort_beats = max(0.0, _float(previous.get("comfort_beats")))
+        # A chair is worth more to a spent body. fatigue is 0 when survival
+        # is off (empty body_state), so relief collapses to 1.0 rather than
+        # inventing a body the story deliberately turned off.
+        fatigue = 1.0 - _clamp(body_state.get("stamina"), default=1.0)
+        relief = 1.0 + _COMFORT_RELIEF_GAIN * fatigue
+        ambient = comfort * relief * (0.5 + pleasure_sensitivity)
+        ambient = min(ambient, _AMBIENT_COMFORT_CEILING)
+        if comfort_beats > 0.0:
+            habituated = ambient * 0.5 ** (
+                comfort_beats / _COMFORT_HABITUATION_HALF_LIFE)
+            # The floor never RAISES a contribution that started below it.
+            ambient = max(min(_COMFORT_HABITUATED_FLOOR, ambient), habituated)
+        comfort_beats += elapsed if elapsed > 0.0 else 1.0
+
     decay = 0.5 ** (elapsed / 2.0) if elapsed else 1.0
     old_pain = _clamp(previous.get("pain"))
     old_pleasure = _clamp(previous.get("pleasure"))
     pain = max(old_pain * decay, proposed_pain)
-    pleasure = max(old_pleasure * decay, proposed_pleasure)
-    source = why if (proposed_pain or proposed_pleasure) else str(
-        previous.get("source") or "")
+    pleasure = max(old_pleasure * decay, proposed_pleasure, ambient)
+    if proposed_pain or proposed_pleasure:
+        # A grounded appraisal outranks background ease as the named cause.
+        source = why
+    elif ambient and ambient >= max(old_pain, old_pleasure) * decay:
+        source = comfort_key
+    else:
+        source = str(previous.get("source") or "")
     if pain < 0.02 and pleasure < 0.02:
         source = ""
 
@@ -104,17 +168,25 @@ def resolve_hedonic(previous, appraisal, interoception, body_state,
         charge_decay = 0.5 ** (elapsed / _CHARGE_HALF_LIFE) if elapsed else 1.0
         # Pain drives less accumulation than pleasure at equal level: a body
         # under sustained pain escalates through stress, which resolve_stress
-        # already models, not through a drive waiting on release.
+        # already models, not through a drive waiting on release. Ambient
+        # comfort is deliberately absent here -- see Rule 1 above: `drive`
+        # reads the appraisal-proposed value ONLY.
         drive = max(proposed_pleasure, proposed_pain * 0.5)
         charge = _clamp(old_charge * charge_decay
                         + drive * _CHARGE_GAIN * min(max(elapsed, 1.0), 3.0))
-    return {
+    out = {
         "pain": round(_clamp(pain), 4),
         "pleasure": round(_clamp(pleasure), 4),
         "source": source[:300],
         "charge": round(charge, 4),
         "saturated": charge >= _CHARGE_SATURATION,
     }
+    if comfort > 0.0 and comfort_key:
+        # Habituation state rides in this already-persisted dict; the keys
+        # drop the beat the body leaves the source, which IS the reset.
+        out["comfort_beats"] = round(comfort_beats, 3)
+        out["comfort_source"] = comfort_key
+    return out
 
 
 def resolve_stress(previous, appraisal, profile, hedonic, elapsed_units,
