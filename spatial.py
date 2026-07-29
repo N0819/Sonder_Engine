@@ -1824,12 +1824,65 @@ def containment_facts(scene: dict, observer: str, source_names) -> list:
 _MAX_CONTACTS = 40
 _MAX_CONTACT_PART = 48
 
+# How many beats of contact talk a contact survives WITHOUT being re-asserted
+# before it retires. See `_contact_ops_are_evidence` for what counts as such a
+# beat; 2 means a contact survives one silent one and retires on the second.
+_CONTACT_STALE_BEATS = 2
+
 # Small controlled vocabulary. Unknown manners are kept (the fiction is wider
 # than any list) but normalized to lowercase so equality holds.
+#
+# A contact is a STATE -- these bodies are touching, here. Every manner below
+# can hold still and remain true a beat later.
 CONTACT_MANNERS = (
     "touch", "hold", "grip", "press", "rest", "lean", "wrap", "coil",
-    "straddle", "pin", "carry", "support", "kiss", "bite", "strike",
+    "straddle", "pin", "carry", "support",
 )
+
+# The other kind of word a Director reaches for: the ACT that produced the
+# touch. `kiss`, `bite` and `strike` lived in the vocabulary above and were
+# stored identically to `rest` -- so a kiss became a permanent fact about two
+# bodies, re-read as present truth by every stage downstream, and narrated as
+# happening now for as long as it survived. A kiss is a moment; a hand resting
+# is a state, and the record had no way to say which it held.
+#
+# These are not rejected -- the Director means something real by them, and the
+# residue (lips ARE at that forehead) is worth recording. They retire faster
+# (`_CONTACT_MOMENTARY_STALE_BEATS`) and render as the residue rather than as
+# the act, so a standing contact can never be mistaken for a fresh one. The act
+# itself reaches perceivers through the beat's declared sequence, which is the
+# representation that carries WHEN.
+CONTACT_MOMENTARY_MANNERS = (
+    "kiss", "bite", "strike", "pinch", "squeeze", "flick", "lick", "trail",
+    "slap", "tap", "stroke", "brush", "nudge", "poke", "punch", "kick",
+    "scratch", "swat", "shove", "rub", "caress", "graze", "nip", "suck",
+    "nuzzle", "prod", "thrust", "jab", "smack", "tickle", "bump",
+)
+_MOMENTARY_SET = frozenset(CONTACT_MOMENTARY_MANNERS)
+
+# How a standing contact READS. Durable manners keep their own verb (correctly
+# inflected -- the old renderer emitted "press" and "kiss" bare to dodge
+# "presss"); a momentary one renders as the touch it left behind.
+_CONTACT_STATE_VERBS = {
+    "touch": "is against", "hold": "holds", "grip": "grips",
+    "press": "presses against", "rest": "rests against",
+    "lean": "leans against", "wrap": "is wrapped around",
+    "coil": "is coiled around", "straddle": "straddles", "pin": "pins",
+    "carry": "carries", "support": "supports",
+}
+_CONTACT_RESIDUE_VERB = "is against"
+
+# A momentary contact is over the moment the story moves on, so it retires on
+# the very next beat that says anything about contact at all -- one evidence
+# beat, against the two a standing hold gets.
+_CONTACT_MOMENTARY_STALE_BEATS = 1
+
+
+def contact_is_momentary(contact) -> bool:
+    """True when this contact's manner names an ACT rather than a state."""
+    if not isinstance(contact, dict):
+        return False
+    return str(contact.get("manner") or "").strip().casefold() in _MOMENTARY_SET
 
 
 def _contact_text(value, limit=_MAX_CONTACT_PART):
@@ -1865,12 +1918,20 @@ def _clean_contact(raw):
     if actor.casefold() == target.casefold():
         return None  # a body is always in contact with itself; not a fact
     manner = _contact_text(raw.get("manner")).casefold() or "touch"
+    try:
+        unasserted = max(0, int(raw.get("unasserted") or 0))
+    except (TypeError, ValueError):
+        unasserted = 0
     return {
         "actor": actor,
         "actor_part": _contact_text(raw.get("actor_part")),
         "target": target,
         "target_part": _contact_text(raw.get("target_part")),
         "manner": manner,
+        # Beats of contact talk since this was last asserted. Absent on an
+        # incoming op (an assertion is by definition fresh) and on a scene
+        # saved before ageing existed, both of which read as 0.
+        "unasserted": unasserted,
     }
 
 
@@ -2148,6 +2209,32 @@ def normalize_scene_contacts(scene: dict) -> dict:
     return scene
 
 
+def _contact_ops_are_evidence(ops) -> bool:
+    """True when this beat's ops say anything usable about contact at all.
+
+    The ageing rule below turns the Director's SILENCE about a contact into
+    evidence that it ended, which is only sound on a beat where the Director
+    spoke about contact and did not mention it. A beat with no ops (or only
+    junk) is not evidence of anything: measured across a long live scene the
+    Director routinely emits nothing for a beat, and ageing on those would
+    retire the whole arrangement over a couple of quiet exchanges.
+    """
+    for raw in ops or []:
+        if not isinstance(raw, dict):
+            continue
+        op = str(raw.get("op") or "add").strip().casefold()
+        if op == "clear":
+            return True
+        if op == "remove":
+            if (_contact_text(raw.get("actor"), 120)
+                    and _contact_text(raw.get("target"), 120)):
+                return True
+            continue
+        if _clean_contact(raw) is not None:
+            return True
+    return False
+
+
 def apply_contact_ops(scene: dict, ops) -> dict:
     """Apply state_diff.contact_ops to scene.contacts.
 
@@ -2160,6 +2247,26 @@ def apply_contact_ops(scene: dict, ops) -> dict:
 
     Hygiene still runs afterwards, so an op naming someone in another room
     cannot smuggle in an impossible contact.
+
+    AGEING. Position pruning (`normalize_scene_contacts`) ends a hold when
+    someone walks away, and was the only retirement path there was -- so in a
+    scene where nobody changes room, contact was append-only. Measured live:
+    147 adds against 3 removes across one story, ending with fifteen
+    simultaneous holds including one body's mouth recorded in five places, and
+    single touches from four beats earlier still asserted as current. A
+    perception stage reading the scene as present truth then narrates a
+    long-finished act as though it were happening now, and a character
+    answering that is behaving correctly on corrupted input.
+
+    The signal needed to fix it was already in the Director's behaviour: it
+    re-asserts a hold that is still true and simply stops mentioning one that
+    ended. Nothing read it. So on every beat that says anything about contact
+    (`_contact_ops_are_evidence`), each standing contact ages one beat, and one
+    that goes `_CONTACT_STALE_BEATS` such beats without re-assertion retires.
+    An `add` -- from either side, mirror included -- resets the count.
+
+    This does NOT cap how many contacts may stand at once; simultaneity is the
+    point of the ledger. It removes the ones that are no longer true.
     """
     if not isinstance(ops, list) or not ops:
         return scene
@@ -2169,6 +2276,21 @@ def apply_contact_ops(scene: dict, ops) -> dict:
         contacts = []
     current = {_contact_key(c): c for c in
                (_clean_contact(r) for r in contacts) if c is not None}
+
+    # Age BEFORE applying, so this beat's own assertions land fresh on top and
+    # a re-asserted hold never ages at all.
+    if _contact_ops_are_evidence(ops):
+        aged = {}
+        for key, contact in current.items():
+            stale = int(contact.get("unasserted") or 0) + 1
+            # An act is over as soon as the story moves on; a hold persists
+            # until the Director stops naming it.
+            limit = (_CONTACT_MOMENTARY_STALE_BEATS
+                     if contact_is_momentary(contact) else _CONTACT_STALE_BEATS)
+            if stale >= limit:
+                continue  # unmentioned too long: it is over
+            aged[key] = {**contact, "unasserted": stale}
+        current = aged
 
     for raw in ops:
         if not isinstance(raw, dict):
@@ -2217,7 +2339,11 @@ def apply_contact_ops(scene: dict, ops) -> dict:
             # Re-asserting from the other side updates the contact already on
             # record rather than creating its twin.
             if mirror in current and key not in current:
-                current[mirror] = {**current[mirror], "manner": contact["manner"]}
+                # Re-assertion from the other side is still re-assertion: the
+                # manner updates AND the staleness clock resets.
+                current[mirror] = {**current[mirror],
+                                   "manner": contact["manner"],
+                                   "unasserted": 0}
             else:
                 current[key] = contact
 
@@ -2245,7 +2371,20 @@ def contacts_of(scene: dict, name: str) -> list:
 
 
 def contact_phrase(contact: dict, *, subject_first=True) -> str:
-    """One contact as a plain clause: 'Bramwell's hand grips Hinami's waist'."""
+    """One STANDING contact as a plain clause -- state, never event.
+
+    'Bramwell's hand grips Hinami's waist'. Every consumer of this phrase
+    (narrator ground truth via `spatial_facts`, the perception scene payload)
+    is asking what is true right now, so a manner naming an ACT renders as the
+    touch that act left behind: a contact recorded `kiss` reads "X's lips is
+    against Y's forehead", not "X's lips kiss Y's forehead". The act itself is
+    delivered from the beat's declared sequence, which is the representation
+    that carries WHEN it happened.
+
+    Measured live, before this: a forehead kiss from four beats earlier was
+    still rendered in the active present into a perceiver's view, and the
+    character answered it as a live advance.
+    """
     if not isinstance(contact, dict):
         return ""
     actor = str(contact.get("actor") or "").strip()
@@ -2260,8 +2399,16 @@ def contact_phrase(contact: dict, *, subject_first=True) -> str:
     right = f"{target}'s {target_part}" if target_part else target
     if not subject_first:
         return f"{right} is under {left} ({manner})"
-    return f"{left} {manner}s {right}" if not manner.endswith("s") \
-        else f"{left} {manner} {right}"
+    if manner in _MOMENTARY_SET:
+        verb = _CONTACT_RESIDUE_VERB
+    elif manner in _CONTACT_STATE_VERBS:
+        verb = _CONTACT_STATE_VERBS[manner]
+    else:
+        # Outside both vocabularies the fiction is on its own: inflect only
+        # when the model has not already done it ("throttles" must not become
+        # "throttleses").
+        verb = manner if manner.endswith("s") else f"{manner}s"
+    return f"{left} {verb} {right}"
 
 
 def spatial_facts(scene: dict, observer: str, source_names) -> list:

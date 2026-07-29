@@ -41,6 +41,7 @@ from spatial import (
     hiding_holders_of,
     _body_interior_holder,
     ambient_scope,
+    contact_phrase,
     containment_conceals,
     crossing_visible_from,
     egocentric_frame,
@@ -359,19 +360,28 @@ def _observer_scene_payload(scene, perceiver):
         if str(other) != name
         and visual_level_between(scene, name, str(other)) != "none"
     }
-    contacts = [
-        copy.deepcopy(contact)
-        for contact in (scene.get("contacts") or [])
-        if isinstance(contact, dict)
-        and (
+    # Every contact here is STANDING state -- what is true at the top of this
+    # beat, not what just happened. The beat's own acts arrive separately, in
+    # `declared_act.sequence`. Each carries `standing`, a stative clause the
+    # model can lift directly, because the bare {manner: "kiss"} record read as
+    # an event and was narrated as one: a kiss recorded several beats earlier
+    # kept being delivered as a live advance, and the character answered it.
+    contacts = []
+    for contact in (scene.get("contacts") or []):
+        if not isinstance(contact, dict):
+            continue
+        if not (
             name in (str(contact.get("actor") or ""),
                      str(contact.get("target") or ""))
             or (
                 str(contact.get("actor") or "") in visible_names
                 and str(contact.get("target") or "") in visible_names
             )
-        )
-    ]
+        ):
+            continue
+        entry = copy.deepcopy(contact)
+        entry["standing"] = contact_phrase(contact)
+        contacts.append(entry)
     scales = {
         key: value for key, value in (scene.get("scales") or {}).items()
         if str(key) == name or str(key) in visible_names

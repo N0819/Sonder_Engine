@@ -442,7 +442,7 @@ class TestLiftingContactOutOfEntityState:
         assert len(scene["contacts"]) == 1
         assert scene["contacts"][0] == {
             "actor": "Hinami", "actor_part": "", "target": "Tamamo",
-            "target_part": "", "manner": "lean"}
+            "target_part": "", "manner": "lean", "unasserted": 0}
 
     def test_the_key_name_yields_the_body_part(self):
         scene = self._lift({"hinami": {
@@ -574,3 +574,185 @@ class TestSchema:
         assert _normalize_diff_shape({"contact_ops": "junk"})["contact_ops"] == []
         kept = _normalize_diff_shape({"contact_ops": [{"op": "add"}]})
         assert kept["contact_ops"] == [{"op": "add"}]
+
+
+class TestAgeingRetiresContactNobodyReasserts:
+    """Position pruning ends a hold when someone walks away. Nothing ended one
+    that simply stopped being true while both bodies stayed put -- so in a
+    scene set in one room, contact was append-only, and a touch from four
+    beats ago was still asserted as current. Perception reads the scene as
+    present truth and narrates it as happening now.
+
+    The Director already re-asserts a hold that persists and stops mentioning
+    one that ended; ageing is what reads that signal.
+    """
+
+    def test_a_contact_nobody_reasserts_retires(self):
+        scene = merge_scene_with_diff(_scene(), {"contact_ops": [
+            {"op": "add", **_hold(actor_part="lips", target_part="forehead",
+                                  manner="kiss")}]})
+        assert len(scene["contacts"]) == 1
+
+        # Two later beats that talk about contact without mentioning the kiss.
+        for _ in range(2):
+            scene = merge_scene_with_diff(scene, {"contact_ops": [
+                {"op": "add", **_hold(actor_part="palm",
+                                      target_part="sternum", manner="press")}]})
+
+        assert [c["actor_part"] for c in scene["contacts"]] == ["palm"]
+
+    def test_a_reasserted_contact_never_ages(self):
+        """The sustained hold is the one the Director keeps naming."""
+        scene = _scene()
+        for _ in range(6):
+            scene = merge_scene_with_diff(scene, {"contact_ops": [
+                {"op": "add", **_hold(actor_part="palm",
+                                      target_part="sternum", manner="press")}]})
+
+        assert len(scene["contacts"]) == 1
+        assert scene["contacts"][0]["unasserted"] == 0
+
+    def test_reassertion_from_the_other_side_also_resets_the_clock(self):
+        scene = merge_scene_with_diff(_scene(), {"contact_ops": [
+            {"op": "add", **_hold(actor_part="palm", target_part="sternum",
+                                  manner="press")}]})
+        for _ in range(4):
+            # The mirror: the same hold stated from the other body.
+            scene = merge_scene_with_diff(scene, {"contact_ops": [
+                {"op": "add", "actor": "Hinami", "actor_part": "sternum",
+                 "target": "Bramwell", "target_part": "palm",
+                 "manner": "press"}]})
+
+        assert len(scene["contacts"]) == 1
+
+    def test_a_beat_with_no_contact_ops_ages_nothing(self):
+        """The failure a naive implementation introduces.
+
+        Silence about contact is only evidence on a beat that speaks about
+        contact at all. Live, the Director routinely emits nothing for a beat;
+        ageing on those would retire a whole arrangement over a couple of
+        quiet exchanges.
+        """
+        scene = merge_scene_with_diff(_scene(), {"contact_ops": [
+            {"op": "add", **_hold(actor_part="palm", target_part="sternum",
+                                  manner="press")}]})
+
+        for _ in range(8):
+            scene = merge_scene_with_diff(scene, {})          # no contact_ops
+        for _ in range(8):
+            scene = merge_scene_with_diff(scene, {"contact_ops": []})
+
+        assert len(scene["contacts"]) == 1
+        assert scene["contacts"][0]["unasserted"] == 0
+
+    def test_junk_ops_are_not_evidence(self):
+        scene = merge_scene_with_diff(_scene(), {"contact_ops": [
+            {"op": "add", **_hold()}]})
+        for _ in range(6):
+            scene = merge_scene_with_diff(
+                scene, {"contact_ops": [{"op": "add"}, {"op": "nonsense"}]})
+
+        assert len(scene["contacts"]) == 1
+
+    def test_simultaneity_is_not_capped(self):
+        """Ageing removes what is no longer true; it must not remove what is.
+
+        Every one of these is asserted on the same beat, so all of them stand
+        -- including two contacts sharing one actor part, which a body moving
+        between two places within a beat genuinely produces.
+        """
+        scene = merge_scene_with_diff(_scene(), {"contact_ops": [
+            {"op": "add", **_hold(actor_part="palm", target_part="sternum",
+                                  manner="press")},
+            {"op": "add", **_hold(actor_part="tongue", target_part="belly",
+                                  manner="lick")},
+            {"op": "add", **_hold(actor_part="tongue", target_part="throat",
+                                  manner="lick")},
+            {"op": "add", **_hold(actor_part="thigh", target_part="hip",
+                                  manner="rest")},
+        ]})
+
+        assert len(scene["contacts"]) == 4
+
+    def test_a_scene_saved_before_ageing_existed_reads_as_fresh(self):
+        """Back-compat: no `unasserted` key means 0, not "infinitely stale"."""
+        scene = _scene(contacts=[_hold()])
+        scene = merge_scene_with_diff(scene, {"contact_ops": [
+            {"op": "add", **_hold(actor_part="palm", target_part="sternum",
+                                  manner="press")}]})
+
+        assert len(scene["contacts"]) == 2
+
+
+class TestAnActIsNotAState:
+    """`manner` carried two different kinds of word with one storage rule.
+
+    `rest`, `press` and `hold` describe a state: they can hold still and stay
+    true. `kiss`, `pinch` and `flick` name the ACT that produced a touch, and
+    an act is over as soon as the story moves on. Storing both identically
+    meant a kiss became a permanent fact, and every consumer that reads the
+    scene as present truth narrated it as happening now.
+    """
+
+    def test_a_momentary_manner_renders_as_the_touch_it_left(self):
+        assert contact_phrase(_hold(actor_part="lips", target_part="forehead",
+                                    manner="kiss")) == (
+            "Bramwell's lips is against Hinami's forehead")
+
+    def test_a_durable_manner_keeps_its_own_verb(self):
+        assert contact_phrase(_hold(manner="rest")) == (
+            "Bramwell's hand rests against Hinami's waist")
+        assert contact_phrase(_hold(manner="press")) == (
+            "Bramwell's hand presses against Hinami's waist")
+
+    def test_an_unknown_manner_is_still_inflected_only_once(self):
+        """The fiction is wider than any list, and 'throttleses' is not a word."""
+        assert contact_phrase(_hold(manner="throttles")) == (
+            "Bramwell's hand throttles Hinami's waist")
+
+    def test_an_act_retires_a_beat_before_a_hold_does(self):
+        scene = merge_scene_with_diff(_scene(), {"contact_ops": [
+            {"op": "add", **_hold(actor_part="lips", target_part="forehead",
+                                  manner="kiss")},
+            {"op": "add", **_hold(actor_part="palm", target_part="sternum",
+                                  manner="press")},
+        ]})
+        assert len(scene["contacts"]) == 2
+
+        # One later beat that speaks about contact without naming either.
+        scene = merge_scene_with_diff(scene, {"contact_ops": [
+            {"op": "add", **_hold(actor_part="tail", target_part="ankle",
+                                  manner="coil")}]})
+
+        standing = {c["actor_part"] for c in scene["contacts"]}
+        assert "lips" not in standing, "the act is over"
+        assert "palm" in standing, "the hold is not"
+
+    def test_a_reasserted_act_still_stands(self):
+        """A kiss the Director keeps naming is a kiss still happening."""
+        scene = _scene()
+        for _ in range(5):
+            scene = merge_scene_with_diff(scene, {"contact_ops": [
+                {"op": "add", **_hold(actor_part="lips",
+                                      target_part="forehead", manner="kiss")}]})
+
+        assert len(scene["contacts"]) == 1
+
+    def test_narrator_ground_truth_states_contact_as_state(self):
+        scene = merge_scene_with_diff(_scene(), {"contact_ops": [
+            {"op": "add", **_hold(actor_part="lips", target_part="forehead",
+                                  manner="kiss")}]})
+        facts = spatial_facts(scene, "Hinami", ["Bramwell"])
+
+        contact_lines = [f for f in facts if "forehead" in f]
+        assert contact_lines
+        assert not any("kiss" in f for f in contact_lines), (
+            "ground truth must not hand the narrator an act to re-stage")
+
+    def test_classification_is_total_on_junk(self):
+        from spatial import contact_is_momentary
+
+        assert contact_is_momentary(_hold(manner="kiss")) is True
+        assert contact_is_momentary(_hold(manner="rest")) is False
+        assert contact_is_momentary({}) is False
+        assert contact_is_momentary(None) is False
