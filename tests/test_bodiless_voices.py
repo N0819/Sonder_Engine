@@ -99,3 +99,50 @@ def test_bodiless_voice_is_never_tracked_as_a_presence(temp_db):
     tracked = temp_db.wget(cid, "background_presences", {}) or {}
     assert "Computer" not in tracked      # a voice, not a bystander
     assert "Guinan" in tracked            # an ordinary extra still is one
+
+
+# ---- the rescue must be asked of the ENTITY, not of the position ---------
+
+def test_a_stale_position_does_not_disable_the_exemption():
+    """The guard used to be "this speaker has no room", which a single stale
+    `positions` entry falsifies -- and the artifact the exemption exists for
+    is exactly such an entry. Measured live: a computer flagged `ubiquitous`
+    but still pinned to the room it was first voiced in answered a direct
+    question from four decks away, and the answer died at hear_level 'none'.
+    """
+    scene = _scene()
+    scene["positions"]["Computer"] = "ten_forward"   # the category error
+
+    assert "computer" in ubiquitous_speaker_names(scene)
+    assert is_ubiquitous_entity(scene["entities"]["computer"])
+
+
+def test_merge_removes_the_position_a_bodiless_voice_should_never_have():
+    from spatial import merge_scene_with_diff
+
+    scene = _scene()
+    scene["positions"]["Computer"] = "ten_forward"
+
+    merged = merge_scene_with_diff(scene, {})
+
+    assert "Computer" not in merged["positions"]
+    assert "computer" in merged["entities"], "the voice itself survives"
+    assert merged["positions"]["Hinami"] == "ten_forward", "bodies untouched"
+
+
+def test_pruning_reports_what_it_dropped_and_is_idempotent():
+    from spatial import prune_bodiless_positions
+
+    scene = _scene()
+    scene["positions"]["Computer"] = "ten_forward"
+
+    assert prune_bodiless_positions(scene) == ["Computer"]
+    assert prune_bodiless_positions(scene) == []
+
+
+def test_pruning_is_total_on_a_scene_without_either_table():
+    from spatial import prune_bodiless_positions
+
+    assert prune_bodiless_positions({}) == []
+    assert prune_bodiless_positions({"positions": "junk"}) == []
+    assert prune_bodiless_positions({"positions": {}, "entities": {}}) == []

@@ -2182,6 +2182,44 @@ def contacts_broken_by_scale_change(scene: dict, previous_scales) -> list:
     return sorted(changed)
 
 
+def prune_bodiless_positions(scene: dict) -> list:
+    """Drop `positions` entries belonging to a bodiless voice.
+
+    A ship's computer, a station PA and a public-address system are not
+    standing anywhere -- `scene.is_ubiquitous_entity` calls giving one a room
+    a category error, and the Director prompt tells it to declare such a thing
+    with NO position. It still happens: measured live, one was created with a
+    room in the same breath as a description reading "a voice-activated system
+    with no physical body", trailed the player for five beats, and was then
+    stranded in the room it was last voiced in for eighty more.
+
+    A stale entry like that is not inert. Every reader that asks where the
+    speaker is gets an answer, and the answer is wrong -- the delivery rescue
+    in perception is the one that matters, and it is now asked of the entity
+    rather than of the position, but nothing was removing the record itself
+    and there is no way for an author to. So merge hygiene removes it, the
+    same way position changes prune an impossible contact.
+
+    Returns the names dropped, for the caller to report; mutates in place.
+    """
+    positions = scene.get("positions")
+    entities = scene.get("entities")
+    if not isinstance(positions, dict) or not isinstance(entities, dict):
+        return []
+    try:  # lazy: scene.py imports THIS module, so the edge only goes one way
+        from scene import ubiquitous_speaker_names
+        bodiless = ubiquitous_speaker_names(scene)
+    except Exception:
+        return []
+    if not bodiless:
+        return []
+    dropped = [key for key in list(positions)
+               if str(key).strip().casefold() in bodiless]
+    for key in dropped:
+        positions.pop(key, None)
+    return dropped
+
+
 def normalize_scene_contacts(scene: dict) -> dict:
     """Contact hygiene, run at merge -- the sibling of normalize_scene_stations.
 
@@ -4043,6 +4081,9 @@ def merge_scene_with_diff(
     # Derived LAST among position writes: whatever else this beat did to
     # positions, a carried body ends up where its carrier is.
     derive_contained_positions(merged)
+    # A bodiless voice is not standing anywhere; a position on one is a
+    # category error that no author can currently delete by hand.
+    prune_bodiless_positions(merged)
 
     apply_contact_ops(merged, diff.get("contact_ops"))
     normalize_scene_contacts(merged)
