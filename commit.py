@@ -1931,7 +1931,12 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
                          cond.get("started_at_seconds", 0.0),
                          cond.get("expires_at_seconds"),
                          cond.get("next_tick_seconds"),
-                         payload, 1),
+                         # The row's own `active`, not a hardcoded 1. An
+                         # ENDING that names an id no row carries yet (a
+                         # Director closing a condition under a rekeyed id, an
+                         # imported chat) was being inserted as ACTIVE, so the
+                         # act of waking someone put them under.
+                         payload, int(cond.get("active", 1))),
                     )
 
     return {"entities_committed": len(diff.get("entities") or {}),

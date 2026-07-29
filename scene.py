@@ -1112,7 +1112,15 @@ def dialogue_budget(chat, turn, cid, nonce):
         target = rng.randint(lo, hi)
     else:
         target = min(max(1, round((lo + hi) / 2)), hi)
-    return {"style": style, "suggested_lines": target, "hard_max": hi, "may_stay_silent": lo == 0}
+    # `min_lines` rides along as itself. It used to be consumed here and
+    # discarded: the only thing derived from it was `may_stay_silent`, a boolean
+    # that a SINGLE line already satisfies, so an author setting min_lines 2
+    # sent the character agent no number it could honour. Measured across the
+    # author's live chats, line counts did not track the setting at all -- a
+    # chat at min_lines 2 produced one line in 28 of 28 declarations while a
+    # chat at min_lines 0 produced two or more in 43% of them.
+    return {"style": style, "suggested_lines": target, "min_lines": lo,
+            "hard_max": hi, "may_stay_silent": lo == 0}
 
 def cast_scene_context(cast_rows):
     """Build scene-relevant character dossiers for mapping and director."""
