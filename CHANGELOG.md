@@ -147,6 +147,45 @@ pattern that produced almost every fix: state the fact, leave the choice.
 
 ### Fixed
 
+- **A mind put under could never come back.** Reported from real play and
+  settled by the corpus: across 1483 Director resolutions in 44 chats, 24
+  awareness conditions were ever emitted and **not one** carried `active: 0`.
+  The Director had never once ended an awareness condition. The four that ever
+  stopped gating were born with a 600-second expiry and closed by the clock;
+  everything else is still active, including `unconscious` rows seventy turns
+  later. The cause was banal — the resolve payload never told the Director that
+  anyone was under, or under which `condition_id`, so it could not re-emit an id
+  it was never given. A player's declared "you eventually wake when morning
+  comes" parsed perfectly and produced an empty diff, twice.
+
+  NPCs were worse. The comment justifying player-only protection reasoned that a
+  spurious level "costs one beat of silence" for an NPC — true only if something
+  wakes them. A gated NPC runs no character step, so it generates no pressure to
+  be woken and reads as quiet rather than stuck.
+
+  Waking is now world-side and deterministic where it is not a judgement call:
+  any player declaration ends any gate on the player; a deliberate rouse by
+  another character ends `asleep` but pointedly **not** `sedated` or
+  `unconscious`, whose refusal must be narrated as a fact (the first place in
+  the engine where the three gated levels differ); and eight hours of simulation
+  time ends `asleep` alone. The sleeping mind still never decides to wake.
+
+- **NPCs spoke one line whatever the configuration said.** `min_lines: 2` was
+  set and persisted in eight chats; one produced exactly one speech entry in 28
+  of 28 declarations, while a chat configured for zero produced two or more 43%
+  of the time. The floor was destroyed before the prompt saw it: only
+  `may_stay_silent` was derived from `min_lines`, a boolean that one line
+  already satisfies, so an author asking for two sent the character agent no
+  number it could honour. The prompt did mention the budget, which was worse
+  than silence — "pacing guidance", 480 lines below "smallest plausible next
+  behaviour".
+
+  That directive has now collapsed a divisible quantity three times: the sprint
+  path, spoken-line fullness, and line count. Its scoping now sits **at** the
+  directive rather than 400 lines away in another section, and says plainly that
+  it governs neither how many lines a character speaks nor how full each is.
+
+
 - **The engine was destroying its own bearings at runtime.** `_merge_room`
   upserted edges with wholesale replacement, so a model re-mentioning a doorway
   it had no reason to restate the bearing for erased that bearing — the exact
