@@ -1,5 +1,5 @@
 """Regression tests for the Fable-review F1-F4 narrator world-fidelity
-backstops (docs/FABLE_REVIEW_FOLLOWUPS.md):
+backstops (adversarial review, alpha3.3; all closed):
 
 F1 — event ordering: a quoted response must not render before the event it
 answers; the narrator receives the pipeline's own numbered event_order and

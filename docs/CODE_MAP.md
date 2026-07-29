@@ -15,7 +15,7 @@
 | `agents/loops.py` | 552 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 201 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 875 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/perception.py` | 2376 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
+| `agents/perception.py` | 2377 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 976 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 92 | Step and active-variant persistence helpers. | `db` |
 | `app.py` | 3881 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `auth_routes`, `backdrops`, `character_schema`, `chat_archive`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `survival`, `updates` |
@@ -26,7 +26,7 @@
 | `character_schema.py` | 1200 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
 | `chat_archive.py` | 1039 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory` |
 | `checkpoints.py` | 673 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
-| `comfort.py` | 291 |  | `spatial` |
+| `comfort.py` | 292 |  | `spatial` |
 | `commit.py` | 4715 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind` |
 | `db.py` | 1343 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 193 |  | `db` |
@@ -155,11 +155,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `perception_outcome()` | 1672 | 705 lines |
+| `perception_outcome()` | 1673 | 705 lines |
 | `perception_act()` | 1088 | 416 lines |
 | `perception_establish()` | 920 | 167 lines |
 | `_observer_scene_payload()` | 318 | 106 lines |
-| `_redact_concealed_from_event()` | 1606 | 65 lines |
+| `_redact_concealed_from_event()` | 1606 | 66 lines |
 | `_touch_only_sources()` | 1505 | 62 lines |
 | `_source_channels()` | 509 | 56 lines |
 | `_delivered_manifest()` | 766 | 51 lines |
@@ -285,14 +285,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_derive()` | 191 | 82 lines |
-| `_is_body()` | 136 | 21 lines |
-| `_posture_of()` | 172 | 17 lines |
-| `_entity_record()` | 122 | 12 lines |
-| `_station_of()` | 159 | 11 lines |
-| `comfort_level()` | 275 | 8 lines |
-| `rest_affording()` | 285 | 7 lines |
-| `_tokens()` | 99 | 6 lines |
+| `_derive()` | 192 | 82 lines |
+| `_is_body()` | 137 | 21 lines |
+| `_posture_of()` | 173 | 17 lines |
+| `_entity_record()` | 123 | 12 lines |
+| `_station_of()` | 160 | 11 lines |
+| `comfort_level()` | 276 | 8 lines |
+| `rest_affording()` | 286 | 7 lines |
+| `_tokens()` | 100 | 6 lines |
 
 ### `commit.py`
 

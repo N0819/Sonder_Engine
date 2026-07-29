@@ -1,8 +1,22 @@
 # Greeting-seeded openings — implementation design
 
-> Status: **design / not yet implemented.** Import SillyTavern greetings + alt-greetings,
-> preserve the prose verbatim, extract the simulation scaffolding underneath at ingest,
-> and let a player jump straight in with any persona via "Start story now".
+> Status: **shipped in alpha 1.4, under a materially different architecture than
+> this document proposes.** Import SillyTavern greetings + alt-greetings,
+> preserve the prose verbatim, extract the simulation scaffolding underneath, and
+> let a player jump straight in with any persona via "Start story now".
+>
+> **The one deviation worth knowing before you read §"The clean cut".** The
+> design pre-bakes four establishment steps as saved variants so the narrator LLM
+> never runs on turn 0, and calls that "verbatim by construction — the only real
+> guarantee". That is not what shipped: `greetings.py` runs the full pipeline and
+> then swaps the authored prose into a new active variant afterwards
+> (`_override_narrator`). Verbatim preservation is real but is enforced
+> post-hoc, not structurally.
+>
+> Still unbuilt and still wanted — ingest-time extraction caching with
+> `extractor_version`, idempotent seed event keys, `player_slot` and conflict
+> escalation, turn-0 greeting swipe, and two named invariant tests — are
+> registered in [`UNBUILT.md`](UNBUILT.md) §6.3.
 
 ## Core idea
 

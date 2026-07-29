@@ -1,8 +1,15 @@
 # Off-screen life, reactivation, and villain ticks — design
 
-> Status: **design / not yet implemented.** Covers `Design.md` roadmap items 7
-> (reactivation negotiation) and 10 (richer off-screen life), which are treated
-> here as **one mechanism at three cadences** rather than two features.
+> Status: **design / not yet implemented** — re-verified at alpha 6.1, still
+> entirely unbuilt, including `BehaviorController`, which remains declared in
+> `schemas.py` and consumed nowhere. Registered as
+> [`UNBUILT.md`](UNBUILT.md) §2.7 and §2.8, which those roadmap numbers now
+> point at; this document keeps the argument. Treated here as **one mechanism at
+> three cadences** rather than two features.
+>
+> One precedent that did not exist when this was written:
+> `background_claims.py` is exactly the "commit invention as claims, not facts"
+> mechanism decision 3 asks for, built for background presences.
 
 ## The problem
 

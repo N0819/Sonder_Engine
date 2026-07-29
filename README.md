@@ -42,8 +42,8 @@ flow, including the different opening-turn path.
 6. [`docs/TESTING.md`](docs/TESTING.md) — test tiers and CI policy.
 7. [`Design.md`](Design.md) — philosophy, architecture, and a verified
    built / partial / not-built conformance table.
-8. [`docs/OPEN_ITEMS.md`](docs/OPEN_ITEMS.md) — known defects and unfinished
-   work. [`CHANGELOG.md`](CHANGELOG.md) is the history.
+8. [`docs/UNBUILT.md`](docs/UNBUILT.md) — the single register of known defects
+   and unbuilt work. [`CHANGELOG.md`](CHANGELOG.md) is the history.
 
 ## Run locally
 

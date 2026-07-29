@@ -96,10 +96,10 @@ These are architectural guarantees, not stylistic preferences.
   as rival explanations of one subject; within a room, claims still revise each
   other normally. Characters demonstrably build durable cognitive maps this way
   — see [`docs/SPATIAL_LEARNING_EXPERIMENT.md`](docs/SPATIAL_LEARNING_EXPERIMENT.md)
-  — but the engine has **no outcome feedback**: confidence tracks restatement
-  and recency, never whether acting on a belief worked. Every navigational
-  affordance reports where a character has BEEN; none reports what SUCCEEDED,
-  so a proven route accumulates no weight against novelty.
+  — but **belief confidence has no outcome feedback**: it tracks restatement and
+  recency, never whether acting on the belief worked. Navigation is the one
+  place with a success signal (`worked_before`, next bullet); a *belief* still
+  accumulates no weight from having been acted on successfully.
 - **Outcome feedback exists, narrowly.** An intention reaching `satisfied` is
   the one success signal the engine can observe without trusting a bare
   self-report (`affect.apply_intent_ops` gates satisfy behind evidence). When
@@ -248,7 +248,7 @@ files are local state or private diagnostics and are ignored deliberately.
 - `mapping.py`: lore routing and retrieval
 - `perception.py`: opening, action-onset, and outcome views
 - `character.py`: one character decision
-- `background.py`: one-beat, stateless reaction for a named background presence with no character sheet (deterministically gated by `commit.py`'s `pick_background_reactor`)
+- `background.py`: two paths. The scene-manager (`scene_life`, one batched call voicing every managed presence in a room, config `off`/`ambient`/`full`) runs when enabled; otherwise the original one-beat, stateless reaction for a single named background presence with no character sheet (deterministically gated by `commit.py`'s `pick_background_reactor`)
 - `loops.py`: deterministic micro-perception, reactions, and dialogue rounds
 - `narration.py`: player-facing prose
 - `common.py`: shared normalization and delivery helpers

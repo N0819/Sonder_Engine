@@ -1,6 +1,8 @@
 # Database and State Map
 
-The engine uses SQLite. The schema is defined in `db.py`; access is intentionally lightweight through `q`, `qi`, `qtx`, `transaction`, `wget`, and `wset`.
+The engine uses SQLite. The schema is defined in `db.py`; access is intentionally lightweight through `q`, `qi`, `qtx`, `transaction`, `wget`, and `wset` (plus the frame-scoped `wget_for_frame`/`wset_for_frame`).
+
+Housekeeping tables not described below: `schema_meta` (the migration version), and `guest_grants` / `host_sessions` (see `guest_access.py` and `auth_routes.py`).
 
 ## Resource tables
 
@@ -33,7 +35,15 @@ The engine uses SQLite. The schema is defined in `db.py`; access is intentionall
   `state` whole, `chat_archive.py` exports/imports it verbatim, and the branch
   path copies the row; room ids are frame-scoped scene rids preserved as-is by
   all three.
-- `turns`: player declarations in sequence.
+- `chat_char_frames`: per-frame status/state override for a cast member, so one
+  character can be dormant in one era and live in another.
+- `frames`: the temporal frames themselves. Most `world` keys are frame-scoped
+  through this table; cross-frame contracts deliberately are not.
+- `chat_personas`, `turn_player_inputs`: multiplayer. Extra personas and their
+  per-frame station, and each extra player's per-beat declaration — the primary
+  player's declaration lives on `turns`, everyone else's lives here.
+- `turns`: the primary player's declaration in sequence, plus the beat's
+  `frame_id`.
 - `steps`, `variants`: inspectable intermediate pipeline outputs and rerolls.
 - `events`: one summarized committed event per turn.
 - `memories`, `memory_summaries`: character-owned experience records and consolidation.
@@ -43,7 +53,7 @@ The engine uses SQLite. The schema is defined in `db.py`; access is intentionall
 ## Structured world tables
 
 - `world_entities`: normalized projection of the scene's entities, derived at commit from the same post-dedup diff that builds the scene blob (`commit_world_entities(prepared=...)`). Read at runtime only for fixed-point existence checks (`paradox._entity_exists`) and book-anchor alias resolution (`commit._entity_alias_map`).
-- `world_placements`: DECOMMISSIONED (Phase 3a) — no runtime writer or reader; kept only so old snapshots/exports restore. Positions live solely in the frame-scoped `scene.positions`.
+- `world_placements`: DECOMMISSIONED (Phase 3a) — nothing inserts or reads it; kept only so old snapshots/exports restore. The two surviving runtime writers are deletes (legacy cleanup in `commit_world_entities`, and `paradox.py`). Positions live solely in the frame-scoped `scene.positions`.
 - `world_events`, `world_conditions`, `scheduled_events`: objective event timeline, active conditions, and future events (`transit_arrival`, `news_arrival`). `scheduled_events` is keyed `(chat_id, event_id)` since v16 (same repartition v14 applied to entities/conditions).
 - `room_registry`: the sole cross-frame ledger of room identity/existence-over-time/retirement, keyed `(chat_id, room_uid)` and scoped to an owning lorebook. It is a deterministic projection of every scene write: `commit_scene` maintains it in the same commit domain, and the manual world editor (`world_put`) reconciles it through `commit.sync_room_registry_with_scene`. Rooms and lorebooks are retired (`retired_turn_id`), never deleted, on removal/destruction.
 - `fiction_worlds`, `fiction_locations`, `transit_edges`: DEPRECATED dead macro schema (nothing in the runtime pipeline reads or writes them; kept only so old imports restore — removal is planned).
@@ -58,6 +68,10 @@ Authority model (Phase 3a): the frame-scoped `world.scene` blob is the single ru
 - `qtx(sql, args)`: write only inside `transaction()`.
 - `wget(chat_id, key, default)`: decode a JSON value from `world`.
 - `wset(chat_id, key, value)`: JSON upsert into `world`.
+- `wget_for_frame(chat_id, key, frame_id, default)` / `wset_for_frame(...)`: the
+  same, addressed to one temporal frame. Most `world` keys are frame-scoped —
+  use these when the era matters, which for live world state it almost always
+  does.
 
 Use `qtx` for a multi-statement invariant that must roll back together. Nested domain transactions become savepoints. `commit_all` supplies one outer transaction for all primary turn effects, so any exception rolls the complete turn back. Do not perform provider or embedding calls while a write transaction is open.
 

@@ -1,7 +1,9 @@
 # Design: the gods expand the maze
 
-**Status:** designed, not built. Depends on nothing that is not already in the
-engine; the work is in the harness and in one deterministic guard.
+**Status:** designed, not built — re-verified at alpha 6.1 (one maze SVG in
+`tools/mazes/`, no `--expand` flag). Depends on nothing that is not already in
+the engine; the work is in the harness and in one deterministic guard.
+Registered as [`UNBUILT.md`](UNBUILT.md) §7.
 
 Every arm so far has asked the same question: *can a character learn a space
 from nothing?* Vesk has now answered it several times over, and the answer is

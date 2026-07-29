@@ -70,7 +70,8 @@ perception_act
     ↓
 [interaction_loop when reactors exist and autonomy > 0]
     OR
-[parallel character:<id> steps when reactors exist and autonomy == 0]
+[parallel character:<id> steps when reactors exist, autonomy == 0,
+ and the beat was NOT contested]
     ↓
 director_resolve
     ↓
@@ -80,8 +81,20 @@ perception_outcome
     ↓
 narrator
     ↓
+[narrator_extra when the chat has other human players]
+    ↓
 commit
 ```
+
+Two conditions the diagram cannot show:
+
+- **The reactor set is consciousness-gated first.** A reactor whose awareness is
+  in `scene.NON_AWAKE_GATED` is dropped before any character step is planned, so
+  a gated mind runs no step at all.
+- **Contested beats plan no parallel character steps.** When a `reaction_loop`
+  ran, it already collected each reactor's declaration; planning `character:<id>`
+  steps as well would run those minds twice in one beat. `agents/runtime.py`
+  records this as a deliberate fix, not an omission.
 
 ### `director_interpret`
 
@@ -146,7 +159,12 @@ The Director owns objective causality but does not own character private psychol
 
 ### `background_react`
 
-Unconditionally present in the plan but internally self-gating: `commit.py`'s `pick_background_reactor` is a deterministic, LLM-free check that returns `None` for the large majority of turns (no salient, un-voiced named background presence this beat), in which case this stage costs nothing. Only when it picks a name does one small, stateless LLM call decide whether that person reacts and, if so, a single line and/or brief action for this beat only — no persistent memory, psychology, or mind-models (that is what character promotion is for). This is a deterministic backstop for the director_resolve prompt's own background-entity voicing license (see `prompts.py`), which live play showed goes unused often enough under sustained narrative pressure to need one, the same lesson already learned for spatial zone-tagging and speech concealment.
+Unconditionally present in the plan but internally self-gating, with two paths chosen by the per-chat `background_config` (`scene.py`) key `scene_life`:
+
+- **`off` (default) — one presence.** `commit.py`'s `pick_background_reactor` is a deterministic, LLM-free check that returns `None` for the large majority of turns (no salient, un-voiced named background presence this beat), in which case this stage costs nothing. Only when it picks a name does one small, stateless LLM call decide whether that person reacts and, if so, a single line and/or brief action for this beat only. `max_reactors` defaults to 1 and is raisable to 3, so "one presence" is the default rather than an invariant.
+- **`ambient` / `full` — the scene manager.** One batched call voices every managed presence in the room at once (roster from `managed_presences`, capped by `max_managed`), partitioned by `spatial.ambient_scope` and filtered per presence by a `hear_level` audience map. The plan label changes to "Scene life · manager (ambient|full)" accordingly. Voicing is batched; **writing is not** — each attributed entry is routed to its own record at commit, which is what keeps one call from becoming one shared mind. Design and its still-unbuilt half: [`BACKGROUND_LIFE_DESIGN.md`](BACKGROUND_LIFE_DESIGN.md), [`UNBUILT.md`](UNBUILT.md) §6.1.
+
+Neither path grants persistent memory, psychology, or mind-models — that is what character promotion is for. This is a deterministic backstop for the director_resolve prompt's own background-entity voicing license (see `prompts.py`), which live play showed goes unused often enough under sustained narrative pressure to need one, the same lesson already learned for spatial zone-tagging and speech concealment.
 
 Its output is merged into `perception_outcome`'s dialogue processing rather than mutating `director_resolve`'s already-persisted step/variant, so a rerun/resume from this point onward stays consistent with what was actually rendered.
 
@@ -166,26 +184,50 @@ deterministic delivery site.
 
 Renders the player-facing prose. Fidelity checks and player-echo stripping are applied before the output is saved.
 
+### `narrator_extra`
+
+Planned only when the chat has other human players: each needs its own perceiver
+and its own render of what *they* saw. Registered like any other stage, and
+together with `narrator` it forms the `_PRESENTATIONAL_TAIL` — rerolling either
+re-runs the remaining tail rather than the whole turn.
+
+It does **not** yet carry the primary narrator's consciousness gate or its full
+fidelity payload ([`UNBUILT.md`](UNBUILT.md) §3.4, S3-A6).
+
 ### `commit`
 
 `commit_all` first prepares the exact post-turn scene plus all lore and memory embeddings without holding SQLite's write lock. It then invokes every durable domain inside one outer transaction under a per-turn idempotency lock:
 
-1. scene and simulation clock
-2. world entities and conditions (a derived projection built from the same prepared post-dedup diff as the scene) — entity state blobs referencing concealed actors are skipped (S3-A8)
-3. cast status/state
-4. paradox checks
-5. spatial-frame reconciliation
-6. mapping/canon updates
-7. character active psychology, beliefs/associations, memories, relationships,
+1. transit sweep — first, because it mutates the prepared scene (timed
+   arrivals, engine notices) that the scene domain then persists
+2. scene and simulation clock
+3. world entities and conditions (a derived projection built from the same
+   prepared post-dedup diff as the scene) — an entity state blob referencing a
+   concealed actor raises a `"possible stale clause (S3-A8)"` warning and is
+   still committed; an earlier skip-the-update fix was reverted as durable
+   corruption, so this is a signal, not a guard
+4. cast status/state
+5. paradox checks
+6. spatial-frame reconciliation
+7. mapping/canon updates
+8. character active psychology, beliefs/associations, memories, relationships,
    and event row — dialogue memories store appearance labels for unrecognized
    speakers (F2/P1); a character deciding turn N never retrieves memories from
    turn N or later, via the `current_turn_idx` hard cutoff in
    `search_memories` (F1)
-8. background-presence tracking — co-located character names pass through the
-   the presence's own recognition ledger (F3)
-9. pending-state clear
+9. background-presence tracking — co-located character names pass through the
+   presence's own recognition ledger (F3)
+10. narration person
+11. obligations
+12. world pressure
+13. authored events
+14. pending-state clear
 
-A failure in any domain aborts immediately and rolls back all earlier writes from that turn. Character autobiographical consolidation runs after the primary transaction because it is a reconstructible derived cache and may require an LLM call; consolidation failure produces a warning without corrupting committed facts.
+Domains 5 and 6 run deliberately after the scene/entity/cast writes so they
+inspect this turn's projected world, while staying inside the same rollback
+boundary.
+
+A failure in any domain aborts immediately and rolls back all earlier writes from that turn. Two things run *after* the primary transaction, both because they may call an LLM and neither can corrupt a committed fact: character autobiographical consolidation (a reconstructible derived cache) and autonomous background-to-cast promotion (additive and forward-only — the new character becomes step-eligible next turn). A failure in either is a warning.
 
 ## Streaming
 

@@ -260,5 +260,5 @@ domain failure (`commit.py`).
   lorebook/World Info format; provider ecosystem.
 - **External specification, read directly:** SIGMA SRS / SRIP-14 (RMI),
   documentation set dated 2026-05-28 — license terms and §XXII read from the
-  document itself. Recorded as an influence under consideration; see
-  `docs/OPEN_ITEMS.md` for whether it has been built.
+  document itself. Built in alpha 6.1 as `memory.contrast_memory` — see §1.5
+  for what carries over and what deliberately does not.

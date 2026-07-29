@@ -1,9 +1,20 @@
 # Background Life — making extras feel like people
 
-Status: **design / theorycraft only**. Nothing here is implemented. Written after a
-read of `agents/background.py`, `commit.py`'s presence-tracking and gate code,
-`prompts.py:background_react`, and the merge sites in `agents/perception.py` /
-`agents/narration.py`.
+Status: **mostly built.** Most of §3 shipped in alpha 4.0 as the scene manager —
+the batched voicing (§3.3), unbatched writing (§3.2), the single stage (§3.4),
+the `place` block (§3.7), frozen personality blurbs (§3.8), the opt-in tiered
+config (§3.10), the I/O contract (§3.11), co-DM-not-co-author (§3.12), and
+claims-not-facts (§3.13, as `background_claims.py`).
+
+What is **not** built: the whole digest lifecycle (§3.5), promotion conversion
+and the `ambient_turns` guard (§3.6 — an active defect, not just backlog),
+interim filler (§3.9), `canon_ref` (§3.8.1), the separation eval (§3.3.1), the
+narrator dilution clause (§5), and both §4 follow-ons. Those are registered in
+[`UNBUILT.md`](UNBUILT.md) §6.1; this document keeps the argument for them.
+
+Read the section text below as the original proposal — it was written before any
+of this existed, and its "not implemented" framing is preserved deliberately
+rather than rewritten into the past tense.
 
 The goal this document argues for: a room should feel inhabited *whether or not
 the player is doing anything*. Today it only feels inhabited when the player

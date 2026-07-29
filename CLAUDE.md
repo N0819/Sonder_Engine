@@ -11,8 +11,9 @@ This repo already maintains detailed docs for coding agents. Read them before ma
 3. [`docs/CODE_MAP.md`](docs/CODE_MAP.md) — generated index of modules, functions, routes, DB tables, and frontend sections. Regenerate with `make map`; do not hand-edit.
 4. [`docs/DATABASE.md`](docs/DATABASE.md) — schema, write helpers (`q`/`qi`/`qtx`/`transaction`/`wget`/`wset`), and the schema-change checklist.
 5. [`docs/TESTING.md`](docs/TESTING.md) — fast/full/browser tiers, dependency constraints, and CI policy.
-6. [`Design.md`](Design.md) — product philosophy, architecture, a verified conformance table (built / partial / not built), structural debt, and roadmap. Its status rows were checked against source; keep them that way by editing the row in the same commit as the behaviour.
-7. [`agents/README.md`](agents/README.md) — how to add a new pipeline stage.
+6. [`Design.md`](Design.md) — product philosophy, architecture, a verified conformance table (built / partial / not built), and structural debt. Its status rows were checked against source; keep them that way by editing the row in the same commit as the behaviour.
+7. [`docs/UNBUILT.md`](docs/UNBUILT.md) — the single register of unfinished work: known defects, the roadmap, deferred audit findings, and every design-note residual. No other document keeps its own status list. Delete an entry in the commit that lands it; add the corresponding row to `Design.md`.
+8. [`agents/README.md`](agents/README.md) — how to add a new pipeline stage.
 
 Do not duplicate content from these files in explanations; point to them instead.
 

@@ -1,4 +1,4 @@
-"""F6 (docs/FABLE_REVIEW_FOLLOWUPS.md): a planted tell must have a stored
+"""F6 (adversarial review, alpha3.3; closed): a planted tell must have a stored
 referent. Impostor t2 planted 'a half-second longer than a servant's glance
 should' with no ground anywhere -- in a mystery, readers bank every such
 detail, so an untethered tell is fake significance.
