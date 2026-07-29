@@ -712,6 +712,28 @@ def _orrin_sheet(name="Orrin"):
         "speed on proved ground over care on unproved -- a route he has "
         "proved is a route he should be running",
     ]
+    # THE COMMISSION AS A PROJECT, not a goal. Goals are built to be
+    # completable and abandonable, and across three arms that is exactly what
+    # they did: "walk the proved line to the shrine" was marked satisfied by
+    # the character the beat after his first arrival, and a courier's
+    # commission decayed dormant after 150 barren beats. A project cannot be
+    # discharged by one instance (satisfy is refused unless its OWN
+    # satisfied_when is met), is untouched by the dormancy sweep, and weighs
+    # 1.0 -- the same as the drive that kept beating it at 0.8.
+    #
+    # Deliberately NAMES NO CHAMBER, for the same reason the goals below do
+    # not: a project text is payload, and handing him the goal room's
+    # identifier in his own sheet would leak by fiat the one thing the arm
+    # exists to measure whether he can learn. `reward_on_contact` appends the
+    # name the beat he stands in it, which is when it becomes his.
+    sheet["psychology"]["projects"] = [{
+        "project": ("Every run through this maze ends at the shrine. A run "
+                    "that stops anywhere else is a run I did not finish."),
+        "about": "world",
+        "satisfied_when": ("the keepers withdraw the commission -- not by "
+                           "reaching the shrine, which is the job and not "
+                           "the end of it"),
+    }]
     sheet["initial_state"] = dict(sheet.get("initial_state") or {})
     # Deliberately NOT naming Chamber 0603. He has not earned that room's
     # identity on run 1, and seeding it would be an information leak straight
@@ -1109,15 +1131,20 @@ def run_interlude(chat_id, char_id, name, run_no, reached, turn_id):
         body = (f"You reached the shrine at the heart of the maze. The "
                 f"keepers fed you well for it -- {fed} -- and you ate sitting "
                 f"down, which you almost never do. Then they walked you back "
-                f"to the entrance and set you at the threshold to run it "
-                f"again.")
+                f"to the entrance and set you at the threshold. You are at "
+                f"the start again, and they told you plainly: the shrine has "
+                f"been made ready a second time, and what waits there for you "
+                f"now is worth more than what you took from it before. It is "
+                f"there. It is waiting. Go and get it.")
         valence, arousal, salience = 0.8, 0.4, 0.85
     else:
         body = (f"The keepers called the run before you reached the shrine. "
                 f"They fed you anyway -- {fed} -- and you ate it standing, "
                 f"chewing over where the way had gone wrong. Then they walked "
-                f"you back to the entrance and set you at the threshold to "
-                f"run it again.")
+                f"you back to the entrance and set you at the threshold. You "
+                f"are at the start again, and the shrine is still stocked and "
+                f"still waiting, and the reward in it is still unclaimed. It "
+                f"goes to whoever gets there. Nothing is keeping it for you.")
         valence, arousal, salience = 0.3, 0.35, 0.8
 
     try:
@@ -1125,7 +1152,8 @@ def run_interlude(chat_id, char_id, name, run_no, reached, turn_id):
         add_memory(chat_id, char_id, turn_id, "episodic", "experienced",
                    salience, body, category="event",
                    gist=("Finished a run, was fed, and was carried back to "
-                         "the entrance to start again."),
+                         "the entrance to start again -- with a reward "
+                         "waiting at the shrine, still unclaimed."),
                    location=_rid(START), valence=valence, arousal=arousal,
                    emotional_context="fed and rested; set going again")
     except Exception as exc:                       # pragma: no cover
@@ -1445,10 +1473,82 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
             # beat, the route so far, and the rng.
             checkpoint(run_no, step + 1, visited)
         if here == _rid(GOAL):
+            reward_on_contact(chat_id, char_id, name)
             break
     if stalls:
         print(f"    ({len(stalls)} stalled beats this run)")
     return visited, (trace or [])
+
+
+def reward_on_contact(chat_id, char_id, name):
+    """The shrine itself is the reward, felt where it is, the beat he touches
+    it.
+
+    This should have been the shape from the start. The interlude fed him at
+    the run BOUNDARY, so the hedonic charge and the memory both landed after
+    the fact and attached to the meal: measured after his first arrival,
+    `pleasure 0.45, source "hot barley and dark beer after the run"`, and not
+    one belief anywhere in his state mentioning the shrine. He walked
+    forty-eight moves to the object of the entire experiment and what
+    registered was dinner.
+
+    That is why the scenery kept winning. A shattered mirror and a chalk
+    circle rewarded attention with a theory to build; the shrine rewarded
+    attention with nothing at all, because its reward was paid out somewhere
+    else to something else. Studying the chalk circle was the better-reasoned
+    choice, and he made it three runs running.
+
+    Leaks nothing: the room is already his -- he is standing in it -- and the
+    text names no doorway, no direction and no other chamber. The interlude
+    keeps its meal, which is a real reward for finishing; it simply stops
+    being the ONLY thing that ever felt good.
+    """
+    from db import q, qi
+    import json as _json
+    try:
+        row = q("SELECT id FROM turns WHERE chat_id=? ORDER BY idx DESC "
+                "LIMIT 1", (chat_id,), one=True)
+        if row:
+            from memory import add_memory
+            add_memory(chat_id, char_id, row["id"], "episodic", "experienced",
+                       f"{name} came into the shrine chamber and the light off "
+                       "the water went over him, and it was warm, and the air "
+                       "smelled of bread. He had got there. Whatever the gods "
+                       "keep, they keep it here, and he was standing in it.",
+                       location=_rid(GOAL), valence=0.9, arousal=0.5,
+                       salience=0.95)
+        st_row = q("SELECT state FROM chat_chars WHERE chat_id=? AND char_id=?",
+                   (chat_id, char_id), one=True)
+        if st_row:
+            st = _json.loads(st_row["state"] or "{}")
+            active = st.setdefault("active_state", {})
+            hed = active.get("hedonic")
+            if not isinstance(hed, dict):
+                hed = {"pain": 0.0, "pleasure": 0.0, "source": "",
+                       "charge": 0.0}
+            hed["pleasure"] = max(float(hed.get("pleasure") or 0.0), 0.85)
+            hed["pain"] = 0.0
+            hed["source"] = "standing in the shrine at the end of the maze"
+            active["hedonic"] = hed
+            # The room's NAME becomes his the beat he stands in it, and the
+            # project that has been steering him blind can finally say where
+            # it is going. Until now the commission named no chamber on
+            # purpose (that would have been the leak); from here the
+            # destination resolver can route on the project text itself,
+            # which is what makes it a durable fallback when every goal and
+            # intention above it has died.
+            goal_name = f"Chamber {_rid(GOAL)[1:]}"
+            for proj in (st.setdefault("interior", {})
+                         .setdefault("projects", [])):
+                text = str(proj.get("project") or "")
+                if "shrine" in text.lower() and goal_name not in text:
+                    proj["project"] = f"{text.rstrip('.')}. The shrine is " \
+                                      f"{goal_name}."
+            qi("UPDATE chat_chars SET state=? WHERE chat_id=? AND char_id=?",
+               (_json.dumps(st), chat_id, char_id))
+        print("    REACHED THE SHRINE -- reward paid on contact", flush=True)
+    except Exception as exc:                            # pragma: no cover
+        print(f"    shrine reward not applied ({exc})")
 
 
 # Fields worth watching, in the order they make sense to read: what he thought
