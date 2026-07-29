@@ -380,7 +380,7 @@ def _observer_scene_payload(scene, perceiver):
         ):
             continue
         entry = copy.deepcopy(contact)
-        entry["standing"] = contact_phrase(contact)
+        entry["standing"] = contact_phrase(contact, you=name)
         contacts.append(entry)
     scales = {
         key: value for key, value in (scene.get("scales") or {}).items()
