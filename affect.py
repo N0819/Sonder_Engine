@@ -70,6 +70,11 @@ _INTENT_CAP = 4
 _INTENT_SIMILARITY = 0.4
 _INTENT_EVIDENCE_WINDOW = 3
 _INTENT_DORMANT_AFTER = 30
+# Public: agents/character.py surfaces an active intention as `fading` once
+# it has gone two-thirds of the dormancy fuse without progress, so the
+# giving-up can happen BY the character instead of TO them (see
+# docs/DESIGN_LONG_TERM_GOALS.md, "Decay should be reasoned, not silent").
+INTENT_DORMANT_AFTER = _INTENT_DORMANT_AFTER
 _INTENT_PROGRESS_STEP = 0.2
 # Consecutive attempts at FULL progress -- the beat spent on a goal that has
 # nothing left to give -- before it stops steering. Two, not more: one barren
@@ -294,35 +299,42 @@ def label_matches(label, v, a):
 
 _SERVES_INTENT_SIMILARITY = 0.4
 
-def normalize_serves(serves, intentions):
-    """Resolve a model-emitted `serves` key to "drive" or an intention id.
+def normalize_serves(serves, intentions, projects=None):
+    """Resolve a model-emitted `serves` key to "drive", an intention id, or
+    a project id.
 
     Models routinely emit serves as "intention:i2" — or "intention:<the
     goal's own text>" — instead of the bare id the commit priority lookup
     expects, which silently scores a goal-serving impact at situational
-    priority (0.4 instead of 0.8). Strips an "intention:" prefix and
-    resolves the remainder: an exact id match wins, else the intention
-    whose text is most similar (claim_similarity >=
-    _SERVES_INTENT_SIMILARITY). Unprefixed keys ("drive", bare ids,
-    "situational") pass through untouched, and an unresolvable remainder
-    is returned stripped so the caller's situational fallback still
-    applies. Pure and total on junk inputs.
+    priority (0.4 instead of 0.8). Strips an "intention:" or "project:"
+    prefix and resolves the remainder against the matching ledger: an exact
+    id match wins, else the entry whose text is most similar
+    (claim_similarity >= _SERVES_INTENT_SIMILARITY). Unprefixed keys
+    ("drive", bare ids, "situational") pass through untouched, and an
+    unresolvable remainder is returned stripped so the caller's situational
+    fallback still applies. Pure and total on junk inputs.
     """
     key = str(serves or "").strip()
-    if not key.casefold().startswith("intention:"):
+    folded = key.casefold()
+    if folded.startswith("project:"):
+        rows = [(str(p.get("id") or ""), str(p.get("project") or ""))
+                for p in (projects or []) if isinstance(p, dict)]
+        rest = key[len("project:"):].strip()
+    elif folded.startswith("intention:"):
+        rows = [(str(i.get("id") or ""), str(i.get("intent") or ""))
+                for i in (intentions or []) if isinstance(i, dict)]
+        rest = key[len("intention:"):].strip()
+    else:
         return key
-    rest = key[len("intention:"):].strip()
     if not rest:
         return rest
-    intents = [i for i in (intentions or []) if isinstance(i, dict)]
-    ids = {str(i.get("id") or "") for i in intents}
-    if rest in ids:
+    if rest in {rid for rid, _ in rows}:
         return rest
     best_id, best_sim = "", 0.0
-    for intent in intents:
-        sim = claim_similarity(rest, str(intent.get("intent") or ""))
+    for rid, text in rows:
+        sim = claim_similarity(rest, text)
         if sim > best_sim:  # strict > keeps first-wins ties deterministic
-            best_id, best_sim = str(intent.get("id") or ""), sim
+            best_id, best_sim = rid, sim
     if best_id and best_sim >= _SERVES_INTENT_SIMILARITY:
         return best_id
     return rest
@@ -674,7 +686,8 @@ def normalize_wants(wants, valid_intention_ids):
 
     Caps to 3, merges near-duplicates (claim_similarity >= 0.4, higher
     urgency wins), rewrites unknown `serves` (neither "drive" nor a known
-    intention id) to "situational", and lets at most one situational want
+    intention/project id -- the caller passes the union) to "situational",
+    and lets at most one situational want
     survive — weak models otherwise multiply free-floating urges that
     serve nothing. Picks enacted = highest-urgency want and suppressed =
     highest-urgency remaining want with `conflicts_with` set (the desire
@@ -694,7 +707,16 @@ def normalize_wants(wants, valid_intention_ids):
         want["urgency"] = _clamp01(raw.get("urgency"), fallback=0.5)
         serves = str(raw.get("serves") or "situational").strip()
         if serves != "drive" and serves not in valid_ids:
-            serves = "situational"
+            # Models emit "intention:i2" / "project:pa1" here exactly as they
+            # do in goal_impacts, and until now that silently demoted the
+            # want to situational -- the same demotion normalize_serves
+            # exists to prevent one field over.
+            stripped = serves
+            for prefix in ("intention:", "project:"):
+                if stripped.casefold().startswith(prefix):
+                    stripped = stripped[len(prefix):].strip()
+                    break
+            serves = stripped if stripped in valid_ids else "situational"
         want["serves"] = serves
         want.pop("enacted", None)
         want.pop("suppressed", None)
@@ -967,6 +989,469 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok):
                 f"({turn_idx - last} turns without progress)")
 
     return (result, warnings)
+
+# ---- Projects (Tier 1.5) ----
+#
+# The tier between the eternal drive and the completable intention: durable
+# but not eternal, able to name a room, and structurally immune to every
+# mechanism above that correctly spends intentions. Four measured failures
+# motivate it (docs/DESIGN_LONG_TERM_GOALS.md): a life's-work aim marked
+# satisfied the beat after its first success; a commission decayed dormant by
+# 150 barren beats the world had not withdrawn; aims abandoned along with the
+# tactic that served them; and a standing purpose out-competed every beat by
+# whatever the current room offered, because it scored 0.8 against
+# drive-serving wants at 1.0.
+#
+# The cap IS the mechanism. Two slots, never more: with seven live
+# intentions there is no answer to "what is this person about right now",
+# with two there always is. Adoption over a full ledger is refused, so
+# taking on a third has a price -- something must be given up, by name, with
+# the reason stated. That displacement is deliberately the ONLY way a
+# project ends other than meeting its own criterion: no dormancy sweep, no
+# stall counter, no progress field. A hundred barren beats is a normal week
+# inside a project.
+
+PROJECT_CAP = 2
+_PROJECT_SIMILARITY = 0.4
+# A satisfied_when at or above this similarity to its own project text is
+# circular ("done when I have done it"). Measured gap on real strings:
+# circular/task criteria 0.5-0.75, genuine external conditions 0.125-0.25.
+_CRITERION_RESTATES_SIM = 0.4
+_FORMER_PROJECTS_CAP = 6
+
+
+def _next_project_id(projects, former):
+    """Deterministic p<n>, never reusing an id a former project carried --
+    a displaced project's id coming back on an unrelated adoption would make
+    the former ledger read as the history of the new one."""
+    highest = 0
+    for rec in list(projects or []) + list(former or []):
+        raw = str((rec or {}).get("id") or "") if isinstance(rec, dict) else ""
+        if raw.startswith("p"):
+            try:
+                highest = max(highest, int(raw.lstrip("pa")))
+            except ValueError:
+                pass
+    return f"p{highest + 1}"
+
+
+def apply_project_ops(projects, former, ops, turn_idx):
+    """Apply a turn's project operations under the cap and the legibility
+    floor. Returns (projects, former, warnings).
+
+    Ops: `adopt` {project, about?, satisfied_when?} takes one on while a
+    slot is free; `displace` {id, why} gives one up -- why is REQUIRED,
+    because the giving-up is the act: it is the one revision of a belief
+    about the self the engine supports, and it must happen out loud, never
+    as silent eviction; `satisfy` {id, why} closes one whose OWN
+    satisfied_when criterion has been met -- a project with no criterion is
+    not completable at all (it re-arms at every occasion by construction)
+    and satisfy on it is refused.
+
+    Closures are applied before adoptions whatever order the model emitted,
+    so displace-and-adopt lands in one beat without the model having to know
+    the processing order. Ends land in `former` with the stated reason and
+    the turn -- continuity, like former_drives, not obligation.
+
+    What is deliberately ABSENT here is most of the point: no dormancy
+    sweep, no barren counter, no progress ceiling. Nothing in this function
+    or any other touches a project the model did not explicitly close.
+    """
+    live = [dict(p) for p in (projects or []) if isinstance(p, dict)]
+    ended = [dict(p) for p in (former or []) if isinstance(p, dict)]
+    warnings: list[str] = []
+    turn_idx = int(_float_or(turn_idx))
+    ops = [op for op in (ops or []) if isinstance(op, dict)]
+
+    def _find(pid):
+        pid = str(pid or "")
+        for p in live:
+            if str(p.get("id") or "") == pid:
+                return p
+        return None
+
+    for op in ops:
+        kind = str(op.get("op") or "").strip().casefold()
+        if kind not in ("displace", "satisfy"):
+            continue
+        target = _find(op.get("id"))
+        if target is None:
+            warnings.append(f"project {kind} rejected: unknown id "
+                            f"{str(op.get('id') or '')!r}")
+            continue
+        why = str(op.get("why") or "").strip()
+        if not why:
+            warnings.append(
+                f"project {kind} rejected for {target.get('id')!r}: a "
+                "project ends by a stated reason or not at all")
+            continue
+        if kind == "satisfy" and not str(
+                target.get("satisfied_when") or "").strip():
+            warnings.append(
+                f"project satisfy rejected for {target.get('id')!r}: it has "
+                "no satisfied_when criterion, so it is not completable -- "
+                "it re-arms at every occasion; displace it with a reason if "
+                "it no longer speaks for the character")
+            continue
+        live.remove(target)
+        ended.append({
+            "id": str(target.get("id") or ""),
+            "project": str(target.get("project") or ""),
+            "why": why, "turn": turn_idx,
+            "end": "satisfied" if kind == "satisfy" else "displaced",
+        })
+
+    for op in ops:
+        kind = str(op.get("op") or "").strip().casefold()
+        if kind in ("displace", "satisfy"):
+            continue
+        if kind != "adopt":
+            warnings.append(f"unknown project op {kind!r}")
+            continue
+        text = str(op.get("project") or "").strip()
+        if not text:
+            warnings.append("project adopt rejected: empty project text")
+            continue
+        dup = next((p for p in live if claim_similarity(
+            text, str(p.get("project") or "")) >= _PROJECT_SIMILARITY), None)
+        if dup is not None:
+            warnings.append(
+                f"project adopt rejected: restates {dup.get('id')!r} -- a "
+                "project is held, not re-adopted")
+            continue
+        # THE DELIBERATION GATE. "Can a mind reliably deliberate that this
+        # is worthy as a project?" is answered by making the deliberation
+        # mechanical: state what would END this other than doing it once.
+        # A criterion that RESTATES the project is not a criterion --
+        # measured cleanly separable on real strings: circular criteria
+        # ("understand the symbols" -> "when I understand the symbols")
+        # score 0.5-0.75 against their project text, genuine external
+        # conditions ("the keepers withdraw the commission", "spring comes
+        # and the village still stands") score 0.125-0.25. The same gate
+        # catches a TASK wearing the word, because a task's completion
+        # restates the task ("fetch the physician" -> "the physician is
+        # here", 0.5). What it cannot catch is an insincere-but-external
+        # criterion; that residue is what probation below is for.
+        crit = str(op.get("satisfied_when") or "").strip()
+        if not crit:
+            warnings.append(
+                "project adopt rejected: adoption is a deliberation -- "
+                "state satisfied_when, what would end this project OTHER "
+                "than doing it once. No statable end beyond the doing "
+                "means it is a task or a fascination, not a project")
+            continue
+        if claim_similarity(text, crit) >= _CRITERION_RESTATES_SIM:
+            warnings.append(
+                "project adopt rejected: satisfied_when restates the "
+                "project, which is circular -- 'done when I have done it' "
+                "is what a TASK says. Name the condition OUTSIDE the doing "
+                "that would end it, or serve it as an intention instead")
+            continue
+        if len(live) >= PROJECT_CAP:
+            warnings.append(
+                "project adopt rejected: both slots full -- adopting a "
+                "third requires displacing one by name, with the reason "
+                "stated (a displace op in the same beat frees the slot)")
+            continue
+        about = str(op.get("about") or "").strip().casefold()
+        live.append({
+            "id": _next_project_id(live, ended),
+            "project": text,
+            "about": about if about in ("world", "self") else "",
+            "satisfied_when": crit,
+            "adopted_turn": turn_idx,
+            # Fresh adoption counts as service: the drift clock starts now,
+            # not at some notional zero that would read as instantly adrift.
+            "last_served_turn": turn_idx,
+            # PROBATION: a runtime adoption weighs at intention level and
+            # may lapse quietly until it is lived into -- see
+            # settle_probation. Nobody knows on day one that something is
+            # their life's work; time filters instead of judgement.
+            "probation": True,
+            "served_beats": 0,
+        })
+
+    return (live, ended[-_FORMER_PROJECTS_CAP:], warnings)
+
+
+# Establishment is EARNED BY SERVICE, never by survival. The obvious rule
+# ("survives N boundary reviews") was considered and rejected: the measured
+# failure mode of this tier is precisely that the model stops referring to
+# what it holds, so passive survival would establish a project by
+# inattention -- the exact pathology, made permanent. Both floors are
+# needed: service alone lets a three-beat enthusiasm establish same-day;
+# age alone is establishment by neglect. Served on three distinct beats
+# across at least a dozen turns is a commitment that lasted AND was acted
+# on.
+_PROBATION_SERVED_MIN = 3
+_PROBATION_AGE_MIN = 12
+# A probationary project unserved this long lapses -- quietly, because you
+# can drop something you took up last week without ceremony; the stated-
+# reason floor stays where it matters, on projects a character has actually
+# lived by. Three times the drift-marker threshold: the character has been
+# SHOWN the drift for two-thirds of the fuse before the lapse lands, so a
+# lapse is never the first notice. Deliberately wider than the intention
+# stall (2 barren attempts) -- probationary barren-tolerance is most of
+# what adoption buys before establishment.
+_LAPSE_AFTER = 24
+
+
+def settle_probation(projects, former, turn_idx):
+    """Establish or lapse probationary projects. Returns (projects, former,
+    warnings). Deterministic, runs every commit AFTER the service ledger so
+    this beat's service counts.
+
+    Establishment removes the probation flag: the project now weighs at
+    drive level and can no longer lapse -- from here only its own
+    satisfied_when or a displacement with a stated reason ends it. A lapse
+    moves it to former_projects with end 'lapsed' and an auto-stated why:
+    recorded continuity, no ceremony. Authored and harness-written projects
+    never pass through here at all (no probation flag -- the author's
+    deliberation already happened), which is what keeps the live pa1
+    untouched by this change."""
+    live, ended, warnings = [], list(former or []), []
+    turn_idx = int(_float_or(turn_idx))
+    for p in projects or []:
+        if not (isinstance(p, dict) and p.get("probation")):
+            live.append(p)
+            continue
+        p = dict(p)
+        served = int(_float_or(p.get("served_beats")))
+        age = turn_idx - int(_float_or(p.get("adopted_turn"), turn_idx))
+        idle = turn_idx - int(_float_or(p.get("last_served_turn"), turn_idx))
+        if served >= _PROBATION_SERVED_MIN and age >= _PROBATION_AGE_MIN:
+            p.pop("probation", None)
+            warnings.append(
+                f"project {p.get('id')!r} established -- served "
+                f"{served} beats over {age} turns; it now weighs with the "
+                "drive and ends only by its criterion or out loud")
+        elif idle >= _LAPSE_AFTER:
+            ended.append({
+                "id": str(p.get("id") or ""),
+                "project": str(p.get("project") or ""),
+                "why": f"lapsed on probation: unserved for {idle} beats",
+                "turn": turn_idx,
+                "end": "lapsed",
+            })
+            warnings.append(
+                f"project {p.get('id')!r} lapsed -- adopted turn "
+                f"{p.get('adopted_turn')}, unserved for {idle} beats; a "
+                "fascination that passed, recorded without ceremony")
+            continue
+        live.append(p)
+    return (live, ended[-_FORMER_PROJECTS_CAP:], warnings)
+
+
+def _last_named_room(text, named_rooms):
+    """The last room a text names, resolved against {casefolded node name:
+    rid}. Last-named wins for the same reason as _destination_from_goals:
+    'from the gate to the shrine' is going TO the shrine. None when the text
+    names no known room -- both vocabularies closed, identifier recognition,
+    never prose reading."""
+    folded = str(text or "").casefold()
+    best = None
+    for key, rid in (named_rooms or {}).items():
+        if not key:
+            continue
+        pos = folded.rfind(str(key))
+        if pos >= 0 and (best is None or pos > best[0]):
+            best = (pos, str(rid))
+    return best[1] if best else None
+
+
+def projects_served_this_beat(projects, wants, goal_text, impact_serves=(),
+                              named_rooms=None):
+    """The project ids this beat's declared interior actually served.
+
+    The measured failure this feeds (A15, run 5): `pa1` held at weight 1.0
+    while, twenty beats in, nothing the character emitted served it -- top
+    want serves 'drive', goal 'Reorient and test connectivity', and no
+    marker anywhere for the gap between HOLDING a project and SERVING it.
+    The tier stopped failing by being outranked and started failing by
+    being forgotten. This is the ledger the drift marker reads.
+
+    Three channels, most explicit first:
+      * a want whose `serves` resolves to the project id;
+      * a goal-impact `serves` resolving to it (caller pre-normalizes);
+      * the beat goal naming the SAME room the project text names, over the
+        character's own place-graph names -- the substance channel, because
+        a character routinely serves a project without citing it ('Move
+        west along proven route toward Chamber 0603' never says pa1).
+        Text similarity was measured and rejected for this: it scored the
+        chalk-circle detour (0.2) ABOVE 'walk the proved line to the
+        shrine' (0.167). Naming the same destination is the honest test,
+        and for projects about people rather than places the two explicit
+        channels still carry.
+    """
+    rows = [(str(p.get("id") or ""), str(p.get("project") or ""))
+            for p in (projects or []) if isinstance(p, dict)]
+    ids = {rid for rid, _ in rows if rid}
+    served = set()
+    for w in wants or []:
+        if isinstance(w, dict) and str(w.get("serves") or "") in ids:
+            served.add(str(w["serves"]))
+    for s in impact_serves or ():
+        if str(s) in ids:
+            served.add(str(s))
+    goal_room = _last_named_room(goal_text, named_rooms)
+    if goal_room:
+        for rid, text in rows:
+            if rid not in served \
+                    and _last_named_room(text, named_rooms) == goal_room:
+                served.add(rid)
+    return served
+
+
+def goal_slot_currency(prev_active, goal_text, named_rooms, here_rid,
+                       turn_idx):
+    """Tenure and spend stamps for the beat-goal slot, computed at commit.
+
+    `active_state.goal` is rewritten every commit from the enacted want, so
+    the SLOT is per-beat -- but the CLAIM inside it is whatever the model
+    re-emits, and re-emission is free: the en_route continuation-default
+    deliberately made goals sticky, and stickiness serves whatever holds the
+    slot. Measured (maze, turns 370-385): "Compare chalk circle patterns
+    across chambers" survived a run boundary and a process restart with no
+    cap, criterion, or visibility; "Run east to Chamber 0206 along the
+    proved line" kept steering for beats after he had stood in Chamber 0206
+    and moved on -- a claim the engine could SEE was spent, tethering him
+    back to the room it named (visited tail ... 0306 0206 0205 0206 0306
+    0206). The goal was functioning as an ungoverned project.
+
+    Two deterministic facts, stamped here at the single active_state write
+    point and read back by agents/character._annotate_goal_currency:
+
+      * `goal_since` -- the turn the slot last CHANGED words. Same words
+        carried forward keep the stamp; any re-wording is a re-authoring
+        and restarts the clock. Tenure is what a run boundary the engine
+        cannot see (no engine row) still shows up as.
+      * `goal_room` / `goal_room_reached` -- the room the goal's own text
+        names over the character's OWN place-graph names (identifier
+        recognition, never prose reading), and the turn the character's
+        committed position first became that room while these exact words
+        held. A reached claim stays reached only while the words stand:
+        "return to the kitchen", said fresh, is a new claim and routes.
+
+    Facts only -- nothing here rewrites the goal, and the payload marker
+    plus the routing exclusion (_destination_from_goals) are the read side.
+    Pure and total on junk inputs. Returns the stamps to merge into the
+    freshly rebuilt active_state; an empty slot holds nothing and gets
+    nothing.
+    """
+    text = str(goal_text or "").strip()
+    if not text or not isinstance(turn_idx, int):
+        return {}
+    prev = prev_active if isinstance(prev_active, dict) else {}
+    same_claim = (text.casefold()
+                  == str(prev.get("goal") or "").strip().casefold())
+    since = None
+    if same_claim:
+        try:
+            since = int(prev.get("goal_since"))
+        except (TypeError, ValueError):
+            since = None
+    out = {"goal_since": since if since is not None else turn_idx}
+    room = _last_named_room(text, named_rooms)
+    if not room:
+        return out
+    out["goal_room"] = room
+    reached = None
+    if same_claim:
+        try:
+            reached = int(prev.get("goal_room_reached"))
+        except (TypeError, ValueError):
+            reached = None
+    if reached is None and here_rid is not None \
+            and str(here_rid) == room:
+        reached = turn_idx
+    if reached is not None:
+        out["goal_room_reached"] = reached
+    return out
+
+
+def project_boundary(projects, intentions, before_status, new_room,
+                     prev_room, scene_marker, location, frame_id,
+                     named_rooms=None):
+    """The engine-detectable moments that re-ask a held project. Returns a
+    why-string, or None when no boundary passed this beat.
+
+    v1 left boundary review prompt-normative and it did not hold (A15 run
+    5: nine perfect beats, then drift, with no moment that ever re-asked
+    what the project meant for the next move). These are the boundaries the
+    engine can actually SEE, each one honest:
+
+      * arrival -- the character's committed position just became the room
+        a project's own text names, over their own place-graph names;
+      * a task ending -- an intention entered satisfied/abandoned/blocked
+        this commit (the closing ops are the one lifecycle edge commit can
+        observe without trusting a self-report);
+      * the scene or frame changing -- against the scene_marker persisted
+        last beat; no marker (first beat) is silence, never a boundary.
+
+    NOT detectable, deliberately absent rather than faked: 'run end' (a
+    harness concept the engine has no row for) and 'major Director event'
+    (events carry no uniform salience field; memory salience is a different
+    ledger). Detection is a fact; what the review MEANS stays the
+    character's -- the flag invites project_ops, it never applies any.
+    """
+    if not projects:
+        return None
+    reasons = []
+    if new_room and str(new_room) != str(prev_room or ""):
+        for p in projects:
+            if not isinstance(p, dict):
+                continue
+            proom = _last_named_room(str(p.get("project") or ""), named_rooms)
+            if proom and proom == str(new_room):
+                reasons.append("you have arrived where your project "
+                               f"{str(p.get('id') or '')} points")
+                break
+    closed = ("satisfied", "abandoned", "blocked")
+    for intent in intentions or []:
+        if not isinstance(intent, dict):
+            continue
+        sid = str(intent.get("id") or "")
+        if intent.get("status") in closed \
+                and (before_status or {}).get(sid) not in closed:
+            reasons.append(f"your task {sid} closed this beat")
+            break
+    if isinstance(scene_marker, dict):
+        if str(location or "") != str(scene_marker.get("location") or ""):
+            reasons.append("the scene has changed")
+        elif str(frame_id or "") != str(scene_marker.get("frame") or ""):
+            reasons.append("the frame has changed")
+    return "; ".join(reasons) if reasons else None
+
+
+def serves_priority(serves, steering_ids, project_ids=(), probation_ids=()):
+    """The appraisal weight of a `serves` key: drive 1.0, an ESTABLISHED
+    project 1.0, a probationary project or steering intention 0.8, anything
+    else situational 0.4.
+
+    Established projects score AT DRIVE WEIGHT deliberately -- this is the
+    whole answer to the measured loss: the shrine commission, expressed as
+    an intention, lost the beat auction to drive-serving wants at
+    1.0-vs-0.8 every time, in three arms. A project is what a character is
+    ABOUT right now; a want serving it must not weigh less than a want
+    serving what they eternally are. The scarcity cap (two slots) is what
+    makes that weight safe to grant -- seven intentions at 1.0 would just
+    move the soup up a tier.
+
+    A PROBATIONARY project weighs exactly as an intention does, on purpose:
+    adoption alone must buy no appraisal power, or a nine-beat fascination
+    adopted into the free slot becomes privileged the moment it is named.
+    Drive weight is earned by service (settle_probation), never by the act
+    of adopting.
+    """
+    key = str(serves or "")
+    if key == "drive":
+        return 1.0
+    if key in {str(p) for p in (project_ids or ())}:
+        return 1.0
+    if key in {str(p) for p in (probation_ids or ())}:
+        return 0.8
+    return 0.8 if key in (steering_ids or ()) else 0.4
+
 
 # ---- Drive rupture ----
 

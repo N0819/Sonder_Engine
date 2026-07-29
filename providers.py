@@ -36,6 +36,44 @@ generation_event_sink = contextvars.ContextVar(
 )
 cancel_event = contextvars.ContextVar("cancel_event", default=None)
 
+# The last reasoning block a thinking model returned, per context. For such a
+# model this is the actual decision trace -- the structured output is only its
+# conclusion -- and it was being dropped at the response boundary, so the one
+# artifact that explains WHY a beat came out as it did never left this module.
+# It is diagnostic only: nothing downstream may treat it as content, because a
+# reasoning trace is a model talking to itself and has not been through any of
+# the checks the answer has.
+#
+# A ContextVar rather than a global: perception fans out across a thread pool
+# with contextvars.copy_context(), so a plain global would hand one observer's
+# reasoning to another.
+last_reasoning = contextvars.ContextVar("last_reasoning", default=None)
+
+
+def _capture_reasoning(message):
+    """Stash a thinking model's trace, under whichever key it arrived by."""
+    if not isinstance(message, dict):
+        return
+    text = ""
+    for key in ("reasoning", "reasoning_content", "thinking"):
+        value = message.get(key)
+        if isinstance(value, str) and value.strip():
+            text = value
+            break
+        # OpenRouter can return reasoning as a list of blocks.
+        if isinstance(value, list):
+            parts = [
+                str(b.get("text") or b.get("thinking") or "")
+                for b in value if isinstance(b, dict)
+            ]
+            if any(parts):
+                text = "\n".join(p for p in parts if p)
+                break
+    try:
+        last_reasoning.set(text or None)
+    except Exception:
+        pass
+
 REQUEST_TIMEOUT = (30, 300)
 
 # Independent pipeline stages (mapping+perception_act, narrator+
@@ -1005,7 +1043,7 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
     # the streaming path, which is the one actually used during normal
     # pipeline runs (token_sink is set for the live "stream agents" UI).
     body["stream_options"] = {"include_usage": True}
-    text = ""
+    text, reasoning = "", ""
     usage = None
     t0 = time.time()
     _check_cancel()
@@ -1036,12 +1074,28 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
                 raise LLMError(f"provider stream error: {msg}", 0, True)
             if j.get("usage"):
                 usage = j["usage"]
-            d = (j.get("choices") or [{}])[0].get("delta", {}).get("content")
+            _delta = (j.get("choices") or [{}])[0].get("delta", {})
+            # Reasoning arrives on its OWN delta key, never in `content`, and
+            # it is the pipeline's real path -- the sink is set for the live
+            # UI, so this function serves every engine turn while the
+            # non-streaming branch below serves almost nothing. Capturing
+            # reasoning only there meant the feature was dead in the engine
+            # and looked, from the outside, exactly like a model that does not
+            # expose a trace. It is NOT passed to `sink`: the sink is player-
+            # facing prose, and a model's private thinking is not that.
+            _r = _delta.get("reasoning") or _delta.get("reasoning_content")
+            if isinstance(_r, str) and _r:
+                reasoning += _r
+            d = _delta.get("content")
             if d:
                 text += d
                 sink(d)
     if role:
         _log_usage(role, model, t0, usage)
+    try:
+        last_reasoning.set(reasoning or None)
+    except Exception:
+        pass
     return text
 
 def _sse_anthropic(base, headers, body, sink, role=None, model=None):
@@ -1417,6 +1471,19 @@ def _chat_complete_once(
         )
 
     parsed = response.json()
+    # A 200 with no `choices` is not a model answering badly, it is the provider
+    # not answering at all -- observed live at ~2.6% of beats on one endpoint,
+    # surfacing as "'choices'" inside a JSON-validation error that blamed the
+    # model. Retried as a transport failure, which is what it is; a KeyError
+    # here would abort the beat and read as the character having nothing to say.
+    if not (parsed.get("choices") or []):
+        raise LLMError(
+            f"{prov['name']}: response carried no choices "
+            f"({str(parsed)[:200]})",
+            response.status_code,
+            True,
+        )
+    _capture_reasoning(parsed["choices"][0].get("message"))
     content = parsed["choices"][0]["message"]["content"]
     # Some models (nemotron:thinking observed) honour response_format=json_object
     # by returning a syntactically-valid SKELETON with every string value set to
@@ -1430,6 +1497,7 @@ def _chat_complete_once(
                               timeout=_request_timeout())
         if alt.status_code < 400:
             parsed = alt.json()
+            _capture_reasoning(parsed["choices"][0].get("message"))
             content = parsed["choices"][0]["message"]["content"]
     _log_usage(role, model, _t0, parsed.get("usage"))
     return content
@@ -1599,6 +1667,7 @@ async def _chat_complete_async_once(
             raise LLMError(f"{prov['name']}: HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
         parsed = r.json()
         _log_usage(role, model, _t0, parsed.get("usage"))
+        _capture_reasoning((parsed.get("choices") or [{}])[0].get("message"))
         return parsed["choices"][0]["message"]["content"]
 
 async def _sse_openai_async(url, headers, body, sink, client, role=None, model=None):
@@ -1606,7 +1675,7 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
     # Without this a streamed response reports no token counts at all -- see
     # the matching comment in _sse_openai.
     body["stream_options"] = {"include_usage": True}
-    text = ""
+    text, reasoning = "", ""
     usage = None
     t0 = time.time()
     _check_cancel()
@@ -1638,13 +1707,21 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
                 raise LLMError(f"provider stream error: {msg}", 0, True)
             if j.get("usage"):
                 usage = j["usage"]
-            d = (j.get("choices") or [{}])[0].get("delta", {}).get("content")
+            _delta = (j.get("choices") or [{}])[0].get("delta", {})
+            _r = _delta.get("reasoning") or _delta.get("reasoning_content")
+            if isinstance(_r, str) and _r:
+                reasoning += _r
+            d = _delta.get("content")
             if d:
                 text += d
                 if sink:
                     sink(d)
     if role:
         _log_usage(role, model, t0, usage)
+    try:
+        last_reasoning.set(reasoning or None)
+    except Exception:
+        pass
     return text
 
 async def _sse_anthropic_async(base, headers, body, sink, client, role=None, model=None):

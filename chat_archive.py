@@ -603,6 +603,15 @@ class ChatArchiveService:
                         if active and active_seen:
                             active = False
                         active_seen = active_seen or active
+                        # `reasoning` is deliberately NOT carried across the
+                        # portable archive boundary. It is a thinking model's
+                        # private trace: large, unvalidated, and nothing the
+                        # fiction ever ratified. It is worth keeping locally
+                        # to debug the run that produced it and worth nothing
+                        # to whoever imports the story. Imports therefore land
+                        # with the column at its default, which is correct
+                        # rather than lossy -- there is no reasoning for a beat
+                        # this machine did not generate.
                         qtx(
                             "INSERT INTO variants("
                             "step_id,content,created,active"

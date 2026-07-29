@@ -16,12 +16,26 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 import providers
 
 REPO = Path(__file__).resolve().parent.parent
 
 
-def test_ceiling_caps_an_absurd_request():
+@pytest.fixture
+def no_stored_setting(monkeypatch):
+    """max_output_tokens reads the saved setting first, so this fast-tier test
+    was asserting against whatever `max_output_tokens` happens to be in the
+    developer's local engine.db -- it fails at HEAD on a machine that has ever
+    raised the ceiling in the settings UI. Fast-tier tests must be
+    database-independent (CLAUDE.md); stub the read so the assertion is about
+    the CODE's ceiling, which is what this file is testing."""
+    monkeypatch.delenv("FICTION_ENGINE_MAX_OUTPUT_TOKENS", raising=False)
+    monkeypatch.setattr(providers, "get_setting", lambda *a, **k: None)
+
+
+def test_ceiling_caps_an_absurd_request(no_stored_setting):
     ceiling = providers.max_output_tokens()
     assert providers._clamp_max_tokens(200000) == ceiling
     assert ceiling <= 32000

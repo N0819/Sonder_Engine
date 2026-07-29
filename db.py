@@ -64,7 +64,7 @@ def parse_scoped_world_key(key):
     return key, None
 
 DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -410,7 +410,8 @@ CREATE TABLE IF NOT EXISTS variants(
     step_id INTEGER NOT NULL REFERENCES steps(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     created REAL NOT NULL,
-    active INTEGER NOT NULL DEFAULT 0
+    active INTEGER NOT NULL DEFAULT 0,
+    reasoning TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_variants_step ON variants(step_id);
 CREATE INDEX IF NOT EXISTS idx_variants_active ON variants(step_id, active);
@@ -1070,6 +1071,14 @@ MIGRATIONS = [
     # v18 -> v19
     [
         "ALTER TABLE chat_chars ADD COLUMN sheet TEXT",
+    ],
+    # v19 -> v20
+    [
+        # A thinking model's reasoning trace, kept beside the output it
+        # produced. Diagnostic only: it is a model talking to itself and has
+        # been through none of the checks the answer has, so nothing may read
+        # it as content. Empty for models that do not expose one.
+        "ALTER TABLE variants ADD COLUMN reasoning TEXT NOT NULL DEFAULT ''",
     ],
 ]
 

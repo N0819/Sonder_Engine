@@ -698,6 +698,13 @@ async function openPipeline(tid) {
       : Math.max(0, variants.length - 1);
 
     const pre = el("pre", {}, "");
+    const reasoning = el("pre", { class: "reasoning" }, "");
+    const reasoningWrap = el(
+      "details",
+      { class: "reasoning-wrap" },
+      el("summary", {}, "Expand reasoning"),
+      reasoning
+    );
     const cnt = el(
       "span",
       { class: "badge" },
@@ -732,6 +739,15 @@ async function openPipeline(tid) {
       } catch (error) {
         pre.textContent = variant.content;
       }
+
+      // A thinking model's own trace, when it exposed one. Collapsed by
+      // default and kept visibly apart from the output: it is the model
+      // talking to itself, it has been through none of the validation the
+      // output has, and nothing in the fiction has ratified it.
+      const think = (variant.reasoning || "").trim();
+      reasoning.textContent = think;
+      reasoningWrap.style.display = think ? "" : "none";
+      reasoningWrap.open = false;
     };
 
     const controls = el(
@@ -900,6 +916,7 @@ async function openPipeline(tid) {
           + (s.stale ? "  (stale)" : "")
       ),
       controls,
+      reasoningWrap,
       pre
     );
 

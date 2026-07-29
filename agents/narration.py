@@ -19,7 +19,17 @@ from scene import (
 import os
 import re
 
-from spatial import spatial_digest, spatial_facts, room_of
+from spatial import (
+    containment_conceals,
+    entity_arc,
+    has_visual,
+    room_of,
+    spatial_digest,
+    spatial_facts,
+    spatial_rel,
+    visible_adjacent_rooms,
+    visual_level_between,
+)
 
 
 def _spatial_facts_field(scene, observer):
@@ -306,11 +316,43 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info):
     return events
 
 
+def _player_sees_character(scene, p_name, p_room, name, now_room):
+    """S3-A4: can the player actually SEE this co-present character this beat.
+
+    Co-location is not perception. A character standing in the player's
+    pitch-dark room, sealed inside a closed container, or in the player's rear
+    blind spot is not seen, and the audit's case was exactly that: an entrant
+    into the player's pitch-dark room arriving in the narrator payload as an
+    enforced fact.
+
+    Body-level (`visual_level_between`) whenever BOTH bodies are literally in
+    `scene.positions`, so a carried light counts: standing in a lamp's pool in
+    an otherwise dark room IS seen. When either is not (the player's room came
+    from `ctx['_player_room']`, or the character is stored under a uid/alias
+    key `cast_room` resolved) fall back to the room-level answer rather than
+    denying outright -- over-denial here would drop a plainly visible
+    co-present character out of ordinary narration, which is the failure mode
+    this gate must not create.
+    """
+    if not name or not p_room:
+        return False
+    if containment_conceals(scene, p_name, name):
+        return False
+    # None = no facing/bearing basis, which fails open per entity_arc's own
+    # contract; only a positive 'rear' is a blind spot.
+    if entity_arc(scene, p_name, name) == "rear":
+        return False
+    if room_of(scene, p_name) and room_of(scene, name):
+        return visual_level_between(scene, p_name, name) != "none"
+    return has_visual(spatial_rel(scene, p_room, now_room or p_room))
+
+
 def _position_delta_payload(ctx, chat, p_name, p_room, recognized, cast_info):
     """F2: each co-present cast member's position delta this beat
     (prev committed room -> this beat's room, plus a moved flag). Returns
     (payload_view, check_facts, room_display_names). Scoped to characters the
-    player can place: in the player's room now, or there last beat."""
+    player can place: co-present now AND actually perceptible (see
+    `_player_sees_character`)."""
     prev_sc = get_scene(chat["id"], chat)
     sc = ctx.get("outcome_scene") or prev_sc
     rooms = sc.get("rooms") or {}
@@ -332,12 +374,29 @@ def _position_delta_payload(ctx, chat, p_name, p_room, recognized, cast_info):
         # gone, and their destination is not the player's to know.
         if not p_room or now_room != p_room:
             continue
+        # S3-A4 (second half): co-location alone was the whole gate, so a
+        # character who ENTERED the player's pitch-dark room still arrived
+        # here with moved=True. The narrator prompt's POSITION CONTINUITY
+        # rule then invites rendering them and _check_narrator_fidelity
+        # ENFORCES prose agreement, turning an unperceived body into a
+        # required sentence.
+        if not _player_sees_character(sc, p_name, p_room, name, now_room):
+            continue
         moved = (prev_room is None) or (prev_room != now_room)
+        # Where they came FROM is a separate perception from the fact that
+        # they are here now: seeing someone walk in tells you nothing about
+        # the room behind the door. Name the origin only when the player can
+        # see into it (barrier + light, via has_visual). Otherwise the entry
+        # still ships -- the player sees the arrival -- with no origin.
+        prev_display = None
+        if moved and prev_room and has_visual(
+                spatial_rel(sc, p_room, prev_room)):
+            prev_display = room_names.get(prev_room, prev_room)
         display = _speaker_display(
             name, recognized, info.get("appearance"), info.get("aliases"))
         payload[display] = {
             "room": room_names.get(now_room, now_room),
-            "prev_room": room_names.get(prev_room, prev_room) if moved else None,
+            "prev_room": prev_display,
             "moved": moved,
         }
         facts.append({"name": display, "room_id": now_room, "moved": moved})
@@ -456,7 +515,7 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
         "narrator",
         get_prompt("narrator"),
         call_payload,
-        max_tokens=16000,
+        max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
     # Warning-only re-normalization; strict schema+semantic validation
     # (with repair/fallback/raise) already ran inside _agent_json.
@@ -567,9 +626,16 @@ def narrator(ctx, nonce):
         pos_payload, pos_facts, room_names = _position_delta_payload(
             ctx, chat, player_name, p_room, recognized, cast_info)
         # S3-A5: pass visible rooms so portal states for unseen rooms are
-        # withheld from the narrator payload.
-        from spatial import visible_adjacent_rooms as _var
-        _visible = set(_var(_scene_for_frame, p_room)) | ({p_room} if p_room else set())
+        # withheld from the narrator payload. visible_adjacent_rooms returns
+        # room RECORDS ({room_id, room_name, barrier, description}), not ids
+        # -- set() over them raised TypeError: unhashable type: 'dict' and
+        # crashed the narrator on every awake, non-establishment turn whose
+        # room had a sight-permitting adjacency. Same unpacking as
+        # perception.py's _observer_scene_payload.
+        _visible = {
+            str(r["room_id"]) for r in visible_adjacent_rooms(_scene_for_frame, p_room)
+            if isinstance(r, dict) and r.get("room_id")
+        } | ({p_room} if p_room else set())
         portal_states = _visible_portal_states(_scene_for_frame, p_room, _visible)
         if event_order:
             _world_fields["event_order"] = event_order

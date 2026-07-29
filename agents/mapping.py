@@ -61,7 +61,12 @@ def mapping_stage(ctx, nonce):
     pers = persona_of(chat)
 
     payload = {
-        "director_recent_messages": director_context(chat["id"], 5),
+        # X18: mapping is NOT entitled to the omniscient record. It emits lore
+        # entries and scene_patch room notes, and room_notes is served into
+        # every perceiver's payload -- so an unscrubbed concealed line here
+        # launders into everyone's context two model hops later.
+        "director_recent_messages": director_context(
+            chat["id"], 5, entitled=False),
         "player_action": {
             "sequence": interp.get("sequence") or [],
             "speech": interp.get("speech"),

@@ -275,6 +275,18 @@ box-shadow:-14px 0 36px rgba(0,0,0,.2)}
 .step{border:1px solid var(--bd);border-radius:8px;padding:8px;margin:8px 0}
 .step.stale{opacity:.6}
 .step h4{margin:0 0 6px;font-size:13px}
+/* A thinking model's reasoning trace. Deliberately quieter than the output
+   beside it: it is diagnostic, it has been through none of the validation the
+   output has, and it must never read as something the fiction ratified. */
+.reasoning-wrap{margin:0 0 6px}
+.reasoning-wrap>summary{cursor:pointer;font-size:11px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--muted,#888);user-select:none}
+.reasoning-wrap>summary:hover{color:var(--fg,inherit)}
+.reasoning-wrap>summary:focus-visible{outline:2px solid var(--acc,#69f);
+  outline-offset:2px;border-radius:3px}
+.reasoning{white-space:pre-wrap;font-size:11.5px;line-height:1.5;
+  color:var(--muted,#888);border-left:2px solid var(--bd);
+  padding:6px 0 6px 10px;margin:6px 0 0;max-height:22em;overflow:auto}
 .step pre{white-space:pre-wrap;font-size:11px;max-height:220px;
 overflow:auto;background:var(--bg);padding:6px;border-radius:6px}
 #modal{position:fixed;inset:0;background:rgba(3,5,9,.93);

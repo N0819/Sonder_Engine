@@ -178,10 +178,11 @@ Renders the player-facing prose. Fidelity checks and player-echo stripping are a
 6. mapping/canon updates
 7. character active psychology, beliefs/associations, memories, relationships,
    and event row — dialogue memories store appearance labels for unrecognized
-   speakers (F2/P1); rerolls exclude memories from the current/later turns via
-   `max_turn_idx` (F1)
+   speakers (F2/P1); a character deciding turn N never retrieves memories from
+   turn N or later, via the `current_turn_idx` hard cutoff in
+   `search_memories` (F1)
 8. background-presence tracking — co-located character names pass through the
-   player's recognition map (F3)
+   the presence's own recognition ledger (F3)
 9. pending-state clear
 
 A failure in any domain aborts immediately and rolls back all earlier writes from that turn. Character autobiographical consolidation runs after the primary transaction because it is a reconstructible derived cache and may require an LLM call; consolidation failure produces a warning without corrupting committed facts.
@@ -256,6 +257,9 @@ model stream.
 | Correct turn disappears after reload | `commit.py`, checkpoints, or database restore |
 | Reroll leaves mixed old/new state | stale-step propagation, active variants, or resume logic |
 | Character knows a concealed action from a prior turn | `recent_events_for_observer` in `scene.py` (Pattern 4), `_redact_concealed_from_event` in `agents/perception.py` |
-| Character remembers something from a rerolled turn | `max_turn_idx` cutoff in `memory.py` (F1) |
+| Character remembers something from a rerolled turn | `current_turn_idx` cutoff in `memory.py` `search_memories` (F1) |
+| Character keeps recalling a belief they have since revised | `reconcile_inference_confidence` in `memory.py`, `belief_credence` in `theory_of_mind.py` |
+| Character theorises lucidly about others while in agony or ecstasy | `cognitive_absorption` in `psychology_runtime.py`, `absorbed_cap`/`formation_floor`/`sheet_capacity` in `theory_of_mind.py` |
+| Character treats its own guesses as established fact | `active_hypotheses` (`i_suspect` keys) in `agents/character.py`, ACTIVE HYPOTHESES block in `prompts.py` |
 | Background dialogue names an unrecognized character | `_present_others` recognition gate in `agents/background.py` (F3) |
 | Narrator reports a door state in an unseen room | `_visible_portal_states` visibility gating in `agents/narration.py` (S3-A5) |

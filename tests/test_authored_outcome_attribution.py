@@ -46,9 +46,15 @@ def test_unbound_act_binds_the_character_its_text_names():
                 intended_effects=[{"target_id": None, "kind": "she breaks"}])]
     assert bind_sequence_targets(seq, FORMS) == 1
     assert seq[0]["targets"] == ["Dr. Moon"]
-    # the effect's dropped reference is mirrored too, so claim extraction and
-    # the resolve coverage check both get a subject they can check.
-    assert seq[0]["intended_effects"][0]["target_id"] == "Dr. Moon"
+    # The effect's null target_id is deliberately LEFT null. A name in the text
+    # is evidence the act concerns that character, which is all `targets`
+    # claims; `target_id` is the stronger claim that the outcome LANDS on them,
+    # and inferring it from the same mention manufactured authority claims the
+    # director never authored -- 'dodge away from Sarah' does not put an effect
+    # on Sarah, but the mirroring said it did, and _requires_reaction_phase then
+    # spent a reaction step contesting it. _extract_authority_claims reads the
+    # same name evidence through its own target_forms guard instead.
+    assert seq[0]["intended_effects"][0]["target_id"] is None
 
 
 def test_binding_never_overwrites_what_the_director_bound():

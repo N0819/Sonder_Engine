@@ -93,10 +93,19 @@ def complete_validated_json(
     system: str,
     payload: dict,
     temperature=None,
-    max_tokens: int = 16000,
+    max_tokens: int | None = None,
     sampler=None,
     repair_attempts: int = 1,
 ) -> dict:
+    # None means "the configured ceiling" (providers._clamp_max_tokens). This
+    # used to be a hardcoded 16000, which made max_output_tokens a one-way
+    # knob: the clamp only ever LOWERS, so raising the setting above 16000
+    # changed nothing for the stage that most needs the room. Measured in maze
+    # arm A11 -- a reasoning model's thinking is billed as output, so trinity
+    # spent 11-13k tokens deliberating before emitting any JSON, hit exactly
+    # 16000, and the beat died on `Unterminated string`. The engine's comment
+    # invites raising the ceiling for "a model with a genuinely larger usable
+    # output window"; that invitation did not work.
     user = json.dumps(payload, ensure_ascii=False)
     provider_errored = False
     last_provider_error = None
@@ -251,13 +260,33 @@ def complete_validated_json(
 
         report = fallback_report
 
+    # What the model ACTUALLY sent, on the exception. A validation error names
+    # the field that was wrong and says nothing about the shape that was sent,
+    # and those are different questions: "about_entity: field required" reads
+    # as an omission whether the model omitted it, nested it, or sent a map we
+    # then mangled. Twice now the same failure has been undiagnosable because
+    # the raw response died inside this function, so the fix had to be
+    # guessed. Trimmed hard, and attached only when everything has already
+    # failed -- at which point the beat is lost anyway and the one thing worth
+    # salvaging is the evidence.
+    _shown = str(previous_raw if previous_raw else raw or "")[:600]
+    _sent = f" | model sent: {_shown}" if _shown.strip() else ""
+    # For a thinking model the reasoning is where the intent is visible, and
+    # a malformed answer usually has a perfectly clear intent behind it.
+    try:
+        from providers import last_reasoning as _lr
+        _think = str(_lr.get() or "")[:400]
+        if _think.strip():
+            _sent += f" | reasoning: …{_think[-400:]}"
+    except Exception:
+        pass
     if last_provider_error is not None:
         raise RuntimeError(
             f"{step_key}: all providers failed "
             f"(last provider error: {last_provider_error}); "
-            f"validation: {'; '.join(report.errors[:6])}"
+            f"validation: {'; '.join(report.errors[:6])}{_sent}"
         )
     raise RuntimeError(
         f"{step_key} failed JSON validation: "
-        + "; ".join(report.errors[:12])
+        + "; ".join(report.errors[:12]) + _sent
     )

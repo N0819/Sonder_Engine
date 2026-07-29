@@ -23,7 +23,16 @@ The engine uses SQLite. The schema is defined in `db.py`; access is intentionall
   story. Never fold the two JSON domains together: card edits may change
   psychology/voice/history/configuration, while current mood, stress, learned
   beliefs, memories, relationships, and bodily condition remain live state.
-  `scene.active_cast` is the main effective-sheet read boundary.
+  `scene.active_cast` is the main effective-sheet read boundary. `state` also
+  carries the character's durable spatial memory — `place_graph` (nodes/edges
+  with `basis` walked/seen, written by `commit.record_spatial_experience` from
+  that character's own position and sight only, bounded by
+  `PLACE_GRAPH_NODE_CAP` eviction) beside the windowed `visited_rooms` and the
+  legacy `known_exits`/`known_dead_ends` views of it. Deliberate persistence
+  decision: no schema, remap, or archive change — checkpoints snapshot/restore
+  `state` whole, `chat_archive.py` exports/imports it verbatim, and the branch
+  path copies the row; room ids are frame-scoped scene rids preserved as-is by
+  all three.
 - `turns`: player declarations in sequence.
 - `steps`, `variants`: inspectable intermediate pipeline outputs and rerolls.
 - `events`: one summarized committed event per turn.
