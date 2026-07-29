@@ -282,6 +282,47 @@ replaced.
   is present on the first beat after — which is exactly when the slot
   was measured presenting a dead scene's want as current. Tests:
   `tests/test_goal_currency.py`.
+- **Manner-goals ("sprint east to maintain speed"): measured, ruled not a
+  defect, nothing built.** Run 6, turns ~402–411: the goal slot held pure
+  manner-of-locomotion — "Sprint south/east to maintain speed and reach
+  shrine faster", finally "Continue eastward sprint to maintain speed and
+  progress" — while true distance to the shrine went 23→16 and gave three
+  rooms back. Decomposed against the event record, the give-back was not
+  the wording's doing: (1) the approach was the fastest of the run
+  *while* manner-goals held, because a room-less goal routes nothing and
+  destination fell through to ia4/pa1 exactly as designed —
+  `_destination_from_goals` resolved Chamber 0603 and `en_route` showed
+  `further_than_last_room: true` throughout the retreat (verified against
+  the live state); (2) the stall (turns 406–408) was geometric, not
+  motivational — r0304's only onward edge (r0303) carries `dir: null`
+  ("fails to move east due to missing bearing") and east of r0304 is
+  wall, so the frozen "east" outlived the world's offer of east by two
+  failed beats and a no-op; (3) turns 409–412 were commented
+  reconnaissance around a believed wall, ending in a re-derivation
+  ("Observe Chamber 0402 for connections to the shrine route") that
+  served pa1 on the boundary-review beat. Note the engine never saw the
+  beat-19 semantic drop-out at all: "shrine" is not a node NAME, so
+  `goal_room` was null from beat 9 onward and engine behaviour was
+  identical before and after the wording shift. Declined extensions,
+  with the numbers: a third marker for "goal with no object" would
+  require prose-reading manner out of room-less text (against the
+  closed-vocabulary rule) and pathologises the ordinary case — nearly
+  every conversation goal is room-less, and "keep pace with the caravan"
+  is manner AND legitimate; similarity-keyed tenure carry
+  (claim_similarity across the three wordings: 0.86 / 0.5 / 0.5, all
+  above the 0.4 house threshold) would have reached only ~9–10 held
+  beats before the turn-412 self-correction — under the threshold, so
+  even the strongest version of the proposed marker says nothing the
+  existing machinery did not already act on faster. The corrective
+  pressure that worked is already priced in: naming the room your
+  purpose lives in is what makes project service visible
+  (`projects_served_this_beat`'s substance channel), so manner-wording
+  starves pa1's ledger, `adrift` climbs and escalates, and the boundary
+  review collects the debt — which is what happened. The RUNNING prompt
+  is destination-anchored where it matters ("a run that ends further
+  from where you are going has cost you ground at speed"; "for a body
+  whose craft or drive is getting THERE"), so the run-affirming
+  affordances were not the cause either.
 
 ## Not yet decided
 
