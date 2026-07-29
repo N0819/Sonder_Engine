@@ -214,6 +214,48 @@ replaced.
   question to answer — renew by acting, revise, or abandon with a stated
   reason. The sweep is unchanged and remains the backstop.
 
+- **Adoption governance (v3): the deliberation is mechanical.** "Can a mind
+  reliably deliberate that this is worthy as a project?" — answered by
+  making `satisfied_when` the test, with a measured discriminator:
+  `adopt` **requires** a criterion, and a criterion that *restates the
+  project text* is refused as circular (`_CRITERION_RESTATES_SIM = 0.4`;
+  measured gap: circular/task criteria score 0.5–0.75 against their own
+  project text — "understand the symbols"/"when I understand the symbols"
+  0.75, "fetch the physician"/"the physician is here" 0.5 — while genuine
+  external conditions score 0.125–0.25: "the keepers withdraw the
+  commission" 0.125, "spring comes and the village still stands" 0.25).
+  The same gate therefore catches a task wearing the word, because a
+  task's completion restates the task. What it cannot catch — an insincere
+  but external criterion — is what probation is for.
+- **Probation (v3): time filters instead of judgement.** A runtime
+  adoption starts `probation: true`: it weighs at **intention** level
+  (0.8) — adoption alone buys no appraisal power — and it may **lapse
+  quietly** (to `former_projects`, `end: "lapsed"`, auto-stated why, no
+  ceremony) once unserved for `_LAPSE_AFTER = 24` beats, three times the
+  drift threshold, so a lapse is never the first notice. It
+  **establishes** — probation flag removed, drive weight, lapse-immune —
+  after being *served* on ≥ 3 distinct beats over ≥ 12 turns
+  (`settle_probation`, fed by the service ledger). Establishment by
+  *surviving N boundary reviews* was considered and rejected: the measured
+  failure mode of this tier is inattention, so passive survival would
+  establish the exact pathology. Both floors are needed — service alone
+  lets a three-beat enthusiasm establish same-day; age alone is
+  establishment by neglect. Authored and harness-written projects carry no
+  probation flag: the author's deliberation already happened, which is
+  what keeps a live `pa1` untouched by the change. The stated-reason
+  displacement floor now applies exactly where it belongs: to projects a
+  character has actually lived by.
+- **The goal slot functioning as an ungoverned project: named, not yet
+  built.** Measured: "Compare chalk circle patterns across chambers"
+  survived a run boundary and a process restart in `active_state.goal`,
+  with no cap, criterion, or visibility — partly a *consequence* of the
+  en_route continuation-default, which makes goals sticky by design. But
+  turn-370 live data shows the shipped machinery bending it back (goal
+  returned to the proved line; pa1 served; the fascination demoted to
+  trailing concerns). Decision: measure before governing. The trigger for
+  building goal-slot aging: a non-serving goal surviving `adrift >= 12`
+  AND a boundary review without re-deriving toward the project.
+
 ## Not yet decided
 
 - Whether a renewed intention should cost something, so renewal is a
