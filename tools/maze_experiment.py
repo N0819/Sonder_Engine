@@ -1510,13 +1510,23 @@ def reward_on_contact(chat_id, char_id, name):
                 "LIMIT 1", (chat_id,), one=True)
         if row:
             from memory import add_memory
+            # salience is POSITIONAL, before the body -- same call shape the
+            # interlude uses. Passing the body into that slot and salience as
+            # a keyword raises, and the guard below then swallows the whole
+            # block: the first two arrivals paid nothing on contact because
+            # of exactly that, silently.
             add_memory(chat_id, char_id, row["id"], "episodic", "experienced",
-                       f"{name} came into the shrine chamber and the light off "
-                       "the water went over him, and it was warm, and the air "
-                       "smelled of bread. He had got there. Whatever the gods "
-                       "keep, they keep it here, and he was standing in it.",
+                       0.95,
+                       f"You came into the shrine chamber and the light off "
+                       "the water went over you, and it was warm, and the air "
+                       "smelled of bread. You had got there. Whatever the "
+                       "gods keep, they keep it here, and you were standing "
+                       "in it.",
+                       category="event",
+                       gist="Reached the shrine and stood in it.",
                        location=_rid(GOAL), valence=0.9, arousal=0.5,
-                       salience=0.95)
+                       emotional_context="arrival; the thing itself, not the "
+                                         "meal afterwards")
         st_row = q("SELECT state FROM chat_chars WHERE chat_id=? AND char_id=?",
                    (chat_id, char_id), one=True)
         if st_row:
