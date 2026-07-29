@@ -32,15 +32,17 @@ flow, including the different opening-turn path.
 
 1. [`AGENTS.md`](AGENTS.md) — edit routing, invariants, source-of-truth order.
    **Read first for any behavioural change.**
-2. [`docs/PIPELINE.md`](docs/PIPELINE.md) — stage-by-stage execution.
-3. [`docs/DATABASE.md`](docs/DATABASE.md) — schema, write helpers, and the
+2. [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — how the system operates,
+   layer by layer, and why each boundary is where it is.
+3. [`docs/PIPELINE.md`](docs/PIPELINE.md) — stage-by-stage execution.
+4. [`docs/DATABASE.md`](docs/DATABASE.md) — schema, write helpers, and the
    checklist every new persistent field must satisfy.
-4. [`docs/CODE_MAP.md`](docs/CODE_MAP.md) — generated index of modules,
+5. [`docs/CODE_MAP.md`](docs/CODE_MAP.md) — generated index of modules,
    functions, routes, and tables. Regenerate with `make map`; never hand-edit.
-5. [`docs/TESTING.md`](docs/TESTING.md) — test tiers and CI policy.
-6. [`Design.md`](Design.md) — philosophy, architecture, and a verified
+6. [`docs/TESTING.md`](docs/TESTING.md) — test tiers and CI policy.
+7. [`Design.md`](Design.md) — philosophy, architecture, and a verified
    built / partial / not-built conformance table.
-7. [`docs/OPEN_ITEMS.md`](docs/OPEN_ITEMS.md) — known defects and unfinished
+8. [`docs/OPEN_ITEMS.md`](docs/OPEN_ITEMS.md) — known defects and unfinished
    work. [`CHANGELOG.md`](CHANGELOG.md) is the history.
 
 ## Run locally
