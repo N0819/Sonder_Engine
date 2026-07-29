@@ -26,7 +26,8 @@
 | `character_schema.py` | 1200 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
 | `chat_archive.py` | 1039 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory` |
 | `checkpoints.py` | 673 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
-| `commit.py` | 4585 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind` |
+| `comfort.py` | 291 |  | `spatial` |
+| `commit.py` | 4593 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind` |
 | `db.py` | 1343 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 193 |  | `db` |
 | `greetings.py` | 252 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
@@ -40,15 +41,15 @@
 | `pipeline_context.py` | 168 | Typed mutable context passed through a turn pipeline. | `db` |
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 3034 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 3038 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1910 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
-| `psychology_runtime.py` | 352 |  | — |
+| `psychology_runtime.py` | 424 |  | — |
 | `scene.py` | 1142 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
 | `schemas.py` | 2504 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 3926 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 965 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 184 | Bearing math and reciprocal spatial-edge normalization. | — |
-| `survival.py` | 311 |  | `db` |
+| `survival.py` | 320 |  | `db` |
 | `theory_of_mind.py` | 703 |  | — |
 | `updates.py` | 281 |  | — |
 
@@ -279,18 +280,31 @@
 | `ensure_checkpoint()` | 602 | 27 lines |
 | `_preserved_settings()` | 456 | 25 lines |
 
+### `comfort.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_derive()` | 191 | 82 lines |
+| `_is_body()` | 136 | 21 lines |
+| `_posture_of()` | 172 | 17 lines |
+| `_entity_record()` | 122 | 12 lines |
+| `_station_of()` | 159 | 11 lines |
+| `comfort_level()` | 275 | 8 lines |
+| `rest_affording()` | 285 | 7 lines |
+| `_tokens()` | 99 | 6 lines |
+
 ### `commit.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 3472 | 774 lines |
-| `prepare_scene_commit()` | 1401 | 242 lines |
-| `track_background_presences()` | 2159 | 196 lines |
-| `commit_world_entities()` | 1775 | 163 lines |
-| `_prepare_destruction()` | 692 | 158 lines |
-| `update_place_graph()` | 67 | 153 lines |
-| `prepare_mapping_commit()` | 2874 | 133 lines |
-| `commit_mapping()` | 3009 | 120 lines |
+| `prepare_memory_commit()` | 3473 | 781 lines |
+| `prepare_scene_commit()` | 1402 | 242 lines |
+| `track_background_presences()` | 2160 | 196 lines |
+| `commit_world_entities()` | 1776 | 163 lines |
+| `_prepare_destruction()` | 693 | 158 lines |
+| `update_place_graph()` | 68 | 153 lines |
+| `prepare_mapping_commit()` | 2875 | 133 lines |
+| `commit_mapping()` | 3010 | 120 lines |
 
 ### `db.py`
 
@@ -431,10 +445,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 3025 | 10 lines |
-| `presets()` | 3016 | 2 lines |
-| `active_preset()` | 3019 | 2 lines |
-| `nsfw_enabled()` | 3022 | 2 lines |
+| `get_prompt()` | 3029 | 10 lines |
+| `presets()` | 3020 | 2 lines |
+| `active_preset()` | 3023 | 2 lines |
+| `nsfw_enabled()` | 3026 | 2 lines |
 
 ### `providers.py`
 
@@ -453,14 +467,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `resolve_stress()` | 120 | 80 lines |
-| `resolve_hedonic()` | 49 | 69 lines |
-| `apply_belief_updates()` | 210 | 57 lines |
-| `apply_association_updates()` | 269 | 44 lines |
-| `cognitive_absorption()` | 326 | 27 lines |
-| `elapsed_psych_units()` | 32 | 15 lines |
+| `resolve_hedonic()` | 75 | 115 lines |
+| `resolve_stress()` | 192 | 80 lines |
+| `apply_belief_updates()` | 282 | 57 lines |
+| `apply_association_updates()` | 341 | 44 lines |
+| `cognitive_absorption()` | 398 | 27 lines |
+| `elapsed_psych_units()` | 58 | 15 lines |
 | `_float()` | 11 | 6 lines |
-| `_authored_beliefs()` | 202 | 6 lines |
+| `_authored_beliefs()` | 274 | 6 lines |
 
 ### `scene.py`
 
@@ -530,11 +544,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `tick_vitals()` | 201 | 52 lines |
-| `apply_vitals_diff()` | 255 | 32 lines |
+| `tick_vitals()` | 201 | 61 lines |
+| `apply_vitals_diff()` | 264 | 32 lines |
 | `seed_vitals()` | 121 | 23 lines |
 | `is_sealed_in()` | 176 | 23 lines |
-| `vitals_facts()` | 289 | 23 lines |
+| `vitals_facts()` | 298 | 23 lines |
 | `vital_label()` | 160 | 14 lines |
 | `vitals_of()` | 146 | 12 lines |
 | `_clamp()` | 110 | 5 lines |

@@ -1,8 +1,19 @@
 # Design: comfort from surfaces
 
-**Status:** designed, not built. Independent of the place graph, but its most
-interesting effect (a remembered warm corner) only exists once place purpose
-does — see §5.
+**Status:** built — `comfort.py` (derivation), `resolve_hedonic`'s
+`ambient_comfort` argument (`psychology_runtime.py`), the `tick_vitals` rest
+derivation (`survival.py`), wired at the single hedonic call site in
+`commit.py`; pinned by `tests/test_surface_comfort.py`. Independent of the
+place graph, but its most interesting effect (a remembered warm corner) only
+exists once place purpose does — see §5, still not built; `rest_affording`
+is the seam its future writer should read.
+
+Two implementation deviations from §1 as written, both deliberate: the
+`relief` multiplier (and `pleasure_sensitivity`) apply *under* an absolute
+0.3 ceiling rather than on top of it — the uncapped formula would let a
+spent sybarite reach 0.54, breaking §4's absorption promise — and
+`comfort_level` returns `(level, source)` so the habituation key and the
+prompt-visible source string are the same fact.
 
 Sitting on a cushioned bench, lying on a bed, standing by a hearth should give a
 small pleasure. Not an event; a background ease that makes a body feel better
