@@ -24,6 +24,27 @@ _CHARGE_GAIN = 0.18
 _CHARGE_HALF_LIFE = 12.0
 _CHARGE_SATURATION = 0.85
 
+# Sustained-level habituation. A DIFFERENT quantity from `charge`: charge is
+# the drive, and only the character ends it. This is how ARRESTING the level
+# still is -- how much of the mind it is entitled to go on claiming.
+#
+# The level is peak-held, so a body under continuous strong stimulus sits
+# pinned at the ceiling indefinitely, and `cognitive_absorption` reads that
+# level. Measured live: a character held there produced zero new wants for
+# three consecutive beats, with an identical goal string and mood, able to
+# hold exactly one open question -- and said the same sentence shape every
+# time, because there was nothing else in her to say. Beat twelve of maximum
+# stimulation does not claim a mind the way beat one does.
+#
+# A PEAK still claims it completely. Habituation covers the plateau, never the
+# spike: a fresh escalation, a genuinely novel beat, or the release itself
+# resets the clock and the body is fully arrested again. `_PEAK_RISE` is read
+# against the RAW appraisal proposal rather than the stored level, because the
+# stored one is peak-held and clamped -- it cannot express a rise.
+_PEAK_RISE = 0.15
+_PEAK_NOVELTY = 0.7
+_SUSTAINED_LEVEL = 0.6
+
 # Ambient comfort: the world-side pleasure floor (comfort.py derives it,
 # docs/DESIGN_SURFACE_COMFORT.md designed it). Two hard rules, neither of
 # them tuning:
@@ -174,12 +195,35 @@ def resolve_hedonic(previous, appraisal, interoception, body_state,
         drive = max(proposed_pleasure, proposed_pain * 0.5)
         charge = _clamp(old_charge * charge_decay
                         + drive * _CHARGE_GAIN * min(max(elapsed, 1.0), 3.0))
+    # How long this body has been held at a strong level with nothing new
+    # happening to it. Reset by a peak -- a fresh escalation, a genuinely novel
+    # beat, or the release -- and by the level itself falling away. Read by
+    # cognitive_absorption, which otherwise treats beat twelve exactly like
+    # beat one. Measured on the RAW proposal: the stored level is peak-held
+    # and clamped, so a rise cannot be seen there.
+    raw_stimulus = max(
+        _clamp(somatic.get("pain")) if why else 0.0,
+        _clamp(somatic.get("pleasure")) if why else 0.0,
+    )
+    peaked = (
+        bool(released)
+        or raw_stimulus >= _clamp(previous.get("stimulus")) + _PEAK_RISE
+        or _clamp(appraisal.get("novelty")) >= _PEAK_NOVELTY
+    )
+    if peaked or max(pain, pleasure) < _SUSTAINED_LEVEL:
+        sustained = 0.0
+    else:
+        sustained = (max(0.0, _float(previous.get("sustained_beats")))
+                     + (elapsed if elapsed > 0.0 else 1.0))
+
     out = {
         "pain": round(_clamp(pain), 4),
         "pleasure": round(_clamp(pleasure), 4),
         "source": source[:300],
         "charge": round(charge, 4),
         "saturated": charge >= _CHARGE_SATURATION,
+        "sustained_beats": round(sustained, 3),
+        "stimulus": round(raw_stimulus, 4),
     }
     if comfort > 0.0 and comfort_key:
         # Habituation state rides in this already-persisted dict; the keys
@@ -393,6 +437,13 @@ def apply_association_updates(existing, psychology, updates, turn_idx,
 _ABSORPTION_CURVE = 1.3
 _ABSORPTION_CHARGE_WEIGHT = 0.35
 _ABSORPTION_SATURATED_FLOOR = 0.45
+# How fast a HELD level stops being arresting, and how far that can go. The
+# floor is deliberately above zero -- a body at the ceiling is never something
+# a mind simply ignores -- and for a saturated body the existing saturated
+# floor is the real destination, which is "still busy, three thoughts instead
+# of one" rather than "free".
+_ABSORPTION_HABITUATION_HALF_LIFE = 4.0
+_ABSORPTION_HABITUATED_FLOOR = 0.35
 
 
 def cognitive_absorption(hedonic, stress=None):
@@ -410,11 +461,29 @@ def cognitive_absorption(hedonic, stress=None):
     Kept separate from `load`/`overloaded`, which stay strain-only: a demanding
     drive is not a coping failure, but it is still something the mind is busy
     with.
+
+    HABITUATION applies to the level term, and only on a plateau. The level is
+    peak-held, so a body under continuous strong stimulus reads at the ceiling
+    forever, and this used to hand back full absorption forever with it --
+    measured live as a character who could hold one open question, generated no
+    new want for three straight beats, and said the same sentence shape every
+    time. `sustained_beats` (resolve_hedonic) says how long the body has been
+    there with nothing new happening; the level's claim decays on a half-life
+    across it. A PEAK resets that clock upstream, so a fresh escalation, a
+    novel beat or the release is fully arresting again -- habituation covers
+    the plateau, never the spike. The saturated floor still applies underneath,
+    so a saturated body habituates to "busy", not to "free".
     """
     hedonic = hedonic if isinstance(hedonic, dict) else {}
     stress = stress if isinstance(stress, dict) else {}
     level = max(_clamp(hedonic.get("pain")), _clamp(hedonic.get("pleasure")))
     absorbed = level ** _ABSORPTION_CURVE
+    sustained = max(0.0, _float(hedonic.get("sustained_beats")))
+    if sustained > 0.0:
+        absorbed *= max(
+            _ABSORPTION_HABITUATED_FLOOR,
+            0.5 ** (sustained / _ABSORPTION_HABITUATION_HALF_LIFE),
+        )
     charge = _clamp(hedonic.get("charge"))
     absorbed = max(absorbed, _ABSORPTION_CHARGE_WEIGHT * charge)
     if hedonic.get("saturated"):
