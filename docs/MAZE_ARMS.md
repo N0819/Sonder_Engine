@@ -448,3 +448,128 @@ different things and the A2 table separates them: bearings change how
 efficiently unknown ground is cleared, whereas the run-3-to-5 *drift* in A2
 was a route-retention failure, which bearings cannot explain. If the drift is
 gone, `worked_before` is the credible cause.
+
+### A13 — a second subject, and the day the affordances learned to talk to each other
+
+Same maze as A11/A12 (`maze7x7-a11.svg`, 49 rooms, optimal 28). New subject:
+**Orrin**, `--subject orrin`, a maze-solver rather than a courier. Vesk was
+retired first, and the reason is the finding that produced the arm: his drive
+essence was *"being the one who gets there — motion as proof of worth"*, so
+motion IS the proof, any step satisfies it, and a step into unseen ground pays
+more than a step along a proved route. Three correct sheet edits failed to move
+that. Orrin's drive is solving, and a maze's solution IS the shrine, so the goal
+is drive-serving by construction rather than by authored priority.
+
+| run | beats | moves | idle | unique | backtracks | reversals | reached | excess |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 60 | 45 | 15 | 24 | 37 | 6 | no | — |
+| 2 | 58 | 41 | 17 | 23 | 36 | 5 | no | — |
+| 3 | 66 | 48 | 18 | 32 | 35 | 9 | **yes** | +20 |
+| 4 | 55 | 50 | 5 | 31 | 25 | 7 | **yes** | +22 |
+| 5 | 31 | 26 | 5 | 20 | 12 | 2 | **yes** | **−2** |
+
+Run 5's excess is negative because `moves` counts movement BEATS and a run
+covers several rooms in one: 26 beats of movement across a 28-room path. The
+first arrival in the whole experiment is run 3 — no Vesk arm ever entered the
+shrine.
+
+**Read this table with the caveats below.** It is not a clean five-run arm.
+
+#### What the arm actually found
+
+**A solving drive decodes whatever it is given.** Run 1 cost fourteen
+consecutive beats standing under a rope ladder; by run 3 it had become a
+symbolic theory of the whole maze — mirrors and feathers and a chalk circle as
+an ordered *sequence*, with "decision-point chambers" as a category he invented,
+and an association (*entering a decision-point chamber → speculate*) that made
+it self-extending. Every one of his 10 learned associations rewarded the
+behaviour that produced it. The full ledger of 18 beliefs shows the turn
+precisely: the first five are plain observation, and from b44 every one carries
+a reading the world never supplied.
+
+The behaviour is not stupid, which is why the sheet is what changed: a maze
+thick with authored detail is a reasonable place to look for encoded meaning,
+and `expression` said *"reads every wall as information"*. It now says
+CONNECTIVITY, and the taboo covers studying a room instead of testing a corridor.
+
+**The scenery was winning because the shrine was empty.** After his first
+arrival his state read `pleasure 0.45, source "hot barley and dark beer after
+the run"` and not one belief anywhere mentioning the shrine. He walked 48 moves
+to the object of the experiment and what registered was dinner, because the
+reward was paid at the run BOUNDARY. A chalk circle rewarded attention with a
+theory to build; the shrine rewarded it with nothing. Studying the chalk circle
+was the better-reasoned choice and he made it for three runs. `reward_on_contact`
+now pays in the room, on the beat, and the interlude states that another reward
+is waiting.
+
+**Three affordances, each locally correct, none talking to each other.** All
+three surfaced inside one run and all three had the same shape:
+- the exits carried the route to Chamber 0603 while the run offers carried
+  nothing, so a 3-room `full_reach` run beat a 1-room step that named his
+  destination — and ended four rooms further out;
+- a stale intention naming Chamber 0504 outvoted his own goal, pointing 17
+  beats of salience at the wrong room;
+- a goal naming the WAYPOINT he was standing in silenced the standing shrine
+  intention entirely.
+
+**A finished maze was illegible.** With all 49 rooms walked, `_frontier_hops`
+returns None everywhere, so every exit read `spent` — which also outranks
+`proven` and `known` in precedence — plus `beats_since_new_ground: 26` on a
+counter that can never reset. Forty-nine local "nothing new that way"s do not
+sum, in a model's reading, to "there is nothing new ANYWHERE"; they sum to *I am
+in the wrong part of the maze*. He invented an "unexplored eastern corridor" out
+of a sightline that bends, and chased it. The payload was manufacturing the
+phantom the character was blamed for. Same defect reaches any resident who has
+walked their whole home — `tests/test_place_graph.py` had three fixtures
+PINNING `spent` as the correct reading of an ordinary character's known world.
+
+**Motivation needed a tier that outlives a task.** `ia4` ("walk the proved line
+to the shrine") was marked *satisfied* by the character the beat after his first
+arrival; Vesk's commission decayed dormant after 150 barren beats. Projects
+(cap 2, weight 1.0, no dormancy, closed only by their own criterion or a stated
+displacement) answered it, and the effect is the idle column: 18 → 5 between
+runs 3 and 4.
+
+#### The principle that produced every fix that worked
+
+State the fact; leave the choice. `ground_fully_known`, `en_route`, `ends_in`,
+`unentered`, `adrift` — not one removes an option. The evidence they work is a
+sentence he wrote unprompted after `closer_than_last_room` went false:
+**"Rejoin the proven route to the shrine."** The first self-correction in the
+experiment, and nothing forced it. He kept his curiosity; it stopped being the
+only thing that paid.
+
+#### What the numbers cannot claim
+
+- **Heavily intervened in.** Run 4 was restarted from beat 0 five times and run
+  5 twice, each time to put a newly-built mechanism live. Runs are therefore not
+  independent trials of one configuration.
+- **Hand-written state.** Beliefs, an association, a goal, an intention and a
+  project were written directly into `chat_chars.state` at various points, and
+  six concerns, four beliefs and ten associations were surgically deleted once.
+  All of it is recorded in the git log, none of it is a natural history.
+- **`--max-steps` changed mid-arm**, 60 → 120 from run 3 onward, so beat counts
+  are not comparable across the whole table.
+- **A snapshot was taken wrong.** Copying only the `.db` file of a WAL-mode
+  SQLite database silently lost 15 turns; a rollback intended for the run-2/3
+  boundary landed mid-run-2. Use `VACUUM INTO`.
+- **Two arrivals paid no contact reward at all** — `add_memory` takes `salience`
+  positionally and the guard swallowed the TypeError into a log nobody read. The
+  fix landed before run 5 and the run-4 reward was applied by hand afterwards.
+
+None of that weakens what the arm actually established, which is the most it
+has produced about how these minds work rather than how fast they walk. Every
+defect above was found by watching a character behave sensibly and being forced
+to ask what the world had told him: the theory-building came from set dressing
+plus a drive to decode, the phantom frontier came from a payload that could say
+"nothing that way" 49 times and never "nothing anywhere", the drift came from a
+commitment nothing re-asserted, and the scenery won because the shrine had never
+once been worth arriving at. Those are findings about psychology, and they
+replicate as reasoning traces — quoted verbatim throughout — rather than as
+summary statistics.
+
+What the table specifically cannot support is a clean before/after performance
+claim, because the configuration changed underneath it. Treat the rows as five
+different experiments that happen to share a character, and the prose as the
+result. A14 should run one configuration end to end without intervention, which
+is the only thing missing.
