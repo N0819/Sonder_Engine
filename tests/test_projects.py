@@ -283,3 +283,33 @@ class TestAProjectNamesADestination:
                         "rH": {"basis": "walked", "name": "Chamber 0100"}},
               "edges": {}}
         assert _destination_from_goals(state, pg)["rid"] == "rH"
+
+
+class TestAMutatedProjectIsNotReseeded:
+    """A project's wording can legitimately change after adoption -- the maze
+    harness appends the goal room's name the beat the character first stands
+    in it, which is the moment that identifier becomes legitimately his. A
+    text-keyed seeding check then stops recognising the authored source and
+    seeds a second copy.
+
+    Measured live: `pa1` held twice, one project occupying both slots, which
+    defeats the cap that is the entire point of the tier.
+    """
+
+    def test_the_authored_id_is_what_makes_it_the_same_project(self):
+        from character_schema import character_projects, default_character_data
+        sheet = default_character_data("Someone")
+        sheet.setdefault("psychology", {})["projects"] = [
+            {"project": "Every run ends at the shrine.", "about": "world"}]
+        authored = character_projects(sheet)
+        assert authored and authored[0]["id"] == "pa1"
+
+        # adopted, then its wording grew -- the same project, still pa1
+        live = [dict(authored[0],
+                     project="Every run ends at the shrine. It is Chamber 0603.")]
+        seen_ids = {str(p.get("id") or "") for p in live}
+        seeded = [p for p in authored
+                  if str(p.get("id") or "") not in seen_ids]
+        assert seeded == [], (
+            "an authored project already held must not seed again just "
+            "because its text has moved on")
