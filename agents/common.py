@@ -1646,6 +1646,92 @@ def _normalize_character_output(out):
         out["mind_model_updates"] = converted
     return out
 
+# Narration ABOUT an utterance, as opposed to the utterance. A player writes
+# their own beat in second person ("you gently pinch her nipple"), so a speech
+# text carrying `you`/`your` outside its quotes is prose the interpreter lifted
+# whole rather than the line the player spoke. Attribution verbs are kept
+# deliberately narrow -- `say`/`said` and friends, never `tell`/`told` -- so an
+# ordinary spoken line that happens to quote someone ('He told me "get out" and
+# I left.') is not mistaken for narration and gutted.
+_SPEECH_NARRATION_RE = re.compile(
+    r"(?<![\w'])(?:you|your|yours"
+    r"|says?|said|saying|replie[sd]|reply|answers?|answered"
+    r"|mutters?|muttered|whispers?|whispered|murmurs?|murmured"
+    r"|adds?|added|calls?|called|shouts?|shouted)(?![\w'])",
+    re.I,
+)
+
+
+def repair_narrated_speech(text):
+    """Reduce a speech text that swallowed its own narration to the words said.
+
+    Observed live: `director_interpret` returned the player's ENTIRE raw input
+    as a single speech element, stage directions included --
+
+        '"Wait" You say it flatly, without turning around. "I am not going."'
+
+    -- and perception injected it faithfully as dialogue. Two failures follow
+    at once: the narration is delivered as spoken words, and because the lifted
+    prose is in second person, the "You" now points at the LISTENER, who is
+    told they said it.
+
+    Fires only when the text holds at least one quoted span AND the residue
+    outside those spans reads as narration (>=2 words, carrying a second-person
+    pronoun or a speech-attribution verb). A wholly unquoted line -- the normal
+    shape -- is returned untouched, as is a line that is nothing but its quote.
+    Returns the input unchanged when it declines to act, so callers may assign
+    the result unconditionally.
+    """
+    raw = str(text or "")
+    if not raw.strip():
+        return text
+    segments = _QUOTED_SPAN_RE.split(raw)
+    # split() alternates residue/span/residue...; odd indices are the spans.
+    spans = [s for i, s in enumerate(segments) if i % 2 == 1]
+    if not spans:
+        return text
+    residue = " ".join(s for i, s in enumerate(segments) if i % 2 == 0)
+    if len(residue.split()) < 2 or not _SPEECH_NARRATION_RE.search(residue):
+        return text
+    bodies = [b for b in (_quote_body(s) for s in spans) if b]
+    if not bodies:
+        return text
+    spoken = ""
+    for body in bodies:
+        if spoken and spoken[-1] not in ".!?,;:-—":
+            spoken += "."
+        spoken = f"{spoken} {body}" if spoken else body
+    return spoken
+
+
+def repair_narrated_speech_elements(out):
+    """Apply `repair_narrated_speech` to one interpret result in place.
+
+    Covers both representations -- the `sequence` speech elements and the flat
+    `speech` mirror -- because downstream stages read whichever is present.
+    Returns the list of (before, after) pairs it changed, for warning.
+    """
+    changed = []
+    if not isinstance(out, dict):
+        return changed
+    for element in (out.get("sequence") or []):
+        if not isinstance(element, dict) or element.get("type") != "speech":
+            continue
+        before = element.get("text")
+        after = repair_narrated_speech(before)
+        if after != before:
+            element["text"] = after
+            changed.append((before, after))
+    before = out.get("speech")
+    if before:
+        after = repair_narrated_speech(before)
+        if after != before:
+            out["speech"] = after
+            if not any(b == before for b, _ in changed):
+                changed.append((before, after))
+    return changed
+
+
 def player_speech_lines(interp):
     lines = [e.get("text") for e in (interp.get("sequence") or [])
              if e.get("type") == "speech" and e.get("text")]
