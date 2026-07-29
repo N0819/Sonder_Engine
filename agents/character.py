@@ -59,6 +59,7 @@ from .common import (
     _dict,
     _list,
     _normalize_character_output,
+    _word_shingles,
     assign_event_ids,
     cap_mind_model_updates,
     character_room,
@@ -172,6 +173,57 @@ def _self_line_refrain(lines):
         if hits >= _REFRAIN_MIN_LINES and hits * 2 >= total:
             out[slot] = {"word": word, "lines": hits, "of": total}
     return out or None
+
+
+def _speech_texts(result):
+    """This beat's declared spoken lines, from whichever shape carries them."""
+    if not isinstance(result, dict):
+        return []
+    texts = [str(e.get("text") or "")
+             for e in (result.get("sequence") or [])
+             if isinstance(e, dict) and e.get("type") == "speech"]
+    if not texts and result.get("speech"):
+        texts = [str(result.get("speech"))]
+    return [t for t in texts if t.strip()]
+
+
+def _normalized_line(text):
+    return " ".join(_REFRAIN_WORD_RE.findall(str(text or "").lower()))
+
+
+def _first_verbatim_repeat(new_texts, recent_texts):
+    """A line this beat reissues from the character's own recent speech, or None.
+
+    `recent_self_lines` and the AVOID SELF-REPETITION rule are advisory, and
+    advice is not a guarantee: measured live, a character was handed its own
+    previous line in that very field and emitted it back word for word on the
+    next beat. The window worked; nothing checked the answer.
+
+    Distinct from `_self_line_refrain`, which catches a reused sentence SHAPE
+    carrying fresh content. This catches the plain case that one deliberately
+    does not -- the same words again -- and the two miss each other's failure
+    completely, so both are needed.
+
+    Matches on normalized equality (punctuation and case are not variation) or
+    on two shared six-word runs, the same threshold the narrator's own
+    repetition check uses: two of those essentially cannot co-occur by accident
+    in speech this short.
+    """
+    previous = [(t, _normalized_line(t), _word_shingles(t))
+                for t in (recent_texts or []) if str(t or "").strip()]
+    if not previous:
+        return None
+    for text in (new_texts or []):
+        norm = _normalized_line(text)
+        if not norm:
+            continue
+        shingles = _word_shingles(text)
+        for original, prev_norm, prev_shingles in previous:
+            if norm and norm == prev_norm:
+                return original
+            if len(shingles & prev_shingles) >= 2:
+                return original
+    return None
 
 
 def _known_pronouns(cast, persona, recognized, exclude=None):
@@ -1911,6 +1963,39 @@ def character_step(ctx, cid, nonce):
         temperature=character_temperature(sh),
         sampler=character_sampler(sh) or None,
     )
+
+    # Deterministic self-repetition screen. The prompt rule and
+    # recent_self_lines are advisory, and advice is not a guarantee -- measured
+    # live, a character was handed its own previous line in that very field and
+    # returned it word for word. ONE rewrite, naming the line; if the second
+    # draft still repeats we keep it and warn rather than lose the beat, since
+    # a character who says nothing is worse than one who says it twice.
+    _repeated = _first_verbatim_repeat(
+        _speech_texts(out), [str(l.get("said") or "") for l in (_self_lines or [])])
+    if _repeated:
+        _retry = _agent_json(
+            role,
+            "character",
+            _cprompt,
+            {**payload,
+             "repeat_correction": {
+                 "you_already_said": _repeated,
+                 "instruction": (
+                     "Your draft reissued this line you have already spoken. "
+                     "Say something else, or act instead of speaking, or stay "
+                     "silent -- but do not send these words again."),
+             }},
+            temperature=character_temperature(sh),
+            sampler=character_sampler(sh) or None,
+        )
+        if _first_verbatim_repeat(
+                _speech_texts(_retry),
+                [str(l.get("said") or "") for l in (_self_lines or [])]):
+            ctx.add_warning(
+                f"character {character_name(sh)}: reissued its own earlier "
+                f"line after a rewrite -- {_repeated[:80]!r}")
+        else:
+            out = _retry
 
     # Warning-only re-normalization; strict schema+semantic validation
     # (with repair/fallback/raise) already ran inside _agent_json -- a
