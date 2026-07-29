@@ -3719,7 +3719,10 @@ def prepare_memory_commit(ctx, *, scene=None):
                         continue
                     if str(_p.get("project") or "").strip().casefold() \
                             not in _seen_proj:
-                        projects = projects + [_p]
+                        # Seeding counts as service: the drift clock starts
+                        # at the seeding beat, never at authored turn 0.
+                        projects = projects + [
+                            dict(_p, last_served_turn=turn.idx)]
                 projects, former_projects, _pwarn = affect.apply_project_ops(
                     projects, former_projects,
                     own_result.get("project_ops") or [], turn.idx)
@@ -3876,6 +3879,63 @@ def prepare_memory_commit(ctx, *, scene=None):
                         or []
                     ),
                 }
+                # --- Project service ledger + boundary review (Tier 1.5).
+                # A held project stopped failing by being outranked and
+                # started failing by being FORGOTTEN (A15 run 5: pa1 held at
+                # weight 1.0, twenty beats in, nothing emitted serving it).
+                # Two deterministic facts close that gap: last_served_turn
+                # per project (read back as `adrift` in the payload), and a
+                # one-beat review flag when a boundary the engine can
+                # actually see has passed. Facts only -- nothing here writes
+                # a want or applies an op.
+                _named_rooms = {}
+                for _nrid, _nrec in (((st.get("place_graph") or {})
+                                      .get("nodes")) or {}).items():
+                    if isinstance(_nrec, dict):
+                        _nname = str(_nrec.get("name") or "").strip()
+                        if _nname:
+                            _named_rooms.setdefault(_nname.casefold(),
+                                                    str(_nrid))
+                for _p in projects:
+                    # One-shot backfill for projects that predate the ledger
+                    # (a live pa1 exists): grace from here, never instantly
+                    # adrift on the deploy beat. NOT setdefault -- the live
+                    # pa1 was measured carrying an explicit
+                    # last_served_turn: null, which setdefault preserves,
+                    # leaving the ledger dead and the drift marker silent
+                    # forever.
+                    try:
+                        int(_p.get("last_served_turn"))
+                    except (TypeError, ValueError):
+                        _p["last_served_turn"] = turn.idx
+                _impact_serves = [
+                    affect.normalize_serves(
+                        str((gi or {}).get("serves") or ""),
+                        intentions, projects)
+                    for gi in (appraisal_input.get("goal_impacts") or [])
+                    if isinstance(gi, dict)]
+                for _pid in affect.projects_served_this_beat(
+                        projects, wants, str(enacted_goal or ""),
+                        _impact_serves, _named_rooms):
+                    for _p in projects:
+                        if str(_p.get("id") or "") == _pid:
+                            _p["last_served_turn"] = turn.idx
+                # Boundary detection runs BEFORE record_spatial_experience
+                # (below, line ~4100), so st["visited_rooms"] still ends at
+                # the previous position while sc already holds the new one
+                # -- which is exactly the arrival comparison needed.
+                from agents.common import character_room as _char_room_of
+                _prev_room = next(
+                    (str(r) for r in reversed(st.get("visited_rooms") or [])
+                     if isinstance(r, str) and r), None)
+                _scene_marker = (interior.get("scene_marker")
+                                 if isinstance(interior.get("scene_marker"),
+                                               dict) else None)
+                _loc_now = str(sc.get("location") or "")
+                _review_why = affect.project_boundary(
+                    projects, intentions, _before_status,
+                    _char_room_of(sc, sh), _prev_room, _scene_marker,
+                    _loc_now, turn.frame_id, _named_rooms)
                 # --- Drive rupture (Tier 1): a deterministic strain ledger and
                 # two-key gate that can, rarely and earned, crack the core drive.
                 def _serves_of(i):
@@ -3972,6 +4032,12 @@ def prepare_memory_commit(ctx, *, scene=None):
                     # silently erased.
                     "projects": projects,
                     "former_projects": former_projects,
+                    # Where and in which frame this beat committed -- what
+                    # project_boundary compares against next beat. Written
+                    # unconditionally so a project adopted later still meets
+                    # a fresh marker.
+                    "scene_marker": {"location": _loc_now,
+                                     "frame": str(turn.frame_id or "")},
                     "drive_strain": round(float(strain), 4),
                     "strain_log": strain_log,
                     "former_drives": former,
@@ -3993,6 +4059,11 @@ def prepare_memory_commit(ctx, *, scene=None):
                     _interior_out["drive_rupture"] = rupture
                 if override is not None:
                     _interior_out["drive_override"] = override
+                if _review_why:
+                    # One-beat flag: _interior_out is rebuilt each commit,
+                    # so this clears itself unless a new boundary fires.
+                    _interior_out["project_review"] = {
+                        "turn": turn.idx, "why": _review_why}
                 st["interior"] = _interior_out
             # --- Recent-tell ledger: the last few physical cues this
             # character has shown, kept on cstate and fed back into the

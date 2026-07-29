@@ -27,7 +27,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from affect import (PROJECT_CAP, apply_project_ops, normalize_serves,
-                    normalize_wants, serves_priority)
+                    normalize_wants, project_boundary,
+                    projects_served_this_beat, serves_priority)
 from character_schema import character_projects
 
 
@@ -243,6 +244,155 @@ class TestDecayIsReasonedNotSilent:
         from affect import INTENT_DORMANT_AFTER
         from agents.character import _FADING_AFTER
         assert _FADING_AFTER < INTENT_DORMANT_AFTER
+
+
+class TestServingIsObservable:
+    """A15 run 5: pa1 held at weight 1.0 while, twenty beats in, nothing
+    emitted served it. The tier stopped failing by being outranked and
+    started failing by being FORGOTTEN. This ledger is what the drift
+    marker reads: which projects this beat's declared interior actually
+    served, by explicit `serves` or by the goal naming the project's own
+    destination."""
+
+    PROJECTS = [_proj("pa1", "Every run I make ends at the shrine "
+                             "in Chamber 0603")]
+    NAMED = {"chamber 0603": "rD", "chamber 0402": "rQ"}
+
+    def test_an_explicit_want_serves(self):
+        got = projects_served_this_beat(
+            self.PROJECTS,
+            [{"want": "push on", "serves": "pa1"}], "", (), self.NAMED)
+        assert got == {"pa1"}
+
+    def test_a_goal_naming_the_projects_room_serves_in_substance(self):
+        """'Move west along proven route toward Chamber 0603' never says
+        pa1 -- and is service. Text similarity was measured and rejected:
+        it scored the chalk-circle detour above this."""
+        got = projects_served_this_beat(
+            self.PROJECTS, [],
+            "Move west along proven route toward Chamber 0603",
+            (), self.NAMED)
+        assert got == {"pa1"}
+
+    def test_the_drift_goal_does_not_serve(self):
+        """The measured drift shapes, verbatim from the run-5 trace."""
+        for goal in ("Test connectivity by taking the east turn",
+                     "Reorient and test connectivity via available exits",
+                     "Investigate chalk circle in Chamber 0402"):
+            assert projects_served_this_beat(
+                self.PROJECTS, [], goal, (), self.NAMED) == set()
+
+    def test_an_impact_serves(self):
+        got = projects_served_this_beat(
+            self.PROJECTS, [], "", ("pa1",), self.NAMED)
+        assert got == {"pa1"}
+
+    def test_a_want_prefixed_project_id_is_not_demoted(self):
+        """The same silent demotion normalize_serves fixes for impacts
+        existed in normalize_wants: serves 'project:pa1' became
+        situational, and the ledger read a serving beat as drift."""
+        wants, _, _ = normalize_wants(
+            [{"want": "walk the line", "urgency": 0.8,
+              "serves": "project:pa1"}], {"pa1"})
+        assert wants[0]["serves"] == "pa1"
+        wants, _, _ = normalize_wants(
+            [{"want": "press the theory", "urgency": 0.8,
+              "serves": "intention:i2"}], {"i2"})
+        assert wants[0]["serves"] == "i2"
+
+
+class TestDriftIsLegible:
+    """The gap between HOLDING a project and SERVING it was invisible: the
+    project sat in the payload as a static string the character stopped
+    referring to. Same move as `fading` and en_route's closer/further:
+    state the fact, never force the behaviour."""
+
+    def _adrift(self, project, now_turn=100):
+        from agents.character import _annotate_project_drift
+        return _annotate_project_drift([project], now_turn)[0]
+
+    def test_an_unserved_project_shows_its_distance(self):
+        got = self._adrift(dict(_proj("pa1", "x"), last_served_turn=90))
+        assert got["adrift"] == 10
+
+    def test_a_recently_served_project_is_not_nagged(self):
+        """The resident clause: a project may REST while the scene demands
+        other things -- under the threshold the payload says nothing."""
+        got = self._adrift(dict(_proj("pa1", "x"), last_served_turn=95))
+        assert "adrift" not in got
+
+    def test_a_project_with_no_ledger_yet_is_silent(self):
+        """Authored, pre-first-commit: absent means cannot tell."""
+        got = self._adrift(_proj("pa1", "x"))
+        assert "adrift" not in got
+
+    def test_the_stored_rows_are_never_mutated(self):
+        from agents.character import _annotate_project_drift
+        row = dict(_proj("pa1", "x"), last_served_turn=10)
+        _annotate_project_drift([row], 100)
+        assert "adrift" not in row
+
+    def test_adoption_and_seeding_start_the_clock_at_now(self):
+        """A fresh commitment must not read as instantly adrift."""
+        live, _, _ = apply_project_ops(
+            [], [], [{"op": "adopt", "project": "Learn the low passages"}],
+            50)
+        assert live[0]["last_served_turn"] == 50
+
+
+class TestBoundariesTheEngineCanActuallySee:
+    """v1 left review prompt-normative and it did not hold. These are the
+    detectable boundaries, each honest -- and 'run end' and 'major event'
+    are deliberately absent, because the engine has no row for either."""
+
+    PROJECTS = [_proj("pa1", "Every run I make ends at the shrine "
+                             "in Chamber 0603")]
+    NAMED = {"chamber 0603": "rD"}
+
+    def _why(self, **kw):
+        args = dict(projects=self.PROJECTS, intentions=[], before_status={},
+                    new_room=None, prev_room=None, scene_marker=None,
+                    location="The maze", frame_id="f1",
+                    named_rooms=self.NAMED)
+        args.update(kw)
+        return project_boundary(**args)
+
+    def test_arrival_where_the_project_points(self):
+        why = self._why(new_room="rD", prev_room="rC")
+        assert "arrived" in why and "pa1" in why
+
+    def test_standing_on_is_not_arriving_again(self):
+        assert self._why(new_room="rD", prev_room="rD") is None
+
+    def test_a_task_closing_is_a_boundary(self):
+        why = self._why(
+            intentions=[{"id": "i3", "status": "satisfied"}],
+            before_status={"i3": "active"})
+        assert "task i3 closed" in why
+
+    def test_an_already_closed_task_is_not_a_boundary_again(self):
+        assert self._why(
+            intentions=[{"id": "i3", "status": "satisfied"}],
+            before_status={"i3": "satisfied"}) is None
+
+    def test_the_scene_changing_is_a_boundary(self):
+        why = self._why(scene_marker={"location": "The maze",
+                                      "frame": "f1"},
+                        location="The Lantern inn")
+        assert "scene has changed" in why
+
+    def test_the_frame_changing_is_a_boundary(self):
+        why = self._why(scene_marker={"location": "The maze",
+                                      "frame": "f1"}, frame_id="f2")
+        assert "frame has changed" in why
+
+    def test_no_marker_is_silence_not_a_boundary(self):
+        """First beat: nothing to compare against, nothing fires."""
+        assert self._why(scene_marker=None) is None
+
+    def test_no_projects_no_review(self):
+        assert self._why(projects=[], new_room="rD",
+                         prev_room="rC") is None
 
 
 class TestAProjectNamesADestination:
