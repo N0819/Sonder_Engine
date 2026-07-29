@@ -75,6 +75,25 @@ archive/                inactive historical files retained for reference
 
 `sqlite-vec` is used when available for vector search. Providers can point to OpenAI-compatible endpoints, Anthropic, Ollama, KoboldCpp, and configured remote services. API keys and provider settings are stored in the local database, so do not commit a populated `engine.db`.
 
+## Credits
+
+Prior art and research the engine draws on is sourced in
+[`docs/RESEARCH.md`](docs/RESEARCH.md). Named here because it is an external
+standard rather than a library:
+
+- **[Sigma Stratum — SIGMA Runtime documentation](https://github.com/sigmastratum/documentation)**
+  ([sigmastratum.org](https://sigmastratum.org/)). SRIP-14 §XXII, *Retrieval as
+  Perturbation Source*, is the source of the idea that retrieval can serve
+  divergence as well as recall — fetching contrasting rather than matching
+  material when a mind has converged, and marking it non-authoritative. Public
+  SRIPs are CC BY 4.0 with an Independent Implementation Safe Harbor. See
+  [`docs/RESEARCH.md`](docs/RESEARCH.md) §1.5 for what carries over and what
+  deliberately does not.
+
+  Attribution only: citing or independently implementing a public SRIP implies
+  no certification, endorsement, partnership, or official compatibility, and no
+  Sigma marks are used as product identity.
+
 ## License
 
 Released under the [MIT License](LICENSE).
