@@ -748,6 +748,96 @@ class TestASeenCulDeSacIsNotFrontier:
             "fact commit persists as known_dead_ends")
 
 
+class TestAFullyKnownMapSaysSo:
+    """Local exhaustion markers never sum to global completeness.
+
+    Measured live (Orrin, shrine-maze, turn 228): all 49 chambers walked, a
+    0.95 self-belief that "there is no unexplored ground left in this maze",
+    and the payload still read `spent` on every exit with
+    `beats_since_new_ground` at 26 and climbing. Nothing said the map was
+    COMPLETE, so every direction read as failure -- and a mind in failure
+    reaches for the thing that would fix it: his beliefs invented an
+    "unexplored eastern corridor" out of a sightline bend, and his goals
+    chased ground that did not exist instead of walking the route he had
+    proved. A finished maze and a lived-in home are the same payload
+    situation, and neither may read back as exhausted ground: `spent` is a
+    comparative claim, only information while some branch is NOT.
+    """
+
+    # A walked triangle: every doorway taken, nothing new anywhere.
+    ROOMS = {
+        "rA": {"name": "Hall", "desc": "a", "light": "lit",
+               "adjacent": [{"to": "rB", "barrier": "open", "dir": "e"},
+                            {"to": "rC", "barrier": "open", "dir": "s"}]},
+        "rB": {"name": "Kitchen", "desc": "b", "light": "lit",
+               "adjacent": [{"to": "rA", "barrier": "open", "dir": "w"},
+                            {"to": "rC", "barrier": "open", "dir": "s"}]},
+        "rC": {"name": "Cellar", "desc": "c", "light": "lit",
+               "adjacent": [{"to": "rA", "barrier": "open", "dir": "n"},
+                            {"to": "rB", "barrier": "open", "dir": "e"}]},
+    }
+    KNOWN = {"rA": ["rB", "rC"], "rB": ["rA", "rC"], "rC": ["rA", "rB"]}
+    DIGEST = {"ahead": [{"room": "Kitchen", "barrier": "open"}],
+              "behind": [{"room": "Cellar", "barrier": "open"}]}
+    # Rounds of a familiar place: long past the counter's threshold, with no
+    # immediate reversals (a reversal is a different marker's business).
+    ROUTE = ["rA", "rB", "rC", "rA", "rB", "rC", "rA", "rB", "rC", "rA"]
+
+    def _frame(self, rooms=None, known=None, dead=None):
+        from agents.character import _annotate_known_exits
+        scene = {"rooms": rooms or self.ROOMS, "positions": {},
+                 "entities": {}, "attire": {}, "overlays": {}}
+        return _annotate_known_exits(
+            self.DIGEST, scene, self.ROUTE,
+            known_exits=known or self.KNOWN, here_rid="rA",
+            known_dead_ends=dead or [])
+
+    def _with_annex(self, closed):
+        """The triangle plus an annex off the Cellar, seen but never walked
+        -- visibly closed (no way on) or open (a real frontier)."""
+        rooms = {k: dict(v, adjacent=list(v["adjacent"]))
+                 for k, v in self.ROOMS.items()}
+        rooms["rC"]["adjacent"] = rooms["rC"]["adjacent"] + [
+            {"to": "rD", "barrier": "open", "dir": "s"}]
+        rooms["rD"] = {"name": "Annex", "desc": "d", "light": "lit",
+                       "adjacent": [{"to": "rC", "barrier": "open",
+                                     "dir": "n"}]}
+        known = dict(self.KNOWN, rC=["rA", "rB", "rD"])
+        return self._frame(rooms=rooms, known=known,
+                           dead=["rD"] if closed else [])
+
+    def test_the_completeness_is_stated_once_and_positively(self):
+        assert self._frame().get("ground_fully_known") is True
+
+    def test_familiarity_never_reads_as_failure(self):
+        """With nothing new anywhere, `spent` is true of every exit at once
+        -- which is exactly when it stops being information. The exits fall
+        back to what they ARE: known ways."""
+        verdicts = [e.get("verdict", "") for edges in self._frame().values()
+                    if isinstance(edges, list) for e in edges]
+        assert verdicts and all(v.startswith(("known", "proven"))
+                                for v in verdicts)
+
+    def test_the_new_ground_counter_goes_quiet(self):
+        """On a fully-known map since_new can never reset again; emitted, it
+        would brand every step of a route walked ON PURPOSE as getting
+        nowhere, forever."""
+        assert "beats_since_new_ground" not in self._frame()
+
+    def test_a_seen_closed_unentered_room_does_not_break_completeness(self):
+        """What is IN a room is a different question from where anything
+        leads -- the shrine case. The unentered cul-de-sac keeps its own
+        `unentered` reading where it stands; the WAYS are still all known."""
+        assert self._with_annex(closed=True).get("ground_fully_known") is True
+
+    def test_one_real_frontier_anywhere_restores_the_old_reading(self):
+        got = self._with_annex(closed=False)
+        assert "ground_fully_known" not in got
+        assert got.get("beats_since_new_ground"), (
+            "with genuine new ground left, not-getting-anywhere is real "
+            "evidence again")
+
+
 class TestEachExitCarriesItsBearing:
     """The buckets are egocentric; everything else the character reads is
     compass. Bridging the two was left to the model, and it guessed.

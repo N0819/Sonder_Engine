@@ -123,9 +123,35 @@ class TestForgottenGroundIsNotPromising:
             "forgetting the walk must not re-mint the door as discovery")
 
     def test_an_exhausted_branch_stays_exhausted_after_the_window_rolls(self):
+        """The defect was stale ground reading as PROMISING. In this fixture
+        the whole known world is walked, so exhaustion is now stated as the
+        frame-level completeness fact plus a plain `known` -- never as
+        frontier, and no longer as a `spent` that would brand every exit of
+        a fully-known place as failure (see TestAFullyKnownMapSaysSo in
+        test_spatial_affordances)."""
         out = _annotate_known_exits(self.DIGEST, self.SCENE, ["rHere"],
                                     known_exits=self.KNOWN, here_rid="rHere")
+        verdict = out["ahead"][0]["verdict"]
+        assert verdict.startswith("known")
+        assert "door you have never taken" not in verdict
+        assert out.get("ground_fully_known") is True
+
+    def test_mid_run_an_exhausted_branch_still_reads_spent(self):
+        """With genuine frontier elsewhere, `spent` keeps its comparative
+        meaning: THIS branch has nothing new while some branch does."""
+        scene = _scene({
+            "rHere": _room("Hall", [_edge("rOld1", "w"), _edge("rNew", "e")]),
+            "rOld1": _room("Old One", [_edge("rHere", "e"),
+                                       _edge("rOld2", "w")]),
+            "rOld2": _room("Old Two", [_edge("rOld1", "e")]),
+            "rNew": _room("New", [_edge("rHere", "w")]),
+        })
+        known = {"rHere": ["rOld1", "rNew"], "rOld1": ["rHere", "rOld2"],
+                 "rOld2": ["rOld1"]}
+        out = _annotate_known_exits(self.DIGEST, scene, ["rHere"],
+                                    known_exits=known, here_rid="rHere")
         assert out["ahead"][0]["verdict"].startswith("spent")
+        assert "ground_fully_known" not in out
 
     def test_the_window_counters_are_simply_absent_not_invented(self):
         """Absent means cannot tell -- the ordinal/recency numbers belong to
@@ -262,7 +288,14 @@ class TestDisprovenDoorways:
         out = _annotate_known_exits(
             digest, scene, ["rHere"],
             known_exits=known, here_rid="rHere", place_graph=graph)
-        assert out["ahead"][0]["verdict"].startswith("spent")
+        verdict = out["ahead"][0]["verdict"]
+        assert "door you have never taken" not in verdict, (
+            "retraction must win: the branch may not read live")
+        assert verdict.startswith("known"), (
+            "with the disproven door retracted nothing anywhere is new, so "
+            "the way reads familiar rather than failed -- the completeness "
+            "fact below carries the exhaustion")
+        assert out.get("ground_fully_known") is True
 
     def test_a_reappearing_doorway_is_believed_again(self):
         """The correction is perception, so perception can also undo it --
@@ -409,15 +442,21 @@ class TestRecordSpatialExperience:
 
     def test_seventy_beats_in_the_exhausted_chain_reads_exhausted(self):
         """The full defect: standing at the far end of a fully-walked chain,
-        the way back must read spent -- before the fix, the rooms the window
-        had forgotten made the way back read as frontier."""
+        the way back must never read as frontier -- before the fix, the
+        rooms the window had forgotten made it read as discovery. With the
+        WHOLE known world walked the exhaustion is now the frame-level
+        completeness fact plus a plain `known`, not a `spent` that brands a
+        fully-known place as failure."""
         st, sc = self._walk()
         out = _annotate_known_exits(
             {"behind": [{"room": "Room 68", "barrier": "open"}]}, sc,
             st["visited_rooms"], known_exits=st["known_exits"],
             here_rid="r69", known_dead_ends=st["known_dead_ends"],
             place_graph=st["place_graph"])
-        assert out["behind"][0]["verdict"].startswith("spent")
+        verdict = out["behind"][0]["verdict"]
+        assert verdict.startswith("known")
+        assert "door you have never taken" not in verdict
+        assert out.get("ground_fully_known") is True
 
     def test_an_idle_beat_neither_walks_nor_revisits(self):
         sc = self._chain(3)
