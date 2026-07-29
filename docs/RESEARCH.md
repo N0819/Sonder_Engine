@@ -131,9 +131,12 @@ The hybrid memory retriever names and implements three standard IR techniques.
   only quantities it can compute, and Sonder's equivalents already exist as
   measured state (absorption, `sustained_beats`, stress activation).
 
-  *Attribution only.* Citing or independently implementing a public SRIP does
-  not imply certification, endorsement, partnership, or official
-  compatibility, and no Sigma marks are used as product identity.
+  *With thanks, and independently built.* Sonder is not an official or
+  certified Sigma integration and nothing here speaks for Sigma Stratum — the
+  insight is theirs, the adaptation and any mistakes in it are ours. Noted so
+  neither project is mistaken for the other, not to hold the work at arm's
+  length: it is a genuinely good piece of thinking and it is cited because it
+  changed what got built.
 
 Apart from the above, the repo contains no bibliography, arXiv links, DOIs, or
 "inspired by" attributions — including throughout `Design.md`, `AGENTS.md`, and
