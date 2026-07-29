@@ -29,6 +29,7 @@ pattern that produced almost every fix: state the fact, leave the choice.
   is the one revision of a belief about the SELF this engine supports.
 
 
+
 - **Adoption guards for projects.** `satisfied_when` is required, and a
   criterion that merely restates the project is refused: a circular criterion
   restates its own text at 0.5–0.75 similarity, a genuine one names an external
@@ -39,11 +40,80 @@ pattern that produced almost every fix: state the fact, leave the choice.
   by inattention.
 
 
+
+- **Absorption: what the body's claim on attention does to thought.**
+  `psychology_runtime.cognitive_absorption` measures how much of a mind its own
+  body currently has, and is deliberately **blind to valence** — pain and
+  pleasure are opposites in what they are worth to a character and identical in
+  what they cost. It is a separate axis from distress: `load`/`overloaded` stay
+  strain-only, because a demanding drive is not a coping failure but is still
+  something the mind is busy with. The curve is convex, so ordinary discomfort
+  costs little and severe sensation takes over.
+
+  `theory_of_mind` spends the figure three ways. The existing confidence-cap
+  table is already an *effort* gradient, so `absorbed_cap` erodes its effortful
+  end and leaves the immediate end alone: at full absorption `observation` still
+  caps at 1.0 while `second_order` falls 0.50 → 0.12. A character in agony does
+  not get worse at noticing what is in front of them, only at working out why
+  someone is doing what they are doing (Easterbrook cue-utilisation narrowing).
+  `formation_floor` makes a genuinely NEW hypothesis clear a bar before it can
+  form at all. And the hypothesis sheet shrinks.
+
+  Absorption gates **formation, not reinforcement**: recognising more of what
+  you already think is automatic processing and survives, while building a
+  theory is controlled and does not (Shiffrin & Schneider). An earlier version
+  applied the eroded cap to both, so a beat that *confirmed* a settled belief
+  cut it from 0.6 to 0.37 — absorption eating convictions it should only have
+  stopped the character adding to.
+
+
+- **Recall now follows belief.** An inference memory was minted with the
+  confidence the character declared the moment they formed it, and nothing ever
+  revisited it — while their `mind_models` kept moving underneath, since
+  `theory_of_mind.apply_mind_model_updates` blends a restated belief up,
+  partially explains away the competitor it displaces, decays the unreinforced,
+  and prunes below the floor. A character could therefore hold one belief and
+  preferentially *recall* the one they had already abandoned, because retrieval
+  ranked on a number frozen at mint time.
+
+  `theory_of_mind.belief_credence` answers "what does this character believe
+  about this claim now?" using the same matcher and threshold the merge itself
+  uses, and `memory.reconcile_inference_confidence` projects that credence back
+  onto the memories that expressed it at commit. `search_memories` adds a signed
+  belief term for `kind='inference'` rows, so the held belief outranks the
+  revised one on an otherwise equal match.
+
+  A belief that was explained away is pushed toward a floor, never erased — "I
+  was sure of this and I was wrong" stays recallable. `salience` is untouched:
+  how much an inference mattered when formed (which drives consolidation) is a
+  different question from how much the character credits it now.
+
+  Firewall: the reconcile's only inputs are that character's own memory rows and
+  own `mind_models`. It never consults the objective record or asks whether a
+  belief was *true* — a character revises from what they later perceived, and
+  grading beliefs against reality would collapse the belief layer into the truth
+  layer. Pinned structurally by `tests/test_belief_weighted_recall.py`.
+
+  No schema change: `memories.confidence` already existed and already
+  round-tripped through archive, checkpoint, and branch.
+
+- **Beliefs reached in extremity come back up for review.** A hypothesis formed
+  under absorption is stamped `formed_under` rather than merely capped, and
+  `due_for_reappraisal` re-opens it once the character is calmer. Neither
+  standing as though it were reached calmly, nor discounted forever — reviewed
+  when there is room to review it.
+
+  No schema change: all of it rides on `chat_chars.state`, already round-tripped
+  through archive, checkpoint, and branch.
+
+
+
 - **A durable place graph.** `chat_chars.state.place_graph` records rooms a
   character has walked, seen or been told of, and the doorways between them,
   with a basis for each. It is their map, not the world's: if it is wrong, they
   are wrong in exactly the way their map is wrong, and they find out with their
   feet.
+
 
 
 - **Routing toward a room you already want.** Every affordance answered "where
@@ -55,6 +125,7 @@ pattern that produced almost every fix: state the fact, leave the choice.
   names against their OWN graph, and the route rides the exit verdict.
 
 
+
 - **Running.** A body crosses several rooms in one beat. Bounded by DECISION,
   not by sight: follow while there is exactly one passable way on, stop at a
   junction, a dead end, darkness, a shut door, or the budget. The first rule
@@ -62,6 +133,7 @@ pattern that produced almost every fix: state the fact, leave the choice.
   rooms are corridor cells and a corridor cell is usually a bend, so 72 of 96
   passages offered exactly one room and no character ever ran. Winding is what
   makes a maze a maze; a sight-bounded run cannot exist in one.
+
 
 
 - **Legibility markers, which are most of this release.** Each states a fact and
@@ -77,6 +149,7 @@ pattern that produced almost every fix: state the fact, leave the choice.
   shrine."*
 
 
+
 - **What a place is FOR** (`place_purpose.py`). Survival gave a character hunger
   and the hunger had nowhere to go. Places now carry affordances on three bases:
   `witnessed` (own vitals rose here), `told` (a credited claim, dropped the
@@ -85,6 +158,7 @@ pattern that produced almost every fix: state the fact, leave the choice.
   graph node names, so a place they have not perceived cannot reach the lexicon;
   there is no code path. The lexicon yields purpose keys only, never structure:
   you may expect food at an inn, and learn nothing of its layout.
+
 
 
 - **Comfort from surfaces** (`comfort.py`). Pain had a deterministic floor and
@@ -96,10 +170,20 @@ pattern that produced almost every fix: state the fact, leave the choice.
   body registers, never what demands resolution.
 
 
-- **A maze harness** (`tools/maze_experiment.py`), authored mazes from SVG, two
-  authored subjects, checkpoint/resume that survives a mid-experiment code fix,
-  and a live view that draws the real walls.
 
+- **The stable hypothesis sheet.** The character payload carried every tracked
+  entity's leading belief plus competitors with no overall bound, and nothing in
+  the structure said *these are your guesses* — a mind reading its own
+  conjecture back as settled fact, which is the same information-layer collapse
+  this engine polices between minds, happening inside one.
+
+  `select_active_hypotheses` keeps 1–5 open questions on
+  `chat_chars.state.active_hypotheses`, each keyed `i_suspect` so the field name
+  carries the epistemic status. Selection has hysteresis, so the sheet is
+  *stable*: an incumbent holds its slot unless clearly beaten, and it stops
+  churning every turn as confidences wobble. Capacity is `sheet_capacity`, so
+  someone merely in more pain than last beat holds fewer open questions even
+  though they concluded nothing new.
 
 
 - **Conducted hearing, one way only.** A body inside another body's interior is
@@ -111,6 +195,12 @@ pattern that produced almost every fix: state the fact, leave the choice.
   sight, and a murmur still only fragments — it changes the medium, not the
   volume.
 
+
+
+- **A maze harness** (`tools/maze_experiment.py`), authored mazes from SVG, two
+  authored subjects, checkpoint/resume that survives a mid-experiment code fix,
+  and a live view that draws the real walls.
+
 ### Changed
 
 - **The offer of a run names where it ENDS, and nothing along the way.** The
@@ -120,11 +210,6 @@ pattern that produced almost every fix: state the fact, leave the choice.
   might be just the first step, and declared a 1-room "run". Prompt text arguing
   the whole reach was one behaviour was read and lost, twice.
 
-- **The budget stop is `full_reach`, not `winded`.** The best offer a run can
-  get — the passage outlasting the beat — read as a penalty for taking it. Every
-  hard run arrives winded whatever ended it, so the label implied a consequence
-  specific to maximal runs that does not exist. The third word in this engine to
-  beat its own documentation.
 
 - **`spent` appears only while it discriminates.** On a fully-walked map every
   exit read `spent` — which also outranks `proven` and `known` — with a
@@ -133,6 +218,14 @@ pattern that produced almost every fix: state the fact, leave the choice.
   bad went looking for a frontier that did not exist, inventing one out of a
   sightline that merely bends. The same defect reached any resident who had
   walked their whole home: their kitchen door read as exhausted ground.
+
+
+
+- **The budget stop is `full_reach`, not `winded`.** The best offer a run can
+  get — the passage outlasting the beat — read as a penalty for taking it. Every
+  hard run arrives winded whatever ended it, so the label implied a consequence
+  specific to maximal runs that does not exist. The third word in this engine to
+  beat its own documentation.
 
 
 - **A muffled line is now a partial transcript, not a description of one.**
@@ -170,6 +263,7 @@ pattern that produced almost every fix: state the fact, leave the choice.
   the engine where the three gated levels differ); and eight hours of simulation
   time ends `asleep` alone. The sleeping mind still never decides to wake.
 
+
 - **NPCs spoke one line whatever the configuration said.** `min_lines: 2` was
   set and persisted in eight chats; one produced exactly one speech entry in 28
   of 28 declarations, while a chat configured for zero produced two or more 43%
@@ -186,6 +280,7 @@ pattern that produced almost every fix: state the fact, leave the choice.
   it governs neither how many lines a character speaks nor how full each is.
 
 
+
 - **The engine was destroying its own bearings at runtime.** `_merge_room`
   upserted edges with wholesale replacement, so a model re-mentioning a doorway
   it had no reason to restate the bearing for erased that bearing — the exact
@@ -199,27 +294,94 @@ pattern that produced almost every fix: state the fact, leave the choice.
   deleted from the run offers, taken by naming their room, and the Director is
   told never to fail a declared move solely because no compass word matches.
 
-- **A stale intention and a waypoint could each steal the route.** Characters
-  phrase a goal as the next step far more often than as the aim — "run east to
-  Chamber 0004 to progress toward the shrine" names only the waypoint — so the
-  goal won the match and the standing intention was never consulted. And
-  `status == "active"` was the only gate on intentions, so a row true fifty
-  beats ago pointed seventeen beats of salience at the wrong room.
 
-- **A goal claim now carries its own currency.** The slot is rewritten every
-  beat, but the claim inside it is whatever the model re-emits, and re-emission
-  is free. A goal survived a scene reset and a process restart; another kept
-  routing a character back to a room he had reached and left, tethering him to
-  spent ground. Word-keyed, so a deliberately restated aim is a new claim and
-  routes again.
+- **Omniscient event text re-entered later character contexts (Pattern 4).**
+  The stored events row is omniscient (for the author/audit trail), but it
+  was loaded verbatim into character context on subsequent turns. A
+  concealed action from a prior beat thus re-entered a perceiver's context
+  unredacted. Fixed with `recent_events_for_observer` in `scene.py`, which
+  applies `_redact_concealed_from_event` per-observer against the stored
+  event row's structured `dialogue_log` fields before returning the summary.
+  Callers loading past events into character context use this per-observer
+  path instead of the raw omniscient row.
 
-- **`serves: "project:pa1"` was silently demoted to situational.** A want that
-  genuinely served a project was scored as serving nothing — the tier had a hole
-  in it from the beat it shipped.
 
-- **`character_import_warnings` now runs on the harness's own sheets.** An empty
-  `psychology.drive` fails silently: a character emitted drive-serving wants for
-  150 beats against three empty strings and nothing anywhere objected.
+- **Background presence leaked unrecognized character names (F3/SEAM 5).**
+  `_present_others` in `agents/background.py` listed every co-located
+  character by canonical name in the background-presence payload — the same
+  identity leak `_unknown_actor_label` closes everywhere else. A player who
+  had not met a character still saw their name in background dialogue. Fixed
+  by applying that presence's OWN `known` recognition ledger: unrecognized characters
+  are rendered as their appearance-derived label or "someone" rather than
+  their canonical name, mirroring `deterministic_micro_perception`.
+
+
+- **Portal states leaked through unseen doors (S3-A5).**
+  `_visible_portal_states` in `agents/narration.py` included open/shut state
+  for portals in rooms the player could not see. A closed door in an
+  adjacent room the player had no sight of was reported as closed, leaking
+  spatial information. Fixed by passing the player's visible rooms
+  (own room plus `visible_adjacent_rooms`) and withholding portal states for
+  rooms outside that set.
+
+
+- **Entity state blobs persisted concealed actors (S3-A8).**
+  `commit_world_entities` in `commit.py` wrote entity state blobs verbatim
+  from the beat resolution, even when the blob referenced a concealed actor.
+  The entity's position/state then leaked to anyone reading world state
+  later. Fixed by collecting concealed actors from the dialogue log,
+  director_interpret, and character results, then skipping entity state
+  updates that reference a concealed actor — the entity's state is only
+  updated when overtly perceived.
+
+
+- **Concealed redaction withheld the whole paragraph (D1/D2).**
+  `_redact_concealed_from_event` in `agents/perception.py` replaced the
+  entire event text with a fallback message whenever any concealed act was
+  present. This was fail-closed and structurally safe, but heavy-handed: an
+  event with one concealed whisper and five overt actions delivered no event
+  text at all. Improved to sentence-level redaction: the event text is split
+  into sentences, each sentence is checked against the concealed actor names
+  from the structured concealed list (not prose matching), and only sentences
+  referencing a concealed actor are withheld. Overt sentences survive. If no
+  sentences survive, the fallback message is returned.
+
+
+- **`co_present_positions` leaked unperceived destinations (S3-A4).**
+  The narrator payload included characters who left the player's room with
+  their destination room name, which the player had not perceived. Fixed by
+  only including characters in the player's current room, and only if the
+  player could have perceived them (awake, light exists).
+
+
+- **String-line dialogue coercion erased concealment (X14).**
+  String dialogue lines coerced into structured form in `schemas.py`
+  defaulted `visibility` to "overt", dropping `[concealed]` prefixes and
+  `conceal_from` fields. A concealed line became overt in the structured
+  model output. Fixed by preserving the `visibility` and `conceal_from`
+  fields from the original string-line entry.
+
+
+- **Dialogue memories stored unrecognized speaker names (F2/P1).**
+  `commit.py` minted dialogue memories with the speaker's canonical name
+  regardless of whether the hearer recognized them. A character who had
+  never met the speaker stored their name in memory as though they had.
+  Fixed by checking the hearer's `known` map: if the speaker isn't
+  recognized, the memory stores an appearance-based label or "a voice"
+  instead of the canonical name, and `intended_target` is dropped.
+
+
+- **Reroll memories included the current turn (F1).**
+  `search_memories` and `build_character_memory_context` in `memory.py` had
+  no turn cutoff, so a reroll could load memories minted during the turn
+  being rerolled — the character would "remember" something that hadn't
+  happened yet. `current_turn_idx` was passed but fed only the recency
+  scoring, so those rows ranked highly instead of being dropped. Fixed by
+  making it a hard filter applied before ranking: a search that supplies a
+  current turn never sees `turn_idx >= current_turn_idx`. Rows with a NULL
+  `turn_idx` (imported or authored) belong to no turn and are kept. The
+  author-facing memory-search route now omits `current_turn_idx` so the
+  Memories tab still shows the turn just played.
 
 
 - **An occupant of a room parented to another entity was concealed by nothing.**
@@ -236,6 +398,51 @@ pattern that produced almost every fix: state the fact, leave the choice.
   `hiding_holders_of`; `agents/perception._touch_only_sources` reads through it
   rather than the raw ledger.
 
+
+- **Rear-arc action backstop ignored blind spot (B3).**
+  The deterministic action backstop in `perception_outcome` checked
+  `_in_plain_view` but not `behind_sources`, so an actor standing behind the
+  perceiver (outside their field of view) had their action injected into the
+  outcome view. Fixed by checking the perceiver's `behind_sources` list and
+  skipping actors listed there.
+
+
+- **Sensory channel cue matching used substring matching.**
+  `_CHANNEL_CUES` and `_INTENSITY_CUES` in `agents/perception.py` matched
+  cues by substring, so "paint" matched "pain" and a single ambiguous word
+  could flip a whole view's channel. Fixed with word-boundary regex matching.
+
+
+- **Unified delivery gate for deterministic perception (Pattern 3).**
+  Deterministic delivery sites in `agents/loops.py` and `agents/perception.py`
+  used scattered bare checks (`has_visual`, `hear_level`) without consistent
+  containment, awareness, or proximity gating. A new `_delivery_ok` function
+  in `agents/common.py` consolidates containment concealment, awareness,
+  sight (including rear-arc/behind_sources), and hearing (with proximity and
+  sealed-container blocking) into one predicate every delivery site calls.
+
+
+- **F8: the declared `kind` is no longer taken on trust.** Every ceiling keys off
+  it, and nothing checked it — not adversarially, just the path of least
+  resistance: a model wanting confidence about "Vorne is the sort who sells
+  people out" declares it `observation` (cap 1.0) rather than `trait` (0.45),
+  and the whole gradient, including the absorption erosion built on it, stops
+  applying. `effective_kind` lets the claim's own language vote and takes the
+  stricter of the two. Arranged so a misfire can only ever make a character less
+  sure, never more.
+
+
+
+- **X18 closed.** `scene.director_context` now takes `entitled`, and
+  `agents/mapping.py` passes `entitled=False`. The Director is genuinely
+  entitled to the omniscient record — it owns objective causality. Mapping is
+  not: it emits lore entries and `scene_patch` room notes, and `room_notes` is
+  served into every perceiver's payload, which is the laundering chain the audit
+  traced. An unentitled caller gets concealment-scrubbed resolved text and no
+  `player_input` for a turn carrying concealed player speech.
+
+
+
 - **The threshold-crossing grace defeated it even once fixed.**
   `crossing_visible_from` floors sight at `shapes` for two beats so a body does
   not blink out mid-step through a doorway. Entry into a parented interior is
@@ -246,237 +453,61 @@ pattern that produced almost every fix: state the fact, leave the choice.
   enclosing entity has instead is the touch channel, which tells it more than a
   silhouette would.
 
-- **X18 closed.** `scene.director_context` now takes `entitled`, and
-  `agents/mapping.py` passes `entitled=False`. The Director is genuinely
-  entitled to the omniscient record — it owns objective causality. Mapping is
-  not: it emits lore entries and `scene_patch` room notes, and `room_notes` is
-  served into every perceiver's payload, which is the laundering chain the audit
-  traced. An unentitled caller gets concealment-scrubbed resolved text and no
-  `player_input` for a turn carrying concealed player speech.
 
-## Unreleased — Sensation constrains cognition
+- **A stale intention and a waypoint could each steal the route.** Characters
+  phrase a goal as the next step far more often than as the aim — "run east to
+  Chamber 0004 to progress toward the shrine" names only the waypoint — so the
+  goal won the match and the standing intention was never consulted. And
+  `status == "active"` was the only gate on intentions, so a row true fifty
+  beats ago pointed seventeen beats of salience at the wrong room.
 
-### Fixed
 
-- **Reappraisal was checked against a hardcoded calm.** `select_active_hypotheses`
-  asked `due_for_reappraisal` with current absorption pinned to `0.0`, so every
-  belief reached in extremity was flagged unconditionally — including for a
-  character still in the grip of the thing that produced it, told to reconsider
-  it "now that the body does not have your attention" while it plainly did.
-- **Reinforcement erased belief provenance.** The merged hypothesis is rebuilt
-  from the incoming update, so `first_seen_turn` and `formed_under` were dropped
-  every time a belief was restated: a conclusion reached in agony and merely
-  repeated became one that had always been held calmly, and could never come up
-  for review. Provenance belongs to the belief, not to the update that last
-  touched it.
+- **A goal claim now carries its own currency.** The slot is rewritten every
+  beat, but the claim inside it is whatever the model re-emits, and re-emission
+  is free. A goal survived a scene reset and a process restart; another kept
+  routing a character back to a room he had reached and left, tethering him to
+  spent ground. Word-keyed, so a deliberately restated aim is a new claim and
+  routes again.
+
+
+- **`serves: "project:pa1"` was silently demoted to situational.** A want that
+  genuinely served a project was scored as serving nothing — the tier had a hole
+  in it from the beat it shipped.
+
+
 - **Reappraisal did nothing.** `formed_under` was stamped, mentioned in the
   payload, and acted on by no code — the whole re-evaluation rested on the model
   complying with an advisory string, which is not a guarantee this engine
   accepts anywhere else. It now raises plasticity (bounded, so revision still
   needs repeated evidence rather than one beat), and clears the stamp once
   reviewed so it stops re-flagging forever.
-- **F8: the declared `kind` is no longer taken on trust.** Every ceiling keys off
-  it, and nothing checked it — not adversarially, just the path of least
-  resistance: a model wanting confidence about "Vorne is the sort who sells
-  people out" declares it `observation` (cap 1.0) rather than `trait` (0.45),
-  and the whole gradient, including the absorption erosion built on it, stops
-  applying. `effective_kind` lets the claim's own language vote and takes the
-  stricter of the two. Arranged so a misfire can only ever make a character less
-  sure, never more.
 
-### Added
+- **Reappraisal was checked against a hardcoded calm.** `select_active_hypotheses`
+  asked `due_for_reappraisal` with current absorption pinned to `0.0`, so every
+  belief reached in extremity was flagged unconditionally — including for a
+  character still in the grip of the thing that produced it, told to reconsider
+  it "now that the body does not have your attention" while it plainly did.
 
-- **Absorption: what the body's claim on attention does to thought.**
-  `psychology_runtime.cognitive_absorption` measures how much of a mind its own
-  body currently has, and is deliberately **blind to valence** — pain and
-  pleasure are opposites in what they are worth to a character and identical in
-  what they cost. It is a separate axis from distress: `load`/`overloaded` stay
-  strain-only, because a demanding drive is not a coping failure but is still
-  something the mind is busy with. The curve is convex, so ordinary discomfort
-  costs little and severe sensation takes over.
+- **Reinforcement erased belief provenance.** The merged hypothesis is rebuilt
+  from the incoming update, so `first_seen_turn` and `formed_under` were dropped
+  every time a belief was restated: a conclusion reached in agony and merely
+  repeated became one that had always been held calmly, and could never come up
+  for review. Provenance belongs to the belief, not to the update that last
+  touched it.
 
-  `theory_of_mind` spends the figure three ways. The existing confidence-cap
-  table is already an *effort* gradient, so `absorbed_cap` erodes its effortful
-  end and leaves the immediate end alone: at full absorption `observation` still
-  caps at 1.0 while `second_order` falls 0.50 → 0.12. A character in agony does
-  not get worse at noticing what is in front of them, only at working out why
-  someone is doing what they are doing (Easterbrook cue-utilisation narrowing).
-  `formation_floor` makes a genuinely NEW hypothesis clear a bar before it can
-  form at all. And the hypothesis sheet shrinks.
-
-  Absorption gates **formation, not reinforcement**: recognising more of what
-  you already think is automatic processing and survives, while building a
-  theory is controlled and does not (Shiffrin & Schneider). An earlier version
-  applied the eroded cap to both, so a beat that *confirmed* a settled belief
-  cut it from 0.6 to 0.37 — absorption eating convictions it should only have
-  stopped the character adding to.
-
-- **The stable hypothesis sheet.** The character payload carried every tracked
-  entity's leading belief plus competitors with no overall bound, and nothing in
-  the structure said *these are your guesses* — a mind reading its own
-  conjecture back as settled fact, which is the same information-layer collapse
-  this engine polices between minds, happening inside one.
-
-  `select_active_hypotheses` keeps 1–5 open questions on
-  `chat_chars.state.active_hypotheses`, each keyed `i_suspect` so the field name
-  carries the epistemic status. Selection has hysteresis, so the sheet is
-  *stable*: an incumbent holds its slot unless clearly beaten, and it stops
-  churning every turn as confidences wobble. Capacity is `sheet_capacity`, so
-  someone merely in more pain than last beat holds fewer open questions even
-  though they concluded nothing new.
-
-- **Beliefs reached in extremity come back up for review.** A hypothesis formed
-  under absorption is stamped `formed_under` rather than merely capped, and
-  `due_for_reappraisal` re-opens it once the character is calmer. Neither
-  standing as though it were reached calmly, nor discounted forever — reviewed
-  when there is room to review it.
-
-  No schema change: all of it rides on `chat_chars.state`, already round-tripped
-  through archive, checkpoint, and branch.
-
-## Unreleased — Belief-weighted recall
-
-### Added
-
-- **Recall now follows belief.** An inference memory was minted with the
-  confidence the character declared the moment they formed it, and nothing ever
-  revisited it — while their `mind_models` kept moving underneath, since
-  `theory_of_mind.apply_mind_model_updates` blends a restated belief up,
-  partially explains away the competitor it displaces, decays the unreinforced,
-  and prunes below the floor. A character could therefore hold one belief and
-  preferentially *recall* the one they had already abandoned, because retrieval
-  ranked on a number frozen at mint time.
-
-  `theory_of_mind.belief_credence` answers "what does this character believe
-  about this claim now?" using the same matcher and threshold the merge itself
-  uses, and `memory.reconcile_inference_confidence` projects that credence back
-  onto the memories that expressed it at commit. `search_memories` adds a signed
-  belief term for `kind='inference'` rows, so the held belief outranks the
-  revised one on an otherwise equal match.
-
-  A belief that was explained away is pushed toward a floor, never erased — "I
-  was sure of this and I was wrong" stays recallable. `salience` is untouched:
-  how much an inference mattered when formed (which drives consolidation) is a
-  different question from how much the character credits it now.
-
-  Firewall: the reconcile's only inputs are that character's own memory rows and
-  own `mind_models`. It never consults the objective record or asks whether a
-  belief was *true* — a character revises from what they later perceived, and
-  grading beliefs against reality would collapse the belief layer into the truth
-  layer. Pinned structurally by `tests/test_belief_weighted_recall.py`.
-
-  No schema change: `memories.confidence` already existed and already
-  round-tripped through archive, checkpoint, and branch.
-
-## Unreleased — Pipeline audit information-leak fixes
-
-### Fixed
-
-- **Background presence leaked unrecognized character names (F3/SEAM 5).**
-  `_present_others` in `agents/background.py` listed every co-located
-  character by canonical name in the background-presence payload — the same
-  identity leak `_unknown_actor_label` closes everywhere else. A player who
-  had not met a character still saw their name in background dialogue. Fixed
-  by applying that presence's OWN `known` recognition ledger: unrecognized characters
-  are rendered as their appearance-derived label or "someone" rather than
-  their canonical name, mirroring `deterministic_micro_perception`.
-
-- **Portal states leaked through unseen doors (S3-A5).**
-  `_visible_portal_states` in `agents/narration.py` included open/shut state
-  for portals in rooms the player could not see. A closed door in an
-  adjacent room the player had no sight of was reported as closed, leaking
-  spatial information. Fixed by passing the player's visible rooms
-  (own room plus `visible_adjacent_rooms`) and withholding portal states for
-  rooms outside that set.
-
-- **Entity state blobs persisted concealed actors (S3-A8).**
-  `commit_world_entities` in `commit.py` wrote entity state blobs verbatim
-  from the beat resolution, even when the blob referenced a concealed actor.
-  The entity's position/state then leaked to anyone reading world state
-  later. Fixed by collecting concealed actors from the dialogue log,
-  director_interpret, and character results, then skipping entity state
-  updates that reference a concealed actor — the entity's state is only
-  updated when overtly perceived.
-
-- **Omniscient event text re-entered later character contexts (Pattern 4).**
-  The stored events row is omniscient (for the author/audit trail), but it
-  was loaded verbatim into character context on subsequent turns. A
-  concealed action from a prior beat thus re-entered a perceiver's context
-  unredacted. Fixed with `recent_events_for_observer` in `scene.py`, which
-  applies `_redact_concealed_from_event` per-observer against the stored
-  event row's structured `dialogue_log` fields before returning the summary.
-  Callers loading past events into character context use this per-observer
-  path instead of the raw omniscient row.
-
-- **Concealed redaction withheld the whole paragraph (D1/D2).**
-  `_redact_concealed_from_event` in `agents/perception.py` replaced the
-  entire event text with a fallback message whenever any concealed act was
-  present. This was fail-closed and structurally safe, but heavy-handed: an
-  event with one concealed whisper and five overt actions delivered no event
-  text at all. Improved to sentence-level redaction: the event text is split
-  into sentences, each sentence is checked against the concealed actor names
-  from the structured concealed list (not prose matching), and only sentences
-  referencing a concealed actor are withheld. Overt sentences survive. If no
-  sentences survive, the fallback message is returned.
-
-- **Rear-arc action backstop ignored blind spot (B3).**
-  The deterministic action backstop in `perception_outcome` checked
-  `_in_plain_view` but not `behind_sources`, so an actor standing behind the
-  perceiver (outside their field of view) had their action injected into the
-  outcome view. Fixed by checking the perceiver's `behind_sources` list and
-  skipping actors listed there.
-
-- **`co_present_positions` leaked unperceived destinations (S3-A4).**
-  The narrator payload included characters who left the player's room with
-  their destination room name, which the player had not perceived. Fixed by
-  only including characters in the player's current room, and only if the
-  player could have perceived them (awake, light exists).
-
-- **String-line dialogue coercion erased concealment (X14).**
-  String dialogue lines coerced into structured form in `schemas.py`
-  defaulted `visibility` to "overt", dropping `[concealed]` prefixes and
-  `conceal_from` fields. A concealed line became overt in the structured
-  model output. Fixed by preserving the `visibility` and `conceal_from`
-  fields from the original string-line entry.
-
-- **Reroll memories included the current turn (F1).**
-  `search_memories` and `build_character_memory_context` in `memory.py` had
-  no turn cutoff, so a reroll could load memories minted during the turn
-  being rerolled — the character would "remember" something that hadn't
-  happened yet. `current_turn_idx` was passed but fed only the recency
-  scoring, so those rows ranked highly instead of being dropped. Fixed by
-  making it a hard filter applied before ranking: a search that supplies a
-  current turn never sees `turn_idx >= current_turn_idx`. Rows with a NULL
-  `turn_idx` (imported or authored) belong to no turn and are kept. The
-  author-facing memory-search route now omits `current_turn_idx` so the
-  Memories tab still shows the turn just played.
-
-- **Dialogue memories stored unrecognized speaker names (F2/P1).**
-  `commit.py` minted dialogue memories with the speaker's canonical name
-  regardless of whether the hearer recognized them. A character who had
-  never met the speaker stored their name in memory as though they had.
-  Fixed by checking the hearer's `known` map: if the speaker isn't
-  recognized, the memory stores an appearance-based label or "a voice"
-  instead of the canonical name, and `intended_target` is dropped.
-
-- **Unified delivery gate for deterministic perception (Pattern 3).**
-  Deterministic delivery sites in `agents/loops.py` and `agents/perception.py`
-  used scattered bare checks (`has_visual`, `hear_level`) without consistent
-  containment, awareness, or proximity gating. A new `_delivery_ok` function
-  in `agents/common.py` consolidates containment concealment, awareness,
-  sight (including rear-arc/behind_sources), and hearing (with proximity and
-  sealed-container blocking) into one predicate every delivery site calls.
-
-- **Sensory channel cue matching used substring matching.**
-  `_CHANNEL_CUES` and `_INTENSITY_CUES` in `agents/perception.py` matched
-  cues by substring, so "paint" matched "pain" and a single ambiguous word
-  could flip a whole view's channel. Fixed with word-boundary regex matching.
+- **Psychology sustained-drive charge system.**
+  `psychology_runtime.py` adds a slow-integrating `charge` that outlives the
+  peak-held level and discharges only when the character declares
+  resolution. Stress activation now separates aversive strain from
+  non-distressing drive, so a body at the ceiling of a powerful stimulus no
+  longer reads as perfectly composed.
 
 - **Per-observer LLM calls for perception (A4/A5/A6).**
   `_per_observer_model_views` in `agents/perception.py` splits the
   perceiver set into one LLM call per perceiver instead of one shared call,
   creating structural information boundaries rather than relying on post-hoc
   prose scrubs to separate what each observer knows.
+
 
 - **Authorial channel autonomy verbs (common.py).**
   New `_AUTONOMY_VERBS`, `_AUTONOMY_PHRASES`, and `_SUBJECT_LEADS` sets in
@@ -486,6 +517,7 @@ pattern that produced almost every fix: state the fact, leave the choice.
   supports before the reaction gate, claim-subject, and perception checks
   run — all three were blind to unbound targets.
 
+
 - **Reroll restore left stale cast cache.**
   `agents/runtime.py` called `restore_checkpoint` but did not refresh
   `ctx.cast` afterward, so a rerun could use stale cast membership.
@@ -493,12 +525,10 @@ pattern that produced almost every fix: state the fact, leave the choice.
   cache. `checkpoints.py` removes `background_presences` from preserved
   settings and rolls back cast membership on restore.
 
-- **Psychology sustained-drive charge system.**
-  `psychology_runtime.py` adds a slow-integrating `charge` that outlives the
-  peak-held level and discharges only when the character declares
-  resolution. Stress activation now separates aversive strain from
-  non-distressing drive, so a body at the ceiling of a powerful stimulus no
-  longer reads as perfectly composed.
+
+- **`character_import_warnings` now runs on the harness's own sheets.** An empty
+  `psychology.drive` fails silently: a character emitted drive-serving wants for
+  150 beats against three empty strings and nothing anywhere objected.
 
 ## alpha5.1 — A story can leave whole
 
