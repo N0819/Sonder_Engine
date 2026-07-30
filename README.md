@@ -113,9 +113,12 @@ tools/           maintenance scripts and experiment harnesses
 ## Providers and data
 
 Providers can target OpenAI-compatible endpoints, Anthropic, Ollama, KoboldCpp,
-and configured remote services. `sqlite-vec` is used for vector search when
-available; without an embeddings provider configured, semantic recall falls back
-to a cheap lexical hash and quality drops accordingly.
+and configured remote services. Semantic recall ranks a character's own memories
+in Python — cosine similarity over stored embedding blobs, blended with a
+lexical ranking; without an embeddings provider configured it falls back to a
+cheap lexical hash and quality drops accordingly. `sqlite-vec` is a declared
+dependency that nothing currently uses
+([`docs/UNBUILT.md`](docs/UNBUILT.md) §1.4).
 
 API keys, provider settings, and all story content live in the local database —
 **never commit a populated `engine.db`.**

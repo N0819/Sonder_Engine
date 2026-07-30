@@ -88,13 +88,25 @@ not currently computable. Fix the source and the better rule becomes available.
 
 ### 1.4 The vector index is unwired, and `sqlite-vec` is required for it
 
-`memory.py` declares the whole feature and connects none of it. `init_vec_index`
-has no caller, so `memory_vec` and `lore_vec` are never created; nothing ever
-writes an embedding into either; and `search_memories_vec` has no caller either.
-With the dependency installed it would join against a table that does not exist
-and raise — so the feature is not "degraded on some machines", it is **absent on
-all of them**, and semantic recall runs entirely on the numpy path in
-`search_memories`.
+`memory.py` declares the whole feature and connects none of it, and has since
+the first commit — both symbols arrive in the initial upload and never acquire a
+caller. Three independent reasons it has never run:
+
+1. **No caller.** `init_vec_index` is never called, so `memory_vec` and
+   `lore_vec` are never created and nothing ever writes an embedding into
+   either; `search_memories_vec` is never called either.
+2. **The extension is never loaded.** `sqlite-vec` is a *loadable* SQLite
+   extension — importing the Python package does nothing to a connection.
+   Nothing calls `sqlite_vec.load()` or `enable_load_extension()` anywhere, so
+   `USING vec0(...)` fails with `no such module: vec0` even with the dependency
+   installed. Verified directly against 0.1.9.
+3. **`init_vec_index` swallows it** in a bare `except Exception: pass`, so that
+   failure would never have been seen.
+
+So the feature is not "degraded on some machines", it is **absent on all of
+them**. Semantic recall is real but lives in `search_memories`: a full scan of
+the character's rows, then Python ranking — `_cos` over the stored `embedding`
+and `cue_embedding` blobs, blended with `_lexical_memory_ranking`.
 
 `sqlite-vec>=0.1.6,<0.2` is nonetheless a hard runtime requirement in
 `requirements.txt` and `pyproject.toml`, and `_HAS_VEC` guards both functions —
