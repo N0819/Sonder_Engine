@@ -185,6 +185,62 @@ The character step already has a bounded retry, but only for *verbatim
 self-repetition* (`agents/character.py`, the `_first_verbatim_repeat` path), not
 for schema failure. Worth deciding whether a bounded retry belongs there too.
 
+Measured again on a three-turn live run, 2026-07-30, and now with a named
+mechanism: `preprocess_llm_output` drops any `sequence` element that is not a
+dict (`if not isinstance(event, dict): continue`), and a model that answers
+with a list of *sentences* — `["Kess turns to the customs clerk and asks him
+to witness the sale."]` — therefore arrives at validation with an empty
+sequence and fails `semantic_output_errors`' "sequence is empty despite
+nonempty player input". Repair and every fallback candidate ran against that
+sentence; the turn died. Twice in eleven live turns, on two different
+scenarios. Identical on both Pydantic majors, so it is the engine's own
+tolerance that is missing, not a dependency difference.
+
+Half of it has landed: `_name_what_was_discarded` now tells the model that
+*we* dropped its entries and what shape they must take, because the message
+it was being asked to repair was false. What is still open is the
+interpretation, and it is the question leniency always asks — a bare sentence
+does not say whether it is speech or action, and that is the player's conduct
+to declare. Reading it as an action attempt is the least-inventive option
+available and is still an invention. Decide it deliberately; do not let it
+arrive as a "small tolerance fix".
+
+Two other shapes cost turns on the same run and have been closed, both
+non-divergent across majors and both the same mistake one layer down: a
+staged lore entry whose `content` was an object (`_room_notes_from_lore` did
+`content[:600]` on a dict and killed the turn), and a condition written as
+its own description, `{"generator_fuel": ["The generator is running low..."]}`
+against `dict[str, list[dict]]`. Neither is exotic; both are what a model
+does when the field name reads like an invitation to prose.
+
+### 1.7a The leniency layer still loses content silently
+
+Found by differential harness, 2026-07-30, verified identical on both Pydantic
+majors — these are engine defects, not version drift.
+
+- **A name-keyed map loses its key when the item model has no required
+  field.** `schemas._lenient_coerce`'s map expansion carries the key into the
+  item's *first required field*, which is exactly right for `BeliefUpdate.belief`
+  and `AssociationUpdate.cue` — and yields `None` for `GreetingKnowledgeSeed`,
+  `AssertedChange`, `LoreOp`, `BookOp`, `goal_impacts`, `dice` and `evidence`,
+  whose subjects all carry defaults. The key is then dropped: a knowledge seed
+  keyed by its own text arrives with `content: ""`. Falling back to the first
+  *declared* field would close it, at the cost of trusting field order.
+- **`response_candidates` given a map becomes `[]`.** `_coerce_candidates` runs
+  before the generic map expansion and does `value if isinstance(value, list)
+  else []`, so a character's whole deliberation is discarded with no warning.
+  The one place where "the specific validator wins" is the wrong order.
+- **`_coerce_candidate_response` leaks Python repr into prose.** Its list branch
+  `str()`s dict elements instead of recursing, so a structured response becomes
+  `"{'type': 'action'}; {'type': 'speech'}"` — which is then read as what the
+  character said.
+- **Three clamp validators override their own field's declared default.**
+  `CharacterAppraisal.novelty`, `Observation.suddenness` and
+  `GoalImpact.intentionality` declare `0.0` and return `0.5` on `null`, because
+  the field-specific `_clamp_float` runs before the generic null substitution
+  and supplies its own fallback. Whichever number is right, the sheet and the
+  validator should not disagree about it.
+
 ### 1.8 Promotion seeds are minted from the objective event (P5)
 
 `importers.py`'s promotion path uses the full `resolved_event` of every turn

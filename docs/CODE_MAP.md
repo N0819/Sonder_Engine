@@ -23,11 +23,11 @@
 | `authored_events.py` | 124 |  | `db` |
 | `backdrops.py` | 876 |  | `db`, `spatial` |
 | `background_claims.py` | 287 |  | `db` |
-| `character_schema.py` | 1200 | Versioned character/persona defaults, normalization, accessors, and export payloads. | — |
+| `character_schema.py` | 1239 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `schemas` |
 | `chat_archive.py` | 1039 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory` |
 | `checkpoints.py` | 673 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 292 |  | `spatial` |
-| `commit.py` | 4715 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind` |
+| `commit.py` | 4729 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind` |
 | `db.py` | 1343 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 193 |  | `db` |
 | `greetings.py` | 252 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
@@ -46,7 +46,7 @@
 | `providers.py` | 1910 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 493 |  | — |
 | `scene.py` | 1188 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
-| `schemas.py` | 2636 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `schemas.py` | 2872 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 4153 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 965 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 184 | Bearing math and reciprocal spatial-edge normalization. | — |
@@ -252,14 +252,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_character_data()` | 706 | 155 lines |
-| `default_character_data()` | 293 | 88 lines |
-| `_normalize_psychology()` | 164 | 78 lines |
-| `repair_character_shape()` | 647 | 57 lines |
-| `character_initial_active_state()` | 1001 | 48 lines |
-| `normalize_persona_data()` | 862 | 47 lines |
-| `_coerce_appearance()` | 568 | 45 lines |
-| `character_projects()` | 1082 | 35 lines |
+| `normalize_character_data()` | 745 | 155 lines |
+| `default_character_data()` | 332 | 88 lines |
+| `_normalize_psychology()` | 203 | 78 lines |
+| `repair_character_shape()` | 686 | 57 lines |
+| `character_initial_active_state()` | 1040 | 48 lines |
+| `normalize_persona_data()` | 901 | 47 lines |
+| `_coerce_appearance()` | 607 | 45 lines |
+| `character_projects()` | 1121 | 35 lines |
 
 ### `chat_archive.py`
 
@@ -298,14 +298,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 3478 | 898 lines |
+| `prepare_memory_commit()` | 3492 | 898 lines |
 | `prepare_scene_commit()` | 1402 | 242 lines |
 | `track_background_presences()` | 2165 | 196 lines |
 | `commit_world_entities()` | 1776 | 168 lines |
 | `_prepare_destruction()` | 693 | 158 lines |
 | `update_place_graph()` | 68 | 153 lines |
-| `prepare_mapping_commit()` | 2880 | 133 lines |
-| `commit_mapping()` | 3015 | 120 lines |
+| `prepare_mapping_commit()` | 2894 | 133 lines |
+| `commit_mapping()` | 3029 | 120 lines |
 
 ### `db.py`
 
@@ -507,14 +507,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 1951 | 226 lines |
-| `semantic_output_errors()` | 2472 | 111 lines |
-| `_lenient_coerce()` | 305 | 68 lines |
-| `validate_llm_output_strict()` | 2584 | 53 lines |
-| `_declared()` | 255 | 39 lines |
-| `_coerce_conditions()` | 1769 | 37 lines |
+| `preprocess_llm_output()` | 2144 | 229 lines |
+| `semantic_output_errors()` | 2668 | 111 lines |
+| `_lenient_coerce()` | 393 | 103 lines |
+| `validate_llm_output_strict()` | 2816 | 57 lines |
+| `_coerce_conditions()` | 1949 | 50 lines |
+| `_declared()` | 278 | 46 lines |
+| `_name_what_was_discarded()` | 2780 | 34 lines |
 | `_coerce_str_list()` | 13 | 33 lines |
-| `_coerce_considered_responses()` | 1706 | 32 lines |
 
 ### `spatial.py`
 

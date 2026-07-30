@@ -404,3 +404,238 @@ class TestReasoningSurvivesTheStreamingPath:
             providers.last_reasoning.reset(token)
         assert "".join(sent) == '{"ok":1}', (
             "reasoning must never reach the sink -- that is player-facing prose")
+
+
+class TestNothingToReportWhereAnObjectWasDeclared:
+    """`[]` and `""` are how a model spells "nothing to report" for a field
+    that happens to be an object.
+
+    Pydantic 1 agreed with it for free -- `dict([])` and `dict("")` are both
+    `{}` -- so every dict- and model-typed field in the engine accepted the
+    wrong spelling on 1.x and none of them did on 2.x. It is not a
+    per-field cost either: `validate_llm_output` returns the UNNORMALIZED
+    payload when validation fails, so one `"appraisal": []` also costs the
+    step every default, flatten and wrap the rest of the leniency layer
+    would have applied. `_coerce_empty_list_to_dict` had already been
+    written for six named state_diff/scene_patch keys after this crashed a
+    live turn; the field's own declaration says which fields need it.
+    """
+
+    def test_an_empty_list_where_a_nested_model_was_declared(self):
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output(
+            "character", {"response": "hm", "appraisal": []})
+        assert warnings == []
+        assert out["appraisal"]["novelty"] == 0.0
+
+    def test_an_empty_string_reads_the_same_way(self):
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output(
+            "character", {"response": "hm", "interaction": ""})
+        assert warnings == []
+        assert out["interaction"]["addresses"] == []
+
+    def test_an_empty_list_where_a_dict_was_declared(self):
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output("perception", {"views": []})
+        assert warnings == []
+        assert out["views"] == {}
+
+    def test_a_nested_dict_value_may_be_empty_too(self):
+        """The value of a `dict[str, Model]` is not a field of anything, so
+        no validator reaches it -- this is the only place it can be
+        tolerated."""
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output(
+            "director_resolve", {"state_diff": {"rooms": {"cellar": []}}})
+        assert warnings == []
+        assert out["state_diff"]["rooms"]["cellar"]["name"] == ""
+
+    def test_an_empty_string_where_a_list_was_declared(self):
+        """The mirror of the same spelling. Seen live on
+        `lore_ops[].knowledge_locations: ""`, which cost the mapping
+        commit -- on both majors, since neither ever accepted it."""
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output("mapping_commit", {"lore_ops": [
+            {"op": "create", "content": "c", "knowledge_locations": ""}]})
+        assert warnings == []
+        assert out["lore_ops"][0]["knowledge_locations"] == []
+
+    def test_an_empty_object_where_a_list_was_declared(self):
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output("mapping_commit", {"lore_ops": [
+            {"op": "create", "content": "c", "knowledge_locations": {}}]})
+        assert warnings == []
+        assert out["lore_ops"][0]["knowledge_locations"] == []
+
+    def test_a_non_empty_list_is_still_a_real_disagreement(self):
+        """Only the empty spellings mean "nothing". A populated list where an
+        object was declared is a genuine mismatch and must not be guessed at.
+        """
+        from schemas import validate_llm_output
+        _, warnings = validate_llm_output(
+            "perception", {"views": [{"observer": "Mara"}]})
+        assert warnings
+
+
+class TestListElementsAndDictValuesAreCoercedToo:
+    """A list element and a dict value are not fields, so the per-field
+    validator never sees them.
+
+    Pydantic 1 coerced them itself, element by element (`[1, 2]` ->
+    `["1", "2"]`), and 2.x fails the whole step over `dialogue_order.0:
+    Input should be a valid string`. That is a model answering with room
+    NUMBERS instead of room names costing a beat -- and costing it only on
+    one of the two supported majors.
+    """
+
+    def test_numbers_in_a_list_of_prose_become_their_text(self):
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output(
+            "director_resolve", {"dialogue_order": [1, 2]})
+        assert warnings == []
+        assert out["dialogue_order"] == ["1", "2"]
+
+    def test_numbers_in_a_dict_of_prose_become_their_text(self):
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output(
+            "director_resolve", {"state_diff": {"positions": {"Kara": 3}}})
+        assert warnings == []
+        assert out["state_diff"]["positions"]["Kara"] == "3"
+
+    def test_a_fractional_number_where_a_count_was_declared_truncates(self):
+        """Pydantic 1's own truncation, kept rather than discovered: a
+        fractional book id is still pointing at a book."""
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output(
+            "mapping_stage", {"relevant_books": [12.5]})
+        assert warnings == []
+        assert out["relevant_books"] == [12]
+
+    def test_a_whole_float_is_a_count_on_either_major(self):
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output(
+            "mapping_stage", {"relevant_books": [12.0]})
+        assert warnings == []
+        assert out["relevant_books"] == [12]
+
+    def test_prose_in_a_list_of_prose_is_untouched(self):
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output(
+            "director_resolve", {"dialogue_order": ["Mara", "Vesk"]})
+        assert warnings == []
+        assert out["dialogue_order"] == ["Mara", "Vesk"]
+
+
+class TestStagedLoreContentIsProse:
+    """A drafted lore entry has to actually be text by the time anything
+    reads it.
+
+    `staged_lore` is declared `list[dict]`, so nothing checks inside an
+    entry -- and a model asked to draft an entry about a room will sometimes
+    return the entry as an object instead of the paragraph the prompt asks
+    for. Observed live on an opening turn: `_room_notes_from_lore` did
+    `content[:600]` against that dict and the turn died with
+    `KeyError: slice(None, 600, None)`. The same value is what `commit.py`
+    writes into `lore_entries.content`.
+    """
+
+    def test_a_structured_entry_is_flattened_into_prose(self):
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output("mapping_stage", {"staged_lore": [
+            {"keys": ["field_clinic"],
+             "content": {"name": "Field Clinic",
+                         "desc": "One lamp, one generator."}}]})
+        assert warnings == []
+        content = out["staged_lore"][0]["content"]
+        assert isinstance(content, str)
+        assert "One lamp" in content and "Field Clinic" in content
+
+    def test_the_quick_mapping_path_is_covered_too(self):
+        """`mapping_quick` has no schema of its own, so preprocess is the
+        only place this can happen for it -- and `_room_notes_from_lore`
+        reads both."""
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("mapping_quick", {"staged_lore": [
+            {"keys": ["hold"], "content": {"desc": "Rope, and water below."}}]})
+        assert out["staged_lore"][0]["content"] == "Rope, and water below."
+
+    def test_prose_content_is_left_exactly_as_written(self):
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("mapping_stage", {"staged_lore": [
+            {"keys": ["hold"], "content": "Rope, and water below."}]})
+        assert out["staged_lore"][0]["content"] == "Rope, and water below."
+
+
+class TestARepairPromptMustNameTheRealDisagreement:
+    """`preprocess_llm_output` drops any `sequence` element that is not an
+    object, so a model answering with a list of SENTENCES arrives at the
+    semantic check with nothing left and is told "sequence is empty despite
+    nonempty player input" -- which is false, and is then handed to it as the
+    thing to repair. Observed live twice in eleven turns; both times repair
+    and every fallback candidate failed and the turn died.
+
+    Naming the shape is not the same as guessing what the sentences meant. A
+    bare sentence does not say whether it is speech or action, and that is
+    the player's conduct to declare -- see docs/UNBUILT.md 1.7.
+    """
+
+    def test_it_says_the_entries_were_discarded_and_what_shape_to_use(self):
+        from schemas import validate_llm_output_strict
+        report = validate_llm_output_strict(
+            "director_interpret",
+            {"kind": "mixed", "flow": {},
+             "sequence": ["Picks up the PADD.", 'Says, "Nobody leaves."']},
+            source_payload={"player_raw_input": "pick it up and speak"})
+        assert not report.valid
+        assert "were not objects and were discarded" in report.errors[0]
+        assert '"type": "speech"' in report.errors[0]
+
+    def test_a_genuinely_empty_sequence_is_still_reported_as_empty(self):
+        from schemas import validate_llm_output_strict
+        report = validate_llm_output_strict(
+            "director_interpret",
+            {"kind": "mixed", "flow": {}, "sequence": []},
+            source_payload={"player_raw_input": "wait"})
+        assert report.errors == ["sequence is empty despite nonempty player input"]
+
+
+class TestAConditionWrittenAsItsOwnDescription:
+    """`conditions` is `dict[str, list[dict]]`, and a model will write the
+    condition as the sentence that describes it:
+    `{"generator_fuel": ["The generator is running low on fuel..."]}`.
+
+    Observed live on `director_resolve`, identically on both Pydantic
+    majors, and it failed the whole step — which loses the resolved event,
+    the state diff and the beat, not just the condition.
+    `_coerce_conditions` already existed to "coerce the leaf rather than
+    reject the whole step"; its leaf handler passed a non-dict straight
+    through to fail validation. The key already names the condition and
+    `commit.py` stores the entry as its payload, so the prose is kept.
+    """
+
+    def test_prose_becomes_a_condition_keyed_by_its_own_name(self):
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output("director_resolve", {"state_diff": {
+            "conditions": {"generator_fuel": ["Running low; the lamp dies."]}}})
+        assert warnings == []
+        cond = out["state_diff"]["conditions"]["generator_fuel"][0]
+        assert cond["condition_id"] == "generator_fuel"
+        assert cond["note"] == "Running low; the lamp dies."
+
+    def test_a_structured_condition_is_untouched(self):
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output("director_resolve", {"state_diff": {
+            "conditions": {"burn": [{"condition_id": "burn", "kind": "fire"}]}}})
+        assert warnings == []
+        assert out["state_diff"]["conditions"]["burn"] == [
+            {"condition_id": "burn", "kind": "fire"}]
+
+    def test_a_scalar_that_describes_nothing_is_dropped_not_passed_on(self):
+        """A bare number carries neither an id nor a description. Passing it
+        through only fails validation one layer later, with the whole step."""
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output("director_resolve", {"state_diff": {
+            "conditions": {"burn": [7]}}})
+        assert warnings == []
+        assert out["state_diff"]["conditions"]["burn"] == []

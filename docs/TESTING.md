@@ -101,6 +101,37 @@ that coercion itself so both behave alike. When changing `_declared` or
 and diff, which is how the bare-`list` divergence was caught (v1 treats a bare
 `list` as a singleton, v2's `get_origin` does not).
 
+Done exhaustively — every field of every `LenientModel` × a corpus of wrong
+spellings, run under both interpreters and diffed — that check found 311
+payloads that parsed on 1.x and failed on 2.x, in three families the
+field-level coercion could not see:
+
+- `[]` and `""` where a **dict or nested model** was declared, which 1.x
+  accepted everywhere for free because `dict([]) == dict("") == {}`;
+- a wrongly-typed **list element** or **dict value**, which is not a field of
+  anything, so no per-field validator ever reaches it;
+- a fractional float where an `int` was declared, which 1.x truncated.
+
+The lesson generalises past Pydantic: **the leniency is per-field, and content
+does not only arrive in fields.** A new coercion should be asked whether the
+same spelling can arrive one level down, in a `list[X]` element or a
+`dict[str, X]` value — `_coerce_member` is where that answer goes.
+
+None of these are visible to the suite unless a test feeds the wrong spelling
+deliberately: the full suite passed on both majors while all 311 diverged, and
+the cost is not a warning but a *silently unnormalized step*, because
+`validate_llm_output` returns the raw payload when validation fails. One
+`"appraisal": []` costs that step every default, flatten and wrap the rest of
+the layer would have applied.
+
+The same exposure exists outside `schemas.py`. `character_schema.py`'s profile
+models are plain `BaseModel`s that were relying on 1.x to turn a number into
+prose, which made a card with `"expression": 3` a 500 on save and an unreadable
+character on every later turn — on the read path of every accessor, because
+`_normalize_psychology` calls `parse_obj` with no `try`. They now share
+`schemas.coerce_to_declared_scalar`. Any new model anywhere in the repo
+inherits the same obligation.
+
 ## CI layout
 
 GitHub Actions runs:

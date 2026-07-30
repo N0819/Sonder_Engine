@@ -2848,7 +2848,21 @@ def _apply_mapping_book_ops(cid, lb, book_ops):
             continue
 
         raw_parent = op.get("parent_id")
-        parent_id = temp_map.get(raw_parent) if isinstance(raw_parent, str) else raw_parent
+        if isinstance(raw_parent, str):
+            # A same-turn temp handle, or an existing book's id spelled as
+            # text. `parent_id` is declared `Union[int, str]` for exactly
+            # that reason, and which of the two survives validation now
+            # depends on the Pydantic major: 1.x tried `int` first and
+            # coerced `"77"` to 77, 2.x's smart union keeps the string. So a
+            # digit string has to be read as the id it is, or the book
+            # silently reparents to canon root on 2.x -- the same op, filed
+            # somewhere else, with nothing logged. Matches how lore_ops
+            # already resolves `book_id` below.
+            parent_id = temp_map.get(raw_parent) or (
+                int(raw_parent) if raw_parent.isdigit() else None
+            )
+        else:
+            parent_id = raw_parent
         if not isinstance(parent_id, int) or parent_id not in existing:
             parent_id = lb  # keeps the tree rooted under canon -- never an unreachable orphan
 
