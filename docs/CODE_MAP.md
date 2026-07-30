@@ -52,7 +52,7 @@
 | `spatial_orientation.py` | 184 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `survival.py` | 320 |  | `db` |
 | `theory_of_mind.py` | 703 |  | — |
-| `updates.py` | 281 |  | — |
+| `updates.py` | 394 |  | — |
 
 ## Largest top-level functions
 
@@ -584,14 +584,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `check_updates()` | 178 | 52 lines |
-| `install_updates()` | 232 | 50 lines |
-| `_github_releases()` | 140 | 36 lines |
-| `_upstream_ref()` | 82 | 24 lines |
-| `_git()` | 37 | 22 lines |
-| `_is_git_repo()` | 61 | 14 lines |
-| `_repo_slug()` | 113 | 13 lines |
-| `_incoming_tags()` | 128 | 10 lines |
+| `check_updates()` | 290 | 53 lines |
+| `install_updates()` | 345 | 50 lines |
+| `_git()` | 75 | 41 lines |
+| `_github_releases()` | 252 | 36 lines |
+| `_upstream_ref()` | 139 | 24 lines |
+| `_remote_tip()` | 175 | 15 lines |
+| `_is_git_repo()` | 118 | 14 lines |
+| `_repo_slug()` | 225 | 13 lines |
 
 ## FastAPI routes
 
