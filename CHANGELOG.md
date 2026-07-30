@@ -1,5 +1,38 @@
 # Changelog
 
+## alpha 6.1.2 — The updater could not fetch its own update
+
+alpha 6.1.1 was the first release big enough that fetching it took longer than
+the updater was willing to wait, and the way it gave up did lasting damage. The
+symptom on the other side was "Couldn't check for updates" — permanently, on
+every later attempt, with an error naming a git process that had exited hours
+earlier. Found by trying to install 6.1.1 on a normal connection.
+
+### Fixed
+
+- **A slow release fetch broke update checks for good.** `check_updates` capped
+  `git fetch` at 60 seconds; fetching 6.1.1 measured 2m0.5s. Reaching that cap
+  was survivable — what was not is that `subprocess.run(timeout=...)` ends a
+  child with SIGKILL. Git removes the `.lock` files it holds from its SIGTERM
+  handler and gets no chance to from a SIGKILL, so the interrupted fetch left
+  `refs/remotes/origin/main.lock` on disk, and from then on *every* check failed
+  at ref-update time. Git reports that as "Another git process seems to be
+  running", which sends the reader hunting for a process that no longer exists.
+  Timing out now sends SIGTERM and only escalates to SIGKILL after a grace
+  period, so a fetch that runs long can no longer cost the checkout its ability
+  to update. Where a stale lock is already on disk, the error says which file to
+  delete instead of blaming a live process.
+
+- **A check downloaded a release to find out whether there was one.** Every
+  check ran a full `git fetch` — the expensive, lock-taking operation — merely
+  to answer "is there anything new?". It now asks over the wire with
+  `git ls-remote`, a single round trip that transfers no objects, writes
+  nothing, and takes no locks; when the remote tip is a commit the checkout
+  already has, the counts, the commit list and the incoming tags are all
+  computed offline and no fetch happens at all. Objects are downloaded only
+  when they are genuinely new, which is also why the ceiling on that download
+  could be raised to five minutes without a routine check ever waiting on it.
+
 ## alpha 6.1.1 — The engine has to start
 
 alpha 6.1 did not start on a fresh install. `requirements.txt` declares
