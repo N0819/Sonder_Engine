@@ -87,9 +87,13 @@ def test_fill_psychology_preserves_authored_fields_and_fills_nested_gaps(
 
 
 def test_fill_prompt_is_specific_and_non_destructive():
-    from prompts import get_prompt
+    # The authored default, not `get_prompt` -- that resolves the active preset
+    # and the NSFW flag from the settings table, and this is a fast-tier test
+    # about what the prompt SAYS. Overriding the text in a preset is a separate
+    # behaviour from having written it correctly.
+    from prompts import DEFAULT_PROMPTS
 
-    prompt = get_prompt("fill_character_psychology")
+    prompt = DEFAULT_PROMPTS["fill_character_psychology"]
     assert "merges only empty fields" in prompt
     assert "formative pressures" in prompt
     assert "Do not diagnose" in prompt

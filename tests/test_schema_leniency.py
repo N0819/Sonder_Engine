@@ -261,6 +261,11 @@ class TestAFailedBeatCarriesItsEvidence:
         monkeypatch.setattr(
             llm_quality, "chat_complete",
             lambda *a, **k: '{"mind_model_updates": {"Mara": {"nope": 1}}}')
+        # Stubbing the model is not enough: the retry path asks how many
+        # candidates the role has, and that reads `agent_models` from the
+        # settings table. Fast-tier tests are database-independent, so the
+        # count comes from here (as tests/test_strict_stage_validation.py does).
+        monkeypatch.setattr(llm_quality, "role_candidate_count", lambda role: 1)
         import pytest
         with pytest.raises(RuntimeError) as exc:
             llm_quality.complete_validated_json(
@@ -277,6 +282,7 @@ class TestAFailedBeatCarriesItsEvidence:
         monkeypatch.setattr(
             llm_quality, "chat_complete",
             lambda *a, **k: '{"sequence": "' + "x" * 20000 + '"}')
+        monkeypatch.setattr(llm_quality, "role_candidate_count", lambda role: 1)
         import pytest
         with pytest.raises(RuntimeError) as exc:
             llm_quality.complete_validated_json(
