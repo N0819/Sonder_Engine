@@ -86,7 +86,31 @@ Consequence already paid: natural waking had to be keyed on the simulation clock
 (eight hours) rather than on the rest a body actually needed, because "rested" is
 not currently computable. Fix the source and the better rule becomes available.
 
-### 1.4 A character cannot revise a bearing they learned wrong
+### 1.4 The vector index is unwired, and `sqlite-vec` is required for it
+
+`memory.py` declares the whole feature and connects none of it. `init_vec_index`
+has no caller, so `memory_vec` and `lore_vec` are never created; nothing ever
+writes an embedding into either; and `search_memories_vec` has no caller either.
+With the dependency installed it would join against a table that does not exist
+and raise — so the feature is not "degraded on some machines", it is **absent on
+all of them**, and semantic recall runs entirely on the numpy path in
+`search_memories`.
+
+`sqlite-vec>=0.1.6,<0.2` is nonetheless a hard runtime requirement in
+`requirements.txt` and `pyproject.toml`, and `_HAS_VEC` guards both functions —
+so a missing install is indistinguishable from an unwired feature, in both
+directions. It is also **not installed on the primary dev machine**, which is how
+this stayed invisible: the guard returns early, the caller that would have
+noticed does not exist, and no test references `_HAS_VEC`, `sqlite_vec`,
+`memory_vec`, or `vec0` in either state.
+
+Either wire it (create the tables at schema init, write embeddings where
+`memories`/`lore` rows are written, and give `search_memories` a vec-first
+branch) or drop the dependency until it is wired. Do not leave a required
+dependency whose only consumers are unreachable — the manifest currently
+promises a capability the engine does not have.
+
+### 1.5 A character cannot revise a bearing they learned wrong
 
 `disproven` fires when a doorway fails to exist. Nothing fires when a doorway
 exists but the character remembers the wrong heading for it. After a bearing
@@ -98,7 +122,7 @@ Related to the broader gap: a character can revise a belief about the world and
 has almost no mechanism for revising a belief about themselves. Project
 displacement is currently the only one.
 
-### 1.5 See-through barriers mint walkable edges
+### 1.6 See-through barriers mint walkable edges
 
 **Real in story play; cannot affect the maze arms** (generated and authored
 mazes have only `open` edges).
@@ -138,7 +162,7 @@ strict improvement rather than a regression, and this predates it. Any fix must
 also cover the legacy writer in `record_spatial_experience`, or the wall edges
 simply re-enter through the merge.
 
-### 1.6 JSON validation stalls cost beats
+### 1.7 JSON validation stalls cost beats
 
 Six-plus across one experiment arm: `mind_model_updates` missing required
 fields, `sequence` emitted as a non-list, occasionally prose instead of JSON.
@@ -149,7 +173,7 @@ The character step already has a bounded retry, but only for *verbatim
 self-repetition* (`agents/character.py`, the `_first_verbatim_repeat` path), not
 for schema failure. Worth deciding whether a bounded retry belongs there too.
 
-### 1.7 Promotion seeds are minted from the objective event (P5)
+### 1.8 Promotion seeds are minted from the objective event (P5)
 
 `importers.py`'s promotion path uses the full `resolved_event` of every turn
 mentioning the name — **including concealed acts, with no perception filter** —
@@ -160,14 +184,14 @@ holding entitled information tagged as though they had seen it.
 The widest surviving instance of "the omniscient record re-enters a later
 context".
 
-### 1.8 Consolidation flattens provenance (P8)
+### 1.9 Consolidation flattens provenance (P8)
 
 `memory.consolidate_character_memory` melts `heard` / `inferred` / `told` rows
 into one flat autobiographical string, fed back wholesale each turn. **The
 provenance distinction the engine's thesis rests on does not survive the summary
 layer.**
 
-### 1.9 Entity `state` staleness is instrumented, not fixed (S3-A8)
+### 1.10 Entity `state` staleness is instrumented, not fixed (S3-A8)
 
 Nothing reconciles an entity's free-text `state` / `description` against the
 beat's resolution. An earlier "skip the update" fix was **reverted** as durable
@@ -176,13 +200,13 @@ warning and commits the blob anyway. `tests/test_pipeline_audit_leak_gaps.py`
 pins this deliberately as *a signal, not a fix*. Root cause — free-text state
 blobs with omission-only reconciliation and `_PROTECTED_STATE_KEYS` — untouched.
 
-### 1.10 `ctx.warnings` is write-only in production (X15)
+### 1.11 `ctx.warnings` is write-only in production (X15)
 
 Warnings are appended across `agents/background.py` and `agents/character.py`;
 the only readers are tests. Every deterministic guard that "warns rather than
 fails" reports into a channel nothing in production consumes.
 
-### 1.11 Watch items
+### 1.12 Watch items
 
 Not defects yet. Each is a measured shape that will become one silently.
 
@@ -472,7 +496,7 @@ All multiplayer-only, which is why they survived.
   `chat_archive.py` resolves an archive integer against whatever local row holds
   that id, then attaches the archive's `chat_chars.state` to it. Memories are
   safe. Legacy path only.
-- **P5 / P8** are defects, filed at §1.7 and §1.8.
+- **P5 / P8** are defects, filed at §1.8 and §1.9.
 
 ### 3.6 Deliberately kept
 
@@ -520,7 +544,7 @@ Immediate state is split between the `world.scene` JSON document and the
 normalized world/entity tables. Both are useful, but *durable* is not the same as
 *authoritative*: when they disagree, downstream code can select different
 realities. `commit.py` already records a case where the two diverged and the
-divergence was judged the greater harm (§1.9).
+divergence was judged the greater harm (§1.10).
 
 **Recommended direction: publish a field-level authority matrix**, then add
 assertions preventing two systems from independently owning one fact. Begin with
@@ -799,7 +823,7 @@ told-basis node minting, negative entries, and the `repair`/`social` affordances
 
 ### 6.5 Place graph
 
-The walkable-edge defect is §1.5; the redundancy watch is §1.11.
+The walkable-edge defect is §1.6; the redundancy watch is §1.12.
 
 - **`basis: "told"` has no writer**, deliberately. The approved design derived
   hearsay edges from `stated_fact` place claims, and implementing it revealed
