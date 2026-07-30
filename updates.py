@@ -13,6 +13,18 @@ working tree or a diverged branch makes install fail loudly with git's own
 stderr rather than doing anything clever. The caller is expected to restart
 the server process afterwards -- a running Python process does not pick up
 updated source on disk on its own.
+
+Two rules keep a slow network from damaging the checkout, learned from a
+real failure where a release large enough to need a two-minute fetch left
+the repo permanently unable to check for updates:
+
+* Timing a fetch out must never SIGKILL it. Git removes the ``.lock`` files
+  it holds when it receives SIGTERM, and cannot when it is killed outright;
+  an orphaned ``refs/remotes/origin/main.lock`` breaks every later fetch
+  until a human deletes it by hand. See :func:`_git`.
+* A check should not fetch at all unless there is something new to fetch.
+  :func:`_remote_tip` answers "is there anything new?" over the wire without
+  writing to the object store or taking a single lock.
 """
 
 import json
@@ -24,14 +36,40 @@ import urllib.request
 
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 
-# Hard ceiling so a hung network fetch can't wedge the request thread.
-_FETCH_TIMEOUT = 60
+# Hard ceiling so a hung network fetch can't wedge the request thread. This
+# is generous because it is a backstop, not an expectation: a real release
+# fetch on a slow link measured two minutes, and cutting one short is how the
+# checkout got wedged in the first place. Checks reach it only when there are
+# genuinely new objects to download -- see check_updates.
+_FETCH_TIMEOUT = 300
 _LOCAL_TIMEOUT = 15
+# Read-only remote probe: one round trip, no transfer, so it can be strict.
+_LS_REMOTE_TIMEOUT = 20
 _GITHUB_TIMEOUT = 12
+# Seconds given to a timed-out git to clean up its lock files before SIGKILL.
+_TERM_GRACE = 5
+
+_LOCK_HINT = (
+    " A previous update check was interrupted and left a stale lock file "
+    "behind. With no git command running, delete the '.lock' file named "
+    "above and try again."
+)
 
 
 class GitError(Exception):
     """A git invocation failed; ``message`` carries git's stderr."""
+
+
+def _lock_hint(message):
+    """Append recovery guidance when git is complaining about a stale lock.
+
+    Git's own wording ("Another git process seems to be running") sends the
+    reader hunting for a process that exited long ago, so say what actually
+    fixes it.
+    """
+    if "cannot lock ref" in message or "Unable to create" in message:
+        return message.rstrip() + "\n" + _LOCK_HINT
+    return message
 
 
 def _git(*args, timeout=_LOCAL_TIMEOUT):
@@ -39,23 +77,42 @@ def _git(*args, timeout=_LOCAL_TIMEOUT):
 
     Raises :class:`GitError` on a non-zero exit (or if git is missing),
     with the command's stderr as the message so the UI can show it.
+
+    On timeout the child is asked to stop with SIGTERM and only killed if it
+    ignores that. ``subprocess.run(timeout=...)`` sends SIGKILL instead, which
+    is unsafe here: git deletes the ref and index ``.lock`` files it holds
+    from its SIGTERM handler, and a SIGKILL leaves them on disk, where they
+    block every subsequent fetch until someone removes them manually. (On
+    Windows ``terminate`` cannot run that handler, so the guarantee is
+    POSIX-only.)
     """
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             ["git", *args],
             cwd=REPO_ROOT,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
         )
     except FileNotFoundError:
         raise GitError("git is not installed or not on PATH.")
+    try:
+        out, err = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
-        raise GitError(f"git {args[0]} timed out.")
+        proc.terminate()
+        try:
+            proc.communicate(timeout=_TERM_GRACE)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+        raise GitError(f"git {args[0]} timed out after {timeout}s.")
     if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "").strip()
-        raise GitError(detail or f"git {args[0]} failed (exit {proc.returncode}).")
-    return proc.stdout.strip()
+        detail = (err or out or "").strip()
+        raise GitError(
+            _lock_hint(detail)
+            or f"git {args[0]} failed (exit {proc.returncode})."
+        )
+    return out.strip()
 
 
 def _is_git_repo():
@@ -103,6 +160,61 @@ def _upstream_ref(branch):
     raise GitError(
         "No remote tracking branch found. Is 'origin' configured?"
     )
+
+
+def _split_upstream(upstream):
+    """``origin/main`` -> ``("origin", "main")``.
+
+    Branch names may contain slashes (``origin/fix/pydantic-2-compat``); the
+    remote name cannot, so only the first segment is the remote.
+    """
+    remote, _, name = upstream.partition("/")
+    return remote, name
+
+
+def _remote_tip(remote, branch):
+    """The commit id ``refs/heads/<branch>`` points at on ``remote``.
+
+    ``ls-remote`` is a single read-only round trip: it downloads no objects,
+    writes nothing, and takes no locks, so it is safe to run on every check
+    no matter how slow the link is. Returns None if the remote has no such
+    branch, which sends the caller back to the fetch-and-compare path.
+    """
+    ref = f"refs/heads/{branch}"
+    out = _git("ls-remote", remote, ref, timeout=_LS_REMOTE_TIMEOUT)
+    for line in out.splitlines():
+        oid, _, found = line.partition("\t")
+        if found.strip() == ref:
+            return oid.strip()
+    return None
+
+
+def _have_commit(oid):
+    """Whether ``oid`` is already in the local object store.
+
+    When it is, every count and log below can be computed offline and the
+    fetch skipped entirely -- true both when there is no update and when a
+    previous check already downloaded one.
+    """
+    try:
+        _git("cat-file", "-e", f"{oid}^{{commit}}")
+        return True
+    except GitError:
+        return False
+
+
+def _sync_if_needed(remote, branch, upstream):
+    """Resolve what to compare HEAD against, fetching only if we must.
+
+    Returns the revision to use as the upstream tip: the remote's own commit
+    id when ``ls-remote`` could name it, otherwise the remote-tracking ref.
+    A fetch happens only when the remote tip is a commit this checkout has
+    never seen.
+    """
+    tip = _remote_tip(remote, branch)
+    if tip is None or not _have_commit(tip):
+        _git("fetch", "--quiet", "--tags", remote, timeout=_FETCH_TIMEOUT)
+    return tip or upstream
 
 
 def _short_status():
@@ -195,19 +307,20 @@ def check_updates():
 
     try:
         upstream = _upstream_ref(branch)
-        # Update remote-tracking refs and tags without touching the tree.
-        _git("fetch", "--quiet", "--tags", "origin", timeout=_FETCH_TIMEOUT)
+        # Learn the remote tip, downloading objects only if it is new to us.
+        # Neither path touches the working tree.
+        target = _sync_if_needed(*_split_upstream(upstream), upstream)
         local = _git("rev-parse", "--short", "HEAD")
-        behind = int(_git("rev-list", "--count", f"HEAD..{upstream}"))
-        ahead = int(_git("rev-list", "--count", f"{upstream}..HEAD"))
+        behind = int(_git("rev-list", "--count", f"HEAD..{target}"))
+        ahead = int(_git("rev-list", "--count", f"{target}..HEAD"))
         commits = []
         incoming_tags = set()
         if behind:
-            log = _git("log", "--pretty=format:%h\x1f%s", f"HEAD..{upstream}")
+            log = _git("log", "--pretty=format:%h\x1f%s", f"HEAD..{target}")
             for line in log.splitlines():
                 h, _, subject = line.partition("\x1f")
                 commits.append({"hash": h, "subject": subject})
-            incoming_tags = _incoming_tags(upstream)
+            incoming_tags = _incoming_tags(target)
     except GitError as e:
         return {"ok": False, "error": str(e)}
 
@@ -260,13 +373,13 @@ def install_updates():
 
     try:
         upstream = _upstream_ref(branch)
-        _git("fetch", "--quiet", "origin", timeout=_FETCH_TIMEOUT)
+        target = _sync_if_needed(*_split_upstream(upstream), upstream)
         before = _git("rev-parse", "--short", "HEAD")
-        behind = int(_git("rev-list", "--count", f"HEAD..{upstream}"))
+        behind = int(_git("rev-list", "--count", f"HEAD..{target}"))
         if behind == 0:
             return {"ok": True, "updated": False, "current": before,
                     "message": "Already up to date."}
-        _git("merge", "--ff-only", upstream, timeout=_FETCH_TIMEOUT)
+        _git("merge", "--ff-only", target, timeout=_FETCH_TIMEOUT)
         after = _git("rev-parse", "--short", "HEAD")
     except GitError as e:
         return {"ok": False, "error": str(e)}
