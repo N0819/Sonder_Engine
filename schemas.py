@@ -223,11 +223,34 @@ class _Declared(NamedTuple):
     default: Any          # the field's own default, or None if it has none
     default_factory: Any
     is_str: bool          # declared plain prose
+    is_int: bool          # declared a whole number
     is_list: bool         # declared a list of something
     item_type: Any        # that list's element type, if it has one
+    expects_object: bool  # declared a dict or a nested model
+    value_type: Any       # a declared dict's value type, if it has one
 
 
 _NONE_TYPE = type(None)
+
+
+def _expects_object(annotation):
+    """Whether this annotation wants a JSON object -- a dict or a model.
+
+    Both are the same shape on the wire, and Pydantic 1 accepted the same
+    wrong spellings for either (`dict([])` and `dict("")` are both `{}`), so
+    the coercions treat them as one kind.
+    """
+    if annotation is dict or get_origin(annotation) is dict:
+        return True
+    return isinstance(annotation, type) and issubclass(annotation, BaseModel)
+
+
+def _mapping_value_type(annotation):
+    """A declared dict's value type, or None when it declares no value type."""
+    if get_origin(annotation) is not dict:
+        return None
+    args = get_args(annotation)
+    return args[1] if len(args) == 2 else None
 
 
 def _strip_optional(annotation):
@@ -262,13 +285,17 @@ def _declared(field):
     default = None if (required or factory is not None) else field.default
 
     if not _PYDANTIC_V2:
+        outer = field.outer_type_
         return _Declared(
             allows_none=bool(field.allow_none),
             default=default,
             default_factory=factory,
-            is_str=field.outer_type_ is str,
+            is_str=outer is str,
+            is_int=outer is int,
             is_list=getattr(field, "shape", None) == _SHAPE_LIST_V1,
             item_type=getattr(field, "type_", None),
+            expects_object=_expects_object(outer),
+            value_type=_mapping_value_type(outer),
         )
 
     annotation = field.annotation
@@ -288,8 +315,11 @@ def _declared(field):
         default=default,
         default_factory=factory,
         is_str=inner is str,
+        is_int=inner is int,
         is_list=is_list,
         item_type=args[0] if (is_list and args) else None,
+        expects_object=_expects_object(inner),
+        value_type=_mapping_value_type(inner),
     )
 
 
@@ -302,6 +332,64 @@ def _item_fields(item_type):
     return _fields(item_type) or {}
 
 
+def _empty_container(value):
+    """An empty `[]`, `()` or `""` -- every spelling of "nothing to report"
+    that is not already an object."""
+    return isinstance(value, (list, tuple, str)) and not value
+
+
+def _as_declared_scalar(value, target):
+    """One scalar into the type its field declared, as Pydantic 1 did it.
+
+    Pydantic 1 coerced these itself in its lax mode and Pydantic 2 refuses
+    them, so without this the same engine is measurably more brittle
+    depending on which major happens to be installed -- and the brittleness
+    reads later as a bad model rather than as a dependency difference.
+    Only the two directions v1 actually performed are reproduced: any scalar
+    into prose (`5` -> `"5"`, and a bool is an int, so `True` -> `"True"`),
+    and a fractional number into a whole one (`1.5` -> `1`, v1's truncation).
+    """
+    if target is str and isinstance(value, (int, float)):
+        return str(value)
+    if target is int and isinstance(value, float):
+        return int(value)
+    return value
+
+
+def _coerce_member(value, declared_type):
+    """One element of a declared list, or one value of a declared dict.
+
+    Neither is a field of anything, so no validator ever reaches it -- this
+    is the only place their spelling can be tolerated.
+    """
+    if declared_type is None:
+        return value
+    # `dict[str, Optional[str]]` (perception's views) declares prose that may
+    # be absent, and an absent one stays absent -- `_as_declared_scalar`
+    # leaves None alone. What it must not do is read `Optional[str]` as "not
+    # prose" and let a number through to fail the step.
+    declared_type = _strip_optional(declared_type)
+    # A container inside a container -- `dict[str, list[dict]]` is
+    # `StateDiff.conditions`, and its inner list's items are as unreachable
+    # from a field validator as the list itself was. Recursing costs one
+    # line and stops the same rule needing to be rediscovered one level
+    # down.
+    origin = get_origin(declared_type)
+    args = get_args(declared_type)
+    if origin is list:
+        if isinstance(value, list):
+            return [_coerce_member(item, args[0] if args else None)
+                    for item in value]
+        if isinstance(value, (dict, str)) and not value:
+            return []
+    if origin is dict and isinstance(value, dict):
+        return {key: _coerce_member(item, args[1] if len(args) == 2 else None)
+                for key, item in value.items()}
+    if _expects_object(declared_type) and _empty_container(value):
+        return {}
+    return _as_declared_scalar(value, declared_type)
+
+
 def _lenient_coerce(value, declared):
     """The one coercion, given a value and the shape its field declared."""
     if value is None and not declared.allows_none:
@@ -312,14 +400,49 @@ def _lenient_coerce(value, declared):
         return value
     if isinstance(value, (dict, list, tuple)) and declared.is_str:
         return _flatten_to_text(value)
-    # A bare number where prose was declared. Pydantic 1 coerced this itself
-    # (`5` -> `"5"`, and a bool is an int, so `True` -> `"True"`); Pydantic 2
-    # refuses it and the whole beat is discarded over `response: Input should
-    # be a valid string`. Doing it here keeps the engine's tolerance the same
-    # on both majors instead of leaving it to whichever one is installed --
-    # a divergence of exactly the kind that reads later as a bad model.
-    if declared.is_str and isinstance(value, (int, float)):
-        return str(value)
+    # A bare number where prose was declared, or a fractional one where a
+    # count was. See `_as_declared_scalar`: Pydantic 1 did both itself, so
+    # doing them here keeps the engine's tolerance the same on both majors
+    # instead of leaving it to whichever one is installed -- a divergence of
+    # exactly the kind that reads later as a bad model.
+    if declared.is_str or declared.is_int:
+        coerced = _as_declared_scalar(
+            value, str if declared.is_str else int)
+        if coerced is not value:
+            return coerced
+    # An empty list or an empty string where an object was declared. To a
+    # model these all read as "nothing to report", and Pydantic 1 agreed
+    # with it -- `dict([])` and `dict("")` are both `{}`, so v1 accepted the
+    # wrong spelling for every dict- and model-typed field for free. On v2
+    # it is a hard error, and the error is not confined to the one field:
+    # `validate_llm_output` returns the UNNORMALIZED payload when validation
+    # fails, so one `"appraisal": []` costs the whole step every default,
+    # every flatten and every wrap the rest of this function would have
+    # done. `_coerce_empty_list_to_dict` already does this for six named
+    # state_diff/scene_patch keys, which is where it was first seen to crash
+    # a live turn; the field's own declaration says which fields need it.
+    if declared.expects_object and _empty_container(value):
+        return {}
+    # And the mirror of it: `{}` or `""` where a list was declared. Same
+    # "nothing to report", same field-declares-which-fields-need-it
+    # generalization of `_coerce_empty_dict_to_list`, which already does this
+    # for three named scene_patch keys. Seen live on
+    # `lore_ops[].knowledge_locations: ""`, which cost the mapping commit.
+    if declared.is_list and isinstance(value, (dict, str)) and not value:
+        return []
+    # The same two rules again, one level down. `_lenient_coerce` is a
+    # per-FIELD validator, so a nested LenientModel applies it to its own
+    # fields -- but nothing applies it to the ELEMENTS of a `list[str]` or
+    # the VALUES of a `dict[str, str]`, which are not fields of anything.
+    # v1 coerced those element-wise (`[1, 2]` -> `["1", "2"]`) and v2 fails
+    # the whole step over `dialogue_order.0: Input should be a valid
+    # string`, which is how a model answering with room NUMBERS instead of
+    # room names costs a beat.
+    if declared.is_list and isinstance(value, list):
+        return [_coerce_member(item, declared.item_type) for item in value]
+    if declared.value_type is not None and isinstance(value, dict):
+        return {key: _coerce_member(item, declared.value_type)
+                for key, item in value.items()}
     # One item where a list was declared. Asked for "updates" and having
     # exactly one to report, a model will often return the object rather
     # than a list of one -- observed live, a character agent returned a
@@ -369,6 +492,31 @@ def _lenient_coerce(value, declared):
                 out.append(item)
             return out
         return [value]
+    return value
+
+
+def coerce_to_declared_scalar(model_cls, field_name, value):
+    """The scalar half of the leniency, for models defined outside this file.
+
+    `character_schema.py`'s profiles are plain `BaseModel`s and were relying
+    on Pydantic 1 to turn a number into prose for them -- a card with
+    `"expression": 3` loaded fine on 1.x and raises on 2.x, from
+    `normalize_character_data`, which is the READ path for every character
+    accessor. That is a 500 on character save and an unreadable character
+    on every later turn.
+
+    Exported rather than duplicated there: which Pydantic is installed, and
+    what v1 used to coerce, are two facts this module already owns, and a
+    second copy of either is how the majors drift apart again.
+    """
+    field = _fields(model_cls).get(field_name)
+    if field is None:
+        return value
+    declared = _declared(field)
+    if declared.is_str:
+        return _as_declared_scalar(value, str)
+    if declared.is_int:
+        return _as_declared_scalar(value, int)
     return value
 
 
@@ -1694,6 +1842,38 @@ SCHEMA_MAP = {
     "backdrop_prompt": BackdropPromptOutput,
 }
 
+def _flatten_staged_lore(result):
+    """A staged lore entry's `content` is prose, and has to actually be prose.
+
+    `staged_lore` and `relevant_lore` are declared `list[dict]`, so nothing
+    checks what is inside an entry -- and a model asked to draft a lore entry
+    about a room will sometimes return the entry as an OBJECT
+    (`{"name": ..., "desc": ...}`) rather than as the paragraph the prompt
+    asks for. Nothing rejects it, and it then reaches code that treats it as
+    text: observed live on an opening turn, `_room_notes_from_lore` did
+    `content[:600]` on that dict and killed the turn with
+    `KeyError: slice(None, 600, None)`. The same value is also what
+    `commit.py` writes into `lore_entries.content`.
+
+    Flattened here rather than at either reader, because both of them --
+    and the database -- want the same thing, and this is the last point
+    where the model's own structure is still visible enough to join in
+    traversal order.
+    """
+    for key in ("staged_lore", "relevant_lore"):
+        entries = result.get(key)
+        if not isinstance(entries, list):
+            continue
+        flattened = []
+        for entry in entries:
+            if isinstance(entry, dict) and not isinstance(
+                    entry.get("content"), (str, type(None))):
+                entry = dict(entry)
+                entry["content"] = _flatten_view_value(entry["content"]) or ""
+            flattened.append(entry)
+        result[key] = flattened
+
+
 def _coerce_int_list(value):
     result = []
     for item in value or []:
@@ -1767,7 +1947,17 @@ def _coerce_empty_dict_to_list(value):
     return value
 
 def _coerce_conditions(value):
-    def condition_dict(entry):
+    def condition_dict(entry, key=""):
+        if isinstance(entry, str) and entry.strip():
+            # The condition written as its own description --
+            # `{"generator_fuel": ["The generator is running low on fuel..."]}`
+            # -- which cost a live turn on `director_resolve`, identically on
+            # both Pydantic majors. The key already names the condition and
+            # `commit.py` stores the whole entry as its payload, so the prose
+            # is kept rather than thrown away with the step around it. Only
+            # a string converts: any other scalar carries neither an id nor a
+            # description and is dropped by the callers below.
+            return {"condition_id": key, "note": entry.strip()}
         if not isinstance(entry, dict):
             return entry
         entry = dict(entry)
@@ -1796,11 +1986,14 @@ def _coerce_conditions(value):
         fixed = {}
         for key, entry in value.items():
             if isinstance(entry, list):
-                fixed[key] = [condition_dict(item) for item in entry]
+                items = [condition_dict(item, key) for item in entry]
             elif isinstance(entry, dict):
-                fixed[key] = [condition_dict(entry)]
+                items = [condition_dict(entry, key)]
             elif entry is not None:
-                fixed[key] = [entry]
+                items = [condition_dict(entry, key)]
+            else:
+                continue
+            fixed[key] = [item for item in items if isinstance(item, dict)]
         return fixed
     return value
 
@@ -1953,6 +2146,9 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
         return {}
 
     result = dict(raw)
+
+    if step_key in ("mapping_stage", "mapping_quick"):
+        _flatten_staged_lore(result)
 
     if step_key == "mapping_stage":
         patch = result.get("scene_patch")
@@ -2581,6 +2777,42 @@ def semantic_output_errors(
 
     return errors
 
+def _name_what_was_discarded(step_key, raw, error):
+    """Say that WE dropped the sequence, when we did.
+
+    `preprocess_llm_output` discards any `sequence` element that is not an
+    object, so a model that answers with a list of sentences -- observed
+    live twice in eleven turns, e.g. `["Picks up the PADD.", "Says, \\"Nobody
+    leaves this room.\\""]` -- reaches the semantic check with nothing left
+    and is told `sequence is empty despite nonempty player input`. It is
+    then handed that sentence as the thing to repair, and the sentence is
+    false: the model sent a sequence, and this code deleted it. Both repair
+    and every fallback candidate then failed, and the turn died.
+
+    Naming the real disagreement is not the same as guessing what the
+    sentences MEANT -- a bare sentence does not say whether it is speech or
+    action, and the engine must not decide that on the player's behalf. The
+    model that wrote them does know, so the honest move is to tell it what
+    the shape has to be. See docs/UNBUILT.md 1.7.
+    """
+    if step_key != "director_interpret" or "sequence is empty" not in error:
+        return error
+    sent = raw.get("sequence") if isinstance(raw, dict) else None
+    if not isinstance(sent, list):
+        return error
+    dropped = [item for item in sent if not isinstance(item, dict)]
+    if not dropped:
+        return error
+    return (
+        f"{error} -- because {len(dropped)} of the {len(sent)} sequence "
+        "entries you sent were not objects and were discarded. Every entry "
+        "must be an object, e.g. "
+        '{"type": "action", "attempt": "..."} or '
+        '{"type": "speech", "text": "...", "volume": "normal"}. '
+        "Resend the same beat in that shape."
+    )
+
+
 def validate_llm_output_strict(
     step_key: str,
     raw: dict,
@@ -2628,6 +2860,10 @@ def validate_llm_output_strict(
         output,
         source_payload=source_payload,
     )
+    semantic_errors = [
+        _name_what_was_discarded(step_key, raw, error)
+        for error in semantic_errors
+    ]
 
     return ValidationReport(
         valid=not semantic_errors,

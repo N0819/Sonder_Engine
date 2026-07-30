@@ -11,6 +11,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field, validator
 
+from schemas import coerce_to_declared_scalar
+
+_PYDANTIC_V2 = hasattr(BaseModel, "model_validate")
+if _PYDANTIC_V2:
+    from pydantic import field_validator
+
 CHARACTER_SCHEMA = "fiction-engine.character"
 CHARACTER_VERSION = 4
 PERSONA_SCHEMA = "fiction-engine.persona"
@@ -27,6 +33,24 @@ def _profile_str_list(value):
     return [str(item).strip() for item in value if str(item or "").strip()]
 
 
+def _as_profile_list(value):
+    """`traits`/`values` as a list, whatever spelling arrived.
+
+    One entry is accepted as itself. Anything that is not a sequence at all
+    -- a bare number, a flag -- is not a list of profiles and is dropped:
+    iterating it raises `TypeError`, and the two majors disagree about what
+    that becomes. Pydantic 1 rewrapped a validator's `TypeError` as a
+    `ValidationError`; Pydantic 2 rewraps only `ValueError` and
+    `AssertionError`, so the same sheet raises a bare `TypeError` straight
+    past every caller that catches `ValidationError`.
+    """
+    if isinstance(value, (str, dict)):
+        return [value]
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return []
+
+
 def _profile_float(value, default=0.5, low=0.0, high=1.0):
     try:
         result = float(value)
@@ -40,6 +64,23 @@ def _profile_float(value, default=0.5, low=0.0, high=1.0):
 class _PsychologyModel(BaseModel):
     class Config:
         extra = "allow"
+
+    # A number where prose was declared. `_normalize_psychology` calls
+    # `parse_obj` with no try/except and is reached from
+    # `normalize_character_data`, so an authored `"expression": 3` -- which
+    # Pydantic 1 quietly read as `"3"` -- is an uncaught ValidationError on
+    # Pydantic 2, on the read path of every character accessor. The
+    # coercion itself lives in `schemas.py`, which already owns both "what
+    # did this field declare" and "what did v1 do with it".
+    if _PYDANTIC_V2:
+        @field_validator("*", mode="before")
+        @classmethod
+        def _coerce_number_into_prose(cls, value, info):
+            return coerce_to_declared_scalar(cls, info.field_name, value)
+    else:
+        @validator("*", pre=True, allow_reuse=True)
+        def _coerce_number_into_prose(cls, value, field):
+            return coerce_to_declared_scalar(cls, field.name, value)
 
 
 class TraitProfile(_PsychologyModel):
@@ -136,8 +177,7 @@ class PsychologyProfile(_PsychologyModel):
 
     @validator("traits", pre=True)
     def _traits(cls, value):
-        if isinstance(value, (str, dict)):
-            value = [value]
+        value = _as_profile_list(value)
         return [
             {"name": item} if isinstance(item, str) else item
             for item in (value or [])
@@ -146,8 +186,7 @@ class PsychologyProfile(_PsychologyModel):
 
     @validator("values", pre=True)
     def _values(cls, value):
-        if isinstance(value, (str, dict)):
-            value = [value]
+        value = _as_profile_list(value)
         return [
             {"name": item} if isinstance(item, str) else item
             for item in (value or [])

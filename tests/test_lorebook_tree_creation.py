@@ -168,6 +168,43 @@ class TestApplyMappingBookOps:
         assert city_book["parent_id"] == temp_map["world"]
         assert building_book["parent_id"] == temp_map["city"]
 
+    def test_an_existing_books_id_spelled_as_text_still_parents_to_it(self, temp_db):
+        """`parent_id` is declared `Union[int, str]` -- a same-turn temp
+        handle OR an existing book's id -- and which of the two survives
+        validation depends on the Pydantic major: 1.x coerced `"77"` to 77,
+        2.x's smart union keeps the string. Read as a temp handle it matches
+        nothing, and the book silently reparents to canon root: the same op,
+        filed somewhere else, with nothing logged."""
+        chat_id = _make_chat(temp_db)
+        canon = temp_db.qi(
+            "INSERT INTO lorebooks(name,chat_id,book_type) VALUES(?,?,?)",
+            ("Canon", chat_id, "general"),
+        )
+        parent = temp_db.qi(
+            "INSERT INTO lorebooks(name,chat_id,book_type,parent_id) VALUES(?,?,?,?)",
+            ("Aran's Reach", chat_id, "location", canon),
+        )
+        temp_map = commit._apply_mapping_book_ops(chat_id, canon, [
+            {"op": "create", "temp_id": "t1", "name": "Market Dome",
+             "book_type": "location", "parent_id": str(parent)},
+        ])
+        book = temp_db.q("SELECT * FROM lorebooks WHERE id=?", (temp_map["t1"],), one=True)
+        assert book["parent_id"] == parent
+
+    def test_a_temp_handle_still_wins_over_reading_it_as_an_id(self, temp_db):
+        chat_id = _make_chat(temp_db)
+        canon = temp_db.qi(
+            "INSERT INTO lorebooks(name,chat_id,book_type) VALUES(?,?,?)",
+            ("Canon", chat_id, "general"),
+        )
+        temp_map = commit._apply_mapping_book_ops(chat_id, canon, [
+            {"op": "create", "temp_id": "1", "name": "The System", "book_type": "world"},
+            {"op": "create", "temp_id": "t2", "name": "Aran's Reach",
+             "book_type": "location", "parent_id": "1"},
+        ])
+        child = temp_db.q("SELECT * FROM lorebooks WHERE id=?", (temp_map["t2"],), one=True)
+        assert child["parent_id"] == temp_map["1"]
+
     def test_dedupes_by_name_instead_of_creating_a_second_book(self, temp_db):
         chat_id = _make_chat(temp_db)
         canon = temp_db.qi(

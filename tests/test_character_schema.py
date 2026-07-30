@@ -227,3 +227,56 @@ def test_senses_as_text_structured():
 def test_senses_as_text_rejects_invalid_container():
     assert senses_as_text(None) == "ordinary senses"
     assert senses_as_text({"channel": "vision"}) == "ordinary senses"
+
+class TestASheetIsReadableOnEitherPydantic:
+    """A number where a psychology field declared prose.
+
+    `_normalize_psychology` calls `parse_obj` with no try/except, and it sits
+    on the READ path of every character accessor via
+    `normalize_character_data`. Pydantic 1 quietly read `"expression": 3` as
+    `"3"`; Pydantic 2 raises, which is a 500 on character save and a
+    character that cannot be loaded on any later turn -- for a card that had
+    been perfectly loadable the day before the dependency resolved
+    differently. `pydantic>=1.10.13,<3` is a real promise, so the tolerance
+    has to be the engine's own and not the installed major's.
+    """
+
+    def test_a_number_where_a_trait_declared_prose(self):
+        from character_schema import normalize_character_data, character_psychology
+        sheet = normalize_character_data({"psychology": {
+            "traits": [{"name": "wary", "expression": 3}]}})
+        assert character_psychology(sheet)["traits"][0]["expression"] == "3"
+
+    def test_it_reaches_every_profile_the_sheet_nests(self):
+        from character_schema import normalize_character_data, character_psychology
+        psych = character_psychology(normalize_character_data({"psychology": {
+            "values": [{"name": 1}],
+            "self_model": {"beliefs": [{"belief": 7, "source": 1.5}]},
+            "coping": {"strategies": [{"name": "freeze", "costs": 2}]},
+            "learning": {"associations": [{"cue": 5}]},
+        }}))
+        assert psych["values"][0]["name"] == "1"
+        assert psych["self_model"]["beliefs"][0]["belief"] == "7"
+        assert psych["self_model"]["beliefs"][0]["source"] == "1.5"
+        assert psych["coping"]["strategies"][0]["costs"] == "2"
+        assert psych["learning"]["associations"][0]["cue"] == "5"
+
+    def test_the_numeric_fields_are_still_numbers(self):
+        """The generic coercion must not reach a field that declared one."""
+        from character_schema import normalize_character_data, character_psychology
+        psych = character_psychology(normalize_character_data({"psychology": {
+            "traits": [{"name": "wary", "strength": "0.8"}]}}))
+        assert psych["traits"][0]["strength"] == 0.8
+
+    def test_the_list_fields_still_split_a_comma_string(self):
+        """The field-specific pre-validators still run first."""
+        from character_schema import normalize_character_data, character_psychology
+        psych = character_psychology(normalize_character_data({"psychology": {
+            "traits": [{"name": "wary", "activation_cues": "dark, cold"}]}}))
+        assert psych["traits"][0]["activation_cues"] == ["dark", "cold"]
+
+    def test_extension_keys_still_survive(self):
+        from character_schema import normalize_character_data, character_psychology
+        psych = character_psychology(normalize_character_data({"psychology": {
+            "traits": [{"name": "wary", "house_rule": "keep me"}]}}))
+        assert psych["traits"][0]["house_rule"] == "keep me"
