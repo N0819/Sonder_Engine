@@ -82,9 +82,15 @@ the same reason.
 
 Because the constraints pin is 2.x, the other side of that range needs its own
 job: `pydantic1` installs the pinned set, downgrades past the constraint, and
-runs the fast tier. It exists because the range is only a promise if something
-checks it — for a while nothing did, and the 1.x-only import above went
-unnoticed through a full green CI run.
+runs the fast tier. It exists because a range is only a promise if something
+checks it.
+
+Worth being exact about how the 1.x-only import above survived, because the
+lesson is not the one it looks like: **CI caught it immediately.** The next push
+went from a passing fast tier to 160 collection errors, and stayed there through
+five more pushes across a day. Nobody read the result. A job nobody looks at is
+weaker than no job, because it also supplies the belief that something is
+checking. Read the run, or nothing above this line matters.
 
 The two majors also differ in *leniency*, not only in API, and that difference
 is the engine's business rather than Pydantic's: 1.x coerced a number into a
