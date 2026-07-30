@@ -70,13 +70,41 @@ refresh the corresponding direct pin in `constraints.txt`, run
 Playwright packages are an optional extra and never belong in
 `requirements-dev.txt`; browser binaries are installed explicitly.
 
+`pydantic>=1.10.13,<3` spans two majors, and the range is a real promise:
+`schemas.py` reads a field's declared shape through `_declared`, which has one
+branch per major, because Pydantic 2 removed `ModelField` entirely. Anything
+that needs to know what a field declared goes through there. Reaching into a
+version-specific internal instead is how `pydantic.fields.SHAPE_LIST` reached
+`import` scope and made the engine refuse to start for anyone whose install
+resolved to 2.x — invisibly, because a dev machine on 1.10 cannot see it, and
+`@validator("*", pre=True)` with a `field` parameter is a hard error on 2.x for
+the same reason.
+
+Because the constraints pin is 2.x, the other side of that range needs its own
+job: `pydantic1` installs the pinned set, downgrades past the constraint, and
+runs the fast tier. It exists because the range is only a promise if something
+checks it — for a while nothing did, and the 1.x-only import above went
+unnoticed through a full green CI run.
+
+The two majors also differ in *leniency*, not only in API, and that difference
+is the engine's business rather than Pydantic's: 1.x coerced a number into a
+`str` field, 2.x refuses it and discards the beat. `_lenient_coerce` now does
+that coercion itself so both behave alike. When changing `_declared` or
+`_lenient_coerce`, check the majors against each other rather than trusting one
+— the cheap version is to dump every field's coercion under both interpreters
+and diff, which is how the bare-`list` divergence was caught (v1 treats a bare
+`list` as a singleton, v2's `get_origin` does not).
+
 ## CI layout
 
 GitHub Actions runs:
 
 1. fast checks on Python 3.11 and 3.12;
 2. the full Python suite once on Python 3.12;
-3. the optional Chromium behavior suite once on Python 3.12.
+3. the fast tier once on Pydantic 1.x, the half of the declared range the
+   constraints pin does not cover;
+4. the optional Chromium behavior suite once on Python 3.12.
 
 This catches supported-Python drift quickly without paying the full-suite cost
-for every matrix entry.
+for every matrix entry. Jobs 2–4 need job 1, so a broken build fails once
+rather than four times.

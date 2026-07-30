@@ -42,6 +42,36 @@ class TestNullMeansOmitted:
             CausalRegime(regime_id=None)
 
 
+class TestTheEngineIsAsLenientOnEitherPydantic:
+    """The tolerance must not depend on which Pydantic happens to be installed.
+
+    `schemas.py` supports both majors, and they disagree about a bare number in
+    a `str` field: 1.x coerced it to its text, 2.x refuses it and the beat is
+    discarded over `response: Input should be a valid string`. Left to the
+    installed version, the same engine is measurably more brittle on one
+    machine than another, and the difference surfaces as an unreliable model
+    rather than as a dependency difference.
+
+    This is the same reason the import of `pydantic.fields.SHAPE_LIST` was a
+    defect and not a detail: a v1-only internal decided whether a character's
+    beat survived, and the dev machine could not see it.
+    """
+
+    def test_a_number_where_prose_was_declared_becomes_its_text(self):
+        from schemas import ResponseCandidate
+        assert ResponseCandidate(response=5).response == "5"
+        assert ResponseCandidate(response=0.5).response == "0.5"
+
+    def test_a_flag_is_text_too_since_a_bool_is_an_int(self):
+        from schemas import ResponseCandidate
+        assert ResponseCandidate(response=True).response == "True"
+
+    def test_a_number_is_untouched_where_a_number_was_declared(self):
+        """Only a `str` field has no invariant a number violates."""
+        from schemas import ResponseCandidate
+        assert ResponseCandidate(response="x", risk=0.25).risk == 0.25
+
+
 class TestOneItemWhereAListWasDeclared:
     """Asked for "updates" with exactly one to report, a model returns the
     object rather than a list of one.

@@ -46,7 +46,7 @@
 | `providers.py` | 1910 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 493 |  | — |
 | `scene.py` | 1188 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
-| `schemas.py` | 2504 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `schemas.py` | 2636 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 4153 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 965 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 184 | Bearing math and reciprocal spatial-edge normalization. | — |
@@ -507,14 +507,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 1819 | 226 lines |
-| `semantic_output_errors()` | 2340 | 111 lines |
-| `validate_llm_output_strict()` | 2452 | 53 lines |
-| `_coerce_conditions()` | 1637 | 37 lines |
-| `_coerce_str_list()` | 14 | 33 lines |
-| `_coerce_considered_responses()` | 1574 | 32 lines |
-| `validate_llm_output()` | 2046 | 29 lines |
-| `_coerce_candidate_response()` | 1252 | 28 lines |
+| `preprocess_llm_output()` | 1951 | 226 lines |
+| `semantic_output_errors()` | 2472 | 111 lines |
+| `_lenient_coerce()` | 305 | 68 lines |
+| `validate_llm_output_strict()` | 2584 | 53 lines |
+| `_declared()` | 255 | 39 lines |
+| `_coerce_conditions()` | 1769 | 37 lines |
+| `_coerce_str_list()` | 13 | 33 lines |
+| `_coerce_considered_responses()` | 1706 | 32 lines |
 
 ### `spatial.py`
 
