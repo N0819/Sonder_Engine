@@ -71,3 +71,41 @@ def test_invalid_data_member_keeps_original_400_contract():
 
     assert exc.value.status_code == 400
     assert exc.value.detail == "No chat data provided"
+
+
+class TestTheGateIsNotStricterThanTheCodeBehindIt:
+    """`import_chat` reads `data.get("resources") or {}` and
+    `dict(data.get("world") or {})`, but the model refused `world: []`
+    outright and rejected the whole archive with a 400. Pydantic 1 hid that
+    by coercing an empty list to an empty mapping for free, so the
+    intolerance only appeared on 2.x — the same hand-edited or third-party
+    archive importing on one machine and not another."""
+
+    @staticmethod
+    def _validate(payload):
+        from chat_archive import ChatArchiveData
+        validate = getattr(ChatArchiveData, "model_validate", None)
+        model = validate(payload) if validate else ChatArchiveData.parse_obj(payload)
+        dump = getattr(model, "model_dump", None)
+        return dump() if dump else model.dict()
+
+    def test_an_empty_map_spelled_as_a_list(self):
+        assert self._validate({"chat": {"id": 1}, "world": []})["world"] == {}
+
+    def test_an_empty_map_spelled_as_a_string(self):
+        assert self._validate({"chat": {"id": 1}, "resources": ""})["resources"] == {}
+
+    def test_a_version_written_as_a_float(self):
+        assert self._validate({"chat": {"id": 1}, "version": 1.5})["version"] == 1
+
+    def test_legacy_nulls_still_become_empty_collections(self):
+        data = self._validate({"chat": {"id": 1}, "frames": None, "world": None})
+        assert data["frames"] == [] and data["world"] == {}
+
+    def test_forward_compatible_keys_still_survive(self):
+        assert self._validate({"chat": {"id": 1}, "kept": [1, 2]})["kept"] == [1, 2]
+
+    def test_a_missing_chat_is_still_a_hard_failure(self):
+        import pydantic, pytest
+        with pytest.raises(pydantic.ValidationError):
+            self._validate({"world": {}})

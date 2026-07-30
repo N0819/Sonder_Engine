@@ -128,9 +128,33 @@ The same exposure exists outside `schemas.py`. `character_schema.py`'s profile
 models are plain `BaseModel`s that were relying on 1.x to turn a number into
 prose, which made a card with `"expression": 3` a 500 on save and an unreadable
 character on every later turn — on the read path of every accessor, because
-`_normalize_psychology` calls `parse_obj` with no `try`. They now share
-`schemas.coerce_to_declared_scalar`. Any new model anywhere in the repo
-inherits the same obligation.
+`_normalize_psychology` validates with no `try`. They now share
+`schemas.coerce_to_declared`, and so does `chat_archive.py`, whose import gate
+was refusing `world: []` outright while the code behind it read
+`dict(data.get("world") or {})` — a gate stricter than its own consumer, which
+1.x hid by coercing for free. Any new model anywhere in the repo inherits the
+same obligation.
+
+Two remaining differences are deliberate rather than fixed:
+
+- `LoreOp.book_id` and `BookOp.parent_id` are `Union[int, str]` on purpose (an
+  existing book's id **or** a same-turn temp handle), and the majors resolve
+  that union differently — 1.x coerces `"77"` to `77`, 2.x's smart union keeps
+  the string. Both consumers in `commit.py` now resolve either spelling to the
+  same book, so the outcome agrees; normalising the *type* at the schema
+  boundary would make a digit-shaped temp handle collide with a real id, which
+  is a new failure mode traded for cosmetic agreement.
+- `auth_routes.AuthCredentials` rejects a non-string username or password on
+  2.x where 1.x coerced it. That is a typed auth boundary doing its job; the
+  laxity was never intended, and a browser form cannot produce it.
+
+`pydantic>=1.10.13,<3` also has to stay honest about the `<3`. `Extra`,
+`parse_obj` and `.dict()` are deprecated on 2.x and gone in 3.x, and no
+production module uses them any more — six test assertions still call
+`.dict()` (`test_scale.py`, `test_body_position.py`, `test_light_and_survival.py`,
+`test_containment.py`) and are the whole remaining deprecation-warning tail.
+`class Config` and `@validator` remain everywhere, because their replacements
+do not exist on 1.x; those are what to migrate first if the ceiling moves.
 
 ## CI layout
 

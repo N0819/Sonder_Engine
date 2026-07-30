@@ -11,7 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, validator
 
-from schemas import coerce_to_declared_scalar
+from schemas import coerce_to_declared
 
 _PYDANTIC_V2 = hasattr(BaseModel, "model_validate")
 if _PYDANTIC_V2:
@@ -33,18 +33,38 @@ def _profile_str_list(value):
     return [str(item).strip() for item in value if str(item or "").strip()]
 
 
-def _as_profile_list(value):
-    """`traits`/`values` as a list, whatever spelling arrived.
+def _as_profile_list(value, key_slot=None):
+    """A list of profiles, whatever spelling arrived.
 
-    One entry is accepted as itself. Anything that is not a sequence at all
-    -- a bare number, a flag -- is not a list of profiles and is dropped:
-    iterating it raises `TypeError`, and the two majors disagree about what
-    that becomes. Pydantic 1 rewrapped a validator's `TypeError` as a
-    `ValidationError`; Pydantic 2 rewraps only `ValueError` and
-    `AssertionError`, so the same sheet raises a bare `TypeError` straight
-    past every caller that catches `ValidationError`.
+    One entry is accepted as itself. A MAP keyed by the profile's own name
+    -- `{"freeze": {"trigger": "threat"}}` -- is expanded, with the key
+    carried into `key_slot` when the entry left that slot empty, because the
+    key IS the name there. Anything that is not a sequence at all -- a bare
+    number, a flag -- is not a list of profiles and is dropped: iterating it
+    raises `TypeError`, and the two majors disagree about what that becomes.
+    Pydantic 1 rewrapped a validator's `TypeError` as a `ValidationError`;
+    Pydantic 2 rewraps only `ValueError` and `AssertionError`, so the same
+    sheet raises a bare `TypeError` straight past every caller that catches
+    the latter.
+
+    The map case is not new tolerance so much as recovered tolerance: the
+    old code iterated a dict and got its KEYS, so `{"freeze": {...},
+    "flee": {...}}` did produce two named strategies -- and threw away
+    everything under them. It also iterated a bare STRING, so a single
+    strategy spelled `"freeze"` became six strategies named `f`, `r`, `e`,
+    `e`, `z`, `e`.
     """
-    if isinstance(value, (str, dict)):
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        if value and all(isinstance(v, dict) for v in value.values()):
+            expanded = []
+            for key, item in value.items():
+                item = dict(item)
+                if key_slot and not item.get(key_slot):
+                    item[key_slot] = key
+                expanded.append(item)
+            return expanded
         return [value]
     if isinstance(value, (list, tuple)):
         return list(value)
@@ -65,8 +85,8 @@ class _PsychologyModel(BaseModel):
     class Config:
         extra = "allow"
 
-    # A number where prose was declared. `_normalize_psychology` calls
-    # `parse_obj` with no try/except and is reached from
+    # A number where prose was declared. `_normalize_psychology` validates
+    # with no try/except and is reached from
     # `normalize_character_data`, so an authored `"expression": 3` -- which
     # Pydantic 1 quietly read as `"3"` -- is an uncaught ValidationError on
     # Pydantic 2, on the read path of every character accessor. The
@@ -76,11 +96,11 @@ class _PsychologyModel(BaseModel):
         @field_validator("*", mode="before")
         @classmethod
         def _coerce_number_into_prose(cls, value, info):
-            return coerce_to_declared_scalar(cls, info.field_name, value)
+            return coerce_to_declared(cls, info.field_name, value)
     else:
         @validator("*", pre=True, allow_reuse=True)
         def _coerce_number_into_prose(cls, value, field):
-            return coerce_to_declared_scalar(cls, field.name, value)
+            return coerce_to_declared(cls, field.name, value)
 
 
 class TraitProfile(_PsychologyModel):
@@ -177,7 +197,7 @@ class PsychologyProfile(_PsychologyModel):
 
     @validator("traits", pre=True)
     def _traits(cls, value):
-        value = _as_profile_list(value)
+        value = _as_profile_list(value, "name")
         return [
             {"name": item} if isinstance(item, str) else item
             for item in (value or [])
@@ -186,7 +206,7 @@ class PsychologyProfile(_PsychologyModel):
 
     @validator("values", pre=True)
     def _values(cls, value):
-        value = _as_profile_list(value)
+        value = _as_profile_list(value, "name")
         return [
             {"name": item} if isinstance(item, str) else item
             for item in (value or [])
@@ -200,6 +220,19 @@ class PsychologyProfile(_PsychologyModel):
         return value if isinstance(value, dict) else {}
 
 
+def _profile(model_cls, raw):
+    """Validate and dump one profile, on whichever Pydantic is installed.
+
+    `parse_obj`/`.dict()` still work on 2.x but are deprecated there and go
+    away in 3.x, and the declared range (`pydantic>=1.10.13,<3`) is the only
+    thing holding that off. One seam rather than six call sites.
+    """
+    validate = getattr(model_cls, "model_validate", None)
+    model = validate(raw) if validate is not None else model_cls.parse_obj(raw)
+    dump = getattr(model, "model_dump", None)
+    return dump() if dump is not None else model.dict()
+
+
 def _normalize_psychology(value: Any) -> dict:
     """Typed, tolerant normalization for the durable psychology contract.
 
@@ -208,7 +241,7 @@ def _normalize_psychology(value: Any) -> dict:
     profile models allow extras.
     """
     raw = value if isinstance(value, dict) else {}
-    result = PsychologyProfile.parse_obj(raw).dict()
+    result = _profile(PsychologyProfile, raw)
 
     self_model = result.get("self_model")
     if not isinstance(self_model, dict):
@@ -224,10 +257,11 @@ def _normalize_psychology(value: Any) -> dict:
     self_model["shame_triggers"] = _profile_str_list(
         self_model.get("shame_triggers"))
     self_model["beliefs"] = [
-        BeliefProfile.parse_obj(
-            {"belief": item} if isinstance(item, str) else item
-        ).dict()
-        for item in (self_model.get("beliefs") or [])
+        _profile(
+            BeliefProfile,
+            {"belief": item} if isinstance(item, str) else item,
+        )
+        for item in _as_profile_list(self_model.get("beliefs"), "belief")
         if isinstance(item, (str, dict))
     ]
     result["self_model"] = self_model
@@ -243,10 +277,11 @@ def _normalize_psychology(value: Any) -> dict:
     coping["recovery_supports"] = _profile_str_list(
         coping.get("recovery_supports"))
     coping["strategies"] = [
-        CopingStrategyProfile.parse_obj(
-            {"name": item, "response": item} if isinstance(item, str) else item
-        ).dict()
-        for item in (coping.get("strategies") or [])
+        _profile(
+            CopingStrategyProfile,
+            {"name": item, "response": item} if isinstance(item, str) else item,
+        )
+        for item in _as_profile_list(coping.get("strategies"), "name")
         if isinstance(item, (str, dict))
     ]
     result["coping"] = coping
@@ -271,10 +306,10 @@ def _normalize_psychology(value: Any) -> dict:
     learning = result.get("learning")
     if not isinstance(learning, dict):
         learning = {}
-    associations = learning.get("associations") or []
     learning["associations"] = [
-        AssociationProfile.parse_obj(item).dict()
-        for item in associations if isinstance(item, dict)
+        _profile(AssociationProfile, item)
+        for item in _as_profile_list(learning.get("associations"), "cue")
+        if isinstance(item, dict)
     ]
     result["learning"] = learning
     return result
