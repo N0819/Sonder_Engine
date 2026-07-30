@@ -185,27 +185,35 @@ The character step already has a bounded retry, but only for *verbatim
 self-repetition* (`agents/character.py`, the `_first_verbatim_repeat` path), not
 for schema failure. Worth deciding whether a bounded retry belongs there too.
 
-Measured again on a three-turn live run, 2026-07-30, and now with a named
-mechanism: `preprocess_llm_output` drops any `sequence` element that is not a
-dict (`if not isinstance(event, dict): continue`), and a model that answers
-with a list of *sentences* — `["Kess turns to the customs clerk and asks him
-to witness the sale."]` — therefore arrives at validation with an empty
-sequence and fails `semantic_output_errors`' "sequence is empty despite
-nonempty player input". Repair and every fallback candidate ran against that
-sentence; the turn died. Twice in eleven live turns, on two different
-scenarios. Identical on both Pydantic majors, so it is the engine's own
-tolerance that is missing, not a dependency difference.
+Measured again on a three-turn live run, 2026-07-30, and closed for the shape
+that caused it: `preprocess_llm_output` dropped any `sequence` element that
+was not a dict, so a model answering with a list of *sentences* — `["Kess
+turns to the customs clerk and asks him to witness the sale."]` — arrived at
+validation with an empty sequence and failed "sequence is empty despite
+nonempty player input". Repair and every fallback ran against that message,
+which was false, and the turn died. Twice in eleven live turns, on two
+different scenarios, identically on both Pydantic majors.
 
-Half of it has landed: `_name_what_was_discarded` now tells the model that
-*we* dropped its entries and what shape they must take, because the message
-it was being asked to repair was false. What is still open is the
-interpretation, and it is the question leniency always asks — a bare sentence
-does not say whether it is speech or action, and that is the player's conduct
-to declare. Reading it as an action attempt is the least-inventive option
-available and is still an invention. Decide it deliberately; do not let it
-arrive as a "small tolerance fix".
+`_sequence_event_from_prose` now reads such an entry as an ACTION unless the
+whole string is a quotation, and `_name_what_was_discarded` names what was
+dropped for whatever still cannot be read. The action default is the safe
+reading rather than the likely one: typing prose as speech would author an
+utterance AND transmit it to everyone in earshot, while typing speech as an
+action under-informs the room. **What remains open is the mixed sentence** —
+`Says, "Nobody leaves this room."` keeps every word in its attempt text but
+is typed as an act, so a character in the room may not receive it through
+the dialogue channel. Deciding that needs the hearing path looked at, not a
+better regex.
 
-Two other shapes cost turns on the same run and have been closed, both
+A fourth shape cost a turn the same way and is closed the same way: the whole
+answer wrapped in one key of the model's own (`{"the_director_outputs":
+{...}}`), every declared field present and correct one level too deep. The
+step failed as "rooms is empty; positions is empty" — a model that answered
+nothing, when it had answered everything — and the repair prompt inherited
+that false complaint. `_unwrap_envelope` opens it only when the single key is
+not itself a field and what is inside is recognised.
+
+Two other shapes cost turns on the same run and are also closed, both
 non-divergent across majors and both the same mistake one layer down: a
 staged lore entry whose `content` was an object (`_room_notes_from_lore` did
 `content[:600]` on a dict and killed the turn), and a condition written as
@@ -213,33 +221,23 @@ its own description, `{"generator_fuel": ["The generator is running low..."]}`
 against `dict[str, list[dict]]`. Neither is exotic; both are what a model
 does when the field name reads like an invitation to prose.
 
-### 1.7a The leniency layer still loses content silently
+### 1.7a A map key lands in the wrong column on `goal_impacts`
 
-Found by differential harness, 2026-07-30, verified identical on both Pydantic
-majors — these are engine defects, not version drift.
+`_lenient_coerce`'s map expansion carries a name-keyed map's key into the
+item's first required field, or failing that into its first non-optional
+prose field with an empty default. That is right for every item model in the
+engine except `GoalImpact`, whose subject is `serves` — and `serves` carries
+a non-empty default (`"situational"`), so the key lands in `why` instead.
+`{"reach the tower": {"impact": 0.6}}` therefore records the goal as the
+explanation and leaves `serves` generic, which `commit.py`'s goal matching
+cannot use. The information survives (it used to be dropped entirely) but it
+is filed where nothing reads it.
 
-- **A name-keyed map loses its key when the item model has no required
-  field.** `schemas._lenient_coerce`'s map expansion carries the key into the
-  item's *first required field*, which is exactly right for `BeliefUpdate.belief`
-  and `AssociationUpdate.cue` — and yields `None` for `GreetingKnowledgeSeed`,
-  `AssertedChange`, `LoreOp`, `BookOp`, `goal_impacts`, `dice` and `evidence`,
-  whose subjects all carry defaults. The key is then dropped: a knowledge seed
-  keyed by its own text arrives with `content: ""`. Falling back to the first
-  *declared* field would close it, at the cost of trusting field order.
-- **`response_candidates` given a map becomes `[]`.** `_coerce_candidates` runs
-  before the generic map expansion and does `value if isinstance(value, list)
-  else []`, so a character's whole deliberation is discarded with no warning.
-  The one place where "the specific validator wins" is the wrong order.
-- **`_coerce_candidate_response` leaks Python repr into prose.** Its list branch
-  `str()`s dict elements instead of recursing, so a structured response becomes
-  `"{'type': 'action'}; {'type': 'speech'}"` — which is then read as what the
-  character said.
-- **Three clamp validators override their own field's declared default.**
-  `CharacterAppraisal.novelty`, `Observation.suddenness` and
-  `GoalImpact.intentionality` declare `0.0` and return `0.5` on `null`, because
-  the field-specific `_clamp_float` runs before the generic null substitution
-  and supplies its own fallback. Whichever number is right, the sheet and the
-  validator should not disagree about it.
+Fixing it needs the item model to say which field its subject is, rather
+than the shape rules guessing — a name list was tried once and missed
+`belief` and `cue`, which is the whole reason the rule is structural. A
+one-line class attribute (`_subject_field = "serves"`) consulted before the
+positional fallback would close it without reintroducing guesswork.
 
 ### 1.8 Promotion seeds are minted from the objective event (P5)
 

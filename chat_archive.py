@@ -15,7 +15,9 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from fastapi import APIRouter, Body, HTTPException
-from pydantic import BaseModel, Extra, Field, ValidationError, validator
+from pydantic import BaseModel, Field, ValidationError, validator
+
+from schemas import LenientModel
 
 from checkpoints import insert_world_tables
 from character_schema import (
@@ -59,13 +61,23 @@ def _model_dump(model):
     return dump() if dump is not None else model.dict()
 
 
-class ChatArchiveData(BaseModel):
+class ChatArchiveData(LenientModel):
     """Typed, forward-compatible validation for the archive's top level.
 
     Rows remain dictionaries because their shapes track SQLite migrations and
     older exports can legitimately omit newer columns.  Extra top-level keys
     are retained so an older engine does not reject a newer archive merely for
     carrying data it does not yet understand.
+
+    A ``LenientModel`` because this gate was stricter than the code behind
+    it: ``import_chat`` reads ``data.get("resources") or {}`` and
+    ``dict(data.get("world") or {})``, but the model refused ``world: []``
+    outright and rejected the whole archive with a 400.  Pydantic 1 hid that
+    by coercing an empty list to an empty mapping for free, so the
+    intolerance only appeared on 2.x -- a hand-edited or third-party archive
+    importing on one machine and not another.  A missing ``chat`` is still a
+    hard failure: it has no default, and inventing one would import an
+    archive that says nothing.
     """
 
     version: int = 1
@@ -112,16 +124,16 @@ class ChatArchiveData(BaseModel):
         return {} if value is None else value
 
     class Config:
-        extra = Extra.allow
+        extra = "allow"
 
 
-class ChatImportRequest(BaseModel):
+class ChatImportRequest(LenientModel):
     """The POST envelope used by the browser and external clients."""
 
     data: dict[str, Any]
 
     class Config:
-        extra = Extra.allow
+        extra = "allow"
 
 
 @dataclass(frozen=True)
@@ -476,7 +488,7 @@ class ChatArchiveService:
             typed_data = _model_validate(ChatArchiveData, data)
         except ValidationError as exc:
             raise HTTPException(400, "Invalid chat archive") from exc
-        # Pydantic retains unknown keys under Extra.allow.  Using the model's
+        # Pydantic retains unknown keys under extra="allow".  Using the model's
         # dictionary supplies safe defaults for fields absent in old archives.
         data = _model_dump(typed_data)
         resources = data.get("resources") or {}

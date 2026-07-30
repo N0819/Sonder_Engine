@@ -581,11 +581,13 @@ class TestARepairPromptMustNameTheRealDisagreement:
     """
 
     def test_it_says_the_entries_were_discarded_and_what_shape_to_use(self):
+        """Sentences are now read as events (see
+        `TestASequenceWrittenAsSentences`), so what still reaches this path
+        is an entry carrying neither structure nor prose."""
         from schemas import validate_llm_output_strict
         report = validate_llm_output_strict(
             "director_interpret",
-            {"kind": "mixed", "flow": {},
-             "sequence": ["Picks up the PADD.", 'Says, "Nobody leaves."']},
+            {"kind": "mixed", "flow": {}, "sequence": [7, 12]},
             source_payload={"player_raw_input": "pick it up and speak"})
         assert not report.valid
         assert "were not objects and were discarded" in report.errors[0]
@@ -639,3 +641,349 @@ class TestAConditionWrittenAsItsOwnDescription:
             "conditions": {"burn": [7]}}})
         assert warnings == []
         assert out["state_diff"]["conditions"]["burn"] == []
+
+
+class TestAMapKeyIsTheItemsSubject:
+    """The map expansion carries the key into the item's first REQUIRED
+    field, which is right for `BeliefUpdate.belief` and `AssociationUpdate.cue`
+    and yields nothing for every item model where nothing is required — so
+    the key was dropped, and for a knowledge seed keyed by its own text the
+    key IS the seed.
+
+    The fallback is the first field declared as plain, non-optional prose
+    with an EMPTY default: an empty default is a hole a key can fill, a
+    non-empty one is a value the author chose, and None means absence is
+    already meaningful. Declaration order alone picks `category` on an
+    asserted change and `temp_id` on a book op — both wrong.
+    """
+
+    def test_a_seed_keyed_by_its_own_text_keeps_the_text(self):
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output("greeting_interpret", {
+            "knowledge_seeds": {"She lost her brother at Kerrow": {"kind": "fact"}}})
+        assert warnings == []
+        assert out["knowledge_seeds"][0]["content"] == "She lost her brother at Kerrow"
+
+    def test_an_asserted_change_takes_the_key_as_its_subject(self):
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("director_resolve", {
+            "resolved_event": "the door gives",
+            "changes_asserted": {"vault_door": {"change": "now open"}}})
+        change = out["changes_asserted"][0]
+        assert change["subject"] == "vault_door"
+        assert change["category"] == "other"      # its chosen default, untouched
+
+    def test_a_book_op_takes_the_key_as_its_name_not_its_temp_handle(self):
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("mapping_commit", {
+            "book_ops": {"Aran's Reach": {"book_type": "location"}}})
+        assert out["book_ops"][0]["name"] == "Aran's Reach"
+        assert not out["book_ops"][0].get("temp_id")
+
+    def test_a_required_slot_still_wins(self):
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("character", {
+            "response": "x",
+            "belief_updates": {"the door was never locked": {"confidence": 0.7}}})
+        assert out["belief_updates"][0]["belief"] == "the door was never locked"
+
+
+class TestDeliberationSurvivesItsSpelling:
+    def test_candidates_as_a_map_keyed_by_the_option(self):
+        """`_coerce_candidates` ran before the generic map expansion and
+        returned `[]` for anything that was not a list, so a map discarded
+        the character's whole deliberation with no warning."""
+        from schemas import CharacterOutput
+        out = CharacterOutput(response_candidates={
+            "step back": {"risk": 0.2}, "hold the door": {"risk": 0.9}})
+        assert [(c.response, c.risk) for c in out.response_candidates] == [
+            ("step back", 0.2), ("hold the door", 0.9)]
+
+    def test_a_response_written_as_a_list_of_elements_is_not_a_python_repr(self):
+        """The list branch `str()`d its elements, so a structured response
+        became "{'type': 'action'}; {'type': 'speech'}" — and that then reads
+        as something the character considered saying."""
+        from schemas import ResponseCandidate
+        c = ResponseCandidate(response=[
+            {"type": "action", "observable": "steps back"},
+            {"type": "speech", "text": "no"}])
+        assert c.response == "steps back; no"
+
+    def test_a_prose_less_element_still_degrades_to_empty(self):
+        from schemas import ResponseCandidate
+        assert ResponseCandidate(response={"type": "action"}).response == ""
+
+
+class TestAValidatorMustNotContradictItsOwnFieldsDefault:
+    """A field validator runs before the inherited null-substitution, so a
+    shared `_clamp_float` fallback was the effective value for `null` while
+    an omitted field got the field's own default — the same field answering
+    two different ways to two spellings of "not said"."""
+
+    def test_novelty_answers_its_declared_default_either_way(self):
+        from schemas import CharacterAppraisal
+        assert CharacterAppraisal(novelty=None).novelty == 0.0
+        assert CharacterAppraisal().novelty == 0.0
+
+    def test_intentionality_answers_its_declared_default_either_way(self):
+        from schemas import GoalImpact
+        assert GoalImpact(intentionality=None).intentionality == 0.0
+        assert GoalImpact().intentionality == 0.0
+
+    def test_suddenness_answers_its_declared_default_either_way(self):
+        from schemas import Observation
+        req = dict(observation_id="o", perceiver_id="p", source_atom_id="a",
+                   channel="sight", fidelity="clear")
+        assert Observation(suddenness=None, **req).suddenness == 0.0
+        assert Observation(**req).suddenness == 0.0
+
+    def test_the_axes_that_do_declare_a_half_still_get_it(self):
+        from schemas import CharacterAppraisal
+        assert CharacterAppraisal(controllability=None).controllability == 0.5
+        assert CharacterAppraisal(coping_potential=None).coping_potential == 0.5
+
+
+class TestASequenceWrittenAsSentences:
+    """Every non-object sequence entry was discarded, so a model answering
+    with sentences reached the semantic check with nothing left and the turn
+    died — twice in eleven live turns.
+
+    An entry is kept as an ACTION unless the whole string is a quotation.
+    Typing prose as speech would author an utterance AND transmit it to
+    everyone in earshot; typing speech as an action under-informs the room
+    instead, and where the engine cannot tell it must fail toward telling
+    minds less than happened.
+    """
+
+    def test_a_sentence_becomes_an_action_attempt(self):
+        from schemas import validate_llm_output_strict
+        report = validate_llm_output_strict(
+            "director_interpret",
+            {"kind": "mixed", "flow": {}, "sequence": ["Picks up the PADD."]},
+            source_payload={"player_raw_input": "pick it up"})
+        assert report.valid
+        assert report.output["sequence"] == [
+            {"type": "action", "attempt": "Picks up the PADD."}]
+
+    def test_a_wholly_quoted_sentence_is_speech(self):
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("director_interpret", {
+            "sequence": ['"Nobody leaves this room."']})
+        assert out["sequence"] == [{"type": "speech",
+                                    "text": "Nobody leaves this room.",
+                                    "volume": "normal"}]
+
+    def test_a_sentence_that_merely_contains_a_quote_stays_an_action(self):
+        """Nothing is lost — the attempt text still holds every word — and
+        the conservative reading cannot put words in anyone's mouth."""
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("director_interpret", {
+            "sequence": ['Says, "Nobody leaves this room."']})
+        assert out["sequence"][0]["type"] == "action"
+        assert "Nobody leaves this room." in out["sequence"][0]["attempt"]
+
+    def test_an_empty_entry_is_still_dropped(self):
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("director_interpret", {
+            "sequence": ["", "   ", 7]})
+        assert out["sequence"] == []
+
+    def test_a_real_event_object_is_untouched(self):
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("director_interpret", {"sequence": [
+            {"type": "speech", "text": "hello", "volume": "whisper"}]})
+        assert out["sequence"] == [
+            {"type": "speech", "text": "hello", "volume": "whisper"}]
+
+
+class TestAWholeAnswerWrappedInOneKey:
+    """Observed live on an opening turn: `director_establish` returned
+    `{"the_director_outputs": {"location": ..., "rooms": ..., "positions":
+    ...}}` — every declared field present and correct, one level too deep.
+    Nothing looked inside, so the step failed as "rooms is empty; positions
+    is empty", which reads as a model that answered nothing when it had
+    answered everything. The repair prompt was handed that same false
+    complaint, returned the same envelope, and the turn died.
+    """
+
+    def test_the_envelope_is_opened_when_what_is_inside_is_recognised(self):
+        from schemas import validate_llm_output_strict
+        report = validate_llm_output_strict("director_establish", {
+            "the_director_outputs": {
+                "rooms": {"lamp_room": {"name": "Lamp room"}},
+                "positions": {"Wren": "lamp_room"}}})
+        assert report.valid
+        assert report.output["positions"]["Wren"] == "lamp_room"
+
+    def test_a_single_legitimate_field_is_not_mistaken_for_an_envelope(self):
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("mapping_stage", {
+            "scene_patch": {"rooms": {"cellar": {"name": "Cellar"}}}})
+        assert list(out["scene_patch"]["rooms"]) == ["cellar"]
+
+    def test_an_envelope_of_nothing_recognisable_is_still_a_disagreement(self):
+        """Guessing there would hide the real error behind a plausible
+        unwrap."""
+        from schemas import validate_llm_output_strict
+        report = validate_llm_output_strict(
+            "director_establish", {"wrapper": {"nope": 1}})
+        assert not report.valid
+
+    def test_two_top_level_keys_are_never_an_envelope(self):
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("director_establish", {
+            "rooms": {"a": {"name": "A"}}, "positions": {"Wren": "a"}})
+        assert out["positions"] == {"Wren": "a"}
+
+
+class TestTheSameReadingForEveryPlayer:
+    def test_a_co_players_sentence_is_read_like_the_primary_players(self):
+        """Otherwise one player's prose is recovered and another's is
+        discarded, in the same payload, for no reason either could see."""
+        from schemas import validate_llm_output
+        out, _ = validate_llm_output("director_interpret", {
+            "sequence": ["Picks up the PADD."],
+            "other_players": {"p2": {"sequence": ["Steps into the doorway.",
+                                                 '"Wait."', 7]}}})
+        assert out["sequence"][0]["type"] == "action"
+        co = out["other_players"]["p2"]["sequence"]
+        assert co[0] == {"type": "action", "attempt": "Steps into the doorway."}
+        assert co[1]["type"] == "speech" and co[1]["volume"] == "normal"
+        assert len(co) == 2
+
+
+class TestEvidenceIsFiledTheSameWayInEitherSpelling:
+    """A map keyed by the evidence itself landed the key in `event_id` — the
+    first empty prose slot — which is the opposite of what the same words get
+    in list form, where a sentence routes to `fact`. One rule, both paths."""
+
+    def test_prose_keys_land_on_fact_and_id_like_keys_on_event_id(self):
+        from schemas import MindHypothesis
+        h = MindHypothesis(about_entity="Mara", kind="observation", claim="x",
+                           evidence={"the sound from the east corridor": {},
+                                     "turn:12:a": {}})
+        assert [(e.event_id, e.fact) for e in h.evidence] == [
+            ("", "the sound from the east corridor"), ("turn:12:a", "")]
+
+    def test_a_list_of_strings_is_unchanged(self):
+        from schemas import MindHypothesis
+        h = MindHypothesis(about_entity="Mara", kind="observation", claim="x",
+                           evidence=["the sound from the east corridor", "turn:12:a"])
+        assert [(e.event_id, e.fact) for e in h.evidence] == [
+            ("", "the sound from the east corridor"), ("turn:12:a", "")]
+
+
+class TestDeliberationIsNeverInvented:
+    """A blank candidate is an option the character never weighed, written
+    into the record the variant viewer shows."""
+
+    def test_an_empty_map_yields_no_candidates(self):
+        from schemas import CharacterOutput
+        assert CharacterOutput(response_candidates={}).response_candidates == []
+
+    def test_a_map_that_is_neither_candidate_nor_map_of_candidates(self):
+        from schemas import CharacterOutput
+        assert CharacterOutput(response_candidates={"a": "b"}).response_candidates == []
+
+    def test_one_candidate_written_as_itself_is_kept(self):
+        from schemas import CharacterOutput
+        out = CharacterOutput(response_candidates={"response": "hold the door"})
+        assert [c.response for c in out.response_candidates] == ["hold the door"]
+
+    def test_a_bare_string_is_one_candidate(self):
+        from schemas import CharacterOutput
+        out = CharacterOutput(response_candidates="step back")
+        assert [c.response for c in out.response_candidates] == ["step back"]
+
+
+class TestAYesNoFieldAnsweringADifferentQuestion:
+    """Observed live: `entities.permit.container` — "is this a container" —
+    came back as `"kess_vantar"`, the id of whoever was holding it. Both
+    majors refuse it, and refusing cost the whole `director_establish` step
+    its normalization over one misused field.
+
+    The declared default asserts nothing: the value could not have meant
+    yes-or-no, and the answer it did carry has no slot here to survive in.
+    """
+
+    def test_a_name_where_a_flag_was_declared_falls_back_to_the_default(self):
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output("director_establish", {
+            "rooms": {"quay": {"name": "Quay"}}, "positions": {"Kess": "quay"},
+            "entities": {"permit": {"name": "Permit", "container": "kess_vantar"}}})
+        assert warnings == []
+        assert out["entities"]["permit"]["container"] is False
+
+    def test_every_spelling_of_yes_and_no_both_majors_agree_on_is_kept(self):
+        from schemas import SceneEntityDef
+        for value, expected in ((True, True), (False, False), ("yes", True),
+                                ("no", False), ("true", True), ("FALSE", False),
+                                (1, True), (0, False)):
+            assert SceneEntityDef(name="x", container=value).container is expected
+
+    def test_a_number_that_is_neither_zero_nor_one_is_not_a_flag(self):
+        from schemas import SceneEntityDef
+        assert SceneEntityDef(name="x", container=2).container is False
+
+
+class TestAnInfinityIsNotAWholeNumber:
+    """`1e999` is ordinary JSON and `json.loads` hands it back as `inf`.
+    Truncating a float into an `int`-declared field then raised
+    `OverflowError` — which is neither `ValueError` nor `AssertionError`, so
+    NEITHER Pydantic major rewraps it, and it escaped every
+    `except ValidationError` in the engine as an uncaught exception in the
+    character stage."""
+
+    def test_an_infinity_degrades_with_a_warning_instead_of_escaping(self):
+        import json
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output(
+            "character", json.loads('{"active_state": {"enacted_want": 1e999}}'))
+        assert warnings
+        assert out["active_state"]["enacted_want"] == float("inf")
+
+    def test_a_fraction_still_truncates(self):
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output(
+            "character", {"active_state": {"enacted_want": 1.5}})
+        assert warnings == []
+        assert out["active_state"]["enacted_want"] == 1
+
+
+class TestAnUnpolicedListOfObjects:
+    """A bare `list[dict]` says "objects, shape unpoliced". There is no item
+    model to consult, so a scalar element carries nothing that could be
+    mapped into one — and every consumer already skips it
+    (`agents/common.lore_for` filters `isinstance(e, dict)`; nothing reads
+    `npc_suggestions` at all). The schema was the only strict layer, and it
+    failed the WHOLE step: observed live, `relevant_lore: [1934, 1938, …]`
+    — the model answering with lore ids — aborted the turn.
+    """
+
+    def test_scalar_elements_are_dropped_and_real_ones_kept(self):
+        from schemas import validate_llm_output
+        out, warnings = validate_llm_output("mapping_stage", {
+            "relevant_lore": [1934, 1938, {"id": 1, "content": "kept"}],
+            "npc_suggestions": ["Severine might follow."]})
+        assert warnings == []
+        assert out["relevant_lore"] == [{"id": 1, "content": "kept"}]
+        assert out["npc_suggestions"] == []
+
+    def test_a_typed_list_of_models_still_refuses_rather_than_lose_content(self):
+        """There the item model names what is missing, and repair can act on
+        it — dropping a character's belief update silently would be the
+        defect this layer exists to prevent."""
+        from schemas import validate_llm_output
+        _, warnings = validate_llm_output(
+            "character", {"mind_model_updates": ["she flinched"]})
+        assert warnings
+
+    def test_an_archive_row_is_still_strict(self):
+        """`chat_archive` declares `list[dict[str, Any]]` — parametrized, not
+        bare. An archive quietly missing a turn is worse than one refused."""
+        import pydantic, pytest
+        from chat_archive import ChatArchiveData
+        validate = getattr(ChatArchiveData, "model_validate", None) \
+            or ChatArchiveData.parse_obj
+        with pytest.raises(pydantic.ValidationError):
+            validate({"chat": {"id": 1}, "turns": [{"idx": 0}, 7]})

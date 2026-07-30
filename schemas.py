@@ -2,6 +2,7 @@
 """Pydantic schemas for all pipeline and world-state structures."""
 
 import json
+import math
 import re
 
 from pydantic import BaseModel, Field, ValidationError, validator
@@ -224,6 +225,7 @@ class _Declared(NamedTuple):
     default_factory: Any
     is_str: bool          # declared plain prose
     is_int: bool          # declared a whole number
+    is_bool: bool         # declared a yes/no
     is_list: bool         # declared a list of something
     item_type: Any        # that list's element type, if it has one
     expects_object: bool  # declared a dict or a nested model
@@ -292,6 +294,7 @@ def _declared(field):
             default_factory=factory,
             is_str=outer is str,
             is_int=outer is int,
+            is_bool=outer is bool,
             is_list=getattr(field, "shape", None) == _SHAPE_LIST_V1,
             item_type=getattr(field, "type_", None),
             expects_object=_expects_object(outer),
@@ -316,6 +319,7 @@ def _declared(field):
         default_factory=factory,
         is_str=inner is str,
         is_int=inner is int,
+        is_bool=inner is bool,
         is_list=is_list,
         item_type=args[0] if (is_list and args) else None,
         expects_object=_expects_object(inner),
@@ -352,6 +356,15 @@ def _as_declared_scalar(value, target):
     if target is str and isinstance(value, (int, float)):
         return str(value)
     if target is int and isinstance(value, float):
+        # `int(inf)` raises OverflowError, which is neither ValueError nor
+        # AssertionError and so is rewrapped by NEITHER major -- it escapes
+        # every `except ValidationError` in the engine. `1e999` is ordinary
+        # JSON and `json.loads` gives it back as `inf`, so this is reachable
+        # from any model that writes a large number. An infinity is not a
+        # whole number anyway: leave it to fail as the validation error it
+        # is, which is what it did before this coercion existed.
+        if math.isinf(value) or value != value:
+            return value
         return int(value)
     return value
 
@@ -390,6 +403,40 @@ def _coerce_member(value, declared_type):
     return _as_declared_scalar(value, declared_type)
 
 
+def _first_empty_prose_field(fields):
+    """The slot a name-keyed map's KEY belongs in, when nothing is required.
+
+    The first field declared as plain, non-optional prose whose default is
+    empty. Emptiness is the test because an empty default means "nothing
+    said yet", which is exactly the hole a key fills, while a non-empty
+    default is a value the author already chose. Optional prose is excluded
+    for the same reason from the other side: where None is a legitimate
+    value, absence already means something, and `BookOp.temp_id` -- a
+    scratch handle, declared before the `name` the key actually is -- would
+    otherwise swallow every key in a map of books.
+    """
+    for name, field in fields.items():
+        declared = _declared(field)
+        if declared.is_str and not declared.allows_none and not declared.default:
+            return name
+    return None
+
+
+_BOOLISH = frozenset(
+    ("true", "false", "yes", "no", "on", "off", "y", "n", "t", "f", "1", "0"))
+
+
+def _reads_as_bool(value):
+    """Whether both Pydantic majors would read this as a yes/no."""
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, (int, float)):
+        return value in (0, 1)
+    if isinstance(value, str):
+        return value.strip().lower() in _BOOLISH
+    return False
+
+
 def _lenient_coerce(value, declared):
     """The one coercion, given a value and the shape its field declared."""
     if value is None and not declared.allows_none:
@@ -410,6 +457,17 @@ def _lenient_coerce(value, declared):
             value, str if declared.is_str else int)
         if coerced is not value:
             return coerced
+    # A yes/no field answering a different question. Observed live:
+    # `entities.permit.container` -- "is this a container" -- came back as
+    # `"kess_vantar"`, the id of whoever was holding it. Both majors refuse
+    # it, and refusing costs the whole step its normalization over one
+    # misused field. Falling back to the declared default asserts nothing:
+    # the value could not have meant yes-or-no, and the answer it did carry
+    # has no slot here to survive in.
+    if declared.is_bool and not _reads_as_bool(value):
+        if declared.default_factory is not None:
+            return declared.default_factory()
+        return declared.default
     # An empty list or an empty string where an object was declared. To a
     # model these all read as "nothing to report", and Pydantic 1 agreed
     # with it -- `dict([])` and `dict("")` are both `{}`, so v1 accepted the
@@ -439,7 +497,23 @@ def _lenient_coerce(value, declared):
     # string`, which is how a model answering with room NUMBERS instead of
     # room names costs a beat.
     if declared.is_list and isinstance(value, list):
-        return [_coerce_member(item, declared.item_type) for item in value]
+        members = [_coerce_member(item, declared.item_type) for item in value]
+        if declared.item_type is dict:
+            # A BARE `list[dict]` -- `relevant_lore`, `npc_suggestions`,
+            # `sequence`, `staged_lore` -- says "objects, shape unpoliced".
+            # There is no item model to consult, so a scalar element carries
+            # nothing that could be mapped into one, and every consumer
+            # already skips it (`agents/common.lore_for` filters
+            # `isinstance(e, dict)`; nothing reads `npc_suggestions` at
+            # all). The schema was the only strict layer, and it failed the
+            # WHOLE step: observed live, `relevant_lore: [1934, 1938, ...]`
+            # -- the model answering with lore ids -- aborted the turn.
+            # Dropping the element costs that element; failing costs the
+            # beat. A PARAMETRIZED `list[dict[str, Any]]` is left strict on
+            # purpose: that is what `chat_archive` declares its rows as, and
+            # an archive quietly missing a turn is worse than one refused.
+            members = [m for m in members if isinstance(m, dict)]
+        return members
     if declared.value_type is not None and isinstance(value, dict):
         return {key: _coerce_member(item, declared.value_type)
                 for key, item in value.items()}
@@ -484,6 +558,20 @@ def _lenient_coerce(value, declared):
             # "first required field" names.
             slot = next((n for n, f in fields.items()
                          if _field_required(f)), None)
+            if slot is None:
+                # An item model where nothing is required still has a
+                # subject, and dropping the key threw it away entirely: a
+                # `knowledge_seeds` map keyed by the seed's own text
+                # arrived with `content: ""`, which is the whole seed. The
+                # slot is the first field declared as prose whose default
+                # is EMPTY -- an empty default means "nothing said yet",
+                # which is what a key can fill; a non-empty one is a
+                # chosen value and not a hole. Declaration order alone
+                # would be wrong: it names `category` on AssertedChange
+                # (default "other") when the key is the subject, and `op`
+                # on LoreOp (default "create") when the key is the entry's
+                # own keys.
+                slot = _first_empty_prose_field(fields)
             out = []
             for key, item in value.items():
                 item = dict(item)
@@ -495,8 +583,8 @@ def _lenient_coerce(value, declared):
     return value
 
 
-def coerce_to_declared_scalar(model_cls, field_name, value):
-    """The scalar half of the leniency, for models defined outside this file.
+def coerce_to_declared(model_cls, field_name, value):
+    """The value half of the leniency, for models defined outside this file.
 
     `character_schema.py`'s profiles are plain `BaseModel`s and were relying
     on Pydantic 1 to turn a number into prose for them -- a card with
@@ -514,6 +602,13 @@ def coerce_to_declared_scalar(model_cls, field_name, value):
         return value
     declared = _declared(field)
     if declared.is_str:
+        # Structured where prose was declared, same as `LenientModel` --
+        # a nested object in `belief` or `expression` is an uncaught
+        # ValidationError out of `_normalize_psychology` on both majors,
+        # which is a 500 on character save. Flatten it as the rest of the
+        # engine does rather than lose the sheet.
+        if isinstance(value, (dict, list, tuple)):
+            return _flatten_to_text(value)
         return _as_declared_scalar(value, str)
     if declared.is_int:
         return _as_declared_scalar(value, int)
@@ -1123,8 +1218,16 @@ class Observation(LenientModel):
     directed_at_self: bool = False
 
     _clamp_observation_axes = validator(
-        "intensity", "suddenness", "ambiguity", pre=True, allow_reuse=True
+        "intensity", "ambiguity", pre=True, allow_reuse=True
     )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.5))
+    # Split out because its declared default is 0.0, not 0.5. A field
+    # validator runs BEFORE the inherited null-substitution, so the shared
+    # clamp's fallback was the effective value for `null` while an omitted
+    # field still got 0.0 -- the same field answering two different ways to
+    # two spellings of "not said", and neither matching the other.
+    _clamp_suddenness = validator(
+        "suddenness", pre=True, allow_reuse=True
+    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
 
 class SensorChannel(LenientModel):
     channel_id: str
@@ -1369,6 +1472,19 @@ class NarratorOutput(LenientModel):
 # ---- Character Output ----
 
 
+def _evidence_slot(text):
+    """Which EvidenceRef field a bare piece of evidence belongs in.
+
+    A token that looks like an id ("current", "turn:12:...") lands on
+    `event_id`; anything else is prose and lands on `fact`.
+    """
+    text = str(text or "").strip()
+    if not text:
+        return {}
+    looks_like_id = bool(re.fullmatch(r"[\w:.\-]+", text)) and " " not in text
+    return {"event_id": text} if looks_like_id else {"fact": text}
+
+
 def _coerce_evidence_refs(value):
     """Accept a bare string where an EvidenceRef was expected.
 
@@ -1383,16 +1499,30 @@ def _coerce_evidence_refs(value):
     A token that looks like an id ("current", "turn:12:...") lands on
     `event_id`; anything else is prose and lands on `fact`.
     """
+    if isinstance(value, dict):
+        # A map keyed by the evidence itself. The generic map expansion
+        # would land the key in `event_id` -- the first empty prose slot --
+        # which is the opposite of what the same text gets in list form,
+        # where a sentence is routed to `fact`. Answer it here, with the
+        # one rule, rather than let two paths disagree about the same words.
+        if value and all(isinstance(v, dict) for v in value.values()):
+            expanded = []
+            for key, item in value.items():
+                item = dict(item)
+                if not item.get("event_id") and not item.get("fact"):
+                    item.update(_evidence_slot(key))
+                expanded.append(item)
+            value = expanded
+        else:
+            value = [value]
     if not isinstance(value, (list, tuple)):
         return value
     out = []
     for item in value:
         if isinstance(item, str):
-            text = item.strip()
-            if not text:
-                continue
-            looks_like_id = bool(re.fullmatch(r"[\w:.\-]+", text)) and " " not in text
-            out.append({"event_id": text} if looks_like_id else {"fact": text})
+            slot = _evidence_slot(item)
+            if slot:
+                out.append(slot)
         else:
             out.append(item)
     return out
@@ -1443,9 +1573,13 @@ class GoalImpact(LenientModel):
     _impact = validator("impact", pre=True, allow_reuse=True)(
         lambda cls, value: _clamp_float(value, -1.0, 1.0, 0.0)
     )
-    _certainty_intentionality = validator(
-        "certainty", "intentionality", pre=True, allow_reuse=True
+    _certainty = validator(
+        "certainty", pre=True, allow_reuse=True
     )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.5))
+    # Declares 0.0. See Observation.suddenness above.
+    _intentionality = validator(
+        "intentionality", pre=True, allow_reuse=True
+    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
 
 
 class SomaticImpact(LenientModel):
@@ -1473,9 +1607,14 @@ class CharacterAppraisal(LenientModel):
     goal_impacts: list[GoalImpact] = Field(default_factory=list)
 
     _unit_axes = validator(
-        "novelty", "controllability", "coping_potential",
+        "controllability", "coping_potential",
         pre=True, allow_reuse=True,
     )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.5))
+    # Declares 0.0, and `psychology_runtime.stress_delta` reads it with a
+    # 0.0 fallback of its own -- the 0.5 was the odd one out of three.
+    _novelty = validator(
+        "novelty", pre=True, allow_reuse=True,
+    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
     _signed_axes = validator(
         "norm_compatibility", "self_congruence", "intrinsic_pleasantness",
         pre=True, allow_reuse=True,
@@ -1554,9 +1693,51 @@ def _coerce_candidate_response(value):
                 return text
         return ""
     if isinstance(value, (list, tuple)):
-        parts = [str(v).strip() for v in value if str(v or "").strip()]
-        return "; ".join(parts)
+        # Recurse rather than `str()` each element: a list of sequence
+        # elements is the same shape as the case above, one level out, and
+        # stringifying it put a Python dict repr into the character's prose
+        # ("{'type': 'action'}; {'type': 'speech'}") -- which then reads as
+        # something they considered saying.
+        parts = [str(_coerce_candidate_response(v) or "").strip()
+                 for v in value]
+        return "; ".join(part for part in parts if part)
     return value
+
+
+def _coerce_candidate_list(value):
+    """`response_candidates` however the model spelled the collection.
+
+    A list is the declared shape. A MAP keyed by the option itself --
+    `{"step back": {"risk": 0.2}}` -- is the same shape models reach for on
+    every other list of named things, and returning `[]` for it discarded
+    the character's whole deliberation with no warning. A single candidate
+    object is accepted as itself, matching the generic wrap.
+    """
+    if isinstance(value, str):
+        value = [value]
+    elif isinstance(value, dict):
+        if not value:
+            value = []
+        elif all(isinstance(v, dict) for v in value.values()):
+            expanded = []
+            for key, item in value.items():
+                item = dict(item)
+                if not item.get("response"):
+                    item["response"] = key
+                expanded.append(item)
+            value = expanded
+        elif set(value) & set(_fields(ResponseCandidate) or {}):
+            value = [value]      # one candidate, written as itself
+        else:
+            # Neither a candidate nor a map of them. Wrapping it produced a
+            # blank `{"response": ""}` -- an option the character never
+            # weighed, written into the record the variant viewer shows.
+            value = []
+    return [
+        {"response": item} if isinstance(item, str) else item
+        for item in (value if isinstance(value, list) else [])
+        if isinstance(item, (str, dict))
+    ]
 
 
 class ResponseCandidate(LenientModel):
@@ -1639,13 +1820,7 @@ class CharacterOutput(LenientModel):
     )
     _coerce_candidates = validator(
         "response_candidates", pre=True, allow_reuse=True
-    )(
-        lambda cls, value: [
-            {"response": item} if isinstance(item, str) else item
-            for item in (value if isinstance(value, list) else [])
-            if isinstance(item, (str, dict))
-        ]
-    )
+    )(lambda cls, value: _coerce_candidate_list(value))
     _coerce_active_state = validator("active_state", pre=True, allow_reuse=True)(
         lambda cls, value: (
             {"mood": value, "goal": ""} if isinstance(value, str) else value
@@ -1841,6 +2016,40 @@ SCHEMA_MAP = {
     "blurb_mint": BlurbMintOutput,
     "backdrop_prompt": BackdropPromptOutput,
 }
+
+_WHOLLY_QUOTED = re.compile(r'^\s*["“]([^"”]+)["”]\s*[.!?]*\s*$')
+
+
+def _sequence_event_from_prose(text):
+    """A sequence entry the model wrote as a sentence instead of an object.
+
+    `["Picks up the PADD.", "Says, \\"Nobody leaves this room.\\""]` -- and
+    every non-object entry was discarded, so the step then failed as
+    "sequence is empty despite nonempty player input" and the turn died.
+    Twice in eleven live turns, on both Pydantic majors.
+
+    The entry is kept as an ACTION unless the whole string is a quotation,
+    which is the only spelling that says "this is speech" without
+    interpretation. A sentence that merely CONTAINS a quote stays an action
+    whose attempt text still holds every word, so nothing is lost -- only
+    typed conservatively.
+
+    That default is deliberate and it is the safe direction, not the
+    convenient one. Typing prose as speech would both author an utterance
+    for whoever declared it and transmit it to everyone within earshot;
+    typing speech as an action under-informs the room instead. Where the
+    engine cannot tell, it must fail toward telling minds LESS than
+    happened, never more.
+    """
+    text = text.strip()
+    if not text:
+        return None
+    quoted = _WHOLLY_QUOTED.match(text)
+    if quoted:
+        return {"type": "speech", "text": quoted.group(1).strip(),
+                "volume": "normal"}
+    return {"type": "action", "attempt": text}
+
 
 def _flatten_staged_lore(result):
     """A staged lore entry's `content` is prose, and has to actually be prose.
@@ -2141,11 +2350,43 @@ def _fill_entity_names(container) -> None:
             entity["name"] = derived
 
 
+def _unwrap_envelope(step_key, raw):
+    """A model that wrapped its whole answer in one key of its own.
+
+    Observed live on an opening turn: `director_establish` returned
+    `{"the_director_outputs": {"location": ..., "rooms": ..., "positions":
+    ...}}` -- every declared field present and correct, one level too deep.
+    Nothing looked inside, so the step failed as "rooms is empty; positions
+    is empty", which reads as a model that answered nothing when it had in
+    fact answered everything. The repair prompt was handed that same false
+    complaint and returned the same envelope, and the turn died.
+
+    Unwrapped only when it is unambiguous: exactly one key, that key is NOT
+    itself a field of this step's schema, and the object under it does carry
+    fields the schema declares. A single legitimate field (`{"response":
+    "..."}`) is left alone, and so is an envelope whose contents this step
+    does not recognise -- that is a real disagreement and belongs in the
+    error, not in a guess.
+    """
+    if len(raw) != 1:
+        return raw
+    key, inner = next(iter(raw.items()))
+    if not isinstance(inner, dict) or not inner:
+        return raw
+    model_cls = SCHEMA_MAP.get(step_key)
+    if model_cls is None:
+        return raw
+    fields = set(_fields(model_cls) or {})
+    if key in fields or not (set(inner) & fields):
+        return raw
+    return inner
+
+
 def preprocess_llm_output(step_key: str, raw: dict) -> dict:
     if not isinstance(raw, dict):
         return {}
 
-    result = dict(raw)
+    result = dict(_unwrap_envelope(step_key, raw))
 
     if step_key in ("mapping_stage", "mapping_quick"):
         _flatten_staged_lore(result)
@@ -2215,6 +2456,8 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
         cleaned_sequence = []
 
         for event in sequence:
+            if isinstance(event, str):
+                event = _sequence_event_from_prose(event)
             if not isinstance(event, dict):
                 continue
 
@@ -2365,9 +2608,21 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
                     decl["speech_volume"] = normalize_speech_volume(decl.get("speech_volume"))
                 seq = decl.get("sequence")
                 if isinstance(seq, list):
+                    # A co-player's beat gets the same reading as the
+                    # primary player's, including a sentence where an event
+                    # object was declared. Anything else leaves one player's
+                    # prose recovered and another's discarded, in the same
+                    # payload, for no reason either of them could see.
+                    cleaned = []
                     for ev in seq:
-                        if isinstance(ev, dict) and ev.get("type") == "speech":
+                        if isinstance(ev, str):
+                            ev = _sequence_event_from_prose(ev)
+                        if not isinstance(ev, dict):
+                            continue
+                        if ev.get("type") == "speech":
                             ev["volume"] = normalize_speech_volume(ev.get("volume"))
+                        cleaned.append(ev)
+                    decl["sequence"] = cleaned
 
     return result
 

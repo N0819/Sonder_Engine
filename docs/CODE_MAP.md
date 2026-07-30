@@ -23,8 +23,8 @@
 | `authored_events.py` | 124 |  | `db` |
 | `backdrops.py` | 876 |  | `db`, `spatial` |
 | `background_claims.py` | 287 |  | `db` |
-| `character_schema.py` | 1239 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `schemas` |
-| `chat_archive.py` | 1039 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory` |
+| `character_schema.py` | 1274 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `schemas` |
+| `chat_archive.py` | 1051 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 673 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 292 |  | `spatial` |
 | `commit.py` | 4729 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind` |
@@ -46,7 +46,7 @@
 | `providers.py` | 1910 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 493 |  | — |
 | `scene.py` | 1188 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `character_schema`, `db`, `spatial` |
-| `schemas.py` | 2872 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `schemas.py` | 3127 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 4153 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 965 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 184 | Bearing math and reciprocal spatial-edge normalization. | — |
@@ -252,21 +252,21 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_character_data()` | 745 | 155 lines |
-| `default_character_data()` | 332 | 88 lines |
-| `_normalize_psychology()` | 203 | 78 lines |
-| `repair_character_shape()` | 686 | 57 lines |
-| `character_initial_active_state()` | 1040 | 48 lines |
-| `normalize_persona_data()` | 901 | 47 lines |
-| `_coerce_appearance()` | 607 | 45 lines |
-| `character_projects()` | 1121 | 35 lines |
+| `normalize_character_data()` | 780 | 155 lines |
+| `default_character_data()` | 367 | 88 lines |
+| `_normalize_psychology()` | 236 | 80 lines |
+| `repair_character_shape()` | 721 | 57 lines |
+| `character_initial_active_state()` | 1075 | 48 lines |
+| `normalize_persona_data()` | 936 | 47 lines |
+| `_coerce_appearance()` | 642 | 45 lines |
+| `_as_profile_list()` | 36 | 36 lines |
 
 ### `chat_archive.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_model_validate()` | 50 | 4 lines |
-| `_model_dump()` | 56 | 4 lines |
+| `_model_validate()` | 52 | 4 lines |
+| `_model_dump()` | 58 | 4 lines |
 
 ### `checkpoints.py`
 
@@ -507,14 +507,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 2144 | 229 lines |
-| `semantic_output_errors()` | 2668 | 111 lines |
-| `_lenient_coerce()` | 393 | 103 lines |
-| `validate_llm_output_strict()` | 2816 | 57 lines |
-| `_coerce_conditions()` | 1949 | 50 lines |
-| `_declared()` | 278 | 46 lines |
-| `_name_what_was_discarded()` | 2780 | 34 lines |
-| `_coerce_str_list()` | 13 | 33 lines |
+| `preprocess_llm_output()` | 2385 | 243 lines |
+| `_lenient_coerce()` | 440 | 144 lines |
+| `semantic_output_errors()` | 2923 | 111 lines |
+| `validate_llm_output_strict()` | 3071 | 57 lines |
+| `_coerce_conditions()` | 2158 | 50 lines |
+| `_declared()` | 280 | 48 lines |
+| `_coerce_evidence_refs()` | 1488 | 41 lines |
+| `_coerce_candidate_response()` | 1671 | 34 lines |
 
 ### `spatial.py`
 
@@ -619,7 +619,7 @@
 | POST | `/api/characters/{cid}/recover_greetings` | `char_recover_greetings()` | `app.py:1413` |
 | POST | `/api/characters/{cid}/start` | `character_start_story()` | `app.py:1395` |
 | POST | `/api/chats` | `chat_new()` | `app.py:1811` |
-| POST | `/api/chats/import` | `import_chat()` | `chat_archive.py:151` |
+| POST | `/api/chats/import` | `import_chat()` | `chat_archive.py:163` |
 | DELETE | `/api/chats/{cid}` | `chat_del()` | `app.py:1913` |
 | GET | `/api/chats/{cid}` | `chat_get()` | `app.py:1943` |
 | PUT | `/api/chats/{cid}` | `chat_edit()` | `app.py:1817` |
@@ -646,7 +646,7 @@
 | GET | `/api/chats/{cid}/dialogue_config` | `dlg_get()` | `app.py:2760` |
 | PUT | `/api/chats/{cid}/dialogue_config` | `dlg_put()` | `app.py:2764` |
 | GET | `/api/chats/{cid}/dramatic_irony` | `get_dramatic_irony_feed()` | `app.py:2101` |
-| GET | `/api/chats/{cid}/export` | `export_chat()` | `chat_archive.py:145` |
+| GET | `/api/chats/{cid}/export` | `export_chat()` | `chat_archive.py:157` |
 | GET | `/api/chats/{cid}/fixed_points` | `fixed_points_list()` | `app.py:2872` |
 | POST | `/api/chats/{cid}/fixed_points` | `fixed_points_create()` | `app.py:2882` |
 | DELETE | `/api/chats/{cid}/fixed_points/{anchor_id}` | `fixed_points_delete()` | `app.py:2904` |
