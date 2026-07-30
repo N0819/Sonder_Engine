@@ -47,6 +47,42 @@ jobs:
       - name: Run full suite
         run: make test-full
 
+  pydantic1:
+    # `constraints.txt` pins Pydantic 2, so every other job exercises only one
+    # side of the declared `pydantic>=1.10.13,<3` range. `schemas.py` carries a
+    # branch per major (`_declared`), and the 1.x branch had no coverage here at
+    # all -- which is how a 1.x-only internal reached import scope and stopped
+    # the engine starting for anyone who resolved to 2.x. See docs/TESTING.md.
+    name: Schemas on Pydantic 1.x
+    needs: fast
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            constraints.txt
+            requirements*.txt
+      - name: Install test dependencies, then downgrade past the constraint
+        run: |
+          python -m pip install -c constraints.txt -r requirements-dev.txt
+          python -m pip install "pydantic>=1.10.13,<2"
+      - name: Confirm the major under test
+        run: |
+          python - <<'EOF'
+          import pydantic
+          assert pydantic.VERSION.startswith("1."), (
+              f"this job must run Pydantic 1.x, got {pydantic.VERSION}")
+          print("pydantic", pydantic.VERSION)
+          EOF
+      # The fast tier, not just the schema tests: the exposure is not limited to
+      # `schemas.py`. Any module reaching for a 2.x-only API (`model_validate`,
+      # `model_dump`) breaks 1.x the same way, and the whole tier costs ~10s.
+      - name: Run the fast tier on Pydantic 1.x
+        run: make test-fast
+
   browser:
     name: Browser behavior
     needs: fast

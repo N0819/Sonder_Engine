@@ -5,10 +5,9 @@ import json
 import re
 
 from pydantic import BaseModel, Field, ValidationError, validator
-from pydantic.fields import SHAPE_LIST as _SHAPE_LIST
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Any, Union
+from typing import Any, NamedTuple, Optional, Union, get_args, get_origin
 
 
 def _coerce_str_list(value):
@@ -62,7 +61,11 @@ def _clamp_float(value, lo, hi, default):
 
 # ---- Pydantic v1/v2 Compatibility ----
 
-if hasattr(BaseModel, "model_validate"):
+_PYDANTIC_V2 = hasattr(BaseModel, "model_validate")
+
+if _PYDANTIC_V2:
+    from pydantic import field_validator
+
     def _validate(model_cls, data):
         return model_cls.model_validate(data)
 
@@ -72,6 +75,10 @@ if hasattr(BaseModel, "model_validate"):
     def _fields(model_cls):
         return model_cls.model_fields
 else:
+    # v1 records a field's container kind as an int enum on the ModelField.
+    # There is no v2 equivalent; `_declared` reads the annotation there.
+    from pydantic.fields import SHAPE_LIST as _SHAPE_LIST_V1
+
     def _validate(model_cls, data):
         return model_cls.parse_obj(data)
 
@@ -203,6 +210,168 @@ def _flatten_to_text(value):
     return value
 
 
+# What the coercions below need to know about a field, read the same way on
+# either Pydantic major. Pydantic 1 answered all of this from its ModelField
+# (`allow_none`, `outer_type_`, `shape == SHAPE_LIST`, `type_`); Pydantic 2 has
+# no ModelField at all and the annotation is the only source. Reading it once,
+# here, is what keeps the coercion logic itself version-free -- the alternative
+# is v1-only internals leaking into rules about model behaviour, which is how
+# `pydantic.fields.SHAPE_LIST` came to decide whether a character's beat
+# survived.
+class _Declared(NamedTuple):
+    allows_none: bool     # None is a real value here, not an omission
+    default: Any          # the field's own default, or None if it has none
+    default_factory: Any
+    is_str: bool          # declared plain prose
+    is_list: bool         # declared a list of something
+    item_type: Any        # that list's element type, if it has one
+
+
+_NONE_TYPE = type(None)
+
+
+def _strip_optional(annotation):
+    """`Optional[X]` -> `X`, which is what v1's `outer_type_` already gave us.
+
+    A union of two real types is left alone: it is not "X, optionally absent"
+    and must not be read as X.
+    """
+    args = get_args(annotation)
+    if _NONE_TYPE in args:
+        rest = [a for a in args if a is not _NONE_TYPE]
+        if len(rest) == 1:
+            return rest[0]
+    return annotation
+
+
+def _field_required(field):
+    """Whether the model is obliged to supply this field, either major."""
+    is_required = getattr(field, "is_required", None)   # v2 FieldInfo
+    if callable(is_required):
+        return bool(is_required())
+    return bool(getattr(field, "required", False))      # v1 ModelField
+
+
+def _declared(field):
+    """Read one field's declared shape off whichever Pydantic is installed."""
+    factory = getattr(field, "default_factory", None)
+    required = _field_required(field)
+    # A required field has no default to fall back on. Spelling that as None
+    # keeps `default` meaning "the value this field falls back to", rather
+    # than v2's PydanticUndefined sentinel leaking into the coercion rules.
+    default = None if (required or factory is not None) else field.default
+
+    if not _PYDANTIC_V2:
+        return _Declared(
+            allows_none=bool(field.allow_none),
+            default=default,
+            default_factory=factory,
+            is_str=field.outer_type_ is str,
+            is_list=getattr(field, "shape", None) == _SHAPE_LIST_V1,
+            item_type=getattr(field, "type_", None),
+        )
+
+    annotation = field.annotation
+    inner = _strip_optional(annotation)
+    # `Any` accepts None, and v1 read it as allow_none too.
+    allows_none = (annotation is None or annotation is Any
+                   or _NONE_TYPE in get_args(annotation))
+    args = get_args(inner)
+    # Only a PARAMETRIZED list counts, matching v1, where a bare `list`
+    # annotation is a singleton and not SHAPE_LIST. The wrap-a-single-item rule
+    # is about a list of known items; a bare `list` declares no item to be one
+    # of, so a dict there stays the disagreement it is instead of becoming a
+    # one-element list that validates.
+    is_list = get_origin(inner) is list
+    return _Declared(
+        allows_none=allows_none,
+        default=default,
+        default_factory=factory,
+        is_str=inner is str,
+        is_list=is_list,
+        item_type=args[0] if (is_list and args) else None,
+    )
+
+
+def _item_fields(item_type):
+    """The element model's own fields, or {} when the element is not a model."""
+    if item_type is None or not isinstance(item_type, type):
+        return {}
+    if not issubclass(item_type, BaseModel):
+        return {}
+    return _fields(item_type) or {}
+
+
+def _lenient_coerce(value, declared):
+    """The one coercion, given a value and the shape its field declared."""
+    if value is None and not declared.allows_none:
+        if declared.default_factory is not None:
+            return declared.default_factory()
+        if declared.default is not None:
+            return declared.default
+        return value
+    if isinstance(value, (dict, list, tuple)) and declared.is_str:
+        return _flatten_to_text(value)
+    # A bare number where prose was declared. Pydantic 1 coerced this itself
+    # (`5` -> `"5"`, and a bool is an int, so `True` -> `"True"`); Pydantic 2
+    # refuses it and the whole beat is discarded over `response: Input should
+    # be a valid string`. Doing it here keeps the engine's tolerance the same
+    # on both majors instead of leaving it to whichever one is installed --
+    # a divergence of exactly the kind that reads later as a bad model.
+    if declared.is_str and isinstance(value, (int, float)):
+        return str(value)
+    # One item where a list was declared. Asked for "updates" and having
+    # exactly one to report, a model will often return the object rather
+    # than a list of one -- observed live, a character agent returned a
+    # bare object for both `mind_model_updates` and `relationship_updates`
+    # and the whole beat was discarded with "value is not a valid list".
+    # The mirror of the case above, and no more ambiguous: the singular
+    # and the list of one mean the same thing.
+    if declared.is_list and isinstance(value, dict) and value:
+        # Two different things arrive as a bare dict here and they need
+        # opposite treatment. One is a single item -- wrap it. The other
+        # is a MAP of items keyed by name, which models reach for when
+        # the list is "updates about people": {"Mara": {...}, "Vesk":
+        # {...}}. Wrapping that produces a one-element list whose element
+        # is the whole map, and it fails as
+        # `mind_model_updates.0.about_entity: field required` -- an error
+        # that reads like the model omitted a field when in fact we
+        # mangled its structure.
+        #
+        # Told apart by whether the dict's own keys look like the item's
+        # fields. Nothing is guessed: a map whose values are not all
+        # objects is not a map of items, and is wrapped as before.
+        fields = _item_fields(declared.item_type)
+        item_fields = set(fields)
+        looks_like_item = bool(item_fields & set(value))
+        if (not looks_like_item and item_fields
+                and all(isinstance(v, dict) for v in value.values())):
+            # Carry the key across when the item has an obvious slot for
+            # it and the model left that slot empty -- the key IS the
+            # subject in this shape.
+            # Which slot the key belongs in is the item's own FIRST
+            # REQUIRED field, not a list of names guessed in advance. A
+            # guessed list of about_entity/name/entity/id looked general
+            # and was not: it missed `belief` on BeliefUpdate and `cue`
+            # on AssociationUpdate, so a map keyed by belief text lost
+            # the text and failed as `belief_updates.0.belief: field
+            # required` -- the same error the map handling existed to
+            # prevent, one model over. The subject of these shapes is
+            # what the model is obliged to supply, which is exactly what
+            # "first required field" names.
+            slot = next((n for n, f in fields.items()
+                         if _field_required(f)), None)
+            out = []
+            for key, item in value.items():
+                item = dict(item)
+                if slot and not item.get(slot):
+                    item[slot] = key
+                out.append(item)
+            return out
+        return [value]
+    return value
+
+
 class LenientModel(BaseModel):
     """BaseModel that accepts a structured value where prose was declared.
 
@@ -220,69 +389,32 @@ class LenientModel(BaseModel):
     hide the actual error, and that is worth a hard failure.
     """
 
-    @validator("*", pre=True, allow_reuse=True)
-    def _coerce_structured_into_str(cls, value, field):
-        if value is None and not field.allow_none:
-            if field.default_factory is not None:
-                return field.default_factory()
-            if field.default is not None:
-                return field.default
-            return value
-        if isinstance(value, (dict, list, tuple)) and field.outer_type_ is str:
-            return _flatten_to_text(value)
-        # One item where a list was declared. Asked for "updates" and having
-        # exactly one to report, a model will often return the object rather
-        # than a list of one -- observed live, a character agent returned a
-        # bare object for both `mind_model_updates` and `relationship_updates`
-        # and the whole beat was discarded with "value is not a valid list".
-        # The mirror of the case above, and no more ambiguous: the singular
-        # and the list of one mean the same thing.
-        if (getattr(field, "shape", None) == _SHAPE_LIST
-                and isinstance(value, dict) and value):
-            # Two different things arrive as a bare dict here and they need
-            # opposite treatment. One is a single item -- wrap it. The other
-            # is a MAP of items keyed by name, which models reach for when
-            # the list is "updates about people": {"Mara": {...}, "Vesk":
-            # {...}}. Wrapping that produces a one-element list whose element
-            # is the whole map, and it fails as
-            # `mind_model_updates.0.about_entity: field required` -- an error
-            # that reads like the model omitted a field when in fact we
-            # mangled its structure.
-            #
-            # Told apart by whether the dict's own keys look like the item's
-            # fields. Nothing is guessed: a map whose values are not all
-            # objects is not a map of items, and is wrapped as before.
-            item_fields = set(getattr(field.type_, "__fields__", {}) or {})
-            looks_like_item = bool(item_fields & set(value))
-            if (not looks_like_item and item_fields
-                    and all(isinstance(v, dict) for v in value.values())):
-                # Carry the key across when the item has an obvious slot for
-                # it and the model left that slot empty -- the key IS the
-                # subject in this shape.
-                # Which slot the key belongs in is the item's own FIRST
-                # REQUIRED field, not a list of names guessed in advance. A
-                # guessed list of about_entity/name/entity/id looked general
-                # and was not: it missed `belief` on BeliefUpdate and `cue`
-                # on AssociationUpdate, so a map keyed by belief text lost
-                # the text and failed as `belief_updates.0.belief: field
-                # required` -- the same error the map handling existed to
-                # prevent, one model over. The subject of these shapes is
-                # what the model is obliged to supply, which is exactly what
-                # "first required field" names.
-                slot = next(
-                    (n for n, f in
-                     (getattr(field.type_, "__fields__", {}) or {}).items()
-                     if f.required), None)
-                out = []
-                for key, item in value.items():
-                    item = dict(item)
-                    if slot and not item.get(slot):
-                        item[slot] = key
-                    out.append(item)
-                return out
-            return [value]
-        return value
-
+    if _PYDANTIC_V2:
+        # Still a per-FIELD validator on v2, not a whole-model one. What v2
+        # removed is the `field` parameter, not the `"*"` target, and
+        # `ValidationInfo.field_name` replaces it.
+        #
+        # The distinction decides correctness, not style. A model-level
+        # before-validator runs ahead of every field validator, so this generic
+        # coercion would pre-empt the field-specific ones -- and some of those
+        # exist precisely to handle a shape this one would handle WORSE.
+        # `ResponseCandidate.response` is the case: `_coerce_candidate_response`
+        # degrades a prose-less sequence element to "", while the generic
+        # flatten scavenges every scalar it can find and returns the `type`
+        # discriminator as if it were prose ({"type": "action"} -> "action").
+        # As a field validator this runs after the field's own, matching v1,
+        # where a specific `pre=True` validator precedes the inherited `"*"`.
+        @field_validator("*", mode="before")
+        @classmethod
+        def _coerce_structured_into_str(cls, value, info):
+            field = _fields(cls).get(info.field_name)
+            if field is None:
+                return value    # extra="allow" keys are not ours to reshape
+            return _lenient_coerce(value, _declared(field))
+    else:
+        @validator("*", pre=True, allow_reuse=True)
+        def _coerce_structured_into_str(cls, value, field):
+            return _lenient_coerce(value, _declared(field))
 
 
 class GenreProfile(LenientModel):
