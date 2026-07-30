@@ -1,5 +1,114 @@
 # Changelog
 
+## alpha 6.1.1 — The engine has to start
+
+alpha 6.1 did not start on a fresh install. `requirements.txt` declares
+`pydantic>=1.10.13,<3`, pip resolves that to 2.x, and `schemas.py` imported a
+1.x-only internal at module scope — so the import failed before anything ran.
+A dev machine pinned to 1.10 could not see it. Everything else here is what
+the same investigation turned up underneath: tolerances that differed by which
+Pydantic happened to be installed, and turns dying on shapes that had nothing
+to do with Pydantic at all.
+
+Found by reading live play and by running the same payloads under both
+majors, side by side.
+
+### Fixed
+
+- **A fresh install could not start the engine.** `from pydantic.fields import
+  SHAPE_LIST` at import scope, plus `@validator("*", pre=True)` with a `field`
+  parameter, are both hard errors on 2.x. `schemas.py` now reads a field's
+  declared shape through `_declared`, which has one branch per major because
+  Pydantic 2 removed `ModelField` entirely; everything that needs to know what
+  a field declared goes through there. CI gained a job that runs the fast tier
+  on 1.x, because a declared range is only a promise if something checks it.
+
+- **A character card with a number in it made the character unreadable.**
+  `character_schema.py`'s profile models were plain `BaseModel`s relying on 1.x
+  to read `"expression": 3` as `"3"`, and `_normalize_psychology` validates
+  with no `try` — on the read path of *every* character accessor. On 2.x that
+  was a 500 on character save and a character that could not be loaded on any
+  later turn. A structured value in the same slot 500'd on both majors and no
+  longer does.
+
+- **311 model-output shapes were accepted on one Pydantic and discarded on the
+  other.** Three families the field-level coercion could not see: `[]` and `""`
+  where a dict or nested model was declared (1.x took it for free, because
+  `dict([])` is `{}`); a wrongly-typed list *element* or dict *value*, which is
+  not a field of anything so no per-field validator reaches it; and a
+  fractional float where an `int` was declared. The cost was never a warning —
+  `validate_llm_output` returns the *unnormalized* payload when validation
+  fails, so one `"appraisal": []` also cost that step every default, flatten
+  and wrap the rest of the layer would have applied.
+
+- **Four live turns died on shapes that were identical on both majors**, which
+  is why they had never read as a dependency problem. A staged lore entry whose
+  `content` was an object (`_room_notes_from_lore` sliced a dict and the turn
+  died); a condition written as its own sentence, `{"generator_fuel": ["The
+  generator is running low..."]}`, which failed the whole `director_resolve`
+  step and took the resolved event and the state diff with it; the entire
+  answer wrapped in one key of the model's own, `{"the_director_outputs":
+  {...}}`, which failed as "rooms is empty; positions is empty" — a model that
+  answered nothing, when it had answered everything — and then handed the
+  repair prompt that same false complaint; and `relevant_lore` returned as a
+  list of lore IDS, where the schema was the only strict layer and
+  `agents/common.lore_for` already skipped non-dicts anyway.
+
+- **The archive import gate was stricter than the importer behind it.**
+  `import_chat` reads `dict(data.get("world") or {})`, while the model in front
+  of it refused `world: []` and rejected the whole archive with a 400 — so a
+  hand-edited or third-party archive imported on one machine and not another.
+
+- **The leniency layer was losing content quietly.** A name-keyed map dropped
+  its key whenever the item model had no required field, so a knowledge seed
+  keyed by its own text arrived with `content: ""` — the whole seed.
+  `response_candidates` given a map returned `[]`, discarding a character's
+  entire deliberation with no warning. A structured candidate response was
+  `str()`d into prose, putting a Python dict repr where the character's words
+  go. And three appraisal axes contradicted their own declared defaults, so
+  `null` and omission — two spellings of "not said" — answered differently.
+
+### Changed
+
+- **A `sequence` written as sentences is read as ACTION**, or as speech only
+  when the whole string is a quotation. Twice in eleven live turns a model
+  answered with prose; every entry was discarded, the step failed as "sequence
+  is empty despite nonempty player input", and the turn died against a
+  complaint that was false. The action default is the safe direction, not the
+  likely one: typing prose as speech would author an utterance *and* transmit
+  it to everyone in earshot, while typing speech as an action under-informs the
+  room. Where the engine cannot tell, it must fail toward telling minds less
+  than happened. A co-player's sequence gets the same reading.
+
+- **`[]`, `""` and `{}` now all read as "nothing to report"** for whichever
+  container a field declared — a deliberate widening of roughly 153 list
+  fields, symmetric across majors, and only for *empty* values: a non-empty
+  dict on a list field still wraps, a non-empty list on a dict field still
+  fails. A bare `list[dict]` also drops elements that cannot be objects, since
+  there is no item model to map them into; a parametrized `list[dict[str,
+  Any]]` stays strict, because that is what an archive row is.
+
+- **`CharacterAppraisal.novelty`, `Observation.suddenness` and
+  `GoalImpact.intentionality` answer `0.0` on an explicit `null`**, their own
+  declared default, where a shared clamp used to say `0.5`. Omission always
+  gave `0.0` and `psychology_runtime.stress_delta` already assumed it, so this
+  removes a contradiction rather than inventing one — but it is a live
+  stress-computation input, and no explicit null on those three fields occurred
+  in 389 captured validations, which is a bound and not a proof.
+
+- **One coping strategy spelled `"freeze"` is one strategy.** The old code
+  iterated the string and produced six, named `f`, `r`, `e`, `e`, `z`, `e`. A
+  map of strategies keyed by name now keeps both the key and the fields under
+  it; it used to keep the key and discard everything else.
+
+- `pydantic.Extra`, `parse_obj` and `.dict()` are gone from production code —
+  all three are removed in Pydantic 3, and the `<3` ceiling was the only thing
+  holding that off. Deprecation warnings fell from 4520 to 106, the remainder
+  six test assertions.
+
+- `docs/UNBUILT.md` is now the single register of unfinished work, replacing
+  five audit documents whose status lists had drifted.
+
 ## alpha 6.1 — Something else you own
 
 A character stops being interesting the moment it runs out of things to
