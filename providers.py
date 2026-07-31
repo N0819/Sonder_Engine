@@ -661,6 +661,10 @@ ROLES = [
     # slow or failed image prompt cannot delay or break a beat. When no model
     # is configured for it, backdrops fall back to a deterministic template.
     "backdrop_prompt",
+    # Writes a sound-library search query from spatial data (ambience.py).
+    # OPTIONAL and out of band on the same terms as backdrop_prompt: with no
+    # model configured, ambience falls back to a deterministic keyword query.
+    "ambience_prompt",
 ]
 
 # Image generation is a different API surface from chat completion, so it gets
@@ -670,6 +674,11 @@ ROLES = [
 # contains no image-output models at all, which is why this cannot simply
 # reuse the chat role plumbing.
 IMAGE_ENDPOINT = "/images/generations"
+# The image-to-image half of the same OpenAI-compatible surface: a multipart
+# POST carrying an existing image for the model to work FROM. Not every
+# provider implements it, so every caller must be able to fall back to plain
+# generation -- see backdrops.generate_backdrop.
+IMAGE_EDIT_ENDPOINT = "/images/edits"
 
 
 def image_model():
@@ -846,6 +855,55 @@ def generate_image(prompt, size=None, timeout=180):
         return got.content
     raise LLMError("image entry had neither b64_json nor url: %s"
                    % json.dumps(entry)[:200])
+
+def edit_image(prompt, image_bytes, size=None, timeout=180):
+    """Generate one image FROM another, returning raw bytes. Raises on failure.
+
+    The point is CONTINUITY: handed the room's existing picture, a model
+    changes what the prompt asks for and leaves the rest of the place alone,
+    where a fresh generation reinvents the architecture every time the light
+    changes. Same configured model and provider as `generate_image`; only the
+    endpoint and the encoding differ (multipart, because it carries a file).
+
+    Never called from the turn pipeline -- see backdrops.py.
+    """
+    cfg = image_model()
+    if not cfg:
+        raise RuntimeError("No image model configured — set the `image_model` setting")
+    prov = provider(cfg["provider"])
+    if not prov:
+        raise RuntimeError("Image provider %r not found" % cfg["provider"])
+    base = (_prov_field(prov, "base_url") or "").rstrip("/")
+    fields = {"model": (None, cfg["model"]), "prompt": (None, prompt),
+              "n": (None, "1"), "response_format": (None, "b64_json"),
+              "image": ("scene.png", image_bytes, "image/png")}
+    # `auto` is a generations-only size on several providers, and an edit
+    # inherits its dimensions from the image it is given anyway.
+    if size or (cfg.get("size") and cfg["size"] != "auto"):
+        fields["size"] = (None, size or cfg["size"])
+    headers = {"Authorization": "Bearer %s" % (_prov_field(prov, "api_key") or "")}
+    resp = _session().post(base + IMAGE_EDIT_ENDPOINT, files=fields,
+                           headers=headers, timeout=timeout)
+    if resp.status_code >= 400:
+        raise LLMError("image edit failed (%s): %s"
+                       % (resp.status_code, resp.text[:300]),
+                       status_code=resp.status_code)
+    payload = resp.json()
+    entries = payload.get("data") or []
+    if not entries:
+        raise LLMError("image edit returned no data: %s"
+                       % json.dumps(payload)[:300])
+    entry = entries[0]
+    if entry.get("b64_json"):
+        import base64
+        return base64.b64decode(entry["b64_json"])
+    if entry.get("url"):
+        got = _session().get(entry["url"], timeout=timeout)
+        got.raise_for_status()
+        return got.content
+    raise LLMError("image edit entry had neither b64_json nor url: %s"
+                   % json.dumps(entry)[:200])
+
 
 @dataclass
 class RetryConfig:

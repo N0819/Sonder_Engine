@@ -15,8 +15,11 @@ These tests pin the two properties that make it safe and affordable:
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
+import backdrops
 from backdrops import _setting_only, visual_signature
 
 
@@ -600,3 +603,106 @@ class TestBodySentencesAreDropped:
         used by both the prompt and the signature, so they cannot drift."""
         room = {"desc": "Blood on the walls."}
         assert "blood" not in place_desc(room).casefold()
+
+
+class TestRoomContinuity:
+    """A room's second picture should be its first with the light changed, not
+    a fresh invention of the same place."""
+
+    def test_the_anchor_is_the_first_image_and_never_moves(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(backdrops, "BACKDROP_DIR", str(tmp_path))
+        monkeypatch.setattr(backdrops, "branch_lineage", lambda cid: [])
+        first = backdrops.backdrop_path(1, "sigfirst")
+        os.makedirs(os.path.dirname(first), exist_ok=True)
+        open(first, "wb").write(b"\x89PNG first")
+
+        backdrops.set_room_anchor(1, "yard", "sigfirst")
+        assert backdrops.room_anchor(1, "yard")[0] == first
+
+        # A later state of the same room must not become the new anchor: an
+        # anchor that drifted would compound artifacts down a chain of edits.
+        later = backdrops.backdrop_path(1, "siglater")
+        open(later, "wb").write(b"\x89PNG later")
+        backdrops.set_room_anchor(1, "yard", "siglater")
+        assert backdrops.room_anchor(1, "yard")[0] == first
+
+    def test_no_anchor_for_an_unseen_room_or_a_missing_file(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(backdrops, "BACKDROP_DIR", str(tmp_path))
+        monkeypatch.setattr(backdrops, "branch_lineage", lambda cid: [])
+        assert backdrops.room_anchor(1, "yard")[0] is None
+        # Indexed, but the host emptied the directory.
+        backdrops.set_room_anchor(1, "yard", "gone")
+        assert backdrops.room_anchor(1, "yard")[0] is None
+        assert backdrops.room_anchor(1, None)[0] is None
+
+    def test_a_branch_inherits_its_parents_rooms(self, tmp_path, monkeypatch):
+        """Otherwise every room is re-invented at the fork, which is exactly
+        the discontinuity this exists to prevent."""
+        monkeypatch.setattr(backdrops, "BACKDROP_DIR", str(tmp_path))
+        monkeypatch.setattr(backdrops, "branch_lineage",
+                            lambda cid: [1] if cid == 2 else [])
+        parent = backdrops.backdrop_path(1, "sigparent")
+        os.makedirs(os.path.dirname(parent), exist_ok=True)
+        open(parent, "wb").write(b"\x89PNG parent")
+        backdrops.set_room_anchor(1, "yard", "sigparent")
+        assert backdrops.room_anchor(2, "yard")[0] == parent
+
+
+class TestRoomFoldering:
+    """Images are filed under their room. A long story is hundreds of them
+    across a dozen places, and a flat directory of hex names is unreadable to
+    anyone trying to find, keep or delete a particular room."""
+
+    def test_a_room_id_cannot_escape_its_directory(self):
+        assert backdrops._room_dir("../../etc") == "etc"
+        assert backdrops._room_dir("Ten Forward") == "ten_forward"
+        assert backdrops._room_dir("") == "_room"
+        assert "/" not in backdrops._room_dir("a/b/c")
+
+    def test_the_flat_layout_is_still_found(self, tmp_path, monkeypatch):
+        """Everything generated before rooms had folders is still on disk in
+        the old shape, and must not silently regenerate."""
+        monkeypatch.setattr(backdrops, "BACKDROP_DIR", str(tmp_path))
+        monkeypatch.setattr(backdrops, "branch_lineage", lambda cid: [])
+        legacy = backdrops.backdrop_path(1, "oldsig")
+        os.makedirs(os.path.dirname(legacy), exist_ok=True)
+        open(legacy, "wb").write(b"\x89PNG old")
+        assert backdrops.cached_backdrop(1, "oldsig") == legacy
+
+    def test_a_foldered_image_is_found_too(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(backdrops, "BACKDROP_DIR", str(tmp_path))
+        monkeypatch.setattr(backdrops, "branch_lineage", lambda cid: [])
+        nested = backdrops.backdrop_path(1, "newsig", "ten_forward")
+        os.makedirs(os.path.dirname(nested), exist_ok=True)
+        open(nested, "wb").write(b"\x89PNG new")
+        assert backdrops.cached_backdrop(1, "newsig") == nested
+        assert "ten_forward" in nested
+
+
+class TestRevisionPrompt:
+    """Two prompts, not one. A generation describes the whole place because
+    nothing exists yet; a revision describes only what moved, because the place
+    is already in the image it is handed."""
+
+    def test_a_revision_states_the_change_and_not_the_room(self):
+        place = {"name": "Courtyard", "desc": "Flagstones and a well.",
+                 "weather": ["heavy rain"], "ground": "churned mud"}
+        before = {"name": "Courtyard", "desc": "Flagstones and a well."}
+        out = backdrops.compose_revision(place, None, before)
+        assert "heavy rain" in out and "churned mud" in out
+        # The fabric of the room is what the image already shows. Restating it
+        # is what invites the model to draw a different courtyard.
+        assert "Flagstones" not in out
+        assert "EXACTLY" in out and "No people." in out
+
+    def test_what_the_anchor_already_shows_is_not_repeated(self):
+        place = {"name": "Courtyard", "weather": ["heavy rain"]}
+        out = backdrops.compose_revision(place, None, {"weather": ["heavy rain"]})
+        assert "heavy rain" not in out
+        assert "reproduce the same room faithfully" in out
+
+    def test_a_generation_still_describes_everything(self):
+        place = {"name": "Courtyard", "desc": "Flagstones and a well.",
+                 "weather": ["heavy rain"]}
+        out = backdrops.compose_prompt(place, None, "")
+        assert "Courtyard" in out and "Flagstones" in out and "heavy rain" in out

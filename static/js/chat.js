@@ -30,7 +30,16 @@ function detectSceneMood(text) {
 }
 
 function applySceneMood(text) {
-  document.body.dataset.mood = detectSceneMood(text);
+  setSceneMood(detectSceneMood(text));
+}
+
+// The write is what costs: `body[data-mood]` is what the stylesheet keys the
+// inherited --mood-tint off, so assigning it invalidates style for the whole
+// document. The scroll observer lands on the same turn many times in a row,
+// and re-asserting the mood it already has is a document-wide invalidation
+// bought for nothing.
+function setSceneMood(mood) {
+  if (document.body.dataset.mood !== mood) document.body.dataset.mood = mood;
 }
 
 // Tracks which rendered .turn element is currently most visible in #msgs so
@@ -55,6 +64,11 @@ let _activeRun = null;
 // looking at, which is the same question this observer already answers --
 // so it stays one observer and one notion of "the current turn" rather than
 // two that can disagree while scrolling.
+// Set when a run has just produced a turn, cleared by the first observer pass
+// that lands on it. The scene layers read it to tell "the reader is waiting for
+// this one" from "the reader is scrolling past it".
+let _freshTurnPending = false;
+
 function observeSceneMood(msgsEl, turnEntries) {
   if (_moodObserver) {
     _moodObserver.disconnect();
@@ -67,25 +81,48 @@ function observeSceneMood(msgsEl, turnEntries) {
   // being observed -- so visibility has to be accumulated across calls
   // rather than read fresh each time.
   const ratios = new Map();
-  const proseByEl = new Map(turnEntries.map(e => [e.el, e.prose]));
+  // Each turn's mood is a pure function of prose that does not change while it
+  // is on screen, so it is computed ONCE here rather than on every scroll tick.
+  // Per tick it was a full lowercase copy of the prose block plus ~60 substring
+  // scans over it, for an answer that could not have moved.
+  const moodByEl = new Map(turnEntries.map(e => [e.el, detectSceneMood(e.prose)]));
   const turnIdByEl = new Map(turnEntries.map(e => [e.el, e.turnId]));
+  const newestTurnId = turnEntries[turnEntries.length - 1].turnId;
 
   _moodObserver = new IntersectionObserver(entries => {
     for (const entry of entries) {
-      ratios.set(entry.target, entry.isIntersecting ? entry.intersectionRatio : 0);
+      // Dropped rather than stored as 0: a zero can never win the comparison
+      // below, so keeping it only grows this map to the length of the whole
+      // story and makes every later tick scan every turn ever scrolled past.
+      if (entry.isIntersecting && entry.intersectionRatio > 0) {
+        ratios.set(entry.target, entry.intersectionRatio);
+      } else {
+        ratios.delete(entry.target);
+      }
     }
     let bestEl = null, bestRatio = 0;
     for (const [el, ratio] of ratios) {
       if (ratio > bestRatio) { bestRatio = ratio; bestEl = el; }
     }
     if (bestEl) {
-      applySceneMood(proseByEl.get(bestEl));
+      setSceneMood(moodByEl.get(bestEl) || "calm");
+      // A turn the reader just WAITED for is not a turn they scrolled past:
+      // its picture and its sound are commissioned immediately, while every
+      // other turn has to be dwelt on first. Consumed once, so scrolling away
+      // and back afterwards behaves like ordinary reading.
+      const fresh = _freshTurnPending && turnIdByEl.get(bestEl) === newestTurnId;
+      if (fresh) _freshTurnPending = false;
       // Guarded because backdrops.js is an experimental extra: if it fails to
       // load (or a browser is holding a cached index.html without its script
       // tag), a missing function here would throw inside the observer and
       // take the transcript's own mood/scroll behaviour down with it.
       if (typeof backdropOnVisibleTurn === "function") {
-        backdropOnVisibleTurn(turnIdByEl.get(bestEl));
+        backdropOnVisibleTurn(turnIdByEl.get(bestEl), { fresh });
+      }
+      // Same observer, same notion of "the turn being read", so the picture
+      // and the sound can never disagree about which room the reader is in.
+      if (typeof ambienceOnVisibleTurn === "function") {
+        ambienceOnVisibleTurn(turnIdByEl.get(bestEl), { fresh });
       }
     }
   }, { root: msgsEl, threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] });
@@ -177,6 +214,7 @@ function renderChat() {
   updateChatScopedButtons();
   renderFrameBar();
   if (typeof backdropResetForRender === "function") backdropResetForRender();
+  if (typeof ambienceResetForRender === "function") ambienceResetForRender();
 
   if (!S.chat) {
     $("#chatname").textContent = "No story selected";
@@ -277,7 +315,20 @@ function renderChat() {
     turnEntries.push({ el: d, prose: t.prose || "", turnId: t.id });
   }
 
-  M.scrollTop = M.scrollHeight;
+  // Explicitly instant. #msgs has scroll-behavior:smooth for the reader's own
+  // scrolling and for the scrollIntoView calls further down, but a rebuild
+  // leaves scrollTop at 0, so honouring it here ANIMATES from the top of the
+  // story to the bottom -- dragging every turn in between through a real
+  // layout and paint, which is exactly the work `content-visibility` is here
+  // to avoid. The jump is meant to be a jump.
+  M.scrollTo({ top: M.scrollHeight, behavior: "instant" });
+  // Re-asserted once layout has settled. Turns off screen are skipped by
+  // `content-visibility` and contribute an ESTIMATED height until they have
+  // been rendered at least once, so the first scrollHeight of a long story is
+  // an approximation -- close, but not the bottom.
+  requestAnimationFrame(() => {
+    M.scrollTo({ top: M.scrollHeight, behavior: "instant" });
+  });
   observeSceneMood(M, turnEntries);
 }
 
@@ -375,6 +426,7 @@ const FRIENDLY_SUBAGENTS = {
   blurb_mint: "Giving the extras personalities",
   scene_life: "Voicing the room",
   backdrop_prompt: "Describing the room for a picture",
+  ambience_prompt: "Describing the room's sound",
   background_react: "A bystander reacts",
 };
 
@@ -415,6 +467,22 @@ function turnStatusStop() {
   _turnStatusTimer = null;
 }
 
+// Reading scrollHeight straight after writing text into #live forces a
+// synchronous layout, and the token path does that PER TOKEN for the whole
+// length of a run. Coalesced into one write per painted frame instead: the log
+// still sits at the bottom of every frame anyone sees, and stops re-laying-out
+// between the frames nobody does.
+let _liveScrollPinned = false;
+function pinLiveLog() {
+  if (_liveScrollPinned) return;
+  _liveScrollPinned = true;
+  requestAnimationFrame(() => {
+    _liveScrollPinned = false;
+    const L = $("#live");
+    if (L) L.scrollTop = L.scrollHeight;
+  });
+}
+
 function liveStep(key, label) {
   const L = $("#live");
   const sid = safeId(key);
@@ -432,7 +500,7 @@ function handleEvt(ev) {
     const p = document.getElementById("lt-" + safeId(ev.key));
     if (p && $("#streamtgl").checked) {
       p.textContent += ev.delta;
-      $("#live").scrollTop = $("#live").scrollHeight;
+      pinLiveLog();
     }
   } else if (ev.type === "generation_reset") {
     const pre = document.getElementById(
@@ -497,6 +565,10 @@ async function runStream(url, body, context = {}) {
     turnStatusStop();
     if (S.chatId) {
       try {
+        // The re-render below lands the reader on a brand-new turn. Mark it so
+        // its picture and sound are fetched at once rather than after a dwell:
+        // waiting two seconds for a beat you just watched arrive is a stall.
+        if (ok) _freshTurnPending = true;
         await openChat(S.chatId);
       } catch (e) {
         toast("Could not refresh story.", "err");

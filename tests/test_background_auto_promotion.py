@@ -10,7 +10,7 @@ W4: promotion is no longer UI-only. promote_background_character factors the
 confirm-route body into a reusable helper, and auto_promote_background_characters
 is a commit-side sweep that autonomously promotes a presence crossing the
 auto-threshold (promotable + dialogue_turns >= 3 + present/addressed this
-beat), gated behind setting('auto_promote') which defaults ON.
+beat), gated behind setting('auto_promote') which defaults OFF.
 
 Driven through the real deterministic commit-side functions with only the
 LLM boundary (draft_promoted_character) stubbed, in the style of
@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import json
 import time
+
+import pytest
 
 import importers
 from commit import (
@@ -210,9 +212,21 @@ class TestPromoteBackgroundCharacter:
 
 
 class TestAutoPromoteSweep:
-    def _seed(self, db, cid, dialogue_turns, last_turn):
+    """The sweep is OFF unless the host asked for it, twice over: the global
+    `auto_promote` switch and a non-zero `promote_after_addressed`. And what it
+    counts is turns the story deliberately turned toward this person -- not
+    turns they spoke, which extras do to each other all day."""
+
+    def _seed(self, db, cid, dialogue_turns, last_turn, addressed_turns=None,
+              enable=True, after=3):
+        if enable:
+            db.set_setting("auto_promote", "1")
+            db.wset(cid, "dialogue_config", {"promote_after_addressed": after})
         db.wset(cid, "background_presences", {
-            "Data": _presence(1, last_turn, dialogue_turns=dialogue_turns),
+            "Data": dict(_presence(1, last_turn, dialogue_turns=dialogue_turns),
+                         addressed_turns=list(
+                             dialogue_turns if addressed_turns is None
+                             else addressed_turns)),
         })
 
     def test_promotes_qualifying_presence_active_this_beat(self, temp_db, monkeypatch):
@@ -225,6 +239,43 @@ class TestAutoPromoteSweep:
         assert [p["name"] for p in result["promoted"]] == ["Data"]
         assert temp_db.q("SELECT id FROM characters WHERE name='Data'", one=True)
         assert "Data" not in temp_db.wget(cid, "background_presences", {})
+
+    def test_off_unless_switched_on(self, temp_db, monkeypatch):
+        """The default. Acquiring a permanent cast member from a passer-by is
+        not something a story should do unasked."""
+        cid = _make_chat(temp_db)
+        self._seed(temp_db, cid, [1, 2, 4], last_turn=5, enable=False)
+        temp_db.wset(cid, "dialogue_config", {"promote_after_addressed": 3})
+        _stub_draft(monkeypatch)
+
+        result = auto_promote_background_characters(_ctx(cid, 5, "Data, report."))
+
+        assert result == {"promoted": []}
+        assert temp_db.q("SELECT id FROM characters WHERE name='Data'", one=True) is None
+
+    def test_zero_turns_till_promotion_never_promotes(self, temp_db, monkeypatch):
+        """The other half of the default: the dialogue menu's own dial at 0."""
+        cid = _make_chat(temp_db)
+        self._seed(temp_db, cid, [1, 2, 4], last_turn=5, after=0)
+        _stub_draft(monkeypatch)
+
+        result = auto_promote_background_characters(_ctx(cid, 5, "Data, report."))
+
+        assert result == {"promoted": []}
+        assert "Data" in temp_db.wget(cid, "background_presences", {})
+
+    def test_chatter_alone_never_promotes(self, temp_db, monkeypatch):
+        """The bug this rule exists for: an extra who talks constantly to OTHER
+        extras is doing exactly what background life is for, and used to earn a
+        character sheet for it."""
+        cid = _make_chat(temp_db)
+        self._seed(temp_db, cid, [1, 2, 3, 4, 5], last_turn=5, addressed_turns=[])
+        _stub_draft(monkeypatch)
+
+        result = auto_promote_background_characters(_ctx(cid, 5, "I keep walking."))
+
+        assert result == {"promoted": []}
+        assert "Data" in temp_db.wget(cid, "background_presences", {})
 
     def test_gated_off_by_the_auto_promote_setting(self, temp_db, monkeypatch):
         cid = _make_chat(temp_db)
@@ -239,7 +290,7 @@ class TestAutoPromoteSweep:
 
     def test_below_dialogue_threshold_stays_tracked(self, temp_db, monkeypatch):
         """Promotable per the UI badge (2 dialogue turns) but below the
-        autonomous threshold (3) -- the sweep leaves her alone."""
+        configured number of addressed turns -- the sweep leaves her alone."""
         cid = _make_chat(temp_db)
         self._seed(temp_db, cid, [1, 2], last_turn=5)
         _stub_draft(monkeypatch)
@@ -272,9 +323,13 @@ class TestAutoPromoteSweep:
         """Two qualifiers in the same beat: only the most-voiced is promoted;
         the other stays tracked for a later beat."""
         cid = _make_chat(temp_db)
+        temp_db.set_setting("auto_promote", "1")
+        temp_db.wset(cid, "dialogue_config", {"promote_after_addressed": 3})
         temp_db.wset(cid, "background_presences", {
-            "Data": _presence(1, 5, dialogue_turns=[1, 2, 4, 5]),
-            "Worf": _presence(1, 5, dialogue_turns=[2, 3, 5]),
+            "Data": dict(_presence(1, 5, dialogue_turns=[1, 2, 4, 5]),
+                         addressed_turns=[1, 2, 4, 5]),
+            "Worf": dict(_presence(1, 5, dialogue_turns=[2, 3, 5]),
+                         addressed_turns=[2, 3, 5]),
         })
         _stub_draft(monkeypatch)
 
@@ -283,3 +338,36 @@ class TestAutoPromoteSweep:
         assert [p["name"] for p in result["promoted"]] == ["Data"]
         remaining = temp_db.wget(cid, "background_presences", {})
         assert "Worf" in remaining and "Data" not in remaining
+
+
+class TestPromotionNameCollision:
+    """Names are identity here: scene.positions, the active cast, addressing,
+    perception routing and every psychology write are keyed on them. Two people
+    called the same thing in one story is one mind's state reachable under
+    another's key."""
+
+    def test_refuses_the_players_own_name(self, temp_db, monkeypatch):
+        cid = _make_chat(temp_db)
+        _stub_draft(monkeypatch)
+        pid = temp_db.qi(
+            "INSERT INTO personas(name,sheet) VALUES(?,?)",
+            ("Hinami", json.dumps({"identity": {"name": "Hinami"}})))
+        temp_db.qi("UPDATE chats SET persona_id=? WHERE id=?", (pid, cid))
+        sheet = dict(_SHEET)
+        sheet["identity"] = dict(sheet.get("identity") or {}, name="Hinami")
+
+        with pytest.raises(ValueError) as caught:
+            promote_background_character(cid, "The Spice Seller", sheet=sheet,
+                                         memory_seeds=[])
+        assert "persona" in str(caught.value)
+        assert temp_db.q("SELECT id FROM characters WHERE name='Hinami'",
+                         one=True) is None
+
+    def test_refuses_a_name_already_in_the_cast(self, temp_db, monkeypatch):
+        cid = _make_chat(temp_db)
+        _stub_draft(monkeypatch)
+        promote_background_character(cid, "Data", sheet=dict(_SHEET), memory_seeds=[])
+
+        with pytest.raises(ValueError):
+            promote_background_character(cid, "Data", sheet=dict(_SHEET),
+                                         memory_seeds=[])

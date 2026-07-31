@@ -21,6 +21,7 @@ Do not duplicate content from these files in explanations; point to them instead
 
 ```bash
 make run        # start the local server (uvicorn app:app --reload, port 8008)
+make serve      # the same server with no file watcher — for playing, not developing
 make test-fast  # broad Python suite without database-backed slow tests
 make test-full  # every Python regression test
 make test       # alias for test-full

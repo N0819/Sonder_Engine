@@ -6,6 +6,7 @@ import json
 import time
 
 import app
+import attire
 from character_schema import (
     default_character_data,
     default_persona_data,
@@ -150,14 +151,25 @@ def test_establishment_outfits_are_authoritative_without_private_card_leaks(
     )
     result = director.director_establish(ctx, nonce=0)
 
-    assert captured["player"]["initial_outfit"] == persona["initial_outfit"]
-    assert captured["present_characters"][0]["initial_outfit"] == \
-        character["initial_outfit"]
+    # The card's own two fields, unchanged. `regions` rides alongside them and
+    # is empty on both these cards, so compare the fields the test is about.
+    for authored, sent in (
+        (persona, captured["player"]["initial_outfit"]),
+        (character, captured["present_characters"][0]["initial_outfit"]),
+    ):
+        assert sent["wearing"] == authored["initial_outfit"]["wearing"]
+        assert sent["state"] == authored["initial_outfit"].get("state", [])
     payload_text = json.dumps(captured)
     assert "PERSONA_PRIVATE_MARKER" not in payload_text
     assert "CHARACTER_PRIVATE_MARKER" not in payload_text
-    assert result["attire"]["Nia"] == persona["initial_outfit"]
-    assert result["attire"]["Iris"] == character["initial_outfit"]
+    # The authored outfit wins over the model's invention, and now arrives with
+    # its regions -- the opening turn must not be the one beat that drops them.
+    for name, authored in (("Nia", persona), ("Iris", character)):
+        entry = result["attire"][name]
+        assert sorted(entry["wearing"]) == sorted(
+            authored["initial_outfit"]["wearing"])
+        assert entry["state"] == authored["initial_outfit"].get("state", [])
+        assert attire.flat_wearing(entry["regions"]) == entry["wearing"]
 
 
 def test_new_scene_seeds_character_and_persona_initial_outfits(temp_db):
@@ -196,8 +208,14 @@ def test_new_scene_seeds_character_and_persona_initial_outfits(temp_db):
         "SELECT * FROM chats WHERE id=?", (chat_id,), one=True,
     )))
 
-    assert scene["attire"]["Nia"] == persona["initial_outfit"]
-    assert scene["attire"]["Iris"] == character["initial_outfit"]
+    # Seeding also sorts the flat list into regions (attire.authored_entry), so
+    # the ledger entry is a superset of the card's two fields rather than equal
+    # to it. What must not change is the clothes themselves.
+    for name, authored in (("Nia", persona), ("Iris", character)):
+        entry = scene["attire"][name]
+        assert sorted(entry["wearing"]) == sorted(
+            authored["initial_outfit"]["wearing"])
+        assert entry["state"] == authored["initial_outfit"].get("state", [])
 
 
 def test_initial_outfit_never_resets_existing_live_attire(temp_db):
@@ -257,10 +275,21 @@ def test_first_attachment_to_existing_story_seeds_outfit(temp_db):
 
     app.chat_add_char(chat_id, {"char_id": char_id})
 
-    assert temp_db.wget(chat_id, "scene")["attire"]["Iris"] == {
-        "wearing": ["a charcoal coat"],
-        "state": [],
-    }
+    entry = temp_db.wget(chat_id, "scene")["attire"]["Iris"]
+    assert entry["wearing"] == ["a charcoal coat"]
+    assert entry["state"] == []
+    # A coat is not a torso garment: it goes over the shoulders and past the
+    # waist, and is ONE garment across all three (attire.regions_covered).
+    # Field by field rather than as a whole dict: a garment grows fields
+    # (description, condition, attaches) and pinning the shape here only ever
+    # breaks a test that is about seeding.
+    coat, = entry["regions"]["torso"]["garments"]
+    assert coat["name"] == "a charcoal coat"
+    assert coat["state"] == "worn"
+    # A coat is not a torso garment: it goes over the shoulders and past the
+    # waist, and is ONE garment across all three (attire.regions_covered).
+    assert coat["covers"] == ["torso", "arms", "waist"]
+    assert attire.covered_regions(entry["regions"]) == ["torso", "arms", "waist"]
 
 
 def test_card_editors_place_initial_outfit_near_identity():
@@ -270,9 +299,16 @@ def test_card_editors_place_initial_outfit_near_identity():
         Path(__file__).resolve().parents[1] / "static/js/editors.js"
     ).read_text(encoding="utf-8")
 
-    assert source.count("Initial outfit — clothing only") == 2
+    # Clothing is authored by REGION now; the flat "initial outfit" and
+    # "clothing condition" inputs are retired (docs/UNBUILT.md §2.14 landed).
+    # The legacy `wearing` list survives as an INPUT format -- imports and the
+    # generators still emit it, and character_schema migrates it into regions
+    # on read -- but nothing types into it any more.
+    assert "Initial outfit — clothing only" not in source
+    assert "Initial clothing condition" not in source
+    assert source.count("fAttireGarments(\n    \"Starting clothes\"") == 2
     assert source.count("Body appearance — stable visible features") == 2
-    assert source.count("initial_outfit: {") >= 4
+    assert source.count("initial_outfit: { regions:") >= 4
 
 
 def test_director_establishment_respects_initial_outfit_separation():

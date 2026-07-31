@@ -98,6 +98,11 @@ alpha 6.1.
 | Theory of mind, cached and event-triggered | **Built** | `theory_of_mind.py`; `tom_triggers` on the flow |
 | Event-grounded live psychology | **Built** | v4 character schema plus `psychology_runtime.py`: stress split into aversive strain and non-distressing drive, mixed pain/pleasure outside survival with a slow-integrating unresolved `charge`, protected beliefs, learned cue associations, and simulation-time recovery. Ambient comfort from surfaces (`comfort.py` + `resolve_hedonic`'s `ambient_comfort` floor) is built: it raises the pleasure level only — never `charge` — habituates on a sustained source, and lets `tick_vitals` derive passive rest from lying on a soft support |
 | Authored initial outfit with live story attire | **Built** | Character/persona `initial_outfit` is kept separate from stable body appearance and seeds `scene.attire` once; later clothing changes remain mutable story state |
+| Clothing by body region | **Built** | `attire.py`: a garment covers one or more of head/torso/arms/hands/waist/**groin**/legs/feet, ordered outermost-first, so exposure is state rather than a sentence. `waist` and `groin` are separate because a sash covers the belt line and nothing else, while a dress covers both — conflated, a body in only an obi reports its groin covered, and a dress stopping at the waist reports it bare. `regions_covered` spans a garment across every region it covers (a kimono: torso/arms/waist/groin/legs), `_sync_spanning_garments` keeps those copies one garment so loosening a kimono at the torso does not leave its sleeves fastened, and `newly_removed` reports it once. A garment is worn OVER a region or merely AT it (`attaches`: a ribbon is in the hair, a necklace at the throat — present, visible, covering nothing, so a head wearing only a ribbon is bare and removing it uncovers nobody), and garments within a region are ordered outermost-first, so an under-layer keeps covering when the layer over it comes off and is reported as hidden while it does not. `name` is a short handle — the key the Director and `decisive_targets` match on — with `description` beside it; `split_garment_name` recovers the two from generators that write "Name — description" into one field, which used to truncate at the name limit mid-clause AND leave a hundred-word string as the matching key. The Director is given an explicit `exposed` list and told it is the whole truth about bare skin. Regions are the only authoring surface; `initial_outfit.wearing` is retired to an INPUT format (older cards, imports, generator output), migrated into regions by `character_schema._normalize_initial_outfit` on read and written back derived, so a cue-table guess lands in the region editor where an author can correct it and the two representations cannot disagree. `initial_outfit.state` is retired outright — see garment condition. `agents/common.attire_view` is the shared prompt projection, and `beneath` reaches no prompt unless the host sets `attire_beneath` — an uncovered region still reports itself uncovered |
+| Garment condition, distinct from wear | **Built** | A garment carries `condition` (stained, torn, soaked) alongside `state` (how far off the body); a shirt can be soaked and fully worn. Set by the Director through `attire.<name>.conditions`, persists until something changes it, and travels with the garment when it comes off (`commit._mint_shed_garments`) so a stained shirt is a stained shirt on the floor. The resolve prompt states the asymmetry a blow creates: the garment's damage is permanent until mended, the body's is `vitals.injury`/a condition/an overlay, all of which heal, and neither may be written into stable appearance |
+| Undressing as a sequence | **Built** | A garment moves `worn → loosened → open → removed` one rung per beat (`attire.advance`), lifted by a decisive act from ANY voice in the beat — player input, a character's declaration, or the resolved prose. `attire.decisive_targets` attributes it PER BODY (garment first, then first person in the player's own words, then a sole name), so the actor is not mistaken for the target and one person hurrying does not undress the room. Getting dressed is deliberately unrestricted. `commit.py` clamps the Director's whole-garment proposals through `apply_flat_change`, and `director_resolve`'s prompt states the rule so the events match the step actually reached. A garment that comes off is minted as a real portable object in the room (`commit._mint_shed_garments`) rather than ceasing to exist — unless it arrives on ANOTHER body the same beat, which is a handover rather than a drop: "she takes off her coat and drapes it over his shoulders" used to leave two coats, one on his shoulders and one at their feet. Keyed on arriving-this-beat rather than worn-by-anyone, so two guards in the same kind of cloak still get a real cloak on the floor when one takes his off |
+| Generated body and clothing | **Built** | `importers.fill_appearance` + the `fill_appearance` prompt fill body and per-region outfit from the card, what the author has typed but not yet saved, and a brief; `beneath` is a separate opt-in and is stripped from the proposal when it was not asked for. Writes nothing — the editor reopens on an unsaved proposal, as `fill_character_psychology` does |
+| Approach is not arrival | **Built** | `MovementDecl.arrives` — whether the declaration covers ARRIVING or only setting off — filled by `director_interpret` and honoured deterministically by `director_resolve` (`_guard_approach_is_not_arrival`, plus the backstop refusing to commit a non-arriving move). Live failure, "The Blizzard" turn 2: "You wander towards it" of a building seen through the snow became `to_room: distant_mountain_building`, the route check passed it (the rooms genuinely were adjacent and open), and the resolve wrote her through the door into the firelight — from `exposure: open` to `exposure: sheltered`, out of a blizzard, with nobody having said she was going in. A FIELD rather than a downstream test because the distinction is not recoverable downstream: measured across 1249 live turns, no text heuristic separates "I cross the command deck toward the med bay" (an asserted crossing) from "progresses across the clearing toward the building" — both say "toward", both are staged `approach`, both are `commitment: asserted`. Four heuristics were tried against the corpus and each blocked legitimate arrivals (3, 8 and 4 false positives). Defaults true, so no existing declaration changes meaning. Carried/contained bodies are exempt; a declared VEHICLE mover is guarded like any other, since a skiff told to head for a light is as much not-there-yet as the hand on its tiller. An approach in flight is recorded on the scene per mover (`scene.approach`), so the next declaration toward the same place ARRIVES — without that memory the feature strands anyone who keeps writing approach-flavoured text, and time spent approaching is time spent standing still (measured: six simulated hours of "trudging towards the mountain" left the walker in her starting clearing under level-12 snowdrifts). `ActionStage` — classified since the beginning, read by nothing — is `docs/UNBUILT.md` §1.13 |
 | Place purpose (what a place is FOR) | **Built (v1)** | `place_purpose.py` per `docs/DESIGN_PLACE_PURPOSE.md`: live `perception.here_affords` echo; `affords` ledger on the character's own place-graph nodes — `witnessed` from own vitals/`comfort.rest_affording`, `told` mirrored from reconciled beliefs with `belief_credence`-refreshed sureness, `assumed` derived read-side from own node names (never stored); `memory.recalled_places` surfaces at most two walked-route options on a felt need. Witnessed drink/water/warmth, told-basis node minting, and negative entries deliberately not built |
 | Durable place graph (a mind's own map of walked ground) | **Built** | `commit.update_place_graph` writes per-character nodes and edges onto `chat_chars.state` with `basis: walked\|seen`, `disproven` retraction both ways, and `PLACE_GRAPH_NODE_CAP` eviction; read back as navigational verdicts and `_frontier_hops` distance in `agents/character.py`. `basis: "told"` is an accepted value with no writer, deliberately |
 | Long-term goals (the project tier) | **Built (v3)** | `affect.apply_project_ops` / `serves_priority` / `project_boundary` / `settle_probation`; persisted in `interior.projects` / `former_projects`. Caps at two, adoption requires a non-circular `satisfied_when`, probation weighs at intention level until served on ≥3 beats over ≥12 turns, drift surfaces as `adrift`. Per `docs/DESIGN_LONG_TERM_GOALS.md` |
@@ -343,9 +348,111 @@ Subsystems the original architecture never imagined, now load-bearing:
   legible when the mind drifts from one rather than decayed behind its back.
 - **Deterministic mechanics sweep** (`mechanics.py`). Timed arrivals, expiry,
   dock edges, news latency — LLM-free, seeded, idempotent.
+- **Weather** (`weather.py`). One sky per scene, with each room's share decided
+  by its own `exposure` (open / sheltered / enclosed) and by how many muffling
+  boundaries the room graph puts between it and open air. The Director sets it
+  on a beat that changes it; between those it drifts on the simulation clock,
+  seeded and idempotent, so a reroll cannot produce a different sky. Sight and
+  sound are answered separately, because a cellar sees nothing of a downpour
+  and hears it clearly — and walking into a cave takes the rain from present,
+  to muffled, to faint, to gone. A scene acquires weather only when its fiction
+  establishes one, so a starship never has any. A Director's declaration is
+  read as a REPORT and written over the sky already blowing, never in place of
+  it: the vocabulary is five short enums, a beat describing a storm reaches for
+  the vivid word (`blizzard`, `gale-force`, `sub-zero`), and every default is
+  the mildest reading of its field — so an exact-match lookup that answered
+  each unread word with its default turned the worst weather in the vocabulary
+  into a calm spring day and replaced the storm with it. `_SYNONYMS` reads the
+  words models actually write, and a word it still cannot read keeps what the
+  scene had rather than clearing it. (Live failure, "The Blizzard" turn 2: all
+  five declared fields missed, the whiteout became fair/none/still/mild while
+  the player stood in an open clearing, and five later beats inherited the
+  calm.)
+- **Weather rendering** (`static/js/weather-fx.js`). Rain and snow drawn over
+  the story for rooms that can see the sky, with storm flashes and thunder
+  arriving after them on a distance-shaped delay. A storm sky is not
+  automatically an electrical one: `weather.has_lightning` and its mirror
+  `weatherFxStormy` require precipitation that is not snow or sleet, so an
+  ordinary blizzard neither flashes nor puts thunder into what a room hears.
+  **Thundersnow** is the exception and is a property of the SKY rather than
+  something derived from what falls — derived, every blizzard would flash;
+  forbidden, none ever could. `advance_weather` rolls it seeded at
+  `THUNDERSNOW_ODDS`, so a squall almost never flashes and a long blizzard
+  probably will once, identically on every replay; a beat may also declare it.
+  `normalize_weather` clears the flag anywhere it is meaningless, so lightning
+  cannot outlive the snow that earned it. Drawn as three repeating tiles moved by the compositor. Snow
+  additionally drifts: each layer carries a second, composed transform swaying
+  it sideways on its own period (none of the three divide each other, so the
+  depths never fall back into step) and leans a few degrees off the stack's
+  angle via the independent `rotate` property — three layers on one identical
+  vector read as wallpaper being pulled rather than as snow. Rain is exempt,
+  and falls at roughly 1.7x its first-pass speed, because rain falls hard and
+  straight. Marks per tile scale by tile AREA (equal counts at unequal sizes made the
+  smallest layer three times the density of the largest) and snow gets its own
+  larger, mutually non-multiple tile sizes: a rain streak blurs into its
+  neighbours, while a snowflake is a distinct blob whose constellation the eye
+  finds repeating. Skipped entirely under `prefers-reduced-motion`, and routed
+  through the ambience mute.
 - **Scene backdrops** (`backdrops.py`). Generated images of the room, built from
   a whitelisted spatial projection that structurally excludes occupants. Cached
   per room-plus-visible-state; a branch reads its ancestors' images in place.
+  Reading one is free and immediate; commissioning one waits until the reader
+  has settled on a turn — scrolling through a story passes rooms nobody stopped
+  in, and neither the picture nor the sound is bought for those. All three
+  presentation layers answer the same question — WHICH TURN IS BEING READ — from
+  one scroll observer and one per-turn payload built from `scene_after_turn`, so
+  scrolling back through a story is chronological: the picture, the sky and the
+  sound are the ones that stood while that beat happened, not the ones the story
+  has since arrived at. A turn with no picture or bed of its own holds the one
+  already showing rather than blanking, but only while it belongs to the same
+  ROOM — held across a doorway, the transcript and the screen disagree about
+  where the story is.
+- **Room ambience** (`ambience.py`). A looping sound bed for the player's room,
+  from the same occupant-free discipline: the query is written from a
+  whitelisted projection, so a soundscape cannot report a presence perception
+  did not deliver. Cached per room-plus-AUDIBLE-state — deliberately a
+  different set from the visual one, since light changes the picture and not
+  the sound. Two sources (a local folder, or Freesound's CC-licensed APIv2,
+  credited in the panel), a per-room host pin that overrides the automatic
+  pick, and a reroll that remembers what it rejected. Up to three simultaneous
+  layers (room tone / weather / one detail), each with its own level, its own
+  reroll, its own credit and its own IDENTITY CHECK — a pin stores a sound's id
+  rather than a preview URL that would expire, that id is resolved on
+  Freesound's sound endpoint (its text search has no `id` field and answers
+  `id:341802` with whatever scores as text — in practice one sound named
+  `file_id.diz.mp3`, for every id alike, which made a pinned two-layer
+  soundscape download one unrelated recording twice), and the preview URL,
+  which carries its own sound id, is checked against the id the layer claims
+  before anything is written to the cache — the weather layer carrying the attenuation its
+  room's depth earned, so rain two rooms in is quiet over an undiminished room
+  tone. That layer is the sky and only the sky: no thunder, since the engine
+  draws the lightning and times the clap to it, and no wildlife, which belongs
+  to the place, sits on its own level and goes on sounding after the rain
+  stops. A host can stage that mix by ear and pin it to the room. The standard
+  is a bed TRUE TO THE ROOM rather than a bed at any cost: candidates are
+  ranked against the room's own description instead of the library's ordering,
+  what the model names in `avoid` is struck out, and a place with no continuous
+  sound of its own — a sealed vault, still air — can be judged silent, which is
+  cached like any other answer and overruled by the reroll. The room's named
+  FIXTURES are part of that description and rank ahead of its adjectives,
+  because a hearth is a sound and "warm, modest, lit" is three things no
+  microphone can hear. Freesound ANDs the words of a query, so a full room
+  query almost always matches nothing and has to be broadened — and a rung that
+  returns results is not a rung that ANSWERS: broadening is followed until a
+  recording actually of this place comes back, and the ladder reaches past
+  prefixes to single terms, since English puts modifiers in front of the head
+  noun and a room's name in fiction is a proper noun no library has heard of.
+  A winner matching neither the room nor what was searched for is refused
+  outright rather than laid down as better than nothing. (Live failure, "The
+  Blizzard": a warm hall with a lit hearth was searched for as "stone hearth
+  fire crackle wooden room", every rung missed until the single word `stone`,
+  and the hall was given a recording titled "ambience in a large cave" —
+  scoring zero against the room, like every other candidate, and winning on a
+  `loopable` tag.) Each bed loops by
+  overlapping itself rather than restarting at the file boundary, where an MP3's
+  padding leaves an audible hole. The cache key is deliberately coarse: it is a
+  function of the TERMS a search would use, and a room whose state has moved but
+  not audibly changed adopts the bed already on disk instead of resolving again.
 - **Lorebook hierarchy** (`memory.py`, `agents/mapping.py`). Nested books,
   inheritance modes, scope by world and location, link graph, canon locking.
 - **Multiplayer and guest access** (`guest_access.py`).

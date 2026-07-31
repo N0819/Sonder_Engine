@@ -300,6 +300,56 @@ Not defects yet. Each is a measured shape that will become one silently.
   `rekey_place_claims` and `reconcile_inference_confidence`. **If a third
   consumer appears, collapse them.**
 
+### 1.13 `ActionStage` is classified and never read
+
+`schemas.ActionStage` (`immediate|preparation|approach|contact|sustained`) is
+filled in by `director_interpret` on every action element and read, on the
+resolve path, by **nothing**. Its only consumer anywhere is
+`agents/common._requires_reaction_phase`. So the interpret has been correctly
+classifying "this act has not landed yet" since the beginning, to no effect —
+which is what let the blizzard beat resolve an approach as an arrival
+(`Design.md`, "Approach is not arrival"; the fix routes around `stage` via
+`MovementDecl.arrives` rather than through it).
+
+Two things follow, neither done:
+
+- **The other unlanded stages have no consequence either.** `preparation` means
+  the act is setup, not the thing; the live corpus has 8 of them, 2 with an
+  `inventory_ops` in the same beat. `initiation` appears 9 times and **is not a
+  member of the enum at all** — the model invents it and it passes validation
+  untouched, so any guard keying on the declared values silently misses those
+  beats. Either the enum is enforced or it is not a closed set.
+- **`sustained` is the interesting one and the least safe to act on.** 250 live
+  beats are staged sustained, 128 of which move somebody, 62 open a contact and
+  53 mint a condition — and most of those are correct, because a sustained act
+  is ONGOING rather than unfinished. Anything that treats sustained as
+  "not landed" will be wrong most of the time. What is missing is the
+  distinction between an act that continues and an act that has not yet
+  completed, and the schema does not carry it.
+
+### 1.14 A resolve-asserted position has no authority check
+
+`director_resolve`'s passable-route backstop guards `state_diff.positions` only
+when interpret DECLARED a movement (`if isinstance(mv, dict) and
+mv.get("to_room")`). When it declares none, the resolve's own position
+assertion reaches commit with no route check, no adjacency check and no
+authority check — it can put the player anywhere in the graph. Live corpus: 13
+beats where the resolve moved the player with no declared movement, of which
+several are legitimate (being carried, an asserted crossing the interpret did
+not model) and several are not.
+
+The honest rule is not obvious, which is why this is a register entry rather
+than a guard: a resolve legitimately moves a player who is carried, dragged,
+falling or riding, and each of those declares no movement either. The
+containment check in `_guard_approach_is_not_arrival` is the start of the
+answer, not the whole of it.
+
+The wider point: `movement` is the channel through which the player says where
+they are going, and a stage that can relocate the player without it is
+authoring player conduct — the same boundary `_check_player_act_authority`
+defends for speech and action, unguarded for position.
+
+
 ---
 
 ## 2. Roadmap
@@ -444,6 +494,127 @@ correctness implication, which is why it ranks below the integrity work.
 
 A short end-of-session synthesis that re-anchors on resume. Small, and it
 directly addresses the "coming back after a week" experience.
+
+### 2.11 Weather rendering is rain, snow and lightning only
+
+`static/js/weather-fx.js` draws falling precipitation and storm flashes for
+rooms whose `weather_for_room(...)["weather_visible"]` is true, scaled by
+`visible_reach`, and thunder follows each flash on a distance-shaped delay.
+Not built:
+
+- **the picture disagrees with the overlay under cover.** `weather_visible`
+  was split from `sky_visible` so a porch draws the rain it is sheltering
+  from, but `weather_words(..., "sight")` — which writes the backdrop image
+  prompt — is still gated on `sky_visible` and `falls_on_you`. So a sheltered
+  lane gets rain drawn over a picture generated as though it were dry. Fixing
+  it means teaching the sight channel a third phrase ("rain beyond the
+  eaves"), which moves `visual_signature` and re-generates every sheltered
+  room's image — a cost worth choosing deliberately rather than in passing.
+
+- **fog and wind have no visual.** Fog is the obvious next one and is a screen
+  tint rather than falling weather, so it wants its own layer rather than a
+  tile.
+- **the fall is periodic.** Three tiled layers translating at different speeds
+  is what a particle engine's randomness was traded for, and it is the reason
+  the overlay costs almost nothing — but it is a loop, where particles never
+  repeated. Watching one layer alone would show it; watching all three
+  together, so far, does not.
+- **the flash is a whole-screen brighten, not a bolt.** A drawn bolt has to
+  land somewhere, and the somewhere is a photograph of a room this code knows
+  nothing about.
+- **snow does not settle** and rain does not streak a window. Both want a
+  second, slower buffer that the current single-pass loop has no place for.
+
+### 2.12 Ambience layering is capped at three, and has no sends
+
+`ambience.py` mixes up to three simultaneous beds (`tone` / `weather` /
+`extra`), each with its own gain, rerollable and pinnable per layer. What is
+still absent:
+
+- **no reverb or filtering.** A muffled room gets a different *recording*
+  rather than the same one behind a low-pass, because the player is plain
+  `<audio>` elements. Real filtering means an `AudioContext`, which needs its
+  own unlock gesture — see the note in `ambience.js` on why Web Audio was not
+  used for the crossfade either.
+- **layers do not duck.** Nothing lowers the room tone when a louder element
+  arrives; the gains are static per layer.
+- **no per-layer loop offsets**, so two beds fetched at the same length can
+  phase against each other audibly on long stays.
+- **the loop overlap hides a seam, it cannot fix a clip.** `armSeamlessLoop`
+  crossfades a bed into itself, which removes the hole at the file boundary but
+  not a recording whose end does not belong beside its beginning — a passing
+  car at 0:58 still arrives every 0:58. Freesound exposes no loopability
+  descriptor (`ac_loop` is undefined on its search server), so `_LOOP_WORDS`
+  guesses from tags; nothing measures the actual seam.
+
+### 2.13 Matching a recording to a room is keyword overlap, not hearing
+
+Freesound ANDs the terms of a query, so the seven- and eight-word acoustic
+descriptions this module composes match *nothing at all*; `_query_ladder`
+broadens until something comes back, and `_rank_candidates` then judges what
+came back against the room's own words rather than the crowd's rating. That is
+what a bath scene needs to stop being given falling roof tiles. What it still
+cannot do:
+
+- **it compares words, not sounds.** `fit` is set-overlap between a query and a
+  recording's name and tags, with plurals folded and a penalty list of event
+  words. A perfectly-tagged recording of the wrong place still scores; an
+  untagged recording of exactly the right one scores nothing. Embeddings over
+  the tag vocabulary would be the honest fix.
+- **a room named in fiction has no acoustic vocabulary at all.** When the model
+  writes proper nouns through into the query, the ladder strips them to
+  something generic and the fallback to the room's own words hits the same
+  wall — `Design.md`'s "describe the sound, never the fiction" rule is enforced
+  only by the prompt.
+- **`fit` is computed but never shown.** The picker lists candidates in ranked
+  order without saying why, and a host who disagrees has no handle on it.
+
+---
+
+### 2.14 Clothing regions: what is still rough
+
+The model, the authoring surface, the generator and the visibility switch are
+all built (`Design.md`, "Clothing by body region"). What remains:
+
+- **`attire.region_of` and `_SPANNING_CUES` are keyword tables.** Qipao, sari,
+  thawb, abaya, kimono, toga and their spans are now in them, but the tables are
+  still English word lists: a garment they do not know lands on the torso alone,
+  which reads as "naked from the waist down" the moment it comes off. The
+  coverage picker is the escape hatch — a garment whose coverage is set by hand
+  is never re-guessed — but nothing warns an author that a guess happened, so
+  the wrong span is only discovered when something undresses oddly. A garment
+  that is only SOMETIMES full-length (a tunic, a sleeved vs. sleeveless shirt)
+  is deliberately left single-region.
+- **`beneath` is authored per region, but the body's fallback is one string.**
+  `describe()` fills an unauthored region from `embodiment.visible.summary`,
+  which describes a whole person — so an unauthored region says the same thing
+  as every other unauthored region. Acceptable while the alternative is making
+  authors fill seven fields, but it reads flatly when several regions are bare
+  at once.
+- **`fStrList` fragments any list entry containing a comma.** It joins with
+  ", " and reads back by splitting on ",", so a generated
+  `"Nine golden tails from the lower back, shifting with mood"` was saved back
+  as two features and `"vermillion, white, and gold"` as three. Found on a
+  generated card, where it matters most: the generator writes prose entries,
+  and the mangling happens the moment an author keeps them.
+  `embodiment.visible.distinctive_features` now uses `fLineList` (one per
+  line); every other prose list still uses `fStrList` — the psychology fields
+  are the worst of them (`activation_cues`, `inhibited_by`, `conflicts_with`,
+  `protected_beliefs`, `pride_triggers`, `shame_triggers`, `under_stress`,
+  `somatic_signs`, `recovery_supports`, `generalization_tags`), since those are
+  clauses by nature. Converting them is mechanical; it was left out of the
+  change that found it rather than sprawling.
+- **the reader has no view of it.** Regions exist in the card editor and in
+  every prompt, but the story panel still shows the flat `wearing` list, so a
+  reader cannot see that a robe is open, or that a shirt is stained, without
+  inferring it from prose.
+- **`decisive_targets` is sentence matching.** It reads a beat's prose to decide
+  whose clothes came off at once, attributing by garment, then first person in
+  the player's own input, then a sole name. It gets the actor-vs-target case
+  right and the ambiguous cases wrong-but-slow (nobody hurries), and it decides
+  only SPEED, never who may know what — but it is prose matching, and §3.1
+  applies to it as much as anywhere. A structured "this act was decisive"
+  signal on the declaration would retire it.
 
 ---
 

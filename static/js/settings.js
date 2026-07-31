@@ -56,6 +56,19 @@ $("#b-style").onclick = async () => {
   });
   const datalist = el("datalist", { id: listId },
     PRESETS.map(x => el("option", { value: x })));
+
+  // How far the sky may go, and how much of the world it may touch. A closed
+  // set, unlike everything else here, because it GATES engine behaviour rather
+  // than describing it: the ground state machine, the drift cap and what the
+  // Director is permitted to do with weather all read it.
+  const severity = el("select", { style: "flex:1" }, [
+    ["calm", "Calm — weather is scenery, and leaves no mark"],
+    ["seasonal", "Seasonal — real weather, and ground that answers to it"],
+    ["harsh", "Harsh — weather you would not want to be caught out in"],
+    ["catastrophic", "Catastrophic — weather may become the event"],
+  ].map(([v, label]) => el("option",
+    { value: v, ...(v === (g.weather_severity || "seasonal") ? { selected: "" } : {}) },
+    label)));
   const selfBtn = el("button", {
     onclick: () => { genre.value = ""; toast("Genre left to the engine.", "ok"); },
   }, "Self-determine");
@@ -89,6 +102,15 @@ $("#b-style").onclick = async () => {
       el("span", { class: "small", style: "width:70px" }, "Genre"), genre, datalist, selfBtn),
     el("div", { class: "row", style: "margin-top:6px" },
       el("span", { class: "small", style: "width:70px" }, "Tone"), tone),
+    el("div", { class: "row", style: "margin-top:6px" },
+      el("span", { class: "small", style: "width:70px" }, "Weather"), severity),
+    el("div", { class: "small dim", style: "margin-top:4px" },
+      "How far the sky may go, and how much of the world it may touch. Beyond "
+      + "Calm, weather leaves a mark that stays: an hour of heavy rain turns an "
+      + "open yard to mud, a night of snow leaves drifts, and both are still "
+      + "there when the sky clears — the room sounds and looks like it. "
+      + "Catastrophic is the only setting that lets weather hurt anyone or "
+      + "break anything, and nothing reaches for it unless you do."),
     el("div", { style: "margin-top:10px" },
       el("div", { class: "small" }, "Director notes"), dirNotes),
     el("div", { style: "margin-top:8px" },
@@ -112,7 +134,7 @@ $("#b-style").onclick = async () => {
           style_guide: {
             genre: genre.value, tone: tone.value,
             director_notes: dirNotes.value, mapping_notes: mapNotes.value,
-            avoid: avoid.value,
+            avoid: avoid.value, weather_severity: severity.value,
           },
         });
         if (S.chatId === chatId) await refreshVitalsHud();
@@ -161,6 +183,12 @@ $("#b-dlg").onclick = async () => {
                                    value: bg.max_managed ?? 6 });
   const maxReactors = el("input", { type: "number", min: "1", max: "3",
                                     value: bg.max_reactors ?? 1 });
+  // Promotion. Deliberately here, next to the controls that decide who gets to
+  // speak, and deliberately visible: acquiring a permanent cast member is the
+  // largest thing this menu can cause, and it used to happen with no dial at
+  // all and nothing on screen to say it might.
+  const promoteAfter = el("input", { type: "number", min: "0", max: "99",
+                                     value: c.promote_after_addressed ?? 0 });
 
   modal("Dialogue config", b => b.append(
     el("div", { class: "small dim", style: "margin-bottom:10px" },
@@ -196,7 +224,9 @@ $("#b-dlg").onclick = async () => {
       el("table", { class: "grid", style: "margin-top:6px" },
         el("tr", {}, el("td", {}, "scene life"), el("td", {}, sceneLife)),
         el("tr", {}, el("td", {}, "max managed"), el("td", {}, maxManaged)),
-        el("tr", {}, el("td", {}, "max reactors"), el("td", {}, maxReactors))),
+        el("tr", {}, el("td", {}, "max reactors"), el("td", {}, maxReactors)),
+        el("tr", {}, el("td", {}, "turns till auto-promotion"),
+          el("td", {}, promoteAfter))),
       el("div", { class: "small dim", style: "margin-top:6px" },
         el("div", {}, el("b", {}, "Ambient"), " — the manager is only ever shown what "
           + "everyone present already heard, so it cannot leak one extra's knowledge "
@@ -214,9 +244,13 @@ $("#b-dlg").onclick = async () => {
           + "never become fact on their own."),
         el("div", {}, "Their manner and look follow ",
           el("b", {}, "Genre & style"), " — set the genre there first."),
-        el("div", { style: "margin-top:4px" }, el("b", {}, "Note: "),
-          "while this is on, leave auto-promotion off — background chatter currently "
-          + "counts toward promoting an extra into a full character."))),
+        el("div", { style: "margin-top:4px" },
+          el("b", {}, "Turns till auto-promotion"), " — how many turns of DELIBERATE "
+          + "interaction turn an extra into a full character with a sheet, memory and "
+          + "psychology. 0 (the default) never promotes anyone. The counter only moves "
+          + "on a turn where you addressed them or a real character spoke to them — "
+          + "extras chattering among themselves does not count, however long it goes "
+          + "on. Promotion also has to be switched on globally in ⚙ API."))),
     el("div", { class: "small dim", style: "margin-top:10px" },
       "Prose pacing for NPC dialogue — how much NPCs tend to say, independent of autonomy above."),
     el("table", { class: "grid" },
@@ -229,7 +263,8 @@ $("#b-dlg").onclick = async () => {
         await api("PUT", `/api/chats/${chatId}/dialogue_config`, {
           style: st.value, min_lines: mn.value, max_lines: mx.value, variance: va.value,
           autonomy: +auto.value, allow_npc_initiative: npcInit.checked, allow_npc_to_npc_dialogue: npcNpc.checked,
-          stop_on_player_address: stopAddr.checked, stop_on_question_to_player: stopQ.checked, silence_ends_exchange: silence.checked
+          stop_on_player_address: stopAddr.checked, stop_on_question_to_player: stopQ.checked, silence_ends_exchange: silence.checked,
+          promote_after_addressed: +promoteAfter.value
         });
         await api("PUT", `/api/chats/${chatId}/background_config`, {
           scene_life: sceneLife.value, max_managed: +maxManaged.value,
@@ -1666,6 +1701,9 @@ function renderFullApiSettings(b) {
       const enableBox = el("input", {
         type: "checkbox", ...(S.boot.backdrops_enabled ? { checked: "" } : {})
       });
+      const continuityBox = el("input", {
+        type: "checkbox", ...(S.boot.backdrop_continuity ? { checked: "" } : {})
+      });
       b.append(el("h4", {}, "Scene backdrops"),
         el("div", { class: "small dim" },
           "Paints a generated image of the room behind the story. The picture is built from the room's spatial description only — never from who is standing in it — so no character ever appears in one. Each distinct room is generated once and cached, so revisiting a place is free."),
@@ -1675,7 +1713,8 @@ function renderFullApiSettings(b) {
             onclick: async () => {
               const picked = imgCombo.read();
               await api("PUT", "/api/image_model", { ...picked, size: sizeIn.value.trim() });
-              await api("PUT", "/api/backdrops", { enabled: enableBox.checked });
+              await api("PUT", "/api/backdrops", { enabled: enableBox.checked,
+                                                  continuity: continuityBox.checked });
               await boot();
               toast(picked.provider && picked.model
                 ? "Backdrop image model saved." : "Backdrop image model cleared.", "ok");
@@ -1684,8 +1723,99 @@ function renderFullApiSettings(b) {
         el("div", { class: "row", style: "margin:6px 0" },
           el("label", { class: "small" }, enableBox,
             " Generate backdrops for new rooms (costs one image per room)")),
+        el("div", { class: "row", style: "margin:6px 0" },
+          el("label", { class: "small" }, continuityBox,
+            " Keep rooms consistent by revising the room's first image")),
+        el("div", { class: "small dim" },
+          "With this on, a room's later pictures — lights out, rain, mud, wreckage — are "
+          + "edits of the FIRST image of that room rather than fresh generations, so the "
+          + "architecture, furniture and camera angle stay put instead of being reinvented "
+          + "each time. It needs a provider whose image endpoint accepts an input image; "
+          + "if a request is refused the picture is generated normally instead, so the "
+          + "worst case is what you have today. Off by default because the quality of an "
+          + "edit depends entirely on the model, and it is worth seeing one before "
+          + "trusting it with every room."),
         el("div", { class: "small dim" },
           "With this off, backdrops already generated still show — they're free — but no new ones are commissioned. Picking a model fills in a size it actually supports (they differ, and some take names like “landscape_16_9” rather than pixels); landscape is preferred because the picture sits behind a centred column in a browser window. Edit-only models are left out of the list — a backdrop is generated from text alone."));
+    }
+
+    // What a card authors beneath each clothing region. Its own small block
+    // rather than a line inside another one: it governs explicit body
+    // description, and a host looking for it should find it by looking.
+    {
+      const beneathBox = el("input", {
+        type: "checkbox", ...(S.boot.attire_beneath ? { checked: "" } : {})
+      });
+      beneathBox.onchange = async () => {
+        await api("PUT", "/api/attire_beneath", { enabled: beneathBox.checked });
+        await boot();
+        toast(beneathBox.checked
+          ? "Underneath descriptions will be used."
+          : "Underneath descriptions will be left out.", "ok");
+      };
+      b.append(el("h4", {}, "Clothing and the body"),
+        el("div", { class: "small dim" },
+          "Clothes are tracked by body region — head, torso, arms, hands, waist, "
+          + "legs, feet — and come off a step at a time rather than all at once: "
+          + "worn, loosened, open, off. A garment that leaves someone becomes a "
+          + "real object in the room. Character and persona cards can also "
+          + "describe what each region shows once nothing covers it."),
+        el("div", { class: "row", style: "margin:6px 0" },
+          el("label", { class: "small" }, beneathBox,
+            " Use the “underneath” descriptions authored on cards")),
+        el("div", { class: "small dim" },
+          "Off by default. With it off a card's underneath text is left out of "
+          + "every prompt — an uncovered region is still reported as uncovered, "
+          + "because that is a fact about the scene, and the character's own "
+          + "appearance supplies the rest."));
+    }
+
+    // Room ambience. Not an agent-model row for the same reason backdrops is
+    // not: the thing being configured is a SOURCE of media (a folder, or a
+    // sound library's API), not a chat model. The optional `ambience_prompt`
+    // role that writes the search query does live in Agent models below.
+    {
+      const cfg = S.boot.ambience || {};
+      const sourceSel = el("select", {},
+        el("option", { value: "local", ...(cfg.source === "local" ? { selected: "" } : {}) }, "local folder"),
+        el("option", { value: "freesound", ...(cfg.source === "freesound" ? { selected: "" } : {}) }, "Freesound"));
+      const libIn = el("input", { style: "flex:1", placeholder: "/path/to/your/ambience/folder",
+                                  value: cfg.library || "" });
+      const keyIn = el("input", {
+        type: "password", style: "width:190px",
+        placeholder: cfg.has_key ? "•••• (key set — blank keeps it)" : "Freesound API key",
+      });
+      const enableBox = el("input", { type: "checkbox", ...(cfg.enabled ? { checked: "" } : {}) });
+      const ncBox = el("input", {
+        type: "checkbox",
+        ...((cfg.licenses || []).includes("Attribution NonCommercial") ? { checked: "" } : {}),
+      });
+      b.append(el("h4", {}, "Room ambience"),
+        el("div", { class: "small dim" },
+          "Plays a looping sound bed for the room the player is standing in, chosen from the room's spatial description only — never from who is in it. It follows the room, the hour, the weather and any damage, and each distinct state is fetched once and cached. Mute, volume and reroll live beside the input box."),
+        el("div", { class: "row", style: "margin:6px 0" }, sourceSel, libIn, keyIn,
+          el("button", {
+            onclick: async () => {
+              const licenses = ["Creative Commons 0", "Attribution"];
+              if (ncBox.checked) licenses.push("Attribution NonCommercial");
+              await api("PUT", "/api/ambience", {
+                enabled: enableBox.checked,
+                source: sourceSel.value,
+                library: libIn.value.trim(),
+                freesound_key: keyIn.value.trim(),
+                licenses,
+              });
+              await boot();
+              if (typeof syncAmbience === "function") syncAmbience();
+              toast("Ambience settings saved.", "ok");
+            },
+          }, "Save")),
+        el("div", { class: "row", style: "margin:6px 0" },
+          el("label", { class: "small" }, enableBox, " Play ambience"),
+          el("label", { class: "small", style: "margin-left:14px" }, ncBox,
+            " Also allow NonCommercial-licensed sounds")),
+        el("div", { class: "small dim" },
+          "A local folder is searched by filename — name files for what they sound like (“rain_on_tin_roof.ogg”), or drop an index.json beside them mapping a file to extra words. Freesound needs a free API key from freesound.org/apiv2/apply; it fetches CC0 and Attribution sounds by default, and whatever is playing is credited in the 🎧 panel."));
     }
 
     b.append(el("h4", {}, "Agent models"),

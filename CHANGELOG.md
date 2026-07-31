@@ -1,5 +1,176 @@
 # Changelog
 
+## alpha 6.2 — Prose has no memory
+
+Three things in this engine existed only as sentences. The weather was a clause
+inside a room's description, so it could not change without the description
+being rewritten and could not agree between two rooms standing under the same
+sky. What a place sounded like was not represented at all. What someone was
+wearing was a flat list plus one free-text line of state — which is how a
+character told, in as many words, that she was "still fully clothed, not quite
+undressed yet" ended the same paragraph bare, and how one live transcript came
+to have three complete outfits worn simultaneously.
+
+A sentence describing a state is not the same as holding it. This release gives
+all three somewhere to live.
+
+### Added
+
+- **Weather.** One sky per scene, and each room's share of it decided by the
+  ROOM (`weather.py`). Modelling it per-room invites two adjacent outdoor rooms
+  to disagree; instead `rooms[id].exposure` — open, sheltered, enclosed — says
+  how much of the one sky reaches each place, widened further by how many
+  muffling boundaries the room graph puts between it and open air. Sight and
+  sound are answered separately, because a cellar sees nothing of a downpour
+  and hears it clearly, and walking into a cave takes the rain from present, to
+  muffled, to faint, to gone. Between the beats that change it the sky drifts on
+  the simulation clock, seeded and idempotent, so a reroll cannot produce a
+  different one. A scene acquires weather only when its fiction establishes one,
+  so a starship never has any. Ground state answers to it: an hour of heavy rain
+  turns a yard to mud, and how far weather is allowed to go is a host setting
+  from Calm through Catastrophic.
+
+- **Weather on screen.** Rain and snow drawn over the story for rooms that can
+  actually see the sky, thinning under cover, slanted by wind, scaled by
+  severity (`static/js/weather-fx.js`). Storms flash, occasionally draw a full
+  branching bolt under open sky, and the thunder arrives after the flash by a
+  distance-shaped delay. A storm sky is not automatically an electrical one:
+  snow and sleet do not flash, so a blizzard stays dark — except for
+  thundersnow, which is real, rolled rarely and deterministically, and belongs
+  to the sky rather than being derived from what is falling.
+
+  Not a particle system. It began as one and that was the most expensive thing
+  the app did while sitting still — a full-viewport canvas re-rasterised from
+  JavaScript sixty times a second, for scenery. What ships is one small
+  seamless tile generated once into a canvas, handed to CSS as a repeating
+  background and moved with a compositor transform: no JavaScript per frame, no
+  repaint, and no vendored dependency.
+
+- **Room ambience.** A looping sound bed for the room the player is standing in,
+  built as the audio twin of the backdrop path and just as firmly out of band —
+  a network fetch to a sound library must never sit between a player and their
+  prose (`ambience.py`, `static/js/ambience.js`). The query is written from the
+  same whitelisted, occupant-free room projection, so a soundscape cannot report
+  a presence perception did not deliver: a tavern sounds busy because the room
+  says it is a tavern, never because five people are standing in it. Up to three
+  simultaneous layers — room tone, weather, one detail — each with its own
+  level, its own reroll and its own credit, so rain two rooms in is a quiet
+  layer over an undiminished room tone, which one clip cannot express. Two
+  sources: a folder of audio the host already owns, or Freesound's APIv2,
+  licence-filtered to CC0 and Attribution with the uploader, licence and source
+  URL stored beside every cached file and shown while it plays. A room judged to
+  have no continuous sound of its own says so and stays quiet, which is cached
+  like any other answer and overruled by the reroll.
+
+  The cache key is a room plus its AUDIBLE state, which is deliberately a
+  different set from its visible one: weather changes what a place sounds like
+  and LIGHT DOES NOT, so a room going dark is a wholly new picture and the
+  identical bed.
+
+- **Clothing by body region.** A garment occupies one or more of head, torso,
+  arms, hands, waist, groin, legs and feet, ordered outermost-first, so removing
+  one has a defined consequence — this region, previously covered by that, now
+  shows what was under it (`attire.py`). Coarse on purpose: the point is to make
+  layering and exposure representable, not to model tailoring.
+
+  And taking it off is a sequence, not a switch. A garment moves
+  `worn → loosened → open → removed`, one rung per beat unless the player says
+  otherwise, so "partially undressed" is a state the engine can stop at rather
+  than a sentence the next beat re-reads and resolves however it likes. Garments
+  carry `condition` — stained, torn, soaked — separately from how far off the
+  body they are, because a soaked coat is still a worn coat. What is under a
+  garment is authored per region where an author cares to and falls back to the
+  body's own description where they do not; whether it is shown at all is a
+  per-story choice, off by default.
+
+- **Body and outfit generated from the card.** `importers.fill_appearance` and
+  the `fill_appearance` prompt fill a character's physical description and
+  per-region starting outfit from what the card already says, so the seven
+  fields above are not a wall between a new card and playing it.
+
+- **Backdrops keep the room.** A room's first image becomes its anchor, and
+  later beats are generated FROM that picture rather than fresh
+  (`providers.edit_image`), so furniture and camera angle stay put instead of
+  the architecture being reinvented every time the light changes.
+
+- **A plain-language feature list.** [`docs/FEATURES.md`](docs/FEATURES.md) —
+  every feature the app has, one line each, in the words a reader would use.
+
+### Fixed
+
+- **A declaration toward somewhere became arrival there.** The Director's
+  movement declaration now carries `arrives` — whether it covers ARRIVING or
+  only setting off — filled by `director_interpret` and honoured deterministically
+  by `director_resolve`. Live failure, "The Blizzard" turn 2: "you wander towards
+  it", of a building seen through the snow, resolved as a completed move through
+  the door into the firelight, from `exposure: open` to `exposure: sheltered`,
+  out of a blizzard, with nobody having said she was going in. A FIELD rather
+  than a downstream test because the distinction is not recoverable downstream —
+  measured across 1249 live turns, no text heuristic separates "I cross the
+  command deck toward the med bay" from "progresses across the clearing toward
+  the building", and four heuristics tried against the corpus each blocked
+  legitimate arrivals. An approach in flight is remembered per mover, so the
+  next declaration toward the same place arrives; without that memory, six
+  simulated hours of "trudging towards the mountain" left the walker in her
+  starting clearing under level-12 snowdrifts.
+
+- **A blizzard normalised into a calm spring day.** Weather's vocabulary is five
+  short enums and `_pick` matched them exactly, so a Director describing a storm
+  in the words anyone would reach for missed every one of them. Live failure,
+  "The Blizzard" turn 2, declared correctly and in full:
+  `{sky: blizzard, precipitation: heavy snow, intensity: severe, wind:
+  gale-force, temperature: sub-zero}`. Not one term was in the vocabulary, each
+  fell to its default — and every default is the MILDEST reading of its field —
+  so the whiteout normalised to fair / none / none / still / mild and, being a
+  declaration, replaced the storm that was actually blowing. The player stood in
+  an open clearing in a whiteout with the snow overlay off and the gale gone
+  from the room's sound, and five later beats inherited the calm.
+
+  `_SYNONYMS` now reads the words models actually write, and a phrase containing
+  a vocabulary word resolves to the EARLIEST one in it, so "gale-force wind"
+  names a gale rather than answering with the noun. A declaration is also
+  written OVER the sky already blowing rather than in place of it: a beat
+  reports what it noticed, so a field it left out — or wrote in a word still
+  unreadable — keeps what was there. A word this vocabulary cannot read is not
+  evidence that the weather has cleared.
+
+- **A warm hall with a lit hearth was given a recording of a cave.** Three
+  compounding defects in how a bed is matched to a room. Freesound ANDs the
+  words of a query, so room queries must be broadened, and broadening dropped
+  terms from the END — which keeps the modifier and throws away the head noun,
+  since that is where English puts them. "stone hearth fire crackle wooden room"
+  missed at every rung until the single word `stone`, which returns caves.
+  `compose_query` fails the other way, leading with the room's name: a proper
+  noun in fiction that no sound library has heard of, and the last term the
+  ladder discards. The ladder now reaches past prefixes to single terms, and a
+  rung that returns results is no longer assumed to ANSWER — broadening
+  continues until a recording actually of this place comes back.
+
+  Ranking could not tell the two apart either: judged against the room's own
+  words, a cave and a crackling hearth both scored zero, and the pick fell
+  through to a `loopable` tag. Candidates now also carry how much of what was
+  ASKED FOR they answer, ranked beneath the room and above everything that is
+  not relevance — and one answering neither is refused outright rather than laid
+  down as better than nothing. Finally, a room's named fixtures (`anchors`) were
+  sitting in the scene unread while the query described the light and the mood;
+  they now lead it, and a hearth going cold is a new bed rather than the same
+  room reworded.
+
+- **Scrolling back showed the room you are in now.** The picture and the bed for
+  a beat with none of their own were held over from wherever the reader had
+  been, including across a doorway — so a turn spent out in the blizzard could
+  be read with the waystation's fire on screen and in the ears. Both now hold
+  over only within the same ROOM, where consecutive beats differ by the hour,
+  the weather or some damage and the image is still of the place being read.
+
+- **Truncated generator output looked finished.** `_jparse` recovers a cut-off
+  model response by closing its open braces, which is right for a pipeline beat
+  that must not die and wrong for a generator whose result a person is about to
+  read — a half-written outfit came back looking exactly like a complete one.
+  Generator paths now require a strictly parseable object with no repair of any
+  kind, and checking that the text ends in `}` is not that: a truncation lands
+  immediately after a closing brace often enough.
+
 ## alpha 6.1.2 — The updater could not fetch its own update
 
 alpha 6.1.1 was the first release big enough that fetching it took longer than

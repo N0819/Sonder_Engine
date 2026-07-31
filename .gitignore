@@ -20,6 +20,11 @@ demo/trek_bridge_scene_life/run.db*
 demo/trek_bridge_scene_life/run_out.txt
 engine.test.db*
 backdrops/
+# Fetched ambience beds, and the host's own sound library if they put it here.
+# Both are media, not source: the cache is reconstructible from the manifests'
+# queries, and a personal library may be licensed material the host bought.
+ambience/
+ambience_library/
 
 # Scene/chat blobs dumped out of a live playthrough while debugging. These are
 # play content, not engine source -- one was picked up by a release rsync and

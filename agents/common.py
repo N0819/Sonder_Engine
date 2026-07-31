@@ -6,13 +6,14 @@ import hashlib
 import json
 import re
 
+import attire as attire_model
 from character_schema import (
     character_knowledge_config,
     character_name,
     normalize_character_data,
     persona_name,
 )
-from db import q
+from db import get_setting, q
 from llm_quality import complete_validated_json
 from memory import chat_lorebook_ids, chat_lorebook_weights
 from providers import chat_complete
@@ -374,6 +375,57 @@ def _contextual_rooms(sc, cast, *extra_room_ids, hops=1):
 # Entity fields that exist so CODE can resolve a reference, not because an
 # observer could perceive them. See _perceptible_entities.
 _ENTITY_LOOKUP_ONLY_FIELDS = ("aliases",)
+
+
+def _beneath_visible():
+    """Whether what is under someone's clothing is spelled out at all.
+
+    Off unless the host turns it on. What a card authors per region as
+    `beneath` is explicit body description, and a default that starts
+    narrating it the first time a coat comes off is not a default anyone
+    chose. With this off the region still reports itself as bare -- the
+    exposure is objective and the story needs it -- and the body's own
+    appearance is what fills the rest, which is where it lived before regions
+    existed.
+    """
+    return str(get_setting("attire_beneath") or "").strip().casefold() in (
+        "1", "on", "true", "yes")
+
+
+def attire_view(entry, body=""):
+    """One body's clothing as a stage should see it.
+
+    The flat `wearing`/`state` pair stays, because that is the shape the
+    Director writes back in `attire:{name:{add,remove,...}}`. Alongside it goes
+    one line per region, which is the only representation that can say a robe
+    is open rather than merely present -- and the only one that can say a
+    region is bare while the body is still dressed.
+    """
+    if not isinstance(entry, dict):
+        return {}
+    regions = attire_model.normalize_regions(entry)
+    lines = attire_model.describe(
+        regions, beneath_visible=_beneath_visible(), body=body)
+    exposed = attire_model.exposed_regions(regions)
+    return {
+        "wearing": entry.get("wearing") or [],
+        "state": entry.get("state") or [],
+        **({"regions": lines} if lines else {}),
+        # Stated rather than left to be worked out from the lines above. What
+        # a body shows is exactly this list -- a garment that is loosened or
+        # hanging open is still ON, and a region nobody has mentioned is
+        # unmodelled rather than bare, so neither appears here.
+        **({"exposed": exposed} if exposed else {}),
+    }
+
+
+def scene_attire_view(sc):
+    """`attire_view` across every body in the scene."""
+    return {
+        name: attire_view(entry)
+        for name, entry in (sc.get("attire") or {}).items()
+        if isinstance(entry, dict)
+    }
 
 
 def _perceptible_entities(sc, perceiver_names=None):

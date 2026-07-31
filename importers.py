@@ -807,6 +807,15 @@ def draft_promoted_character(chat_id, name):
     # -- force it empty regardless of what the model produced, same as
     # the prompt instructs but without depending on it being followed.
     sheet["opening"]["first_message"] = ""
+    # Nor is the NAME the model's to choose, and for the same reason. It is
+    # what the scene has been calling this person, the key
+    # `background_presences` tracks them under, and the speaker label their
+    # quoted lines were matched on. Meanwhile the evidence pack is full of
+    # OTHER people's names -- the player's most of all, since `resolved_event`
+    # is the whole beat, not just this person's part in it. Left to the model,
+    # a spice seller and a young shopper in one market were BOTH minted
+    # carrying the player persona's name.
+    sheet.setdefault("identity", {})["name"] = name
     memory_seeds = [
         str(m) for m in (parsed.get("memory_seeds") or []) if str(m).strip()
     ]
@@ -946,6 +955,126 @@ def fill_character_psychology(char_id, brief):
     # card are distinguishable from v3's neutral defaults.
     merged = _merge_missing_fields(stored, restricted)
     return normalize_character_data(merged)
+
+
+def _json_arrived_whole(text):
+    """Did this response contain a COMPLETE JSON object, or a salvaged one?
+
+    `_jparse` recovers a cut-off response by closing its open braces, which is
+    right for a pipeline beat that must not die and wrong for a generator whose
+    result a person is about to read: a half-written outfit comes back looking
+    exactly like a finished one. Checking that the text ends in `}` is not
+    enough -- a truncation lands immediately after a closing brace often
+    enough, and then the tail of the object is simply missing.
+
+    So: strict parse of the outermost braced block, with no repair of any kind.
+    Prose on either side of it is fine; that is a complete answer with chatter
+    around it, not a truncated one.
+    """
+    stripped = re.sub(
+        r"^```[a-zA-Z]*\n?|```$", "", str(text or "").strip(), flags=re.M).strip()
+    match = re.search(r"\{.*\}", stripped, re.S)
+    if not match:
+        return False
+    try:
+        json.loads(match.group(0))
+    except Exception:
+        return False
+    return True
+
+
+def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None):
+    """Preview an AI fill of one card's body and clothing.
+
+    Like `fill_character_psychology`, this WRITES NOTHING -- the editor shows
+    the proposal and the author's ordinary Save is what commits it. A
+    generation request that quietly rewrote a card would make "let me see what
+    it comes up with" an irreversible act.
+
+    `draft` is what the author currently has typed in the editor, which may not
+    be what is stored: generating from the saved copy would ignore the two
+    lines they just wrote, which is exactly when they press the button.
+
+    Unlike the psychology fill, this one REPLACES rather than fills gaps. Body
+    and clothing are a single coherent description -- a generated outfit under
+    a hand-written summary that contradicts it is worse than either alone -- so
+    the author reviews a whole proposal and keeps or discards it.
+    """
+    table = "characters" if kind == "character" else "personas"
+    normalize = (normalize_character_data if kind == "character"
+                 else normalize_persona_data)
+    row = q(f"SELECT sheet FROM {table} WHERE id=?", (entity_id,), one=True)
+    if not row:
+        raise ValueError("Card not found")
+    stored = json.loads(row["sheet"] or "{}")
+    normalized = normalize(stored)
+    draft = draft if isinstance(draft, dict) else {}
+    payload = {
+        "brief": str(brief or "").strip(),
+        "include_beneath": bool(include_beneath),
+        "card": normalized,
+        "author_draft": {
+            "appearance": draft.get("appearance") or {},
+            "initial_outfit": draft.get("initial_outfit") or {},
+        },
+    }
+    with _silent_provider_stream():
+        raw = chat_complete(
+            "utility",
+            get_prompt("fill_appearance"),
+            json.dumps(payload, ensure_ascii=False),
+            temperature=0.8,
+            # None means the configured ceiling, not a hardcoded budget. A
+            # reasoning model bills its thinking as output, so a fixed few
+            # thousand tokens is spent deliberating before any JSON is emitted
+            # and the call returns an EMPTY string -- see the same finding in
+            # llm_quality.complete_validated_json (maze arm A11).
+            max_tokens=None,
+        )
+    proposed = _jparse(raw)
+    if not proposed:
+        # Distinguish the two failures: nothing came back at all, versus
+        # something came back that was not JSON. They have different causes and
+        # the message used to show neither, because it printed an empty string.
+        if not str(raw or "").strip():
+            raise RuntimeError(
+                "The model returned nothing. This usually means the output "
+                "budget ran out before any JSON was written — a reasoning "
+                "model spends its thinking on that budget. Raise "
+                "'Max output tokens' in Settings, or point the `utility` role "
+                "at a non-reasoning model."
+            )
+        raise RuntimeError(
+            "Appearance fill returned no usable data.\n"
+            f"Raw output:\n{raw[:800]}"
+        )
+    if not _json_arrived_whole(raw):
+        raise RuntimeError(
+            "The model ran out of output budget partway through and the "
+            "result was cut off. Raise 'Max output tokens' in Settings, or "
+            "point the `utility` role at a non-reasoning model — a reasoning "
+            "model spends that same budget on its thinking."
+        )
+    merged = copy.deepcopy(stored)
+    visible = ((proposed.get("embodiment") or {}).get("visible")
+               if isinstance(proposed.get("embodiment"), dict) else None)
+    if isinstance(visible, dict):
+        merged.setdefault("embodiment", {})
+        if not isinstance(merged["embodiment"], dict):
+            merged["embodiment"] = {}
+        merged["embodiment"]["visible"] = {
+            **(merged["embodiment"].get("visible") or {}), **visible}
+    outfit = proposed.get("initial_outfit")
+    if isinstance(outfit, dict):
+        if not include_beneath:
+            # Belt and braces against a model that answered the question it
+            # was not asked. The setting governs whether `beneath` is USED;
+            # this governs whether it is written onto a card at all.
+            for entry in (outfit.get("regions") or {}).values():
+                if isinstance(entry, dict):
+                    entry["beneath"] = ""
+        merged["initial_outfit"] = outfit
+    return normalize(merged)
 
 
 def generate_persona(brief):

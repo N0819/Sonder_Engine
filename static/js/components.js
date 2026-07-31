@@ -234,6 +234,38 @@ function promptModal(message, defaultValue = "", opts = {}) {
   });
 }
 
+// A prompt with one extra opt-in beside it. Its own helper rather than an
+// option on promptModal because it resolves to a different shape -- {text,
+// checked} instead of a string -- and quietly changing what promptModal
+// returns for some callers is how a null check stops working somewhere else.
+function promptModalWithToggle(message, toggleLabel, opts = {}) {
+  return new Promise(resolve => {
+    let finished = false;
+    const finish = value => {
+      if (finished) return;
+      finished = true;
+      overlay.cleanup();
+      resolve(value);
+    };
+    const input = el("input", { type: "text", style: "width:100%", value: opts.defaultValue || "" });
+    const box = el("input", { type: "checkbox", ...(opts.checked ? { checked: "" } : {}) });
+    const done = () => finish({ text: input.value, checked: box.checked });
+    const overlay = _confirmOverlay(wrap => {
+      wrap.append(
+        el("div", { style: "margin-bottom:8px;white-space:pre-wrap" }, message),
+        input,
+        el("label", { class: "small", style: "display:block;margin-top:10px" },
+          box, " " + toggleLabel),
+        ...(opts.toggleNote
+          ? [el("div", { class: "small dim", style: "margin-top:4px" }, opts.toggleNote)]
+          : []),
+        el("div", { class: "row", style: "justify-content:flex-end;margin-top:12px" },
+          el("button", { onclick: () => finish(null) }, "Cancel"),
+          el("button", { class: "primary", onclick: done }, opts.okLabel || "OK")));
+    }, { dismiss: () => finish(null), confirm: done });
+  });
+}
+
 // ---- Toasts ----
 function toast(message, type = "ok", timeout = 4200) {
   const icon = { ok: "✓", err: "!", warn: "▲", info: "•" }[type] || "•";
@@ -264,13 +296,29 @@ function elapsedLabel(s) {
   const sec = Math.max(0, Math.floor((Date.now() - s) / 1000));
   return sec < 60 ? sec + "s" : Math.floor(sec / 60) + "m " + String(sec % 60).padStart(2, "0") + "s";
 }
-setInterval(() => { if (S.tasks.size) renderActivity() }, 1000);
+// Ticks only while something is actually running. As an unconditional
+// setInterval this woke the page once a second forever, for the whole time the
+// tab was open, to discover that there was nothing to redraw -- which is enough
+// to keep a laptop out of its deeper idle states all evening.
+let _activityTicker = null;
+function activityTicking(on) {
+  if (on && !_activityTicker) {
+    _activityTicker = setInterval(() => {
+      if (S.tasks.size) renderActivity();
+      else activityTicking(false);
+    }, 1000);
+  } else if (!on && _activityTicker) {
+    clearInterval(_activityTicker);
+    _activityTicker = null;
+  }
+}
 
 function backgroundTask(label, work, opts = {}) {
   const id = ++S.taskSeq;
   S.tasks.set(id, { id, label, started: Date.now() });
   if (opts.closeModal !== false) closeModal();
   renderActivity();
+  activityTicking(true);          // stops itself once the last task finishes
   Promise.resolve().then(work)
     .then(async r => {
       if (opts.onSuccess) await opts.onSuccess(r);
@@ -336,9 +384,176 @@ function fNum(label, val, step) {
   const i = el("input", { type: "number", step: step || "any", value: val !== undefined && val !== null ? val : "", style: "width:100%" });
   return { node: el("div", { class: "ff" }, el("label", {}, label), i), read: () => i.value === "" ? undefined : +i.value };
 }
+// One entry per LINE, for lists whose entries are prose and therefore contain
+// commas. `fStrList` splits on commas, which silently fragments them: a
+// generated "Nine golden tails from the lower back, shifting with mood" was
+// saved back as two features, and "vermillion, white, and gold" as three.
+function fLineList(label, vals) {
+  const t = el("textarea", {
+    style: "width:100%", rows: "4",
+    placeholder: "one per line"
+  }, (vals || []).join("\n"));
+  return {
+    node: el("div", { class: "ff" }, el("label", {}, label), t),
+    read: () => t.value.split("\n").map(s => s.trim()).filter(Boolean)
+  };
+}
+
 function fStrList(label, vals) {
   const i = el("input", { value: (vals || []).join(", "), placeholder: "comma-separated", style: "width:100%" });
   return { node: el("div", { class: "ff" }, el("label", {}, label), i), read: () => i.value.split(",").map(s => s.trim()).filter(Boolean) };
+}
+
+// The closed set from attire.py. `waist` and `groin` are separate on purpose:
+// a sash covers the belt line and nothing else, so conflating them would
+// report a body wearing only an obi as covered where it matters most.
+const ATTIRE_REGIONS = ["head", "torso", "arms", "hands", "waist", "groin",
+                        "legs", "feet"];
+
+// Coverage presets, offered as one-click shortcuts inside the picker. Not the
+// only way to answer -- the checkboxes are -- but the four spans real clothing
+// actually has, because ticking five boxes for every kimono is a chore an
+// author should not have to repeat.
+const ATTIRE_COVERAGE = [
+  ["whole body (kimono, toga, jumpsuit)", ["torso", "arms", "waist", "groin", "legs"]],
+  ["shoulders to ankles (dress, gown, sari)", ["torso", "waist", "groin", "legs"]],
+  ["over the shoulders (coat, cloak, jacket)", ["torso", "arms", "waist"]],
+  ["legwear (trousers, skirt)", ["legs", "groin"]],
+];
+
+// A dropdown of checkboxes: what this garment covers, any combination of it.
+// `auto` is the default and means "work it out from the name" -- resolved in
+// attire.py, so the cue table has exactly one implementation.
+function fCoveragePicker(covers, auto, attaches) {
+  const boxes = new Map(ATTIRE_REGIONS.map(region => [region, el("input", {
+    type: "checkbox", ...((covers || []).includes(region) ? { checked: "" } : {})
+  })]));
+  const autoBox = el("input", { type: "checkbox", ...(auto ? { checked: "" } : {}) });
+  // Worn AT a place rather than over it. Same question as coverage, so it
+  // lives in the same control: a ribbon sits in the hair and covers no head.
+  const attachBox = el("input", {
+    type: "checkbox", ...(attaches ? { checked: "" } : {}) });
+  const summary = el("summary", { style: "cursor:pointer;font-size:12px" });
+
+  const picked = () => ATTIRE_REGIONS.filter(r => boxes.get(r).checked);
+  const sync = () => {
+    const on = picked();
+    boxes.forEach(b => { b.disabled = autoBox.checked; });
+    summary.textContent = (attachBox.checked ? "worn at: " : "covers: ") + (
+      autoBox.checked ? "auto" : (on.length ? on.join(", ") : "nothing yet"));
+  };
+  autoBox.onchange = sync;
+  attachBox.onchange = sync;
+  boxes.forEach(b => { b.onchange = () => { autoBox.checked = false; sync(); }; });
+
+  const preset = (label, regions) => el("button", {
+    type: "button", class: "ghost", style: "font-size:11px;padding:2px 6px",
+    onclick: () => {
+      autoBox.checked = false;
+      boxes.forEach((b, r) => { b.checked = regions.includes(r); });
+      sync();
+    }
+  }, label);
+
+  const node = el("details", { class: "card", style: "flex:1;min-width:0;padding:4px 8px" },
+    summary,
+    el("label", { class: "small", style: "display:block;margin:6px 0" },
+      autoBox, " auto — work it out from the garment's name"),
+    el("label", { class: "small", style: "display:block;margin:6px 0" },
+      attachBox, " worn at, covers nothing (ribbon, necklace, ring)"),
+    el("div", { class: "row", style: "flex-wrap:wrap;gap:8px" },
+      ...ATTIRE_REGIONS.map(region =>
+        el("label", { class: "small" }, boxes.get(region), " " + region))),
+    el("div", { class: "small dim", style: "margin-top:6px" },
+      "waist is the belt line; groin is covered separately, so a sash alone "
+      + "leaves it bare."),
+    el("div", { class: "row", style: "flex-wrap:wrap;gap:4px;margin-top:6px" },
+      ...ATTIRE_COVERAGE.map(([label, regions]) => preset(label, regions))));
+
+  sync();
+  return { node, read: () => (autoBox.checked ? null : picked()),
+           attaches: () => attachBox.checked };
+}
+
+function fAttireGarments(label, regions) {
+  // One flat list of garments, each with what it covers -- rather than a box
+  // per region, which cannot express a garment that spans several and made
+  // the author place the same kimono four times.
+  const seen = new Map();
+  ATTIRE_REGIONS.forEach(region => {
+    ((regions || {})[region] || {}).garments?.forEach(g => {
+      const name = (typeof g === "string" ? g : g?.name || "").trim();
+      if (!name || seen.has(name.toLowerCase())) return;
+      const covers = (g.covers && g.covers.length ? g.covers : [region]);
+      seen.set(name.toLowerCase(), {
+        name, covers, description: g.description || "",
+        attaches: !!g.attaches, condition: g.condition || "" });
+    });
+  });
+
+  const list = fList(label, [...seen.values()], "+ garment", g => {
+    // Name and description are separate because the NAME is the matching key:
+    // "take off the kimono" has to find it, and a paragraph cannot be matched.
+    const name = el("input", { value: g.name || "", placeholder: "name",
+                               style: "flex:1;min-width:0" });
+    const description = el("input", {
+      value: g.description || "", placeholder: "what it looks like (optional)",
+      style: "flex:2;min-width:0" });
+    const covers = fCoveragePicker(g.covers, !!g.auto, !!g.attaches);
+    return {
+      node: [name, description, covers.node],
+      read: () => {
+        if (!name.value.trim()) return null;
+        const picked = covers.read();
+        return { name: name.value.trim(), description: description.value.trim(),
+                 covers: picked || [], auto: picked === null,
+                 attaches: covers.attaches(), condition: g.condition || "" };
+      }
+    };
+  }, () => ({ name: "", description: "", covers: [], auto: true,
+              attaches: false, condition: "" }));
+
+  // "Underneath" stays per region: it describes a body part, not a garment.
+  const beneath = ATTIRE_REGIONS.map(region => {
+    const input = el("input", {
+      value: ((regions || {})[region] || {}).beneath || "",
+      placeholder: "underneath (optional)", style: "flex:2;min-width:0"
+    });
+    return {
+      region, read: () => input.value.trim(),
+      node: el("div", { class: "row", style: "gap:6px;margin-bottom:4px" },
+        el("span", { class: "small dim", style: "flex:none;width:52px" }, region),
+        input)
+    };
+  });
+
+  return {
+    node: el("div", {}, list.node,
+      el("label", { style: "margin-top:10px" }, "Underneath, by region"),
+      ...beneath.map(b => b.node)),
+    read: () => {
+      const out = {};
+      list.read().filter(Boolean).forEach(g => {
+        // "auto" is sent as a flag rather than resolved here: attire.py owns
+        // the cue table, and a second copy of it in the browser would drift.
+        const anchor = g.covers[0] || "torso";
+        const entry = out[anchor] || (out[anchor] = { garments: [], beneath: "" });
+        entry.garments.push({
+          name: g.name, description: g.description, state: "worn",
+          attaches: g.attaches, condition: g.condition,
+          ...(g.auto ? { auto: true }
+                     : (g.covers.length > 1 ? { covers: g.covers.slice(1) } : {}))
+        });
+      });
+      beneath.forEach(b => {
+        const text = b.read();
+        if (!text) return;
+        const entry = out[b.region] || (out[b.region] = { garments: [], beneath: "" });
+        entry.beneath = text;
+      });
+      return out;
+    }
+  };
 }
 
 function fList(label, items, addLabel, buildRow, newItem) {

@@ -92,6 +92,31 @@ class TestDraftPromotedCharacter:
         assert draft["memory_seeds"] == ["Asked a patient how they were feeling."]
         assert draft["evidence_turns"] == [5]
 
+    def test_the_name_is_not_the_models_to_choose(self, temp_db, monkeypatch):
+        """The bug this exists for: the evidence pack is the whole beat, so it
+        is full of OTHER people's names -- the PLAYER's most of all. Two
+        different market extras in one story were both minted carrying the
+        player persona's name, which in an engine that keys minds by name is an
+        identity collision, not a typo."""
+        chat_id = _make_chat(temp_db)
+        _add_event(temp_db, chat_id, 5,
+                   "Hinami steps under the awning. The spice seller nods at her.",
+                   dialogue_log=[{"speaker": "The Spice Seller",
+                                  "exact_quote": "Rain's set in.", "tone": "dry"}])
+
+        def fake_chat_complete(role, system, user, **kwargs):
+            return json.dumps({
+                "sheet": {"identity": {"name": "Hinami",
+                                       "uid": "spice_seller_hinami"},
+                          "opening": {"first_message": ""}},
+                "memory_seeds": [],
+            })
+
+        monkeypatch.setattr(importers, "chat_complete", fake_chat_complete)
+
+        draft = importers.draft_promoted_character(chat_id, "The Spice Seller")
+        assert draft["sheet"]["identity"]["name"] == "The Spice Seller"
+
     def test_raises_clearly_when_model_returns_no_sheet(self, temp_db, monkeypatch):
         chat_id = _make_chat(temp_db)
         _add_event(temp_db, chat_id, 1, "Crusher is present.", dialogue_log=[
