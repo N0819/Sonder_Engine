@@ -821,6 +821,29 @@ class MovementDecl(LenientModel):
     # Without this field "I drive the van onto the ferry" was structurally
     # identical to "I walk onto the ferry" and moved the player's body.
     mover: str = "self"
+    # Does the declaration cover ARRIVING, or only setting off?
+    #
+    # "I walk to the bridge" arrives. "I wander towards the building" does not:
+    # it says which way the walker is going, and the beat ends with them
+    # closer, still outside. Live failure, "The Blizzard" turn 2 -- interpret
+    # turned "You wander towards it" into
+    # `to_room: distant_mountain_building`, the route check passed it (the
+    # rooms genuinely were adjacent and open), and the resolve wrote her
+    # through the door into the firelight. Nothing was wrong except that
+    # nobody had said she was going in.
+    #
+    # A FIELD rather than something inferred downstream, because it cannot be
+    # inferred: measured across 1249 live turns, no test on the declaration's
+    # own text separates "I cross the command deck toward the med bay" (an
+    # asserted crossing) from "wander towards it" (progress) -- both say
+    # "toward", and only the stage that actually read the player's sentence
+    # can tell. `stage: "approach"` was already in the schema and read by
+    # nothing on the resolve path, which is the same mistake one field over.
+    #
+    # Defaults TRUE: every declaration that reached this field before it
+    # existed meant arrival, and a default of False would strand every one of
+    # them.
+    arrives: bool = True
 
 # ---- Authority ----
 
@@ -970,6 +993,12 @@ class RoomDef(LenientModel):
     # validation round-trip, and a room going dark must survive it. Absent
     # means lit, so nothing changes for a scene that never mentions light.
     light: Optional[str] = None
+    # How much of the sky this room stands under: open | sheltered | enclosed.
+    # Declared for the same reason `light` and `zone` are -- the validation
+    # round-trip drops what it does not declare, and a courtyard that survives
+    # as "enclosed" gets no weather at all. Absent falls back to
+    # weather.room_exposure's keyword derivation, never to "it rains here".
+    exposure: Optional[str] = None
 
 class WorldEntity(LenientModel):
     entity_id: str
@@ -1272,6 +1301,10 @@ class InitialEntityState(LenientModel):
 class DirectorEstablish(LenientModel):
     location: str = ""
     time: str = "now"
+    # The sky the story opens under. Same shape as StateDiff.weather; absent
+    # means the engine's fair-and-still default rather than "no weather", so
+    # an opening that never mentions the sky still has one to drift from.
+    weather: Optional[dict] = None
     scene_description: str = ""
     rooms: dict[str, RoomDef] = Field(default_factory=dict)
     entities: dict[str, SceneEntityDef] = Field(default_factory=dict)
@@ -1380,6 +1413,13 @@ class StateDiff(LenientModel):
     # prefers this over the new room's own name.
     location: str = ""
     time: Optional[dict] = None
+    # One sky over the whole scene: {sky, precipitation, intensity, wind,
+    # temperature}, normalized to a closed vocabulary by weather.py. Emitted
+    # only when a beat actually changes it -- absent means "unchanged", and
+    # between Director edits the sky drifts deterministically on the
+    # simulation clock (weather.advance_weather). How much of it any given
+    # room gets is a property of the ROOM (`RoomDef.exposure`), never of this.
+    weather: Optional[dict] = None
     claim_dispositions: list[dict] = Field(default_factory=list)
     # Destruction declaration (DestructionEffect shape -- see its
     # docstring). Declared here so model_dump() keeps it through

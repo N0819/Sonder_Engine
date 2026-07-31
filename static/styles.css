@@ -89,11 +89,18 @@ radial-gradient(ellipse 70% 65% at 50% 45%,transparent,rgba(6,8,13,.55) 100%)}
 /* The transcript's own surfaces, only while a backdrop is up: prose needs a
    panel to sit on once there is a picture behind it, and must NOT grow one
    when there isn't (an empty panel behind every turn is just noise). */
+/* No backdrop-filter here, deliberately. Each blurred element is its own
+   composited layer whose backdrop must be snapshotted and blurred again on
+   every frame it moves -- i.e. continuously, while scrolling, per panel. What
+   it bought was a blur seen through the 8-14% of these panels that is not
+   already opaque (--bd-panel runs .86-.92, set from the picture's luminance in
+   backdrops.js), which is close to nothing. If you want it back, one
+   `backdrop-filter:blur(3px)` on this rule and one blur(6px) on .pin below
+   restores it exactly. */
 body.has-backdrop .prose{background:rgba(9,12,19,var(--bd-panel,.89));
 border:1px solid rgba(255,255,255,.055);border-radius:12px;
-padding:13px 18px 15px;max-width:68ch;backdrop-filter:blur(3px);
+padding:13px 18px 15px;max-width:68ch;
 box-shadow:0 12px 34px rgba(0,0,0,.26);text-shadow:0 1px 2px rgba(0,0,0,.5)}
-body.has-backdrop .pin{backdrop-filter:blur(6px)}
 /* Over a picture the mood only needs to GRADE it: the image and its veil are
    already doing the atmospheric work, and a full-strength wash would flatten
    what was just paid for. */
@@ -207,7 +214,23 @@ flex-direction:column;gap:12px;scroll-behavior:smooth;
    light changes over ~2s instead of snapping on every scroll-driven
    re-evaluation. */
 background-color:var(--mood-tint,transparent);transition:background-color 1.8s ease}
-.turn{max-width:720px;margin:0 auto;width:100%;animation:fade-slide .2s ease both}
+/* `content-visibility` is the single biggest thing this file does for power.
+   A long story is hundreds of turns, and with a backdrop up EVERY one of them
+   carries a 34px box-shadow -- composited, and re-evaluated on every scrolled
+   frame, for panels nobody can see. (It carried a backdrop-filter blur too
+   until that was removed above.) This lets
+   the browser skip layout, paint and compositing for anything off screen; the
+   two or three turns actually on screen are unchanged, pixel for pixel.
+   `auto` in contain-intrinsic-size means a turn that has been rendered once
+   remembers its real height, so the scrollbar and scroll anchoring stay honest
+   (the 320px is only the guess for one never yet seen). */
+.turn{max-width:720px;margin:0 auto;width:100%;animation:fade-slide .2s ease both;
+content-visibility:auto;contain-intrinsic-size:auto 320px}
+/* ...except the newest few, which are exempt. That is where every render lands
+   the reader and where a new beat arrives, and a landing zone measured from
+   ESTIMATED heights is a landing zone that shifts under them once the real ones
+   resolve. Four is the most that fit on a screen at once. */
+.turn:nth-last-child(-n+4){content-visibility:visible}
 /* What the player wrote is fiction too -- it reads in sequence with the prose
    it provoked, so it takes the reading face and the reading size rather than
    staying pinned at 13px system-ui while the story around it scales. Held a
@@ -249,7 +272,10 @@ color:var(--fg)}
    column, so the text field itself lines up with the prose above it. */
 #composer{display:flex;gap:8px;padding:10px 12px;position:relative;
 border-top:1px solid var(--bd);background:var(--bg2);
-box-shadow:0 -10px 30px rgba(0,0,0,.13)}
+box-shadow:0 -10px 30px rgba(0,0,0,.13);
+/* Named container so the ambience cluster can respond to how much room is
+   actually left beside the 720px column -- see #ambience-bar. */
+container:composer / inline-size}
 /* Same column as .turn: max-width 720px, centred. Matching THAT (rather than
    .prose's 65ch) is what makes the two line up on screen, because the prose
    is itself left-aligned inside this centred column -- so both share a left
@@ -411,6 +437,127 @@ font-weight:600;transition:all .2s;min-height:auto}
 .nsfw-btn.on{background:#c0392b;color:#fff;border-color:#e74c3c}
 .nsfw-btn:hover{opacity:.85}
 #b-backdrop.on{border-color:var(--acc);color:var(--acc)}
+/* Weather effects (weather-fx.js): rain and snow drawn over the whole window
+   for rooms that can see the sky.
+   z-index 15 puts it above #app (1) and below the drawer (20), modals (50) and
+   toasts (120) -- weather belongs over the story, never over a dialog someone
+   is reading. NOT inside #scene-backdrop: that layer is opacity:0 without a
+   generated image and sits behind #app's near-opaque prose panels, so rain
+   drawn there would be invisible exactly where the reader is looking.
+   pointer-events:none is not optional -- a full-window canvas would otherwise
+   eat every click in the app. */
+/* z-index 0, the same level as #scene-backdrop and BELOW #app at 1 -- so the
+   weather sits over the PICTURE and under everything you actually use. It
+   stacks above the backdrop despite sharing a level because it comes later in
+   the document. (It lived at 15, over the whole app, on the theory that the
+   ~90% opaque prose panels would otherwise hide it. They do hide it -- but the
+   reading column is 720px inside a much wider window, so the weather reads in
+   the margins around the story, and rain over the toolbar was reading as rain
+   ON the interface rather than beyond it.) */
+#weather-fx{position:fixed;inset:0;width:100%;height:100%;z-index:0;
+pointer-events:none;opacity:0;transition:opacity .9s ease;overflow:hidden}
+/* Deliberately not full strength: this passes over the text, so it has to
+   stay at the edge of noticeable. */
+#weather-fx.on{opacity:.55}
+/* The wind's slant, applied to the whole stack at once so that every layer and
+   its own travel stay on one axis -- drops sliding across their own direction
+   is the tell that weather is a texture rather than something falling.
+   Oversized because a rotated rectangle does not cover the window it was cut
+   from; #weather-fx clips the overhang. */
+.wfx-tilt{position:absolute;inset:-30%;transform-origin:50% 50%}
+/* One repeating tile per layer, moved by exactly its own tile height. Nothing
+   here is painted per frame: a transform on a composited layer is handled by
+   the compositor, which is why this costs a fraction of the canvas it replaced.
+   `will-change` is load-bearing rather than cargo-culted -- it is what keeps
+   each layer promoted instead of re-rasterised. */
+.wfx-layer{position:absolute;inset:0;background-repeat:repeat;
+will-change:transform;animation-name:wfx-fall;animation-timing-function:linear;
+animation-iteration-count:infinite;animation-duration:1s}
+@keyframes wfx-fall{
+  from{transform:translate3d(0,0,0)}
+  to{transform:translate3d(0,var(--wfx-travel,120px),0)}}
+/* Snow does not fall the way rain does. Rain is fast and near-vertical, so one
+   direction for the whole field is right; snow drifts, and three layers sliding
+   down one identical vector reads as a sheet of wallpaper being pulled. The
+   sway is a SECOND transform on a wrapper, composed with the fall rather than
+   replacing it -- still two compositor transforms and no per-frame JavaScript.
+   `alternate` is what makes it seamless: it returns to zero at the end of every
+   period by definition, so there is no discontinuity to hide. */
+.wfx-drift{position:absolute;inset:0;will-change:transform;
+animation-name:wfx-sway;animation-timing-function:ease-in-out;
+animation-iteration-count:infinite;animation-direction:alternate;
+animation-duration:9s}
+@keyframes wfx-sway{
+  from{transform:translate3d(calc(var(--wfx-sway,20px) * -1),0,0)}
+  to{transform:translate3d(var(--wfx-sway,20px),0,0)}}
+@media (prefers-reduced-motion:reduce){.wfx-drift{animation:none}}
+/* Lightning. Not a tsParticles effect -- a flash is not a particle system, and
+   this one also has to be the thing thunder is timed from. The double pulse is
+   what makes it read as lightning rather than as a page repaint. */
+/* Lightning, at the same level as the weather and the picture rather than over
+   the whole app: the storm belongs to the SCENE, not to the interface.
+   Radiating rather than a flat wash -- it scales outward from the origin as it
+   fades, which is what a distant sheet of lightning does to a sky and what a
+   flat opacity pulse never quite reads as. Violet because a storm sky lit from
+   inside is not daylight-white; the blue-white version read as a screen
+   glitch. */
+#weather-flash{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0;
+transform-origin:50% 0%;
+background:radial-gradient(circle at 50% 0%,rgba(214,196,255,.9),
+rgba(150,132,224,.42) 45%,rgba(92,78,160,.16) 70%,transparent 100%)}
+#weather-flash.flash{animation:wfx-flash 1000ms ease-out}
+/* The double pulse is what makes it read as lightning rather than as a page
+   repaint: a strike is several discharges down one channel, milliseconds
+   apart. */
+@keyframes wfx-flash{
+  0%{opacity:0;transform:scale(.72)}
+  6%{opacity:.6;transform:scale(1)}
+  12%{opacity:.12;transform:scale(1.04)}
+  20%{opacity:.46;transform:scale(1.1)}
+  34%{opacity:.09;transform:scale(1.16)}
+  100%{opacity:0;transform:scale(1.3)}}
+/* The full render, for a strike near enough to actually see. Only ever drawn
+   for a room with open sky over it -- see weatherFxBolt. */
+#weather-bolt{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0}
+#weather-bolt.flash{animation:wfx-bolt 620ms ease-out}
+@keyframes wfx-bolt{
+  0%{opacity:0}8%{opacity:1}16%{opacity:.15}26%{opacity:.85}
+  40%{opacity:.1}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){#weather-flash{display:none}}
+/* Weather is atmosphere, not information: anyone who has asked the OS to stop
+   things moving gets a still scene, and weather-fx.js skips the draw loop
+   entirely rather than relying on this rule alone. */
+@media (prefers-reduced-motion:reduce){#weather-fx{display:none}}
+
+/* Room ambience, sitting beside the composer's send button. Kept visually
+   quiet at rest: it is next to the thing the reader actually types into, so it
+   earns attention only when something is playing or muted. */
+/* Floated into the composer's right-hand margin rather than laid out in the
+   row: #composer-inner carries the same 720px measure as the prose column, so
+   an in-flow control here would silently narrow the input the story is typed
+   into. Absolute keeps that column exactly the width it was before this
+   feature existed. */
+#ambience-bar{position:absolute;right:12px;bottom:14px;
+display:flex;align-items:center;gap:4px}
+#ambience-bar .icon-button{min-width:32px;padding:4px 6px}
+#b-ambience.on{border-color:var(--acc);color:var(--acc)}
+#b-ambience.blocked{border-color:var(--warn,#d9a441);color:var(--warn,#d9a441)}
+#b-ambience.working{animation:bd-pulse 1.4s ease-in-out infinite}
+/* Muted is a state someone must be able to see without hovering -- the whole
+   point of a panic button is that it reads at a glance. */
+#b-amb-mute.muted{border-color:#c0392b;color:#e74c3c}
+#b-amb-reroll:disabled{opacity:.4;cursor:default}
+#amb-vol{width:64px;accent-color:var(--acc)}
+/* The room to float in is (COMPOSER - 720)/2, and the composer is the window
+   minus the sidebar and minus whatever the drawer is taking -- so this has to
+   be a container query, not a media query. Sized against the window it read
+   ~280px of margin where there were really ~140, and the cluster reached back
+   over the Send button. Shed the slider first (volume is the one control with
+   an OS-level equivalent), then give up floating and share the row. */
+@container composer (max-width:1040px){#amb-vol{display:none}}
+@container composer (max-width:900px){
+  #ambience-bar{position:static;flex:0 0 auto;align-self:flex-end;padding-bottom:4px}
+}
 /* An image can take half a minute; without this the button is the only place
    the reader could tell whether anything is happening at all. */
 #b-backdrop.working{animation:bd-pulse 1.4s ease-in-out infinite}

@@ -81,6 +81,10 @@ def test_get_resolves_the_room_without_generating(client, story, backdrop_dir):
     # Found via the persona SHEET's identity.name -> scene.positions, which is
     # the same resolution commit.py uses.
     assert body["room"] == "Ten Forward"
+    # The room's identity travels beside its display name: a turn with no
+    # picture of its own holds the previous one only while the reader is still
+    # in the same room, and two rooms can share a name.
+    assert body["room_id"] == "ten_forward"
     assert body["signature"]
     assert body["ready"] is False and body["url"] is None
     # A read is free: nothing was written, and nothing was billed.
@@ -332,3 +336,26 @@ def test_asking_again_after_a_failure_retries(
     assert _wait_for(lambda: client.get(
         f"/api/turns/{story['turn_id']}/backdrop").json()["status"] == "ready")
     assert len(attempts) == 2
+
+
+def test_continuity_is_off_until_explicitly_switched_on(client):
+    """It changes how every picture after a room's first one is MADE, and a
+    provider with a poor edit endpoint would quietly degrade every backdrop in
+    the story. That is not something to discover from a default."""
+    import backdrops
+
+    assert backdrops._continuity_enabled() is False
+    boot = client.get("/api/bootstrap").json()
+    assert boot["backdrop_continuity"] is False
+
+    r = client.put("/api/backdrops", json={"enabled": True, "continuity": True})
+    assert r.status_code == 200, r.text
+    assert r.json()["continuity"] is True
+    assert backdrops._continuity_enabled() is True
+
+    # Absent means unchanged, so the plain on/off toggle cannot silently clear it.
+    client.put("/api/backdrops", json={"enabled": False})
+    assert backdrops._continuity_enabled() is True
+
+    client.put("/api/backdrops", json={"enabled": True, "continuity": False})
+    assert backdrops._continuity_enabled() is False

@@ -1,4 +1,4 @@
-import contextvars, json, queue, re, time, threading, os
+import contextvars, json, queue, random, re, time, threading, os
 import updates
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Body, HTTPException, Query, Request
@@ -50,7 +50,7 @@ from importers import (
     generate_character, generate_persona, generate_lore_entries,
     reinterpret_lorebook, resolve_import_card, draft_promoted_character,
     recover_greetings_from_source, character_import_warnings,
-    fill_character_psychology,
+    fill_character_psychology, fill_appearance,
 )
 from commit import (commit_all, promotable_background_presences,
                     promote_background_character,
@@ -74,9 +74,17 @@ from memory import (
 )
 from scene import (
     persona_of, get_scene, chat_character_sheet, seed_initial_attire,
+    weather_severity,
 )
 from backdrops import (build_backdrop_request, request_backdrop, cached_backdrop,
                        backdrop_status, backdrop_error)
+from ambience import (FREESOUND_LICENCES, ambience_error, ambience_pin_for,
+                      ambience_pins, ambience_settings, ambience_status,
+                      build_ambience_request, cached_ambience,
+                      clear_ambience_pin, library_files, media_type_for,
+                      ONESHOT_VARIANTS, request_ambience, request_oneshot,
+                      search_candidates,
+                      set_ambience_pin)
 from auth_routes import (
     GUEST_ALLOWED_API_PATHS,
     GUEST_COOKIE,
@@ -880,11 +888,27 @@ def bootstrap():
         "lorebooks": [dict(r) for r in q("SELECT * FROM lorebooks WHERE chat_id IS NULL")],
         "chats": [dict(r) for r in q("SELECT * FROM chats ORDER BY id DESC")],
         "nsfw_enabled": get_setting("nsfw_enabled") == "1",
+        # What a card authors under each clothing region (attire.describe's
+        # `beneath`). Off unless asked for: exposure itself is objective and
+        # always reported, but spelling out the body under the garment is a
+        # choice the host makes rather than one a first run makes for them.
+        "attire_beneath": get_setting("attire_beneath") == "1",
         # Scene backdrops (backdrops.py). Off unless switched on: every new
         # room costs a real image generation, so this is opt-in per install
         # rather than something a first run starts spending money on.
         "image_model": image_model(),
         "backdrops_enabled": get_setting("backdrops_enabled") == "1",
+        # Image-to-image continuity (backdrops._continuity_enabled). Explicitly
+        # off until asked for: it changes how every picture after a room's
+        # first one is made.
+        "backdrop_continuity": get_setting("backdrop_continuity") == "1",
+        # Room ambience (ambience.py). Off unless switched on, like backdrops --
+        # but the reason is different: audio that starts itself on a first run
+        # is a worse surprise than a picture, and a browser would block it
+        # anyway until the reader has clicked something. The API key is never
+        # sent back, only whether one is set.
+        "ambience": {k: v for k, v in ambience_settings().items() if k != "key"},
+        "ambience_licenses": list(FREESOUND_LICENCES),
         "auto_promote": get_setting("auto_promote") != "0",
         "default_prompts": DEFAULT_PROMPTS,
         "prompt_presets": presets(),
@@ -923,7 +947,41 @@ def put_image_model(body: dict = Body(...)):
 def put_backdrops(body: dict = Body(...)):
     enabled = bool(body.get("enabled"))
     set_setting("backdrops_enabled", "1" if enabled else "0")
-    return {"enabled": enabled}
+    # Absent means unchanged, so the toolbar toggle can send {enabled} alone.
+    if "continuity" in body:
+        set_setting("backdrop_continuity", "1" if body.get("continuity") else "0")
+    return {"enabled": enabled,
+            "continuity": get_setting("backdrop_continuity") == "1"}
+
+@app.put("/api/ambience")
+def put_ambience(body: dict = Body(...)):
+    """Room-ambience configuration: on/off, which source, and its credentials.
+
+    Every field is optional so the toolbar toggle can send `{enabled}` alone
+    without clearing the library path or the API key -- the same "absent means
+    unchanged" contract the provider routes use for keys.
+    """
+    if "enabled" in body:
+        set_setting("ambience_enabled", "1" if body.get("enabled") else "0")
+    if "source" in body:
+        source = str(body.get("source") or "").strip()
+        if source not in ("local", "freesound"):
+            raise HTTPException(400, "source must be 'local' or 'freesound'")
+        set_setting("ambience_source", source)
+    if "library" in body:
+        set_setting("ambience_library", str(body.get("library") or "").strip())
+    # An empty key means "leave it alone", never "delete it": the UI cannot
+    # show the stored value back, so a blank field is the normal state of an
+    # already-configured install. Clearing is explicit.
+    if body.get("freesound_key"):
+        set_setting("freesound_key", str(body["freesound_key"]).strip())
+    if body.get("clear_key"):
+        set_setting("freesound_key", "")
+    if "licenses" in body:
+        picked = [lic for lic in (body.get("licenses") or [])
+                  if lic in FREESOUND_LICENCES]
+        set_setting("ambience_licenses", json.dumps(picked))
+    return {k: v for k, v in ambience_settings().items() if k != "key"}
 
 @app.put("/api/openrouter_routing")
 def put_openrouter_routing(body: dict = Body(...)):
@@ -1014,6 +1072,18 @@ def get_nsfw():
 def set_nsfw(body: dict = Body(...)):
     set_setting("nsfw_enabled", "1" if body.get("enabled") else "0")
     return {"enabled": body.get("enabled", False)}
+
+@app.put("/api/attire_beneath")
+def set_attire_beneath(body: dict = Body(...)):
+    """Whether a card's per-region `beneath` text is used at all.
+
+    Turning it off does not erase what a card authored; it stops that text
+    being put into any prompt. Regions still report themselves as bare, which
+    is objective and belongs to the story either way.
+    """
+    enabled = bool(body.get("enabled"))
+    set_setting("attire_beneath", "1" if enabled else "0")
+    return {"enabled": enabled}
 
 # ---- Self-update (host-only via the access-control middleware) ----
 # Sync defs so FastAPI runs the blocking git/network work in its threadpool
@@ -1445,6 +1515,30 @@ def char_fill_psychology(cid: int, body: dict = Body(default={})):
     except Exception as exc:
         raise HTTPException(502, f"Psychology fill failed: {exc}") from exc
     return {"id": cid, "sheet": sheet}
+
+def _appearance_fill(kind, entity_id, body):
+    """Shared handler for the two card editors' body-and-clothing generator."""
+    try:
+        return fill_appearance(
+            kind, entity_id,
+            str(body.get("prompt") or body.get("brief") or "").strip(),
+            include_beneath=bool(body.get("beneath")),
+            draft=body.get("draft"),
+        )
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, f"Appearance fill failed: {exc}") from exc
+
+@app.post("/api/characters/{cid}/fill_appearance")
+def char_fill_appearance(cid: int, body: dict = Body(default={})):
+    """Preview a generated body and outfit for editor review. Writes nothing."""
+    return {"id": cid, "sheet": _appearance_fill("character", cid, body)}
+
+@app.post("/api/personas/{pid}/fill_appearance")
+def persona_fill_appearance(pid: int, body: dict = Body(default={})):
+    """Preview a generated body and outfit for editor review. Writes nothing."""
+    return {"id": pid, "sheet": _appearance_fill("persona", pid, body)}
 
 @app.get("/api/characters/{cid}/export")
 def char_export(cid: int):
@@ -2780,6 +2874,10 @@ def dlg_put(cid: int, body: dict = Body(...)):
             "stop_on_player_address": bool(body.get("stop_on_player_address", True)),
             "stop_on_question_to_player": bool(body.get("stop_on_question_to_player", True)),
             "silence_ends_exchange": bool(body.get("silence_ends_exchange", True)),
+            # 0 = never promote. Capped well below the point where a counter
+            # would be theatre rather than a setting.
+            "promote_after_addressed": max(
+                0, min(99, int(body.get("promote_after_addressed", 0)))),
         }
 
         for key, default in derived.items():
@@ -3823,12 +3921,18 @@ def turn_backdrop(tid: int):
         # No room resolved -- an opening turn before mapping has placed
         # anyone, say. Not an error: there is simply nothing to depict.
         return {"enabled": enabled, "configured": configured, "room": None,
+                "room_id": None,
                 "signature": None, "ready": False, "url": None}
     status = backdrop_status(cid, req["signature"])
     return {
         "enabled": enabled,
         "configured": configured,
         "room": req["room_name"],
+        # The room's IDENTITY, not its display name. A turn with no picture of
+        # its own leaves whatever is on screen up rather than blanking, and that
+        # is only honest while the reader is still in the same room -- see
+        # `backdropForTurn`. Two rooms can share a name; they cannot share this.
+        "room_id": req["room"],
         "signature": req["signature"],
         "ready": bool(req["cached"]),
         # 'ready' | 'pending' | 'error' | 'absent'. Pending is why this route
@@ -3837,6 +3941,13 @@ def turn_backdrop(tid: int):
         "status": status,
         "error": backdrop_error(req["signature"]) if status == "error" else None,
         "url": _backdrop_url(cid, req["signature"]) if req["cached"] else None,
+        # What the weather overlay should draw over this room, already scoped
+        # to what the room can see. {} for anywhere with no sky. `severity` is
+        # the host's own setting riding along on it, so the drawing can be as
+        # restrained or as violent as the story asked for.
+        "weather": dict(req.get("weather") or {},
+                        severity=weather_severity(cid))
+        if req.get("weather") else {},
     }
 
 
@@ -3879,3 +3990,238 @@ def backdrop_image(cid: int, signature: str):
     # without touching the network at all.
     return FileResponse(path, media_type="image/png",
                         headers={"Cache-Control": "private, max-age=31536000, immutable"})
+# ============================ ROOM AMBIENCE ============================
+# The audio twin of the section above: a looping sound bed for the room the
+# player is standing in. Same guarantees, same out-of-band execution -- see
+# ambience.py for why the acoustic cache key is a different set of fields from
+# the visual one (light changes the picture and not the sound; weather and the
+# hour change both).
+#
+# Every route lives under /api/, so the access-control middleware makes it
+# host-only for free -- and the audio route in particular must stay there: it
+# serves files from a host-chosen directory, which is not something to hang
+# outside authentication.
+
+
+def _ambience_url(chat_id, signature, rev=0, layer=0):
+    # `rev` is what makes the immutable cache header honest across a reroll:
+    # same signature, different bytes, therefore a different URL. `layer` picks
+    # one bed out of a mix.
+    return "/api/chats/%d/ambience/%s.audio?rev=%d&layer=%d" % (
+        int(chat_id), signature, int(rev or 0), int(layer or 0))
+
+
+def _ambience_payload(cid, req, status=None):
+    """The one shape both ambience routes answer with."""
+    settings = ambience_settings()
+    manifest = req.get("cached") if req else None
+    # A room the `ambience_prompt` model judged to have no continuous sound of
+    # its own. RESOLVED, not missing: `ready` stays true and the token still
+    # moves, so the client crossfades to quiet exactly as it would to a bed,
+    # and nothing re-asks for a sound that was correctly declined.
+    silent = bool((manifest or {}).get("silent"))
+    return {
+        "enabled": settings["enabled"],
+        "configured": settings["configured"],
+        "source": settings["source"],
+        "room": req["room_name"] if req else None,
+        "room_id": req["room"] if req else None,
+        "signature": req["signature"] if req else None,
+        "pinned": bool(req.get("pin")) if req else False,
+        # Per-room level: rain two rooms in is quieter as well as different.
+        "gain": (req or {}).get("gain") or 1.0,
+        "ready": bool(manifest),
+        "silent": silent,
+        # Why this room is quiet, in the model's own words, for the panel to
+        # show. A verdict a reader cannot see reads as a broken feature.
+        "reason": (manifest or {}).get("reason") or "" if silent else "",
+        "status": status or (ambience_status(cid, req["signature"]) if req else "absent"),
+        "error": ambience_error(req["signature"]) if req else None,
+        "url": _ambience_url(cid, req["signature"],
+                             (manifest or {}).get("rev")) if manifest and not silent
+        else None,
+        # The mix: one entry per simultaneous bed, each with its own level and
+        # its own credit. A single-bed room is a one-entry list, so the client
+        # has one shape to handle rather than two.
+        "layers": [
+            {"index": index,
+             "role": layer.get("role") or "tone",
+             "gain": layer.get("gain", 1.0),
+             "title": layer.get("title") or "",
+             "source": layer.get("source") or "",
+             # What a pin needs to name this exact sound again. Host-only
+             # route, and a local path is the host's own library.
+             "path": layer.get("path") or "",
+             "id": layer.get("id"),
+             "license": layer.get("license") or "",
+             "username": layer.get("username") or "",
+             "credit_url": layer.get("url") or "",
+             "query": layer.get("query") or "",
+             "url": _ambience_url(cid, req["signature"],
+                                  (manifest or {}).get("rev"), index)}
+            for index, layer in enumerate((manifest or {}).get("layers") or [])
+        ] if manifest else [],
+        # The identity the PLAYER uses. A reroll keeps the signature (the room
+        # and its state have not changed) but must still crossfade to the new
+        # bed, so the thing the frontend compares has to move when the bytes
+        # do.
+        "token": "%s#%d" % (req["signature"], (manifest or {}).get("rev") or 0)
+        if req and manifest else None,
+        # What is actually playing, so the reader can see (and credit) it. The
+        # Freesound licences in play require attribution, and a feature that
+        # cannot tell you what it fetched cannot honour that.
+        "track": {k: manifest.get(k) for k in
+                  ("title", "source", "license", "username", "url", "query")}
+        if manifest and not silent else None,
+    }
+
+
+@app.get("/api/turns/{tid}/ambience")
+def turn_ambience(tid: int):
+    """What this turn's room should sound like, and whether it is already here.
+
+    Cheap and free: resolves the room and the cache signature, and NEVER
+    searches or downloads. The frontend calls this for whichever turn is on
+    screen, then POSTs only if it wants to pay for a miss.
+    """
+    turn = _backdrop_turn(tid)
+    cid = turn["chat_id"]
+    req = build_ambience_request(cid, turn["idx"], _backdrop_player(cid),
+                                 style_guide(cid))
+    if not req:
+        return _ambience_payload(cid, None)
+    return _ambience_payload(cid, req)
+
+
+@app.post("/api/turns/{tid}/ambience")
+def turn_ambience_resolve(tid: int, body: dict = Body(default={})):
+    """Ask for this turn's ambience. Returns immediately.
+
+    Like the backdrop POST, this does NOT wait: a library search plus a
+    download is seconds of network for audio nobody is waiting on. The caller
+    gets 'ready' or 'pending' and polls the GET.
+    """
+    turn = _backdrop_turn(tid)
+    cid = turn["chat_id"]
+    settings = ambience_settings()
+    if not settings["configured"]:
+        raise HTTPException(
+            503, "Ambience has no source yet — set one under ⚙ API › Room ambience.")
+    layer = body.get("layer")
+    # `layer` narrows a reroll to one bed of the mix; absent, null or
+    # unparseable all mean the whole mix. A caller that sends something else is
+    # asking for a reroll, not for a 500.
+    try:
+        reroll_layer = int(layer) if layer is not None else None
+    except (TypeError, ValueError):
+        reroll_layer = None
+    out = request_ambience(cid, turn["idx"], _backdrop_player(cid),
+                           style_guide(cid), force=bool(body.get("force")),
+                           reroll=bool(body.get("reroll")),
+                           reroll_layer=reroll_layer)
+    if not out:
+        raise HTTPException(409, "This turn has no room to give a sound to yet.")
+    req = build_ambience_request(cid, turn["idx"], _backdrop_player(cid),
+                                 style_guide(cid))
+    return _ambience_payload(cid, req, status=out["status"])
+
+
+@app.get("/api/chats/{cid}/ambience/{signature}.audio")
+def ambience_audio(cid: int, signature: str, layer: int = 0):
+    if not _BACKDROP_SIGNATURE.match(
+            (signature or "").removeprefix("pin").removeprefix("fx")):
+        raise HTTPException(404)
+    manifest = cached_ambience(cid, signature)
+    if not manifest:
+        raise HTTPException(404, "No ambience for that signature")
+    layers = manifest.get("layers") or []
+    if layer < 0 or layer >= len(layers):
+        raise HTTPException(404, "No such layer in that mix")
+    path = layers[layer]["file_path"]
+    return FileResponse(path, media_type=media_type_for(path),
+                        headers={"Cache-Control": "private, max-age=31536000, immutable"})
+
+
+@app.get("/api/ambience/search")
+def ambience_search(q: str, source: str = "", limit: int = 8):
+    """Candidate sounds for a query, for the reassignment picker.
+
+    Deliberately NOT cached and NOT written anywhere: this is a host browsing,
+    not the engine choosing. Nothing is downloaded until something is pinned.
+    """
+    query = str(q or "").strip()
+    if not query:
+        raise HTTPException(400, "A search needs a query")
+    if source and source not in ("local", "freesound"):
+        raise HTTPException(400, "source must be 'local' or 'freesound'")
+    try:
+        results = search_candidates(query, source or None,
+                                    limit=max(1, min(int(limit), 20)))
+    except Exception as exc:
+        raise HTTPException(502, "Search failed: %s" % str(exc)[:200])
+    return {"query": query, "source": source or ambience_settings()["source"],
+            "results": results}
+
+
+@app.get("/api/ambience/library")
+def ambience_library():
+    """Everything in the local library, so the picker can list it unfiltered."""
+    settings = ambience_settings()
+    return {"library": settings["library"],
+            "exists": os.path.isdir(settings["library"]),
+            "files": library_files(settings["library"])}
+
+
+@app.get("/api/chats/{cid}/ambience/oneshot/{name}")
+def ambience_oneshot(cid: int, name: str, variant: int = -1):
+    """A non-looping effect (thunder), fetched once and cached forever.
+
+    Asked for by the weather overlay when it draws lightning: a flash with no
+    sound is a screen artifact. Returns immediately with 'pending' on a miss --
+    the first storm of a session may flash silently, and that is a better
+    outcome than holding a request open.
+    """
+    # A different take each time unless one is asked for by number. Chosen
+    # HERE rather than by the caller so every route to a thunderclap gets the
+    # variety, and so the client stays as dumb as "play thunder".
+    if variant < 0:
+        variant = random.randrange(ONESHOT_VARIANTS)
+    try:
+        out = request_oneshot(cid, name, variant)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+    ready = out["status"] == "ready"
+    return {"name": name, "variant": variant, "status": out["status"],
+            "ready": ready, "error": ambience_error(out["signature"]),
+            "url": _ambience_url(cid, out["signature"]) if ready else None}
+
+
+@app.get("/api/chats/{cid}/ambience/pins")
+def ambience_pins_get(cid: int):
+    return {"pins": ambience_pins(cid)}
+
+
+@app.put("/api/chats/{cid}/ambience/pin")
+def ambience_pin_put(cid: int, body: dict = Body(...)):
+    """Fix one room's sound to an explicit choice.
+
+    Keyed by room rather than by cache signature on purpose: a host saying
+    "this hall sounds like this" means the hall, not the hall-at-night-in-rain.
+    The pin therefore also overrides the time-of-day and weather shifts the
+    automatic path makes -- that is the point of pinning one.
+    """
+    room = str(body.get("room") or "").strip()
+    if not room:
+        raise HTTPException(400, "A pin needs a room id")
+    try:
+        pin = set_ambience_pin(cid, room, body.get("choice") or body)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"ok": True, "room": room, "pin": pin}
+
+
+@app.delete("/api/chats/{cid}/ambience/pin")
+def ambience_pin_delete(cid: int, room: str):
+    """Drop a pin, returning the room to automatic selection."""
+    return {"ok": True, "cleared": clear_ambience_pin(cid, str(room or "").strip()),
+            "pin": ambience_pin_for(cid, str(room or "").strip())}

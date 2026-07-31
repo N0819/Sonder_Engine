@@ -63,6 +63,7 @@ from .common import (
     _normalize_character_output,
     _word_shingles,
     assign_event_ids,
+    attire_view,
     cap_mind_model_updates,
     character_room,
     norm_sequence,
@@ -1854,7 +1855,11 @@ def character_step(ctx, cid, nonce):
         "sense_profile": character_senses(sh),
         "interoception": character_interoception(sh),
         "abilities": character_abilities(sh),
-        "attire": sc.get("attire", {}).get(character_name(sh)),
+        # Its own clothing, by region. A character knows what it is wearing
+        # and what of itself is uncovered -- that is interoception, not
+        # observation -- so this is the one place the region view is of the
+        # reader's own body rather than someone else's.
+        "attire": attire_view(sc.get("attire", {}).get(character_name(sh))),
         "recent_self_lines": _self_lines,
         # The SHAPE those lines keep reusing, computed rather than left to the
         # character to notice about itself -- see _self_line_refrain. Absent

@@ -23,6 +23,7 @@ const BD = {
   layers: null,          // the two cross-fading image layers
   front: 0,              // which layer is currently showing
   signature: null,       // the signature currently painted
+  shownRoom: null,       // which ROOM the painted picture is of
   wanted: null,          // the signature the visible turn wants painted
   turnSeq: 0,            // guards against out-of-order async responses
   byTurn: new Map(),     // turn id -> the GET payload (cleared per render)
@@ -30,7 +31,14 @@ const BD = {
   failed: new Set(),     // signatures already tried and given up on
   chatId: null,          // which story the painted backdrop belongs to
   timer: null,
+  dwellTimer: null,      // the second, slower one: see backdropOnVisibleTurn
 };
+
+// Reading what already exists is instant and free; COMMISSIONING one is neither.
+// So the two are on different clocks: a picture already on disk appears as fast
+// as the scroll settles, and nothing is paid for until the reader has actually
+// stopped to read.
+const BD_SETTLE_MS = 220, BD_DWELL_MS = 2000;
 
 // The scrim over the whole picture: a fixed strength, tuned on screen. It was
 // originally derived from the image's luminance across a 0.30-0.78 range,
@@ -194,7 +202,7 @@ function generateBackdrop(turnId, signature) {
   return job;
 }
 
-async function backdropForTurn(turnId) {
+async function backdropForTurn(turnId, opts = {}) {
   if (turnId == null) return;
   const seq = ++BD.turnSeq;
   let state = BD.byTurn.get(turnId);
@@ -210,12 +218,34 @@ async function backdropForTurn(turnId) {
   BD.enabled = !!state.enabled;
   BD.configured = !!state.configured;
   updateBackdropBtn();
+  // The room-scoped weather rides on this payload, so the rain overlay follows
+  // the same "which turn is being read" answer the picture does. Guarded like
+  // every other optional module here: a missing script must not break the
+  // transcript.
+  if (typeof weatherFxForTurn === "function") weatherFxForTurn(state);
 
   if (!state.signature) { BD.wanted = null; clearBackdrop(); return; }
   BD.wanted = state.signature;
-  if (state.ready && state.url) { showBackdrop(state.url, state.signature); return; }
-  // A miss. Free viewers see the previous room stay up rather than a blank
-  // screen; only an enabled, configured install pays to fill it in.
+  if (state.ready && state.url) {
+    BD.shownRoom = state.room_id || null;
+    showBackdrop(state.url, state.signature);
+    return;
+  }
+  // A miss. The previous picture stays up rather than blanking -- but only
+  // while it is a picture of THIS ROOM. Consecutive beats in one room differ by
+  // the hour, the weather, some damage; holding the image through those reads
+  // as the room the reader is in. Holding it across a doorway does not: it
+  // shows the waystation's fire behind a beat spent out in the blizzard, which
+  // is the transcript and the screen disagreeing about where the story is.
+  // A room with no picture yet is better represented by none.
+  if ((state.room_id || null) !== BD.shownRoom) {
+    BD.shownRoom = null;
+    clearBackdrop();
+  }
+  // Only an enabled, configured install pays to fill it in -- and only once the
+  // reader has settled here, or this turn was just generated. Scrolling through
+  // a long story crosses dozens of rooms nobody stopped in.
+  if (!opts.commission) return;
   if (!BD.enabled || !BD.configured || BD.failed.has(state.signature)) return;
 
   const generated = await generateBackdrop(turnId, state.signature);
@@ -228,6 +258,7 @@ async function backdropForTurn(turnId) {
   // share it, so drifting a few beats while it renders still wants this exact
   // image.
   if (generated.signature === BD.wanted) {
+    BD.shownRoom = state.room_id || null;
     showBackdrop(generated.url, generated.signature);
   }
 }
@@ -235,9 +266,19 @@ async function backdropForTurn(turnId) {
 // Called from the scroll observer in chat.js, which fires on every
 // intersection change -- coalesce, or a flick of the wheel becomes a dozen
 // requests for turns the reader never stopped at.
-function backdropOnVisibleTurn(turnId) {
+function backdropOnVisibleTurn(turnId, opts = {}) {
   clearTimeout(BD.timer);
-  BD.timer = setTimeout(() => backdropForTurn(turnId), 220);
+  clearTimeout(BD.dwellTimer);
+  // Always the quick pass, which shows whatever is already cached.
+  BD.timer = setTimeout(
+    () => backdropForTurn(turnId, { commission: !!opts.fresh }), BD_SETTLE_MS);
+  // And, unless this turn was just generated (where the reader is plainly here
+  // and waiting), a second pass that is allowed to spend money -- cancelled by
+  // the next scroll tick, so passing through a room never commissions it.
+  if (!opts.fresh) {
+    BD.dwellTimer = setTimeout(
+      () => backdropForTurn(turnId, { commission: true }), BD_DWELL_MS);
+  }
 }
 
 // Turn content (and so its room) can change under us on reroll, edit or
@@ -245,15 +286,25 @@ function backdropOnVisibleTurn(turnId) {
 function backdropResetForRender() {
   BD.byTurn.clear();
   clearTimeout(BD.timer);
+  clearTimeout(BD.dwellTimer);
   // Opening a different story (or none) must not leave the previous story's
   // room on screen. The observer would eventually correct it, but only once a
   // turn scrolls into view -- an empty chat has none, so it never would.
   if (BD.chatId !== S.chatId) {
     BD.chatId = S.chatId;
     BD.wanted = null;
+    BD.shownRoom = null;
     clearBackdrop();
+    // The sky belongs to the story too. WFX state is module-global and is only
+    // ever updated when a TURN's payload arrives, so without this a new story
+    // kept raining the old one's rain -- indefinitely for a story with no
+    // turns yet, since the observer that would correct it never fires.
+    if (typeof weatherFxApply === "function") weatherFxApply(null);
   }
-  if (!S.chatId) clearBackdrop();
+  if (!S.chatId) {
+    clearBackdrop();
+    if (typeof weatherFxApply === "function") weatherFxApply(null);
+  }
 }
 
 function updateBackdropBtn() {

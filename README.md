@@ -40,9 +40,11 @@ flow, including the different opening-turn path.
 5. [`docs/CODE_MAP.md`](docs/CODE_MAP.md) — generated index of modules,
    functions, routes, and tables. Regenerate with `make map`; never hand-edit.
 6. [`docs/TESTING.md`](docs/TESTING.md) — test tiers and CI policy.
-7. [`Design.md`](Design.md) — philosophy, architecture, and a verified
+7. [`docs/FEATURES.md`](docs/FEATURES.md) — every feature in plain language:
+   what the app does, one line each.
+8. [`Design.md`](Design.md) — philosophy, architecture, and a verified
    built / partial / not-built conformance table.
-8. [`docs/UNBUILT.md`](docs/UNBUILT.md) — the single register of known defects
+9. [`docs/UNBUILT.md`](docs/UNBUILT.md) — the single register of known defects
    and unbuilt work. [`CHANGELOG.md`](CHANGELOG.md) is the history.
 
 ## Run locally
@@ -57,11 +59,35 @@ installs dependencies, and opens the app.
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app:app --host 127.0.0.1 --port 8008 --reload
+uvicorn app:app --host 127.0.0.1 --port 8008 --timeout-graceful-shutdown 3
 ```
+
+That last flag is not optional in practice. Uvicorn's graceful shutdown waits
+*indefinitely* for a client that has not finished reading its response, and a
+browser tab buffering a multi-megabyte ambience bed is exactly such a client —
+so Ctrl+C prints "Shutting down", then "Waiting for connections to close", and
+sits there until a second Ctrl+C kills it. `make run` and `make serve` pass it
+for you.
 
 Then open <http://127.0.0.1:8008>. The database is `engine.db` by default; set
 `ENGINE_DB` before startup to use another path.
+
+**To play, do not pass `--reload`** (and `make serve` is the same command).
+Idle, the server itself costs nothing — measured at 0% of a core with a story
+open. The file watcher behind `--reload` is a different matter: given
+`watchfiles` it is event-driven and free, but without it uvicorn falls back to
+re-walking the whole tree and stat-ing every `.py` file four times a second,
+which measured **16% of a core, permanently, for a server doing nothing**.
+`requirements.txt` asks for `uvicorn[standard]`, which includes `watchfiles`,
+so a clean install of the above is fine — but a system-packaged uvicorn often
+is not. If you are developing and want reloads, check with:
+
+```bash
+python -c "import watchfiles" || pip install watchfiles
+```
+
+`make run` checks this for you and slows the fallback watcher down when
+`watchfiles` is missing.
 
 ## Development
 
@@ -74,7 +100,8 @@ make test-fast   # broad suite, no database-backed tests
 make test-full   # every Python regression test
 make structure   # duplicate symbols, patch debris, stale map
 make map         # regenerate docs/CODE_MAP.md
-make run         # start the server
+make run         # start the server, watching for code changes
+make serve       # start the server with no watcher — for playing
 ```
 
 `make check` treats a stale `docs/CODE_MAP.md`, a duplicated top-level symbol,
@@ -141,6 +168,32 @@ standard rather than a library:
   Implemented independently from the public specification, with thanks. Sonder
   isn't an official or certified Sigma integration, and nothing here speaks for
   Sigma Stratum — the good idea is theirs, any mistakes in using it are ours.
+
+- **[Freesound](https://freesound.org/)** — the optional room-ambience feature
+  can source its sound beds from Freesound's APIv2, the collaborative
+  Creative Commons sound database maintained by the [Music Technology
+  Group](https://www.upf.edu/web/mtg) at Universitat Pompeu Fabra, Barcelona.
+  Every recording it plays is somebody's field work, uploaded under a licence
+  that asks to be credited: the engine fetches only CC0 and Attribution sounds
+  unless a host opts into more, stores the uploader, licence and source URL
+  beside each cached file, and shows them in the 🎧 panel while that sound is
+  playing. Sonder is not affiliated with or endorsed by Freesound, and using
+  the feature needs your own free API key from
+  [freesound.org/apiv2/apply](https://freesound.org/apiv2/apply). If you
+  publish or stream anything containing an Attribution-licensed bed, credit
+  its uploader — the panel tells you who.
+
+  The alternative source is a local folder of audio you already own, which
+  involves no third party at all.
+
+The weather overlay has no third-party dependency at all. It began as
+[tsParticles](https://particles.js.org/) by Matteo Bruni — a good library,
+and thanks are owed for the version that shipped first — but a particle engine
+redraws a full-screen canvas from JavaScript every frame, which is a great deal
+of power for scenery. It now draws one small tile, generated at runtime and
+seamless by construction, repeated as a background and moved by a CSS
+`transform`: no per-frame JavaScript, no repaint, and the animation runs on the
+compositor rather than the CPU. Nothing is downloaded and nothing is vendored.
 
 ## License
 

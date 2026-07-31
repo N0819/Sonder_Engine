@@ -88,6 +88,23 @@
         <button id="send" class="primary">Send ➤</button>
         <button id="stop" class="danger hidden">■ Stop</button>
       </div>
+
+      <!-- Room ambience (ambience.js). Beside the input rather than in the top
+           toolbar because these are mid-scene reflexes -- mute a bed that has
+           started to grate, reroll one that landed wrong -- not settings
+           configured once. Mute is deliberately its own button and not buried
+           in the panel: it is the control someone needs in a hurry.
+           A SIBLING of #composer-inner, not a child: that inner wrapper
+           carries the 720px measure the prose column is aligned to, so
+           anything inside it takes width away from the input. Out here it
+           floats in the margin the full-bleed composer already has. -->
+      <div id="ambience-bar" role="group" aria-label="Room ambience">
+        <button id="b-amb-mute" class="icon-button" title="Mute ambience" aria-label="Mute ambience">🔊</button>
+        <input id="amb-vol" type="range" min="0" max="1" step="0.01" value="0.35"
+               title="Ambience volume" aria-label="Ambience volume">
+        <button id="b-amb-reroll" class="icon-button" title="Different sound for this room" aria-label="Different sound for this room">🎲</button>
+        <button id="b-ambience" class="icon-button" title="Room ambience" aria-label="Room ambience">🎧</button>
+      </div>
     </div>
 
     <!-- Your own condition: the gutter between the sidebar and the story,
@@ -127,6 +144,11 @@
 <script src="/static/js/editors.js"></script>
 <script src="/static/js/lorebooks.js"></script>
 <script src="/static/js/backdrops.js"></script>
+<script src="/static/js/ambience.js"></script>
+<!-- Weather draws itself: one generated tile moved by a CSS transform, no
+     particle engine and so no vendored bundle to load. See the header of
+     weather-fx.js for why that is a fraction of the power. -->
+<script src="/static/js/weather-fx.js"></script>
 <script src="/static/js/chat.js"></script>
 <script src="/static/js/settings.js"></script>
 <script src="/static/js/themes.js"></script>

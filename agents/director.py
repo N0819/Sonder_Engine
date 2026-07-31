@@ -6,6 +6,7 @@ import json
 import random
 import re
 
+import attire as attire_model
 from character_schema import (
     character_abilities,
     character_appearance,
@@ -82,6 +83,7 @@ from .common import (
     normalize_character_refs,
     player_speech_lines,
     repair_narrated_speech_elements,
+    scene_attire_view,
 )
 
 def _cast_match_forms(cast):
@@ -217,13 +219,16 @@ def director_establish(ctx, nonce):
     for entity, state in initial_attire.items():
         if not isinstance(state, dict):
             continue
-        wearing = sanitize_attire_items(state.get("wearing") or [])
-        condition = [
-            str(item).strip() for item in (state.get("state") or [])
-            if str(item or "").strip()
-        ]
-        if wearing or condition:
-            attire[entity] = {"wearing": wearing, "state": condition}
+        # Authored regions are restored with the rest. Without this the
+        # opening turn is the one beat that silently discards them, and a
+        # card's placement would only take effect from turn two onward.
+        entry = attire_model.authored_entry(
+            sanitize_attire_items(state.get("wearing") or []),
+            state.get("state"),
+            state.get("regions"),
+        )
+        if any(entry.values()):
+            attire[entity] = entry
     out["attire"] = attire
 
     out.setdefault("entities", {})
@@ -2577,6 +2582,88 @@ def _unratified_background_claims(chat_id, turn_idx):
         return []
 
 
+def _guard_approach_is_not_arrival(ctx, interp, sd, sc, p_name):
+    """A declaration that only reaches TOWARD somewhere does not end inside it.
+
+    Observed live, story "The Blizzard", turn 2. The player wrote "You wander
+    towards it" of a lit building seen through the snow the beat before.
+    `director_interpret` produced `stage: "approach"` and
+    `asserted_effects: "progresses across the snowy clearing toward the
+    building"` -- and also `movement: {to_room: "distant_mountain_building",
+    why: "heading towards the flickering light"}`. The passable-route backstop
+    passed it, correctly: the rooms were adjacent and the edge was open.
+    `director_resolve` then wrote "she reaches the building, opens the door,
+    and steps into its lantern-lit interior" and committed her position inside,
+    taking her from `exposure: open` to `exposure: sheltered` -- out of a
+    blizzard -- with nobody having said she was going in.
+
+    The fix is `MovementDecl.arrives`, set by the stage that actually read the
+    player's sentence. This is the deterministic half: a movement whose own
+    declaration says it does not arrive may not commit a position.
+
+    It is a FIELD because the distinction cannot be recovered downstream.
+    Measured across the whole live corpus (1249 turns): no test on the
+    declaration's text separates "I cross the command deck and head down the
+    central corridor TOWARD the med bay" -- an asserted crossing -- from
+    "PROGRESSES across the snowy clearing TOWARD the building". Both say
+    "toward"; both are staged `approach`; both are `commitment: asserted`. Four
+    successive heuristics were tried against the corpus and each one blocked
+    legitimate arrivals: last-element stage (3 false positives), presence
+    versus progress markers (still 8), single-element beats (still 4). The
+    information simply is not in the diff -- only in the sentence, which only
+    the interpret sees.
+
+    `stage` is the cautionary tale one field over: an `ActionStage` enum in the
+    schema since the beginning, read by NOTHING on the resolve path, so the
+    interpret has been classifying these correctly all along to no effect.
+    """
+    mv = interp.get("movement")
+    if not isinstance(mv, dict) or mv.get("arrives", True):
+        return
+    # A SECOND declaration toward the same place arrives. Without this the
+    # feature strands anyone who keeps writing approach-flavoured text: the
+    # engine would answer "you get closer" forever, and time spent approaching
+    # is time spent standing still -- measured, six hours of "trudging towards
+    # the mountain" left the walker in the clearing she started in, under
+    # level-12 snowdrifts the weather had piled on a body that never moved.
+    # One beat closes the distance, the next one gets there.
+    pending = sc.get("approach") or {}
+    subject_key = p_name if str(mv.get("mover") or "self") == "self" else str(mv["mover"])
+    # Per mover. The scene-global shape ({"who": ...}) is still read so a save
+    # written before this does not lose a walker mid-stride.
+    if "who" in pending:
+        pending = ({pending["who"]: {"to_room": pending.get("to_room")}}
+                   if pending.get("who") else {})
+    if (pending.get(subject_key) or {}).get("to_room") == mv.get("to_room"):
+        ctx.warnings.append(
+            f"Approach completed: {subject_key} was already closing on "
+            f"'{mv.get('to_room')}' and arrives this beat."
+        )
+        return
+    # Whose move was it. "self" is the player's own body; anything else is the
+    # vehicle or mount they declared, and a skiff told to head for the light is
+    # as much not-there-yet as the hand on its tiller. Guarding only the player
+    # left "I steer us towards the lighthouse" putting the boat on the rock.
+    subject = p_name if str(mv.get("mover") or "self") == "self" else str(mv["mover"])
+    was = room_of(sc, subject)
+    now = (sd.get("positions") or {}).get(subject)
+    if not now or now == was:
+        return
+    # Being moved WITHOUT walking is somebody else's doing -- carried, dragged,
+    # shut in a crate -- and that is the resolve's to assert, not this guard's
+    # to refuse.
+    if (sc.get("contained") or {}).get(subject):
+        return
+    sd["positions"].pop(subject, None)
+    ctx.warnings.append(
+        f"Approach is not arrival: {subject}'s declared movement to "
+        f"'{mv.get('to_room')}' is marked arrives=false, but the beat placed "
+        f"them in '{now}'{f' (from {was!r})' if was else ''}. Position "
+        "unchanged -- moving closer to somewhere is not being there, and "
+        "reaching a building is not entering it."
+    )
+
+
 def director_resolve(ctx, nonce):
     chat = ctx.chat
     interp = _dict(ctx.director_interpret)
@@ -2753,7 +2840,7 @@ def director_resolve(ctx, nonce):
             ),
             "entities": sc.get("entities"),
             "positions": sc.get("positions"),
-            "attire": sc.get("attire"),
+            "attire": scene_attire_view(sc),
             "time": sc.get("time"),
         },
         "simulation_clock": clock,
@@ -3081,8 +3168,17 @@ def director_resolve(ctx, nonce):
                 f"to '{mv['to_room']}' not opened this beat and the resolve "
                 "diff did not assert the move; position unchanged."
             )
-        else:
+        elif mv.get("arrives", True):
             sd["positions"][move_subject] = mv["to_room"]
+        else:
+            # Declared as heading there, not getting there. The destination is
+            # still what they are moving toward -- it is the arrival that this
+            # beat does not contain.
+            ctx.warnings.append(
+                f"Movement to '{mv['to_room']}' declared arrives=false: "
+                f"{move_subject} is heading there, not there. No position "
+                "committed this beat."
+            )
 
         if mover_eid is not None:
             # Driver-conflation guard: a vehicle move relocates the ENTITY;
@@ -3107,6 +3203,14 @@ def director_resolve(ctx, nonce):
                     f"'{mv['to_room']}' -- the player rides inside the "
                     "vehicle's interior; only the vehicle's position moves."
                 )
+
+    # Runs whether or not a movement was DECLARED, and after the backstop has
+    # had its say. The reported case declared one -- interpret turned "wander
+    # towards it" into `movement.to_room: distant_mountain_building`, with
+    # `why: "heading towards the flickering light"` -- and the route check
+    # passed it, because the rooms genuinely were adjacent and open. Nothing
+    # there was wrong except that the player never said they were going in.
+    _guard_approach_is_not_arrival(ctx, interp, sd, sc, p_name)
 
     if not out.get("resolved_event"):
         parts = []

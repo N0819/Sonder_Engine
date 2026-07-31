@@ -32,6 +32,8 @@ from character_schema import (
 
 import re as _re
 
+import attire as attire_model
+
 _NON_ATTIRE_TERMS = {
     "chair", "cushion", "seat", "table", "cup", "mug", "glass",
     "bottle", "book", "weapon", "tool",
@@ -52,11 +54,18 @@ def sanitize_attire_items(items):
 
 
 def seed_initial_attire(scene, name, outfit):
-    """Seed one body's authored starting clothes without resetting live state."""
+    """Seed one body's authored starting clothes without resetting live state.
+
+    This is where the card's two representations become one. Authored regions
+    are taken as written; the flat `wearing` list is sorted into whatever
+    regions they left unclaimed. The merge happens HERE rather than in the card
+    so a cue-table guess is never written back to something an author reads as
+    their own choice -- see `character_schema._normalize_initial_outfit`.
+    """
     if not isinstance(scene, dict) or not str(name or "").strip():
         return False
-    attire = scene.setdefault("attire", {})
-    if name in attire:
+    ledger = scene.setdefault("attire", {})
+    if name in ledger:
         return False
     outfit = outfit if isinstance(outfit, dict) else {}
     wearing = sanitize_attire_items(outfit.get("wearing") or [])
@@ -64,9 +73,10 @@ def seed_initial_attire(scene, name, outfit):
         str(item).strip() for item in (outfit.get("state") or [])
         if str(item or "").strip()
     ]
-    if not wearing and not state:
+    entry = attire_model.authored_entry(wearing, state, outfit.get("regions"))
+    if not any(entry.values()):
         return False
-    attire[name] = {"wearing": wearing, "state": state}
+    ledger[name] = entry
     return True
 
 
@@ -892,6 +902,11 @@ DEFAULT_INTERACTION_CONFIG = {
     "stop_on_player_address": True,
     "stop_on_question_to_player": True,
     "silence_ends_exchange": True,
+    # Turns of DELIBERATE interaction -- the player addressing them, or a real
+    # character aiming a line at them -- before a background extra is promoted
+    # into a full character. 0 means never, and is the default: acquiring cast
+    # is not something a story should do without being asked.
+    "promote_after_addressed": 0,
 }
 
 DEFAULT_REACTION_CONFIG = {
@@ -1053,6 +1068,23 @@ def fiction_model(chat_id):
 STYLE_GUIDE_FIELDS = ("genre", "tone", "director_notes", "mapping_notes", "avoid")
 STYLE_GUIDE_LIMIT = 2000
 
+# How far the sky is allowed to go, and how much of the world it may touch.
+# A closed vocabulary rather than free text because it GATES behaviour rather
+# than describing it -- the engine caps drift on it and the Director is told
+# what it permits, so an unrecognised value has to become a known one.
+#
+#   calm          weather is scenery. Light at worst, and it leaves no mark on
+#                 the world: no mud, no drifts, nothing underfoot.
+#   seasonal      real weather, the full range of it, and ground that answers
+#                 to it. Nothing here endangers anyone. THE DEFAULT.
+#   harsh         weather you would not want to be caught out in: soaking,
+#                 numbing, treacherous footing. Costly, not deadly.
+#   catastrophic  weather may become the event. Floods, blizzards, things
+#                 giving way. Opt-in, and never a default, because a story can
+#                 be ruined by a sky that decided to.
+WEATHER_SEVERITIES = ("calm", "seasonal", "harsh", "catastrophic")
+DEFAULT_WEATHER_SEVERITY = "seasonal"
+
 # Explicit "work it out yourself" values for genre. Pinning a genre is the new
 # capability, but self-determination is the DEFAULT and stays first-class: the
 # engine already infers a fiction_model from the scenario and lore, and an
@@ -1075,6 +1107,13 @@ def normalize_style_guide(raw):
     if not isinstance(raw, dict):
         return {}
     out = {}
+    # Closed vocabulary, so it is normalized rather than trimmed: this one
+    # gates engine behaviour instead of describing it, and an unrecognised
+    # value has to become a known one rather than travel on as free text.
+    severity = str(raw.get("weather_severity") or "").strip().casefold()
+    if severity and severity != DEFAULT_WEATHER_SEVERITY:
+        out["weather_severity"] = (severity if severity in WEATHER_SEVERITIES
+                                   else DEFAULT_WEATHER_SEVERITY)
     for key in STYLE_GUIDE_FIELDS:
         value = raw.get(key)
         if value is None:
@@ -1093,6 +1132,12 @@ def style_guide(chat_id):
     """The authored style guide, or {} when none is set. Read per turn so an
     edit applies to the next beat without a restart."""
     return normalize_style_guide(wget(chat_id, "style_guide", None) or {})
+
+
+def weather_severity(chat_id):
+    """How far this story's sky may go. See WEATHER_SEVERITIES."""
+    value = (style_guide(chat_id) or {}).get("weather_severity")
+    return value if value in WEATHER_SEVERITIES else DEFAULT_WEATHER_SEVERITY
 
 def simulation_clock(chat_id):
     return wget(chat_id, "simulation_clock", None) or {

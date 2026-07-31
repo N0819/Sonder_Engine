@@ -11,6 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, validator
 
+import attire
 from schemas import coerce_to_declared
 
 _PYDANTIC_V2 = hasattr(BaseModel, "model_validate")
@@ -350,17 +351,39 @@ def _outfit_items(value: Any) -> list[str]:
 
 
 def _normalize_initial_outfit(value: Any) -> dict:
-    """Normalize authored starting clothes into the live attire shape."""
+    """Normalize authored starting clothes into the live attire shape.
+
+    `regions` is the authoring surface: which body part each garment occupies,
+    and optionally what is underneath it.
+
+    `wearing` is RETIRED as something an author fills in, and kept as an input
+    format -- what every older card carries, what an import brings, and what
+    the generators still emit. It is folded into `regions` on read, so a card
+    written the old way migrates the first time anything looks at it, and the
+    cue-table guess `attire.region_of` made lands in the region editor where an
+    author can see it and move it. A guess nobody can find is worse than a
+    guess in the wrong place.
+
+    It is then written back as a DERIVED mirror, so the two can never disagree
+    about the same body. `state` is retired outright: what has happened to a
+    garment now belongs to the garment (`condition`), not to a free-text list
+    beside the person. Existing values are preserved, never extended.
+    """
     if isinstance(value, dict):
         wearing = value.get("wearing")
         if wearing is None:
             wearing = value.get("items") or value.get("outfit")
         state = value.get("state")
+        regions = attire.normalize_regions({
+            "regions": value.get("regions"),
+            "wearing": _outfit_items(wearing),
+        })
     else:
-        wearing, state = value, []
+        wearing, state, regions = value, [], {}
     return {
-        "wearing": _outfit_items(wearing),
+        "wearing": attire.flat_wearing(regions) or _outfit_items(wearing),
         "state": _outfit_items(state),
+        "regions": regions,
     }
 
 
@@ -372,7 +395,7 @@ def default_character_data(name: str = "Unnamed") -> dict:
             "aliases": [],
             "pronouns": {"subject": "they", "object": "them", "possessive": "their"},
         },
-        "initial_outfit": {"wearing": [], "state": []},
+        "initial_outfit": {"wearing": [], "state": [], "regions": {}},
         "simulation": {"tier": "mid", "temperature": 0.8, "sampler": {},
                        "curiosity": 0.5},
         "embodiment": {
@@ -469,7 +492,7 @@ def default_persona_data(name: str = "Player") -> dict:
             "aliases": [],
             "pronouns": {"subject": "they", "object": "them", "possessive": "their"},
         },
-        "initial_outfit": {"wearing": [], "state": []},
+        "initial_outfit": {"wearing": [], "state": [], "regions": {}},
         "embodiment": {
             "senses": [
                 {"channel": "vision", "acuity": "ordinary", "range": "ordinary", "notes": ""},
@@ -1020,7 +1043,7 @@ def character_appearance(sheet: dict) -> str:
 def character_initial_outfit(sheet: dict) -> dict:
     return copy.deepcopy(
         normalize_character_data(sheet).get(
-            "initial_outfit", {"wearing": [], "state": []})
+            "initial_outfit", {"wearing": [], "state": [], "regions": {}})
     )
 
 def character_senses(sheet: dict) -> list[dict]:
@@ -1215,7 +1238,7 @@ def persona_appearance(sheet: dict) -> str:
 def persona_initial_outfit(sheet: dict) -> dict:
     return copy.deepcopy(
         normalize_persona_data(sheet).get(
-            "initial_outfit", {"wearing": [], "state": []})
+            "initial_outfit", {"wearing": [], "state": [], "regions": {}})
     )
 
 def persona_senses(sheet: dict) -> list[dict]:

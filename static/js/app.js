@@ -25,6 +25,7 @@ async function boot() {
   // See the guard in chat.js's observer: an optional experimental module must
   // never be able to abort boot() before the sidebar and transcript render.
   if (typeof syncBackdrops === "function") syncBackdrops();
+  if (typeof syncAmbience === "function") syncAmbience();
   renderSide();
 
   // On cold boot no chat is open yet, so nothing else would ever replace

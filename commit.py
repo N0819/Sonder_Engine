@@ -28,8 +28,10 @@ from character_schema import (character_name, new_uid, character_psychology,
                               normalize_character_data, persona_name,
                               character_appearance as _char_appearance)
 from frames import is_recognized_in_frame
+import attire as attire_model
 from scene import set_char_state, set_char_status, seed_initial_attire
 from mechanics import mechanics_sweep, news_latency_seconds, stable_event_key
+from weather import advance_weather, normalize_weather
 from spatial import (merge_scene_with_diff,
                      normalize_room_id, spatial_rel, hear_level,
                      normalize_barrier, normalize_bearing, opposite_bearing,
@@ -1366,6 +1368,21 @@ def _heal_attire_identity_keys(sc, cast):
     from agents.common import character_scene_keys
 
     alias_to_canonical = {}
+    # A name somebody actually GOES BY, as opposed to also answers to. One
+    # character's alias is another's name often enough in fiction -- a nickname,
+    # a family name, a title -- and folding on it merges two bodies. Measured:
+    # with a character named Yuki and a second whose aliases include "Yuki",
+    # this collapsed Yuki's wardrobe onto the other woman, who was wearing
+    # nothing and acquired a yukata; Yuki's own record disappeared.
+    own_names = set()
+    for row in cast or []:
+        try:
+            keys = character_scene_keys(json.loads(row["sheet"]))
+        except Exception:
+            continue
+        if keys:
+            own_names.add(keys[0].casefold())
+
     for row in cast or []:
         try:
             keys = character_scene_keys(json.loads(row["sheet"]))
@@ -1374,7 +1391,11 @@ def _heal_attire_identity_keys(sc, cast):
         if not keys:
             continue
         for key in keys[1:]:
-            alias_to_canonical[key.casefold()] = keys[0]
+            folded = key.casefold()
+            # A registered name always outranks somebody else's alias for it.
+            if folded in own_names and folded != keys[0].casefold():
+                continue
+            alias_to_canonical[folded] = keys[0]
 
     def canonical(name):
         return alias_to_canonical.get(str(name or "").strip().casefold(), name)
@@ -1397,6 +1418,126 @@ def _heal_attire_identity_keys(sc, cast):
                 target[field] = merged
 
     return canonical
+
+
+def _player_name_or_none(ctx):
+    """The player's own name, or None if it cannot be resolved."""
+    try:
+        from scene import persona_of
+        return persona_name(persona_of(ctx.chat)) or None
+    except Exception:
+        return None
+
+
+def _beat_voices(ctx, res):
+    """Every text this beat was acted in, EXCEPT the player's own input.
+
+    What each character declared, plus the Director's resolved prose. The
+    player's input is passed separately by the caller, because first person is
+    only a reliable subject there -- "I rip my coat off" names its subject
+    nowhere else in the sentence.
+
+    Used only to decide how FAST an undressing the fiction has already asked
+    for happens -- never who may know what -- so reading across all of it
+    carries no information-firewall cost.
+    """
+    texts = []
+    if isinstance(res, dict):
+        texts.append(str(res.get("resolved_event") or ""))
+    for result in (getattr(ctx, "character_results", None) or {}).values():
+        if not isinstance(result, dict):
+            continue
+        for key in ("action", "speech"):
+            texts.append(str(result.get(key) or ""))
+        for element in result.get("sequence") or []:
+            if isinstance(element, dict):
+                for key in ("action", "speech", "text"):
+                    texts.append(str(element.get(key) or ""))
+    return [t for t in texts if t.strip()]
+
+
+def _mint_shed_garments(sc, shed, diff=None):
+    """A garment that has come off becomes a thing in the room.
+
+    Clothes that vanish when removed cannot be picked up, taken, hidden or
+    found again, and the story loses the shirt it just spent a beat on. Minted
+    as an ordinary portable object, so everything that already works on objects
+    -- being carried, being put inside a wardrobe or a chest, being seen --
+    works on it with no further machinery. Placed where its wearer is standing;
+    where it goes next is the story's business.
+
+    Written into the beat's `diff` as well as the scene. `world_entities` is a
+    DERIVED projection built from that diff, not from the scene blob, so an
+    entity minted only here would live in the runtime scene and be absent from
+    the normalized table -- the one divergence Phase 3a exists to prevent.
+    """
+    if not shed or not isinstance(sc, dict):
+        return
+    entities = sc.setdefault("entities", {})
+    positions = sc.setdefault("positions", {})
+    projected = diff.setdefault("entities", {}) if isinstance(diff, dict) else None
+    for owner, garment, *rest in shed:
+        condition = (rest[0] if rest else "") or ""
+        key = re.sub(r"[^a-z0-9]+", "_", str(garment).casefold()).strip("_")
+        if not key:
+            continue
+        key = "%s_%s" % (key, re.sub(r"[^a-z0-9]+", "_",
+                                     str(owner).casefold()).strip("_"))[:60]
+        if key in entities:
+            continue
+        entities[key] = {
+            "name": str(garment),
+            "kind": "object",
+            # What happened to it while it was being worn travels with it. A
+            # shirt someone spilled wine down is a wine-stained shirt on the
+            # floor, not a clean one -- the stain belongs to the garment.
+            "description": "%s, taken off%s" % (
+                str(garment), " — %s" % condition if condition else ""),
+            "aliases": [str(garment)],
+            "portable": True,
+            "container": False,
+            "interior_rooms": [],
+            "state": {"clothing": True, "worn_by": str(owner), "shed": True,
+                      **({"condition": condition} if condition else {})},
+        }
+        if projected is not None:
+            projected.setdefault(key, entities[key])
+        where = positions.get(owner)
+        if where:
+            positions[key] = where
+
+
+def _advance_ground(cid, sc):
+    """What the sky has left on each room's floor, after this beat.
+
+    Deterministic and idempotent, like the weather drift it follows: same
+    scene, same result, so a reroll does not re-mud a yard. Written to its own
+    scene key rather than into `overlays`, which the Director authors -- engine
+    bookkeeping and authored world-state should not be able to overwrite each
+    other. Both the acoustic and the visual cache keys read it, so a yard that
+    has turned to mud sounds and looks like one.
+    """
+    from scene import weather_severity
+    from weather import ground_after, room_exposure, weather_for_room
+
+    if not isinstance(sc, dict):
+        return
+    rooms = sc.get("rooms") or {}
+    if not rooms:
+        return
+    severity = weather_severity(cid)
+    previous = sc.get("ground") if isinstance(sc.get("ground"), dict) else {}
+    ground = {}
+    for room_id in rooms:
+        state = ground_after(
+            previous.get(room_id), weather_for_room(sc, room_id), severity,
+            exposed=room_exposure(sc, room_id) == "open")
+        if state:
+            ground[room_id] = state
+    if ground:
+        sc["ground"] = ground
+    else:
+        sc.pop("ground", None)
 
 
 def prepare_scene_commit(ctx):
@@ -1537,8 +1678,85 @@ def prepare_scene_commit(ctx):
                 cur.append(it)
         sc["overlays"][k] = cur[-6:]
 
+    # An approach in flight. `MovementDecl.arrives=false` means the mover is
+    # closing on somewhere and does not get there this beat; recording it is
+    # what lets the NEXT declaration toward the same place arrive (see
+    # agents/director._guard_approach_is_not_arrival). Without the record the
+    # feature has no memory and an approach can never complete -- the engine
+    # answers "you get closer" for as long as the player keeps asking.
+    _mv = (ctx.director_interpret or {}).get("movement")
+    if isinstance(_mv, dict) and _mv.get("to_room"):
+        _who = _mv.get("mover") or "self"
+        if _who == "self":
+            try:
+                from scene import persona_of
+                _who = persona_name(persona_of(ctx.chat)) or "self"
+            except Exception:
+                _who = "self"
+        # Keyed PER MOVER. One record for the whole scene meant two people
+        # walking at once overwrote each other: multiplayer is supported, and
+        # Ana heading for the tower never arrived because Bo was heading for
+        # the gate. A skiff and its passenger can both be under way too.
+        _pending = sc.setdefault("approach", {})
+        if not isinstance(_pending, dict) or "who" in _pending:
+            # The scene-global shape this replaced. Carry a live record over
+            # rather than dropping the walker mid-stride.
+            _old = _pending if isinstance(_pending, dict) else {}
+            _pending = sc["approach"] = (
+                {_old["who"]: {"to_room": _old.get("to_room"),
+                               "turn": _old.get("turn")}}
+                if _old.get("who") and _old.get("to_room") else {})
+        if _mv.get("arrives", True):
+            # Arrived, or was refused. Either way this mover is no longer
+            # closing on anywhere.
+            _pending.pop(_who, None)
+        else:
+            _pending[_who] = {"to_room": _mv["to_room"],
+                              "turn": getattr(ctx.turn, "idx", None)}
+        if not _pending:
+            sc.pop("approach", None)
+    elif isinstance(sc.get("approach"), dict):
+        # A beat that declares no movement at all abandons the approach: the
+        # walker stopped to do something else, and picking the thread back up
+        # is a fresh declaration. Only the player's own -- a companion halfway
+        # across a field is still halfway across it.
+        _pending = sc["approach"]
+        if "who" in _pending:
+            sc.pop("approach", None)
+        else:
+            try:
+                from scene import persona_of
+                _pending.pop(persona_name(persona_of(ctx.chat)) or "", None)
+            except Exception:
+                pass
+            if not _pending:
+                sc.pop("approach", None)
+
     att = sc.setdefault("attire", {})
     canonical_attire_key = _heal_attire_identity_keys(sc, ctx.cast)
+    # WHOSE clothes this beat tore off, not merely whether somebody's did.
+    #
+    # Every voice in the beat is read, not just the player's: a character who
+    # rips a shirt open is as decisive as a player who does, and the rule
+    # exists to stop the engine being slower than its own fiction. Scoped per
+    # body, because one flag for the whole beat meant the player yanking their
+    # own coat off undressed everyone standing near them.
+    _decisive_names = attire_model.decisive_targets(
+        getattr(ctx.turn, "player_input", "") or "",
+        _beat_voices(ctx, res),
+        {_name: attire_model.flat_wearing(attire_model.normalize_regions(_entry))
+         for _name, _entry in att.items() if isinstance(_entry, dict)},
+        player_name=_player_name_or_none(ctx),
+    )
+    _shed = []
+    # Garments that arrive on SOMEBODY this beat. A coat that comes off one
+    # body and onto another in the same breath -- "she takes off her coat and
+    # drapes it over his shoulders" -- has not been dropped, and minting it as
+    # an object on the floor leaves two coats: one on his shoulders, one at
+    # their feet. Newly-arrived rather than merely present, so two guards each
+    # in "a wool cloak" still get a real cloak on the floor when one of them
+    # takes his off.
+    _gained = set()
     for name, d in (diff.get("attire") or {}).items():
         name = canonical_attire_key(name)
         if not isinstance(d, dict):
@@ -1546,29 +1764,80 @@ def prepare_scene_commit(ctx):
         cur = att.setdefault(name, {"wearing": [], "state": []})
         cur.setdefault("wearing", [])
         cur.setdefault("state", [])
+        # A whole-outfit write (`wearing` with no add/remove/replace) is what
+        # director_establish sends. It used to `continue` straight past the
+        # reconciliation below, which made it the one shape that could still
+        # undress someone in a single beat -- fine on the opening turn, where
+        # everything is dressing, but nothing stopped a resolve emitting it.
         if "wearing" in d and not any(k in d for k in ("add", "remove", "replace")):
             cur["wearing"] = sanitize_attire_items(list(d.get("wearing") or []))
             if d.get("state") is not None:
                 cur["state"] = d["state"] if isinstance(d["state"], list) else [d["state"]]
-            continue
-        if isinstance(d.get("replace"), list):
-            cur["wearing"] = sanitize_attire_items(list(d["replace"]))
-        for it in d.get("add") or []:
-            it = str(it).strip()
-            if it and it not in cur["wearing"]:
-                cur["wearing"].append(it)
-        cur["wearing"] = sanitize_attire_items(cur["wearing"])
-        for it in d.get("remove") or []:
-            if it in cur["wearing"]:
-                cur["wearing"].remove(it)
-        if d.get("state") is not None:
-            cur["state"] = d["state"] if isinstance(d["state"], list) else [d["state"]]
+        else:
+            if isinstance(d.get("replace"), list):
+                cur["wearing"] = sanitize_attire_items(list(d["replace"]))
+            for it in d.get("add") or []:
+                it = str(it).strip()
+                if it and it not in cur["wearing"]:
+                    cur["wearing"].append(it)
+            cur["wearing"] = sanitize_attire_items(cur["wearing"])
+            for it in d.get("remove") or []:
+                if it in cur["wearing"]:
+                    cur["wearing"].remove(it)
+            if d.get("state") is not None:
+                cur["state"] = d["state"] if isinstance(d["state"], list) else [d["state"]]
+
+        # Regions, and the one-rung-per-beat rule. The Director speaks in whole
+        # garments, so "remove the sash" means gone -- which is exactly the
+        # instant undress this reconciliation exists to stop. `wearing` and
+        # `state` are then DERIVED from the regions, so the two shapes cannot
+        # disagree about the same body.
+        _before = attire_model.normalize_regions(cur)
+        # What has just HAPPENED to a garment -- spilled wine, a tear, soaking.
+        # It belongs to the garment rather than to the body, so that taking the
+        # shirt off leaves the stain on the shirt instead of on the person.
+        _marks = d.get("conditions")
+        _after = attire_model.apply_flat_change(
+            _before, cur["wearing"], decisive=name in _decisive_names,
+            conditions=_marks if isinstance(_marks, dict) else None)
+        cur["regions"] = _after
+        cur["wearing"] = attire_model.flat_wearing(_after)
+        _notes = attire_model.flat_state(_after)
+        if _notes:
+            # Anything the Director wrote in prose is kept alongside the
+            # derived notes rather than replaced by them.
+            _authored = [n for n in (cur.get("state") or [])
+                         if str(n).strip() and str(n) not in _notes]
+            cur["state"] = _notes + _authored
+        _had = {g["name"].casefold()
+                for entry in _before.values()
+                for g in (entry.get("garments") or [])
+                if g.get("state") != "removed"}
+        for _entry in _after.values():
+            for _g in _entry.get("garments") or []:
+                if _g.get("state") != "removed" and _g["name"].casefold() not in _had:
+                    _gained.add(_g["name"].casefold())
+        for _region, _garment in attire_model.newly_removed(_before, _after):
+            _shed.append((name, _garment,
+                          attire_model.condition_of(_after, _garment)))
+
+    _mint_shed_garments(
+        sc, [s for s in _shed if s[1].casefold() not in _gained], diff)
 
     est = ctx.director_establish
     if est:
         sc["location"] = est.get("location", sc.get("location"))
         sc["time"] = est.get("time", sc.get("time"))
         sc["description"] = est.get("scene_description", sc.get("description"))
+        # An omitted sky means NO SKY, never a default one. The prompt tells
+        # the Director to leave weather out where it is meaningless -- deep
+        # space, a sealed habitat, an interior-only story -- and defaulting to
+        # "fair" here would overrule that and give a starship weather to drift.
+        # A story with no weather stays weatherless until a beat says otherwise,
+        # and the drift below only ever moves a sky that already exists.
+        opening_weather = normalize_weather(est.get("weather"))
+        if opening_weather:
+            sc["weather"] = opening_weather
     else:
         # DW-1: on a NORMAL turn scene.location was never refreshed, so after a
         # relocation to a genuinely new place (time travel, a new city) the
@@ -1592,6 +1861,36 @@ def prepare_scene_commit(ctx):
             sc["time"] = td.get("display_advance", sc.get("time"))
         elif isinstance(td, str):
             sc["time"] = td
+
+    # Weather. The Director's own change wins outright; otherwise the sky
+    # drifts on the simulation clock, deterministically and idempotently, so a
+    # reroll of this turn produces the same weather rather than a new one. AFTER
+    # the clock block above, which is what supplies the elapsed time to drift
+    # against.
+    #
+    # Written OVER the sky the scene already has, not in place of it. A
+    # declaration is a beat reporting what it noticed, not a complete restatement
+    # of the weather -- so a field it left out, or wrote in a word outside the
+    # vocabulary, keeps what was blowing. Replacing wholesale meant a Director
+    # who said "blizzard, heavy snow, severe, gale-force, sub-zero" -- every term
+    # a synonym this vocabulary could not read -- cleared the sky it was trying
+    # to describe. See `_SYNONYMS` in weather.py.
+    declared = normalize_weather(diff.get("weather"), sc.get("weather"))
+    if declared:
+        sc["weather"] = declared
+    elif sc.get("weather"):
+        # Only a scene that HAS weather drifts. An earlier draft drifted
+        # whenever no opening ran, which quietly gave every pre-existing chat a
+        # sky on its next beat -- including the ones the prompt tells the
+        # Director to leave weatherless (deep space, a sealed interior). A
+        # story acquires weather when its fiction says so, never by default.
+        elapsed = float((clock or wget(cid, "simulation_clock", {}) or {})
+                        .get("elapsed_seconds") or 0.0)
+        sc["weather"] = advance_weather(
+            sc.get("weather"), elapsed, seed="chat:%s" % cid,
+            cold=normalize_weather(sc.get("weather")).get("temperature") == "freezing")
+
+    _advance_ground(cid, sc)
 
     infer_vehicle_zones(cid, ctx.turn.frame_id, prev_scene, sc)
     _carry_names = [character_name(json.loads(c["sheet"])) for c in ctx.cast]
@@ -2338,23 +2637,45 @@ def track_background_presences(ctx, nonce):
         _sel = str((ctx.get("background_react") or {}).get("name") or "").strip().casefold()
         if _sel:
             selected_names = {_sel}
+    # DELIBERATE interaction, counted separately from everything else. The
+    # other two counters record what a presence DID -- `dialogue_turns` that
+    # they spoke (to anyone, including ambient chatter with the player nowhere
+    # in it) and `mention_turns` that the narration named them. Neither says
+    # the story turned toward this person on purpose, which is the only thing
+    # that should ever earn a passer-by a character sheet.
+    #
+    # Three things count, all of them someone choosing this presence:
+    # the director marking them as the player's addressee, the player naming
+    # them in their own input, and a registered character aiming a line at
+    # them. The signal for the first already existed and was used only as a
+    # same-beat liveness bit; nothing accumulated it.
+    addressed_refs = _flow_addressed_refs(ctx)
+    player_input = str(getattr(ctx.turn, "player_input", "") or "")
     sc = wget(cid, "scene", {}) or {}
     for name, record in presences.items():
+        addressed = (_presence_in_addressed_refs(name, addressed_refs)
+                     or _background_name_mentioned(name, player_input))
         pr = record.get("pending_reply")
         if isinstance(pr, dict) and turn_idx > (pr.get("expires_turn")
                                                 if pr.get("expires_turn") is not None else -1):
             record.pop("pending_reply", None)
         if name.casefold() in selected_names:
             record.pop("pending_reply", None)  # the moment was theirs; discharged
-            continue
-        entry = _character_address_of(
-            res, name, roster, sc, (record.get("sketch") or {}).get("station_room"))
-        if entry:
-            record["pending_reply"] = {
-                "from": entry.get("speaker"), "quote": entry.get("exact_quote", ""),
-                "tone": entry.get("tone", ""), "turn": turn_idx,
-                "expires_turn": turn_idx + 2,
-            }
+        else:
+            entry = _character_address_of(
+                res, name, roster, sc, (record.get("sketch") or {}).get("station_room"))
+            if entry:
+                addressed = True
+                record["pending_reply"] = {
+                    "from": entry.get("speaker"), "quote": entry.get("exact_quote", ""),
+                    "tone": entry.get("tone", ""), "turn": turn_idx,
+                    "expires_turn": turn_idx + 2,
+                }
+        if addressed:
+            turns = record.setdefault("addressed_turns", [])
+            if turn_idx not in turns:
+                turns.append(turn_idx)
+                record["last_turn"] = turn_idx
 
     wset(cid, "background_presences", presences)
     return {"tracked": len(presences)}
@@ -2557,6 +2878,46 @@ def promotable_background_presences(chat_id):
     return out
 
 
+def _refuse_name_collision(cid, new_name):
+    """Refuse to mint a character whose in-story name is already taken.
+
+    Names are IDENTITY here, not decoration: `scene.positions`, the active
+    cast, addressing, perception routing and every psychology write are keyed
+    on them. Two people called the same thing in one story is not a cosmetic
+    duplicate -- it is one mind's state reachable under another's key, which is
+    the exact failure the information firewall exists to prevent.
+
+    The player's persona is the one that matters most and the one that was
+    actually hit: a promoted market seller minted as "Hinami" alongside a
+    player persona named Hinami would have shared her position entry outright
+    (see the `positions` seed below).
+
+    Raised rather than silently renamed. On the autonomous path this is caught
+    upstream and becomes a turn warning, leaving the presence tracked and
+    promotable once whatever caused the clash is resolved.
+    """
+    from scene import persona_of
+
+    wanted = str(new_name or "").strip().casefold()
+    if not wanted:
+        raise ValueError("A promoted character needs a name.")
+    chat_row = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    taken = {}
+    player = persona_name(persona_of(dict(chat_row))) if chat_row else ""
+    if player:
+        taken[str(player).casefold()] = "the player's persona"
+    for row in q(
+            "SELECT ch.name AS name FROM chat_chars cc "
+            "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?", (cid,)):
+        key = str(row["name"] or "").strip().casefold()
+        if key:
+            taken.setdefault(key, "a character already in this story")
+    if wanted in taken:
+        raise ValueError(
+            "Refusing to promote %r: that name belongs to %s. Names are how "
+            "this engine tells minds apart." % (new_name, taken[wanted]))
+
+
 def promote_background_character(cid, name, sheet=None, memory_seeds=None):
     """Attach a tracked background presence as a real character: mint the
     characters/chat_chars rows, seed her scene position, mutual recognition
@@ -2584,6 +2945,7 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None):
 
     sheet = normalize_character_data(sheet)
     memory_seeds = [str(m) for m in (memory_seeds or []) if str(m).strip()]
+    _refuse_name_collision(cid, character_name(sheet))
 
     char_id = qi(
         "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
@@ -2655,9 +3017,35 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None):
 AUTO_PROMOTE_DIALOGUE_THRESHOLD = 3
 
 
+def _promote_after_addressed(cid):
+    """Turns of deliberate interaction before a presence is promoted.
+
+    Lives in `dialogue_config` rather than beside the other promotion
+    thresholds because it is the one a host actually tunes, and because that
+    blob already has a route, an editor and a place in PRESERVED_SETTING_KEYS
+    -- a promotion rule that silently rolled back with a reroll would be worse
+    than no rule. 0 disables promotion entirely.
+    """
+    from scene import dialogue_config
+
+    try:
+        raw = (dialogue_config(cid) or {}).get("promote_after_addressed")
+        return max(0, min(99, int(raw)))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _auto_promote_enabled():
+    """Off unless the host has explicitly switched it on.
+
+    Promotion is not a small event: it mints a character sheet with an LLM
+    call, attaches a permanent cast member, seeds mutual recognition with
+    everyone present and starts writing that mind's psychology every beat.
+    Defaulting that ON meant a story could acquire cast the host never asked
+    for, from a passer-by who happened to talk twice.
+    """
     value = str(get_setting("auto_promote") or "").strip().casefold()
-    return value not in ("0", "off", "false", "no")
+    return value in ("1", "on", "true", "yes")
 
 
 def auto_promote_background_characters(ctx):
@@ -2673,7 +3061,8 @@ def auto_promote_background_characters(ctx):
     and any remaining qualifiers stay tracked and promote on a later beat.
     Runs AFTER the turn's primary transaction (see _commit_all_locked) --
     it is additive and forward-only, so a failure is a warning, never a
-    rollback. Gated by setting('auto_promote'), default on.
+    rollback. Gated by setting('auto_promote'), which is OFF unless the host
+    turns it on -- see `_auto_promote_enabled`.
     """
     if not _auto_promote_enabled():
         return {"promoted": []}
@@ -2686,7 +3075,13 @@ def auto_promote_background_characters(ctx):
     promotable = {
         r["name"] for r in promotable_background_presences(cid) if r["promotable"]
     }
-    _auto_dialogue_min = promotion_thresholds(cid)["auto_dialogue"]
+    # How many turns of DELIBERATE interaction earn a sheet. Zero means never,
+    # which is what the dialogue menu's own control offers as its low end -- a
+    # host who wants extras to stay extras should not have to remember to watch
+    # them.
+    _addressed_min = _promote_after_addressed(cid)
+    if _addressed_min <= 0:
+        return {"promoted": []}
     selected = {
         str(n).casefold()
         for n in ((ctx.get("background_react") or {}).get("selected") or [])
@@ -2698,7 +3093,11 @@ def auto_promote_background_characters(ctx):
         if name not in promotable:
             continue
         dialogue_turns = record.get("dialogue_turns") or []
-        if len(dialogue_turns) < _auto_dialogue_min:
+        # The gate that matters: turns the player or a real character
+        # deliberately turned toward this person. Counting the turns they
+        # merely SPOKE promoted extras for holding conversations with each
+        # other, which is what background life is FOR.
+        if len(record.get("addressed_turns") or []) < _addressed_min:
             continue
         # "Present/addressed this beat": their record was touched this turn
         # (spoke / mentioned), the gate picked them, a character's address

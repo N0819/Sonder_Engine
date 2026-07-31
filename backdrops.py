@@ -41,6 +41,7 @@ import threading
 
 from db import q, wget_for_frame
 from spatial import effective_light, light_at, normalize_light, room_of
+from weather import weather_for_room, weather_words
 
 # Where generated images live. Deliberately NOT the database: engine.db is
 # already ~400MB of text, and a few hundred backdrops would dwarf it while
@@ -52,7 +53,11 @@ BACKDROP_DIR = os.environ.get(
 # A backdrop is scenery, so the visual signature only tracks what changes how
 # the PLACE looks. Overlays and conditions can do that (smoke, darkness,
 # wreckage); positions and dialogue cannot.
-_VISUAL_STATE_KEYS = ("overlays", "conditions", "weather")
+# Weather is NOT here even though it plainly changes how a place looks: it is
+# scene-level, and a cellar does not become a different picture because it
+# started raining over the city. It enters the key ROOM-SCOPED instead, through
+# weather.weather_for_room -- see visual_signature.
+_VISUAL_STATE_KEYS = ("overlays", "conditions", "ground")
 
 # scene.time is freeform narrative text, not a clock: live values include
 # "Night", "a few seconds", "a few seconds pass", "moments pass". Hashing it
@@ -122,6 +127,12 @@ def visual_signature(scene, room_id, style=None, viewer=None):
         # changes that more.
         "light": _viewer_light(scene, room_id, viewer),
         "light_sources": _light_sources_in(scene, room_id),
+        # Only what this room actually gets of the sky, and only as the WORDS
+        # that reach the prompt -- not the raw weather dict, which carries the
+        # whole scene's sky and would repaint a cellar for a storm it cannot
+        # see. Keying on the rendered description keeps the rule the rest of
+        # this module follows: the key is a function of what reaches the image.
+        "weather": weather_words(weather_for_room(scene, room_id), "sight"),
         "style": style or {},
     }
     for key in _VISUAL_STATE_KEYS:
@@ -140,8 +151,29 @@ def visual_signature(scene, room_id, style=None, viewer=None):
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:24]
 
 
-def backdrop_path(chat_id, signature):
+def backdrop_path(chat_id, signature, room_id=None):
+    """Where one backdrop lives.
+
+    Filed under its ROOM when the caller knows which -- a long story is
+    hundreds of images across a dozen rooms, and a flat directory of hex names
+    is unreadable to anyone trying to find, keep or delete a particular place.
+    Images written before this are still in the flat layout and are still
+    found; see `cached_backdrop`, which is the only thing that needs to know.
+    """
+    if room_id:
+        return os.path.join(BACKDROP_DIR, str(chat_id), _room_dir(room_id),
+                            "%s.png" % signature)
     return os.path.join(BACKDROP_DIR, str(chat_id), "%s.png" % signature)
+
+
+# Room ids come from a model and reach the filesystem here, so they are reduced
+# to something that cannot escape the directory they belong in.
+_ROOM_DIR_SAFE = re.compile(r"[^a-z0-9_-]+")
+
+
+def _room_dir(room_id):
+    name = _ROOM_DIR_SAFE.sub("_", str(room_id or "").casefold()).strip("_")
+    return name[:60] or "_room"
 
 
 # How many ancestors deep a lookup will walk. A miss costs one os.path.exists
@@ -194,13 +226,23 @@ def cached_backdrop(chat_id, signature):
     cheap precisely because it adds no bytes, and a story branched a dozen
     times would otherwise carry a dozen copies of the same corridor.
     """
-    path = backdrop_path(chat_id, signature)
-    if os.path.exists(path):
-        return path
-    for ancestor in branch_lineage(chat_id):
-        inherited = backdrop_path(ancestor, signature)
-        if os.path.exists(inherited):
-            return inherited
+    for cid in [chat_id] + branch_lineage(chat_id):
+        # The flat layout first: it is where everything generated before rooms
+        # had their own folders still lives, and checking it costs one stat.
+        path = backdrop_path(cid, signature)
+        if os.path.exists(path):
+            return path
+        # Then the room folders. A signature already encodes its room, so at
+        # most one of these can match; the scan is a handful of directories.
+        folder = os.path.join(BACKDROP_DIR, str(cid))
+        try:
+            rooms = os.listdir(folder)
+        except OSError:
+            continue
+        for room in rooms:
+            nested = os.path.join(folder, room, "%s.png" % signature)
+            if os.path.exists(nested):
+                return nested
     return None
 
 
@@ -211,8 +253,16 @@ def cached_backdrop(chat_id, signature):
 # will draw the Doctor anyway, so the source text is stripped before it ever
 # reaches the prompt rather than relying on the instruction alone -- the same
 # belt-and-braces shape used elsewhere in this engine.
-_PERSON_CLAUSE = re.compile(
-    r"[^.!?]*\b(he|she|they|him|her|them|his|hers|their|"
+# Matched against ONE SENTENCE at a time (see `_setting_only`), never across a
+# whole description. The clause-spanning form this used to have --
+# `[^.!?]*\b(...)\b[^.!?]*[.!?]` -- is the textbook quadratic-backtracking
+# shape: an unbounded run on both sides of an alternation. Measured on the real
+# room descriptions in engine.db it cost 8.06ms per call against 0.24ms for the
+# sentence-split form, and it is called four times for every backdrop-plus-
+# ambience pair the reader's scrolling asks for. Byte-identical output on all
+# 54 of them; the split is the same rule expressed so it cannot backtrack.
+_PERSON_WORDS = re.compile(
+    r"\b(he|she|they|him|her|them|his|hers|their|"
     r"says?|said|asks?|asked|replies|replied|leans?|turns?|looks?|walks?|"
     r"stands?|sits?|smiles?|nods?|whispers?|shouts?|steps?|"
     # Collective occupants. Room DESCRIPTIONS name populations where narrative
@@ -226,8 +276,11 @@ _PERSON_CLAUSE = re.compile(
     # turbolift panel scrolls "crew registration data" -- both architecture,
     # both kept.
     r"crew ?members?|civilians?|patrons?|passengers?|bystanders?|"
-    r"onlookers?|crowds?|people|figures?)\b[^.!?]*[.!?]",
+    r"onlookers?|crowds?|people|figures?)\b",
     re.I)
+
+# Sentence boundaries, keeping the terminator with the sentence it ends.
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s*")
 
 
 def _setting_only(text):
@@ -246,8 +299,13 @@ def _setting_only(text):
     # welded "He says," onto the next sentence and the person-clause strip then
     # ate the setting prose along with it.
     stripped = re.sub(r'[""«»"][^""«»"]*[""«»"]', " . ", str(text or ""))
-    stripped = _PERSON_CLAUSE.sub(" ", stripped)
-    stripped = _BODY_CLAUSE.sub(" ", stripped)
+    # Sentence at a time. Dropping a whole sentence is what the old
+    # clause-spanning patterns did too -- they just paid quadratically for the
+    # privilege of finding its edges. See `_PERSON_WORDS`.
+    stripped = " ".join(
+        sentence for sentence in _SENTENCE_SPLIT.split(stripped)
+        if sentence and not _PERSON_WORDS.search(sentence)
+        and not _BODY_WORDS.search(sentence))
     # Fragments left by removing a quote mid-sentence.
     stripped = re.sub(r"(?<![.!?])\s*\.\.+", " ", stripped)
     # Collapse the runs of bare periods left where consecutive quotes were
@@ -334,10 +392,11 @@ _VISUAL_REGISTER = {
 # exactly as a sentence with a pronoun or a speech verb is -- patching the word
 # would leave "The has been removed" behind, and the sentence had no place in
 # an empty-room prompt to begin with.
-_BODY_CLAUSE = re.compile(
-    r"[^.!?]*\b(corpses?|cadavers?|dead bodies|dead body|bodies|body|"
+# Per sentence, like `_PERSON_WORDS` above and for the same reason.
+_BODY_WORDS = re.compile(
+    r"\b(corpses?|cadavers?|dead bodies|dead body|bodies|body|"
     r"remains|nude|naked|nudity|sex|sexual|erotic|explicit|suicide)"
-    r"\b[^.!?]*[.!?]",
+    r"\b",
     re.I)
 
 _VISUAL_REGISTER_RE = re.compile(
@@ -493,6 +552,14 @@ def room_projection(scene, room_id, viewer=None):
     overlay = (scene.get("overlays") or {}).get(room_id)
     if overlay:
         out["overlays"] = overlay
+    # Weather, scoped to what this room is standing under. A room with no sky
+    # gets no entry at all rather than an empty one, so the prompt cannot
+    # acquire a "no weather" clause it would then try to paint.
+    weather = weather_for_room(scene, room_id)
+    words = weather_words(weather, "sight")   # never the audible-only phrases
+    if words:
+        out["weather"] = words
+        out["exposure"] = weather.get("exposure")
     return out
 
 
@@ -535,8 +602,13 @@ def arrival_turn_for_room(chat_id, turn_idx, room_id, player_name=None,
     # Per-turn scene lives in `checkpoints.blob`, not in a step: this chat has
     # no `outcome_scene` step at all, and the first draft queried for one,
     # silently found nothing, and fell back to the current turn every time.
-    # Blobs are ~1MB each, so the lookback is deliberately small -- a cheap
-    # per-turn room index would be the right optimization if this ships.
+    # Blobs are megabytes each and this walks up to eight of them, which is
+    # most of what the backdrop route costs. Asking for only `positions` and
+    # `player_room` instead of the whole scene was tried and MEASURED WORSE:
+    # two json_extract paths make SQLite walk the blob twice where
+    # `scene_after_turn` walks it once. The real fix is the per-turn room index
+    # named above, or a cache keyed on `checkpoints.created` -- neither of
+    # which is a one-liner, and both of which want their own tests.
     arrival = turn_idx
     for idx in range(turn_idx, max(-1, turn_idx - max(1, min(int(lookback), 8))), -1):
         scene = scene_after_turn(chat_id, idx)
@@ -562,12 +634,24 @@ def scene_after_turn(chat_id, turn_idx):
     player has already left, which is exactly how an earlier draft "found" a
     frame-scoping bug that did not exist.
     """
-    row = q("SELECT blob FROM checkpoints WHERE chat_id=? AND turn_idx=?",
-            (chat_id, turn_idx + 1), one=True)
-    if row:
+    # Only the scene, not the whole world blob it sits in. A checkpoint is
+    # megabytes -- lore caches, relationship maps, everything pending -- and the
+    # scene is about one percent of it, so parsing the rest was work thrown away
+    # on every read of a route the reader's scrolling polls. Measured 25.4ms ->
+    # 15.0ms on the largest checkpoint in this database, same result.
+    try:
+        row = q("SELECT json_extract(blob,'$.world.scene') AS scene "
+                "FROM checkpoints WHERE chat_id=? AND turn_idx=?",
+                (chat_id, turn_idx + 1), one=True)
+    except Exception:
+        # A blob SQLite cannot parse is one this cannot use either. Falling
+        # through to the live scene is what the json.loads below did with the
+        # same input; it must not become a failed request now that the parse
+        # happens in the query.
+        row = None
+    if row and row["scene"] is not None:
         try:
-            world = (json.loads(row["blob"]) or {}).get("world") or {}
-            scene = world.get("scene")
+            scene = row["scene"]
             if isinstance(scene, str):
                 scene = json.loads(scene)
             if isinstance(scene, dict):
@@ -609,6 +693,11 @@ def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None):
                                            player_name)))),
         "time": scene.get("time") or "",
         "location": scene.get("location") or "",
+        # For the weather overlay (static/js/weather-fx.js), which draws only
+        # where the sky can actually be seen. Handed over as the SCOPED answer
+        # rather than the scene's raw weather, so the frontend cannot draw rain
+        # into a cellar by reading the wrong field.
+        "weather": weather_for_room(scene, room_id),
     }
 
 
@@ -695,6 +784,8 @@ def compose_prompt(place, style=None, flavour=""):
         parts.append(str(place["desc"]))
     if place.get("overlays"):
         parts.append(", ".join(str(o) for o in place["overlays"]))
+    if place.get("weather"):
+        parts.append(", ".join(str(w) for w in place["weather"]))
     if place.get("time"):
         parts.append("time: %s" % place["time"])
     # Lighting, in words an image model acts on. Omitted at "lit", which is the
@@ -713,6 +804,67 @@ def compose_prompt(place, style=None, flavour=""):
     if (style or {}).get("avoid"):
         parts.append("avoid: %s" % style["avoid"])
     return " | ".join(p for p in parts if p)
+
+
+# What a REVISION asks for, as opposed to a generation. The two read the same
+# spatial state and use it in opposite directions: a generation prompt has to
+# describe the whole place, because nothing exists yet and every omission is
+# something the model will invent. A revision prompt has to describe the
+# CHANGE, because the place already exists in the image it is handed, and every
+# detail restated is a detail the model is invited to redraw differently.
+#
+# Handing the generation prompt to an edit endpoint -- which is what the first
+# version of this did -- is the whole feature defeated: "a stone courtyard,
+# flagstones, a well, overcast" tells the model to draw a stone courtyard, and
+# it happily draws a different one.
+_REVISION_PREFACE = (
+    "Revise the supplied image of this exact place. Keep its architecture, "
+    "layout, materials, furnishings, camera angle and framing EXACTLY as they "
+    "are -- this is the same room, a moment later, not a new view of it. "
+    "Change only what follows")
+_REVISION_CLOSE = (
+    "Do not add, remove or rearrange anything else. No people.")
+
+# The fields that describe a room's STATE rather than its fabric: what a
+# revision is allowed to talk about. `name`/`desc` are deliberately absent --
+# they are the fabric, they are already in the picture, and restating them is
+# how a revision turns back into a generation.
+_REVISION_STATE_KEYS = ("overlays", "weather", "ground")
+
+
+def compose_revision(place, style=None, previous=None):
+    """The prompt for editing a room's existing image into its new state.
+
+    `previous` is the place projection the anchor image was drawn from, when it
+    is known; without it every state field is treated as new, which is
+    conservative in the right direction (it restates the weather rather than
+    silently assuming the picture already has it).
+    """
+    changes = []
+    for key in _REVISION_STATE_KEYS:
+        value = place.get(key)
+        if not value:
+            continue
+        if (previous or {}).get(key) == value:
+            continue          # already true of the image; saying so risks a redraw
+        if isinstance(value, (list, tuple)):
+            value = ", ".join(str(v) for v in value)
+        changes.append("%s: %s" % (key, value))
+    lighting = _LIGHT_PROMPT.get(normalize_light(place.get("light")))
+    if lighting and (previous or {}).get("light") != place.get("light"):
+        changes.append(lighting)
+        changes.extend(_source_lighting(place))
+    if place.get("time") and (previous or {}).get("time") != place.get("time"):
+        changes.append("time of day: %s" % place["time"])
+    if not changes:
+        # Nothing about the state has moved, so the only honest instruction is
+        # "the same room again" -- which is what a caller with an anchor and no
+        # delta should be asking for.
+        changes.append("nothing; reproduce the same room faithfully")
+    parts = ["%s: %s." % (_REVISION_PREFACE, "; ".join(changes)), _REVISION_CLOSE]
+    if (style or {}).get("avoid"):
+        parts.append("avoid: %s" % style["avoid"])
+    return " ".join(parts)
 
 
 def refine_prompt(draft, place):
@@ -755,6 +907,97 @@ def _generation_lock(key):
         return lock
 
 
+# --- continuity ------------------------------------------------------------
+#
+# A room's SECOND picture should be its first one with the light changed, not a
+# fresh invention of the same place. Left to plain text-to-image, every state
+# of a room -- lit, dark, wet, wrecked -- is generated from scratch, and they
+# come back with different architecture, different furniture and a different
+# window. Handing the model the room's existing image fixes that.
+#
+# The image handed over is the room's ANCHOR: the first one that ever succeeded
+# for that room, not the most recent. Editing the most recent would compound
+# every artifact down a chain of edits until the tenth state of a room is a
+# photocopy of a photocopy; editing the anchor keeps every variant one step
+# from the same original.
+
+_ANCHOR_INDEX = "rooms.json"
+
+
+def _anchor_path(chat_id):
+    return os.path.join(BACKDROP_DIR, str(chat_id), _ANCHOR_INDEX)
+
+
+def room_anchor(chat_id, room_id):
+    """The image every state of this room is a variant of, and the projection
+    it was drawn from -- (path, place) or (None, {}).
+
+    The projection matters as much as the picture: a revision prompt has to say
+    what CHANGED, and it can only do that against what the anchor already
+    shows.
+
+    Walks the branch lineage like `cached_backdrop` does, so a branch inherits
+    its parent's rooms rather than re-inventing them at the fork.
+    """
+    if not room_id:
+        return None, {}
+    for cid in [chat_id] + branch_lineage(chat_id):
+        try:
+            with open(_anchor_path(cid), "r", encoding="utf-8") as fh:
+                index = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        entry = (index or {}).get(str(room_id))
+        if isinstance(entry, str):        # the first shape: signature alone
+            entry = {"signature": entry}
+        if not isinstance(entry, dict) or not entry.get("signature"):
+            continue
+        path = cached_backdrop(cid, entry["signature"])
+        if path:
+            return path, (entry.get("place") or {})
+    return None, {}
+
+
+def set_room_anchor(chat_id, room_id, signature, place=None):
+    """Remember this image as the room's anchor, if it has none yet. Written
+    once and never rewritten: an anchor that drifted would defeat its purpose."""
+    if not room_id or not signature:
+        return
+    path = _anchor_path(chat_id)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            index = json.load(fh)
+        if not isinstance(index, dict):
+            index = {}
+    except (OSError, ValueError):
+        index = {}
+    if index.get(str(room_id)):
+        return
+    index[str(room_id)] = {"signature": signature, "place": place or {}}
+    tmp = path + ".part"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(index, fh, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+
+
+def _continuity_enabled():
+    """Off unless the host has explicitly switched it on.
+
+    Not a default, because it changes HOW every picture after the first is
+    made: an edit of the room's first image rather than a fresh generation.
+    That is the point when it works, and when a provider's edit endpoint is
+    poor it quietly degrades every backdrop in the story -- which is not
+    something to discover from a default. It also cannot be verified from here:
+    the endpoint's existence is checkable, the quality of what it returns is
+    not.
+    """
+    from db import get_setting
+
+    value = str(get_setting("backdrop_continuity") or "").strip().casefold()
+    return value in ("1", "on", "true", "yes")
+
+
 def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
                       force=False):
     """Produce (or serve from cache) the backdrop for a turn.
@@ -763,7 +1006,7 @@ def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
     the image generator automatically -- composing and generating are one
     operation from the caller's point of view.
     """
-    from providers import generate_image
+    from providers import edit_image, generate_image
 
     req = build_backdrop_request(chat_id, turn_idx, player_name, style)
     if not req:
@@ -782,14 +1025,38 @@ def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
 
         prompt = refine_prompt(
             compose_prompt(req["place"], style, req["flavour"]), req["place"])
-        data = generate_image(prompt)
+        # Same room, new state: modify the picture that already exists rather
+        # than inventing the place again. Any failure here -- a provider with
+        # no edits endpoint, a model that refuses one, a corrupt anchor -- is a
+        # reason to generate normally, never a reason to have no backdrop.
+        anchor, anchor_place = (room_anchor(chat_id, req.get("room"))
+                                if _continuity_enabled() else (None, {}))
+        data = None
+        if anchor:
+            # A DIFFERENT prompt, not the same one: a generation describes the
+            # whole place because nothing exists yet, a revision describes only
+            # what moved because the place is already in the image it is given.
+            # See compose_revision.
+            revision = compose_revision(req["place"], style, anchor_place)
+            try:
+                with open(anchor, "rb") as fh:
+                    data = edit_image(revision, fh.read())
+                prompt = revision
+            except Exception:
+                data = None
+        if data is None:
+            data = generate_image(prompt)
 
-        path = backdrop_path(chat_id, req["signature"])
+        path = backdrop_path(chat_id, req["signature"], req.get("room"))
         os.makedirs(os.path.dirname(path), exist_ok=True)
         tmp = path + ".part"
         with open(tmp, "wb") as fh:
             fh.write(data)
         os.replace(tmp, path)      # atomic: a reader never sees a half image
+        # The first image a room ever gets becomes the one every later state of
+        # it is edited from.
+        set_room_anchor(chat_id, req.get("room"), req["signature"],
+                        req.get("place"))
     return {"path": path, "signature": req["signature"],
             "room": req["room_name"], "prompt": prompt, "cached": False}
 

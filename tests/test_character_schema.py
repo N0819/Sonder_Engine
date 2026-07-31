@@ -31,7 +31,8 @@ def test_v4_psychology_and_outfit_defaults_migrate_v2():
     assert normalized["psychology"]["learning"]["associations"] == []
     assert normalized["embodiment"]["interoception"]["pleasure_sensitivity"] == 0.5
     assert normalized["initial_state"]["hedonic"]["pain"] == 0.0
-    assert normalized["initial_outfit"] == {"wearing": [], "state": []}
+    assert normalized["initial_outfit"] == {"wearing": [], "state": [],
+                                            "regions": {}}
 
 def test_default_character_is_agnostic():
     sheet = default_character_data("Test")
@@ -118,7 +119,8 @@ def test_native_persona_defaults_missing_fields():
     assert normalized["identity"]["name"] == "Partial Player"
     assert normalized["competence"]["abilities"] == []
     assert normalized["narration"]["voice_setting"] == ""
-    assert normalized["initial_outfit"] == {"wearing": [], "state": []}
+    assert normalized["initial_outfit"] == {"wearing": [], "state": [],
+                                            "regions": {}}
 
 
 def test_native_adjacent_clothing_moves_out_of_body_appearance():

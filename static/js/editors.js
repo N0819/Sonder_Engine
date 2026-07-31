@@ -1,7 +1,53 @@
+// The "fill body and clothing" button, shared by both card editors.
+//
+// `readDraft` returns what the author currently has TYPED, which is not what is
+// saved -- generating from the stored copy would ignore the two lines they just
+// wrote, which is exactly the moment anyone presses this. Nothing is written:
+// the proposal reopens the editor unsaved, and the author's ordinary Save is
+// still what commits it.
+function appearanceFillButton(kind, card, readDraft, reopen) {
+  const path = kind === "character" ? "characters" : "personas";
+  const button = el("button", {
+    title: "Generate the body and the starting outfit from this card and your notes",
+    onclick: async () => {
+      const answer = await promptModalWithToggle(
+        "What should this body and outfit be? Anything already on the card is "
+        + "kept — describe build, colouring, bearing, what they wear and how "
+        + "they wear it, or leave it blank and let the rest of the card decide.",
+        "Also write what each clothed region shows underneath",
+        { toggleNote: "Body description under the clothes, region by region. "
+            + "Written onto the card only if you tick this, and used in play "
+            + "only while the matching switch in Settings is on." });
+      if (answer === null) return;
+      const label = button.textContent;
+      button.textContent = "Generating…";
+      button.disabled = true;
+      try {
+        const r = await api("POST", `/api/${path}/${card.id}/fill_appearance`,
+          { prompt: answer.text, beneath: answer.checked, draft: readDraft() });
+        const refreshed = {
+          ...card,
+          name: r.sheet?.identity?.name || card.name,
+          sheet: JSON.stringify(r.sheet)
+        };
+        closeAllModals();
+        await boot();
+        reopen(refreshed);
+        toast("Body and clothing generated. Review, then save.", "ok");
+      } catch (e) {
+        toast("Appearance fill failed: " + e.message, "err");
+        button.textContent = label;
+        button.disabled = false;
+      }
+    }
+  }, "✨ Fill body & clothing");
+  return button;
+}
+
 function defaultCharacterSheet() {
   return {
     identity: { name: "New Character", aliases: [], pronouns: { subject: "they", object: "them", possessive: "their" } },
-    initial_outfit: { wearing: [], state: [] },
+    initial_outfit: { regions: {} },
     simulation: { tier: "mid", temperature: 0.8, sampler: {} },
     embodiment: { senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", notes: "ordinary human senses" }], visible: { summary: "A person of unremarkable appearance.", build: "", face: "", hair: "", eyes: "", distinctive_features: [] }, latent: [], interoception: { acuity: 0.5, pain_sensitivity: 0.5, fatigue_sensitivity: 0.5, pleasure_sensitivity: 0.5 } },
     psychology: { drive: { essence: "", expression: "", taboo: "" }, traits: [], values: [], self_model: { summary: "", protected_beliefs: [], pride_triggers: [], shame_triggers: [], beliefs: [] }, coping: { under_stress: [], default_conflict_style: "", strategies: [], recovery_supports: [] }, stress_profile: { baseline_reactivity: 0.5, recovery_rate: 0.5, overload_threshold: 0.8, attentional_style: "", somatic_signs: [] }, learning: { associations: [] } },
@@ -191,13 +237,12 @@ function charEditor(c, options = {}) {
   }
   f.aliases = fStrList("Aliases", sheet.identity?.aliases);
   f.pronouns = fPronouns("Pronouns", sheet.identity?.pronouns);
-  f.initial_outfit = fStrList(
-    "Initial outfit — clothing only (one item per line)",
-    sheet.initial_outfit?.wearing
-  );
-  f.initial_outfit_state = fStrList(
-    "Initial clothing condition (optional)",
-    sheet.initial_outfit?.state
+  // Regions are the only place clothing is authored. The card's legacy flat
+  // `wearing` list is migrated into regions by character_schema on read, so an
+  // older or imported card arrives here with its clothes already placed -- and
+  // with `attire.region_of`'s guess visible, where it can be corrected.
+  f.outfit_regions = fAttireGarments(
+    "Starting clothes", sheet.initial_outfit?.regions
   );
   f.tier = fSelect("Tier", [["bg", "background"], ["mid", "recurring"], ["major", "major/antagonist"]], sheet.simulation?.tier);
   f.temperature = fNum("Temperature (0.5–1.1)", sheet.simulation?.temperature, "0.05");
@@ -211,7 +256,7 @@ function charEditor(c, options = {}) {
   f.face = fText("Face", sheet.embodiment?.visible?.face);
   f.hair = fText("Hair", sheet.embodiment?.visible?.hair);
   f.eyes = fText("Eyes", sheet.embodiment?.visible?.eyes);
-  f.distinctive = fStrList("Distinctive features", sheet.embodiment?.visible?.distinctive_features);
+  f.distinctive = fLineList("Distinctive features (one per line)", sheet.embodiment?.visible?.distinctive_features);
   f.latent = fLatent("Latent/hidden capabilities (powers, secret identities, equipment functions)", sheet.embodiment?.latent);
   f.intero_acuity = fNum("Interoceptive acuity (0..1)", sheet.embodiment?.interoception?.acuity, "0.1");
   f.pain_sensitivity = fNum("Pain sensitivity (0..1)", sheet.embodiment?.interoception?.pain_sensitivity, "0.1");
@@ -302,6 +347,17 @@ function charEditor(c, options = {}) {
     }
   }, "✨ Fill psychology gaps") : null;
 
+  const fillAppearance = c && !isChatCard
+    ? appearanceFillButton("character", c, () => ({
+        appearance: {
+          summary: f.summary.read(), build: f.build.read(), face: f.face.read(),
+          hair: f.hair.read(), eyes: f.eyes.read(),
+          distinctive_features: f.distinctive.read()
+        },
+        initial_outfit: { regions: f.outfit_regions.read() }
+      }), refreshed => charEditor(refreshed))
+    : null;
+
   modal(
     isChatCard
       ? "Edit story card — " + sheet.identity?.name
@@ -329,7 +385,21 @@ function charEditor(c, options = {}) {
           "Appearance describes the body and stable visible features. Initial "
           + "outfit is copied into the story's live attire state, where it can "
           + "later be changed without rewriting this card."),
-        f.initial_outfit.node, f.initial_outfit_state.node,
+        f.outfit_regions.node,
+        el("div", { class: "small dim" },
+          "Each garment covers part of a body, which is what lets the story "
+          + "undress someone one piece at a time — worn, then loosened, then "
+          + "open, then off, a step per beat — and lets a spill or a tear "
+          + "belong to the garment, so it goes with the shirt when the shirt "
+          + "comes off. Most clothing is not one body part: a kimono or a "
+          + "toga is the whole body, a dress is shoulders to ankles, a coat "
+          + "goes over the shoulders. Leave the coverage on “auto” and it is "
+          + "worked out from the name. Note that waist means the belt line "
+          + "only — a sash does not cover the groin. List the outermost "
+          + "garment first. \"Underneath\" is what a region shows once "
+          + "nothing covers it, and is used only when it has been switched "
+          + "on in Settings."),
+        fillAppearance,
         f.tier.node, f.temperature.node),
       el("details", { open: "" }, el("summary", {}, "Embodiment (Visible & Senses)"),
         f.summary.node, f.senses.node, f.build.node, f.face.node, f.hair.node,
@@ -383,10 +453,10 @@ function charEditor(c, options = {}) {
               aliases: f.aliases.read(),
               pronouns: f.pronouns.read()
             },
-            initial_outfit: {
-              wearing: f.initial_outfit.read(),
-              state: f.initial_outfit_state.read()
-            },
+            // `wearing` is derived from the regions by the schema, never
+            // sent from here -- two authored copies of one outfit is how the
+            // ledger ends up saying different things about the same body.
+            initial_outfit: { regions: f.outfit_regions.read() },
             simulation: { tier: f.tier.read(), temperature: f.temperature.read(), sampler: {} },
             embodiment: {
               senses: f.senses.read(),
@@ -483,7 +553,7 @@ function charEditor(c, options = {}) {
 function personaEditor(p) {
   const sheet = p ? JSON.parse(p.sheet) : {
     identity: { name: "New Persona", aliases: [], pronouns: { subject: "they", object: "them", possessive: "their" } },
-    initial_outfit: { wearing: [], state: [] },
+    initial_outfit: { regions: {} },
     embodiment: {
       senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", notes: "ordinary human senses" }],
       visible: { summary: "A person of unremarkable appearance.", build: "", face: "", hair: "", eyes: "", distinctive_features: [] },
@@ -497,13 +567,12 @@ function personaEditor(p) {
   f.name = fText("Name", sheet.identity?.name);
   f.aliases = fStrList("Aliases", sheet.identity?.aliases);
   f.pronouns = fPronouns("Pronouns", sheet.identity?.pronouns);
-  f.initial_outfit = fStrList(
-    "Initial outfit — clothing only (one item per line)",
-    sheet.initial_outfit?.wearing
-  );
-  f.initial_outfit_state = fStrList(
-    "Initial clothing condition (optional)",
-    sheet.initial_outfit?.state
+  // Regions are the only place clothing is authored. The card's legacy flat
+  // `wearing` list is migrated into regions by character_schema on read, so an
+  // older or imported card arrives here with its clothes already placed -- and
+  // with `attire.region_of`'s guess visible, where it can be corrected.
+  f.outfit_regions = fAttireGarments(
+    "Starting clothes", sheet.initial_outfit?.regions
   );
   f.senses = fSenses("Senses", sheet.embodiment?.senses);
   f.appearance = fArea(
@@ -514,11 +583,19 @@ function personaEditor(p) {
   f.face = fText("Face", sheet.embodiment?.visible?.face);
   f.hair = fText("Hair", sheet.embodiment?.visible?.hair);
   f.eyes = fText("Eyes", sheet.embodiment?.visible?.eyes);
-  f.distinctive = fStrList("Distinctive features", sheet.embodiment?.visible?.distinctive_features);
+  f.distinctive = fLineList("Distinctive features (one per line)", sheet.embodiment?.visible?.distinctive_features);
   f.latent = fLatent("Latent/hidden capabilities", sheet.embodiment?.latent);
   f.public_history = fArea("Public history (world could know)", sheet.knowledge?.public_history, 3);
   f.voice_setting = fArea("Voice setting (PRIVATE — narrator only)", sheet.narration?.voice_setting, 3);
   f.abilities = fAbilities("Abilities", sheet.competence?.abilities);
+  const fillAppearance = p ? appearanceFillButton("persona", p, () => ({
+    appearance: {
+      summary: f.appearance.read(), build: f.build.read(), face: f.face.read(),
+      hair: f.hair.read(), eyes: f.eyes.read(),
+      distinctive_features: f.distinctive.read()
+    },
+    initial_outfit: { regions: f.outfit_regions.read() }
+  }), refreshed => personaEditor(refreshed)) : null;
   const ph = phEditor(sheet.knowledge?.private_history, false);
 
   modal(p ? "Edit persona — " + sheet.identity?.name : "New persona", b => {
@@ -528,7 +605,21 @@ function personaEditor(p) {
         el("div", { class: "small dim" },
           "Keep body appearance separate from clothing. Initial outfit seeds "
           + "the story's live attire state and can change during play."),
-        f.initial_outfit.node, f.initial_outfit_state.node),
+        f.outfit_regions.node,
+        el("div", { class: "small dim" },
+          "Each garment covers part of a body, which is what lets the story "
+          + "undress someone one piece at a time — worn, then loosened, then "
+          + "open, then off, a step per beat — and lets a spill or a tear "
+          + "belong to the garment, so it goes with the shirt when the shirt "
+          + "comes off. Most clothing is not one body part: a kimono or a "
+          + "toga is the whole body, a dress is shoulders to ankles, a coat "
+          + "goes over the shoulders. Leave the coverage on “auto” and it is "
+          + "worked out from the name. Note that waist means the belt line "
+          + "only — a sash does not cover the groin. List the outermost "
+          + "garment first. \"Underneath\" is what a region shows once "
+          + "nothing covers it, and is used only when it has been switched "
+          + "on in Settings."),
+        fillAppearance),
       el("details", { open: "" }, el("summary", {}, "Embodiment (Visible & Senses)"),
         f.appearance.node, f.senses.node, f.build.node, f.face.node, f.hair.node, f.eyes.node, f.distinctive.node, f.latent.node),
       el("details", { open: "" }, el("summary", {}, "History & Voice"), f.public_history.node, f.voice_setting.node),
@@ -543,10 +634,10 @@ function personaEditor(p) {
               aliases: f.aliases.read(),
               pronouns: f.pronouns.read()
             },
-            initial_outfit: {
-              wearing: f.initial_outfit.read(),
-              state: f.initial_outfit_state.read()
-            },
+            // `wearing` is derived from the regions by the schema, never
+            // sent from here -- two authored copies of one outfit is how the
+            // ledger ends up saying different things about the same body.
+            initial_outfit: { regions: f.outfit_regions.read() },
             embodiment: {
               senses: f.senses.read(),
               visible: { summary: f.appearance.read(), build: f.build.read(), face: f.face.read(), hair: f.hair.read(), eyes: f.eyes.read(), distinctive_features: f.distinctive.read() },
