@@ -2370,6 +2370,147 @@ function renderUpdateError(b, message, retry = renderUpdateChecking) {
     el("button", { onclick: closeModal }, "Close")));
 }
 
+// ---- Legacy checkpoint conversion (host-only maintenance) ----------------
+//
+// Sits in the Software updates modal because that is where a host looks after
+// pulling a version whose storage format changed. Checkpoints used to carry
+// every memory's embedding vectors inline, and since a checkpoint is a full
+// snapshot of the bank, the same vector was re-stored on every turn: measured
+// on a real database, checkpoints were 94.5% of a 4.4 GB file and the vectors
+// were 96.9% of each one. Converting moves each vector into a
+// content-addressed store the checkpoints reference.
+//
+// Never automatic. It rewrites rollback history, so the host asks for it.
+function checkpointCompactionBlock() {
+  const body = el("div", { class: "small dim" }, "Checking checkpoint storage…");
+  const wrap = el("div", { style: "margin-top:14px;padding:10px 12px;"
+                                + "border:1px solid var(--bd);border-radius:9px" },
+    el("div", { style: "font-weight:650;margin-bottom:5px" },
+       "Convert legacy checkpoints to the leaner format"),
+    body);
+
+  const mb = n => (Number(n || 0) / 1e6).toFixed(1) + " MB";
+  let timer = null;
+
+  const render = async () => {
+    let d;
+    try { d = await api("GET", "/api/maintenance/checkpoints"); }
+    catch (e) {
+      body.textContent = "Could not check: " + (e?.message || e);
+      return;
+    }
+    const p = d.progress || {};
+    body.textContent = "";
+
+    if (p.running) {
+      const total = p.total || 0, done = p.done || 0;
+      const pct = total ? Math.min(100, Math.round((done / total) * 100)) : 0;
+      body.append(el("div", {}, `Converting — ${done.toLocaleString()} of `
+                              + `${total.toLocaleString()} checkpoints (${pct}%)`));
+      // A determinate bar: the total is known before the run starts, so a
+      // spinner would be hiding information the host already paid for.
+      body.append(el("div", {
+        style: "margin-top:7px;height:8px;border-radius:5px;overflow:hidden;"
+             + "background:var(--bd)" },
+        el("div", { style: `height:100%;width:${pct}%;background:var(--ac,#4a90d9);`
+                         + "transition:width .3s ease" })));
+      if (p.bytes_before) {
+        body.append(el("div", { class: "small dim", style: "margin-top:6px" },
+          `${mb(p.bytes_before)} → ${mb(p.bytes_after)} so far`));
+      }
+      if (!timer) timer = setInterval(render, 1000);
+      return;
+    }
+
+    if (timer) { clearInterval(timer); timer = null; }
+
+    if (p.error) {
+      body.append(el("div", { style: "color:var(--danger,#c0392b)" },
+        "Conversion stopped: " + p.error));
+      body.append(el("div", { class: "small dim", style: "margin-top:4px" },
+        "Nothing was lost — converted checkpoints stay converted and the rest "
+        + "are untouched. Running it again resumes."));
+    }
+
+    // Stories the conversion REFUSED. Each was compacted on a duplicate,
+    // failed the equivalence check, and had its original left exactly as it
+    // was. Named, because "some stories were skipped" is not something a host
+    // can act on.
+    const skipped = p.skipped || [];
+    if (skipped.length) {
+      const box = el("div", { style: "margin-top:8px;padding:8px 10px;border-radius:7px;"
+                                   + "border:1px solid var(--danger,#c0392b)" },
+        el("div", { style: "font-weight:600" },
+           `${skipped.length} ${skipped.length === 1 ? "story was" : "stories were"} `
+           + "left alone to avoid losing anything"));
+      for (const s of skipped) {
+        box.append(el("div", { class: "small", style: "margin-top:5px" },
+          el("b", {}, `Cannot compact "${s.name}"`),
+          el("span", { class: "dim" }, ` — ${s.reason}`)));
+      }
+      box.append(el("div", { class: "small dim", style: "margin-top:6px" },
+        "These keep their original checkpoints and still roll back normally. "
+        + "Everything else was converted."));
+      body.append(box);
+    }
+
+    const legacy = d.legacy || 0, total = d.checkpoints || 0;
+    if (!total) {
+      body.append(el("div", {}, "No checkpoints stored yet."));
+      return;
+    }
+    if (!legacy) {
+      body.append(el("div", {}, `✓ All ${total.toLocaleString()} checkpoints are `
+                              + `in the current format (${mb(d.bytes)}).`));
+      body.append(el("div", { class: "small dim", style: "margin-top:4px" },
+        "There is nothing to convert. This offers itself again only if you "
+        + "import a story saved by an older version."));
+      return;
+    }
+
+    body.append(el("div", {},
+      `${legacy.toLocaleString()} of ${total.toLocaleString()} checkpoints are in `
+      + `the legacy format, using ${mb(d.legacy_bytes)}.`));
+    body.append(el("div", { class: "small dim", style: "margin-top:5px" },
+      "Converting stores each memory's embedding once instead of once per "
+      + "checkpoint. Nothing is re-embedded and no memory is changed — only "
+      + "where the vectors live. Typically shrinks them by 10× or more."));
+    const go = el("button", { style: "margin-top:9px" }, "Convert now");
+    go.onclick = async () => {
+      go.disabled = true;
+      go.textContent = "Starting…";
+      try {
+        const r = await api("POST", "/api/maintenance/checkpoints/compact", {});
+        // The server refuses when there is nothing legacy left, which is the
+        // right answer for a stale card or a direct API call. Say so rather
+        // than showing a bar for a run that never started.
+        if (r && r.started === false) {
+          go.remove();
+          body.append(el("div", { class: "small dim", style: "margin-top:6px" },
+            r.reason === "nothing to convert"
+              ? "Nothing to convert — every checkpoint is already in the current "
+                + "format. This becomes available again if you import a story "
+                + "saved by an older version."
+              : `Not started: ${r.reason || "unknown reason"}`));
+          return;
+        }
+      }
+      catch (e) {
+        go.disabled = false;
+        go.textContent = "Convert now";
+        body.append(el("div", { style: "color:var(--danger,#c0392b);margin-top:6px" },
+          e?.message || String(e)));
+        return;
+      }
+      render();
+    };
+    body.append(go);
+  };
+
+  render();
+  return wrap;
+}
+
 function renderUpdateStatus(b, r) {
   // ok:false is an environment problem (not a git checkout, offline, no
   // remote) -- surface the server's own explanation rather than a retry loop.
@@ -2382,6 +2523,7 @@ function renderUpdateStatus(b, r) {
 
   if (r.up_to_date) {
     b.append(el("div", { class: "card" }, "✓ You're on the latest version."));
+    b.append(checkpointCompactionBlock());
     b.append(el("div", { class: "row", style: "margin-top:10px" },
       el("button", { onclick: closeModal }, "Close")));
     return;
@@ -2414,6 +2556,8 @@ function renderUpdateStatus(b, r) {
       "⚠ You have local uncommitted changes. Commit or stash them before "
       + "installing an update."));
   }
+
+  b.append(checkpointCompactionBlock());
 
   const installBtn = el("button", { class: "primary" }, "Install update");
   installBtn.onclick = () => runUpdateInstall(b, installBtn);

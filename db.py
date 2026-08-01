@@ -64,7 +64,7 @@ def parse_scoped_world_key(key):
     return key, None
 
 DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -462,6 +462,36 @@ CREATE TABLE IF NOT EXISTS memories(
     disputed TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_memories_chat_char ON memories(chat_id, char_id);
+
+-- Embedding vectors, stored ONCE and addressed by content.
+--
+-- A checkpoint used to carry every memory's two float32 vectors inline, and
+-- since a checkpoint is a full snapshot of the bank, the same vector was
+-- re-stored on every turn for the life of the story. Measured on the live
+-- database: checkpoints were 94.5% of a 4.4 GB file, `memories` was 98.9% of
+-- each checkpoint, and the two vector fields were 96.9% of that. One story
+-- held 40,224 memory copies across 118 checkpoints and only 529 distinct by
+-- (char_id, content) -- 76x redundancy, 1.00 GB of vectors that need 13 MB.
+--
+-- The key is sha1(char_id, whitespace-normalised content), which is
+-- memory._memory_vector_key -- already written, and already relied on by
+-- rebuild_checkpoint_embeddings to join saved memories to live ones. A vector
+-- is a pure function of the document built from the memory, so content is the
+-- honest address for it.
+--
+-- APPEND-ONLY, and never garbage-collected when a memory is deleted. A
+-- checkpoint that predates the deletion still references the vector, and a
+-- rollback that cannot restore one is a worse failure than a few kilobytes of
+-- orphaned rows.
+CREATE TABLE IF NOT EXISTS memory_vectors(
+    vkey TEXT PRIMARY KEY,
+    embedding BLOB,
+    cue_embedding BLOB,
+    embedding_model TEXT NOT NULL DEFAULT '',
+    embedding_dim INTEGER,
+    created REAL NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_memories_turn ON memories(turn_id);
 CREATE INDEX IF NOT EXISTS idx_memories_chronology ON memories(chat_id, char_id, turn_idx, id);
 CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(chat_id, char_id, category);
@@ -1103,6 +1133,21 @@ MIGRATIONS = [
         # the row's salience, and an empty dispute reads as undisputed.
         "ALTER TABLE memories ADD COLUMN importance REAL",
         "ALTER TABLE memories ADD COLUMN disputed TEXT NOT NULL DEFAULT ''",
+    ],
+    # v21 -> v22
+    [
+        # Content-addressed embedding storage; see the SCHEMA comment. The
+        # table starts empty and fills as checkpoints are written or compacted
+        # (tools/compact_checkpoints.py), so nothing needs backfilling for the
+        # engine to keep working -- an existing checkpoint still carries its
+        # vectors inline and restores from them exactly as before.
+        "CREATE TABLE IF NOT EXISTS memory_vectors("
+        "vkey TEXT PRIMARY KEY,"
+        "embedding BLOB,"
+        "cue_embedding BLOB,"
+        "embedding_model TEXT NOT NULL DEFAULT '',"
+        "embedding_dim INTEGER,"
+        "created REAL NOT NULL)",
     ],
 ]
 
