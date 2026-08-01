@@ -789,6 +789,49 @@ def _replace_memory_fts(memory_id: int, data: dict):
 def _delete_memory_fts(memory_id: int):
     qi("DELETE FROM memory_retrieval_fts WHERE memory_id=?", (str(memory_id),))
 
+# How far one consequence moves a memory's importance, and the ceiling it
+# climbs toward. Deliberately small and asymptotic: importance is evidence
+# accumulating that a memory mattered, and one relationship change is evidence,
+# not proof. Nothing here is driven by RETRIEVAL -- a memory that gets recalled
+# a lot would then get recalled more, which is a popularity loop wearing the
+# word "importance". Only consequences the engine can point at move it, which
+# is also why `access_count` stays written and unread.
+_IMPORTANCE_STEP = 0.12
+_IMPORTANCE_CEILING = 0.97
+# A memory the character has re-read moves further, because being wrong about
+# something is a bigger fact about it than being cited once.
+_IMPORTANCE_DISPUTE_STEP = 0.2
+_MAX_DISPUTE_READING = 300
+
+
+def _dispute_of(raw):
+    """The stored re-reading, or None. Never raises on a malformed blob -- a
+    corrupt dispute must not make a memory unreadable."""
+    if not raw:
+        return None
+    try:
+        out = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    return out if isinstance(out, dict) and out.get("reading") else None
+
+
+def effective_importance(mem) -> float:
+    """How much this memory matters NOW: its revised importance if it has one,
+    else the salience it was minted with. The single place that fallback is
+    decided, so a reader cannot accidentally rank on the raw column and see
+    NULL for every row that has never been revised."""
+    if isinstance(mem, dict):
+        value = mem.get("importance")
+        if value is None:
+            value = mem.get("salience")
+    else:
+        value = mem["importance"]
+        if value is None:
+            value = mem["salience"]
+    return _clamp(value)
+
+
 def _row_memory(row) -> dict:
     return {
         "id": row["id"], "chat_id": row["chat_id"], "char_id": row["char_id"],
@@ -806,6 +849,16 @@ def _row_memory(row) -> dict:
         "confidence": row["confidence"] or 0.0,
         "access_count": row["access_count"] or 0,
         "last_accessed": row["last_accessed"],
+        # How central it BECAME. Distinct from salience, which records how much
+        # it mattered when formed and is never revised -- a minor moment can
+        # turn out to have been the important one, and the two facts are
+        # different. NULL (never revised) reads as the salience, so an
+        # untouched bank behaves exactly as it did.
+        "importance": (row["salience"] if row["importance"] is None
+                       else row["importance"]),
+        "importance_revised": row["importance"] is not None,
+        # The character's own later re-reading, if they have made one.
+        "disputed": _dispute_of(row["disputed"]),
         "archived": bool(row["archived"]),
         "event_key": row["event_key"] or "",
         "embedding_model": row["embedding_model"] or "",
@@ -816,7 +869,7 @@ def prepare_memory(chat_id, char_id, turn_id, kind, provenance, salience, conten
                    turn_idx=None, category=None, gist=None, key_phrases=None,
                    entities=None, location="", emotional_context="",
                    valence=0.0, arousal=0.0, confidence=1.0, event_key="",
-                   frame_id=_UNSET) -> dict:
+                   frame_id=_UNSET, importance=None, disputed="") -> dict:
     content = re.sub(r"\s+", " ", str(content or "")).strip()
     entities = list(dict.fromkeys(entities if entities is not None else _extract_entities(content)))
     key_phrases = list(dict.fromkeys(key_phrases if key_phrases is not None else _extract_key_phrases(content, entities)))
@@ -841,6 +894,12 @@ def prepare_memory(chat_id, char_id, turn_id, kind, provenance, salience, conten
         "valence": _clamp(valence, -1.0, 1.0), "arousal": _clamp(arousal),
         "confidence": _clamp(confidence),
         "event_key": str(event_key or "").strip(),
+        # None, not 0.0: NULL is "never revised" and reads as the salience.
+        # Defaulting to a number here would freeze every new memory at its
+        # mint value and silently kill the fallback.
+        "importance": None if importance is None else _clamp(importance),
+        "disputed": _storage_json(disputed) if isinstance(disputed, dict)
+                    else str(disputed or ""),
     }
 
 def _embed_memory(data: dict):
@@ -861,20 +920,22 @@ def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
         data["location"], data["emotional_context"], data["valence"],
         data["arousal"], data["confidence"], _blob(full_vec), _blob(cue_vec),
         embedded.model_key, embedded.dimensions, data.get("frame_id"),
+        data.get("importance"), data.get("disputed") or "",
     )
     if existing:
         mid = existing["id"]
         qi("""UPDATE memories SET turn_id=?,turn_idx=?,kind=?,category=?,provenance=?,
             salience=?,content=?,gist=?,key_phrases=?,entities=?,location=?,
             emotional_context=?,valence=?,arousal=?,confidence=?,embedding=?,
-            cue_embedding=?,embedding_model=?,embedding_dim=?,frame_id=?,archived=0 WHERE id=?""",
+            cue_embedding=?,embedding_model=?,embedding_dim=?,frame_id=?,
+            importance=?,disputed=?,archived=0 WHERE id=?""",
            values + (mid,))
     else:
         mid = qi("""INSERT INTO memories(chat_id,char_id,turn_id,turn_idx,kind,category,
             provenance,salience,content,gist,key_phrases,entities,location,
             emotional_context,valence,arousal,confidence,embedding,cue_embedding,
-            embedding_model,embedding_dim,frame_id,event_key)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            embedding_model,embedding_dim,frame_id,importance,disputed,event_key)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
            (data["chat_id"], data["char_id"]) + values + (data["event_key"],))
     _replace_memory_fts(mid, data)
     return mid
@@ -937,6 +998,93 @@ def delete_turn_memories(turn_id):
         _delete_memory_fts(r["id"])
     qi("DELETE FROM memories WHERE turn_id=?", (turn_id,))
 
+# ---- The one seam a mind reads its own memory through -------------------
+#
+# Two filters decide what a character may legitimately retrieve, and both must
+# run BEFORE any ranking:
+#
+#   the turn cutoff   -- a mind deciding turn N must never read a memory of how
+#                        turn N turned out (audit F1). Not hypothetical: a
+#                        reroll or rerun-from-stage replays the onset of a turn
+#                        whose outcome memories are already committed.
+#   frame visibility  -- a memory formed in another era is not this mind's to
+#                        have yet (frames.is_memory_visible).
+#
+# They used to be written out again at every read path -- search_memories,
+# contrast_memory, recent_memory_buffer, list_memories,
+# consolidate_character_memory -- and docs/MEMORY.md claimed that repetition
+# was what stopped a new path forgetting them. That reasoning is backwards:
+# repetition is precisely how a sixth path forgets, because nothing makes it
+# reproduce five filters it may not know exist.
+#
+# So the rules live here, once, and every argument that carries one is
+# REQUIRED and has no default. A caller cannot omit `before_turn_idx` or
+# `viewer_frame_id`; it can only state them, including stating None. Forgetting
+# becomes a TypeError instead of a leak.
+#
+# The remaining parameters only ever NARROW the result. None of them can
+# readmit a row the two filters excluded, which is what keeps this a seam
+# rather than a configurable query builder.
+
+
+def visible_memory_rows(chat_id, char_id, *, before_turn_idx, viewer_frame_id,
+                        include_archived, since_turn_idx=None,
+                        require_turn_idx=False):
+    """Raw rows this character may legitimately read. The only way to get them.
+
+    `before_turn_idx` is the turn being decided, and the cutoff is strict:
+    turn N itself and every later play-order turn go. Pass None only where
+    there is no turn being decided -- a host browsing the memory panel, not a
+    mind deciding a beat. `turn_idx IS NULL` rows (imported or authored, with
+    no place in play order) are always kept: they belong to no turn, so they
+    cannot be this turn's leaked outcome.
+
+    `viewer_frame_id` may be `_UNSET` to read the ambient contextvar, which is
+    what almost every caller wants; it is still passed explicitly so the
+    decision is visible at the call site. A caller on a worker thread must
+    pass the real value -- contextvars do not propagate into
+    ThreadPoolExecutor workers (see maybe_consolidate_character_memory).
+    """
+    clauses = ["chat_id=?", "char_id=?"]
+    args = [chat_id, char_id]
+    if not include_archived:
+        clauses.append("archived=0")
+    if require_turn_idx:
+        clauses.append("turn_idx IS NOT NULL")
+    if since_turn_idx is not None:
+        clauses.append("turn_idx>=?")
+        args.append(since_turn_idx)
+    if before_turn_idx is not None:
+        # Stated once, in SQL. An earlier draft also re-filtered in Python
+        # "so the rule is an invariant, not an optimisation" -- but two copies
+        # of one rule is the thing this seam exists to stop, and mutation
+        # testing proved the point: deleting the Python half left all 21 seam
+        # tests green, because the SQL half was already doing the work. A
+        # guard nothing can observe failing is not a guard.
+        #
+        # NULL turn_idx is kept explicitly. Those rows are imported or
+        # authored, belong to no turn, and so cannot be this turn's leaked
+        # outcome -- and SQL's three-valued logic would silently drop them
+        # from a bare `turn_idx < ?`.
+        clauses.append("(turn_idx IS NULL OR turn_idx<?)")
+        args.append(before_turn_idx)
+    rows = q("SELECT * FROM memories WHERE " + " AND ".join(clauses), tuple(args))
+    vf = _active_frame_id.get() if viewer_frame_id is _UNSET else viewer_frame_id
+    return [r for r in rows
+            if _frames.is_memory_visible(char_id, r["frame_id"], vf, r["turn_idx"])]
+
+
+# ---- Host-facing reads, which deliberately cross character boundaries ----
+#
+# These answer a question ABOUT the cast rather than a question a character
+# asks itself, so they are not scoped to one char_id and must never feed a
+# character's context. They are named here so the crossing is a listed
+# exception rather than an oversight, and
+# tests/test_memory_read_seam.py::test_no_unlisted_cross_character_reader
+# fails if the list grows without a decision.
+HOST_SCOPE_READERS = ("dramatic_irony_feed", "promise_ledger")
+
+
 def dramatic_irony_feed(chat_id, limit=100):
     """Every character's memories that did NOT come from directly
     witnessing the thing themselves (heard/told/inferred/read) -- a
@@ -989,23 +1137,31 @@ def promise_ledger(chat_id, limit=200):
 
 def list_memories(chat_id, char_id, *, include_archived=False, category=None,
                   provenance=None, limit=500, offset=0, viewer_frame_id=_UNSET):
-    clauses = ["chat_id=?", "char_id=?"]
-    args = [chat_id, char_id]
-    if not include_archived:
-        clauses.append("archived=0")
+    """The host's memory panel for one character. No turn cutoff, deliberately:
+    nobody is deciding a beat here, so there is no future to withhold.
+
+    Paging now happens AFTER frame filtering. It used to be `LIMIT ? OFFSET ?`
+    in SQL with the visibility pass applied to whatever came back, so a page
+    could return fewer rows than asked for -- or none -- while plenty of
+    visible memories sat behind it, and the panel had no way to tell "the end"
+    from "this page happened to be another era's".
+    """
+    rows = visible_memory_rows(
+        chat_id, char_id,
+        before_turn_idx=None,
+        viewer_frame_id=viewer_frame_id,
+        include_archived=include_archived,
+    )
     if category in MEMORY_CATEGORIES:
-        clauses.append("category=?")
-        args.append(category)
+        rows = [r for r in rows if r["category"] == category]
     if provenance in MEMORY_PROVENANCE:
-        clauses.append("provenance=?")
-        args.append(provenance)
-    args.extend([max(1, min(int(limit), 1000)), max(0, int(offset))])
-    rows = q(f"""SELECT * FROM memories WHERE {' AND '.join(clauses)}
-        ORDER BY CASE WHEN turn_idx IS NULL THEN 1 ELSE 0 END, turn_idx DESC, id DESC
-        LIMIT ? OFFSET ?""", tuple(args))
-    vf = _active_frame_id.get() if viewer_frame_id is _UNSET else viewer_frame_id
-    rows = [r for r in rows if _frames.is_memory_visible(char_id, r["frame_id"], vf, r["turn_idx"])]
-    return [_row_memory(r) for r in rows]
+        rows = [r for r in rows if r["provenance"] == provenance]
+    rows.sort(key=lambda r: (r["turn_idx"] is None,
+                            -(r["turn_idx"] if r["turn_idx"] is not None else 0),
+                            -r["id"]))
+    start = max(0, int(offset))
+    stop = start + max(1, min(int(limit), 1000))
+    return [_row_memory(r) for r in rows[start:stop]]
 
 def update_memory(mid, content=None, salience=None, kind=None, provenance=None, *,
                   category=None, gist=None, key_phrases=None, entities=None,
@@ -1050,6 +1206,105 @@ def update_memory(mid, content=None, salience=None, kind=None, provenance=None, 
         mid))
     _replace_memory_fts(mid, data)
     return True
+
+def record_dispute(chat_id, char_id, gist, reading, turn_idx):
+    """The character has re-read one of their own memories.
+
+    The event stays exactly as it was -- "I saw this" is still true, and the
+    row's `content`, `gist`, `provenance` and `salience` are untouched. What is
+    recorded beside it is that the character no longer reads it the way they
+    first did, which is what deception, disguise, staging and plain
+    misidentification actually do to a mind: they do not delete the
+    experience, they change what it meant.
+
+    Deliberately NOT an edge to the memory that superseded it. Checkpoint
+    restore is delete-and-reinsert, so every row id changes and an id-keyed
+    edge would be shredded by the first rollback; stored on the row it rides
+    the existing round-trip verbatim.
+
+    Matched on the character's OWN rows only, by gist, exactly-then-loosely --
+    a character may only re-read something they remember. Returns the ids
+    updated.
+    """
+    needle = " ".join(str(gist or "").split()).casefold()
+    reading = " ".join(str(reading or "").split())[:_MAX_DISPUTE_READING]
+    if not needle or not reading:
+        return []
+    rows = q("SELECT id, gist, content, disputed, salience, importance "
+             "FROM memories WHERE chat_id=? AND char_id=?", (chat_id, char_id))
+    hits = [r for r in rows
+            if " ".join((r["gist"] or "").split()).casefold() == needle]
+    if not hits:
+        hits = [r for r in rows
+                if needle in " ".join((r["gist"] or "").split()).casefold()
+                or needle in " ".join((r["content"] or "").split()).casefold()]
+    updated = []
+    for row in hits:
+        prior = _dispute_of(row["disputed"]) or {}
+        blob = _storage_json({
+            "turn_idx": turn_idx,
+            "reading": reading,
+            # A memory re-read twice has been genuinely unstable, and that is
+            # worth being able to see.
+            "count": int(prior.get("count") or 0) + 1,
+        })
+        # Being wrong about something is a larger fact about it than being
+        # cited once, so a dispute moves importance further than an ordinary
+        # consequence -- and it moves UP: a memory whose meaning changed is
+        # more central to this mind, not less.
+        base = effective_importance(row)
+        raised = min(_IMPORTANCE_CEILING, base + _IMPORTANCE_DISPUTE_STEP)
+        qi("UPDATE memories SET disputed=?, importance=? WHERE id=?",
+           (blob, raised, row["id"]))
+        updated.append(row["id"])
+    return updated
+
+
+def raise_importance(chat_id, char_id, memory_ids=(), *, event_keys=(),
+                     only_unrevised=False, step=_IMPORTANCE_STEP):
+    """Nudge memories toward the ceiling because something happened that they
+    turned out to matter for.
+
+    Asymptotic rather than additive so repetition cannot run away: each
+    consequence closes a fraction of the remaining distance. Never lowers, and
+    never touches `salience` -- how much it mattered when it was FORMED is a
+    different fact, and the one consolidation and archiving still read.
+
+    `chat_id`/`char_id` are required and are applied in the WHERE clause, so a
+    model that cites a memory id belonging to another mind moves nothing. The
+    ids arrive from model output; ownership is not negotiable, and the same
+    lesson as the read seam applies -- the scoping belongs in the query, not
+    in whoever remembers to check first.
+
+    `only_unrevised` bumps a row exactly once ever, which is how a signal that
+    is itself downstream of retrieval is stopped from compounding.
+    """
+    ids = [int(i) for i in (memory_ids or []) if i is not None]
+    keys = [str(k) for k in (event_keys or []) if str(k or "").strip()]
+    if not ids and not keys:
+        return 0
+    # Either handle resolves the same rows. `event_key` is what a character
+    # actually cites (see commit._cited_memory_ids); the row id is what
+    # internal callers have.
+    where, args = [], [chat_id, char_id]
+    if ids:
+        where.append("id IN (%s)" % ",".join("?" for _ in ids)); args += ids
+    if keys:
+        where.append("event_key IN (%s)" % ",".join("?" for _ in keys)); args += keys
+    clause = "chat_id=? AND char_id=? AND (%s)" % " OR ".join(where)
+    args = tuple(args)
+    if only_unrevised:
+        clause += " AND importance IS NULL"
+    rows = q(f"SELECT id, salience, importance FROM memories WHERE {clause}", args)
+    changed = 0
+    for row in rows:
+        base = effective_importance(row)
+        raised = min(_IMPORTANCE_CEILING, base + step * (1.0 - base))
+        if raised - base > 1e-6:
+            qi("UPDATE memories SET importance=? WHERE id=?", (raised, row["id"]))
+            changed += 1
+    return changed
+
 
 def delete_memory(mid):
     _delete_memory_fts(mid)
@@ -1283,32 +1538,21 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
     compete for influence inside a long string; given its own rank list it
     does not have to.
     """
-    rows = q("SELECT * FROM memories WHERE chat_id=? AND char_id=? AND (?=1 OR archived=0)",
-             (chat_id, char_id, 1 if include_archived else 0))
-    if current_turn_idx is not None:
-        # Audit F1, and the SOLE defence against it: a mind deciding turn N
-        # must never retrieve a memory of how turn N turned out. That is not
-        # hypothetical -- a reroll or a rerun-from-stage replays the onset of
-        # a turn whose outcome memories are already committed, so without this
-        # cutoff the character reads the discarded future of the very beat it
-        # is being asked to decide. current_turn_idx used to feed only the
-        # recency scoring below, which RANKED those rows highly instead of
-        # dropping them; it is now a hard filter applied before any
-        # semantic/lexical ranking, so no scoring path can resurrect them.
-        # Strictly `<`: turn N itself and every later play-order turn go.
-        # turn_idx IS NULL rows (imported or authored memories with no place
-        # in play order) are deliberately kept -- they belong to no turn, so
-        # they cannot be this turn's leaked outcome.
-        rows = [
-            row for row in rows
-            if row["turn_idx"] is None or row["turn_idx"] < current_turn_idx
-        ]
+    # Audit F1 (a mind deciding turn N must not read how turn N turned out)
+    # and frame visibility both live in visible_memory_rows, applied before any
+    # ranking so no scoring path can resurrect what they dropped. The turn
+    # cutoff used to feed only the recency scoring below, which RANKED those
+    # rows highly instead of removing them.
+    rows = visible_memory_rows(
+        chat_id, char_id,
+        before_turn_idx=current_turn_idx,
+        viewer_frame_id=viewer_frame_id,
+        include_archived=include_archived,
+    )
     here_set = {str(here).strip().casefold()} if here else set()
     in_sight_set = {
         str(p).strip().casefold() for p in (in_sight or ()) if str(p or "").strip()
     } - here_set
-    vf = _active_frame_id.get() if viewer_frame_id is _UNSET else viewer_frame_id
-    rows = [r for r in rows if _frames.is_memory_visible(char_id, r["frame_id"], vf, r["turn_idx"])]
     if not rows:
         return []
     query_text = str(query or "").strip()
@@ -1377,7 +1621,11 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
     known_turns = [m["turn_idx"] for m in memories.values() if m["turn_idx"] is not None]
     max_turn = current_turn_idx if current_turn_idx is not None else max(known_turns, default=0)
     for mid, mem in memories.items():
-        fused[mid] += 0.08 * mem["salience"]
+        # `importance`, not `salience`: how much it matters NOW, which is the
+        # question ranking is asking. They are the same number until some
+        # consequence revises one, so a bank that has never been touched ranks
+        # exactly as it did.
+        fused[mid] += 0.08 * effective_importance(mem)
         fused[mid] += 0.04 * mem["confidence"]
         if mem["kind"] == "inference":
             # Belief-weighted recall. Confidence on an inference row is no
@@ -1546,14 +1794,12 @@ def contrast_memory(chat_id, char_id, query_text, current_turn_idx, *,
     Same epistemic envelope as search_memories: this character's own rows
     only, hard turn cutoff, frame visibility. No writes.
     """
-    rows = q("SELECT * FROM memories WHERE chat_id=? AND char_id=?",
-             (chat_id, char_id))
-    if current_turn_idx is not None:
-        rows = [r for r in rows
-                if r["turn_idx"] is None or r["turn_idx"] < current_turn_idx]
-    vf = _active_frame_id.get() if viewer_frame_id is _UNSET else viewer_frame_id
-    rows = [r for r in rows
-            if _frames.is_memory_visible(char_id, r["frame_id"], vf, r["turn_idx"])]
+    rows = visible_memory_rows(
+        chat_id, char_id,
+        before_turn_idx=current_turn_idx,
+        viewer_frame_id=viewer_frame_id,
+        include_archived=True,
+    )
     if len(rows) < _CONTRAST_MIN_BANK:
         return []
     excluded = set()
@@ -1603,7 +1849,7 @@ def contrast_memory(chat_id, char_id, query_text, current_turn_idx, *,
             continue
         if not (mem["gist"] or "").strip():
             continue
-        sal = float(mem["salience"] or 0.0)
+        sal = effective_importance(mem)
         if sal < _CONTRAST_MIN_SALIENCE:
             continue
         score = sal
@@ -1675,16 +1921,29 @@ def recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=4, limit=12, 
     # reroll of a pre-commit stage on an already-committed turn would feed the
     # outcome back into the onset declaration (audit #10). The current turn has
     # not legitimately "happened" yet from the deciding mind's point of view.
-    rows = q("""SELECT * FROM memories WHERE chat_id=? AND char_id=? AND archived=0
-        AND turn_idx IS NOT NULL AND turn_idx>=? AND turn_idx<? ORDER BY turn_idx DESC, id DESC LIMIT ?""",
-        (chat_id, char_id, max(0, current_turn_idx - turns), current_turn_idx, limit))
-    rows = list(reversed(rows))
+    #
     # Recent-by-play-order is not the same as recent-by-diegetic-order: the
-    # turn immediately before a frame jump can be an entirely different
-    # era. Without this filter a flash-forward's opening turns would pull
-    # in the pre-jump present as "recent memory."
-    vf = _active_frame_id.get() if viewer_frame_id is _UNSET else viewer_frame_id
-    rows = [r for r in rows if _frames.is_memory_visible(char_id, r["frame_id"], vf, r["turn_idx"])]
+    # turn immediately before a frame jump can be an entirely different era,
+    # so the frame filter in the seam is what stops a flash-forward's opening
+    # turns pulling in the pre-jump present as "recent memory."
+    rows = visible_memory_rows(
+        chat_id, char_id,
+        before_turn_idx=current_turn_idx,
+        viewer_frame_id=viewer_frame_id,
+        include_archived=False,
+        since_turn_idx=max(0, current_turn_idx - turns),
+        require_turn_idx=True,
+    )
+    # Truncate against `limit` from the NEWEST end, then hand back in
+    # chronological order. Sorting ascending and slicing would drop exactly
+    # the most recent memories ("I just escaped aboard the ship") and keep
+    # stale ones from a turn or two back, which is the wrong direction for a
+    # buffer meant to keep a character's own decisions grounded in what most
+    # recently happened. Ordering after the seam rather than in SQL also means
+    # the cap counts VISIBLE rows: it used to be applied before the frame
+    # pass, so another era's memories consumed slots and shortened the buffer.
+    rows.sort(key=lambda r: (r["turn_idx"], r["id"]), reverse=True)
+    rows = list(reversed(rows[:limit]))
     return [_row_memory(r) for r in rows]
 
 # ---- Memory Summaries ----
@@ -1727,6 +1986,31 @@ def save_memory_summary(chat_id, char_id, summary, *, scope="autobiographical", 
        (chat_id, char_id, scope, start_turn_idx, end_turn_idx, summary or "",
         json.dumps(key_phrases, ensure_ascii=False), json.dumps(unresolved_threads, ensure_ascii=False),
         embedding, embedding_model, embedding_dim, time.time()))
+
+def _with_reading(mem):
+    """Attach the character's own later re-reading, where they have made one.
+
+    The memory itself is handed over UNCHANGED -- content, gist, provenance,
+    salience all as recorded -- and the revision travels beside it under its
+    own key. That separation is the feature: the character still remembers
+    seeing what they saw, and also remembers having since decided it meant
+    something else. Collapsing the two would either erase the experience or
+    hide the correction, and a mind that has been deceived holds both.
+
+    The key is phrased as the character's own voice, matching the
+    `it_comes_back_to_me` / `i_suspect` precedent -- epistemic status carried
+    by the key rather than by prose a model can drop.
+    """
+    dispute = mem.get("disputed") if isinstance(mem, dict) else None
+    if not dispute:
+        return mem
+    out = dict(mem)
+    out.pop("disputed", None)
+    out["i_now_read_this_differently"] = dispute.get("reading") or ""
+    if dispute.get("count", 0) > 1:
+        out["times_i_have_reconsidered_it"] = int(dispute["count"])
+    return out
+
 
 def build_character_memory_context(chat_id, char_id, current_turn_idx, current_view, active_state, *,
                                    recent_turns=4, recall_limit=_RECALL_LIMIT, here=None,
@@ -1793,8 +2077,8 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                   if str(item).strip()],
             ]))[:6],
         },
-        "recent_episodes": recent,
-        "recalled_old_memories": recalled,
+        "recent_episodes": [_with_reading(m) for m in recent],
+        "recalled_old_memories": [_with_reading(m) for m in recalled],
         # First-hand only. What reached this character through someone else's
         # account, and what they worked out for themselves, are carried
         # separately below and must not be folded in here.
@@ -1818,25 +2102,23 @@ def consolidate_character_memory(chat_id, char_id, *, through_turn_idx=None, arc
     # consolidation passes, since every call previously re-sent the
     # complete history since turn 0 regardless of what had already been
     # summarized.
-    clauses = [
-        "chat_id=?", "char_id=?", "turn_idx IS NOT NULL",
-        "archived=0", "turn_idx>?",
-    ]
-    args = [chat_id, char_id, old_summary.get("end_turn_idx") or 0]
-    if through_turn_idx is not None:
-        clauses.append("turn_idx<=?")
-        args.append(through_turn_idx)
-    rows = q(f"SELECT * FROM memories WHERE {' AND '.join(clauses)} ORDER BY turn_idx, id", tuple(args))
-    # turn_idx is GLOBAL play order shared by every frame, not per-era --
-    # without this filter, memories formed during a flash-forward/-back
-    # would get folded into the singleton autobiographical summary the
-    # moment play returns to the present and turn_idx catches up, hand-
-    # ing a character knowledge of events they have not diegetically
-    # reached yet. Same epistemic-cursor check every other memory read
-    # path already applies (list_memories/search_memories/recent_memory_
-    # buffer); this call site was the one place it had been missed.
-    vf = _active_frame_id.get() if viewer_frame_id is _UNSET else viewer_frame_id
-    rows = [r for r in rows if _frames.is_memory_visible(char_id, r["frame_id"], vf, r["turn_idx"])]
+    # turn_idx is GLOBAL play order shared by every frame, not per-era -- so
+    # without the seam's frame filter, memories formed during a
+    # flash-forward/-back would be folded into the singleton autobiographical
+    # summary the moment play returns to the present and turn_idx catches up,
+    # handing a character knowledge of events they have not diegetically
+    # reached. `before_turn_idx` is exclusive and this window is inclusive of
+    # `through_turn_idx`, hence the +1.
+    rows = visible_memory_rows(
+        chat_id, char_id,
+        before_turn_idx=(None if through_turn_idx is None
+                         else int(through_turn_idx) + 1),
+        viewer_frame_id=viewer_frame_id,
+        include_archived=False,
+        since_turn_idx=(old_summary.get("end_turn_idx") or 0) + 1,
+        require_turn_idx=True,
+    )
+    rows.sort(key=lambda r: (r["turn_idx"], r["id"]))
     memories = [_row_memory(r) for r in rows]
     if not memories:
         return old_summary
@@ -1890,7 +2172,11 @@ def consolidate_character_memory(chat_id, char_id, *, through_turn_idx=None, arc
             m["id"] for m in memories
             if m.get("id") is not None
             and (m.get("turn_idx") or 0) < cutoff
-            and float(m.get("salience") or 0) < 0.72
+            # The HIGHER of the two. A memory that turned out to matter is
+            # not archived on the strength of how ordinary it looked at the
+            # time -- which is the entire reason the two numbers are separate.
+            and max(float(m.get("salience") or 0),
+                    effective_importance(m)) < 0.72
             and m.get("category") not in ("promise", "relationship", "intention")
         ]
         if archivable:
@@ -1943,6 +2229,7 @@ def dump_chat_memories(chat_id):
          "location": r["location"], "emotional_context": r["emotional_context"],
          "valence": r["valence"], "arousal": r["arousal"], "confidence": r["confidence"],
          "archived": bool(r["archived"]), "event_key": r["event_key"],
+         "importance": r["importance"], "disputed": r["disputed"] or "",
          # Stored vectors travel with the dump so restore can put them
          # back byte-identically instead of re-embedding the entire
          # memory bank on every checkpoint restore (expensive, and a
@@ -1993,6 +2280,11 @@ def prepare_chat_memory_restore(chat_id, mems):
             "emotional_context": m.get("emotional_context", ""),
             "valence": m.get("valence", 0.0), "arousal": m.get("arousal", 0.0),
             "confidence": m.get("confidence", 1.0), "event_key": m.get("event_key", ""),
+            # Carried verbatim. A revised importance and a recorded re-reading
+            # are things the character earned; a rollback restores the bank as
+            # it was, and neither is re-derivable from the row's own text.
+            "importance": m.get("importance"),
+            "disputed": m.get("disputed") or "",
         }
         full_blob = _b64_to_blob(m.get("embedding"))
         cue_blob = _b64_to_blob(m.get("cue_embedding"))
@@ -2064,7 +2356,8 @@ def dump_character_memories(chat_id, char_id):
          "key_phrases": _json_list(r["key_phrases"]), "entities": _json_list(r["entities"]),
          "location": r["location"], "emotional_context": r["emotional_context"],
          "valence": r["valence"], "arousal": r["arousal"], "confidence": r["confidence"],
-         "archived": bool(r["archived"]), "event_key": r["event_key"]}
+         "archived": bool(r["archived"]), "event_key": r["event_key"],
+         "importance": r["importance"], "disputed": r["disputed"] or ""}
         for r in rows
     ]
 
@@ -2093,6 +2386,11 @@ def import_character_memories(chat_id, char_id, memories):
             "emotional_context": m.get("emotional_context", ""),
             "valence": m.get("valence", 0.0), "arousal": m.get("arousal", 0.0),
             "confidence": m.get("confidence", 1.0), "event_key": "",
+            # Both travel with a portable character bank: they are the
+            # character's own history with these memories, not facts about the
+            # chat they were formed in.
+            "importance": m.get("importance"),
+            "disputed": m.get("disputed") or "",
         })
     return len(add_memories_batch(prepared))
 

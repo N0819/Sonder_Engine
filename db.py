@@ -64,7 +64,7 @@ def parse_scoped_world_key(key):
     return key, None
 
 DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -443,7 +443,23 @@ CREATE TABLE IF NOT EXISTS memories(
     embedding_dim INTEGER,
     archived INTEGER NOT NULL DEFAULT 0,
     event_key TEXT NOT NULL DEFAULT '',
-    frame_id INTEGER REFERENCES frames(id) ON DELETE SET NULL
+    frame_id INTEGER REFERENCES frames(id) ON DELETE SET NULL,
+    -- How central this memory BECAME, as against `salience`, which records how
+    -- much it mattered when it was formed and is never revised. NULL means
+    -- "never revised", and every reader falls back to salience, so a bank that
+    -- has never been touched behaves exactly as before.
+    importance REAL,
+    -- The character's own later re-reading of a memory they still hold as
+    -- experience. A witnessed memory stays autobiographically true -- "I saw
+    -- this" -- while its INTERPRETATION becomes contested, which is what
+    -- deception, disguise and misidentification actually do to a mind.
+    -- JSON: {"turn_idx": n, "reading": "...", "count": k}, '' when undisputed.
+    --
+    -- Deliberately a column on the row rather than an edge to another memory
+    -- id: checkpoint restore is delete-and-reinsert, so every row id changes,
+    -- and an id-keyed edge would be shredded by the first rollback. Stored
+    -- here it rides the existing dump/restore round-trip verbatim.
+    disputed TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_memories_chat_char ON memories(chat_id, char_id);
 CREATE INDEX IF NOT EXISTS idx_memories_turn ON memories(turn_id);
@@ -1079,6 +1095,14 @@ MIGRATIONS = [
         # been through none of the checks the answer has, so nothing may read
         # it as content. Empty for models that do not expose one.
         "ALTER TABLE variants ADD COLUMN reasoning TEXT NOT NULL DEFAULT ''",
+    ],
+    # v20 -> v21
+    [
+        # Two questions a memory row could not answer. Both default to the
+        # pre-existing behaviour, so no backfill: a NULL importance reads as
+        # the row's salience, and an empty dispute reads as undisputed.
+        "ALTER TABLE memories ADD COLUMN importance REAL",
+        "ALTER TABLE memories ADD COLUMN disputed TEXT NOT NULL DEFAULT ''",
     ],
 ]
 
