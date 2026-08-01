@@ -2057,6 +2057,37 @@ class CharacterOutput(LenientModel):
     drive_shift: Optional[dict] = None
     belief_updates: list[BeliefUpdate] = Field(default_factory=list)
     association_updates: list[AssociationUpdate] = Field(default_factory=list)
+    # Lines from THIS beat this mind wants to keep. Durable dialogue was gated
+    # by a fixed phrase list (`commit._durable_dialogue_category`: promises,
+    # "my name is", a handful of confessions), which is why the live corpus
+    # holds 15 dialogue rows against 2,028 episodes -- a warning, an
+    # instruction, a code, an indirect threat, a newly established fact all
+    # fail it. Rather than lengthening the list, the character says. That makes
+    # memory formation psychology-dependent, which is the point: one mind keeps
+    # an insult another shrugs off. Commit validates the quote was actually
+    # said this beat AND actually reached this observer's view, so this can
+    # only ever preserve something already heard, never invent one.
+    # [{"quote": str, "why": str}]
+    remember_lines: list[dict] = Field(default_factory=list)
+    # A memory this mind now reads differently. NOT a correction of the record:
+    # the event stays true and untouched, and only the character's reading of
+    # it is recorded as having changed -- what deception, disguise and
+    # misidentification actually do. [{"gist": str, "now_reads": str}]
+    memory_disputes: list[dict] = Field(default_factory=list)
+
+    _coerce_remember_lines = validator(
+        "remember_lines", pre=True, allow_reuse=True)(
+        lambda cls, v: [
+            item for item in (v if isinstance(v, (list, tuple)) else [])
+            if isinstance(item, dict) and str(item.get("quote") or "").strip()
+        ] if isinstance(v, (list, tuple)) else [])
+    _coerce_disputes = validator(
+        "memory_disputes", pre=True, allow_reuse=True)(
+        lambda cls, v: [
+            item for item in (v if isinstance(v, (list, tuple)) else [])
+            if isinstance(item, dict) and str(item.get("gist") or "").strip()
+            and str(item.get("now_reads") or "").strip()
+        ] if isinstance(v, (list, tuple)) else [])
 
     # `cue` is required and an entry without one names nothing, so it cannot be
     # applied -- but dropping the entry is right where failing the entire

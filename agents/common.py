@@ -8,12 +8,13 @@ import re
 
 import attire as attire_model
 from character_schema import (
+    character_appearance,
     character_knowledge_config,
     character_name,
     normalize_character_data,
     persona_name,
 )
-from db import get_setting, q
+from db import get_setting, q, wget
 from llm_quality import complete_validated_json
 from memory import chat_lorebook_ids, chat_lorebook_weights
 from providers import chat_complete
@@ -1343,6 +1344,54 @@ def _identity_token_set(actor_name, aliases=None):
             if tok:
                 tokens.add(tok.casefold())
     return tokens
+
+def observer_label_fn(chat, observer_name, cast):
+    """`name -> what THIS observer may call them`, for any payload that names
+    a body outside perception's own scrubbing.
+
+    Perception decides identity per observer and renders prose accordingly.
+    Everything else that hands a character a NAME has to make the same
+    decision, and until now nothing did -- so a structured field could hand
+    over an identity the prose beside it was carefully withholding. Observed
+    live: `perception.spatial_frame.ahead_entity` came from `scene.positions`,
+    which is keyed by canonical name, and told a character who she was looking
+    at. She had asked twice, in dialogue, and been refused both times; six
+    beats later she used the surname aloud.
+
+    Same rule as `agents/perception.py`'s own gate, from the same `known` map
+    and through the same `_unknown_actor_label`, so this is one identity floor
+    rather than a second one that can drift from it.
+    """
+    known = set((wget(chat["id"], "known", {}) or {}).get(observer_name) or [])
+    sheets = {}
+    for row in (cast or []):
+        try:
+            sheet = json.loads(row["sheet"])
+        except Exception:
+            continue
+        name = character_name(sheet)
+        if name:
+            sheets[name] = sheet
+    persona = persona_of(chat)
+    p_name = persona_name(persona)
+    if p_name:
+        sheets.setdefault(p_name, persona)
+
+    def label(name):
+        text = str(name or "").strip()
+        if not text or text == observer_name or text in known:
+            return text
+        sheet = sheets.get(text)
+        if sheet is None:
+            # Not a body this function knows about -- an entity id, a prop, a
+            # room. Nothing to gate, and inventing a description for a lamp
+            # would be worse than leaving it.
+            return text
+        return _unknown_actor_label(
+            text, character_appearance(sheet), character_scene_keys(sheet)[1:])
+
+    return label
+
 
 def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
     # Every unrecognized actor used to render as the exact same generic

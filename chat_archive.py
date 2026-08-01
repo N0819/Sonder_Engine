@@ -822,6 +822,12 @@ class ChatArchiveService:
                     "confidence": memory.get("confidence", 1.0),
                     "archived": memory.get("archived", False),
                     "event_key": memory.get("event_key", ""),
+                    # How central the memory became, and the character's own
+                    # later re-reading of it. Neither is re-derivable from the
+                    # row's text, so an archive that dropped them would import
+                    # a bank that had forgotten what it learned.
+                    "importance": memory.get("importance"),
+                    "disputed": memory.get("disputed") or "",
                 }
                 for memory in data.get("memories", [])
                 if memory.get("content")

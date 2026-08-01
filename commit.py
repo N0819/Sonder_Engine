@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from db import q, qi, qtx, transaction, wget, wset, get_setting
 from memory import (
     add_memories_batch, prepare_memories_batch, delete_turn_memories, search_lore, add_lore,
+    record_dispute, raise_importance,
     update_lore, LORE_CATEGORIES, LOREBOOK_TYPES,
     chat_lorebook_ids, chat_lorebook_weights, lorebook_manifest, dump_chat_memories,
     add_lorebook_link, lorebook_descendants,
@@ -3988,6 +3989,73 @@ def _durable_dialogue_category(text):
         return "dialogue"
     return None
 
+def _cited_memory_ids(own_result):
+    """Memory ids this mind used as EVIDENCE for a belief it formed this beat.
+
+    Consequence, not popularity. Retrieval on its own never moves importance:
+    a memory that gets recalled would then rank higher and get recalled more,
+    which is a feedback loop wearing the word. Even citation is downstream of
+    retrieval, so the loop is closed structurally instead of hoped away --
+    `raise_importance` is called with `only_unrevised=True`, so a given memory
+    can be lifted by citation exactly once, ever. The signal is "this turned
+    out to be load-bearing at least once", which is boolean by nature.
+
+    Bare `observations_used` deliberately does not count. Citing a memory while
+    describing the beat is not the same as building a belief on it, and the
+    weaker signal is the one that fires on almost every turn.
+
+    Returns `event_key`s, because that is what a character actually cites. The
+    first version of this required a numeric memory ROW id and was therefore
+    dead on arrival -- across a 10-turn live run it matched nothing, while the
+    handles the characters really wrote were `current`, `current:39:4`,
+    `turn:2:character:39:0:action` and `event:<hash>`. The last of those IS the
+    memory's `event_key` (`_stable_event_key`), and all five distinct ones
+    emitted in that run resolved to a real row. The format was there the whole
+    time; the reader was looking for one nothing produces.
+    """
+    if not isinstance(own_result, dict):
+        return []
+    out = set()
+    for update in own_result.get("mind_model_updates") or []:
+        if not isinstance(update, dict):
+            continue
+        for ref in update.get("evidence") or []:
+            if not isinstance(ref, dict):
+                continue
+            raw = str(ref.get("event_id") or "").strip()
+            # "current" and the turn:/character: handles name this beat or an
+            # act within it, not a stored memory.
+            if raw.startswith("event:"):
+                out.add(raw)
+    return sorted(out)
+
+
+def _marked_for_memory(own_result, qbody):
+    """Did this character ask to keep this line (CharacterOutput.remember_lines)?
+
+    Matched on the quote body, loosely in both directions: a model asked to
+    echo a quote will trim or extend it by a word, and rejecting the mark over
+    that would make the feature depend on transcription rather than intent.
+    Loose matching is safe HERE and would not be elsewhere -- the caller has
+    already proved this quote was said this beat and reached this observer, so
+    the only thing being decided is whether a line the character definitely
+    heard is also one they keep.
+    """
+    body = " ".join(str(qbody or "").split()).casefold()
+    if not body or not isinstance(own_result, dict):
+        return False
+    for mark in own_result.get("remember_lines") or []:
+        if not isinstance(mark, dict):
+            continue
+        want = " ".join(str(mark.get("quote") or "").split()).casefold()
+        want = _quote_body(want)
+        if not want:
+            continue
+        if want == body or want in body or body in want:
+            return True
+    return False
+
+
 def _quote_body(quote):
     return (quote or "").strip().strip('"' + "'" + "\u201c\u201d\u2018\u2019")
 
@@ -4065,6 +4133,8 @@ def prepare_memory_commit(ctx, *, scene=None):
     state_updates = []
     relationship_ops = []
     belief_reconciles = []
+    memory_disputes = []
+    importance_bumps = []
     _clock = wget(
         cid, "simulation_clock",
         {"elapsed_seconds": 0.0, "display": "now"},
@@ -4281,6 +4351,17 @@ def prepare_memory_commit(ctx, *, scene=None):
                 qbody = _quote_body(quote)
                 if qbody and (quote in v or qbody in v):
                     category = _durable_dialogue_category(qbody)
+                    # This mind asked to keep the line. The phrase list is a
+                    # floor of what ANYONE would remember; what a particular
+                    # character finds durable is a fact about that character,
+                    # so their own declaration is allowed to add to it -- never
+                    # to remove, since the floor exists for the model that
+                    # declares nothing. Bounded by everything above: the quote
+                    # must have been said this beat and must have reached THIS
+                    # observer's view, so a mark can only preserve something
+                    # already heard.
+                    if not category and _marked_for_memory(own_result, qbody):
+                        category = "dialogue"
                     if category:
                         pending_memories.append({
                             "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
@@ -4968,6 +5049,21 @@ def prepare_memory_commit(ctx, *, scene=None):
                 relationship_ops.append(
                     ("inference", ccid, own_result.get("inference_updates") or [])
                 )
+            # This mind re-read one of its own memories. Deferred to the write
+            # phase with everything else: prepare_memory_commit is pure.
+            for _d in own_result.get("memory_disputes") or []:
+                if isinstance(_d, dict):
+                    memory_disputes.append(
+                        (cid, ccid, str(_d.get("gist") or ""),
+                         str(_d.get("now_reads") or ""), turn.idx))
+            # Consequence, not popularity: a memory the character cited as
+            # EVIDENCE for a belief they formed this beat turned out to be
+            # load-bearing. Retrieval alone never moves importance -- that
+            # would make often-recalled memories more recallable, which is a
+            # feedback loop wearing the word.
+            _cited = _cited_memory_ids(own_result)
+            if _cited:
+                importance_bumps.append((ccid, _cited))
         state_updates.append((cid, ccid, json.dumps(st)))
 
     event_content = json.dumps({
@@ -4994,6 +5090,8 @@ def prepare_memory_commit(ctx, *, scene=None):
         "state_updates": state_updates,
         "relationship_ops": relationship_ops,
         "belief_reconciles": belief_reconciles,
+        "memory_disputes": memory_disputes,
+        "importance_bumps": importance_bumps,
         "event_content": event_content,
     }
 
@@ -5066,6 +5164,24 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
                 chat_id, char_id, char_state, turn.idx,
                 elapsed_seconds=clock_seconds,
             )
+        # A mind re-reading one of its own memories. Scoped to that character's
+        # own rows inside record_dispute, so this can never reach across the
+        # firewall however the model phrased the gist.
+        for chat_id, char_id, _gist, _reading, _tidx in prepared.get(
+                "memory_disputes") or []:
+            try:
+                record_dispute(chat_id, char_id, _gist, _reading, _tidx)
+            except Exception as exc:
+                ctx.add_warning(f"memory dispute not recorded: {exc}")
+        # Memories that turned out to be load-bearing for a belief. Once each,
+        # ever (`only_unrevised`), which is what keeps this a consequence
+        # rather than a popularity loop -- see _cited_memory_ids.
+        for char_id, ids in prepared.get("importance_bumps") or []:
+            try:
+                raise_importance(cid, char_id, event_keys=ids,
+                                 only_unrevised=True)
+            except Exception as exc:
+                ctx.add_warning(f"memory importance not updated: {exc}")
         qi(
             """INSERT INTO events(chat_id,turn_id,content) VALUES(?,?,?)
             ON CONFLICT(chat_id,turn_id) WHERE turn_id IS NOT NULL

@@ -1,0 +1,143 @@
+{"ts": "2026-08-01 09:12:41,460", "level": "INFO", "msg": "llm_call role=mapping model=deepseek/deepseek-v4-flash-0731 system_tokens=4250 user_tokens=0 response_tokens=108 cached_tokens=2816 cache_write_tokens=0 duration=3.48s success=True"}
+{"ts": "2026-08-01 09:12:54,328", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=4281 user_tokens=0 response_tokens=1691 cached_tokens=0 cache_write_tokens=0 duration=12.85s success=True"}
+{"ts": "2026-08-01 09:12:57,567", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6790 user_tokens=0 response_tokens=843 cached_tokens=297 cache_write_tokens=0 duration=3.19s success=True"}
+{"ts": "2026-08-01 09:12:58,091", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6886 user_tokens=0 response_tokens=1069 cached_tokens=5437 cache_write_tokens=0 duration=3.71s success=True"}
+{"ts": "2026-08-01 09:13:13,432", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=5265 user_tokens=0 response_tokens=289 cached_tokens=4972 cache_write_tokens=0 duration=15.30s success=True"}
+{"ts": "2026-08-01 09:13:17,850", "level": "INFO", "msg": "llm_call role=mapping model=deepseek/deepseek-v4-flash-0731 system_tokens=1777 user_tokens=0 response_tokens=432 cached_tokens=1536 cache_write_tokens=0 duration=4.38s success=True"}
+{"ts": "2026-08-01 09:13:24,915", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=5696 user_tokens=0 response_tokens=705 cached_tokens=3584 cache_write_tokens=0 duration=6.21s success=True"}
+{"ts": "2026-08-01 09:13:28,992", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6781 user_tokens=0 response_tokens=838 cached_tokens=293 cache_write_tokens=0 duration=3.67s success=True"}
+{"ts": "2026-08-01 09:13:58,445", "level": "INFO", "msg": "llm_call role=character_major model=x-ai/grok-4.20 system_tokens=14704 user_tokens=0 response_tokens=4870 cached_tokens=128 cache_write_tokens=0 duration=29.09s success=True"}
+{"ts": "2026-08-01 09:14:05,526", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=17749 user_tokens=0 response_tokens=661 cached_tokens=12800 cache_write_tokens=0 duration=7.06s success=True"}
+{"ts": "2026-08-01 09:14:08,416", "level": "INFO", "msg": "llm_call role=character_bg model=deepseek/deepseek-v4-flash-0731 system_tokens=700 user_tokens=0 response_tokens=117 cached_tokens=512 cache_write_tokens=0 duration=2.86s success=True"}
+{"ts": "2026-08-01 09:14:11,355", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6853 user_tokens=0 response_tokens=1396 cached_tokens=252 cache_write_tokens=0 duration=2.90s success=True"}
+{"ts": "2026-08-01 09:14:11,658", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6903 user_tokens=0 response_tokens=872 cached_tokens=292 cache_write_tokens=0 duration=3.20s success=True"}
+{"ts": "2026-08-01 09:14:24,007", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6139 user_tokens=0 response_tokens=297 cached_tokens=4971 cache_write_tokens=0 duration=12.33s success=True"}
+{"ts": "2026-08-01 09:14:33,735", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6183 user_tokens=0 response_tokens=410 cached_tokens=6136 cache_write_tokens=0 duration=9.73s success=True"}
+{"ts": "2026-08-01 09:14:40,506", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=5767 user_tokens=0 response_tokens=472 cached_tokens=3584 cache_write_tokens=0 duration=6.21s success=True"}
+{"ts": "2026-08-01 09:14:42,929", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6354 user_tokens=0 response_tokens=923 cached_tokens=5004 cache_write_tokens=0 duration=1.95s success=True"}
+{"ts": "2026-08-01 09:15:13,871", "level": "INFO", "msg": "llm_call role=character_major model=x-ai/grok-4.20 system_tokens=16412 user_tokens=0 response_tokens=5498 cached_tokens=128 cache_write_tokens=0 duration=30.50s success=True"}
+{"ts": "2026-08-01 09:15:30,571", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=18272 user_tokens=0 response_tokens=986 cached_tokens=12800 cache_write_tokens=0 duration=16.67s success=True"}
+{"ts": "2026-08-01 09:15:37,075", "level": "INFO", "msg": "llm_call role=character_bg model=deepseek/deepseek-v4-flash-0731 system_tokens=693 user_tokens=0 response_tokens=119 cached_tokens=640 cache_write_tokens=0 duration=6.48s success=True"}
+{"ts": "2026-08-01 09:15:40,006", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7105 user_tokens=0 response_tokens=972 cached_tokens=5319 cache_write_tokens=0 duration=2.90s success=True"}
+{"ts": "2026-08-01 09:15:42,850", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7148 user_tokens=0 response_tokens=1799 cached_tokens=292 cache_write_tokens=0 duration=5.74s success=True"}
+{"ts": "2026-08-01 09:16:01,919", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6282 user_tokens=0 response_tokens=538 cached_tokens=4971 cache_write_tokens=0 duration=19.05s success=True"}
+{"ts": "2026-08-01 09:16:21,457", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6444 user_tokens=0 response_tokens=618 cached_tokens=6279 cache_write_tokens=0 duration=19.53s success=True"}
+{"ts": "2026-08-01 09:16:52,745", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6340 user_tokens=0 response_tokens=411 cached_tokens=0 cache_write_tokens=0 duration=31.29s success=True"}
+{"ts": "2026-08-01 09:16:59,455", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=5841 user_tokens=0 response_tokens=422 cached_tokens=3712 cache_write_tokens=0 duration=6.08s success=True"}
+{"ts": "2026-08-01 09:17:04,631", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6724 user_tokens=0 response_tokens=1271 cached_tokens=295 cache_write_tokens=0 duration=4.78s success=True"}
+{"ts": "2026-08-01 09:17:42,608", "level": "INFO", "msg": "llm_call role=character_major model=x-ai/grok-4.20 system_tokens=18729 user_tokens=0 response_tokens=4982 cached_tokens=128 cache_write_tokens=0 duration=37.56s success=True"}
+{"ts": "2026-08-01 09:17:52,716", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=18461 user_tokens=0 response_tokens=1053 cached_tokens=13568 cache_write_tokens=0 duration=10.08s success=True"}
+{"ts": "2026-08-01 09:18:02,214", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=18591 user_tokens=0 response_tokens=983 cached_tokens=18432 cache_write_tokens=0 duration=9.49s success=True"}
+{"ts": "2026-08-01 09:18:05,471", "level": "INFO", "msg": "llm_call role=character_bg model=deepseek/deepseek-v4-flash-0731 system_tokens=754 user_tokens=0 response_tokens=125 cached_tokens=512 cache_write_tokens=0 duration=3.24s success=True"}
+{"ts": "2026-08-01 09:18:08,199", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7285 user_tokens=0 response_tokens=860 cached_tokens=303 cache_write_tokens=0 duration=2.69s success=True"}
+{"ts": "2026-08-01 09:18:10,929", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7233 user_tokens=0 response_tokens=1684 cached_tokens=298 cache_write_tokens=0 duration=5.42s success=True"}
+{"ts": "2026-08-01 09:18:26,823", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6596 user_tokens=0 response_tokens=435 cached_tokens=0 cache_write_tokens=0 duration=15.87s success=True"}
+{"ts": "2026-08-01 09:18:31,470", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=5916 user_tokens=0 response_tokens=334 cached_tokens=4480 cache_write_tokens=0 duration=4.14s success=True"}
+{"ts": "2026-08-01 09:18:35,424", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6627 user_tokens=0 response_tokens=1146 cached_tokens=291 cache_write_tokens=0 duration=3.55s success=True"}
+{"ts": "2026-08-01 09:19:16,225", "level": "INFO", "msg": "llm_call role=character_major model=x-ai/grok-4.20 system_tokens=21247 user_tokens=0 response_tokens=5069 cached_tokens=11200 cache_write_tokens=0 duration=40.20s success=True"}
+{"ts": "2026-08-01 09:19:25,304", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=17901 user_tokens=0 response_tokens=880 cached_tokens=13824 cache_write_tokens=0 duration=9.04s success=True"}
+{"ts": "2026-08-01 09:19:28,084", "level": "INFO", "msg": "llm_call role=character_bg model=deepseek/deepseek-v4-flash-0731 system_tokens=694 user_tokens=0 response_tokens=112 cached_tokens=640 cache_write_tokens=0 duration=2.76s success=True"}
+{"ts": "2026-08-01 09:19:30,275", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6698 user_tokens=0 response_tokens=882 cached_tokens=4957 cache_write_tokens=0 duration=2.16s success=True"}
+{"ts": "2026-08-01 09:19:31,313", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7301 user_tokens=0 response_tokens=1130 cached_tokens=300 cache_write_tokens=0 duration=3.20s success=True"}
+{"ts": "2026-08-01 09:19:43,035", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6633 user_tokens=0 response_tokens=500 cached_tokens=4971 cache_write_tokens=0 duration=11.70s success=True"}
+{"ts": "2026-08-01 09:19:50,585", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=6031 user_tokens=0 response_tokens=573 cached_tokens=3712 cache_write_tokens=0 duration=6.98s success=True"}
+{"ts": "2026-08-01 09:19:58,113", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6393 user_tokens=0 response_tokens=1049 cached_tokens=4989 cache_write_tokens=0 duration=2.28s success=True"}
+{"ts": "2026-08-01 09:20:33,646", "level": "INFO", "msg": "llm_call role=character_major model=x-ai/grok-4.20 system_tokens=23092 user_tokens=0 response_tokens=4457 cached_tokens=128 cache_write_tokens=0 duration=35.04s success=True"}
+{"ts": "2026-08-01 09:20:44,462", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=18035 user_tokens=0 response_tokens=728 cached_tokens=13568 cache_write_tokens=0 duration=10.79s success=True"}
+{"ts": "2026-08-01 09:20:47,952", "level": "INFO", "msg": "llm_call role=character_bg model=deepseek/deepseek-v4-flash-0731 system_tokens=697 user_tokens=0 response_tokens=103 cached_tokens=640 cache_write_tokens=0 duration=3.47s success=True"}
+{"ts": "2026-08-01 09:20:51,300", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7202 user_tokens=0 response_tokens=846 cached_tokens=295 cache_write_tokens=0 duration=3.32s success=True"}
+{"ts": "2026-08-01 09:20:52,340", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7008 user_tokens=0 response_tokens=1224 cached_tokens=290 cache_write_tokens=0 duration=4.36s success=True"}
+{"ts": "2026-08-01 09:21:00,759", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6864 user_tokens=0 response_tokens=353 cached_tokens=4971 cache_write_tokens=0 duration=8.38s success=True"}
+{"ts": "2026-08-01 09:21:39,747", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=2236 user_tokens=0 response_tokens=318 cached_tokens=0 cache_write_tokens=0 duration=38.99s success=True"}
+{"ts": "2026-08-01 09:21:45,582", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6907 user_tokens=0 response_tokens=303 cached_tokens=6861 cache_write_tokens=0 duration=5.83s success=True"}
+{"ts": "2026-08-01 09:21:50,468", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=6011 user_tokens=0 response_tokens=191 cached_tokens=4352 cache_write_tokens=0 duration=4.30s success=True"}
+{"ts": "2026-08-01 09:21:53,990", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6715 user_tokens=0 response_tokens=1040 cached_tokens=293 cache_write_tokens=0 duration=3.12s success=True"}
+{"ts": "2026-08-01 09:22:25,133", "level": "INFO", "msg": "llm_call role=character_major model=x-ai/grok-4.20 system_tokens=24957 user_tokens=0 response_tokens=4063 cached_tokens=128 cache_write_tokens=0 duration=30.58s success=True"}
+{"ts": "2026-08-01 09:22:32,965", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=17942 user_tokens=0 response_tokens=667 cached_tokens=13568 cache_write_tokens=0 duration=7.81s success=True"}
+{"ts": "2026-08-01 09:22:37,717", "level": "INFO", "msg": "llm_call role=character_bg model=deepseek/deepseek-v4-flash-0731 system_tokens=688 user_tokens=0 response_tokens=124 cached_tokens=640 cache_write_tokens=0 duration=4.73s success=True"}
+{"ts": "2026-08-01 09:22:40,220", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7008 user_tokens=0 response_tokens=1236 cached_tokens=5105 cache_write_tokens=0 duration=2.47s success=True"}
+{"ts": "2026-08-01 09:22:40,968", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7054 user_tokens=0 response_tokens=754 cached_tokens=5275 cache_write_tokens=0 duration=3.22s success=True"}
+{"ts": "2026-08-01 09:23:31,548", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6672 user_tokens=0 response_tokens=725 cached_tokens=0 cache_write_tokens=0 duration=50.56s success=True"}
+{"ts": "2026-08-01 09:23:38,071", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=6015 user_tokens=0 response_tokens=560 cached_tokens=4608 cache_write_tokens=0 duration=5.87s success=True"}
+{"ts": "2026-08-01 09:23:40,926", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6609 user_tokens=0 response_tokens=694 cached_tokens=5347 cache_write_tokens=0 duration=2.58s success=True"}
+{"ts": "2026-08-01 09:24:23,698", "level": "INFO", "msg": "llm_call role=character_major model=x-ai/grok-4.20 system_tokens=26046 user_tokens=0 response_tokens=5704 cached_tokens=128 cache_write_tokens=0 duration=42.39s success=True"}
+{"ts": "2026-08-01 09:24:31,522", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=18311 user_tokens=0 response_tokens=912 cached_tokens=13824 cache_write_tokens=0 duration=7.80s success=True"}
+{"ts": "2026-08-01 09:24:33,762", "level": "INFO", "msg": "llm_call role=character_bg model=deepseek/deepseek-v4-flash-0731 system_tokens=692 user_tokens=0 response_tokens=101 cached_tokens=640 cache_write_tokens=0 duration=2.22s success=True"}
+{"ts": "2026-08-01 09:24:35,748", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6838 user_tokens=0 response_tokens=774 cached_tokens=5035 cache_write_tokens=0 duration=1.96s success=True"}
+{"ts": "2026-08-01 09:24:38,848", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7088 user_tokens=0 response_tokens=1212 cached_tokens=290 cache_write_tokens=0 duration=5.05s success=True"}
+{"ts": "2026-08-01 09:24:48,146", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6713 user_tokens=0 response_tokens=441 cached_tokens=4972 cache_write_tokens=0 duration=9.28s success=True"}
+{"ts": "2026-08-01 09:24:55,425", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=6083 user_tokens=0 response_tokens=392 cached_tokens=4352 cache_write_tokens=0 duration=6.72s success=True"}
+{"ts": "2026-08-01 09:24:59,060", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6668 user_tokens=0 response_tokens=1441 cached_tokens=5208 cache_write_tokens=0 duration=3.37s success=True"}
+{"ts": "2026-08-01 09:25:25,531", "level": "INFO", "msg": "llm_call role=character_major model=x-ai/grok-4.20 system_tokens=27624 user_tokens=0 response_tokens=3503 cached_tokens=128 cache_write_tokens=0 duration=26.08s success=True"}
+{"ts": "2026-08-01 09:25:33,908", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=17738 user_tokens=0 response_tokens=865 cached_tokens=13568 cache_write_tokens=0 duration=8.36s success=True"}
+{"ts": "2026-08-01 09:25:40,778", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=17868 user_tokens=0 response_tokens=694 cached_tokens=17664 cache_write_tokens=0 duration=6.87s success=True"}
+{"ts": "2026-08-01 09:25:43,873", "level": "INFO", "msg": "llm_call role=character_bg model=deepseek/deepseek-v4-flash-0731 system_tokens=691 user_tokens=0 response_tokens=121 cached_tokens=640 cache_write_tokens=0 duration=3.08s success=True"}
+{"ts": "2026-08-01 09:25:46,385", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7057 user_tokens=0 response_tokens=1198 cached_tokens=5098 cache_write_tokens=0 duration=2.48s success=True"}
+{"ts": "2026-08-01 09:25:50,015", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7486 user_tokens=0 response_tokens=1561 cached_tokens=300 cache_write_tokens=0 duration=6.11s success=True"}
+{"ts": "2026-08-01 09:26:13,170", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6556 user_tokens=0 response_tokens=1791 cached_tokens=4971 cache_write_tokens=0 duration=23.14s success=True"}
+{"ts": "2026-08-01 09:26:33,002", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6602 user_tokens=0 response_tokens=482 cached_tokens=0 cache_write_tokens=0 duration=19.83s success=True"}
+{"ts": "2026-08-01 09:27:24,858", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6614 user_tokens=0 response_tokens=3070 cached_tokens=0 cache_write_tokens=0 duration=51.85s success=True"}
+{"ts": "2026-08-01 09:27:34,674", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=6108 user_tokens=0 response_tokens=662 cached_tokens=4480 cache_write_tokens=0 duration=9.12s success=True"}
+{"ts": "2026-08-01 09:27:37,682", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6863 user_tokens=0 response_tokens=762 cached_tokens=292 cache_write_tokens=0 duration=2.69s success=True"}
+{"ts": "2026-08-01 09:28:13,431", "level": "INFO", "msg": "llm_call role=character_major model=x-ai/grok-4.20 system_tokens=27536 user_tokens=0 response_tokens=5120 cached_tokens=11200 cache_write_tokens=0 duration=35.40s success=True"}
+{"ts": "2026-08-01 09:28:28,831", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=18744 user_tokens=0 response_tokens=1439 cached_tokens=13696 cache_write_tokens=0 duration=15.38s success=True"}
+{"ts": "2026-08-01 09:28:33,183", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=3492 user_tokens=0 response_tokens=512 cached_tokens=0 cache_write_tokens=0 duration=4.34s success=True"}
+{"ts": "2026-08-01 09:28:35,365", "level": "INFO", "msg": "llm_call role=character_bg model=deepseek/deepseek-v4-flash-0731 system_tokens=703 user_tokens=0 response_tokens=111 cached_tokens=640 cache_write_tokens=0 duration=2.17s success=True"}
+{"ts": "2026-08-01 09:28:37,440", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7107 user_tokens=0 response_tokens=867 cached_tokens=5064 cache_write_tokens=0 duration=2.04s success=True"}
+{"ts": "2026-08-01 09:28:39,646", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7301 user_tokens=0 response_tokens=1224 cached_tokens=289 cache_write_tokens=0 duration=4.25s success=True"}
+{"ts": "2026-08-01 09:28:48,591", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6792 user_tokens=0 response_tokens=434 cached_tokens=4972 cache_write_tokens=0 duration=8.83s success=True"}
+{"ts": "2026-08-01 09:28:59,929", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=6271 user_tokens=0 response_tokens=415 cached_tokens=4608 cache_write_tokens=0 duration=10.62s success=True"}
+{"ts": "2026-08-01 09:29:02,368", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=6797 user_tokens=0 response_tokens=917 cached_tokens=5206 cache_write_tokens=0 duration=2.14s success=True"}
+{"ts": "2026-08-01 09:29:38,237", "level": "INFO", "msg": "llm_call role=character_major model=x-ai/grok-4.20 system_tokens=28358 user_tokens=0 response_tokens=4641 cached_tokens=128 cache_write_tokens=0 duration=35.46s success=True"}
+{"ts": "2026-08-01 09:29:46,219", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=18571 user_tokens=0 response_tokens=1078 cached_tokens=13696 cache_write_tokens=0 duration=7.96s success=True"}
+{"ts": "2026-08-01 09:29:50,115", "level": "INFO", "msg": "llm_call role=director model=deepseek/deepseek-v4-flash-0731 system_tokens=3355 user_tokens=0 response_tokens=183 cached_tokens=0 cache_write_tokens=0 duration=3.88s success=True"}
+{"ts": "2026-08-01 09:29:51,853", "level": "INFO", "msg": "llm_call role=character_bg model=deepseek/deepseek-v4-flash-0731 system_tokens=694 user_tokens=0 response_tokens=19 cached_tokens=640 cache_write_tokens=0 duration=1.72s success=True"}
+{"ts": "2026-08-01 09:29:53,380", "level": "INFO", "msg": "llm_call role=character_bg model=deepseek/deepseek-v4-flash-0731 system_tokens=675 user_tokens=0 response_tokens=19 cached_tokens=512 cache_write_tokens=0 duration=1.53s success=True"}
+{"ts": "2026-08-01 09:29:56,570", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7044 user_tokens=0 response_tokens=984 cached_tokens=5241 cache_write_tokens=0 duration=3.16s success=True"}
+{"ts": "2026-08-01 09:29:57,865", "level": "INFO", "msg": "llm_call role=perception model=inception/mercury-2 system_tokens=7453 user_tokens=0 response_tokens=1342 cached_tokens=303 cache_write_tokens=0 duration=4.45s success=True"}
+{"ts": "2026-08-01 09:30:35,102", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6713 user_tokens=0 response_tokens=2293 cached_tokens=0 cache_write_tokens=0 duration=37.22s success=True"}
+{"ts": "2026-08-01 09:31:27,483", "level": "INFO", "msg": "llm_call role=narrator model=zai-org/glm-latest system_tokens=6779 user_tokens=0 response_tokens=1420 cached_tokens=0 cache_write_tokens=0 duration=52.38s success=True"}
+{"ts": "2026-08-01 09:31:37,169", "level": "INFO", "msg": "llm_call role=utility model=deepseek/deepseek-v4-flash-0731 system_tokens=11959 user_tokens=0 response_tokens=765 cached_tokens=0 cache_write_tokens=0 duration=9.02s success=True"}
+persona: Auditor Dana Rennick  character: Séverine Moreau
+
+=== turn 0 (establish) ===
+  40.7s  stages: 0
+=== turn 1 === 75.6s  memories=4
+    player: I shake the rain off my coat and step up to the desk. "I'm here about the Kestrel manifest
+=== turn 2 === 139.1s  memories=8
+    player: "The seal drops at midnight tomorrow. After that nothing leaves this harbour."
+=== turn 3 === 93.9s  memories=12
+    player: "If anyone asks, you never saw me. Say the ledger was already signed."
+=== turn 4 === 76.2s  memories=16
+    player: "The number is four-seven-three-one. Write it somewhere you'll remember."
+=== turn 5 === 122.6s  memories=20
+    player: I glance at the door, then lower my voice. "How long have you worked here?"
+=== turn 6 === 106.0s  memories=23
+    player: "Who told you to wait for me tonight?"
+=== turn 7 === 76.5s  memories=27
+    player: I set a folded paper on the desk and slide it across without a word.
+=== turn 8 === 156.8s  memories=31
+    player: "That name on the paper. Have you seen it before?"
+=== turn 9 === 83.7s  memories=35
+    player: I pull off the wig and the coat. "I'm not who you were told to expect."
+=== turn 10 === 168.5s  memories=39
+    player: "Everything I said before tonight was someone else's script. Ask me again."
+
+========================================================================
+REPORT
+========================================================================
+
+--- Séverine Moreau: 39 memories ---
+categories: {'episode': 11, 'self': 10, 'inference': 18}
+importance revised: 0
+disputes recorded: 0
+durable dialogue rows: 0
+
+model emitted: 0 remember_lines, 0 memory_disputes
+
+--- firewall ---
+memories saying 'the player': 0   (must be 0)
+known map: {}
+memories naming the persona (Auditor Dana Rennick): 11   (0 until she says her name)
+
+chat_id=1 db=/home/nathan/.claude/jobs/ddd8782e/tmp/play.db

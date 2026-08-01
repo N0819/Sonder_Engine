@@ -999,7 +999,7 @@ def egocentric_frame(scene, observer):
     return b
 
 
-def spatial_digest(scene, observer):
+def spatial_digest(scene, observer, label_for=None):
     """Human-readable egocentric exits for the narrator: the observer's
     egocentric_frame with each edge rendered as {room, barrier}, grouped by
     bucket. The narrator binds egocentric direction words strictly to these
@@ -1040,7 +1040,25 @@ def spatial_digest(scene, observer):
     if frame.get("ahead_entity"):
         # ref is an entity id (look up its name) or already a character name.
         ent = (scene.get("entities") or {}).get(frame["ahead_entity"]) or {}
-        out["ahead_entity"] = ent.get("name") or frame["ahead_entity"]
+        ahead = ent.get("name") or frame["ahead_entity"]
+        # THE ONE FIELD HERE THAT NAMES A BODY, and the only one that needs an
+        # identity decision -- every other bucket names rooms. `positions` and
+        # `stations` are keyed by CANONICAL name, so without a gate this hands
+        # a character the identity of whoever is in front of them regardless of
+        # whether they have any way to know it.
+        #
+        # Observed live: a character asked the person across the desk for her
+        # name twice, in dialogue, and was refused both times, while her view,
+        # her memories and her own claims all correctly said "the auditor".
+        # `ahead_entity` said "Auditor Dana Rennick" from beat three. By beat
+        # eight she used the surname aloud.
+        #
+        # `label_for` is `agents/common.observer_label_fn` -- perception's own
+        # gate and its own `_unknown_actor_label`. Optional because the
+        # narrator writes for the player, whose recognition is decided
+        # elsewhere, and because this function is also called for internal
+        # geometry where nothing is shown to a mind.
+        out["ahead_entity"] = label_for(ahead) if label_for else ahead
     return out
 
 

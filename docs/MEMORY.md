@@ -29,7 +29,9 @@ One row in `memories` (`db.py`). The fields that do work:
 | `kind` | `episodic` / `dialogue` / `inference` / `semantic` / `relationship` / `promise` / `intention` |
 | `category` | Derived from `kind` via `_default_category`; one of `MEMORY_CATEGORIES`. `episode`, `self` and `inference` are essentially all of it in practice — 4,920 of 4,939 live rows. |
 | `provenance` | `witnessed` / `heard` / `told` / `read` / `inferred` / `remembered` |
-| `salience` | How much it mattered when formed. Drives archiving, unbidden recall, and a ranking term. Never revised. |
+| `salience` | How much it mattered **when formed**. Set at mint, never revised. |
+| `importance` | How central it **became**, through consequences. `NULL` = never revised, and reads as `salience` (`effective_importance`). |
+| `disputed` | The character's own later re-reading, if any. JSON `{turn_idx, reading, count}`; `''` when undisputed. |
 | `confidence` | How much the character credits it *now*. Revised every turn for inferences (§7). |
 | `content` | The full text. |
 | `gist` | First sentences up to 240 chars (`_gist`), or model-supplied. |
@@ -174,7 +176,17 @@ only ever cite the past, and did: across one 61-turn chat, `observations_used`
 cited a previous turn 15 times and the current beat zero times. That is why the
 character kept answering the line before the one just spoken.
 
-### Two hard filters, applied before any ranking
+### One seam, two hard filters, applied before any ranking
+
+Every mind-facing read goes through `memory.visible_memory_rows`. Its three
+invariant-bearing arguments — `before_turn_idx`, `viewer_frame_id`,
+`include_archived` — are **required and have no defaults**, so a caller cannot
+omit one. It can only state it, including stating `None`. Forgetting a rule is
+a `TypeError` rather than a leak.
+
+The remaining arguments (`since_turn_idx`, `require_turn_idx`) only ever
+*narrow*. None can readmit a row the filters excluded, which is what keeps this
+a seam rather than a configurable query builder.
 
 **The turn cutoff (audit F1).** `search_memories` drops every row with
 `turn_idx >= current_turn_idx` before scoring. A mind deciding turn N must never
@@ -191,10 +203,40 @@ before the viewer's era, or if the character is a registered traveller of that
 frame. Spatial frames short-circuit the ordinal rule and **fail closed** on a
 missing `turn_idx`.
 
-Both filters run in `search_memories`, `contrast_memory`,
-`recent_memory_buffer`, `list_memories` and `consolidate_character_memory` —
-every read path, not a shared wrapper. That is duplication, and it is the
-reason a new read path cannot forget.
+`search_memories`, `contrast_memory`, `recent_memory_buffer`, `list_memories`
+and `consolidate_character_memory` all read through the seam.
+`list_memories` is the one that passes `before_turn_idx=None`, deliberately:
+it is the host's memory panel, where nobody is deciding a beat and there is no
+future to withhold.
+
+**This document used to claim the opposite, and the claim was wrong.** The
+filters were previously written out again at each of those five call sites, and
+this section said that repetition "is the reason a new read path cannot
+forget." That reasoning is backwards. Repetition is precisely how a sixth path
+forgets, because nothing obliges it to reproduce five rules it may not know
+exist — the safety was resting on whoever wrote it next remembering, which is
+not a property of the code. Hence the seam.
+
+Enforcement is `tests/test_memory_read_seam.py`, which asserts each rule
+against the seam, asserts it again through every character-facing public API
+one excluded class at a time, and asserts that the invariant arguments have no
+defaults. All four rules are mutation-tested: deleting any one of the turn
+cutoff, the frame filter, the character scoping, or the archived policy fails
+between 1 and 6 of those tests. That check earned its keep immediately — an
+earlier draft of the seam applied the turn cutoff twice, in SQL and again in
+Python, and deleting the Python half left all 21 tests green. A guard nothing
+can observe failing is not a guard, so it went.
+
+### Reads that deliberately cross characters
+
+`dramatic_irony_feed` and `promise_ledger` answer a question *about the cast* —
+what the player knows that a character does not, what has been promised across
+the story — rather than a question a character asks itself. They are not scoped
+to one `char_id` and must never feed a mind's context. They are listed in
+`memory.HOST_SCOPE_READERS` so the crossing is a named exception, and a test
+fails if an unlisted cross-character reader appears.
+
+### The two filters
 
 ---
 
@@ -586,22 +628,40 @@ provider.
 ## 10. Why there is no vector index
 
 Recall ranks one character's rows in Python and deliberately uses no ANN index.
-Two reasons, and the first is the real one:
+There are two arguments for that, they have **different shelf lives**, and an
+earlier draft of this section filed both under "settled permanently" — which
+was true of one of them.
 
-**The filters that matter run before ranking.** A mind may not retrieve how the
-turn it is deciding turned out, and may not see another frame's memories. Both
-are per-query predicates over `turn_idx` and `frame_id`. An approximate-nearest-
-neighbour index cannot apply them cheaply before its search — it would return
-neighbours and let the filters cut them afterwards, which changes *how many*
-results survive rather than *which* are best.
+**Structural, and it does not expire.** The filters that matter run before
+ranking. A mind may not retrieve how the turn it is deciding turned out, and
+may not see another frame's memories. Both are per-query predicates over
+`turn_idx` and `frame_id`. An approximate-nearest-neighbour index cannot apply
+them cheaply before its search — it would return neighbours and let the filters
+cut them afterwards, which changes *how many* results survive rather than
+*which* are best. Any future index has to answer this, whatever the corpus
+looks like.
 
-**And the scan is cheaper than the problem.** Measured: 126 ms at 3,500
-memories, 709 ms at 35,000, 2.2 s at 200,000 — a novel series in one chat.
-Beside an LLM call measured in seconds that is not a cost worth an index, and
-two unbuilt optimisations sit in front of one anyway (`_cos` recomputes norms
-although every stored vector is already normalised; stacking rows into one
-matmul is ~20x). See `docs/UNBUILT.md`. The question is settled permanently,
-not provisionally.
+**Workload, and it is a measurement, so it can go stale.** Measured: 126 ms at
+3,500 memories, 709 ms at 35,000, 2.2 s at 200,000. Beside an LLM call measured
+in seconds that is not a cost worth an index, and two unbuilt optimisations sit
+in front of one anyway (`_cos` recomputes norms although every stored vector is
+already normalised; stacking rows into one matmul is ~20x). See
+`docs/UNBUILT.md`.
+
+Read that table carefully: it is **per character**, at the measured growth of
+~3.5 rows per turn *per character*. 200,000 rows is one character with roughly
+57,000 turns of their own, not a chat total. Banks are disjoint by `char_id`
+and character steps run in parallel (`agents/runtime._stream_parallel`), so a
+four-character chat holding 200,000 memories gives each mind ~50,000 rows
+scanned concurrently — better than the 2.2 s figure, not worse. What does not
+divide is CPU: four concurrent NumPy scans still contend for cores, and NumPy
+only releases the GIL for the larger operations.
+
+So the accurate claim is **no ANN index is justified under present workloads or
+architecture**, not that the question is closed forever. If it ever reopens,
+the answer is more likely to be per-character matrix caches, hot/cold tiers,
+summary-first candidate narrowing, or frame-partitioned banks than a global
+index — all of which keep the pre-ranking filters that a global index cannot.
 
 ---
 
@@ -639,11 +699,111 @@ Open, and tracked in [`docs/UNBUILT.md`](UNBUILT.md):
   person, never age out (the archive threshold is 0.72), and grow *more* likely
   to intrude unbidden as a story lengthens.
 
+Raised in review and now built (§13 has the mechanics):
+
+- **A witnessed memory's interpretation can be revised** — `record_dispute`,
+  recorded beside the memory, never over it.
+- **Salience split in two** — `salience` (when formed) and `importance` (what
+  it became), consequence-driven and explicitly not access-driven.
+- **Dialogue durability is no longer only a phrase list** — a character marks
+  its own keepers with `remember_lines`.
+
+Raised in review and still open:
+
+- **Unbidden recall has one mode where it should have several.**
+  `contrast_memory` maximises dissimilarity, which is faithful to SIGMA
+  SRIP-14 §XXII — but that spec is about breaking convergence in a *reasoning
+  system*, not about modelling involuntary memory, and involuntary recall in
+  people is usually cue *similarity*. Contrast is right as an anti-stagnation
+  mechanism; it wants siblings — echo (structurally or affectively similar),
+  unfinished (tied to an open concern), identity (challenges the self-concept),
+  intrusion (highly charged despite low relevance).
+- **Hierarchical summary retrieval**, below.
+
+### Sense as a retrieval channel — built, measured, reverted
+
+**Do sight, scent and sound work as cues?** Yes, through prose, and adding
+machinery for them did not measurably help. Recorded here because the idea is
+an obvious one to have twice.
+
+What is true today: there is **no modality anywhere in memory** — no column, no
+tag — and `sensory_events` never reach `commit.py` at all. They are read in one
+place, the *establishment* path in `agents/perception.py`, and folded into view
+prose. The structured channel is also thin and unnormalised: across the live
+corpus the Director emitted 26 `smell` events under a `kind` vocabulary that
+also contains `olfactory`, `audio`, `ambient_sound`, `visual`, `sight` and
+`light` as separate values, on 48 of 400 outputs. Meanwhile **715 of 4,953
+memories carry scent language in their text**. So a smell is words in an
+episode, the episode's words are the query, and cosine does the rest.
+
+Two additions were built to sharpen that and then removed:
+
+1. **Sense clauses as their own retrieval aspects** ("what you can smell"),
+   on the reasoning that a short facet cannot compete inside a ~1,015-character
+   query — the argument that justified the mood/goal aspects.
+2. **Sense clauses folded into `key_phrases`** at mint, so a one-off scent
+   reaches the cue vector, FTS and exact-match instead of being dropped by
+   frequency ranking.
+
+Measured on six scent pairs, each a memory queried by a **vocabulary-disjoint**
+description of the same smell inside an otherwise-unrelated view, against
+decoys sharing the view's surface language:
+
+| | mean rank | recall@1 | recall@3 |
+|---|---|---|---|
+| unchanged engine | 2.83 | 0/6 | 6/6 |
+| + `key_phrases` | 2.67 | 0/6 | 6/6 |
+| + sense aspects | 2.67 | 0/6 | 6/6 |
+
+Ranks were **identical pair-for-pair** with and without the aspects. Both
+additions were reverted.
+
+**Why the aspect did nothing, which is the part worth keeping.** RRF
+contributes `weight * 12 / (60 + rank)`. At the aspect weight of 0.55 that is
+0.108 at rank 1 and 0.107 at rank 2 — **the discrimination between rank 1 and
+rank 6 of an aspect ranking is 0.008**, against a flat 0.09 for the
+`location` bonus and up to 0.08 for salience. An aspect ranking adds an almost
+uniform ~0.10 to every candidate and separates them by less than a hundredth.
+That applies to the **existing** mood, goal and unresolved-thread aspects too:
+they were justified against concatenation giving them literally zero influence,
+and a rank list does give them more than zero — but among top candidates it is
+under 0.01, and no measurement has ever shown them reordering anything.
+
+**The reframe that settles it.** The right question was never "does a scent
+memory beat decoys engineered to share the query's wording" but "does it
+surface at all". At rank 2–3 of 6 with no help, against adversarial decoys, in
+a real bank of hundreds it is already comfortably retrieved. The prose channel
+works.
+
+If it ever needs to be sharper, the shape that would work is the one `location`
+already uses: a **flat scalar bonus** on a stored per-memory sense vector, not
+another RRF list. That costs a column and an embedding per memory, and should
+not be spent until something in play actually asks for it.
+
 Not in the register, and true:
 
-- **Relevance-ranked summary retrieval is unwired.** `memory_summaries` carries
-  an `embedding` column, and only the rebuild paths read it. Summaries reach a
-  character as whole strings — there is no ranking across them.
+- **Summary retrieval needs windows before it can be ranked, and does not have
+  them.** `memory_summaries` carries an `embedding` column that only the
+  rebuild paths read, which reads like an easy wiring job and is not:
+  `UNIQUE(chat_id, char_id, scope)` means there is exactly **one row per scope**
+  — 54 rows across the whole live corpus, 54 distinct keys. There is nothing
+  to rank *across*. Each consolidation pass merges the previous summary with
+  the new window and overwrites, so the older windows do not survive to be
+  retrieved.
+
+  The real feature is durable summary **windows**: keep turns 0–40 and 41–80 as
+  separate rows, retrieve the ones relevant to the beat, and use their turn
+  ranges to narrow which raw memories to pull — a long-horizon hierarchy
+  instead of one ever-growing block. That needs the `UNIQUE` constraint
+  replaced, `save_memory_summary` to append rather than overwrite,
+  and the consolidation cursor (`get_memory_summary(...)["end_turn_idx"]`) to
+  become a max across windows, plus the dump/restore/archive/rebuild paths.
+
+  Deliberately not built in the same pass as the two columns above. The cursor
+  is the risk: get it wrong and consolidation either re-folds the same
+  memories forever or silently skips a window, and neither shows up as an
+  error — it shows up as a character who has forgotten a stretch of their own
+  story, fifty beats later. It wants its own change and its own verification.
 - **Provenance can still blur inside a scope.** The three scopes are separate
   rows, which a model cannot collapse; but within the first-hand paragraph the
   model's prose can still lose which specific memory a clause came from.
@@ -658,3 +818,89 @@ deleted from the register per the repo's own rule: §1.9 (consolidation flattens
 provenance — P8 shipped as the three scopes in §1) and §3.7a (unbidden recall
 avoids embeddings — shipped as the gated semantic axis in §6). Both now have
 `Design.md` conformance rows instead.
+
+---
+
+## 13. Importance, disputes, and what a character chooses to keep
+
+Three additions from the alpha 6.4.1 review. All three default to the previous
+behaviour, so a bank that has never been touched behaves exactly as it did.
+
+### `salience` and `importance` are different questions
+
+`salience` answers *how much did this matter when it happened* — set at mint by
+`_salience_of`, never revised, and still what consolidation reads. `importance`
+answers *how central did it turn out to be*. `NULL` means never revised and
+reads as the salience (`effective_importance`), which is the only place that
+fallback is decided.
+
+Two consequences move it, and **retrieval is not one of them**. A memory that
+got recalled would rank higher and get recalled more, which is a popularity
+loop wearing the word "importance" — and it is why `access_count` staying
+written-and-unread is correct rather than an oversight.
+
+- **It was load-bearing for a belief.** A memory cited as `evidence` on a
+  mind-model update (`_cited_memory_ids`), which is downstream of retrieval, so
+  the loop is closed structurally: `only_unrevised=True` lifts a given row
+  exactly once, ever. Bare `observations_used` deliberately does not count —
+  citing a memory while describing the beat is not building a belief on it.
+- **The character re-read it** (below), which moves it further, because being
+  wrong about something is a bigger fact about it than using it once.
+
+Raises are asymptotic — each closes a fraction of the distance to a 0.97
+ceiling — so repetition cannot run away. `raise_importance` takes `chat_id` and
+`char_id` and applies them in the `WHERE` clause: the ids arrive from model
+output, and ownership belongs in the query rather than in whoever remembers to
+check first.
+
+Downstream, ranking's salience term reads `effective_importance`, contrast's
+floor reads it, and **archiving reads the higher of the two** — a memory that
+turned out to matter is not retired on the strength of how ordinary it looked
+at the time, which is the entire reason the numbers are separate.
+
+### A memory can be re-read without being rewritten
+
+`reconcile_inference_confidence` moves what a mind *concluded*. But this engine
+exists so a character can be deceived, and when they learn the face was a
+disguise, the memory of seeing it stays true while its meaning does not.
+
+`record_dispute` writes `{turn_idx, reading, count}` to the row's `disputed`
+column. The memory itself — `content`, `gist`, `provenance`, `salience`,
+`valence` — is untouched. `build_character_memory_context` hands the memory over
+unchanged with the revision beside it under `i_now_read_this_differently`, so
+the character holds both: they still remember seeing what they saw, and they
+remember having since decided it meant something else. Collapsing the two would
+either erase the experience or hide the correction.
+
+**A column, not an edge to the superseding memory.** Checkpoint restore is
+delete-and-reinsert, so every row id changes; an id-keyed edge would be
+shredded by the first rollback. Stored on the row it rides the existing
+dump/restore round-trip verbatim.
+
+Disputes are matched against the character's **own** rows by gist, exactly then
+loosely — a mind may only re-read something it remembers.
+
+### The character decides what was worth hearing
+
+`_durable_dialogue_category` is a fixed phrase list — promises, "my name is", a
+few confessions — which is why the corpus holds 15 dialogue rows against 2,028
+episodes. Warnings, instructions, codes, indirect threats and newly established
+facts all fail it.
+
+`CharacterOutput.remember_lines` lets the mind add to that floor (never remove
+from it — the floor exists for the model that declares nothing). Commit has
+already proved the quote was said this beat and reached *this observer's view*
+before the mark is consulted, so a mark can only ever preserve something the
+character genuinely heard, never invent one.
+
+That makes memory formation psychology-dependent, which is the point: one mind
+keeps an insult another shrugs off.
+
+### Schema-change checklist
+
+Both columns are carried by `dump_chat_memories` / `prepare_chat_memory_restore`
+(checkpoints and branches), `dump_character_memories` /
+`import_character_memories` (portable character banks), and
+`chat_archive.py`'s import. Migration is `db.py` v20→v21, additive with no
+backfill: `NULL` importance reads as salience and an empty dispute reads as
+undisputed, so 4,969 existing rows needed no rewriting.

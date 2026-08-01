@@ -57,6 +57,7 @@ from theory_of_mind import mind_models_for_payload, sheet_capacity
 from .common import (
     _agent_json,
     _books,
+    observer_label_fn,
     _char_known_tags,
     _dict,
     _list,
@@ -1988,8 +1989,15 @@ def character_step(ctx, cid, nonce):
             # the way THEY face) -- grounding for their movement/positioning
             # choices, not a script to narrate. Empty when they have no
             # established orientation.
+            # `label_for` gates the one field in here that names a body
+            # (`ahead_entity`) through this character's own recognition, the
+            # same way perception gates the prose beside it. Without it the
+            # orientation frame handed over an identity the view was
+            # deliberately withholding.
             "spatial_frame": _annotate_known_exits(
-                spatial_digest(sc, character_name(sh)), sc,
+                spatial_digest(sc, character_name(sh),
+                               label_for=observer_label_fn(
+                                   chat, character_name(sh), ctx.cast)), sc,
                 stored_state.get("visited_rooms") or [],
                 known_exits=stored_state.get("known_exits") or {},
                 here_rid=char_room,
