@@ -83,7 +83,8 @@ _REGION_CUES = (
                "codpiece", "girdle-cloth")),
     ("arms", ("sleeve", "armband", "vambrace", "bangle", "bracelet")),
     ("torso", ("shirt", "tunic", "blouse", "coat", "cloak", "robe", "jacket",
-               "vest", "waistcoat", "dress", "gown", "haori", "kimono",
+               "vest", "waistcoat", "dress", "gown", "shift", "chemise",
+               "nightgown", "nightdress", "negligee", "slip", "haori", "kimono",
                "yukata", "toga", "chiton", "sari", "saree", "qipao",
                "cheongsam", "abaya", "thawb", "thobe", "kaftan", "caftan",
                "cassock", "jumpsuit", "coverall", "coveralls", "overalls",
@@ -114,7 +115,8 @@ _SPANNING_CUES = (
       "overalls", "catsuit", "wetsuit"),
      ("torso", "arms", "waist", "groin", "legs")),
     # Reaches past the waist, but leaves the arms.
-    (("dress", "gown", "sari", "saree", "qipao", "cheongsam", "robe"),
+    (("dress", "gown", "sari", "saree", "qipao", "cheongsam", "robe",
+      "shift", "chemise", "nightgown", "nightdress", "negligee", "slip"),
      ("torso", "waist", "groin", "legs")),
     # Legwear. Trousers and skirts alike cover what is between the legs; a
     # body in trousers whose groin reads as bare is the failure this split
@@ -324,12 +326,15 @@ def normalize_regions(outfit):
     # list still says "silk sash", and the cue table says waist -- so a
     # per-region check would file a second copy of the same garment on a second
     # body part, which is the three-outfits bug this module exists to end.
-    placed = {g["name"].casefold()
-              for entry in out.values() for g in entry["garments"]}
+    placed = [g["name"] for entry in out.values() for g in entry["garments"]]
     for name in outfit.get("wearing") or []:
         name, description = split_garment_name(name)
         name = _clean(name, GARMENT_NAME_LIMIT)
-        if not name or name.casefold() in placed:
+        # Resolved, not compared. A flat list still naming the garment by the
+        # spelling it had before a region edit renamed it would otherwise file
+        # a SECOND copy of it -- the three-outfits bug, arriving by the one
+        # door the exact-match check left open.
+        if not name or resolve_garment(name, placed, allow_head_noun=False):
             continue
         attaches = attaches_only(name)
         # Every region it covers, not just its anchor. A kimono placed on the
@@ -341,14 +346,14 @@ def normalize_regions(outfit):
             entry["garments"].append(
                 {"name": name, "description": _clean(description, DESCRIPTION_LIMIT),
                  "attaches": attaches, "state": "worn", "condition": ""})
-        placed.add(name.casefold())
+        placed.append(name)
     for region, garments in spanning.items():
         entry = out.setdefault(region, {"garments": [], "beneath": ""})
         for garment in garments:
             if not any(g["name"].casefold() == garment["name"].casefold()
                        for g in entry["garments"]):
                 entry["garments"].append(garment)
-    return _sync_spanning_garments(out)
+    return _sync_spanning_garments(dedupe_regions(out))
 
 
 def authored_entry(wearing=None, state=None, regions=None):
@@ -477,6 +482,283 @@ def _garment_keys(name):
     if not text:
         return "", ""
     return text, text.split()[-1]
+
+
+# How short a phrase may be before containment stops being evidence of
+# identity. "robe" is inside "wardrobe"; "silk" is inside half a wardrobe.
+_CONTAINMENT_FLOOR_WORDS = 2
+_CONTAINMENT_FLOOR_CHARS = 8
+
+
+def resolve_garment(name, worn_names, allow_head_noun=True):
+    """Which garment already on this body a handle refers to, or None.
+
+    The disease this cures: the ledger keyed garments on `name.casefold()`, and
+    the Director writes the name fresh every beat. Measured live -- turn 0
+    registered "sheer obsidian silk robe that parts with every movement", a
+    later beat said "sheer obsidian silk robe", and the body ended up wearing
+    two robes, one of them duplicated across four regions.
+
+    So the garment IN the ledger is canonical and every incoming handle is
+    resolved against it. Four tiers, narrowing:
+
+      1. exact,
+      2. article-stripped phrase equality ("the robe" is "robe"),
+      3. phrase containment, in either direction -- this is the measured case,
+      4. head noun ("robe", "sash") appearing anywhere in the worn phrase, but
+         only when exactly ONE worn garment carries it. Two robes make the
+         handle ambiguous, and an ambiguous handle must resolve to nothing
+         rather than to a coin flip.
+
+    Tier 4 does not compare head noun to head noun, because `_garment_keys`
+    reads the LAST word as the noun and the names models write are not always
+    shaped that way: the live "sheer obsidian silk robe that parts with every
+    movement" has a head noun of "movement". Uniqueness is what makes the
+    looser match safe, not position.
+
+    Containment is floored at `_CONTAINMENT_FLOOR_*` so a bare adjective
+    cannot swallow a wardrobe, and tier 4 is optional because the caller that
+    MERGES garments must be stricter than the caller that merely routes a note
+    at one: merging "silk robe" into "cotton robe" destroys a garment, while
+    routing a note at the wrong robe is a wrong sentence.
+    """
+    handle, head = _garment_keys(name)
+    if not handle:
+        return None
+    # Deduped first. A spanning garment is recorded once per region it covers,
+    # so a robe across torso/waist/groin/legs arrives here four times -- and
+    # tier 4's uniqueness guard would read those four copies as four different
+    # robes and refuse to resolve anything.
+    worn, seen = [], set()
+    for name_ in (worn_names or []):
+        text = str(name_ or "").strip()
+        if text and text.casefold() not in seen:
+            seen.add(text.casefold())
+            worn.append(text)
+    keyed = [(n, *_garment_keys(n)) for n in worn]
+
+    for original in worn:                                       # 1
+        if original.casefold() == str(name).casefold():
+            return original
+    for original, phrase, _ in keyed:                           # 2
+        if phrase and phrase == handle:
+            return original
+    for original, phrase, _ in keyed:                           # 3
+        if not phrase:
+            continue
+        short, long = sorted((phrase, handle), key=len)
+        if len(short.split()) < _CONTAINMENT_FLOOR_WORDS \
+                and len(short) < _CONTAINMENT_FLOOR_CHARS:
+            continue
+        if re.search(r"\b%s\b" % re.escape(short), long):
+            return original
+    if not allow_head_noun or len(head) <= 3:                   # 4
+        return None
+    noun = re.compile(r"\b%s\b" % re.escape(head))
+    hits = [original for original, phrase, worn_head in keyed
+            if worn_head == head or (phrase and noun.search(phrase))]
+    return hits[0] if len(hits) == 1 else None
+
+
+def dedupe_regions(regions):
+    """Collapse two records of ONE garment back into one, on read.
+
+    A redescription forked the garment; this is where the fork heals, and it
+    runs on every read (`normalize_regions`) so that the ~49 scenes already
+    carrying a forked wardrobe repair themselves lazily rather than through a
+    migration that would rewrite stories mid-play. Idempotent, because a
+    checkpoint restore must not be able to make it oscillate.
+
+    Strictly tier 1-3: a bare head noun never merges, so "silk robe" and
+    "cotton robe" stay two robes. What survives the merge is the FURTHEST
+    state (consistent with `_sync_spanning_garments` -- if part of it is off,
+    it is off), every distinct condition, the longest description, and the
+    first-registered name as the handle. The discarded name's surplus wording
+    is folded into the description rather than dropped: the redescription was
+    the author saying something, and this heals the fork without losing it.
+    """
+    regions = regions or {}
+    canonical = []            # first-registered name order, across all regions
+    merged = {}               # canonical key -> accumulated garment facts
+    for region in REGIONS:
+        for garment in (regions.get(region) or {}).get("garments") or []:
+            name = garment.get("name", "")
+            if not name:
+                continue
+            target = resolve_garment(name, canonical, allow_head_noun=False)
+            if target is None:
+                canonical.append(name)
+                target = name
+            key = target.casefold()
+            record = merged.setdefault(
+                key, {"name": target, "rung": 0, "conditions": [],
+                      "description": "", "surplus": []})
+            record["rung"] = max(record["rung"], _rung(garment.get("state", "worn")))
+            mark = str(garment.get("condition") or "").strip()
+            if mark and mark not in record["conditions"]:
+                record["conditions"].append(mark)
+            description = str(garment.get("description") or "").strip()
+            if len(description) > len(record["description"]):
+                record["description"] = description
+            if name.casefold() != key:
+                record["surplus"].append(name)
+
+    if not any(record["surplus"] for record in merged.values()):
+        return regions   # nothing forked: leave every object untouched
+
+    for record in merged.values():
+        # The longer of the two spellings usually carries the detail the
+        # shorter one dropped. Keep it where descriptions live.
+        for surplus in record["surplus"]:
+            phrase, _ = _garment_keys(surplus)
+            handle, _ = _garment_keys(record["name"])
+            extra = phrase.replace(handle, " ").strip(" ,;-")
+            if extra and extra not in record["description"].casefold():
+                record["description"] = _clean(
+                    ("%s %s" % (record["description"], extra)).strip(),
+                    DESCRIPTION_LIMIT)
+
+    out = {}
+    for region in REGIONS:
+        entry = regions.get(region)
+        if not isinstance(entry, dict):
+            continue
+        garments, kept = [], set()
+        for garment in entry.get("garments") or []:
+            name = garment.get("name", "")
+            target = resolve_garment(name, canonical, allow_head_noun=False) or name
+            key = target.casefold()
+            if not key or key in kept:
+                continue      # both forks landed in this region: one survives
+            kept.add(key)
+            record = merged.get(key) or {}
+            garments.append(dict(
+                garment,
+                name=record.get("name", name),
+                state=GARMENT_STATES[record.get("rung", 0)],
+                condition=_clean("; ".join(record.get("conditions") or []),
+                                 CONDITION_LIMIT),
+                description=record.get("description") or garment.get("description", ""),
+            ))
+        out[region] = {"garments": garments, "beneath": entry.get("beneath") or ""}
+    return out
+
+
+# Attire-diff keys that name the wardrobe as a whole rather than one garment.
+_GENERIC_WARDROBE_KEYS = frozenset({
+    "clothing", "clothes", "outfit", "attire", "garments", "dress", "wear",
+})
+
+# Values that assert nothing changed. Kept small and closed on purpose: a
+# note this engine cannot read is kept, not guessed at.
+_NO_CHANGE_NOTES = frozenset({
+    "undisturbed", "unchanged", "intact", "as before", "same", "no change",
+    "none", "unaffected", "untouched", "still on", "as is",
+})
+
+_DIFF_KNOWN_KEYS = ("wearing", "add", "remove", "replace", "state",
+                    "conditions", "regions", "notes")
+
+
+def is_no_change_note(text):
+    """Does this note say, in as many words, that nothing happened?"""
+    return str(text or "").strip().casefold().strip(".") in _NO_CHANGE_NOTES
+
+
+def coerce_diff_shape(diff):
+    """One body's attire diff, canonicalized -- so an off-schema one is READ
+    rather than silently discarded.
+
+    `StateDiff.attire` was `dict[str, dict]` with an untyped inner dict, and
+    commit's loop handles exactly `wearing` / `add` / `remove` / `replace` /
+    `state` / `conditions`. Anything else validated cleanly as a dict and then
+    fell through the loop doing nothing at all. Two of the six attire diffs in
+    the measured story were silent no-ops:
+
+        {"Elyndra": {"robe": "sheer, parted"}, "Hinami": {"clothing": "undisturbed"}}
+        {"Hinami": {"shift": "linen shift, hem rucked up where her hand slipped beneath"}}
+
+    That second one is specific authored detail about a garment the ledger had
+    never heard of, thrown away -- which is why the story's narration could say
+    "the hem of your shift" and "the waistband of your shorts" in one
+    paragraph. So unknown keys are not dropped: they become `notes`
+    {handle: text}, and commit resolves each handle against the wardrobe.
+
+    Also canonicalized here: `state` written as a garment-keyed DICT, which is
+    the `conditions` field spelled differently (one live beat used `state` for
+    it and a later beat used `conditions` for the same sentence). Idempotent,
+    and pure, because commit must run it too -- rerun-from-stage replays diffs
+    stored before this existed.
+    """
+    if not isinstance(diff, dict):
+        return {}
+    out, notes = {}, {}
+    for key, value in diff.items():
+        name = str(key or "").strip()
+        if not name:
+            continue
+        if name == "notes":
+            if isinstance(value, dict):
+                for handle, text in value.items():
+                    handle = str(handle or "").strip()
+                    if handle:
+                        notes[handle] = _flatten_note(text)
+            continue
+        if name == "state":
+            if isinstance(value, dict):
+                # A garment-keyed dict is `conditions`, whatever it is called.
+                marks = dict(out.get("conditions") or {})
+                for handle, text in value.items():
+                    handle = str(handle or "").strip()
+                    if handle:
+                        marks.setdefault(handle, _flatten_note(text))
+                out["conditions"] = marks
+            elif value is not None:
+                out["state"] = [str(s) for s in _as_list(value)
+                                if str(s or "").strip()]
+            continue
+        if name == "conditions":
+            if isinstance(value, dict):
+                marks = dict(out.get("conditions") or {})
+                for handle, text in value.items():
+                    handle = str(handle or "").strip()
+                    if handle:
+                        marks[handle] = _flatten_note(text)
+                out["conditions"] = marks
+            continue
+        if name in ("wearing", "add", "remove", "replace"):
+            if value is None:
+                continue
+            out[name] = [str(s).strip() for s in _as_list(value)
+                         if str(s or "").strip()]
+            continue
+        if name == "regions":
+            # Authored clothing by region -- the opening turn's shape. Passed
+            # through untouched; normalize_regions is what reads it.
+            if isinstance(value, dict):
+                out["regions"] = value
+            continue
+        notes[name] = _flatten_note(value)
+    if notes:
+        out["notes"] = notes
+    return out
+
+
+def _as_list(value):
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return [value]
+
+
+def _flatten_note(value):
+    """A note's text, whatever container it arrived in."""
+    if isinstance(value, str):
+        return " ".join(value.split())
+    if isinstance(value, dict):
+        return "; ".join("%s %s" % (k, _flatten_note(v)) for k, v in value.items())
+    if isinstance(value, (list, tuple)):
+        return "; ".join(_flatten_note(v) for v in value)
+    return "" if value is None else str(value)
 
 
 def decisive_targets(player_text, other_texts, wardrobe, player_name=None):
@@ -689,9 +971,26 @@ def apply_flat_change(previous, wanted, decisive=False, conditions=None):
     different things about the same body.
     """
     previous = previous if isinstance(previous, dict) else {}
-    marks = {str(k).casefold(): _clean(v, CONDITION_LIMIT)
-             for k, v in (conditions or {}).items() if str(v or "").strip()}
-    wanted_keys = {str(name).casefold(): str(name) for name in (wanted or [])}
+    # Every handle the caller supplied is resolved against the garments this
+    # body is ALREADY wearing before it is matched. Without it, a beat naming
+    # the robe by a shorter phrase read as "the robe is not in the wanted list"
+    # (so: start removing it) AND "this wanted garment is not worn" (so: add
+    # it) at the same time -- which is exactly how one robe became two, one of
+    # them halfway off.
+    worn_names = [g.get("name", "")
+                  for entry in previous.values()
+                  for g in (entry.get("garments") or [])
+                  if g.get("name")]
+    marks = {}
+    for handle, text in (conditions or {}).items():
+        if not str(text or "").strip():
+            continue
+        resolved = resolve_garment(handle, worn_names) or str(handle)
+        marks[resolved.casefold()] = _clean(text, CONDITION_LIMIT)
+    wanted_keys = {}
+    for name in (wanted or []):
+        resolved = resolve_garment(name, worn_names, allow_head_noun=False) or str(name)
+        wanted_keys[resolved.casefold()] = resolved
     proposed = {}
     seen = set()
     for region, entry in previous.items():
@@ -784,13 +1083,41 @@ def flat_state(regions):
     derived from the regions rather than being the only place partial undress
     could live.
     """
-    notes = []
+    notes, reported = [], set()
     for region in REGIONS:
         entry = (regions or {}).get(region) or {}
         for garment in entry.get("garments") or []:
-            if garment.get("state") in ("loosened", "open"):
+            # ONCE per garment, not once per region it spans -- the same rule
+            # `flat_wearing` and `newly_removed` already keep. A robe covering
+            # torso, waist, groin and legs was reporting itself loosened four
+            # times, and the duplicate notes were what the narrator read.
+            key = garment.get("name", "").casefold()
+            if garment.get("state") in ("loosened", "open") and key not in reported:
+                reported.add(key)
                 notes.append("%s %s" % (garment["name"], garment["state"]))
     bare = exposed_regions(regions)
     if bare:
         notes.append("bare at the %s" % ", ".join(bare))
     return notes
+
+
+def rederive_entry(entry):
+    """One attire ledger entry with its three representations agreeing again.
+
+    `wearing`, `state` and `regions` are the same wardrobe said three ways, and
+    only the commit path was keeping them in step -- the attire EDITOR
+    (app.attire_put) stored whatever the browser sent, verbatim. That is where
+    the measured fork actually began: a garment renamed by hand in the region
+    editor left `wearing` still naming the old spelling, and the next beat's
+    reconciliation dutifully treated the two spellings as two garments, adding
+    one back while it took the other off.
+
+    Authored prose in `state` survives -- only the DERIVED notes are rebuilt.
+    """
+    entry = entry if isinstance(entry, dict) else {}
+    regions = normalize_regions(entry)
+    derived = flat_state(regions)
+    authored = [str(note) for note in (entry.get("state") or [])
+                if isinstance(note, str) and note.strip() and note not in derived]
+    return {**entry, "regions": regions,
+            "wearing": flat_wearing(regions), "state": derived + authored}

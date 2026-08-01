@@ -167,6 +167,11 @@ async function openChat(id) {
   // Then populate for the story now open -- including the case where it does
   // not track condition at all and the panel simply stays away.
   window.refreshVitalsHud?.();
+  // Offered here rather than at boot: opening a story is the moment its own
+  // memory bank is about to be read, and the moment the answer is about
+  // something the host recognises. `embedding_bank` is null unless this
+  // story's memories were embedded by a different model than the live one.
+  if (chat.embedding_bank) window.erOfferRebuild?.(id, chat.embedding_bank);
   return true;
 }
 

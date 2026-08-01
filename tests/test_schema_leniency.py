@@ -987,3 +987,63 @@ class TestAnUnpolicedListOfObjects:
             or ChatArchiveData.parse_obj
         with pytest.raises(pydantic.ValidationError):
             validate({"chat": {"id": 1}, "turns": [{"idx": 0}, 7]})
+
+
+class TestAnItemModelMayNameItsOwnSubject:
+    """`_subject_field` beats both positional rules, because neither can see a
+    subject field that carries a non-empty default.
+
+    `GoalImpact.serves` defaults to "situational", so it is neither the first
+    REQUIRED field nor the first EMPTY prose field — and a map keyed by the
+    goal filed the goal in `why`, recording the goal as its own explanation
+    and leaving `serves` generic. commit.py's goal matching reads `serves`, so
+    the information survived (it used to be dropped outright) and landed
+    exactly where nothing looks at it.
+    """
+
+    def _impacts(self, payload):
+        import inspect
+
+        import schemas
+        holder = next(
+            obj for _n, obj in vars(schemas).items()
+            if inspect.isclass(obj)
+            and "goal_impacts" in getattr(obj, "__fields__", {}))
+        return schemas._dump(holder(**{"goal_impacts": payload}))["goal_impacts"]
+
+    def test_the_goal_lands_in_serves_not_in_why(self):
+        got = self._impacts({"reach the tower": {"impact": 0.6}})[0]
+        assert got["serves"] == "reach the tower"
+        assert got["why"] == ""
+        assert got["impact"] == 0.6
+
+    def test_a_key_never_overwrites_a_value_the_model_supplied(self):
+        got = self._impacts(
+            {"reach the tower": {"serves": "drive", "impact": 0.2}})[0]
+        assert got["serves"] == "drive"
+
+    def test_the_list_spelling_is_unchanged(self):
+        got = self._impacts([{"serves": "drive", "impact": 0.2}])[0]
+        assert got["serves"] == "drive"
+
+    def test_models_without_the_declaration_still_use_the_positional_rule(self):
+        """The rule this replaces must keep working where it was already
+        right — it was a fix for one model, not a new general mechanism."""
+        from schemas import MindHypothesis
+        h = MindHypothesis(about_entity="Mara", kind="observation", claim="x",
+                           evidence={"the sound from the east corridor": {}})
+        assert h.evidence[0].fact == "the sound from the east corridor"
+
+    def test_a_declared_subject_field_that_is_not_a_field_is_ignored(self):
+        """A typo in the declaration must fall back, never crash."""
+        import schemas
+        from pydantic import Field
+
+        class Bogus(schemas.LenientModel):
+            _subject_field = "nope"
+            name: str = ""
+
+        class Holder(schemas.LenientModel):
+            items: list[Bogus] = Field(default_factory=list)
+
+        assert Holder(**{"items": {"Mara": {}}}).items[0].name == "Mara"

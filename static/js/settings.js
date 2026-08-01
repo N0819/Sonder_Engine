@@ -1421,6 +1421,96 @@ const MODEL_RECOMMENDATIONS = {
   llamacpp: "Whatever GGUF model your llama.cpp server is serving -- same sizing logic as Ollama above.",
 };
 
+// The state of the stored memory vectors, shown next to the role that decides
+// it. The embeddings role is the one whose change has a consequence the panel
+// cannot otherwise show: everything already written stays readable but drops
+// to keyword-only matching until it is re-read through the new model. Put the
+// count and the button where the decision is made, rather than leaving the
+// host to discover it in a story.
+function embeddingBankBlock() {
+  const body = el("div", { class: "small dim" }, "Checking stored memories...");
+  const wrap = el("div", { style: "margin-top:10px;padding:10px 12px;"
+                                + "border:1px solid var(--bd);border-radius:9px" },
+    el("div", { style: "font-weight:650;margin-bottom:5px" },
+       "Stored memory vectors"),
+    body);
+
+  const render = async () => {
+    let data;
+    try { data = await api("GET", "/api/memory/embeddings"); }
+    catch (e) { body.textContent = "Could not check: " + (e?.message || e); return; }
+    const mem = data.memories || {}, sums = data.memory_summaries || {};
+    const stranded = (mem.stranded || 0) + (sums.stranded || 0);
+    const total = (mem.total || 0) + (sums.total || 0);
+    const p = data.progress || {};
+    body.textContent = "";
+
+    if (p.running) {
+      body.append(el("div", {}, `Rebuilding — ${(p.done || 0).toLocaleString()} of `
+                                + `${(p.total || 0).toLocaleString()} done. `
+                                + `You can close this panel; it keeps going.`));
+      setTimeout(render, 1500);
+      return;
+    }
+    body.append(el("div", {},
+      `Current model: ${data.model || "unknown"}`
+      + (data.is_fallback ? " — the local fallback" : "")));
+    if (data.is_fallback) {
+      // Say WHY. "No embeddings provider" is wrong and unhelpful when one is
+      // configured and simply is not an embeddings model — the most likely
+      // mistake, since the model picker lists every model a provider offers
+      // and a chat model looks like a perfectly good choice.
+      body.append(el("div", { class: "warn-note", style: "margin-top:4px" },
+        data.fallback_reason
+          ? "The configured embeddings model was rejected: "
+            + data.fallback_reason
+          : "No embeddings provider is set, so memories are matched by "
+            + "spelling rather than by meaning."));
+      if (data.fallback_reason) {
+        body.append(el("div", { style: "margin-top:3px" },
+          "This role needs a model that produces embeddings, not one that "
+          + "writes text — a chat model will be rejected. "
+          + "`openai/text-embedding-3-small` works on OpenRouter and NanoGPT."));
+      }
+    }
+    body.append(el("div", { style: "margin-top:3px" },
+      `${total.toLocaleString()} stored, ${stranded.toLocaleString()} written by a `
+      + `different model.`));
+
+    if (!stranded) {
+      body.append(el("div", { style: "margin-top:3px" },
+        "Everything is searchable by meaning. Nothing to do."));
+      return;
+    }
+    body.append(el("div", { style: "margin-top:3px" },
+      stranded.toLocaleString() + " can currently be found by keyword and exact "
+      + "phrase only. Rebuilding re-reads them through the current model; it "
+      + "runs in the background and resumes if interrupted."));
+    if (data.is_fallback) {
+      body.append(el("div", { style: "margin-top:5px" },
+        "Set an embeddings provider above first — rebuilding onto the local "
+        + "fallback would replace real vectors with a weaker one."));
+      return;
+    }
+    body.append(el("div", { class: "row", style: "margin-top:7px" },
+      el("button", {
+        class: "primary",
+        onclick: async (e) => {
+          e.target.disabled = true;
+          try {
+            await api("POST", "/api/memory/embeddings/rebuild", {});
+            toast("Rebuilding memory vectors in the background.", "ok");
+          } catch (err) {
+            toast("Could not start: " + (err?.message || err), "err");
+          }
+          render();
+        },
+      }, "Rebuild " + stranded.toLocaleString() + " now")));
+  };
+  render();
+  return wrap;
+}
+
 function modelRecommendationsBlock() {
   return el("div", { class: "small dim", style: "margin-top:6px" },
     el("div", {}, "The rule that matters most: ", el("b", {}, "bigger/newer for narrator and character_major"), " (this is the writing you actually read), ", el("b", {}, "smaller/cheaper for perception, mapping, and utility"), " (mechanical, rarely visible). Specific model names below are current examples, not a permanent list -- providers update their lineups often."),
@@ -1824,19 +1914,25 @@ function renderFullApiSettings(b) {
       el("details", { style: "margin-top:6px" },
         el("summary", {}, "What do these roles do?"),
         el("div", { class: "small dim", style: "margin-top:6px" },
-          el("div", {}, el("b", {}, "Setting only Default is enough to start playing"), " — every other role falls back to it automatically. The rest let you assign a faster or cheaper model to a specific stage of each turn without touching quality where it matters most."),
+          el("div", {}, el("b", {}, "Setting only Default is enough to start playing"), " — every other role falls back to it automatically, with one exception: embeddings, which needs a model of a different KIND and so is never inherited. The rest let you assign a faster or cheaper model to a specific stage of each turn without touching quality where it matters most."),
           el("div", { style: "margin-top:8px" }, el("b", {}, "director"), " — reads what you typed and decides what actually happens: whether an action succeeds, what an NPC's action resolves to. Gets this wrong and the story stops making sense, so keep it on a strong model."),
           el("div", {}, el("b", {}, "perception"), " — filters what each character can actually see/hear/know this turn, based on where they are and what their senses allow. Mechanical, not creative — a good candidate for a lighter model."),
           el("div", {}, el("b", {}, "character_bg / character_mid / character_major"), " — generate what a character does and says, tiered by how central that character is to the scene. Quality shows up directly in dialogue, so keep major characters on a strong model even if you lighten background ones."),
           el("div", {}, el("b", {}, "narrator"), " — turns everything into the prose you actually read. This is the model whose writing style you'll notice most."),
           el("div", {}, el("b", {}, "mapping"), " — keeps track of world facts, lore, and location layout in the background. Rarely visible directly, safe to experiment with."),
-          el("div", {}, el("b", {}, "utility / embeddings"), " — small internal helper tasks (search, quick classification). Not worth spending a premium model on."))),
+          el("div", {}, el("b", {}, "utility"), " — small internal helper tasks (quick classification, short rewrites). Not worth spending a premium model on."),
+          el("div", { style: "margin-top:8px" }, el("b", {}, "embeddings"), " — turns each memory into a vector so a character can recall something relevant that was worded differently 300 turns ago. Cheap per call and it is what makes memory work by MEANING rather than by keyword; leave it unset and the engine falls back to a local hash that only matches shared words."),
+          el("div", { class: "warn-note", style: "margin-top:4px" }, el("b", {}, "Changing this one has a consequence the others do not."), " A memory can only be compared against a vector from the same model, so everything already stored has to be re-read through the new one. Nothing is lost and nothing breaks — until it is rebuilt, older memories are found by keyword only. The engine offers to rebuild when you next open a story, or use the button below."))),
       el("details", { style: "margin-top:6px" },
         el("summary", {}, "Which model should I pick?"),
-        modelRecommendationsBlock()));
+        modelRecommendationsBlock()),
+      embeddingBankBlock());
 
     const roleInputs = {};
     const roleMeta = {};
+    const embedWas = { provider: (am.embeddings || {}).provider ?? null,
+                       model: (am.embeddings || {}).model ?? null };
+    let embedWarned = false;
     let defaultValues = {
       provider: (am.default || {}).provider ?? null,
       model: (am.default || {}).model ?? null,
@@ -1855,14 +1951,79 @@ function renderFullApiSettings(b) {
       }
     }
 
+    // `embeddings` first, then Default, then the rest. It is the one role
+    // whose wrong setting is INVISIBLE -- a chat model here is rejected by the
+    // provider, the engine silently falls back to the local hash, and play
+    // continues looking fine while memory quietly stops working by meaning.
+    // Everything else announces itself in the prose.
+    const ROLE_ORDER = { embeddings: -2, default: -1 };
     const orderedRoles = [...S.boot.roles].sort(
-      (a, b) => (a === "default" ? -1 : b === "default" ? 1 : 0)
+      (a, b) => (ROLE_ORDER[a] ?? 0) - (ROLE_ORDER[b] ?? 0)
     );
+
+    // Embedding models have to be OFFERED, not filtered for: a provider's
+    // /models catalogue lists what it will CHAT with, and embedding models are
+    // not in it. Measured against both configured providers -- 652 and 336
+    // models respectively, zero embedding entries between them. So filtering
+    // the catalogue produced an empty dropdown, which is how someone ends up
+    // typing a chat model into this field.
+    //
+    // Every id below was verified live against both an OpenRouter and a
+    // NanoGPT key; the dimension is shown because it decides how much a
+    // rebuild costs and how big every stored vector becomes.
+    // Ordered by a measured benchmark, not by size or price: 16
+    // vocabulary-disjoint paraphrase queries against a real 441-memory story,
+    // scoring where the correct memory ranked among all 441. Size buys
+    // nothing here -- the two 4096d models finished 7th and last.
+    //
+    // Split BY PROVIDER because ids are not portable: OpenRouter namespaces
+    // them (`openai/...`, `perplexity/...`) and is the only one carrying
+    // Perplexity's models; NanoGPT wants the bare form. Every id below
+    // returned a real vector from that provider when it was added.
+    const EMBED_BY_KIND = {
+      openrouter: [
+        { id: "perplexity/pplx-embed-v1-4b", note: "2560d · best consistency (16/16 top-20) · fastest rebuild" },
+        { id: "perplexity/pplx-embed-v1-0.6b", note: "1024d · best value · 40MB · ~4min rebuild" },
+        { id: "openai/text-embedding-3-small", note: "1536d · best top-1 · 61MB" },
+        { id: "openai/text-embedding-3-large", note: "3072d · strong · 121MB" },
+        { id: "qwen/qwen3-embedding-8b", note: "4096d · good, slow, 161MB" },
+        { id: "thenlper/gte-large", note: "1024d · older, mid-table" },
+        { id: "intfloat/e5-large-v2", note: "1024d · older, mid-table" },
+      ],
+      nanogpt: [
+        { id: "text-embedding-3-small", note: "1536d · best top-1 · 61MB" },
+        { id: "jina-embeddings-v4", note: "2048d · 2nd overall · 81MB" },
+        { id: "text-embedding-3-large", note: "3072d · strong · 121MB" },
+        { id: "gemini-embedding-001", note: "3072d · strong · 121MB" },
+        { id: "qwen/qwen3-embedding-8b", note: "4096d · good, slow, 161MB" },
+        { id: "baai/bge-large-en-v1.5", note: "1024d · open weights · 40MB" },
+        { id: "baai/bge-base-en-v1.5", note: "768d · smallest · 30MB" },
+      ],
+    };
+    // Anything else (a local Ollama, an OpenAI-compatible endpoint) gets the
+    // unprefixed ids, which is the shape those serve.
+    const EMBED_FALLBACK = [
+      { id: "text-embedding-3-small", note: "1536d · widely available" },
+      { id: "nomic-embed-text", note: "768d · common on local Ollama" },
+      { id: "mxbai-embed-large", note: "1024d · common on local Ollama" },
+      { id: "bge-m3", note: "1024d · open weights" },
+    ];
+    const embedSuggestions = prov =>
+      (prov && EMBED_BY_KIND[prov.kind]) || EMBED_FALLBACK;
+
+    // A catalogue entry that DOES look like an embedding model is still worth
+    // offering (a local Ollama provider lists nomic-embed-text properly).
+    const EMBED_MODEL = /embed|^text-embedding|bge[-_]|gte[-_]|e5[-_]|voyage|nomic|mxbai|jina/i;
 
     for (const role of orderedRoles) {
       const cfg = am[role] || {};
       const isDefault = role === "default";
-      const following = !isDefault && !(cfg.provider && cfg.model);
+      // `embeddings` may NEVER follow Default. Default is a chat model, and a
+      // chat model cannot produce an embedding -- the provider rejects it and
+      // the engine degrades to the local hash without a word. Following was
+      // not a convenience here, it was a guaranteed wrong answer.
+      const isEmbeddings = role === "embeddings";
+      const following = !isDefault && !isEmbeddings && !(cfg.provider && cfg.model);
       const meta = { following, rebuild: null };
       roleMeta[role] = meta;
 
@@ -1986,7 +2147,7 @@ function renderFullApiSettings(b) {
         { class: "row", style: "flex:1;align-items:center" }
       );
 
-      const followChk = isDefault ? null : el("input", {
+      const followChk = (isDefault || isEmbeddings) ? null : el("input", {
         type: "checkbox",
         title: "Keep this role in sync with Default until you edit it directly",
         ...(following ? { checked: "" } : {}),
@@ -2016,7 +2177,27 @@ function renderFullApiSettings(b) {
               meta.following = false;
               if (followChk) followChk.checked = false;
             }
-          }
+            // Said ONCE per panel, on the first edit rather than per
+            // keystroke: changing this model orphans every vector already
+            // stored, and that consequence is not visible from the control.
+            if (isEmbeddings && !embedWarned
+                && (String(p) !== String(embedWas.provider)
+                    || String(m || "") !== String(embedWas.model || ""))) {
+              embedWarned = true;
+              toast("Changing the embeddings model means every memory already "
+                  + "stored has to be re-read through it — until then those "
+                  + "memories are found by keyword only. Save, and the engine "
+                  + "will offer to rebuild.", "warn", 11000);
+            }
+          },
+          isEmbeddings ? {
+            suggest: x => EMBED_MODEL.test(x.id),
+            extra: embedSuggestions,
+            suggestNote: "This role needs a model that returns vectors, not "
+                       + "one that writes text — providers do not list these "
+                       + "in their chat catalogue, so known-good ids are "
+                       + "offered here.",
+          } : undefined
         );
         primaryContainer.append(combo.psel, combo.mwrap);
         roleInputs[role].primary = combo;

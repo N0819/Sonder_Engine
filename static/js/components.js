@@ -745,7 +745,17 @@ function modelCombobox(providers, cp, cm, onChange, opts) {
     if (!pid) { models = []; return }
     const seq = ++loadSeq;
     dd.innerHTML = ""; dd.style.display = "block"; dd.append(el("div", { class: "dd-opt dim" }, "Loading…"));
-    const loaded = await fetchList(pid);
+    let loaded = [];
+    try {
+      loaded = await fetchList(pid);
+    } catch {
+      // A catalogue that will not load must not take the dropdown with it.
+      // For the embeddings role the useful entries are `opts.extra` anyway --
+      // providers do not list embedding models in /models at all -- so
+      // rendering with an empty catalogue is strictly better than rendering
+      // nothing and looking broken.
+      loaded = [];
+    }
     // Provider changes can overlap slow catalogue requests. Only the newest
     // request for the provider still selected may replace the dropdown.
     if (seq !== loadSeq || String(psel.value) !== String(pid)) return;
@@ -756,6 +766,33 @@ function modelCombobox(providers, cp, cm, onChange, opts) {
     const q = minput.value.toLowerCase();
     let m = models.filter(x => x.id.toLowerCase().includes(q));
     if (onlyIncluded) m = m.filter(x => x.included);
+    // A role may narrow the catalogue to the kind of model it can actually
+    // use. Only the SUGGESTIONS are narrowed -- the field stays free text, so
+    // a model the pattern does not recognise can still be typed in.
+    let narrowed = false;
+    if (opts && opts.suggest) {
+      m = m.filter(opts.suggest);
+      narrowed = true;
+    }
+    // Ids a role knows are good but the provider does not advertise. Merged
+    // ahead of the catalogue and de-duplicated against it, and searched by
+    // the same typed query so the field still behaves like one box.
+    if (opts && opts.extra) {
+      // Resolved against the SELECTED provider, because model ids are not
+      // portable between them: OpenRouter wants `openai/text-embedding-3-small`
+      // and `perplexity/pplx-embed-v1-4b`, NanoGPT wants the bare form and has
+      // no Perplexity models at all. A single flat list showed NanoGPT ids
+      // while OpenRouter was selected, which is worse than showing none.
+      const chosen = providers.find(p => String(p.id) === String(psel.value));
+      const list = typeof opts.extra === "function"
+        ? (opts.extra(chosen) || []) : opts.extra;
+      const have = new Set(m.map(x => x.id.toLowerCase()));
+      const add = list
+        .filter(x => x.id.toLowerCase().includes(q) && !have.has(x.id.toLowerCase()))
+        .map(x => ({ id: x.id, badge: x.note || "suggested", included: false }));
+      m = add.concat(m);
+      narrowed = true;
+    }
     m = m.slice(0, 80);
     dd.innerHTML = ""; dd.style.display = "block";
     const toggle = el("label", { class: "dd-opt dim", style: "cursor:pointer" },
@@ -766,8 +803,14 @@ function modelCombobox(providers, cp, cm, onChange, opts) {
       }),
       "Show only models included in subscription");
     dd.append(toggle);
+    if (opts && opts.suggestNote && narrowed) {
+      dd.append(el("div", { class: "dd-opt dim" }, opts.suggestNote));
+    }
     if (!m.length) {
-      dd.append(el("div", { class: "dd-opt dim" }, "No matching models."));
+      dd.append(el("div", { class: "dd-opt dim" },
+        opts && opts.suggest
+          ? "No matching models of this kind — you can still type an id."
+          : "No matching models."));
       return;
     }
     for (const x of m) {

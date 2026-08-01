@@ -67,7 +67,7 @@ device, not a cited result.
 
 ### 1.3 Information-retrieval algorithms implemented in `memory.py`
 
-The hybrid memory retriever names and implements three standard IR techniques.
+The hybrid memory retriever names and implements four standard IR techniques.
 
 - **Reciprocal Rank Fusion** — Cormack, G. V., Clarke, C. L. A., & Büttcher,
   S. (2009). *Reciprocal rank fusion outperforms Condorcet and individual rank
@@ -84,6 +84,35 @@ The hybrid memory retriever names and implements three standard IR techniques.
   summaries.* SIGIR '98, 335–336.
   [abstract](https://people.eng.unimelb.edu.au/ammoffat/sigir98/abstracts/carbonell.html)
   — the λ≈0.82 diversity re-ranker at `memory.py:1046`.
+- **The signed hashing trick** — Weinberger, K., Dasgupta, A., Langford, J.,
+  Smola, A., & Attenberg, J. (2009). *Feature hashing for large scale
+  multitask learning.* ICML '09, 1113–1120.
+  [ACM](https://dl.acm.org/doi/10.1145/1553374.1553516) — `providers.cheap_embed`
+  is exactly this: character 3- and 4-grams hashed into 256 dimensions by
+  CRC32, with bit 16 of the hash choosing each contribution's sign, then L2
+  normalised. It is the FALLBACK used whenever no `embeddings` provider role
+  is configured — and therefore, in practice, the only embedding most installs
+  have ever had. Worth being precise about what that buys: it is a fuzzy
+  *lexical* signature, not a semantic one, so the two vector lists it feeds are
+  lexical evidence fused with two other lexical signals. Measured on live data
+  (a memory's `gist` is the model's own paraphrase of its `content`, which makes
+  gist→content a real paraphrase-retrieval test): **recall@1 85%, recall@5 94%,
+  median rank 1** over 200 queries against 600 memories. That holds up because
+  the query `character_memory_context` builds is dominated by the character's
+  current perception — concrete prose thick with the proper nouns and places
+  that recur in the memories worth retrieving, which is the regime n-gram
+  hashing is strong in.
+
+  **That number is the easy case, and it must be read with its companion.** A
+  gist shares its content's proper nouns, so gist→content rewards lexical
+  overlap. Re-measured on the hard case — eight real memories from a 441-memory
+  bank, queried by paraphrases written to preserve meaning while AVOIDING the
+  memory's own vocabulary, which is what recalling something worded differently
+  actually is — crc32 scores **recall@1, @5 and @20 all 0%, at a median rank of
+  228 of 441**. That is indistinguishable from random. So the honest summary is
+  not "better than it sounds": it is a strong lexical retriever and a
+  non-existent semantic one, and the whole of semantic recall is the headroom a
+  real embeddings provider would open.
 
 ### 1.4 Interoperability specs and infrastructure (industry prior art)
 
@@ -92,8 +121,21 @@ The hybrid memory retriever names and implements three standard IR techniques.
   (`static/js/editors.js`).
   [V2](https://github.com/malfoyslastname/character-card-spec-v2) ·
   [V3](https://github.com/kwaroran/character-card-spec-v3).
-- **sqlite-vec** — Alex Garcia's vector-search SQLite extension (`memory.py`).
-  <https://github.com/asg017/sqlite-vec>.
+- **No ANN index — dense retrieval is an exhaustive in-process scan.**
+  `search_memories` loads one character's rows and scores them in NumPy
+  (`_cos` over the stored `embedding` and `cue_embedding` blobs), fusing the
+  result with BM25 and exact-match rankings. A `sqlite-vec` index was declared
+  here once and never wired; it was **deleted rather than completed** in alpha
+  6.3, for two reasons worth recording as prior art rather than as an
+  omission. First, the ANN query could filter only on `chat_id`/`char_id`,
+  while the scan applies two predicates before ranking — a turn cutoff (a mind
+  deciding turn N must not retrieve how turn N resolved) and frame visibility
+  — and those are precisely the selective predicates ANN indexes carry badly.
+  Second, the scan is not a bottleneck at this workload: memories accrue at
+  ~3.5 rows per turn per character, and a full scan measures 16 ms at a real
+  story's worst case (442 rows), 126 ms at ~1,000 turns and 709 ms at ~10,000,
+  against an LLM call in the same beat measured in seconds. Correctness
+  constraints, not scale, decided it. See `docs/UNBUILT.md` §1.4.
 - **Prompt caching** — Anthropic `cache_control` breakpoints and OpenAI
   prefix caching (`prompt_cache.py`).
   [Anthropic](https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching)
@@ -249,13 +291,14 @@ domain failure (`commit.py`).
 - **Web-verified this session:** Ross/Lepper/Hubbard 1975; Johnson/Hashtroudi/
   Lindsay 1993; Friedman–Novikov et al. 1990; Cormack et al. 2009 (RRF);
   Carbonell & Goldstein 1998 (MMR); Park et al. 2023; Wu et al. 2023 (AutoGen);
-  Packer et al. 2023 (MemGPT); Riedl & Bulitko 2013; sqlite-vec; SillyTavern
+  Packer et al. 2023 (MemGPT); Riedl & Bulitko 2013; SillyTavern
   card specs V2/V3.
 - **Canonical, cited from established knowledge (not re-fetched):** Asch 1946;
   Ebbinghaus 1885; Pearl 1988; Hintikka 1962; Fagin et al. 1995; Premack &
   Woodruff 1978; Wimmer & Perner 1983/85; Kaelbling et al. 1998; Genette 1972;
   OCC 1988; Gratch & Marsella 2004; Lewis et al. 2020; Mateas & Stern 2003;
-  CAMEL / MetaGPT; Kosinski 2023; Gray & Reuter 1992; Robertson & Zaragoza 2009.
+  CAMEL / MetaGPT; Kosinski 2023; Gray & Reuter 1992; Robertson & Zaragoza 2009;
+  Weinberger et al. 2009 (feature hashing).
 - **Industry practice / no academic citation:** JSON repair-loop validation;
   lorebook/World Info format; provider ecosystem.
 - **External specification, read directly:** SIGMA SRS / SRIP-14 (RMI),

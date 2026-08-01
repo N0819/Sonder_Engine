@@ -794,4 +794,125 @@ window.addEventListener("unhandledrejection", event => {
   toast(reason?.message || String(reason || "Something went wrong"), "err", 8000);
 });
 
-boot().catch(e => toast("Could not load the app: " + (e?.message || e), "err", 0));
+
+// ---- Embedding reconciler progress -----------------------------------------
+//
+// Changing the embeddings provider does not re-embed anything already stored,
+// and a memory embedded by a different model scores 0 on both vector rankings
+// for good -- so the server reconciles the bank in the background at startup
+// and whenever the `embeddings` role changes. This is the only place a host
+// ever sees that happen: a card that appears when there is work, counts it
+// down, says so when it is finished, and removes itself.
+//
+// Deliberately not a modal and not a toast. It can run for a while on a large
+// bank, nothing is blocked while it does, and interrupting the reader to say
+// "your memories are being upgraded" would be worse than saying nothing.
+const ER = { timer: null, seen: false, card: null };
+
+function erCard() {
+  if (ER.card) return ER.card;
+  const fill = el("div", { class: "er-fill" });
+  const head = el("div", { class: "er-head" }, "Upgrading memory search");
+  const note = el("div", { class: "er-note" }, "");
+  ER.card = el("div", { id: "embed-rebuild" },
+               head, el("div", { class: "er-bar" }, fill), note);
+  ER.card._fill = fill; ER.card._head = head; ER.card._note = note;
+  document.body.appendChild(ER.card);
+  return ER.card;
+}
+
+function erDismiss(after = 0) {
+  if (!ER.card) return;
+  const card = ER.card; ER.card = null;
+  setTimeout(() => card.remove(), after);
+}
+
+async function erPoll() {
+  let data;
+  try { data = await api("GET", "/api/memory/embeddings"); }
+  catch { return; }                       // a failed poll is not worth saying
+  const p = data?.progress || {};
+  const stranded = (data?.memories?.stranded || 0)
+                 + (data?.memory_summaries?.stranded || 0);
+
+  if (p.running) {
+    ER.seen = true;
+    const card = erCard();
+    const total = Math.max(p.total || 0, p.done || 0, 1);
+    card._fill.style.width = Math.round((p.done / total) * 100) + "%";
+    card._head.textContent = "Upgrading memory search";
+    card._note.textContent =
+      `Re-reading ${total.toLocaleString()} memories so older ones can be `
+      + `found by meaning again. ${(p.done || 0).toLocaleString()} done — `
+      + `you can keep playing.`;
+    return;
+  }
+
+  if (ER.seen && ER.card) {              // it was running and has just stopped
+    const card = ER.card;
+    const failed = p.stopped_early || p.error;
+    card.classList.add(failed ? "er-err" : "er-done");
+    card._fill.style.width = "100%";
+    card._head.textContent = failed
+      ? "Memory upgrade interrupted" : "Memory search upgraded";
+    card._note.textContent = failed
+      ? `${(p.done || 0).toLocaleString()} done before it stopped`
+        + `${p.error ? ": " + p.error : ""}. It will pick up where it left `
+        + `off next time — nothing was lost.`
+      : `${(p.done || 0).toLocaleString()} memories re-read. Older memories `
+        + `are searchable by meaning again.`;
+    ER.seen = false;
+    erDismiss(failed ? 14000 : 7000);
+    return;
+  }
+
+}
+
+// Poll only while something is actually running; a background maintenance task
+// does not deserve a standing timer.
+function erWatch() {
+  if (ER.timer) return;
+  ER.timer = setInterval(async () => {
+    await erPoll();
+    if (!ER.seen && !ER.card) { clearInterval(ER.timer); ER.timer = null; }
+  }, 1500);
+}
+
+// Offered when a chat is opened and its memories turn out to have been
+// embedded by a different model than the one configured now. An OFFER rather
+// than an automatic run: a rebuild talks to a paid provider and can take a
+// while on a long story, and spending someone's money because they opened a
+// chat is not a decision this code gets to make.
+window.erOfferRebuild = erOfferRebuild;
+async function erOfferRebuild(chatId, bank) {
+  if (!bank || !bank.stranded) return;
+  const n = bank.stranded.toLocaleString();
+
+  if (bank.is_fallback) {
+    // No embeddings provider configured, so rebuilding would overwrite real
+    // vectors with the local hash — a downgrade. Say what is true and stop.
+    toast(`${n} of this story's memories were written with a different `
+          + `embedding model, so they can only be found by keyword. Set an `
+          + `embeddings provider in API Connections to restore search by `
+          + `meaning.`, "warn", 12000);
+    return;
+  }
+
+  const ok = await confirmModal(
+    `Out-of-date memories\n\n`
+    + `${n} of this story's memories were written with a different embedding `
+    + `model than the one configured now (${bank.model}). Until they are `
+    + `rebuilt they can only be found by keyword and exact phrase — not by `
+    + `meaning.\n\n`
+    + `Rebuilding re-reads them through the current model. It runs in the `
+    + `background, you can keep playing, and it resumes where it left off if `
+    + `it is interrupted.`,
+    { confirmLabel: "Rebuild now", cancelLabel: "Not now" });
+  if (!ok) return;
+  await api("POST", "/api/memory/embeddings/rebuild", { chat_id: chatId });
+  ER.seen = true;
+  erWatch();
+}
+
+boot()
+  .catch(e => toast("Could not load the app: " + (e?.message || e), "err", 0));

@@ -739,3 +739,97 @@ class TestAGarmentThatChangesHands:
             {"GuardA": [], "GuardB": ["a wool cloak"]})
         assert [m[1] for m in minted] == ["a wool cloak"]
         assert minted[0][0] == "GuardA"
+
+
+class TestAnOffSchemaDiffIsReadNotDiscarded:
+    """`StateDiff.attire` had an untyped inner dict, so a shape the commit loop
+    did not recognise validated cleanly and then changed nothing. Two of the
+    six attire diffs in the measured story were silent no-ops, and one of them
+    was the linen shift the prose had been describing since beat 0.
+
+    Every fixture here is verbatim from that story.
+    """
+
+    def _read(self, diff, worn, entry=None):
+        from commit import interpret_attire_notes
+        return interpret_attire_notes(
+            attire.coerce_diff_shape(diff), worn,
+            entry if entry is not None else {"wearing": list(worn), "state": []})
+
+    def test_a_note_naming_a_worn_garment_lands_on_that_garment(self):
+        out = self._read({"robe": "sheer, parted"},
+                         ["sheer obsidian silk robe that parts with every movement"])
+
+        assert out["conditions"] == {
+            "sheer obsidian silk robe that parts with every movement":
+                "sheer, parted"}
+
+    def test_a_note_naming_an_unworn_garment_dresses_the_body_in_it(self):
+        """The reading that keeps the detail. The alternative on record is
+        throwing it away, which is what produced a narrator describing a shift
+        and a pair of shorts on the same body in the same paragraph."""
+        out = self._read(
+            {"shift": "linen shift, hem rucked up where her hand slipped beneath"},
+            ["lightweight travel jacket", "travel shorts"])
+
+        assert out["add"] == ["linen shift"]
+        assert "hem rucked up" in out["conditions"]["linen shift"]
+
+    def test_clothing_undisturbed_changes_nothing(self):
+        entry = {"wearing": ["travel shorts"], "state": []}
+        out = self._read({"clothing": "undisturbed"}, ["travel shorts"], entry)
+
+        assert not out.get("add") and not out.get("conditions")
+        assert entry["state"] == []
+
+    def test_a_note_about_the_whole_outfit_is_kept_as_prose(self):
+        entry = {"wearing": ["travel shorts"], "state": []}
+        self._read({"outfit": "rain-soaked through"}, ["travel shorts"], entry)
+
+        assert "rain-soaked through" in entry["state"]
+
+    def test_a_garment_keyed_state_dict_is_read_as_a_condition(self):
+        out = self._read(
+            {"state": {"robe": "parted more open, falling off one shoulder"}},
+            ["sheer obsidian silk robe"])
+
+        assert out["conditions"] == {
+            "robe": "parted more open, falling off one shoulder"}
+
+    def test_a_shorthand_condition_handle_reaches_the_right_garment(self):
+        """Resolution happens where the wardrobe is: `apply_flat_change` is
+        what turns "robe" into the one robe on the body."""
+        worn = ["sheer obsidian silk robe that parts with every movement"]
+        regions = attire.normalize_regions({"wearing": worn})
+        out = attire.apply_flat_change(
+            regions, worn, conditions={"robe": "falling off one shoulder"})
+
+        assert attire.condition_of(out, worn[0]) == "falling off one shoulder"
+
+    def test_a_recognised_diff_passes_through_untouched(self):
+        out = self._read({"remove": ["sash"], "add": ["cloak"]}, ["sash"])
+
+        assert out["remove"] == ["sash"] and out["add"] == ["cloak"]
+
+
+class TestAuthoredRegionsSurviveTheOpeningTurn:
+    """`AttireState` declared only `wearing` and `state`, so the validation
+    round-trip stripped `regions` -- and the commit loop's whole-outfit branch
+    read past it too. Every body in every story lost its garment descriptions
+    and its `beneath` text on beat 0."""
+
+    def test_the_schema_keeps_them(self):
+        from schemas import AttireState, _dump
+        regions = {"torso": {"garments": [{"name": "robe",
+                                           "description": "black silk"}],
+                             "beneath": "warm skin"}}
+        out = _dump(AttireState(**{"wearing": ["robe"], "regions": regions}))
+
+        assert out["regions"]["torso"]["beneath"] == "warm skin"
+
+    def test_the_diff_shape_carries_them_to_commit(self):
+        regions = {"torso": {"garments": [{"name": "robe",
+                                           "description": "black silk"}]}}
+        out = attire.coerce_diff_shape({"wearing": ["robe"], "regions": regions})
+
+        assert out["regions"] == regions

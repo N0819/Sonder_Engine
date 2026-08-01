@@ -1251,6 +1251,161 @@ def normalize_scene_stations(scene: dict) -> dict:
     return scene
 
 
+def _anchor_for_entity(scene: dict, room_id: str, name: str):
+    """The anchor id of the room feature `name` refers to, or None.
+
+    Identifier recognition, never prose: a room's `bed` anchor and its `bed`
+    entity are the same bed when their ids, names or aliases slugify the same.
+    Anything looser would start reading furniture out of sentences.
+    """
+    anchors = ((scene.get("rooms") or {}).get(room_id) or {}).get("anchors") or {}
+    if not isinstance(anchors, dict) or not anchors:
+        return None
+    slugs = {re.sub(r"[^a-z0-9]", "", str(a).casefold()): a for a in anchors}
+    labels = [name]
+    for eid, entity in (scene.get("entities") or {}).items():
+        if not isinstance(entity, dict):
+            continue
+        names = [eid, entity.get("name"), *(entity.get("aliases") or [])]
+        if any(str(n or "").strip().casefold() == str(name).strip().casefold()
+               for n in names):
+            labels.extend(n for n in names if n)
+            break
+    for label in labels:
+        hit = slugs.get(re.sub(r"[^a-z0-9]", "", str(label).casefold()))
+        if hit:
+            return hit
+    return None
+
+
+# Entity kinds that are never anywhere within a room, because they are things
+# a body is at, holds, or rides. Every other kind -- including the free-text
+# species names models write -- reads as a body.
+_NEVER_STATIONED_KINDS = frozenset({
+    "object", "item", "fixture", "furniture", "container", "portal", "tool",
+    "structure", "vehicle", "decor", "decoration", "artifact", "feature",
+    "technology", "bedding", "flora", "location", "group",
+})
+
+
+def _entity_named(scene: dict, name: str) -> dict:
+    """The entity record `name` refers to by id, name or alias. {} on a miss."""
+    target = str(name or "").strip().casefold()
+    for eid, entity in (scene.get("entities") or {}).items():
+        if not isinstance(entity, dict):
+            continue
+        labels = [eid, entity.get("name"), *(entity.get("aliases") or [])]
+        if any(str(label or "").strip().casefold() == target for label in labels):
+            return entity
+    return {}
+
+
+def derive_scene_stations(scene: dict, explicit=None, fresh_ops=None) -> dict:
+    """Fill in within-room position from what the beat already recorded.
+
+    The Director fills `contact_ops` reliably and `stations` essentially never
+    -- 147 contact adds in one measured story against zero stations in the
+    whole database. But contact IS position at this grain: a hand on the quilt
+    is a body at the bed, and two bodies touching are two bodies within reach.
+    So the ledger the models do maintain seeds the one they do not.
+
+    Additive and idempotent, and it never argues with a statement. A station
+    named in THIS beat's diff is untouchable. An existing `at` is only replaced
+    when the contact deriving it was asserted this beat -- this beat's physical
+    evidence outranks a stale record, an old contact does not.
+
+    A derived station outlives the contact that produced it, deliberately: a
+    hold ends when the Director stops mentioning it, but you do not leave the
+    bed by taking your hand off the quilt. Only a room change clears it, which
+    `normalize_scene_stations` already does.
+    """
+    positions = scene.get("positions") or {}
+    if not positions:
+        return scene
+    stated = {str(k).strip().casefold() for k in (explicit or {})}
+    fresh = set()
+    for raw in fresh_ops or []:
+        if not isinstance(raw, dict):
+            continue
+        if str(raw.get("op") or "add").strip().casefold() != "add":
+            continue
+        contact = _clean_contact(raw)
+        if contact is not None:
+            fresh.add(_contact_key(contact))
+
+    stations = scene.setdefault("stations", {})
+    if not isinstance(stations, dict):
+        stations = scene["stations"] = {}
+
+    for contact in (scene.get("contacts") or []):
+        if not isinstance(contact, dict):
+            continue
+        recent = _contact_key(_clean_contact(contact) or {}) in fresh
+        pair = (contact.get("actor"), contact.get("target"))
+        for me, other in (pair, tuple(reversed(pair))):
+            me, other = str(me or "").strip(), str(other or "").strip()
+            room = _ci_get(positions, me)
+            if not me or not other or room is None or me.casefold() in stated:
+                continue
+            # Only bodies get stationed. A bed touched by a hand is furniture
+            # that a body is AT, not a guest with a position in the room.
+            #
+            # Tested by what the thing IS in the room rather than by
+            # `_is_body_entity`, which reads `scene.attire` -- a table commit
+            # fills AFTER the merge, so on any beat that establishes a scene it
+            # is still empty and every body would fail. A room feature is a
+            # thing you stand at; a body never is. Kinds are model-written free
+            # text ("kitsune", "succubus", "nine-tailed kitsune" all appear
+            # live), so the object list is a DENYLIST -- an unrecognised kind
+            # is taken for a body, which is the recoverable direction.
+            if _anchor_for_entity(scene, room, me) \
+                    or str(_entity_named(scene, me).get("kind") or "").strip(
+                        ).casefold() in _NEVER_STATIONED_KINDS:
+                continue
+            station = stations.setdefault(me, {"at": None, "near": []})
+            if not isinstance(station, dict):
+                continue
+            anchor = _anchor_for_entity(scene, room, other)
+            if anchor and (recent or not station.get("at")):
+                station["at"] = anchor
+            elif not anchor and _ci_get(positions, other) == room:
+                # Two bodies in contact are within reach of each other, which
+                # is what makes a whisper between them arrive whole.
+                near = station.setdefault("near", [])
+                if isinstance(near, list) and other not in near:
+                    near.append(other)
+
+    # Last resort: the body's own `state.position`. The Director has always
+    # written the arrangement there as free text -- "seated_on_bed_edge" is the
+    # live record, and it was the ONLY thing in the whole engine that knew she
+    # was on the bed, read by nothing. This is identifier recognition, not
+    # prose parsing: an anchor id of that body's OWN room, matched as a whole
+    # word, and only where nothing better has already spoken. A body that
+    # merely walked past the bed can be stationed at it by this, which the
+    # Director now sees in its payload and can correct -- against a body that
+    # has been sitting on one for seventeen beats with nowhere to say so.
+    for name, room in list(positions.items()):
+        name = str(name or "").strip()
+        if not name or name.casefold() in stated:
+            continue
+        station = stations.get(name)
+        if isinstance(station, dict) and station.get("at"):
+            continue
+        state = _entity_named(scene, name).get("state")
+        if not isinstance(state, dict):
+            continue
+        words = [w for w in re.split(r"[^a-z0-9]+",
+                                     str(state.get("position") or "").casefold()) if w]
+        if not words:
+            continue
+        for word in words:
+            anchor = _anchor_for_entity(scene, room, word)
+            if anchor:
+                stations.setdefault(name, {"at": None, "near": []})["at"] = anchor
+                break
+    return scene
+
+
 # ---------------------------------------------------------------------------
 # SCALE -- how big each body currently is, relative to its own baseline.
 #
@@ -1823,6 +1978,9 @@ def containment_facts(scene: dict, observer: str, source_names) -> list:
 # how a room change already self-heals a stale station anchor.
 _MAX_CONTACTS = 40
 _MAX_CONTACT_PART = 48
+# A qualifier, not a sentence. Long enough for "beneath her shift, feather
+# light"; short enough that a model cannot narrate into the ledger.
+_MAX_CONTACT_DETAIL = 80
 
 # How many beats of contact talk a contact survives WITHOUT being re-asserted
 # before it retires. See `_contact_ops_are_evidence` for what counts as such a
@@ -1892,6 +2050,86 @@ def _part_is_plural(part: str) -> bool:
     part = str(part or "").strip().casefold()
     return bool(part) and part.endswith("s") and part not in _SINGULAR_S_PARTS
 
+
+# Words that pick out WHICH of a paired part is meant. Everything else is a
+# different KIND of part, on purpose: `tail_spade` is not `tail` blurred, it is
+# a nameable place on it, and the fiction is allowed to touch one without the
+# other.
+_LATERAL_QUALIFIERS = frozenset({
+    "left", "right", "other", "far", "near", "first", "second", "upper",
+    "lower", "fore", "hind", "front", "back", "opposite", "free",
+})
+
+
+def _part_identity(part: str) -> tuple:
+    """A part as (kind, instance): 'left hand' -> ('hand', 'left').
+
+    The ledger keyed a contact on the part's raw text, so 'hand' and 'hand'
+    were the same limb and 'waist' and 'side' were two different places on a
+    body that only has one of them. Both readings are wrong, and the fix is not
+    a synonym table -- it is noticing that an UNQUALIFIED part noun is a
+    definite description. When the fiction says "her hand" twice about the same
+    two bodies it means the hand doing the thing now; when it means the other
+    one it says so, or says both in the same breath.
+
+    So the instance is only what the fiction actually distinguished. Plurals
+    fold into the singular kind ('hands' is both of them, which supersedes
+    either), and a sub-part keeps its own kind.
+    """
+    text = re.sub(r"[^a-z0-9]+", " ", str(part or "").casefold()).strip()
+    if not text:
+        return "", ""
+    words = text.split()
+    instance = []
+    while len(words) > 1 and words[0] in _LATERAL_QUALIFIERS:
+        instance.append(words.pop(0))
+    kind = " ".join(words)
+    if _part_is_plural(kind):
+        kind = kind[:-1]
+    return kind, " ".join(instance)
+
+
+def _same_appendage(left: str, right: str) -> bool:
+    """Do two part KINDS name the same limb, one of them more precisely?
+
+    'tail' and 'tail spade' are one tail. Measured live: a hold recorded
+    `tail_spade -> calf` was re-asserted the next beat as `tail -> ankle` --
+    the same spade, moved, renamed -- and the ledger carried both, so the
+    character was told two tails were on her.
+
+    Structural, not a vocabulary: a refinement REPEATS the limb's own word
+    ('tail spade', 'tail tip'). 'thumb' does not contain 'hand', so a thumb and
+    a hand stay two facts, which is correct -- they can be in two places.
+    """
+    left, right = str(left or "").strip(), str(right or "").strip()
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+    short, long = sorted((left, right), key=len)
+    return " " not in short and short in long.split()
+
+
+def _displaces(standing: dict, incoming: dict) -> bool:
+    """Does `incoming` say the SAME part moved, rather than a second one?
+
+    True only when both name the same pair of bodies, the same part kind, the
+    same instance, and a different spot. The instance rule is deliberately
+    asymmetric: a bare noun never displaces a qualified limb and a qualified
+    one never displaces a bare one. The moment the Director has bothered to
+    distinguish her left hand from her right, both records are protected --
+    losing a distinction the fiction drew is worse than carrying a stale hold
+    the ageing clock will retire anyway.
+    """
+    if standing.get("actor", "").casefold() != incoming.get("actor", "").casefold():
+        return False
+    if standing.get("target", "").casefold() != incoming.get("target", "").casefold():
+        return False
+    was_kind, was_instance = _part_identity(standing.get("actor_part"))
+    now_kind, now_instance = _part_identity(incoming.get("actor_part"))
+    return bool(now_kind) and was_instance == now_instance \
+        and _same_appendage(was_kind, now_kind)
+
 # A momentary contact is over the moment the story moves on, so it retires on
 # the very next beat that says anything about contact at all -- one evidence
 # beat, against the two a standing hold gets.
@@ -1927,6 +2165,19 @@ def _mirror_key(key):
     return (target, target_part, actor, actor_part)
 
 
+def _flip(contact):
+    """The same contact read from the other body's side, for displacement.
+
+    Contact is symmetric, but the ledger stores a direction, so a hold recorded
+    'Hinami's hand -> Elyndra's waist' and later re-asserted from Elyndra's
+    side has to be recognised as the same hand before it can be moved.
+    """
+    return {
+        "actor": contact.get("target", ""), "actor_part": contact.get("target_part", ""),
+        "target": contact.get("actor", ""), "target_part": contact.get("actor_part", ""),
+    }
+
+
 def _clean_contact(raw):
     """A contact record, or None if it names nobody on one side."""
     if not isinstance(raw, dict):
@@ -1948,6 +2199,17 @@ def _clean_contact(raw):
         "target": target,
         "target_part": _contact_text(raw.get("target_part")),
         "manner": manner,
+        # What the parts alone cannot say: pressure, temperature, over or under
+        # clothing. Excluded from the identity key exactly as `manner` is -- a
+        # grip that becomes feather-light is the same contact changing.
+        #
+        # This field exists because its absence was CAUSING the second defect.
+        # With nowhere structured to put "beneath her shift" or "feather
+        # light", the Director wrote them into the entity's own `state`, where
+        # nothing ages them and nothing prunes them, and they stood
+        # contradicting the ledger for the rest of the story.
+        "detail": re.sub(r"[_\s]+", " ",
+                         _contact_text(raw.get("detail"), _MAX_CONTACT_DETAIL)).strip(),
         # Beats of contact talk since this was last asserted. Absent on an
         # incoming op (an assertion is by definition fresh) and on a scene
         # saved before ageing existed, both of which read as 0.
@@ -1985,7 +2247,8 @@ _PROTECTED_STATE_KEYS = frozenset({
 # key-name fragment -> manner. Ordered: the first match wins, so "wrapped"
 # beats a bare "on".
 _CONTACT_KEY_MANNERS = (
-    ("coil", "coil"), ("wrap", "wrap"), ("entwin", "wrap"),
+    ("coil", "coil"), ("curl", "coil"), ("wrap", "wrap"), ("entwin", "wrap"),
+    ("caress", "caress"),
     ("straddl", "straddle"), ("astride", "straddle"), ("mount", "straddle"),
     ("pin", "pin"), ("carry", "carry"), ("carried", "carry"),
     ("support", "support"), ("kiss", "kiss"), ("bit", "bite"),
@@ -2125,8 +2388,153 @@ def contacts_from_entity_state(scene: dict) -> dict:
             })
             state.pop(key, None)
 
+        # Pattern B: the verb is in the VALUE, and the key names the part.
+        # Every contact assertion in the measured story took this shape and
+        # evaded both tests above --
+        #   "hand_position": "beneath_Hinami's_shift_caressing_bare_side"
+        #   "tail_spade":    "curled_around_Hinami's_ankle"
+        #   "lips":          "trailing_kisses_along_Hinami's_jaw"
+        # -- so all three stood unaged and unprunable, contradicting the real
+        # ledger for the rest of the scene. The gate stays conservative in the
+        # way that matters: still a named partner AND a contact verb, still no
+        # parsing of the free-text `description` paragraph.
+        for key, value in list(state.items()):
+            if key in _PROTECTED_STATE_KEYS or not isinstance(value, str):
+                continue
+            lifted = _lift_valued_contact(actor, key, value, positions)
+            if lifted is not None:
+                derived.append(lifted)
+                state.pop(key, None)
+
     if derived:
-        scene["contacts"] = list(scene.get("contacts") or []) + derived
+        # Through the same door an op comes in by, so a lifted assertion obeys
+        # the displacement rule too -- otherwise lifting a hold the ledger
+        # already records under a different part noun would ADD the very
+        # duplicate this whole change exists to stop. Ageing is suppressed:
+        # this is a migration running at merge, not a beat of story.
+        scene = apply_contact_ops(
+            scene, [dict(record, op="add") for record in derived], _age=False)
+
+    # Pattern C: a relational key naming NO partner, contradicted by a contact
+    # that does. "lips_distance": "two_inches_of_visible_space" cannot lift --
+    # there is nobody in it -- and it sat asserting a gap for four beats while
+    # the ledger said the mouths were touching. When the aged, authoritative
+    # record already speaks for that part, the unaged twin goes.
+    _drop_contradicted_state(scene)
+    return scene
+
+
+# Key names that describe a part's relation to something else rather than the
+# body's own doing. Only these are eligible to be dropped as a stale twin --
+# "hand_position": "clenched_at_side" names no partner and describes only this
+# body, so it survives unless a real contact speaks for that hand.
+_RELATIONAL_STATE_SUFFIXES = ("_touch", "_contact", "_grip", "_hold",
+                              "_distance", "_gap", "_position", "_placement")
+
+# A contact verb in a VALUE means contact only if what follows is not a
+# direction: "leaning_over_Hinami" is where she is, not what she is touching,
+# and stations are what model that.
+_DIRECTION_AFTER_VERB = ("over", "toward", "towards", "at", "into", "in",
+                         "down", "up", "close", "closer", "forward", "near",
+                         "beside", "alongside", "past", "away")
+
+
+def _lift_valued_contact(actor, key, value, positions):
+    """A contact asserted as `<part key>: "<verb> ... <person> ... <part>"`.
+
+    Returns a contact record, or None when this is not one. The leftover words
+    become `detail`, which is the point: "beneath her shift", "feather light"
+    is authored physical detail, and deleting the state key without keeping it
+    would trade a stale fact for a lost one.
+    """
+    text = str(value or "")
+    words = re.split(r"[^a-z0-9]+", text.casefold())
+    partner = None
+    for name in positions:
+        slug = re.sub(r"[^a-z0-9]", "", str(name).casefold())
+        if slug and slug in [w for w in words if w]:
+            partner = str(name)
+            break
+    if partner is None or partner.strip().casefold() == str(actor).strip().casefold():
+        return None
+
+    manner = index = None
+    for fragment, mapped in _CONTACT_KEY_MANNERS:
+        for position, word in enumerate(words):
+            if word.startswith(fragment):
+                nxt = words[position + 1] if position + 1 < len(words) else ""
+                if nxt in _DIRECTION_AFTER_VERB:
+                    continue      # a bearing, not a hold
+                manner, index = mapped, position
+                break
+        if manner:
+            break
+    if manner is None:
+        return None
+
+    # The part this key names, minus the relational suffix that made it a key.
+    part = str(key).casefold()
+    for suffix in _RELATIONAL_STATE_SUFFIXES:
+        if part.endswith(suffix):
+            part = part[:-len(suffix)]
+            break
+    part = re.sub(r"[^a-z0-9]+", " ", part).strip()
+
+    # What is left after the verb, the partner's own name and the joining
+    # words: the far part if it reads like one, everything else as detail.
+    drop = set(re.split(r"[^a-z0-9]+", partner.casefold())) | {"s", ""} \
+        | set(_DIRECTION_AFTER_VERB) | {"the", "a", "an", "her", "his", "their",
+                                        "its", "on", "along", "against", "and",
+                                        "around", "of", "to", "with"}
+    tail = [w for w in words[index + 1:] if w and w not in drop]
+    target_part = tail[-1] if tail else ""
+    detail = " ".join([w for w in words[:index] if w and w not in drop]
+                      + tail[:-1])
+    return {
+        "actor": str(actor), "actor_part": part[:_MAX_CONTACT_PART],
+        "target": partner, "target_part": target_part[:_MAX_CONTACT_PART],
+        "manner": manner, "detail": detail[:_MAX_CONTACT_DETAIL],
+    }
+
+
+def _drop_contradicted_state(scene):
+    """Retire a relational state key the contact ledger already speaks for.
+
+    The ledger ages and prunes; entity state does neither. So where both
+    describe the same part of the same body, the ledger is the record and the
+    state copy is its unaged twin -- and an unaged twin is exactly how a beat
+    that ended four beats ago goes on being narrated as present.
+
+    Only relational keys, and only where a standing contact names that part.
+    A key nothing speaks for is left alone: dropping a fact nobody contradicts
+    would be inventing an absence.
+    """
+    entities = scene.get("entities")
+    if not isinstance(entities, dict):
+        return scene
+    for eid, entity in entities.items():
+        if not isinstance(entity, dict):
+            continue
+        state = entity.get("state")
+        if not isinstance(state, dict) or not state:
+            continue
+        actor = str(entity.get("name") or eid).strip()
+        held = [_part_identity(c.get("actor_part"))[0]
+                for c in contacts_of(scene, actor)
+                if str(c.get("actor") or "").strip().casefold() == actor.casefold()]
+        if not held:
+            continue
+        for key in list(state.keys()):
+            if key in _PROTECTED_STATE_KEYS or not isinstance(state.get(key), str):
+                continue
+            low = str(key).casefold()
+            suffix = next((s for s in _RELATIONAL_STATE_SUFFIXES
+                           if low.endswith(s)), None)
+            if not suffix:
+                continue
+            kind, _ = _part_identity(low[:-len(suffix)])
+            if kind and any(_same_appendage(kind, k) for k in held):
+                state.pop(key, None)
     return scene
 
 
@@ -2293,7 +2701,7 @@ def _contact_ops_are_evidence(ops) -> bool:
     return False
 
 
-def apply_contact_ops(scene: dict, ops) -> dict:
+def apply_contact_ops(scene: dict, ops, *, _age=True) -> dict:
     """Apply state_diff.contact_ops to scene.contacts.
 
     add     -- upsert by (actor, actor_part, target, target_part)
@@ -2334,10 +2742,13 @@ def apply_contact_ops(scene: dict, ops) -> dict:
         contacts = []
     current = {_contact_key(c): c for c in
                (_clean_contact(r) for r in contacts) if c is not None}
+    # Keys this beat has already spoken for. A displacement may never eat one
+    # of them: the Director naming two spots in one breath means two spots.
+    asserted = set()
 
     # Age BEFORE applying, so this beat's own assertions land fresh on top and
     # a re-asserted hold never ages at all.
-    if _contact_ops_are_evidence(ops):
+    if _age and _contact_ops_are_evidence(ops):
         aged = {}
         for key, contact in current.items():
             stale = int(contact.get("unasserted") or 0) + 1
@@ -2394,6 +2805,20 @@ def apply_contact_ops(scene: dict, ops) -> dict:
         if contact is not None:
             key = _contact_key(contact)
             mirror = _mirror_key(key)
+            # A part that was somewhere else has MOVED, not multiplied. The
+            # Director re-describes a standing hold rather than repeating it --
+            # measured live, `thumb->ear` became `thumb->ear_base` and
+            # `hand->waist` became `hand->side`, and the ledger read each
+            # rename as a second limb until the staleness clock caught up. So
+            # a fresh spot for the same part retires the old one.
+            #
+            # Not anything asserted THIS beat, though: two spots stated in one
+            # breath are two spots, and the simultaneity they express is the
+            # whole point of a ledger rather than a single "posture" field.
+            for standing in [k for k in current if k not in asserted]:
+                if _displaces(current[standing], contact) \
+                        or _displaces(_flip(current[standing]), contact):
+                    current.pop(standing, None)
             # Re-asserting from the other side updates the contact already on
             # record rather than creating its twin.
             if mirror in current and key not in current:
@@ -2401,9 +2826,12 @@ def apply_contact_ops(scene: dict, ops) -> dict:
                 # manner updates AND the staleness clock resets.
                 current[mirror] = {**current[mirror],
                                    "manner": contact["manner"],
+                                   "detail": contact["detail"] or current[mirror].get("detail", ""),
                                    "unasserted": 0}
+                asserted.add(mirror)
             else:
                 current[key] = contact
+                asserted.add(key)
 
     scene["contacts"] = list(current.values())[-_MAX_CONTACTS:]
     return scene
@@ -2485,7 +2913,8 @@ def contact_phrase(contact: dict, *, subject_first=True, you=None) -> str:
         # when the model has not already done it ("throttles" must not become
         # "throttleses"), and never for a plural subject.
         verb = manner if (plural or manner.endswith("s")) else f"{manner}s"
-    return f"{left} {verb} {right}"
+    detail = str(contact.get("detail") or "").strip()
+    return f"{left} {verb} {right}, {detail}" if detail else f"{left} {verb} {right}"
 
 
 def spatial_facts(scene: dict, observer: str, source_names) -> list:
@@ -3201,9 +3630,22 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
     for key, value in incoming.items():
         if key in ("name", "desc", "notes", "parent_entity", "adjacent"):
             continue
+        # An empty container is indistinguishable from "the model did not
+        # mention this", so it cannot be read as an erasure -- the doctrine
+        # `_ENTITY_DEFAULT_FIELDS` already applies to entities, and the same
+        # trap on rooms costs more: blanking `anchors` takes every station
+        # hanging off them with it, silently, on any beat that re-echoes the
+        # room. Emptying one goes through an explicit write, not a default.
+        if key in _ROOM_SILENT_WHEN_EMPTY and not value:
+            continue
         merged_room[key] = value
 
     return merged_room
+
+
+# Room fields whose empty value means "unmentioned" rather than "cleared".
+_ROOM_SILENT_WHEN_EMPTY = frozenset({"anchors", "size", "zone", "light",
+                                     "exposure"})
 
 # Every SceneEntityDef field whose schema default is indistinguishable from
 # "the model did not mention this". A diff carrying one of these cannot be
@@ -4012,10 +4454,9 @@ def merge_scene_with_diff(
     # reciprocals so either room can derive a consistent left/right. Runs after
     # dedupe (so only surviving edges are reconciled) and barrier normalization.
     normalize_scene_bearings(merged)
-    # Within-room station hygiene: prune stale anchors/near-links (auto-heals a
-    # room move) and symmetrize proximity. Runs after positions are final.
-    if merged.get("stations"):
-        normalize_scene_stations(merged)
+    # Station hygiene moved to the end of the merge, beside contact hygiene:
+    # it has to run after `derive_contained_positions`, or a carried body keeps
+    # the anchor it was standing at while its carrier walks off with it.
     # Body position tracking: apply this beat's contact ops, then prune every
     # contact that positions no longer permit. Runs LAST, after positions are
     # final, which is what makes walking away end a hold with nothing for the
@@ -4087,6 +4528,14 @@ def merge_scene_with_diff(
 
     apply_contact_ops(merged, diff.get("contact_ops"))
     normalize_scene_contacts(merged)
+
+    # Within-room position, last of all. Contact is settled by now, and contact
+    # is what the derivation reads: a hand on the quilt is a body at the bed.
+    # Then the same hygiene as before -- prune a stale anchor (which auto-heals
+    # a room move), drop non-co-located `near` links, symmetrize what survives.
+    derive_scene_stations(merged, diff.get("stations"), diff.get("contact_ops"))
+    merged.setdefault("stations", {})
+    normalize_scene_stations(merged)
 
     # Bodily condition, last: air depends on whether the doorway ended the beat
     # sealed, which the dock-edge rewrite above has only just settled. Entirely

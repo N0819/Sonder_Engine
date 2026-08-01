@@ -539,3 +539,129 @@ class TestLayers:
         after = attire.apply_flat_change(regions, [], decisive=True)
         assert attire.exposed_regions(after) == [
             "torso", "arms", "waist", "groin", "legs"]
+
+
+# --- one garment, however many ways the beat spells it ----------------------
+#
+# The ledger keyed garments on `name.casefold()`, and the Director writes the
+# name fresh every beat. Measured live: turn 0 registered "sheer obsidian silk
+# robe that parts with every movement", a later beat said "sheer obsidian silk
+# robe", and the body ended up wearing two robes -- one of them halfway off,
+# because the reconciliation was adding one back while taking the other away.
+
+_ROBE = "sheer obsidian silk robe that parts with every movement"
+
+
+def test_a_redescribed_garment_resolves_to_the_one_already_worn():
+    assert attire.resolve_garment("sheer obsidian silk robe", [_ROBE]) == _ROBE
+
+
+def test_a_bare_head_noun_finds_the_only_garment_carrying_it():
+    assert attire.resolve_garment("robe", [_ROBE, "lace bodice"]) == _ROBE
+    assert attire.resolve_garment("the robe", [_ROBE]) == _ROBE
+
+
+def test_a_silk_robe_and_a_cotton_robe_stay_two_robes():
+    """An ambiguous handle resolves to nothing rather than to a coin flip."""
+    assert attire.resolve_garment("robe", ["silk robe", "cotton robe"]) is None
+
+
+def test_a_garment_the_body_is_not_wearing_resolves_to_nothing():
+    assert attire.resolve_garment(
+        "linen shift", ["travel jacket", "travel shorts"]) is None
+
+
+def test_a_forked_wardrobe_heals_on_read():
+    """The live record, verbatim: two robes across four regions, one loosened.
+    Healed lazily on read so existing stories repair themselves rather than
+    needing a migration that would rewrite scenes mid-play."""
+    out = attire.normalize_regions({"regions": {
+        "torso": {"garments": [
+            {"name": "sheer obsidian silk robe", "state": "loosened",
+             "condition": "falling off one shoulder"},
+            {"name": "strappy black lace bodice", "state": "worn"},
+            {"name": _ROBE, "state": "worn"}]},
+        "waist": {"garments": [
+            {"name": _ROBE, "state": "worn"},
+            {"name": "sheer obsidian silk robe", "state": "loosened"}]},
+    }})
+
+    names = attire.flat_wearing(out)
+    assert len([n for n in names if "robe" in n]) == 1
+    assert "falling off one shoulder" in attire.condition_of(out, names[0])
+
+
+def test_healing_is_idempotent_so_a_restore_cannot_oscillate():
+    once = attire.normalize_regions({"regions": {"torso": {"garments": [
+        {"name": "sheer obsidian silk robe", "state": "loosened"},
+        {"name": _ROBE, "state": "worn"}]}}})
+    twice = attire.normalize_regions({"regions": once})
+
+    assert attire.flat_wearing(twice) == attire.flat_wearing(once)
+    assert attire.flat_state(twice) == attire.flat_state(once)
+
+
+def test_a_flat_list_naming_a_renamed_garment_does_not_refile_it():
+    out = attire.normalize_regions({
+        "wearing": ["sheer obsidian silk robe"],
+        "regions": {"torso": {"garments": [{"name": _ROBE, "state": "worn"}]}}})
+
+    assert attire.flat_wearing(out) == [_ROBE]
+
+
+def test_flat_state_names_a_spanning_garment_once():
+    """A robe covering four regions was reporting itself loosened four times,
+    and the duplicate notes were what the narrator read."""
+    out = attire.normalize_regions({"wearing": [_ROBE]})
+    out = attire.apply_flat_change(out, [_ROBE])
+    for entry in out.values():
+        for garment in entry["garments"]:
+            garment["state"] = "loosened"
+
+    assert attire.flat_state(out).count("%s loosened" % _ROBE) == 1
+
+
+def test_the_three_representations_are_rederived_together():
+    """Where the fork actually began: the region editor stored what the browser
+    sent, so a hand rename left `wearing` naming the old spelling."""
+    entry = attire.rederive_entry({
+        "wearing": ["sheer obsidian silk robe"],
+        "state": ["she is nervous"],
+        "regions": {"torso": {"garments": [{"name": _ROBE, "state": "worn"}]}}})
+
+    assert entry["wearing"] == [_ROBE]
+    assert "she is nervous" in entry["state"]
+
+
+# --- an off-schema diff is read, not discarded ------------------------------
+
+def test_a_bare_note_is_kept_rather_than_dropped():
+    assert attire.coerce_diff_shape({"robe": "sheer, parted"}) \
+        == {"notes": {"robe": "sheer, parted"}}
+
+
+def test_a_garment_keyed_state_dict_is_conditions_spelled_differently():
+    out = attire.coerce_diff_shape({"state": {"robe": "parted more open"}})
+    assert out["conditions"] == {"robe": "parted more open"}
+    assert "state" not in out
+
+
+def test_a_bare_string_state_becomes_the_list_it_meant():
+    assert attire.coerce_diff_shape({"state": "dishevelled"})["state"] \
+        == ["dishevelled"]
+
+
+def test_coercion_is_idempotent():
+    once = attire.coerce_diff_shape({"shift": "linen shift, hem rucked up"})
+    assert attire.coerce_diff_shape(once) == once
+
+
+def test_authored_regions_pass_through_coercion_untouched():
+    regions = {"torso": {"garments": [{"name": "robe"}], "beneath": "skin"}}
+    assert attire.coerce_diff_shape({"regions": regions})["regions"] == regions
+
+
+def test_clothing_undisturbed_says_nothing_happened():
+    assert attire.is_no_change_note("undisturbed")
+    assert attire.is_no_change_note("Unchanged.")
+    assert not attire.is_no_change_note("hem rucked up")
