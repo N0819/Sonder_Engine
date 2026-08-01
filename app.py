@@ -5,6 +5,7 @@ from fastapi import FastAPI, Body, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
+import attire
 import guest_access as guest
 
 import db
@@ -71,6 +72,7 @@ from memory import (
     relationships_for_payload,
     dramatic_irony_feed, promise_ledger,
     dump_character_memories, import_character_memories,
+    embedding_bank_status, rebuild_progress, start_rebuild_if_needed,
 )
 from scene import (
     persona_of, get_scene, chat_character_sheet, seed_initial_attire,
@@ -918,8 +920,53 @@ def bootstrap():
 
 @app.put("/api/agent_models")
 def put_agent_models(body: dict = Body(...)):
+    # Only the EMBEDDINGS role bears on stored vectors. Changing the narrator
+    # or director model has nothing to do with them, so comparing before and
+    # after keeps this from becoming a nag on every settings write.
+    _before = (json.loads(get_setting("agent_models") or "{}") or {}).get("embeddings") or {}
     set_setting("agent_models", json.dumps(body))
-    return {"ok": True}
+    _after = (body or {}).get("embeddings") or {}
+    changed = ((_before.get("provider"), _before.get("model"))
+               != (_after.get("provider"), _after.get("model")))
+    out = {"ok": True, "embeddings_role_changed": changed}
+    if changed:
+        # Not started here -- the host is told, and decides. A rebuild talks
+        # to a paid provider and can run for a while on a large bank; doing
+        # that silently because someone opened a settings panel is the wrong
+        # default. `embeddings_role_changed` is what the UI prompts on.
+        try:
+            out["bank"] = embedding_bank_status()
+        except Exception as exc:
+            out["bank"] = {"error": str(exc)}
+    return out
+
+
+@app.get("/api/memory/embeddings")
+def memory_embeddings_status():
+    """What the embedding bank looks like, and whether a rebuild is running.
+
+    Polled by the corner progress card; cheap enough to poll (two COUNTs plus
+    an in-memory snapshot) and safe to call at any time.
+    """
+    out = {"progress": rebuild_progress()}
+    try:
+        out.update(embedding_bank_status())
+    except Exception as exc:
+        out["error"] = str(exc)
+    return out
+
+
+@app.post("/api/memory/embeddings/rebuild")
+def memory_embeddings_rebuild(body: dict = Body(default={})):
+    """Start the reconciler by hand.
+
+    `force` rebuilds even when the live model is the crc32 fallback, which is
+    a DOWNGRADE of any real vectors already stored -- so it is never the
+    automatic behaviour and has to be asked for.
+    """
+    body = body or {}
+    return start_rebuild_if_needed(
+        chat_id=body.get("chat_id"), force=bool(body.get("force")))
 
 @app.put("/api/image_model")
 def put_image_model(body: dict = Body(...)):
@@ -2128,6 +2175,21 @@ def chat_get(cid: int):
         )
         lbc = dict(r) if r else None
 
+    # Whether THIS chat's memories were embedded by the model in use now.
+    # Checked when a chat is opened rather than at boot, because that is the
+    # moment the answer is about something the host recognises -- a named
+    # story with a countable number of memories -- and because a bank only
+    # matters when it is about to be read. Two COUNTs; the answer is `None` if
+    # anything about it fails, and a failed maintenance check must never stop
+    # a chat from opening.
+    try:
+        bank = embedding_bank_status(chat_id=cid)
+        stranded = (bank["memories"]["stranded"]
+                    + bank["memory_summaries"]["stranded"])
+        bank = {**bank, "stranded": stranded} if stranded else None
+    except Exception:
+        bank = None
+
     return {
         "chat": dict(chat),
         "participants": parts,
@@ -2135,6 +2197,7 @@ def chat_get(cid: int):
         "lorebook": lbc,
         "lorebooks": books,
         "frames": list_frames(cid),
+        "embedding_bank": bank,
     }
 
 @app.post("/api/chats/{cid}/characters")
@@ -2829,7 +2892,16 @@ def attire_put(cid: int, body: dict = Body(...)):
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
     if not chat: raise HTTPException(404, "Chat not found")
     scene = get_scene(cid, chat)
-    scene["attire"] = body
+    # Re-derived, not stored verbatim. `wearing`, `state` and `regions` are one
+    # wardrobe said three ways, and only the commit path was keeping them in
+    # step -- so renaming a garment in the region editor left `wearing` still
+    # naming the old spelling, and the next beat's reconciliation read the two
+    # spellings as two garments and began putting one on while taking the other
+    # off. That is where the measured fork actually started.
+    scene["attire"] = {
+        name: (attire.rederive_entry(entry) if isinstance(entry, dict) else entry)
+        for name, entry in (body or {}).items()
+    }
     wset(cid, "scene", scene)
     return {"ok": True}
 

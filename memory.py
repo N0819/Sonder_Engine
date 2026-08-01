@@ -1,7 +1,7 @@
 """Memory system with hierarchical lorebook support and expanded categories."""
 
 import base64
-import json, re, time, math
+import json, re, threading, time, math
 import numpy as np
 from collections import defaultdict
 from db import q, qi, wget, wset, transaction
@@ -10,6 +10,7 @@ from prompts import get_prompt
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 import frames as _frames
+from logging_utils import logger
 from theory_of_mind import belief_credence
 from db import active_frame_id as _active_frame_id
 
@@ -101,12 +102,6 @@ _SUMMARY_SCOPES = (
 def summary_scope_for(provenance):
     return _PROVENANCE_SCOPE.get(
         str(provenance or "").strip().casefold(), SUMMARY_SCOPE_FIRSTHAND)
-
-try:
-    import sqlite_vec
-    _HAS_VEC = True
-except ImportError:
-    _HAS_VEC = False
 
 def _blob(v): return np.asarray(v, dtype=np.float32).tobytes()
 def _vec(b):  return np.frombuffer(b, dtype=np.float32) if b else None
@@ -1127,9 +1122,70 @@ def _rrf_add(scores, reasons, ranking, weight, reason):
         if rank <= 12 and reason not in reasons[mid]:
             reasons[mid].append(reason)
 
+# (chat_id, char_id, model_key) already reported. Retrieval runs for every
+# character on every beat, so the warning has to be once per situation rather
+# than once per call, or it becomes the noise it exists to cut through.
+_STRANDED_REPORTED = set()
+
+
+def _warn_stranded_embeddings(chat_id, char_id, stranded, total, model_key):
+    """Say so when stored vectors no longer match the live embedding model.
+
+    A row whose `embedding_model`/`embedding_dim` differ from the current
+    provider's scores 0.0 on BOTH vector rankings -- forever, because nothing
+    re-embeds. That is correct behaviour (a vector from another model is not
+    comparable) and it is silent, which is the problem: configure an
+    `embeddings` provider on a story with history and every memory written
+    before that moment quietly drops to keyword-and-exact-match only, while
+    new ones get the full four signals. The bank splits into two eras and
+    nothing says a word.
+
+    Retrieval still WORKS -- BM25 and exact-match are unaffected, so this
+    degrades rather than breaks, which is exactly why it needs announcing.
+    The fix when it fires is a re-embed pass; see docs/UNBUILT.md §1.15.
+    """
+    if not stranded or not total:
+        return
+    key = (chat_id, char_id, model_key)
+    if key in _STRANDED_REPORTED:
+        return
+    _STRANDED_REPORTED.add(key)
+    logger.warning(
+        "memory: %d of %d stored memories for chat %s char %s were embedded by "
+        "a different model than the live one (%s); their semantic and "
+        "cue-vector rankings score 0 and only keyword/exact matching reaches "
+        "them. Re-embed to restore semantic recall (docs/UNBUILT.md 1.15).",
+        stranded, total, chat_id, char_id, model_key,
+    )
+
+
+# How hard an aspect ranking pulls, against 1.0/1.15 for the main query's own
+# semantic and cue rankings. Deliberately below both: an aspect is a nudge
+# from what the character wants or feels, and it must be able to break a tie
+# between two comparably relevant memories without outranking what the beat is
+# actually about.
+_ASPECT_WEIGHT = 0.55
+
+
 def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
                     current_turn_idx=None, chronological=True, viewer_frame_id=_UNSET,
-                    here=None, in_sight=None):
+                    here=None, in_sight=None, aspects=None):
+    """Retrieve, fusing the main query with any `aspects` given alongside it.
+
+    `aspects` is [(label, text), ...] -- short, separate facets of what the
+    character is bringing to the beat (their mood, their goal, the threads
+    they have not resolved). Each gets its OWN ranking fused into the same
+    RRF, rather than being concatenated onto the query string.
+
+    That distinction is the whole point, and it is measured. The caller used
+    to join everything into one string, where the character's current view
+    ran a median 1,015 characters against a mood fragment of 10-60 -- so
+    `cosine(query_with_mood, view_alone)` came out at 0.994. The mood moved
+    the query vector by essentially nothing and reached recall only as
+    whichever stray n-grams the word happened to share. A short facet cannot
+    compete for influence inside a long string; given its own rank list it
+    does not have to.
+    """
     rows = q("SELECT * FROM memories WHERE chat_id=? AND char_id=? AND (?=1 OR archived=0)",
              (chat_id, char_id, 1 if include_archived else 0))
     if current_turn_idx is not None:
@@ -1159,20 +1215,35 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
     if not rows:
         return []
     query_text = str(query or "").strip()
-    embedded = embed_texts_meta([query_text or "memory"])
+    # One embedding call for the query AND every aspect: the aspects are short
+    # and the round trip is what costs, so separating the rankings is free.
+    _aspects = [(str(lbl), str(txt).strip()) for lbl, txt in (aspects or [])
+                if str(txt or "").strip()]
+    embedded = embed_texts_meta([query_text or "memory"]
+                                + [txt for _lbl, txt in _aspects])
     qv = embedded.vectors[0]
+    aspect_vectors = list(zip((lbl for lbl, _t in _aspects),
+                              embedded.vectors[1:]))
     memories = {}
     sem_scores, cue_scores = [], []
+    stranded = 0
+    comparable = {}
     for row in rows:
         mem = _row_memory(row)
         fv, cv = _vec(row["embedding"]), _vec(row["cue_embedding"])
         compatible = row["embedding_model"] == embedded.model_key and row["embedding_dim"] == embedded.dimensions
+        if not compatible:
+            stranded += 1
         sem = _cos(qv, fv) if compatible and fv is not None else 0.0
         cue = _cos(qv, cv) if compatible and cv is not None else 0.0
         mem["_vector"] = fv if compatible else None
         memories[mem["id"]] = mem
         sem_scores.append((sem, mem["id"]))
         cue_scores.append((cue, mem["id"]))
+        if compatible and aspect_vectors:
+            # Kept only while the aspect rankings are built, a few lines down.
+            comparable[mem["id"]] = (fv, cv)
+    _warn_stranded_embeddings(chat_id, char_id, stranded, len(rows), embedded.model_key)
     sem_rank = [mid for s, mid in sorted(sem_scores, reverse=True) if s > 0][:60]
     cue_rank = [mid for s, mid in sorted(cue_scores, reverse=True) if s > 0][:60]
     lex_rank = _lexical_memory_ranking(chat_id, char_id, query_text)
@@ -1184,6 +1255,18 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
     _rrf_add(fused, reasons, cue_rank, 1.15, "cue-vector match")
     _rrf_add(fused, reasons, lex_rank, 1.1, "keyword match")
     _rrf_add(fused, reasons, exact_rank, 1.25, "exact phrase or entity match")
+    # One ranking per aspect, at a weight that can break a tie but not win an
+    # argument with what the beat is about.
+    for label, av in aspect_vectors:
+        scored = []
+        for mid, (fv, cv) in comparable.items():
+            best = max(_cos(av, fv) if fv is not None else 0.0,
+                       _cos(av, cv) if cv is not None else 0.0)
+            if best > 0:
+                scored.append((best, mid))
+        if scored:
+            ranked = [mid for _s, mid in sorted(scored, reverse=True)][:60]
+            _rrf_add(fused, reasons, ranked, _ASPECT_WEIGHT, label)
     tmode = _temporal_mode(query_text)
     known_turns = [m["turn_idx"] for m in memories.values() if m["turn_idx"] is not None]
     max_turn = current_turn_idx if current_turn_idx is not None else max(known_turns, default=0)
@@ -1492,16 +1575,30 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         text = str(get_memory_summary(chat_id, char_id, scope).get("summary") or "").strip()
         if text:
             provenance_summaries[label] = text
-    query_parts = [current_view or "", str(active_state.get("goal") or ""), str(active_state.get("mood") or ""),
-                   " ".join(summary.get("unresolved_threads") or [])]
-    query_text = " ".join(p for p in query_parts if p)
+    # The beat is the query; what the character BRINGS to it travels beside it
+    # as aspects, each with its own ranking. Concatenated, they did nothing:
+    # the view runs a median ~1,015 characters and a mood fragment 10-60, so
+    # the combined vector sat at cosine 0.994 to the view alone and the mood
+    # reached recall only through stray shared n-grams. See search_memories.
+    query_text = str(current_view or "").strip()
+    aspects = [
+        ("what you are trying to do", str(active_state.get("goal") or "")),
+        ("how you are feeling", str(active_state.get("mood") or "")),
+        ("what is still unsettled",
+         " ".join(summary.get("unresolved_threads") or [])),
+    ]
+    if not query_text:
+        # No perception this beat (a character gated out of the scene): fall
+        # back to the aspects as the query rather than retrieving on "".
+        query_text = " ".join(t for _l, t in aspects if t)
     # current_turn_idx is required here (recent_memory_buffer arithmetic above
     # would already fail on None), so search_memories' F1 turn cutoff always
     # fires on this path -- the character context can never see turn N's own
     # committed memories while deciding turn N, reroll or not.
     recalled = search_memories(chat_id, char_id, query_text, k=recall_limit,
                                include_archived=True, current_turn_idx=current_turn_idx,
-                               chronological=True, here=here, in_sight=in_sight)
+                               chronological=True, here=here, in_sight=in_sight,
+                               aspects=aspects)
     recalled = [m for m in recalled if m["id"] not in recent_ids]
     return {
         "working_memory": {
@@ -2330,31 +2427,292 @@ def relationships_for_payload(chat_id: int, char_id: int) -> dict:
     graph = get_relationships(chat_id, char_id)
     return graph.to_dict()
 
-# ---- Vector Index ----
+# ---- Rebuilding vectors after the embedding model changes ----
 
-def init_vec_index():
-    if not _HAS_VEC:
-        return
-    from db import conn
-    c = conn()
+# Rows per embedding call. Each memory costs TWO documents (its full document
+# and its cue text), so a batch of 32 is 64 texts -- comfortably inside every
+# provider's per-request limit while still amortising the round trip.
+_REBUILD_BATCH = 32
+
+
+def embedding_bank_status(chat_id=None, char_id=None):
+    """How many stored rows were embedded by a model other than the live one.
+
+    Read-only, and cheap: it is the question `_warn_stranded_embeddings`
+    answers per retrieval, asked deliberately and for the whole bank so a host
+    can see the split before deciding to spend on rebuilding it.
+    """
+    live = embed_texts_meta(["status"])
+    where, args = ["1=1"], []
+    if chat_id is not None:
+        where.append("chat_id=?"); args.append(chat_id)
+    if char_id is not None:
+        where.append("char_id=?"); args.append(char_id)
+    clause = " AND ".join(where)
+    stale = ("(embedding_model IS NULL OR embedding_model!=? "
+             "OR embedding_dim IS NULL OR embedding_dim!=?)")
+    counts = {}
+    for table in ("memories", "memory_summaries"):
+        total = q(f"SELECT COUNT(*) AS n FROM {table} WHERE {clause}",
+                  tuple(args), one=True)["n"]
+        stranded = q(
+            f"SELECT COUNT(*) AS n FROM {table} WHERE {clause} AND {stale}",
+            tuple(args) + (live.model_key, live.dimensions), one=True)["n"]
+        counts[table] = {"total": total, "stranded": stranded}
+    return {
+        "model": live.model_key,
+        "dimensions": live.dimensions,
+        # True when no embeddings provider is configured, so the live "model"
+        # is the crc32 fallback. Rebuilding TO that is legal but is a
+        # downgrade, and a caller deserves to be told which way it is going.
+        "is_fallback": bool(live.fallback),
+        # WHY it fell back, verbatim from the provider. Without this the
+        # panel can only say "no embeddings provider", which is wrong and
+        # unhelpful when one IS configured and is simply not an embeddings
+        # model: `embed_texts_meta` catches every failure and degrades to the
+        # hash, so choosing a chat model for this role looks like success and
+        # silently changes nothing. Measured live -- `inception/mercury-2`
+        # selected here returned "Model inception/mercury-2 does not exist",
+        # which is exactly the sentence a host needs to see.
+        "fallback_reason": str(live.error or "") if live.fallback else "",
+        **counts,
+    }
+
+
+def rebuild_embeddings(chat_id=None, char_id=None, *, batch=_REBUILD_BATCH,
+                       limit=None, progress=None):
+    """Re-embed every row whose vectors were made by a different model.
+
+    Configuring an `embeddings` provider on a story with history does not
+    re-embed anything, and `search_memories` scores a row 0.0 on BOTH vector
+    rankings when its `embedding_model`/`embedding_dim` do not match the live
+    ones. Without this pass, the upgrade silently splits a memory bank into
+    two eras -- everything written before it reachable only by keyword and
+    exact match, forever. See docs/UNBUILT.md §1.15.
+
+    Rebuilt with the SAME document construction `_embed_memory` uses, because
+    a vector built from different text is not comparable with one built from
+    the same text, and a rebuild that quietly changed the recipe would be a
+    subtler version of the bug it fixes.
+
+    **Resumable by construction**: the selection is "rows that do not match
+    the live model", so a run that dies halfway simply has less to do next
+    time. Each batch commits on its own for that reason.
+
+    **Refuses to write a fallback over a real vector.** `embed_texts_meta`
+    degrades to the crc32 hash on any provider error, and stamps the batch as
+    `cheap:crc32:256`. Writing that would mark the rows migrated while
+    downgrading them -- the one outcome worse than not running. A batch that
+    comes back `fallback` when the caller is not deliberately rebuilding TO
+    the fallback aborts the run and reports what it managed.
+
+    Never call this on the turn path: it is O(bank) and it talks to a provider.
+    """
+    live = embed_texts_meta(["status"])
+    target_key, target_dim = live.model_key, live.dimensions
+    want_fallback = bool(live.fallback)
+    report = {"model": target_key, "dimensions": target_dim,
+              "memories": 0, "summaries": 0, "batches": 0,
+              "stopped_early": False, "error": ""}
+
+    where, args = ["1=1"], []
+    if chat_id is not None:
+        where.append("chat_id=?"); args.append(chat_id)
+    if char_id is not None:
+        where.append("char_id=?"); args.append(char_id)
+    clause = " AND ".join(where)
+    stale = ("(embedding_model IS NULL OR embedding_model!=? "
+             "OR embedding_dim IS NULL OR embedding_dim!=?)")
+    stale_args = tuple(args) + (target_key, target_dim)
+
+    def _embed(texts):
+        """Embed, or raise so the run stops with the bank still coherent."""
+        got = embed_texts_meta(texts)
+        if got.fallback and not want_fallback:
+            raise RuntimeError(
+                "embedding provider unavailable (%s); refusing to write "
+                "fallback vectors over real ones" % (got.error or "unknown"))
+        return got
+
+    done = 0
     try:
-        c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS memory_vec USING vec0(embedding float[256])")
-        c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS lore_vec USING vec0(embedding float[256])")
-        c.commit()
-    except Exception:
-        pass
+        while limit is None or done < limit:
+            take = batch if limit is None else min(batch, limit - done)
+            rows = q(f"SELECT * FROM memories WHERE {clause} AND {stale} "
+                     "ORDER BY id LIMIT ?", stale_args + (take,))
+            if not rows:
+                break
+            mems = [_row_memory(r) for r in rows]
+            docs = []
+            for mem in mems:
+                docs.append(_memory_document(mem))
+                docs.append(_memory_cues(mem) or _memory_document(mem))
+            got = _embed(docs)
+            with transaction():
+                for index, mem in enumerate(mems):
+                    qi("UPDATE memories SET embedding=?,cue_embedding=?,"
+                       "embedding_model=?,embedding_dim=? WHERE id=?",
+                       (_blob(got.vectors[index * 2]),
+                        _blob(got.vectors[index * 2 + 1]),
+                        got.model_key, got.dimensions, mem["id"]))
+            done += len(rows)
+            report["memories"] += len(rows)
+            report["batches"] += 1
+            if progress:
+                progress(report["memories"], "memories")
 
-def search_memories_vec(chat_id, char_id, query_vec, k=8):
-    if not _HAS_VEC:
-        return None
-    rows = q(
-        "SELECT m.id, m.kind, m.provenance, m.turn_id, m.salience, m.content, v.distance "
-        "FROM memories m JOIN memory_vec v ON v.rowid = m.id "
-        "WHERE m.chat_id=? AND m.char_id=? ORDER BY v.distance LIMIT ?",
-        (chat_id, char_id, k),
-    )
-    return [{"kind": r["kind"], "provenance": r["provenance"], "turn": r["turn_id"],
-             "salience": r["salience"], "content": r["content"], "distance": r["distance"]} for r in rows]
+        while True:
+            rows = q(f"SELECT * FROM memory_summaries WHERE {clause} AND {stale} "
+                     "ORDER BY id LIMIT ?", stale_args + (batch,))
+            if not rows:
+                break
+            texts = [_summary_retrieval_text(
+                r["summary"], _json_list(r["key_phrases"]),
+                _json_list(r["unresolved_threads"])) for r in rows]
+            got = _embed(texts)
+            with transaction():
+                for index, row in enumerate(rows):
+                    qi("UPDATE memory_summaries SET embedding=?,"
+                       "embedding_model=?,embedding_dim=? WHERE id=?",
+                       (_blob(got.vectors[index]), got.model_key,
+                        got.dimensions, row["id"]))
+            report["summaries"] += len(rows)
+            report["batches"] += 1
+            if progress:
+                progress(report["summaries"], "summaries")
+    except Exception as exc:
+        # Everything committed so far stands, and re-running resumes.
+        report["stopped_early"] = True
+        report["error"] = str(exc)
+        logger.warning("memory: embedding rebuild stopped early after "
+                       "%d memories and %d summaries: %s",
+                       report["memories"], report["summaries"], exc)
+        return report
+
+    # A rebuilt row is no longer stranded, so let the per-retrieval warning
+    # speak again if it ever becomes true a second time.
+    _STRANDED_REPORTED.clear()
+    logger.info("memory: rebuilt %d memories and %d summaries onto %s",
+                report["memories"], report["summaries"], target_key)
+    return report
+
+
+# ---- The rebuild, run for the host instead of by the host ----------------
+#
+# Nobody should have to know that changing an embeddings provider silently
+# halves their retrieval, notice that it happened, find a maintenance command
+# and run it. The engine knows the model it is embedding with and the model
+# every stored row was embedded with; where those disagree it can simply fix
+# it. This is the standing reconciler that does.
+#
+# NOT a one-time upgrade migration, and that distinction is the whole design:
+# a mismatch appears whenever the embedding model changes -- configuring a
+# provider, switching providers, a provider changing its default model or its
+# dimensions, or falling back to the crc32 hash because a key expired. So this
+# is a condition to be reconciled whenever it holds, checked at startup and
+# again whenever provider settings are written, rather than a migration that
+# runs once and is never thought about again.
+
+_REBUILD_LOCK = threading.Lock()
+_REBUILD_STATE = {
+    "running": False, "done": 0, "total": 0, "model": "",
+    "finished_at": 0.0, "error": "", "stopped_early": False,
+}
+
+
+def rebuild_progress():
+    """A snapshot of the reconciler, for the status endpoint."""
+    with _REBUILD_LOCK:
+        return dict(_REBUILD_STATE)
+
+
+def _run_rebuild(chat_id=None, char_id=None):
+    status = embedding_bank_status(chat_id, char_id)
+    total = (status["memories"]["stranded"]
+             + status["memory_summaries"]["stranded"])
+    with _REBUILD_LOCK:
+        _REBUILD_STATE.update(running=True, done=0, total=total,
+                              model=status["model"], error="",
+                              stopped_early=False, finished_at=0.0)
+    try:
+        def _tick(count, _kind):
+            with _REBUILD_LOCK:
+                # Memories are rebuilt before summaries, so the summary pass
+                # continues the same count rather than restarting it.
+                _REBUILD_STATE["done"] = max(_REBUILD_STATE["done"], count)
+        report = rebuild_embeddings(chat_id, char_id, progress=_tick)
+        with _REBUILD_LOCK:
+            _REBUILD_STATE.update(
+                done=report["memories"] + report["summaries"],
+                error=report["error"], stopped_early=report["stopped_early"])
+    except Exception as exc:           # never take the server down for this
+        logger.warning("memory: embedding rebuild failed: %s", exc)
+        with _REBUILD_LOCK:
+            _REBUILD_STATE.update(error=str(exc), stopped_early=True)
+    finally:
+        with _REBUILD_LOCK:
+            _REBUILD_STATE.update(running=False, finished_at=time.time())
+
+
+def start_rebuild_if_needed(chat_id=None, char_id=None, *, force=False):
+    """Reconcile stored vectors with the live embedding model, in the
+    background. Returns what it decided, having already started if it started.
+
+    Safe to call on every startup and every settings write: it costs one
+    COUNT per table when there is nothing to do, and it will not start a
+    second run while one is going.
+    """
+    with _REBUILD_LOCK:
+        if _REBUILD_STATE["running"]:
+            return {"started": False, "reason": "already running"}
+    try:
+        status = embedding_bank_status(chat_id, char_id)
+    except Exception as exc:
+        logger.warning("memory: could not check embedding bank: %s", exc)
+        return {"started": False, "reason": "status check failed: %s" % exc}
+    stranded = (status["memories"]["stranded"]
+                + status["memory_summaries"]["stranded"])
+    if not stranded:
+        return {"started": False, "reason": "nothing to rebuild", **status}
+    if status["is_fallback"] and not force:
+        # The live "model" is the crc32 hash, which means no embeddings
+        # provider is configured. Rebuilding onto it would overwrite real
+        # vectors with the fallback -- a downgrade, and one the host never
+        # asked for. Wait for a provider, or for an explicit force.
+        logger.info("memory: %d rows do not match the live embedding model, "
+                    "but no embeddings provider is configured -- not "
+                    "rebuilding onto the fallback.", stranded)
+        return {"started": False, "reason": "no embeddings provider", **status}
+    logger.info("memory: rebuilding %d rows onto %s in the background",
+                stranded, status["model"])
+    thread = threading.Thread(target=_run_rebuild, args=(chat_id, char_id),
+                              name="embedding-rebuild", daemon=True)
+    thread.start()
+    return {"started": True, "stranded": stranded, **status}
+
+
+# ---- Why there is no vector index ----
+#
+# There was a `sqlite-vec` ANN index here (`init_vec_index`,
+# `search_memories_vec`). It never ran -- no caller, and the extension was
+# never loaded -- and it was deleted rather than wired, because wiring it
+# would have been a REGRESSION.
+#
+# `search_memories` filters its rows before ranking: the F1 turn cutoff (a
+# mind deciding turn N must never retrieve how turn N turned out, live on
+# every reroll) and frame visibility. The ANN query filtered on chat_id and
+# char_id only, and those predicates are exactly the kind an ANN index cannot
+# carry cheaply -- so a vec-first branch would have handed a character the
+# committed outcome of its own undecided beat.
+#
+# And the scan it would have optimised does not need optimising. Memories
+# accrue at ~3.5 rows per turn per character; measured with `_cos` verbatim,
+# the full scan costs 16ms at a real story's worst case (442 rows), 126ms at
+# ~1,000 turns, 709ms at ~10,000 -- beside an LLM call measured in seconds.
+# Two cheap optimisations sit in front of an index anyway if it ever mattered:
+# `_cos` recomputes both norms although every stored vector is already
+# normalised (~4x), and the loop could be one matmul (~20x). See
+# docs/UNBUILT.md §1.4.
 
 
 # How far an inference the character no longer holds is pushed down, and the

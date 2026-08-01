@@ -442,7 +442,7 @@ class TestLiftingContactOutOfEntityState:
         assert len(scene["contacts"]) == 1
         assert scene["contacts"][0] == {
             "actor": "Hinami", "actor_part": "", "target": "Tamamo",
-            "target_part": "", "manner": "lean", "unasserted": 0}
+            "target_part": "", "manner": "lean", "detail": "", "unasserted": 0}
 
     def test_the_key_name_yields_the_body_part(self):
         scene = self._lift({"hinami": {
@@ -804,3 +804,230 @@ class TestStandingContactIsWrittenForItsReader:
         assert contact_phrase(_hold(), you="Somebody Else") == plain
         assert contact_phrase(_hold(), you="") == plain
         assert contact_phrase(_hold(), you=None) == plain
+
+
+class TestARenamedPartDoesNotDoubleItself:
+    """The Director re-describes a standing hold rather than repeating it, and
+    the ledger used to read every re-description as a second limb.
+
+    Measured over seventeen live beats: `thumb -> ear` became `thumb ->
+    ear_base`, `hand -> waist` became `hand -> side`, `tail_spade -> calf`
+    became `tail -> ankle`. Nothing renamed anything back, so the character was
+    told, as standing truth, that one woman had two hands and two tails on her.
+    """
+
+    def _apply(self, *beats, scene=None):
+        scene = scene or _scene()
+        for ops in beats:
+            scene = apply_contact_ops(scene, ops)
+        return scene
+
+    def test_the_same_hand_reasserted_on_a_new_spot_moves_rather_than_doubles(self):
+        scene = self._apply(
+            [{"op": "add", **_hold(target_part="waist", manner="rest")}],
+            [{"op": "add", **_hold(target_part="side", manner="touch")}])
+
+        assert len(scene["contacts"]) == 1
+        assert scene["contacts"][0]["target_part"] == "side"
+
+    def test_the_thumb_at_the_ear_then_the_ear_base_is_one_thumb(self):
+        scene = self._apply(
+            [{"op": "add", **_hold(actor_part="thumb", target_part="ear",
+                                   manner="touch")}],
+            [{"op": "add", **_hold(actor_part="thumb", target_part="ear_base",
+                                   manner="touch")}])
+
+        assert [c["target_part"] for c in scene["contacts"]] == ["ear_base"]
+
+    def test_the_tail_and_its_spade_are_one_tail(self):
+        """A refinement repeats the limb's own word, so the engine can see it
+        is the same appendage without a vocabulary of body parts."""
+        scene = self._apply(
+            [{"op": "add", **_hold(actor_part="tail_spade", target_part="calf",
+                                   manner="touch")}],
+            [{"op": "add", **_hold(actor_part="tail", target_part="ankle",
+                                   manner="wrap")}])
+
+        assert len(scene["contacts"]) == 1
+        assert scene["contacts"][0]["target_part"] == "ankle"
+
+    def test_a_thumb_is_not_a_hand_and_both_may_stand(self):
+        scene = self._apply(
+            [{"op": "add", **_hold(actor_part="hand", target_part="waist")}],
+            [{"op": "add", **_hold(actor_part="thumb", target_part="ear")}])
+
+        assert len(scene["contacts"]) == 2
+
+    def test_two_spots_asserted_in_the_same_beat_both_stand(self):
+        """She has two hands, and saying so in one breath is how you say so."""
+        scene = self._apply([
+            {"op": "add", **_hold(actor_part="hand", target_part="cheek")},
+            {"op": "add", **_hold(actor_part="hand", target_part="shoulder")}])
+
+        assert len(scene["contacts"]) == 2
+
+    def test_a_lateral_qualifier_names_a_limb_of_its_own(self):
+        scene = self._apply(
+            [{"op": "add", **_hold(actor_part="left hand", target_part="cheek")}],
+            [{"op": "add", **_hold(actor_part="right hand", target_part="hip")}])
+
+        assert len(scene["contacts"]) == 2
+
+    def test_a_bare_noun_never_displaces_a_qualified_limb(self):
+        """Once the fiction has distinguished her hands, keep the distinction:
+        losing it is worse than carrying a hold the ageing clock will retire."""
+        scene = self._apply(
+            [{"op": "add", **_hold(actor_part="left hand", target_part="cheek")}],
+            [{"op": "add", **_hold(actor_part="hand", target_part="hip")}])
+
+        assert len(scene["contacts"]) == 2
+
+    def test_the_same_qualified_limb_still_moves(self):
+        scene = self._apply(
+            [{"op": "add", **_hold(actor_part="left hand", target_part="cheek")}],
+            [{"op": "add", **_hold(actor_part="left hand", target_part="hip")}])
+
+        assert len(scene["contacts"]) == 1
+
+    def test_both_hands_supersede_the_one(self):
+        scene = self._apply(
+            [{"op": "add", **_hold(actor_part="hand", target_part="waist")}],
+            [{"op": "add", **_hold(actor_part="hands", target_part="hips")}])
+
+        assert len(scene["contacts"]) == 1
+
+    def test_a_hand_on_a_second_person_is_not_a_move(self):
+        scene = _scene(positions={"Bramwell": "bedroom", "Hinami": "bedroom",
+                                  "Tamamo": "bedroom"})
+        scene = self._apply(
+            [{"op": "add", **_hold(target="Hinami", target_part="cheek")}],
+            [{"op": "add", **_hold(target="Tamamo", target_part="arm")}],
+            scene=scene)
+
+        assert len(scene["contacts"]) == 2
+
+    def test_displacement_reads_a_hold_stated_from_the_other_side(self):
+        scene = self._apply(
+            [{"op": "add", "actor": "Hinami", "actor_part": "waist",
+              "target": "Bramwell", "target_part": "hand", "manner": "grip"}],
+            [{"op": "add", **_hold(actor_part="hand", target_part="hip")}])
+
+        assert len(scene["contacts"]) == 1
+
+
+class TestAContactCanCarryDetail:
+    """The qualifiers the parts alone cannot say. Their absence was CAUSING
+    the second defect: with nowhere structured for "beneath her shift" or
+    "feather-light", the Director wrote them into the entity's own state,
+    where nothing ages them.
+    """
+
+    def test_detail_is_recorded_and_read_back(self):
+        scene = merge_scene_with_diff(_scene(), {"contact_ops": [
+            {"op": "add", **_hold(manner="touch"),
+             "detail": "beneath her shift"}]})
+
+        assert "beneath her shift" in contact_phrase(scene["contacts"][0])
+
+    def test_detail_is_not_part_of_a_contacts_identity(self):
+        """A grip that becomes feather-light is the same contact changing."""
+        scene = apply_contact_ops(_scene(), [
+            {"op": "add", **_hold(), "detail": "firm"}])
+        scene = apply_contact_ops(scene, [
+            {"op": "add", **_hold(), "detail": "feather light"}])
+
+        assert len(scene["contacts"]) == 1
+        assert scene["contacts"][0]["detail"] == "feather light"
+
+    def test_detail_is_bounded_so_prose_cannot_be_narrated_into_the_ledger(self):
+        scene = apply_contact_ops(_scene(), [
+            {"op": "add", **_hold(), "detail": "x" * 400}])
+
+        assert len(scene["contacts"][0]["detail"]) <= 80
+
+    def test_a_scene_saved_before_detail_existed_reads_as_none(self):
+        scene = _scene(contacts=[_hold()])
+        scene = merge_scene_with_diff(scene, {})
+
+        assert scene["contacts"][0]["detail"] == ""
+
+
+class TestLiftingContactWrittenAsThePartsOwnDoing:
+    """Pattern B: the contact verb is in the VALUE and the key names the part.
+
+    Every contact assertion in the measured story took this shape and evaded
+    the original lifter, which required the verb in the key NAME and the value
+    to slugify to a bare person. So all of them stood unaged for the rest of
+    the scene, contradicting the real ledger.
+    """
+
+    def _lift(self, state, positions=None):
+        scene = _scene(
+            positions=positions or {"Hinami": "bedroom", "Tamamo": "bedroom"},
+            entities={"hinami": {"name": "Hinami", "state": dict(state)}})
+        return merge_scene_with_diff(scene, {})
+
+    def test_a_part_named_key_whose_value_carries_the_hold_lifts(self):
+        scene = self._lift({"tail_spade": "curled_around_Tamamo's_ankle"})
+
+        assert len(scene["contacts"]) == 1
+        assert scene["contacts"][0]["target"] == "Tamamo"
+        assert scene["contacts"][0]["target_part"] == "ankle"
+        assert "tail_spade" not in scene["entities"]["hinami"]["state"]
+
+    def test_the_leftover_words_survive_as_detail(self):
+        scene = self._lift(
+            {"hand_position": "beneath_Tamamo's_shift_caressing_bare_side"})
+
+        assert scene["contacts"][0]["actor_part"] == "hand"
+        assert scene["contacts"][0]["target_part"] == "side"
+        assert "beneath" in scene["contacts"][0]["detail"]
+
+    def test_leaning_over_someone_is_where_you_are_not_what_you_touch(self):
+        scene = self._lift({"position": "leaning_over_Tamamo_on_bed"})
+
+        assert scene["contacts"] == []
+        assert scene["entities"]["hinami"]["state"]["position"]
+
+    def test_looking_at_someone_is_never_lifted(self):
+        scene = self._lift({"gaze": "half_lidded_looking_down_at_Tamamo"})
+
+        assert scene["contacts"] == []
+        assert scene["entities"]["hinami"]["state"]["gaze"]
+
+    def test_a_lifted_hold_obeys_the_displacement_rule_too(self):
+        """Otherwise lifting a hold the ledger already records under a
+        different part noun would ADD the duplicate this all exists to stop."""
+        scene = _scene(
+            positions={"Hinami": "bedroom", "Tamamo": "bedroom"},
+            contacts=[{"actor": "Hinami", "actor_part": "tail",
+                       "target": "Tamamo", "target_part": "calf",
+                       "manner": "touch"}],
+            entities={"hinami": {"name": "Hinami", "state": {
+                "tail_spade": "curled_around_Tamamo's_ankle"}}})
+        scene = merge_scene_with_diff(scene, {})
+
+        assert len(scene["contacts"]) == 1
+        assert scene["contacts"][0]["target_part"] == "ankle"
+
+    def test_a_distance_the_ledger_contradicts_is_dropped(self):
+        """"lips_distance: two_inches_of_visible_space" sat asserting a gap for
+        four beats while contacts said the mouths were touching. The ledger
+        ages and prunes; entity state does neither, so the ledger is the record.
+        """
+        scene = _scene(
+            positions={"Hinami": "bedroom", "Tamamo": "bedroom"},
+            contacts=[{"actor": "Hinami", "actor_part": "lips",
+                       "target": "Tamamo", "target_part": "lips",
+                       "manner": "kiss"}],
+            entities={"hinami": {"name": "Hinami", "state": {
+                "lips_distance": "two_inches_of_visible_space"}}})
+        scene = merge_scene_with_diff(scene, {})
+
+        assert "lips_distance" not in scene["entities"]["hinami"]["state"]
+
+    def test_a_relational_key_nothing_contradicts_is_left_alone(self):
+        """Dropping a fact nobody contradicts would be inventing an absence."""
+        scene = self._lift({"hand_position": "clenched_at_her_own_side"})
+
+        assert scene["entities"]["hinami"]["state"]["hand_position"]

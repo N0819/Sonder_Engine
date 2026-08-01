@@ -179,9 +179,12 @@ def _posture_of(scene, name):
     _eid, ent = _entity_record(scene, name)
     if not isinstance(ent, dict):
         return ""
-    state = ent.get("state")
-    posture = state.get("posture") if isinstance(state, dict) else ""
-    tokens = _tokens(posture)
+    state = ent.get("state") if isinstance(ent.get("state"), dict) else {}
+    # `position` as well as `posture`: the Director writes the arrangement into
+    # whichever of the two it reaches for, and the live record that led here
+    # was `position: "seated_on_bed_edge"` -- already in this vocabulary, and
+    # never looked at. Same exact-token pass, still never the description.
+    tokens = _tokens(state.get("posture"), state.get("position"))
     if any(t in _LYING_TOKENS for t in tokens):
         return "lying"
     if any(t in _SITTING_TOKENS for t in tokens):

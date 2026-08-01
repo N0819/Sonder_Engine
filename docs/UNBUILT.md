@@ -18,6 +18,20 @@ and a reader taking those documents at face value would have chased about forty
 closed findings. What survived is below, with enough mechanism detail to act on
 without them. Their reasoning is in git history and in `CHANGELOG.md`.
 
+**Partially re-verified 2026-07-31** against alpha 6.3. Entries confirmed still
+true against source this pass: §1.1, §1.3, §1.6, §1.11, §1.13, §2.3, §2.5,
+§2.14 (`fStrList`), §3.2 B1-residual. Entries **corrected** this pass: §2.1 (its
+premise was stale — the ids it asks for already exist and already reach the
+payload; only the prompt never learned), §1.13 (the enum is real, but the
+validation seam the pipeline uses does not enforce it). §1.4 (`sqlite-vec`) was
+re-decided and **landed** — its either/or was wrong, since wiring the vector
+index would have regressed the information firewall — and is deleted per rule 1;
+`docs/RESEARCH.md` §1.4 carries the reasoning, and §1.15 below is the memory
+question that actually remains. Everything else below
+still carries its 2026-07-29 verification date and should be re-checked before
+being acted on — rule 2 exists because this file's claims go stale faster than
+the code does, and two of the ten checked this pass had.
+
 Rules that keep it honest:
 
 1. Delete an entry in the same commit that lands it. Do not mark it done here.
@@ -85,42 +99,6 @@ by sleeping.**
 Consequence already paid: natural waking had to be keyed on the simulation clock
 (eight hours) rather than on the rest a body actually needed, because "rested" is
 not currently computable. Fix the source and the better rule becomes available.
-
-### 1.4 The vector index is unwired, and `sqlite-vec` is required for it
-
-`memory.py` declares the whole feature and connects none of it, and has since
-the first commit — both symbols arrive in the initial upload and never acquire a
-caller. Three independent reasons it has never run:
-
-1. **No caller.** `init_vec_index` is never called, so `memory_vec` and
-   `lore_vec` are never created and nothing ever writes an embedding into
-   either; `search_memories_vec` is never called either.
-2. **The extension is never loaded.** `sqlite-vec` is a *loadable* SQLite
-   extension — importing the Python package does nothing to a connection.
-   Nothing calls `sqlite_vec.load()` or `enable_load_extension()` anywhere, so
-   `USING vec0(...)` fails with `no such module: vec0` even with the dependency
-   installed. Verified directly against 0.1.9.
-3. **`init_vec_index` swallows it** in a bare `except Exception: pass`, so that
-   failure would never have been seen.
-
-So the feature is not "degraded on some machines", it is **absent on all of
-them**. Semantic recall is real but lives in `search_memories`: a full scan of
-the character's rows, then Python ranking — `_cos` over the stored `embedding`
-and `cue_embedding` blobs, blended with `_lexical_memory_ranking`.
-
-`sqlite-vec>=0.1.6,<0.2` is nonetheless a hard runtime requirement in
-`requirements.txt` and `pyproject.toml`, and `_HAS_VEC` guards both functions —
-so a missing install is indistinguishable from an unwired feature, in both
-directions. It is also **not installed on the primary dev machine**, which is how
-this stayed invisible: the guard returns early, the caller that would have
-noticed does not exist, and no test references `_HAS_VEC`, `sqlite_vec`,
-`memory_vec`, or `vec0` in either state.
-
-Either wire it (create the tables at schema init, write embeddings where
-`memories`/`lore` rows are written, and give `search_memories` a vec-first
-branch) or drop the dependency until it is wired. Do not leave a required
-dependency whose only consumers are unreachable — the manifest currently
-promises a capability the engine does not have.
 
 ### 1.5 A character cannot revise a bearing they learned wrong
 
@@ -318,7 +296,12 @@ Two things follow, neither done:
   `inventory_ops` in the same beat. `initiation` appears 9 times and **is not a
   member of the enum at all** — the model invents it and it passes validation
   untouched, so any guard keying on the declared values silently misses those
-  beats. Either the enum is enforced or it is not a closed set.
+  beats. Either the enum is enforced or it is not a closed set. Re-verified
+  2026-07-31, now with the mechanism: a direct `ActionElement(stage=
+  "initiation")` DOES raise, so the enum is real — but
+  `validate_llm_output("director_interpret", …)` returns the element with
+  `stage: "initiation"` intact and **no errors**. The closed set is enforced
+  nowhere the pipeline actually passes through. Settle it at that seam.
 - **`sustained` is the interesting one and the least safe to act on.** 250 live
   beats are staged sustained, 128 of which move somebody, 62 open a contact and
   53 mint a condition — and most of those are correct, because a sustained act
@@ -349,6 +332,166 @@ they are going, and a stage that can relocate the player without it is
 authoring player conduct — the same boundary `_check_player_act_authority`
 defends for speech and action, unguarded for position.
 
+### 1.15 Changing the embedding model silently erases semantic recall of everything already remembered
+
+**Found 2026-07-31**, while re-deciding the (now deleted) `sqlite-vec` entry.
+This is the actual long-term durability defect in memory retrieval; the vector
+index was never it.
+
+Two facts that only bite together.
+
+**One: nothing in this database has ever been semantically embedded.** All
+4,894 memory rows carry `embedding_model: "cheap:crc32:256"` — the FALLBACK
+`providers.cheap_embed`, a hashed character trigram/4-gram signature. It is a
+fuzzy *lexical* signature, not a semantic vector. So two of `search_memories`'s
+four fused lists — "semantic match" (weight 1.0) and "cue-vector match" (weight
+1.15, the highest of the four) — are lexical in disguise. `embeddings` IS a real
+configurable provider role (`providers.py`), so this is a configuration state,
+not a design limit.
+
+**Measured twice, and the second measurement overturns the first.** The easy
+test: a memory's `gist` is the model's own paraphrase of its `content`, so
+gist→content is a paraphrase-retrieval test. Over 200 queries against a
+600-memory corpus, crc32 scores **recall@1 85%, recall@5 94%**. That looked
+reassuring and it was the wrong conclusion to draw, because a gist shares its
+content's proper nouns — the test rewards lexical overlap.
+
+The hard test, on the same engine's real data: eight memories from a
+441-memory story, queried by paraphrases written to preserve meaning while
+AVOIDING the memory's own vocabulary — which is what recalling something
+worded differently three hundred turns ago actually is. crc32 scores
+**recall@1, @5 and @20 all 0%, median rank 228 of 441.** That is
+indistinguishable from random.
+
+So the accurate statement is not "better than it sounds". It is a strong
+lexical retriever and a **non-existent semantic one**, and the whole of
+semantic recall — every case where a character should remember something
+relevant that nobody re-worded for them — is headroom a real embeddings
+provider would open. The engine's episodic recall works today because
+`character_memory_context`'s query is dominated by `current_view`, concrete
+prose thick with the recurring proper nouns hashing is good at. Nothing else
+does.
+
+So the upside of real embeddings is **real but narrow**: it would help the
+conceptual/affective band, and it is not the only lever on that band — two
+cheaper ones sit in front of it, neither needing a provider.
+
+**Both were built in alpha 6.3, and measuring (a) afterwards corrected the
+claim that it was a CHEAPER lever than the provider. It is not an alternative
+to one — it is a multiplier that only pays once the vectors are semantic.**
+Measured against 442 real memories with a real perception view, giving the
+mood its own rank list changed **1 of 10** results. A control aspect chosen to
+share words with the corpus changed 2 and actually fired, so the mechanism
+works; the limiter is that a crc32 hash gives an affective phrase almost no
+discriminative signal — "afraid of being alone again" scored a best match of
+0.293 against a median of 0.127 across the whole bank, where a lexically
+overlapping phrase reached 0.490. Separate rank lists cannot rank on a signal
+that is not there. Build order therefore matters: the provider first, then
+(a) and (b) are worth what they promise.
+
+**(a) The affective query is swamped, and that is a concatenation bug rather
+than an embedding one.** `character_memory_context` builds one query string
+from `current_view + goal + mood + unresolved_threads`. Measured over 725 real
+stored perception views, the median view is **1,015 characters**; a mood or
+goal fragment is 10–60. The result is that
+`cosine(query_with_mood, view_alone) = 0.994` — the mood fragment moves the
+query vector by essentially nothing, and influences recall only lexically
+(the word "anxious" matching the word "anxious"), diluted about 20:1. Querying
+the fragments SEPARATELY and fusing their rankings — RRF is already the
+mechanism, and already fuses four lists — would give mood and goal a rank list
+of their own instead of a rounding error inside someone else's. Free, and it
+would make a real embedding provider worth more when one is configured.
+
+**(b) Emotional congruence is unbuilt and the data is already there.**
+`memories.valence` and `memories.arousal` are populated on every row and feed
+the fused score **not at all**. Their only consumer anywhere is
+`contrast_memory`, at `0.5 * abs(valence) + 0.3 * arousal` — note the `abs`:
+that is emotional INTENSITY ("this memory is charged"), not congruence ("this
+memory matches how you feel now"). Mood-congruent recall is a real effect, the
+engine already tracks current affect, and a signed congruence term in the
+rerank is a defensible addition. Two cautions if it is built: keep it in the
+same band as the salience term (0.08) rather than larger, for the reason the
+belief-credence comment beside it already gives — it should break a tie, not
+outrank an actual match; and note that congruence is a FEEDBACK loop, since a
+character in despair retrieving only despairing memories deepens the despair.
+That may well be correct for fiction — it is what rumination is — but it
+should be a chosen behaviour rather than an emergent one.
+
+None of this touches the cliff below.
+
+**Two: there is no re-embedding path.** `search_memories` gates both vector
+signals on
+`row["embedding_model"] == embedded.model_key and row["embedding_dim"] == embedded.dimensions`.
+Configure a real embeddings provider and every pre-existing row fails that test
+on BOTH halves — and scores **0.0 forever**. New memories get true vectors, old
+ones fall back to lexical-only, and the memory bank splits into two eras at the
+moment of the upgrade. Verified absent: no backfill, re-embed or migration
+symbol exists anywhere in the tree.
+
+So the engine currently punishes improving its own embeddings, and punishes it
+hardest on the oldest memories — the ones a long campaign most depends on. The
+codebase already knows this hazard in a narrower place: `memory.py`'s snapshot
+comment keeps raw vectors in dumps precisely so a restore cannot "silently
+downgrade every vector to the crc32 fallback, which then scores 0.0 forever."
+That reasoning was never extended to a model CHANGE.
+
+**Why a model change really does mean a full rebuild.** Two embedding models
+produce vectors in unrelated spaces: there is no correspondence between one
+model's dimension 37 and another's, so a cosine between them is not "slightly
+worse", it is arbitrary. Different dimensions cannot be compared at all. Even
+one family at two sizes (`text-embedding-3-small` vs `-large`) are different
+spaces. Scoring 0.0 for a mismatch is therefore the CORRECT behaviour — a
+garbage ranking would be worse than falling back to keyword — and re-embedding
+is the only way to compare old memories with new queries. What it does NOT
+mean: re-selecting the same provider and model is a no-op (the check is on
+model key plus dimensions), and changing any other role — narrator, director,
+mapping — has nothing to do with stored vectors. Only the `embeddings` role
+matters, which is why `put_agent_models` compares that role before and after
+rather than firing on every settings write.
+
+**This is a trap, not a live defect — which decides how much to spend on it.**
+Nothing is wrong today: the crc32 signature is self-consistent, every row
+matches every query, and retrieval works exactly as measured. The cliff fires
+only on one specific future action — configuring an `embeddings` provider. So
+the proportionate fix is NOT the migration:
+
+1. **A mismatch guard (~10 lines, do this).** `search_memories` already
+   computes `compatible` per row. When rows are incompatible with the live
+   model, say so once — a warning, an engine notice, a refusal to start,
+   whatever fits — instead of silently scoring 0.0. That converts an invisible
+   cliff into a visible one and buys the right to defer everything else
+   indefinitely.
+2. **The re-embed migration (only when you actually want to switch).** Walk
+   rows whose model_key differs from the live one, re-embed in batches,
+   resumable, never on the turn path.
+
+Doing (1) without (2) is the correct stopping point for as long as no
+embeddings provider is configured.
+
+**Not a fix:** an ANN index. One was declared here once and deleted unwired in
+alpha 6.3 — it could not carry the two pre-ranking filters (turn cutoff, frame
+visibility), so it would have regressed the firewall; `docs/RESEARCH.md` §1.4
+keeps the reasoning. Benchmarked with `memory._cos` verbatim,
+both vectors per row, growing at the measured ~3.5 rows per turn per character:
+
+| rows | ≈ turns for ONE character | cost |
+|---|---|---|
+| 442 (today's worst) | 126 | 16 ms |
+| 3,500 | 1,000 | 126 ms |
+| 35,000 | 10,000 | 709 ms |
+| 200,000 | 57,000 — a novel series in one chat | 2.2 s |
+
+Beside an LLM call measured in seconds, none of that is a cost worth an index.
+And two trivial optimisations sit in front of one anyway, because **`_cos`
+recomputes `norm(a) * norm(b)` on every call although every stored vector is
+already normalised** (`providers.cheap_embed` and `embed_texts_meta` both
+normalise before returning). Dropping the redundant norms is one line and ~4x;
+stacking the rows into a matrix for a single matmul is a few more and ~20x
+total — 35 ms at 10,000 turns, 350 ms at 285,000. So the scan is not "fine for
+now": there is no story length at which it becomes the reason to add an ANN
+index. That question is settled permanently, not provisionally.
+
+
 
 ---
 
@@ -358,21 +501,50 @@ Features the architecture intends and has not built. Ordered by value per unit
 of risk; items 2.1–2.3 repay the structural debt in
 [`../Design.md`](../Design.md) § Structural debt.
 
-### 2.1 Give the present beat a real event id
+### 2.1 Let a character cite the present beat by its real id
 
-**Closes debt #1.** Removes the last instruction-shaped patch from the character
-path. Declarations already mint ids (`turn:<id>:character:<cid>:<n>:action`); the
-current beat's perception should mint one the same way, so `observations_used`
-cites structure rather than obeying a sentence.
+**Closes debt #1.** Re-verified against source and the whole database
+2026-07-31; the original entry's premise was stale and its remaining work is
+much smaller than it claimed.
 
-Today `observations_used` *instructs* the character to cite evidence in a payload
-where only memory rows carry ids and the current beat is an uncitable prose
-string. Measured: 15 citations of a previous turn and zero of the current one
-across one 61-turn chat — a character reliably answering the previous line.
+**What is already built.** `agents/perception.py` mints a real id for every
+observation of the present beat — `current:<perceiver>:<n>` — and those ids
+reach the character payload intact at `perception.observations[].observation_id`
+(`agents/character.py`, the `base_observations` path; a micro-view gets
+`current:<cid>:micro`). The current beat is no longer an uncitable prose string.
+
+**What is not.** The prompt has never been told. `prompts.py`'s OBSERVATIONS
+block still asserts *"The present beat has not been committed and has no event
+id of its own"* and asks for the magic string `"current"` — an
+instruction-shaped patch standing on top of a payload that now carries the
+structure it is substituting for.
+
+Measured across all 1,254 stored character variants, 6,404 citations:
+
+| citations | `event_id` written |
+|---|---|
+| 4,939 | an invented label — `view` (1,532), `current_perception` (505), `perception` (338), `perception_current` (131), `perception:view`, `perception:current`, `event:current_perception`, … |
+| 1,172 | the magic string `"current"` the prompt asks for |
+| 255 | blank |
+| **38** | **a real `current:<perceiver>:<n>` id** |
+
+So the original diagnosis — "a character reliably answering the previous line" —
+is **superseded**: characters overwhelmingly do cite the present beat now. They
+just cite it under about fifteen spellings of a thing that has a real name,
+which is unusable as evidence and unverifiable as a claim.
+
+Remaining work, small: point the OBSERVATIONS block at
+`perception.observations[].observation_id`, and normalize the legacy spellings
+deterministically on the way in (they are a closed set in practice, and the
+table above enumerates it) so no existing citation is lost. Then
+`observations_used` can be validated against the observations actually
+delivered — which is what makes it evidence rather than a sentence.
 
 **Rule this generalises:** whenever a prompt asks a model to prefer X over Y,
 check whether the payload makes X *harder to reach* than Y. If it does, the
-prompt will lose.
+prompt will lose. The corollary this entry adds: when the payload is later
+fixed, **the prompt does not update itself** — a patch written for the old
+payload goes on suppressing the new one.
 
 This is also the same primitive §4.2 and §3's headline want, from the other
 direction.
@@ -598,12 +770,16 @@ all built (`Design.md`, "Clothing by body region"). What remains:
   generated card, where it matters most: the generator writes prose entries,
   and the mangling happens the moment an author keeps them.
   `embodiment.visible.distinctive_features` now uses `fLineList` (one per
-  line); every other prose list still uses `fStrList` — the psychology fields
-  are the worst of them (`activation_cues`, `inhibited_by`, `conflicts_with`,
-  `protected_beliefs`, `pride_triggers`, `shame_triggers`, `under_stress`,
-  `somatic_signs`, `recovery_supports`, `generalization_tags`), since those are
-  clauses by nature. Converting them is mechanical; it was left out of the
-  change that found it rather than sprawling.
+  line); the remaining `fStrList` callers were **enumerated exactly on
+  2026-07-31** (the earlier list over-named fields that had already moved) —
+  `static/js/editors.js` only, ten call sites: Aliases (two, at the character
+  and persona editors), Protected beliefs, Pride triggers, Shame triggers,
+  Recovery supports, Characteristic stress signs, Voice markers, Excluded
+  knowledge titles, Active concerns. Every one but Aliases is a clause by
+  nature, and the psychology ones are the fields `CLAUDE.md` warns fail
+  silently fifty beats later. Converting them is mechanical (`fLineList`
+  already exists and is already wired); it was left out of the change that
+  found it rather than sprawling.
 - **the reader has no view of it.** Regions exist in the card editor and in
   every prompt, but the story panel still shows the flat `wearing` list, so a
   reader cannot see that a robe is open, or that a shirt is stained, without
@@ -759,12 +935,73 @@ the current behaviour.
 S3-A4, S3-A5, S3-A8, X18 and X4. **A1 and B4 still have no dedicated test**, and
 A1 is a confirmed leak class.
 
+### 3.7a Unbidden recall avoids embeddings for a reason that is expiring
+
+`memory.contrast_memory` (SIGMA SRIP-14 §XXII, "retrieval as perturbation")
+picks a high-salience memory DISSIMILAR to the current beat, and its docstring
+says plainly why it does not use embedding cosine as the dissimilarity axis:
+on a corpus embedded with the crc32 fallback, cosine is a fuzzy-lexical signal,
+so structural fields (tokens, location, entities, turn distance) carry the
+contrast instead because they are exact.
+
+That reasoning was correct and is about to stop being true. Once an embeddings
+provider is configured and `rebuild_embeddings` has run, the vectors ARE
+semantic — and semantic dissimilarity is precisely what "structurally
+dissimilar" is reaching for. Measured: the crc32 corpus scores 0% recall at
+every k on paraphrase retrieval, while a real model reaches median rank 2, so
+the signal the function declined genuinely did not exist and now does.
+
+Not changed on a hunch. What it needs is a measurement of its own — does an
+embedding-distance axis surface BETTER unbidden memories than the token axis,
+judged on something other than "it is more sophisticated" — plus a decision
+about mixed banks, since a story part-way through a rebuild has both kinds of
+row and the compatibility check silently scores the stranded ones 0.0, which
+an inverted (dissimilarity) axis would read as maximally contrasting. That
+inversion is the trap: the same 0.0 that makes a stranded row invisible to
+`search_memories` would make it maximally VISIBLE here.
+
 ### 3.8 A structural risk, not a finding
 
 `agents/perception.py` does **not** call `common._delivery_ok`; it uses
 `hear_level` and `_in_plain_view` directly, while `agents/loops.py` routes
 everything through `_delivery_ok`. Two families of delivery gate now exist and
 can drift apart. Consolidating them is the cheap insurance.
+
+### 3.9 Residuals of the alpha 6.3 physical-ledger work
+
+Four things the ledgers still cannot say, all deliberately left rather than
+guessed at.
+
+**A hover is not a contact, and there is nowhere else for it.** A measured
+"two inches of visible space" between two mouths is real fiction with real
+tension, and `contacts` can only say touching or nothing. It currently lives
+(or lived) in entity `state`, where nothing ages it. `_drop_contradicted_state`
+retires such a key only where a standing contact already speaks for that part;
+a genuine hover with no contact survives, unaged, exactly as before. A
+near-contact tier — or a `manner` that means "not quite" — would cover it.
+
+**Entity `state` still has no ageing of any kind.** Nothing retires
+`"breath": "caught"` or `"voice_quality": "held_breath_steadying"` either; they
+persist verbatim until the model happens to overwrite them. Contact was the
+worst case because perception reads it as present truth, and that one is fixed
+at the source — but the disease is wider than the part that was treated.
+
+**An orphaned relational value is dropped rather than folded.** When
+`thumb_touch: "feather_light_at_ear_base"` is retired by a standing thumb
+contact, its qualifier is discarded instead of merged into that contact's
+`detail`. Folding it was rejected for now: matching the right contact by part
+name is the same guesswork the whole change exists to remove, and a wrong
+`detail` is a sentence the narrator will repeat.
+
+**A garment moving between bodies keeps no identity.** `_mint_shed_garments`
+carries a garment's condition onto the floor and back, but "the coat she lent
+him" is a different coat record from "her coat" the moment it lands on him.
+`resolve_garment` is per-body by construction.
+
+Also unbuilt, from the same work: nothing derives a station from within-room
+movement INTENT ("she crosses to the hearth"), because there is no within-room
+approach concept for it to read — room-level `scene.approach` is the only
+staged-movement memory there is.
 
 ---
 

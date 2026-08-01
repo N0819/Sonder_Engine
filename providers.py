@@ -1942,6 +1942,15 @@ def embed_texts_meta(texts) -> EmbeddingBatch:
         prov, model, _ = resolve_role("embeddings")
         base = prov["base_url"].rstrip("/")
         r = _session().post(base + "/embeddings", headers=_headers(prov), json={"model": model, "input": texts}, timeout=REQUEST_TIMEOUT)
+        if r.status_code >= 400:
+            # The BODY carries the reason; `raise_for_status` discards it and
+            # leaves only "400 Client Error", which cannot tell a wrong key
+            # from a wrong model. Measured live: selecting a chat model for
+            # the embeddings role returns "Model inception/mercury-2 does not
+            # exist" -- the one sentence that explains why recall silently
+            # stopped improving. It reaches the settings panel from here.
+            raise RuntimeError("%s %s: %s" % (r.status_code, base + "/embeddings",
+                                              (r.text or "").strip()[:300]))
         r.raise_for_status()
         data = r.json().get("data") or []
         data = sorted(data, key=lambda item: item.get("index", 0))

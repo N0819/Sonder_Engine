@@ -700,3 +700,23 @@ border-radius:10px;background:rgba(25,32,46,.42)}
      between them otherwise eat most of the transcript's height. */
   #live{max-height:120px}
 }
+/* The embedding reconciler's progress card. Bottom-LEFT so it never sits on
+   top of #activity (bottom-right), which can be showing at the same time --
+   a turn can be running while the rebuild works through the bank. */
+#embed-rebuild{position:fixed;left:16px;bottom:17px;z-index:109;
+width:min(320px,calc(100vw - 30px));border:1px solid #3b4b68;
+border-radius:12px;background:var(--bg2);box-shadow:var(--shadow);
+overflow:hidden;animation:activity-in .18s ease}
+#embed-rebuild .er-head{display:flex;gap:9px;align-items:center;
+padding:9px 12px;color:#cfe0ff;font-weight:650;font-size:13px}
+#embed-rebuild .er-note{padding:0 12px 9px;color:#8ea0bb;font-size:11.5px;
+line-height:1.45}
+#embed-rebuild .er-bar{height:4px;background:var(--bg3);overflow:hidden}
+#embed-rebuild .er-fill{height:100%;background:#5b8def;width:0;
+transition:width .3s ease}
+#embed-rebuild.er-done .er-fill{background:#4f9d78}
+#embed-rebuild.er-err .er-fill{background:#b4646f}
+
+/* An inline caution inside help text — the embeddings-role note, where the
+   consequence of a change is not visible from the control itself. */
+.warn-note{color:#d9c27e}

@@ -46,6 +46,61 @@ def _coerce_str_list(value):
     return out
 
 
+def _coerce_station_table(value):
+    """Normalize a `stations` table into {name: {at?, near?}}, dropping junk.
+
+    Deliberately NOT a typed sub-model, and the reason is a correctness one
+    rather than a style one. The merge contract (spatial.merge_scene_with_diff)
+    is a PARTIAL update per entity -- a beat touching only `at` must keep the
+    standing `near` list, and vice versa. A typed `Station(at=None, near=[])`
+    default-fills both halves, so every partial emission would clobber the
+    other one. And `_dump` uses exclude_none, which would delete an EXPLICIT
+    `{"at": null}` -- the only way to say "stepped away from the fixture".
+    `containment: dict[str, Optional[dict]]` already relies on the same
+    null-survives-inside-a-dict behaviour for release.
+
+    What the typed model WOULD have bought -- rejecting off-schema shapes
+    instead of letting them ride as silently-ignored junk -- is bought here
+    instead by canonicalizing them into meaning: a bare string is the anchor,
+    a bare list is the `near` roster.
+    """
+    if not isinstance(value, dict):
+        return {}
+    out = {}
+    for name, station in value.items():
+        name = str(name or "").strip()
+        if not name:
+            continue
+        if isinstance(station, str):
+            station = {"at": station.strip() or None}
+        elif isinstance(station, (list, tuple)):
+            station = {"near": list(station)}
+        if not isinstance(station, dict):
+            continue
+        entry = {}
+        if "at" in station:
+            at = station.get("at")
+            entry["at"] = str(at).strip() or None if at is not None else None
+        if "near" in station:
+            entry["near"] = [n for n in _coerce_str_list(station.get("near"))
+                             if str(n).strip()]
+        if entry:
+            out[name] = entry
+    return out
+
+
+def _coerce_attire_diff(value):
+    """One body's attire diff, canonicalized by attire.coerce_diff_shape.
+
+    Delegated rather than reimplemented because commit.py must run the same
+    coercion: rerunning a stage replays diffs stored before this existed, and
+    two spellings of the rule would eventually disagree about the same body.
+    attire.py imports nothing but `re`, so there is no cycle.
+    """
+    import attire
+    return attire.coerce_diff_shape(value)
+
+
 def _clamp_float(value, lo, hi, default):
     """Coerce to a float within [lo, hi], tolerating the out-of-range numbers
     and non-numeric strings weaker models emit for bounded fields (a
@@ -556,8 +611,23 @@ def _lenient_coerce(value, declared):
             # prevent, one model over. The subject of these shapes is
             # what the model is obliged to supply, which is exactly what
             # "first required field" names.
-            slot = next((n for n, f in fields.items()
-                         if _field_required(f)), None)
+            # An item model may NAME its own subject, and that wins over
+            # both rules below. They are positional heuristics, and a
+            # heuristic cannot see the one case where the subject field
+            # carries a non-empty default: `GoalImpact.serves` defaults to
+            # "situational", so it is neither required nor an empty prose
+            # slot, and `{"reach the tower": {"impact": 0.6}}` filed the goal
+            # in `why` -- recording the goal as the explanation and leaving
+            # `serves` generic, which commit.py's goal matching cannot use.
+            # The information survived and landed where nothing reads it.
+            # Declaring the slot is how a model says which field is its
+            # subject, rather than the shape rules guessing.
+            slot = getattr(declared.item_type, "_subject_field", None)
+            if slot is not None and slot not in fields:
+                slot = None
+            if slot is None:
+                slot = next((n for n, f in fields.items()
+                             if _field_required(f)), None)
             if slot is None:
                 # An item model where nothing is required still has a
                 # subject, and dropping the key threw it away entirely: a
@@ -999,6 +1069,29 @@ class RoomDef(LenientModel):
     # as "enclosed" gets no weather at all. Absent falls back to
     # weather.room_exposure's keyword derivation, never to "it rains here".
     exposure: Optional[str] = None
+    # The named features within the room that prose already refers to -- the
+    # bar, the hearth, the bed -- as {anchor_id: {desc, dir?}}. Entity
+    # `stations` hang off these, and `dir` gives each one a wall so left/right
+    # can be derived. Declared for the same reason every field above it is,
+    # and the omission was load-bearing: the round-trip stripped anchors from
+    # every Director-authored room, so the only anchors any story ever had
+    # came in through the mapping stage's UNTYPED scene_patch dicts. The
+    # Director could not author, update, or even preserve one.
+    #
+    # Optional, NOT default_factory=dict, and the difference is load-bearing:
+    # `_dump` uses exclude_none, so None disappears and silence stays silence.
+    # An always-present `{}` would ride out on every room the Director merely
+    # echoes, and `_merge_room`'s catch-all would read it as an erasure --
+    # blanking the room's anchors on the next beat and taking every station
+    # hanging off them with it. Same shape as `zone`/`light`/`exposure` above,
+    # for the same reason.
+    anchors: Optional[dict[str, dict]] = None
+    # How much floor there is to cross: small | medium | large. The only
+    # thing that makes two distinct anchors read as "across" rather than
+    # "near" (spatial.proximity_rel), so a great hall stops being as
+    # intimate as a wardrobe. Survived until now purely by the same accident
+    # `anchors` did.
+    size: Optional[str] = None
 
 class WorldEntity(LenientModel):
     entity_id: str
@@ -1291,6 +1384,13 @@ class ActorDef(LenientModel):
 class AttireState(LenientModel):
     wearing: list[str] = Field(default_factory=list)
     state: list[str] = Field(default_factory=list)
+    # Clothing BY REGION, with each garment's description and what is beneath
+    # it. Undeclared until now, so the opening turn's authored regions -- the
+    # richest clothing detail any story ever has, straight off the cards --
+    # were stripped by the validation round-trip and rebuilt from bare names.
+    # Every body in every existing story lost its garment descriptions and its
+    # `beneath` text on beat 0. See attire.normalize_regions for the shape.
+    regions: dict[str, dict] = Field(default_factory=dict)
 
 class InitialEntityState(LenientModel):
     posture: str = ""
@@ -1311,6 +1411,8 @@ class DirectorEstablish(LenientModel):
     positions: dict[str, str] = Field(default_factory=dict)
     attire: dict[str, AttireState] = Field(default_factory=dict)
     entity_states: dict[str, InitialEntityState] = Field(default_factory=dict)
+    # Where in each room the opening puts people: {name: {at, near:[]}}.
+    stations: dict[str, dict] = Field(default_factory=dict)
     sensory_events: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
     opening: str = ""
@@ -1321,6 +1423,48 @@ class DirectorEstablish(LenientModel):
     # beat 0 -- {op:'open', subject, note}. Applied deterministically by
     # commit.py's commit_world_pressure.
     world_pressure: list[dict] = Field(default_factory=list)
+
+    _coerce_stations = validator("stations", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_station_table(v)
+    )
+
+class AttireDiff(LenientModel):
+    """One body's clothing change, in whatever shape it arrived.
+
+    `StateDiff.attire` was `dict[str, dict]` -- untyped inside -- and commit's
+    loop reads exactly the fields below. Anything else validated cleanly and
+    was then silently discarded, which is not the lenient behaviour this
+    module's charter asks for: a near-miss shape should be READ, not dropped
+    and not fatal. `notes` is where an unrecognised key lands so commit can
+    resolve its handle against the wardrobe (attire.coerce_diff_shape).
+    """
+    wearing: Optional[list[str]] = None
+    add: list[str] = Field(default_factory=list)
+    remove: list[str] = Field(default_factory=list)
+    replace: Optional[list[str]] = None
+    state: Optional[list[str]] = None
+    conditions: dict[str, str] = Field(default_factory=dict)
+    # Authored clothing by region -- the opening turn's shape, carrying each
+    # garment's description and what is beneath it.
+    regions: dict[str, dict] = Field(default_factory=dict)
+    # {garment handle or free key: what the beat said about it}
+    notes: dict[str, str] = Field(default_factory=dict)
+
+    # A whole-model before-validator, which is the one case LenientModel's
+    # docstring argues AGAINST -- and the exception is deliberate. The
+    # reshaping here is between KEYS, not within a field's value: it has to see
+    # the whole object to know that an unrecognised key is a note rather than a
+    # typo. No field validator can be handed that.
+    if _PYDANTIC_V2:
+        from pydantic import model_validator as _model_validator
+
+        _canonicalize = _model_validator(mode="before")(
+            classmethod(lambda cls, value: _coerce_attire_diff(value)))
+    else:
+        from pydantic import root_validator as _root_validator
+
+        _canonicalize = _root_validator(pre=True, allow_reuse=True)(
+            lambda cls, value: _coerce_attire_diff(value))
 
 class DialogueLogEntry(LenientModel):
     speaker: str
@@ -1386,6 +1530,19 @@ class StateDiff(LenientModel):
     # whatever positions no longer permit. {op: add|remove|clear, actor,
     # actor_part, target, target_part, manner}.
     contact_ops: list[dict] = Field(default_factory=list)
+    # Within-room position: {name: {at: anchor_id|None, near: [names]}}. The
+    # sibling of `positions` at the grain below the room -- at the bed, at the
+    # hearth, beside each other. Undeclared until now, and that omission was
+    # the whole feature: prompts.py has asked the Director for this since
+    # Phase 2, spatial.merge_scene_with_diff has always merged it, and 0 of 45
+    # live scenes contain one, because the round-trip dropped the field before
+    # anything downstream could see it. Without a station every co-located
+    # pair reads `near`, so someone across a great hall and someone in your
+    # arms are the same distance.
+    #
+    # NOT a typed sub-model -- see _coerce_station_table for why the partial
+    # merge and the explicit `at: null` both require the plain dict.
+    stations: dict[str, dict] = Field(default_factory=dict)
     # Scale: {name: factor} relative to that body's own baseline. 1.0 (or
     # omission) is normal size; the engine cancels contacts on a body whose
     # size changed, since a hold is a fact about two bodies at the sizes they
@@ -1400,7 +1557,7 @@ class StateDiff(LenientModel):
     # is what keeps the feature free for stories that do not want it.
     vitals: dict[str, Optional[dict]] = Field(default_factory=dict)
     overlays: dict[str, list] = Field(default_factory=dict)
-    attire: dict[str, dict] = Field(default_factory=dict)
+    attire: dict[str, AttireDiff] = Field(default_factory=dict)
     cast_changes: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
     introductions: list[dict] = Field(default_factory=list)
@@ -1427,6 +1584,10 @@ class StateDiff(LenientModel):
     # deterministically: one vehicle/building, or a 'region' whose
     # multi-book cascade commit.py enumerates from the lorebook tree.
     destruction: Optional[dict] = None
+
+    _coerce_stations = validator("stations", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_station_table(v)
+    )
 
 class AssertedChange(LenientModel):
     """One entry of director_resolve's own changes-asserted manifest: a
@@ -1603,6 +1764,10 @@ class RelationshipUpdate(LenientModel):
     )
 
 class GoalImpact(LenientModel):
+    # Which field a name-keyed map's KEY belongs in. `serves` is this item's
+    # subject, but it carries a non-empty default, so neither positional rule
+    # in `_lenient_coerce` can find it -- see the note there.
+    _subject_field = "serves"
     serves: str = "situational"
     impact: float = Field(default=0.0, ge=-1.0, le=1.0)
     certainty: float = Field(default=0.5, ge=0.0, le=1.0)
@@ -1906,9 +2071,17 @@ class ScenePatch(LenientModel):
     rooms: dict[str, dict] = Field(default_factory=dict)
     entities: dict[str, dict] = Field(default_factory=dict)
     positions: dict[str, str] = Field(default_factory=dict)
+    # Where in each room the mapping stage places people. Same shape and same
+    # reason as StateDiff.stations; the mapping stage is the layout authority,
+    # so this is usually the first thing that knows a room HAS a bed to be on.
+    stations: dict[str, dict] = Field(default_factory=dict)
     remove_entities: list[str] = Field(default_factory=list)
     remove_rooms: list[str] = Field(default_factory=list)
     remove_adjacent: list[dict] = Field(default_factory=list)
+
+    _coerce_stations = validator("stations", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_station_table(v)
+    )
 
 class BookOp(LenientModel):
     """A live, per-turn proposal to create ONE new child lorebook,
@@ -2252,14 +2425,15 @@ _STATE_DIFF_DICT_FIELDS = (
 
 _STATE_DIFF_SIBLING_FIELDS = (
     "remove_entities", "remove_rooms", "remove_adjacent", "conditions",
-    "inventory_ops", "contact_ops", "scales", "containment", "vitals",
-    "overlays",
+    "inventory_ops", "contact_ops", "stations", "scales", "containment",
+    "vitals", "overlays",
     "attire", "cast_changes",
     "world_facts", "introductions", "time", "claim_dispositions",
 )
 
 _SCENE_PATCH_SIBLING_FIELDS = (
-    "rooms", "positions", "remove_entities", "remove_rooms", "remove_adjacent",
+    "rooms", "positions", "stations", "remove_entities", "remove_rooms",
+    "remove_adjacent",
 )
 
 def _hoist_misplaced_entity_siblings(container, sibling_fields):

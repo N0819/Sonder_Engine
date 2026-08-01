@@ -53,3 +53,70 @@ def test_empty_helpers_are_safe():
     assert _extract_entities("") == []
     assert _extract_key_phrases("") == []
     assert _gist("") == ""
+
+class TestStrandedEmbeddingsAreAnnounced:
+    """Configuring an `embeddings` provider on a story with history silently
+    halves its retrieval, and nothing said a word.
+
+    A row whose `embedding_model`/`embedding_dim` differ from the live
+    provider's scores 0.0 on BOTH vector rankings — correct in itself, since a
+    vector from another model is not comparable — and nothing re-embeds, so it
+    stays 0.0 forever. Memories written before the switch drop to keyword and
+    exact matching while newer ones keep all four signals: the bank splits into
+    two eras at the moment of the upgrade. Retrieval still WORKS, which is
+    precisely why it needs announcing rather than raising. See
+    docs/UNBUILT.md §1.15.
+    """
+
+    def _capture(self, monkeypatch):
+        import logging
+
+        import memory
+        seen = []
+
+        class _H(logging.Handler):
+            def emit(self, record):
+                seen.append(record.getMessage())
+
+        handler = _H()
+        memory.logger.addHandler(handler)
+        monkeypatch.setattr(memory, "_STRANDED_REPORTED", set())
+        return memory, seen, handler
+
+    def test_a_mismatched_bank_is_reported(self, monkeypatch):
+        memory, seen, handler = self._capture(monkeypatch)
+        try:
+            memory._warn_stranded_embeddings(1, 2, 300, 442, "openai:x:embed-3")
+        finally:
+            memory.logger.removeHandler(handler)
+        assert len(seen) == 1
+        assert "300 of 442" in seen[0]
+
+    def test_it_reports_once_per_situation_not_once_per_beat(self, monkeypatch):
+        """Retrieval runs for every character on every beat; a warning per call
+        is the noise it exists to cut through."""
+        memory, seen, handler = self._capture(monkeypatch)
+        try:
+            for _ in range(5):
+                memory._warn_stranded_embeddings(1, 2, 300, 442, "openai:x:embed-3")
+        finally:
+            memory.logger.removeHandler(handler)
+        assert len(seen) == 1
+
+    def test_a_different_model_is_a_new_situation(self, monkeypatch):
+        memory, seen, handler = self._capture(monkeypatch)
+        try:
+            memory._warn_stranded_embeddings(1, 2, 300, 442, "openai:x:embed-3")
+            memory._warn_stranded_embeddings(1, 2, 300, 442, "cheap:crc32:256")
+        finally:
+            memory.logger.removeHandler(handler)
+        assert len(seen) == 2
+
+    def test_a_compatible_bank_says_nothing(self, monkeypatch):
+        memory, seen, handler = self._capture(monkeypatch)
+        try:
+            memory._warn_stranded_embeddings(1, 2, 0, 442, "cheap:crc32:256")
+            memory._warn_stranded_embeddings(1, 2, 5, 0, "cheap:crc32:256")
+        finally:
+            memory.logger.removeHandler(handler)
+        assert seen == []

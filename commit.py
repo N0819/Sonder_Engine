@@ -1456,6 +1456,78 @@ def _beat_voices(ctx, res):
     return [t for t in texts if t.strip()]
 
 
+# How long a comma-led head may be and still read as a garment's name rather
+# than as the first clause of a sentence about one.
+_NOTE_NAME_HEAD = 40
+
+
+def interpret_attire_notes(diff, worn, entry=None):
+    """Read an attire diff's free-form notes as the change they describe.
+
+    `StateDiff.attire` had an untyped inner dict, and the commit loop below
+    reads exactly `wearing`/`add`/`remove`/`replace`/`state`/`conditions`.
+    Every other shape validated cleanly and then fell through the loop doing
+    nothing at all. Two of the six attire diffs in the measured story were
+    silent no-ops:
+
+        {"Elyndra": {"robe": "sheer, parted"}}
+        {"Hinami": {"shift": "linen shift, hem rucked up where her hand..."}}
+
+    The second is why that story's narration could say "the hem of your shift"
+    and "the waistband of your shorts" in one paragraph: the shift the prose
+    had been describing since beat 0 never reached the ledger, which still held
+    the travel clothes seeded off her card.
+
+    Three readings, in order of how much they assume:
+
+      1. the handle names a garment she is wearing -> what just happened to it,
+      2. it names the wardrobe as a whole -> prose the body keeps, unless it
+         says in as many words that nothing changed,
+      3. it names a garment the ledger has never heard of -> she is wearing it
+         now. The one-rung rule and the region tables then apply to it like
+         anything else, and the Director sees it next beat to correct.
+
+    Returns the diff with the notes folded into the fields the loop reads.
+    `entry` is the body's live ledger entry, mutated only for reading 2.
+    """
+    diff = dict(diff or {})
+    notes = diff.pop("notes", None)
+    if not isinstance(notes, dict) or not notes:
+        return diff
+    marks = dict(diff.get("conditions") or {})
+    for handle, text in notes.items():
+        text = str(text or "").strip()
+        if not text or attire_model.is_no_change_note(text):
+            continue
+        garment = attire_model.resolve_garment(handle, worn)
+        if garment is not None:
+            marks.setdefault(garment, text)
+        elif str(handle).casefold() in attire_model._GENERIC_WARDROBE_KEYS:
+            if isinstance(entry, dict):
+                entry["state"] = list(entry.get("state") or []) + [text]
+        else:
+            name, mark = attire_model.split_garment_name(text)
+            # A note names the garment and then says what happened to it, and
+            # the clause that follows is nearly always comma-led: "linen
+            # shift, hem rucked up where her hand slipped beneath". Without
+            # this the whole sentence becomes the garment's NAME, which is
+            # also its matching key -- so the next beat's "shift" would not
+            # find it and the fork would start all over again.
+            if "," in name:
+                head, _, rest = name.partition(",")
+                if head.strip() and len(head.strip()) <= _NOTE_NAME_HEAD:
+                    name, mark = head.strip(), (rest.strip() or mark)
+            if attire_model.resolve_garment(name, worn) is not None:
+                marks.setdefault(handle, text)
+                continue
+            diff.setdefault("add", []).append(name)
+            if mark:
+                marks.setdefault(name, mark)
+    if marks:
+        diff["conditions"] = marks
+    return diff
+
+
 def _mint_shed_garments(sc, shed, diff=None):
     """A garment that has come off becomes a thing in the room.
 
@@ -1593,6 +1665,19 @@ def prepare_scene_commit(ctx):
                 for _k in ("dir", "vertical"):
                     if _me and _me.get(_k) and not _edge.get(_k):
                         _edge[_k] = _me[_k]
+
+    # Mapping's within-room placements, folded the same way and for the same
+    # reason: it is the layout authority, so it is usually the first stage that
+    # knows the room has a bed for anyone to be on. Per NAME, and only where
+    # the Director said nothing about that body -- the Director owns causality
+    # and wins wherever the two speak about the same person.
+    _mstations = _mapping_patch.get("stations")
+    if isinstance(_mstations, dict) and _mstations:
+        _stations = diff.setdefault("stations", {})
+        if isinstance(_stations, dict):
+            for _who, _st in _mstations.items():
+                if isinstance(_st, dict):
+                    _stations.setdefault(_who, _st)
 
     sc = merge_scene_with_diff(prev_scene, diff)
     if destruction:
@@ -1761,18 +1846,35 @@ def prepare_scene_commit(ctx):
         name = canonical_attire_key(name)
         if not isinstance(d, dict):
             continue
+        # Coerced HERE as well as at validation, because rerunning a stage
+        # replays a diff stored before the schema knew this shape.
+        d = attire_model.coerce_diff_shape(d)
         cur = att.setdefault(name, {"wearing": [], "state": []})
         cur.setdefault("wearing", [])
         cur.setdefault("state", [])
+
+        d = interpret_attire_notes(
+            d, attire_model.flat_wearing(attire_model.normalize_regions(cur)),
+            cur)
         # A whole-outfit write (`wearing` with no add/remove/replace) is what
         # director_establish sends. It used to `continue` straight past the
         # reconciliation below, which made it the one shape that could still
         # undress someone in a single beat -- fine on the opening turn, where
         # everything is dressing, but nothing stopped a resolve emitting it.
-        if "wearing" in d and not any(k in d for k in ("add", "remove", "replace")):
+        if d.get("wearing") is not None and not any(
+                d.get(k) for k in ("add", "remove", "replace")):
             cur["wearing"] = sanitize_attire_items(list(d.get("wearing") or []))
             if d.get("state") is not None:
                 cur["state"] = d["state"] if isinstance(d["state"], list) else [d["state"]]
+            # Authored regions are the richest clothing detail any story gets
+            # -- every garment's description, and what is under it, straight
+            # off the cards. They were being read past here and rebuilt from
+            # bare names, so beat 0 threw them away on every body in every
+            # story. (The schema was dropping them too; AttireState declares
+            # `regions` now.)
+            if isinstance(d.get("regions"), dict) and d["regions"]:
+                cur["regions"] = attire_model.normalize_regions(
+                    {"wearing": cur["wearing"], "regions": d["regions"]})
         else:
             if isinstance(d.get("replace"), list):
                 cur["wearing"] = sanitize_attire_items(list(d["replace"]))
@@ -1806,8 +1908,12 @@ def prepare_scene_commit(ctx):
         if _notes:
             # Anything the Director wrote in prose is kept alongside the
             # derived notes rather than replaced by them.
+            # Strings only. A `state` written as a garment-keyed dict used to
+            # be wrapped whole into this list, where it sat among the sentences
+            # as a raw object for the rest of the story; it is read as
+            # `conditions` now, which is what it was always trying to say.
             _authored = [n for n in (cur.get("state") or [])
-                         if str(n).strip() and str(n) not in _notes]
+                         if isinstance(n, str) and n.strip() and n not in _notes]
             cur["state"] = _notes + _authored
         _had = {g["name"].casefold()
                 for entry in _before.values()

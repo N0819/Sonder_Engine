@@ -203,3 +203,68 @@ def test_act_verb_far_from_the_subject_is_not_flagged():
 def test_possessive_subject_is_still_the_player():
     assert _check_player_act_authority(
         "Hinami's fingers close around the cool plastic.", [], PLAYER)
+
+
+# --- the mirror: a character owns their own speech --------------------------
+#
+# Live, alpha 6.0.2: a character agent declared silence -- empty sequence,
+# stop_reason "natural silence", no dialogue_log entry -- and the Director's
+# resolved_event said "<the character> adds a further comment" anyway.
+# Perception rendered a speech event with no content; the narrator, having
+# nothing to quote, dressed the absence as inaudibility. It was read as a
+# muffling bug and was a fabrication. The player side of this boundary had a
+# guard since alpha 6.0.2; characters had none, so nothing objected when the
+# Director authored conduct for a mind that owns it.
+
+from agents.common import _check_character_speech_authority
+
+SILENT = ["Elyndra"]
+
+
+def test_the_live_failure_is_caught():
+    assert _check_character_speech_authority(
+        "Elyndra adds a further comment. Hinami looks away.", SILENT)
+
+
+def test_a_contentless_attribution_is_the_whole_point():
+    """Nothing downstream can tell this was invented: it quotes nothing, so
+    the dialogue-fidelity checks have no body to whitelist against."""
+    assert _check_character_speech_authority(
+        "Elyndra says something in reply.", SILENT)
+
+
+def test_a_silent_character_may_still_act():
+    assert _check_character_speech_authority(
+        "Elyndra steps closer and watches her.", SILENT) == []
+
+
+def test_thinking_and_looking_are_not_speech():
+    for prose in ("Elyndra considers the question.",
+                  "Elyndra looks at her for a long moment.",
+                  "Elyndra hesitates, then turns away."):
+        assert _check_character_speech_authority(prose, SILENT) == [], prose
+
+
+def test_a_character_who_spoke_is_not_checked():
+    """Separating an elaborated line from an added one needs more than a verb
+    list, so only total silence is adjudicated -- the same scoping its sibling
+    uses for actions."""
+    assert _check_character_speech_authority(
+        "Elyndra adds a further comment.", ["Hinami"]) == []
+
+
+def test_a_pronoun_subject_is_not_guessed_at():
+    assert _check_character_speech_authority(
+        "She adds a further comment.", SILENT) == []
+
+
+def test_inflected_speech_verbs_are_caught():
+    for verb in ("murmurs", "muttered", "is replying", "answers", "puts in"):
+        assert _check_character_speech_authority(
+            f"Elyndra {verb} to nobody in particular.", SILENT), verb
+
+
+def test_empty_and_missing_inputs_are_noops():
+    assert _check_character_speech_authority("", SILENT) == []
+    assert _check_character_speech_authority("Elyndra says something.", []) == []
+    assert _check_character_speech_authority("Elyndra says something.", [""]) == []

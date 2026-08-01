@@ -1,5 +1,178 @@
 # Changelog
 
+## alpha 6.3 — One hand, one place
+
+Alpha 6.2 said prose has no memory. This one is about the ledgers that replaced
+it, and the fact that three of them were keyed on words a model writes fresh
+every beat.
+
+A story reported the symptom first: characters kept "forgetting who had what
+against what", and being on a bed did not seem to mean anything. Both turned
+out to be true, and neither was a model problem.
+
+The contact ledger keys a hold on (who, which part, whom, which part), all free
+text. The Director does not repeat itself — it re-describes. Over seventeen
+measured beats `thumb→ear` became `thumb→ear_base`, `hand→waist` became
+`hand→side`, and `tail_spade→calf` became `tail→ankle`. Nothing renamed
+anything back, so the ledger held five simultaneous holds for three limbs, and
+every beat opened by telling the character, as standing truth, that one woman
+had two hands and two tails on her.
+
+Being on the bed was worse: there was nowhere to record it. The engine has a
+complete within-room position system — anchors, stations, reach tiers, left and
+right, a blind spot behind you — designed, tested, asked for in the prompts,
+and merged by the scene merger. `stations` was declared on neither Pydantic
+model it had to pass through, so `extra="ignore"` deleted it every time.
+**Zero of forty-five live scenes had ever contained one**, while seventeen model
+outputs across the same database contained one the schema had thrown away. Two
+people spent seventeen beats on a bed that no part of the engine knew they were
+on.
+
+And the same disease had a third host. A wardrobe keyed garments by name, a beat
+wrote a shorter name for the same robe, and a body ended up wearing two robes —
+one of them halfway off, because the reconciliation was putting one on while
+taking the other away.
+
+### Fixed
+
+- **A part names the part doing this now.** An unqualified body-part noun is a
+  definite description, so re-asserting the same limb somewhere new MOVES it and
+  retires the old spot (`spatial._part_identity`, `_same_appendage`,
+  `_displaces`). A refinement that repeats the limb's own word is that limb —
+  `tail spade` is the tail, `thumb` is not a `hand` — which is structural rather
+  than a table of synonyms, because touching an ear and touching its base are
+  genuinely different acts and a synonym table would flatten them. Two carve-outs
+  keep the range: anything said in the SAME beat stands, so two hands remain
+  sayable in one breath; and a bare noun never displaces a qualified limb nor the
+  reverse, so once the fiction has distinguished her left hand from her right,
+  the distinction survives.
+- **Contact can say how it feels.** A bounded `detail` — "beneath her shift",
+  "feather-light" — because the absence of one was CAUSING the next bug: with
+  nowhere structured for it, the Director wrote it into the entity's own state.
+- **Contact has exactly one record again.** The lifter that pulls contact out of
+  entity `state` required the verb in the key NAME and a bare person in the
+  value; every assertion in the measured story evaded both, and entity state
+  neither ages nor prunes. One mouth was simultaneously two inches away,
+  trailing kisses along a jaw, and kissing — three accounts, one of them four
+  beats dead. The verb is now read from the value too, with a direction guard so
+  `leaning_over_X` stays the bearing it is and `gaze` is never touched; leftover
+  words survive as `detail` rather than being deleted with the key; lifted holds
+  go through the same displacement rule. A relational key the ledger already
+  speaks for is retired — but only then, because dropping one nothing
+  contradicts would be inventing an absence.
+- **Within-room position exists at all.** `stations` declared on `StateDiff` and
+  `ScenePatch`, and `anchors`/`size` on `RoomDef` — which were being stripped
+  too, so the Director could not author, update or even preserve an anchor, and
+  the only anchors any story ever had arrived through the mapping stage's
+  untyped dicts. Kept as plain dicts rather than typed sub-models on purpose:
+  the merge is a partial per-entity update, so a default-filled `near: []` would
+  clobber the standing roster, and the dump's `exclude_none` would delete the
+  explicit `{at: null}` that means "stepped away from the fixture".
+- **The engine works out where you are.** Models fill contact reliably and
+  stations essentially never, so `spatial.derive_scene_stations` seeds the
+  ledger from the one they do maintain: a contact with a room fixture stations
+  that body at it, a body-to-body contact makes a mutual within-reach link, and
+  a body's own `position` string is read for the room's own anchor ids. Additive
+  and idempotent, never overrides what the beat stated, and a derived station
+  outlives the contact that made it — you do not leave the bed by taking your
+  hand off the quilt — while leaving the room still clears it. On the story that
+  reported this, both women are now on the bed, within reach of each other, and
+  the bed registers as something warm to be on.
+- **An echoed room cannot erase its own fixtures.** Declaring `anchors` meant
+  the validation round-trip emitted an empty one on every room the Director
+  merely re-described, and the merge's catch-all would have read that as an
+  erasure — taking every station hanging off it. Empty is now silence, for
+  anchors, size, zone, light and exposure alike.
+- **A garment is one garment, however it is spelled.** Every incoming handle
+  resolves against what the body already wears, in four narrowing tiers, with an
+  ambiguous handle resolving to nothing rather than a coin flip — so a silk robe
+  and a cotton robe stay two robes. An existing fork heals on READ, so stored
+  stories repair themselves rather than needing a migration that would rewrite
+  scenes mid-play. The fork's actual trigger was the attire editor, which stored
+  the browser's wardrobe verbatim and left `wearing` naming the old spelling
+  after a rename; it re-derives all three representations now.
+- **A clothing change is no longer silently dropped.** `StateDiff.attire` had an
+  untyped inner dict, so any shape the commit loop did not recognise validated
+  cleanly and changed nothing — two of the six attire diffs in the measured
+  story were no-ops, one of them `{"shift": "linen shift, hem rucked up where
+  her hand slipped beneath"}`. That is why its narration could describe the hem
+  of a shift and the waistband of a pair of shorts on the same body in the same
+  paragraph, the ledger still holding the travel clothes off her card. An
+  unrecognised key is now read three ways: a garment she wears, the outfit as a
+  whole, or a garment she is now wearing.
+- **The opening turn stops throwing away its own best detail.** `AttireState`
+  never declared `regions`, so the round-trip stripped every authored garment
+  description and every line of what is underneath — the richest clothing detail
+  a story ever gets, straight off the cards — from every body in every story, on
+  beat 0.
+- **Smaller.** A spanning garment reports its state once instead of once per
+  region it covers; a `state` written as a garment-keyed object is read as the
+  condition it was trying to be instead of being wrapped whole into a list of
+  sentences; the reconcile seam now has a `stations` evidence class, so a resolve
+  that asserts someone moved within a room and encodes it nowhere is caught
+  rather than passed; comfort reads a body's `position` as well as its `posture`.
+
+### Memory: the retrieval nobody could see was broken
+
+A second thread, found while auditing `docs/UNBUILT.md` and traced by
+measurement rather than by reading the code.
+
+- **`sqlite-vec` removed, and the register entry asking for it deleted.** It
+  had been a hard dependency in both manifests since the first commit, with two
+  functions that no caller ever reached and an extension that was never loaded.
+  The register said "wire it or drop it" with wiring as the better half; that
+  was backwards. `search_memories` applies two filters BEFORE ranking — a turn
+  cutoff (its own comment calls it "the SOLE defence" against a mind retrieving
+  how the turn it is deciding turned out) and frame visibility — and the ANN
+  query could filter on `chat_id`/`char_id` and nothing else. Wiring it would
+  have handed a character the committed outcome of its own undecided beat.
+  Benchmarked besides: the exhaustive scan costs 16 ms at a real story's worst
+  case and 709 ms at ten thousand turns, against an LLM call measured in
+  seconds. There is no story length at which an index becomes the answer.
+- **The embedding layer was measured, and it was not what anyone thought.**
+  Every stored vector was `cheap:crc32:256` — the FALLBACK, a hashed character
+  n-gram signature, used because no embeddings provider had ever been
+  configured. On the easy test (a memory's `gist` retrieving its own `content`,
+  which shares proper nouns) it scored 85% recall@1, and that number was
+  reassuring and wrong. On the honest test — sixteen paraphrases written to
+  keep the meaning and drop the vocabulary, against 441 real memories — it
+  scored **0% at rank 1, 5 and 20, median rank 228 of 441.** Indistinguishable
+  from random. It is a strong lexical retriever and a non-existent semantic
+  one, and README, `docs/RESEARCH.md` and the register all carried the
+  flattering figure until now.
+- **Changing the embedding model no longer loses everything silently.** A row
+  embedded by another model scores 0.0 on both vector rankings forever, because
+  a vector is only comparable with one from the same model. Nothing re-embedded
+  and nothing said so, so configuring a provider would have split a memory bank
+  into two eras at the moment of the upgrade. Now: `memory.rebuild_embeddings`
+  re-reads stranded rows in batches, resumable by construction, refusing to
+  write the crc32 fallback over real vectors when a provider hiccups mid-run;
+  `embedding_bank_status` counts the split; a warning fires once per situation
+  when retrieval meets stranded rows; and opening a story offers the rebuild
+  rather than performing it, because a rebuild spends someone's money and
+  opening a chat is not consent.
+- **The embeddings role could be set to a model that cannot embed, and nothing
+  objected.** Measured live: `inception/mercury-2` selected for it returned
+  "Model does not exist", `embed_texts_meta` caught the failure and degraded to
+  the hash, and play continued looking fine. Fixed at four points — the role no
+  longer inherits Default (Default is a chat model, so inheriting was a
+  guaranteed wrong answer), the picker offers verified embedding ids per
+  provider because no provider lists them in `/models` at all, the provider's
+  own rejection message now reaches the settings panel instead of being
+  discarded by `raise_for_status`, and changing the role warns about the
+  consequence.
+- **Aspects: the character's mood and goal get their own rank list.** They were
+  concatenated onto a query dominated by the perception view — a median 1,015
+  characters against a 10-60 character fragment, leaving
+  `cosine(query_with_mood, view_alone)` at 0.994. They now fuse as their own
+  RRF rankings. Measured honestly, this changes 1 result in 10 today, because
+  it ranks on a signal the crc32 hash does not carry; it is a multiplier that
+  pays once the vectors are semantic, not an alternative to making them so.
+
+Twenty embedding models were benchmarked against a real story to pick a
+default worth recommending; the results are in the settings panel, per
+provider, with dimensions and storage cost on each.
+
 ## alpha 6.2 — Prose has no memory
 
 Three things in this engine existed only as sentences. The weather was a clause

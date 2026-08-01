@@ -67,6 +67,7 @@ from .common import (
     _extract_authority_claims,
     _list,
     _normalize_scene_patch,
+    _check_character_speech_authority,
     _check_player_act_authority,
     _quote_body,
     _requires_reaction_phase,
@@ -247,6 +248,7 @@ def director_establish(ctx, nonce):
             ctx.cast, player_name=player_name),
         "remove_entities": [],
         "remove_rooms": [],
+        "stations": out.get("stations") if isinstance(out.get("stations"), dict) else {},
         "attire": out.get("attire") if isinstance(out.get("attire"), dict) else {},
         "world_facts": out.get("world_facts") if isinstance(out.get("world_facts"), list) else [],
         "time": None,
@@ -359,6 +361,10 @@ def director_interpret(ctx, nonce):
             "rooms": _contextual_rooms(sc, ctx.cast, p_room),
             "entities": sc.get("entities"),
             "positions": sc.get("positions"),
+            # Where in the room each body stands. Shown so the Director can
+            # MAINTAIN the ledger -- it was being asked to write stations it
+            # was never allowed to read.
+            "stations": sc.get("stations") or {},
         },
         "simulation_clock": clock,
         "paradox": paradox_visible_to(chat["id"], ctx.turn.frame_id),
@@ -1686,7 +1692,7 @@ def _normalize_diff_shape(sd):
     Safety net for the LLM returning a string/list where an object belongs."""
     if not isinstance(sd, dict):
         sd = {}
-    for k in ("positions", "rooms", "entities", "overlays", "attire",
+    for k in ("positions", "stations", "rooms", "entities", "overlays", "attire",
               "conditions", "scales", "containment", "vitals"):
         if not isinstance(sd.get(k), dict):
             sd[k] = {}
@@ -1951,6 +1957,7 @@ _OMISSION_CATEGORY_ALIASES = {
     "adjacent": "adjacency", "door": "adjacency", "passage": "adjacency",
     "barrier": "adjacency",
     "position": "positions", "movement": "positions",
+    "station": "stations", "placement": "stations",
     "entity": "entities", "object": "entities",
     "condition": "conditions", "status_effect": "conditions",
     "clothing": "attire", "outfit": "attire",
@@ -2004,6 +2011,14 @@ def _evidence_present(sd, omission, forms=None):
 
     if category == "time":
         return sd.get("time") is not None
+    if category == "stations":
+        # Sixteen resolves across the database asserted a station change in
+        # changes_asserted and encoded it nowhere, and the shallow containment
+        # fallback marked every one of them covered. Moving to a different
+        # ROOM counts too: that is a position change, and it carries the
+        # within-room one with it.
+        return any(hits(k) for k in (sd.get("stations") or {})) \
+            or any(hits(k) for k in (sd.get("positions") or {}))
     if category in ("adjacency", "transit"):
         if room_hit_with_adjacency() or removal_edge_hit() \
                 or entity_transit_hit():
@@ -2840,6 +2855,7 @@ def director_resolve(ctx, nonce):
             ),
             "entities": sc.get("entities"),
             "positions": sc.get("positions"),
+            "stations": sc.get("stations") or {},
             "attire": scene_attire_view(sc),
             "time": sc.get("time"),
         },
@@ -3001,20 +3017,48 @@ def director_resolve(ctx, nonce):
         and (e.get("attempt") or e.get("observable"))
     ]
     _player_name = (pers.get("name") or persona_name(pers)) if pers else ""
+    # CHARACTER-SPEECH AUTHORITY, the mirror of the below. A character owns
+    # their own speech exactly as the player owns theirs, and only the player
+    # had a guard: live, a character declared silence and the resolve said it
+    # "adds a further comment" anyway. Every name that was ASKED this beat and
+    # produced no speech -- `char_speech` is keyed by the same display name
+    # `_declared_act_texts` and the dialogue log use.
+    _silent_names = [
+        str(d.get("name") or "").strip() for d in decls
+        if str(d.get("name") or "").strip()
+        and not (char_speech.get(str(d.get("name") or "").strip()))
+    ]
+    _mute = _check_character_speech_authority(
+        out.get("resolved_event") or "", _silent_names)
     _invented = _check_player_act_authority(
         out.get("resolved_event") or "", _declared_player_actions, _player_name)
-    if _invented:
-        _note = (
-            "Your previous resolved_event gave the PLAYER physical acts they "
-            "did not declare this beat. The player declared "
-            + ("no action at all -- only speech."
-               if not _declared_player_actions else "only the listed actions.")
-            + " Rewrite it keeping every other fact identical: describe what "
-            "OTHER characters do, and the player ONLY as they declared. An NPC "
-            "may offer, hold out, brace or wait -- the player accepts on their "
-            "own turn. You may add sensory detail to a declared act; you may "
-            "not add an act. Offending sentences: "
-            + " | ".join(w.split(": ", 1)[-1] for w in _invented))
+    if _invented or _mute:
+        # ONE retry covering both violations. They are the same boundary from
+        # two sides, they are detected at the same moment, and asking twice
+        # would cost a second call to say the same thing.
+        _parts = []
+        if _invented:
+            _parts.append(
+                "Your previous resolved_event gave the PLAYER physical acts they "
+                "did not declare this beat. The player declared "
+                + ("no action at all -- only speech."
+                   if not _declared_player_actions else "only the listed actions.")
+                + " Rewrite it keeping every other fact identical: describe what "
+                "OTHER characters do, and the player ONLY as they declared. An NPC "
+                "may offer, hold out, brace or wait -- the player accepts on their "
+                "own turn. You may add sensory detail to a declared act; you may "
+                "not add an act. Offending sentences: "
+                + " | ".join(w.split(": ", 1)[-1] for w in _invented))
+        if _mute:
+            _parts.append(
+                "Your previous resolved_event attributed SPEECH to a character "
+                "who declared none this beat. Silence is a declaration: a "
+                "character who said nothing said nothing, and you may not give "
+                "them a comment, a reply or a murmur. They may still act, react "
+                "and be described -- write what they DO, or let the silence "
+                "stand. Offending sentences: "
+                + " | ".join(w.split(": ", 1)[-1] for w in _mute))
+        _note = " ".join(_parts)
         _retry = _agent_json(
             "director",
             "director_resolve",
@@ -3026,15 +3070,19 @@ def director_resolve(ctx, nonce):
         _retry_invented = _check_player_act_authority(
             _retry.get("resolved_event") or "",
             _declared_player_actions, _player_name)
-        if len(_retry_invented) < len(_invented):
-            out, _invented = _retry, _retry_invented
-        for _w in _invented:
+        _retry_mute = _check_character_speech_authority(
+            _retry.get("resolved_event") or "", _silent_names)
+        # Kept only if it reduces the TOTAL, so a rewrite that fixes the
+        # player's acts by inventing a line for a silent character loses.
+        if len(_retry_invented) + len(_retry_mute) < len(_invented) + len(_mute):
+            out, _invented, _mute = _retry, _retry_invented, _retry_mute
+        for _w in _invented + _mute:
             ctx.add_warning(_w)
     # Surfaced on the step itself, not only in ctx.warnings -- a content
     # violation that survives the retry must at least be visible in the
     # step/variant inspector rather than vanishing.
-    if _invented:
-        out["player_act_warnings"] = _invented
+    if _invented or _mute:
+        out["player_act_warnings"] = _invented + _mute
 
     # Warning-only re-normalization; strict validation already ran inside
     # _agent_json (see director_establish above).

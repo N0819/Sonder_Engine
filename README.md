@@ -140,12 +140,29 @@ tools/           maintenance scripts and experiment harnesses
 ## Providers and data
 
 Providers can target OpenAI-compatible endpoints, Anthropic, Ollama, KoboldCpp,
-and configured remote services. Semantic recall ranks a character's own memories
-in Python — cosine similarity over stored embedding blobs, blended with a
-lexical ranking; without an embeddings provider configured it falls back to a
-cheap lexical hash and quality drops accordingly. `sqlite-vec` is a declared
-dependency that nothing currently uses
-([`docs/UNBUILT.md`](docs/UNBUILT.md) §1.4).
+and configured remote services. Recall ranks a character's own memories in
+Python and deliberately uses no vector index: one character's rows are scored
+in NumPy and fused with a BM25 keyword ranking and an exact-phrase ranking,
+because the two filters that matter most — a mind may not retrieve how the turn
+it is deciding turned out, and it may not see another frame's memories — have
+to run *before* ranking, which is exactly what an approximate-nearest-neighbour
+index cannot do cheaply. At this workload the exhaustive scan is also simply
+cheaper than the problem: a few tens of milliseconds for a long story
+([`docs/RESEARCH.md`](docs/RESEARCH.md) §1.3–1.4).
+
+Configuring an `embeddings` provider is what makes recall work by MEANING.
+Without one, the two vector rankings fall back to a character n-gram hash: a
+fuzzy lexical signature that retrieves reworded text well when it shares
+vocabulary, and **not at all when it does not** — measured against a real
+441-memory story, recall of a genuine paraphrase is indistinguishable from
+random. Keyword and exact-phrase matching still work, so nothing breaks; what
+is missing is a character recalling something relevant that was worded
+differently three hundred turns ago.
+
+Switching providers does **not** re-embed what is already stored — a vector can
+only be compared with one from the same model. The engine notices and offers to
+rebuild when you open a story, and API Connections shows the count and a button
+([`docs/UNBUILT.md`](docs/UNBUILT.md) §1.15).
 
 API keys, provider settings, and all story content live in the local database —
 **never commit a populated `engine.db`.**

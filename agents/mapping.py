@@ -193,7 +193,8 @@ def mapping_quick(ctx, nonce):
         "relevant_lore": merged[:12], "staged_lore": [],
         "scene_patch": {
             "rooms": {}, "entities": {},
-            "positions": {}, "remove_entities": [], "remove_rooms": [],
+            "positions": {}, "stations": {},
+            "remove_entities": [], "remove_rooms": [],
         },
         "cached": True,
         "summary": f"{len(merged[:12])} lore entries recalled from "

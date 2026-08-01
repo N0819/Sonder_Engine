@@ -518,7 +518,7 @@ def _character_display_name(row):
 
 def _normalize_scene_patch(value):
     patch = dict(value or {})
-    for key in ("rooms", "entities", "positions"):
+    for key in ("rooms", "entities", "positions", "stations"):
         if not isinstance(patch.get(key), dict):
             patch[key] = {}
     for key in ("remove_entities", "remove_rooms", "remove_adjacent"):
@@ -1855,6 +1855,95 @@ def _player_subject_sentences(prose, player_name):
                 out.append(stripped)
                 break
     return out
+
+
+# Speech verbs, as the stem-plus-inflection pattern `_PLAYER_ACT_VERBS` uses.
+# Only verbs that ASSERT an utterance: "considers", "hesitates", "looks" are
+# not speech, and a character who declared silence is entitled to all of them.
+_ATTRIBUTION_STEMS = (
+    "say", "speak", "reply", "respond", "answer", "add", "offer", "remark",
+    "observe", "note", "comment", "continue", "go on", "put in", "interject",
+    "interrupt", "counter", "retort", "insist", "repeat", "explain", "admit",
+    "confess", "agree", "protest", "object", "ask", "inquire", "wonder aloud",
+    "murmur", "mutter", "mumble", "whisper", "breathe", "hiss", "growl",
+    "purr", "drawl", "call", "shout", "yell", "cry", "exclaim", "declare",
+    "announce", "state", "tell", "greet", "chuckle out", "manage",
+)
+# NOTE the distinct name: `_SPEECH_VERBS` further down is a different thing
+# (a literal tuple used for dialogue-cue detection). Two symbols of that name
+# in one module is exactly the duplicate `make structure` fails on.
+def _inflect(stem):
+    """A stem as a regex matching its inflections.
+
+    English inflects a phrasal verb on its HEAD, not its tail: "puts in", not
+    "put ins". Appending the suffix group to the whole escaped stem silently
+    produced a pattern that could never match the form people actually write,
+    which is worse than not listing the verb at all -- it reads as covered.
+    """
+    head, _, rest = str(stem).partition(" ")
+    pattern = rf"{re.escape(head)}(?:e?s|ed|ing|d)?"
+    return rf"{pattern}\s+{re.escape(rest)}" if rest else pattern
+
+
+_ATTRIBUTION_VERBS = "|".join(_inflect(stem) for stem in _ATTRIBUTION_STEMS)
+
+# How far past the name to look for the verb. Same window the player check
+# uses, and for the same reason: the act must be what this body is DOING, not
+# a word appearing anywhere in a long sentence.
+_SPEECH_VERB_WINDOW = 3
+
+
+def _check_character_speech_authority(resolved_event, silent_names):
+    """Speech a resolved_event gives a character who declared none this beat.
+
+    The mirror of `_check_player_act_authority`, and the boundary it defends is
+    the same one from the other side. Live, alpha 6.0.2: a character agent
+    declared silence -- empty sequence, `stop_reason: "natural silence"`, no
+    dialogue_log entry -- and the resolved_event said "<the character> adds a
+    further comment" anyway. Perception rendered a speech event with no
+    content; the narrator, having nothing to quote, dressed the absence as
+    inaudibility. It read as a muffling bug and was a fabrication.
+
+    A character owns their own speech exactly as the player owns theirs, and
+    until now only the player had a guard. Nothing objected when the Director
+    authored conduct for a mind that owns it.
+
+    Scoped like its sibling, to the unambiguous case: the character was ASKED
+    this beat and declared NO speech at all, so any utterance attributed to
+    them is invented by construction. Sentence subject must be the name
+    itself -- a pronoun subject could be anyone in the beat, and guessing
+    would make this cry wolf on ordinary narration.
+
+    `silent_names` is who declared nothing; a character who spoke is not
+    checked, because separating an elaborated line from an added one needs
+    more than a verb list.
+    """
+    warnings = []
+    for name in (silent_names or []):
+        forms = _player_name_forms(name)
+        if not forms:
+            continue
+        for sentence in _player_subject_sentences(resolved_event, name):
+            # A quoted span is the dialogue path's business, not this one:
+            # a fabricated LINE is caught (and whitelisted) by the dialogue
+            # fidelity checks, while what this catches is the contentless
+            # attribution those cannot see -- "X adds a comment" quotes
+            # nothing, so nothing downstream can tell it was invented.
+            without_quotes = re.sub(r'"[^"]*"|“[^”]*”', " ", sentence)
+            for form in forms:
+                match = re.match(rf"^{re.escape(form)}(?:'s)?\b", without_quotes)
+                if match:
+                    tail = without_quotes[match.end():]
+                    break
+            else:
+                continue
+            head = " ".join(re.findall(r"[A-Za-z']+", tail)[:_SPEECH_VERB_WINDOW])
+            if re.search(rf"\b(?:{_ATTRIBUTION_VERBS})\b", head, re.I):
+                warnings.append(
+                    "Speech attributed to a character who declared none "
+                    f"(character-speech authority): {name}: {sentence[:120]!r}"
+                )
+    return warnings
 
 
 def _check_player_act_authority(resolved_event, declared_actions, player_name):

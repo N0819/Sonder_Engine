@@ -297,7 +297,24 @@ legitimately perceive, learn, remember or infer.
   reach or step over, breaking holds that no longer make sense, and persisting
   until something changes it back.
 - **Contact** — Who is touching whom, with a manner and body parts, ending by
-  itself when they are no longer in the same place.
+  itself when they are no longer in the same place. A hand described a second
+  time in a new place has MOVED, not multiplied — so a story does not
+  accumulate a woman with four hands on someone. Two hands doing two things are
+  said in one breath, or named apart ("her left hand"), and then both stand.
+- **Contact detail** — A hold can carry how it feels: feather-light, firm,
+  beneath the shirt, cold. It travels with the touch and changes as the touch
+  changes.
+- **Where in a room you are** — At the bar, at the hearth, on the bed, beside
+  someone. This decides whether a whisper reaches you whole, whether someone is
+  within arm's reach or across a hall, which side of you they are on, and
+  whether a body can be somewhere you are not looking. Rooms name their own
+  fixtures, and the engine works out where people are from what they are
+  touching — so putting a hand on the quilt is enough to be at the bed, and you
+  stay there after you let go.
+- **Beds and other surfaces** — Being on one is a real place to be, not a
+  sentence: it survives the beat that put you there, contributes warmth and
+  softness to how your body feels, and someone lying on it while you sit on its
+  edge are both true at once.
 - **Restraint** — Held, bound, pinned or encased carries through the world as a
   real limit rather than a line of prose.
 - **Clothing** — Authored starting clothes seed a story once and stay separate
@@ -334,6 +351,15 @@ legitimately perceive, learn, remember or infer.
 - **Clothes that come off are still there** — A removed garment becomes a real
   object in the room, so it can be picked up, carried, handed over, or put away
   in a wardrobe.
+- **A garment is one garment, however it is described** — "the robe", "her
+  sheer black robe" and the full name it was written down under all mean the
+  same robe. A story cannot end up dressing someone in two copies of the same
+  thing, one of them half off, because a sentence used a shorter name; and a
+  wardrobe that already went wrong repairs itself the next time it is read.
+- **A change of clothes is never quietly lost** — If a beat says something about
+  what someone is wearing, it lands: on that garment if she is wearing it, on
+  the outfit as a whole if it is about all of it, and as a new garment if the
+  story has dressed her in something the wardrobe had not heard of yet.
 - **What is underneath** — A card can describe what each region shows once
   nothing covers it. Off by default and switched on in Settings; with it off, a
   bare region is still reported as bare and the body's own description stands in.
