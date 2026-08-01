@@ -1576,3 +1576,15 @@ body.has-backdrop .prose {
   border: 1px solid var(--bd);
 }
 :root[data-theme="ink"] .vital-fill { border-radius: 0; opacity: .82; }
+
+/* The hearth is a full-viewport fixed layer on an infinite loop -- the single
+   largest standing GPU cost in the app for anyone on this theme. `reduced`
+   holds it at one brightness (the glow is still there, it just stops
+   breathing); `off` removes the layer entirely. See the effects block in
+   styles.css. */
+:root[data-theme="tavern"][data-effects="reduced"] body::before {
+  animation: none;
+}
+:root[data-theme="tavern"][data-effects="off"] body::before {
+  content: none;
+}

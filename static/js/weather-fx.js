@@ -136,6 +136,16 @@ function weatherFxReduced() {
     && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+// The Appearance menu's "Off" level. CSS hides the host, but this is what stops
+// the WORK: no layer elements, and no tile generation -- each tile is a canvas
+// rasterised at device resolution and turned into a data URL, which is real
+// memory and real time to produce for something that will not be shown.
+// "Reduced" is deliberately NOT handled here: at that level the weather is
+// still drawn, it simply does not move, and that is a CSS decision.
+function weatherFxEffectsOff() {
+  return document.documentElement.dataset.effects === "off";
+}
+
 // A 2d canvas is all this needs now -- no OffscreenCanvas, no worker, no
 // library. The old implementation had to check for `transferControlToOffscreen`
 // because tsParticles THREW without it rather than degrading.
@@ -349,7 +359,8 @@ function weatherFxApply(weather) {
       ? "snow" : "rain";
   const storm = visible && weatherFxStormy(weather);
 
-  if ((!kind && !storm) || weatherFxReduced() || !weatherFxSupported()) {
+  if ((!kind && !storm) || weatherFxReduced() || weatherFxEffectsOff()
+      || !weatherFxSupported()) {
     weatherFxStop();
     return;
   }
@@ -526,4 +537,12 @@ document.addEventListener("visibilitychange", () => {
     weatherFxScheduleFlash(weatherFxStormy(WFX.weather)
       && weatherFxVisible(WFX.weather));
   }
+});
+
+// Re-apply when the effects level changes, so the menu takes effect on the
+// weather that is already on screen rather than at the next room change. The
+// stored weather is re-fed through the same entry point, which tears down at
+// "off" and rebuilds when it comes back.
+window.addEventListener("sonder-effects-change", () => {
+  if (WFX.weather) weatherFxApply(WFX.weather);
 });

@@ -84,13 +84,45 @@ function openAppearanceSettings() {
       }, label));
     }
 
+    const effectsRow = el("div", {
+      class: "segmented-control", role: "group",
+      "aria-label": "Motion and effects",
+    });
+    const effectsNote = el("div", { class: "small dim" });
+
+    const syncEffectsSelection = () => {
+      const active = appearance.currentEffects();
+      for (const button of effectsRow.querySelectorAll("button")) {
+        const selected = button.dataset.effects === active;
+        button.classList.toggle("on", selected);
+        button.setAttribute("aria-pressed", selected ? "true" : "false");
+      }
+      const level = (appearance.effectsLevels || [])
+        .find(item => item.id === active);
+      effectsNote.textContent = level ? level.description : "";
+    };
+
+    for (const level of (appearance.effectsLevels || [])) {
+      effectsRow.append(el("button", {
+        type: "button",
+        "data-effects": level.id,
+        "aria-label": `${level.name} effects`,
+        onclick: () => {
+          appearance.applyEffects(level.id);
+          syncEffectsSelection();
+        },
+      }, level.name));
+    }
+
     const resetButton = el("button", {
       type: "button",
       onclick: () => {
         appearance.applyTheme(appearance.DEFAULT_THEME);
         appearance.applyProseSize(appearance.DEFAULT_PROSE_SIZE);
+        appearance.applyEffects(appearance.DEFAULT_EFFECTS);
         syncThemeSelection();
         syncSizeSelection();
+        syncEffectsSelection();
         toast("Appearance reset to Sonder defaults.", "ok");
       },
     }, "Reset appearance");
@@ -105,11 +137,21 @@ function openAppearanceSettings() {
           el("div", { class: "section-title" }, "Story text size"),
           el("div", { class: "small dim" }, "Adjusts the fiction transcript without enlarging the controls.")),
         sizeRow),
+      el("div", { class: "appearance-reading-row" },
+        el("div", {},
+          el("div", { class: "section-title" }, "Motion and effects"),
+          el("div", { class: "small dim" },
+            "Weather, hearth glow and backdrop fades are drawn continuously, "
+            + "which keeps the graphics chip awake. Turning them down is the "
+            + "single biggest thing you can do for battery life here."),
+          effectsNote),
+        effectsRow),
       el("div", { class: "appearance-actions" }, resetButton,
         el("button", { class: "primary", type: "button", onclick: closeModal }, "Done")));
 
     syncThemeSelection();
     syncSizeSelection();
+    syncEffectsSelection();
   }, { wide: true, autoFocus: false });
 }
 

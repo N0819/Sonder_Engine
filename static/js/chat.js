@@ -1,52 +1,16 @@
-// ---- Scene mood ----
-// Subtle ambient shift of the page background based on the latest turn's
-// prose -- a plain keyword read of already-rendered text, entirely
-// client-side. No pipeline/backend signal involved: this is intentionally
-// cheap and approximate rather than a real sentiment model, since the goal
-// is atmosphere, not accuracy. Keyword sets are illustrative, not
-// exhaustive; ties are broken by whichever mood scores highest, and no
-// signal at all (or a tie at zero) leaves the default "calm" look.
-const MOOD_KEYWORDS = {
-  tense: ["dark", "shadow", "fear", "afraid", "danger", "dread", "blood",
-    "scream", "threat", "death", "dead", "kill", "hunt", "stalk", "wound",
-    "pain", "terror", "panic", "claw", "teeth", "choke", "gasp", "cold dread"],
-  warm: ["smile", "laugh", "warm", "gentle", "comfort", "embrace", "hug",
-    "kind", "tender", "cozy", "safe", "relief", "grateful", "affection", "home"],
-  somber: ["grief", "tears", "loss", "mourn", "sorrow", "alone", "lonely",
-    "regret", "ache", "weep", "empty", "goodbye"],
-  triumphant: ["victory", "triumph", "cheer", "exhilarat", "proud", "won",
-    "glory", "celebrat", "joy", "success"],
-};
-
-function detectSceneMood(text) {
-  const lower = String(text || "").toLowerCase();
-  let best = "calm", bestScore = 0;
-  for (const [mood, words] of Object.entries(MOOD_KEYWORDS)) {
-    let score = 0;
-    for (const w of words) if (lower.includes(w)) score++;
-    if (score > bestScore) { best = mood; bestScore = score; }
-  }
-  return best;
-}
-
-function applySceneMood(text) {
-  setSceneMood(detectSceneMood(text));
-}
-
-// The write is what costs: `body[data-mood]` is what the stylesheet keys the
-// inherited --mood-tint off, so assigning it invalidates style for the whole
-// document. The scroll observer lands on the same turn many times in a row,
-// and re-asserting the mood it already has is a document-wide invalidation
-// bought for nothing.
-function setSceneMood(mood) {
-  if (document.body.dataset.mood !== mood) document.body.dataset.mood = mood;
-}
-
-// Tracks which rendered .turn element is currently most visible in #msgs so
-// the ambient mood follows whatever scene the user is actually looking at
-// while scrolling, not just the newest turn. Recreated on every renderChat()
+// ---- The turn being read ----
+// Tracks which rendered .turn element is currently most visible in #msgs, so
+// the backdrop and the ambient sound follow whatever scene the reader is
+// actually looking at while scrolling, not just the newest turn. One observer
+// and one notion of "the current turn", so the picture and the sound can never
+// disagree about which room the reader is in. Recreated on every renderChat()
 // since the old DOM nodes it observes get thrown away with M.innerHTML="".
-let _moodObserver = null;
+//
+// It also drove a keyword-guessed "scene mood" that tinted the page. That is
+// gone: it lowercased every turn's prose and ran ~60 substring scans over it
+// to pick a colour, and each change wrote `body[data-mood]`, invalidating
+// style for the whole document.
+let _visibleTurnObserver = null;
 // Only the newest story navigation may publish its response. Fetches can
 // complete out of order when two sidebar rows are clicked quickly; without a
 // sequence guard, the older payload could be assigned to S.chat after S.chatId
@@ -69,10 +33,10 @@ let _activeRun = null;
 // this one" from "the reader is scrolling past it".
 let _freshTurnPending = false;
 
-function observeSceneMood(msgsEl, turnEntries) {
-  if (_moodObserver) {
-    _moodObserver.disconnect();
-    _moodObserver = null;
+function observeVisibleTurn(msgsEl, turnEntries) {
+  if (_visibleTurnObserver) {
+    _visibleTurnObserver.disconnect();
+    _visibleTurnObserver = null;
   }
   if (!turnEntries.length) return;
 
@@ -81,15 +45,10 @@ function observeSceneMood(msgsEl, turnEntries) {
   // being observed -- so visibility has to be accumulated across calls
   // rather than read fresh each time.
   const ratios = new Map();
-  // Each turn's mood is a pure function of prose that does not change while it
-  // is on screen, so it is computed ONCE here rather than on every scroll tick.
-  // Per tick it was a full lowercase copy of the prose block plus ~60 substring
-  // scans over it, for an answer that could not have moved.
-  const moodByEl = new Map(turnEntries.map(e => [e.el, detectSceneMood(e.prose)]));
   const turnIdByEl = new Map(turnEntries.map(e => [e.el, e.turnId]));
   const newestTurnId = turnEntries[turnEntries.length - 1].turnId;
 
-  _moodObserver = new IntersectionObserver(entries => {
+  _visibleTurnObserver = new IntersectionObserver(entries => {
     for (const entry of entries) {
       // Dropped rather than stored as 0: a zero can never win the comparison
       // below, so keeping it only grows this map to the length of the whole
@@ -105,7 +64,6 @@ function observeSceneMood(msgsEl, turnEntries) {
       if (ratio > bestRatio) { bestRatio = ratio; bestEl = el; }
     }
     if (bestEl) {
-      setSceneMood(moodByEl.get(bestEl) || "calm");
       // A turn the reader just WAITED for is not a turn they scrolled past:
       // its picture and its sound are commissioned immediately, while every
       // other turn has to be dwelt on first. Consumed once, so scrolling away
@@ -115,7 +73,7 @@ function observeSceneMood(msgsEl, turnEntries) {
       // Guarded because backdrops.js is an experimental extra: if it fails to
       // load (or a browser is holding a cached index.html without its script
       // tag), a missing function here would throw inside the observer and
-      // take the transcript's own mood/scroll behaviour down with it.
+      // take the transcript's own scroll behaviour down with it.
       if (typeof backdropOnVisibleTurn === "function") {
         backdropOnVisibleTurn(turnIdByEl.get(bestEl), { fresh });
       }
@@ -127,7 +85,7 @@ function observeSceneMood(msgsEl, turnEntries) {
     }
   }, { root: msgsEl, threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] });
 
-  for (const { el } of turnEntries) _moodObserver.observe(el);
+  for (const { el } of turnEntries) _visibleTurnObserver.observe(el);
 }
 
 async function openChat(id) {
@@ -241,7 +199,6 @@ function renderChat() {
         ? el("div", { class: "small dim", style: "margin-top:14px" },
             "…or pick an existing story from the sidebar.")
         : null));
-    applySceneMood("");
     return;
   }
 
@@ -255,7 +212,6 @@ function renderChat() {
   const frameTurns = S.chat.turns.filter(t => (t.frame_id ?? null) === S.currentFrameId);
 
   const last = frameTurns[frameTurns.length - 1];
-  applySceneMood(last ? last.prose : "");
 
   const turnEntries = [];
 
@@ -334,7 +290,7 @@ function renderChat() {
   requestAnimationFrame(() => {
     M.scrollTo({ top: M.scrollHeight, behavior: "instant" });
   });
-  observeSceneMood(M, turnEntries);
+  observeVisibleTurn(M, turnEntries);
 }
 
 function branchTurn(tid) {
