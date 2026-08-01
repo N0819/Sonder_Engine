@@ -9,13 +9,11 @@ import pytest
 
 
 def pytest_collection_modifyitems(items):
-    """Keep the fast tier free of measured database setup cost.
+    """Mark database-backed tests ``slow``.
 
-    The instrumented suite showed each ``temp_db`` setup taking roughly
-    1.2--1.6 seconds in a populated development checkout.  Database-backed
-    tests remain part of ``make test-full``; the fast tier concentrates on
-    pure contracts, schemas, spatial rules, prompt boundaries, and frontend
-    source guards.
+    Kept for CI's matrix-breadth job (``make test-fast``), NOT as the tier a
+    developer should run before considering a change done -- see the fixture
+    below for why that split no longer means what it used to.
     """
 
     for item in items:
@@ -23,11 +21,41 @@ def pytest_collection_modifyitems(items):
             item.add_marker(pytest.mark.slow)
 
 
+def _fast_tmp_dir():
+    """A RAM-backed directory for test databases, where the platform has one.
+
+    ``db.init()`` is fsync-bound, not compute-bound: ``executescript(SCHEMA)``
+    auto-commits ~117 DDL statements (53 tables, 64 indexes, FTS5 virtuals,
+    triggers) against a brand-new file, and pays a flush for each. That single
+    call was the dominant cost of the whole suite -- 159 of 252 test files
+    request ``temp_db``, and their test BODIES run in 0.02--0.10s against a
+    setup measured at 0.2s idle and 1.2--1.6s on a loaded checkout.
+
+    Measured here, 13 database-backed tests: 2.93s on disk, 0.61s on tmpfs.
+    Nothing about the database changes -- same schema, same WAL, same
+    isolation, same per-test file. Only the storage backing moves, so a test
+    cannot tell the difference; the suite just stops waiting on the platter.
+
+    Returns None where no tmpfs exists (macOS, Windows), which falls back to
+    tempfile's own default. Correct everywhere, fast where it can be.
+    ``ENGINE_TEST_TMPDIR`` overrides, for a host where /dev/shm is too small.
+    """
+    override = os.environ.get("ENGINE_TEST_TMPDIR")
+    if override:
+        return override
+    if os.path.isdir("/dev/shm") and os.access("/dev/shm", os.W_OK):
+        return "/dev/shm"
+    return None
+
+
+_TMP_DIR = _fast_tmp_dir()
+
+
 @pytest.fixture
 def temp_db():
     """Create and configure a temporary test database."""
     fd, db_path = tempfile.mkstemp(
-        suffix=".db"
+        suffix=".db", dir=_TMP_DIR
     )
     os.close(fd)
     os.remove(db_path)

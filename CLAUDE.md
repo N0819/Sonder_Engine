@@ -22,15 +22,16 @@ Do not duplicate content from these files in explanations; point to them instead
 ```bash
 make run        # start the local server (uvicorn app:app --reload, port 8008)
 make serve      # the same server with no file watcher — for playing, not developing
-make test-fast  # broad Python suite without database-backed slow tests
-make test-full  # every Python regression test
+make test-full  # every Python regression test (~36s — run this freely)
 make test       # alias for test-full
+make test-lf    # last-failed first, then the rest — the fix-verify loop
+make test-fast  # CI matrix-breadth ONLY; skips 159 of 252 files (see docs/TESTING.md)
 make test-browser # optional real Chromium behavior tests
 make map        # regenerate docs/CODE_MAP.md
 make structure  # run tools/project_check.py (duplicate-symbol, patch-debris, empty-test, stale-map checks)
 make compile    # python -m compileall on all source
-make check-fast # compile + structure/map freshness + test-fast
-make check      # compile + map + structure + test-full — run this before considering a change done
+make check-fast # compile + structure/map freshness + full suite
+make check      # compile + map + structure + full suite — run this before considering a change done
 ```
 
 Single test:

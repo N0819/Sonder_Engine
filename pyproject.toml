@@ -24,7 +24,9 @@ browser = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-ra"
+# --strict-markers: an unregistered marker is an error, not a silent no-op.
+# Without it `-m "not sloow"` selects everything and reports success.
+addopts = "-ra --strict-markers"
 markers = [
-  "slow: high-cost integration and concurrency tests omitted by make test-fast",
+  "slow: database-backed tests (they request the temp_db fixture); deselected only by make test-fast, which is a CI matrix-breadth job",
 ]

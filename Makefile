@@ -1,7 +1,7 @@
 PYTHON ?= python
 PYTEST ?= $(PYTHON) -m pytest
 
-.PHONY: run serve test test-fast test-full test-browser browser-install map structure compile check-fast check clean
+.PHONY: run serve test test-fast test-full test-lf test-browser browser-install map structure compile check-fast check clean
 
 # `--reload` is not free. With watchfiles installed (which `uvicorn[standard]`
 # in pyproject.toml already asks for) the watcher is event-driven and costs
@@ -31,11 +31,23 @@ serve:
 
 test: test-full
 
+# CI matrix-breadth only: proves the pure-contract tests pass on a second
+# interpreter without paying for the database tier twice. NOT the tier to
+# check your own work with -- it deselects every test that touches the
+# database, which is 159 of 252 files and includes the persistence and
+# information-firewall suites. Since test databases moved to tmpfs
+# (tests/conftest.py) the whole suite costs about what this used to, so
+# there is no longer a speed argument for running less of it.
 test-fast:
 	$(PYTEST) -q -m "not slow"
 
 test-full:
 	$(PYTEST) -q
+
+# The fix-verify loop: last-failed first, then the rest. Free -- the pytest
+# cache is already on -- and the right tool while iterating on one bug.
+test-lf:
+	$(PYTEST) -q --lf --ff
 
 test-browser:
 	$(PYTEST) -q browser_tests
@@ -52,7 +64,13 @@ structure:
 compile:
 	$(PYTHON) -m compileall -q *.py agents tools tests browser_tests
 
-check-fast: compile structure test-fast
+# Both tiers now run every test. The difference is `map`: `check` regenerates
+# docs/CODE_MAP.md, `check-fast` only verifies the copy on disk is current.
+# check-fast USED to mean "skip the database tests", which made it a fast path
+# that quietly skipped the persistence and firewall suites -- the tests this
+# repo exists to keep honest. That was a real trade when a temp_db cost 1.2s;
+# it is not one now.
+check-fast: compile structure test-full
 
 check: compile map structure test-full
 
