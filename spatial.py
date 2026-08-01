@@ -2701,7 +2701,7 @@ def _contact_ops_are_evidence(ops) -> bool:
     return False
 
 
-def apply_contact_ops(scene: dict, ops, *, _age=True) -> dict:
+def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
     """Apply state_diff.contact_ops to scene.contacts.
 
     add     -- upsert by (actor, actor_part, target, target_part)
@@ -2745,6 +2745,9 @@ def apply_contact_ops(scene: dict, ops, *, _age=True) -> dict:
     # Keys this beat has already spoken for. A displacement may never eat one
     # of them: the Director naming two spots in one breath means two spots.
     asserted = set()
+    # (old, new) pairs, so a caller can report what it read a re-description
+    # AS -- a rename collapsed in silence teaches the model nothing.
+    displaced = []
 
     # Age BEFORE applying, so this beat's own assertions land fresh on top and
     # a re-asserted hold never ages at all.
@@ -2818,7 +2821,9 @@ def apply_contact_ops(scene: dict, ops, *, _age=True) -> dict:
             for standing in [k for k in current if k not in asserted]:
                 if _displaces(current[standing], contact) \
                         or _displaces(_flip(current[standing]), contact):
-                    current.pop(standing, None)
+                    moved = current.pop(standing, None)
+                    if moved is not None:
+                        displaced.append((moved, contact))
             # Re-asserting from the other side updates the contact already on
             # record rather than creating its twin.
             if mirror in current and key not in current:
@@ -2834,6 +2839,16 @@ def apply_contact_ops(scene: dict, ops, *, _age=True) -> dict:
                 asserted.add(key)
 
     scene["contacts"] = list(current.values())[-_MAX_CONTACTS:]
+    # Out of band, never onto the scene: the saved document carries world
+    # state and nothing else, and a `_`-prefixed scratch key is exactly what
+    # `test_nothing_is_stashed_in_the_saved_scene` exists to refuse.
+    if report is not None:
+        report.extend(
+            (f"{a['actor']}'s {a['actor_part']} on {a['target']}'s "
+             f"{a['target_part']}",
+             f"{b['actor']}'s {b['actor_part']} on {b['target']}'s "
+             f"{b['target_part']}")
+            for a, b in displaced)
     return scene
 
 
@@ -4320,6 +4335,8 @@ def _shield_standing_bearings(prior_rooms, incoming_rooms):
 def merge_scene_with_diff(
     scene: dict,
     diff: dict | None,
+    *,
+    contact_report=None,
 ) -> dict:
     diff = diff or {}
     # A scene is a nested mutable structure.  A shallow copy allowed
@@ -4526,7 +4543,8 @@ def merge_scene_with_diff(
     # category error that no author can currently delete by hand.
     prune_bodiless_positions(merged)
 
-    apply_contact_ops(merged, diff.get("contact_ops"))
+    apply_contact_ops(merged, diff.get("contact_ops"),
+                      report=contact_report)
     normalize_scene_contacts(merged)
 
     # Within-room position, last of all. Contact is settled by now, and contact

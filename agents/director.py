@@ -69,6 +69,7 @@ from .common import (
     _normalize_scene_patch,
     _check_character_speech_authority,
     _check_player_act_authority,
+    _check_player_interiority_authority,
     _quote_body,
     _requires_reaction_phase,
     _resolve_player_room,
@@ -2856,6 +2857,13 @@ def director_resolve(ctx, nonce):
             "entities": sc.get("entities"),
             "positions": sc.get("positions"),
             "stations": sc.get("stations") or {},
+            # The contact ledger it is asked to MAINTAIN. Withheld until now,
+            # which is the cause of the drift the displacement rule repairs
+            # downstream: a Director that cannot see it wrote `hand -> waist`
+            # one beat and `hand -> side` the next, not renaming anything but
+            # writing fresh each time, blind. Showing the exact part nouns
+            # already on record is what lets a re-assertion BE one.
+            "contacts": sc.get("contacts") or [],
             "attire": scene_attire_view(sc),
             "time": sc.get("time"),
         },
@@ -3032,7 +3040,15 @@ def director_resolve(ctx, nonce):
         out.get("resolved_event") or "", _silent_names)
     _invented = _check_player_act_authority(
         out.get("resolved_event") or "", _declared_player_actions, _player_name)
-    if _invented or _mute:
+    # What the player FEELS is theirs as much as what they do. Everything the
+    # player wrote this beat is exempt -- declared feeling is declared.
+    _felt = _check_player_interiority_authority(
+        out.get("resolved_event") or "", _player_name,
+        " ".join(str(x) for x in (
+            ctx.input or "",
+            (interp.get("speech") or ""),
+            json.dumps(interp.get("sequence") or []))))
+    if _invented or _mute or _felt:
         # ONE retry covering both violations. They are the same boundary from
         # two sides, they are detected at the same moment, and asking twice
         # would cost a second call to say the same thing.
@@ -3049,6 +3065,15 @@ def director_resolve(ctx, nonce):
                 "own turn. You may add sensory detail to a declared act; you may "
                 "not add an act. Offending sentences: "
                 + " | ".join(w.split(": ", 1)[-1] for w in _invented))
+        if _felt:
+            _parts.append(
+                "Your previous resolved_event named what the PLAYER FEELS. "
+                "Their interior state is theirs to declare, not yours to "
+                "assert -- and an observer cannot know it is genuine. Report "
+                "only what a body SHOWS (trembling, wide eyes, a shrill cry, "
+                "a step back) and let the reader infer the rest. Rewrite "
+                "keeping every other fact identical. Offending sentences: "
+                + " | ".join(w.split(": ", 1)[-1] for w in _felt))
         if _mute:
             _parts.append(
                 "Your previous resolved_event attributed SPEECH to a character "
@@ -3072,17 +3097,24 @@ def director_resolve(ctx, nonce):
             _declared_player_actions, _player_name)
         _retry_mute = _check_character_speech_authority(
             _retry.get("resolved_event") or "", _silent_names)
+        _retry_felt = _check_player_interiority_authority(
+            _retry.get("resolved_event") or "", _player_name,
+            " ".join(str(x) for x in (
+                ctx.input or "", (interp.get("speech") or ""),
+                json.dumps(interp.get("sequence") or []))))
         # Kept only if it reduces the TOTAL, so a rewrite that fixes the
         # player's acts by inventing a line for a silent character loses.
-        if len(_retry_invented) + len(_retry_mute) < len(_invented) + len(_mute):
-            out, _invented, _mute = _retry, _retry_invented, _retry_mute
-        for _w in _invented + _mute:
+        if (len(_retry_invented) + len(_retry_mute) + len(_retry_felt)
+                < len(_invented) + len(_mute) + len(_felt)):
+            out, _invented, _mute, _felt = (
+                _retry, _retry_invented, _retry_mute, _retry_felt)
+        for _w in _invented + _mute + _felt:
             ctx.add_warning(_w)
     # Surfaced on the step itself, not only in ctx.warnings -- a content
     # violation that survives the retry must at least be visible in the
     # step/variant inspector rather than vanishing.
-    if _invented or _mute:
-        out["player_act_warnings"] = _invented + _mute
+    if _invented or _mute or _felt:
+        out["player_act_warnings"] = _invented + _mute + _felt
 
     # Warning-only re-normalization; strict validation already ran inside
     # _agent_json (see director_establish above).

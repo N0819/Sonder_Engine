@@ -593,6 +593,29 @@ def _restore_checkpoint_body(chat_id, r):
             seen.add(key)
             deduplicated.append(entry)
         wset(chat_id, "lore_cache", deduplicated[:24])
+
+    # A restore puts stored vectors back BYTE-IDENTICALLY -- deliberately, so
+    # a reroll never re-embeds a whole memory bank and never risks a provider
+    # hiccup silently downgrading it to the crc32 fallback. Correct in itself,
+    # and it has one consequence nobody chose: a checkpoint taken BEFORE an
+    # embedding rebuild carries the old vectors AND the old model key, so
+    # restoring it silently UNDOES the rebuild.
+    #
+    # Measured live: rerolling one turn of a 642-memory story put 637 rows
+    # back on `cheap:crc32:256` after a completed rebuild onto a real model.
+    # The host saw only the rebuild prompt reappearing; the actual loss was
+    # the rebuild itself.
+    #
+    # Re-embedding inline is the wrong fix -- it is exactly what the verbatim
+    # restore exists to avoid, and it would put a provider call on the reroll
+    # path. Instead, hand it to the reconciler that already does this work in
+    # the background, resumably, and refuses to write a fallback over real
+    # vectors. It costs one COUNT when there is nothing to do.
+    try:
+        from memory import start_rebuild_if_needed
+        start_rebuild_if_needed(chat_id)
+    except Exception:
+        pass    # a maintenance task must never fail a restore
 def _lore_cache_fingerprint(entry):
     keys = re.sub(r"\s+", " ", str(entry.get("keys") or "").strip().casefold())
     content = re.sub(r"\s+", " ", str(entry.get("content") or "").strip().casefold())

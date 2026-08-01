@@ -1,5 +1,131 @@
 # Changelog
 
+## alpha 6.4 — What nothing was checking
+
+Alpha 6.3 fixed three ledgers keyed on words a model writes fresh each beat.
+This one started as "what else is in the register" and turned into a single
+finding, arrived at four separate times: **a prompt rule with nothing checking
+it is decoration.** Every defect below was already forbidden in writing.
+
+### Memory works by meaning now
+
+- **An embeddings provider is a real option, and the engine tells you when it
+  is not working.** The role could be set to a model that cannot embed and
+  nothing objected -- measured live, `inception/mercury-2` returned "Model does
+  not exist", `embed_texts_meta` caught it, degraded to the local hash, and
+  play continued looking fine. Fixed at four points: the role no longer
+  inherits Default (Default is a chat model, so inheriting was a guaranteed
+  wrong answer), the picker offers verified embedding ids PER PROVIDER because
+  no provider lists them in `/models` at all, the provider's own rejection
+  message reaches the settings panel instead of being discarded by
+  `raise_for_status`, and changing the role warns about the consequence.
+- **Twelve models benchmarked against a real 441-memory story** on
+  vocabulary-disjoint paraphrase retrieval -- the hard case, where the query
+  keeps the meaning and drops the words. The crc32 fallback scores **0% at
+  every k, median rank 228 of 441**: indistinguishable from random. A real
+  model reaches median rank 1-3. Size buys nothing; the two 4096d models
+  finished 7th and last, and a 1536d one won.
+- **`memory.rebuild_embeddings`** re-reads stranded rows in batches, resumable
+  by construction, refusing to write the crc32 fallback over real vectors when
+  a provider fails mid-run. Opening a story OFFERS it rather than performing
+  it, because a rebuild spends money and opening a chat is not consent.
+- **A restore no longer undoes a rebuild.** Checkpoints store vectors verbatim
+  so a reroll never re-embeds -- correct, and it meant a checkpoint written
+  BEFORE a rebuild silently reverted one. Measured: one reroll put 637 of 642
+  rows back on the fallback. Restore now hands the bank to the reconciler.
+- **`rebuild_checkpoint_embeddings` carries a rebuild back through saved
+  states without embedding anything.** A vector is a pure function of content,
+  and the same memory recurs unchanged across every checkpoint -- one story
+  held 40,224 memory copies and 526 distinct by content. So it substitutes
+  vectors already earned, joined on (character, content). Live: **99,442 saved
+  memories repaired across 1,040 checkpoints in 98 seconds, zero API calls**,
+  against 99,442 calls for the brute-force alternative. Rows since deleted are
+  left exactly as they were rather than blanked to tidy a number.
+
+### Retrieval was ignoring its own relevance signals
+
+- **Two score scales were being summed as though they shared one.** RRF's
+  magnitude is arbitrary -- `weight / (60 + rank)` is ~0.02 at rank 1 and only
+  its ORDER means anything -- while the bonuses after it are hand-tuned on a
+  0..1 utility scale. Raw, the four relevance rankings could contribute 0.074
+  combined against a recency bonus reaching 0.12 ALONE: a recent, salient
+  memory matching nothing outranked the best match on every relevance signal
+  there is. Invisible until real embeddings made the signal real. Measured
+  fix: end-to-end paraphrase retrieval 1/16 -> 7/16, and the share of
+  retrieved memories carrying an actual vector match 12% -> ~50%.
+- **`recall_limit` 8 -> 16.** Every result set is padded with chronological
+  neighbours, so at 8 those four padding entries were a third of what a
+  character saw. Raising it displaces padding with relevance-selected
+  memories: mean relevance RISES 0.608 -> 0.640 while the least relevant slot
+  does not move. Stops at 16, where the curve flattens and the payload does
+  not.
+- **Mood and goal get their own rank list.** Concatenated onto a query
+  dominated by a ~1,015-character perception view, a 10-60 character mood
+  fragment left `cosine(query_with_mood, view_alone)` at 0.994 -- it moved
+  nothing. They now fuse as their own RRF rankings.
+- **Unbidden recall gained a semantic axis** (SIGMA SRIP-14 §XXII). The token
+  axis could only see DIFFERENT WORDS, and different words routinely mean the
+  same thing: it offered "pivots toward the open doorway into the corridor" as
+  a *contrast* to a beat about walking down a corridor. Gated on near-total
+  model coverage, because the axis is INVERTED -- a stranded row scoring 0.0
+  reads as maximally contrasting, so the same number that hides a row from
+  ordinary recall would make it maximally visible here.
+- **Mood-congruent recall**, bounded below salience so it breaks ties rather
+  than winning arguments. Congruence is a feedback loop: a character in
+  despair recalling only despair deepens it, which may be right for fiction
+  but should be chosen rather than emergent.
+
+### A memory now carries the mood it was formed in
+
+`resolve_affect` turns a model's proposed mood into the one a character
+actually holds -- decayed toward baseline, moved by appraisal, cross-checked
+against the label. It runs ~500 lines BELOW the memory mint, so a memory could
+never see it and took the raw self-report instead. Measured across the same
+characters: the self-report averages +0.773 with **0% negative**; the resolved
+affect averages +0.467 with **22% negative**. Newer stories had inherited the
+saturated one -- median valence +0.85, four negatives in 3,162 rows -- which
+is a constant, not an axis, and it silently disabled everything downstream
+that reads affect.
+
+### The firewall had holes where prose crossed a boundary
+
+- **The Director may not say what the player FEELS.** Live: the player typed
+  only "W-what did you do to me!?" and the resolve wrote "the shrill, PANICKED
+  cry" and "she takes in the GENUINE TERROR in those wide eyes" -- an
+  interior state the player never declared, asserted as fact, with "genuine"
+  claiming its truth. The mirror of `_check_player_act_authority`, exempting
+  anything the player themselves wrote.
+- **The narrator may not either**, in the second person it writes in ("you
+  feel", "terror grips you"). Enforced rather than warned, because it is the
+  last stage: what the narrator writes IS what the story said happened.
+  Anything already in the view is exempt -- perception is its source of truth.
+- **A perception view may not narrate its own perceiver.** Elyndra's own view
+  read "Elyndra's gaze stays fixed on the shifting lump, her teasing smile
+  faltering", in a view that elsewhere said "You see Hinami". She is not
+  watching her own smile falter. Perception had COPIED the Director's
+  omniscient sentence rather than rendering the beat from her frame;
+  per-observer calls do not prevent that. Wired into all three passes -- pass
+  1 applies the identity floor directly rather than through `_scrub_view_for`,
+  and is the pass that most needs it. A fresh 4-turn live run had 1 of 17
+  views narrating its own perceiver.
+- **An absence is not an episode.** 356 memories across five stories -- 7.3%
+  of the bank, and a THIRD of one story's -- were the single sentence "You are
+  in an unspecified area.", all at salience 0.47, all eligible to be handed to
+  a character instead of something that happened. Still being written on the
+  most recent turn of three stories.
+
+### The Director can see what the engine did with its output
+
+- **`scene.contacts` reaches the Director**, which is the cause of the drift
+  alpha 6.3 repaired downstream: a stage asked to maintain a ledger it cannot
+  see writes fresh every beat rather than re-asserting.
+- **`ctx.tell_director`** carries what the deterministic layer MADE of a
+  beat's output onto the next beat's `engine_notices` -- when a contact
+  re-description was read as the same limb moving, when an attire note was
+  read as dressing someone. Distinct from `ctx.warnings`, which nothing in
+  production reads. A stage that cannot see what happened to its output is
+  guessing every beat.
+
 ## alpha 6.3 — One hand, one place
 
 Alpha 6.2 said prose has no memory. This one is about the ledgers that replaced

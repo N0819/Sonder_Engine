@@ -1,6 +1,7 @@
 """Memory system with hierarchical lorebook support and expanded categories."""
 
 import base64
+import hashlib
 import json, re, threading, time, math
 import numpy as np
 from collections import defaultdict
@@ -1116,9 +1117,105 @@ def _memory_similarity(a, b):
     return _jaccard_text(f"{a.get('gist','')} {a.get('content','')}",
                          f"{b.get('gist','')} {b.get('content','')}")
 
+# The bridge between two score scales that were being added together as though
+# they shared one.
+#
+# RRF's output is arbitrary in magnitude -- `weight / (60 + rank)` is about
+# 0.02 at rank 1, and only its ORDER carries meaning. The bonuses that follow
+# (salience, recency, presence) are hand-tuned on a 0..1 utility scale. Summed
+# raw, the four relevance rankings could contribute at most 0.074 combined,
+# while the recency bonus alone reaches 0.12 -- so a recent, salient memory
+# with NO relevance to the query outranked the single best match on every
+# relevance signal the engine has.
+#
+# It was invisible until alpha 6.3. With the crc32 fallback the vector
+# rankings were lexical noise, so nobody could tell they were being ignored;
+# configuring a real embeddings provider made the signal real and the
+# imbalance measurable. Measured on a live 441-memory story: end-to-end
+# retrieval of a paraphrased memory ran at 1/16, and 88% of the memories
+# handed to a character carried no vector match at all.
+#
+# Scaled rather than re-tuning the bonuses, because the bonuses' RELATIVE
+# values are meaningful and their absolute band is the one that was chosen
+# deliberately. 12 puts the four rankings at ~0.9 combined against a ~0.4
+# bonus band: relevance leads, and salience/recency/presence still decide
+# between comparably relevant memories, which is what they are for. Measured
+# across 12 real perception views, the share of retrieved memories with an
+# actual vector match goes 12% -> ~50% and plateaus by 16, so this sits at the
+# top of the useful range rather than past it.
+_RRF_SCALE = 12.0
+
+
+# How many retrieved memories reach a character each beat.
+#
+# Was 8, and measured too low once relevance actually worked. Every result set
+# is padded with chronological neighbours of what was recalled, so at 8 those
+# four padding entries were a third of what the character saw. Raising the
+# limit dilutes them with relevance-selected memories instead -- measured on
+# real perception views, mean relevance of the whole set RISES from 0.608 to
+# 0.640 while the least relevant slot does not move, i.e. the added memories
+# are better than the padding they displace, not filler.
+#
+# 16 rather than 24: end-to-end recall of a paraphrased memory goes 7/16 ->
+# 11/16 -> 13/16 across 8/16/24, but relevance flattens (0.640 -> 0.649) while
+# the payload keeps growing (~890 -> ~1242 tokens per character per beat). The
+# attention budget is real -- see docs/UNBUILT.md 1.12 on nine payload keys --
+# so this stops where the curve does.
+_RECALL_LIMIT = 16
+
+
+# Mood-congruent recall: what you feel shapes what comes back.
+#
+# `memories.valence` is written on every row and, until alpha 6.3.1, fed the
+# ranking nowhere -- its only consumer was `contrast_memory`, and there as
+# `abs(valence)`, which is emotional INTENSITY ("this memory is charged"), not
+# congruence ("this matches how you feel now"). The signed half of an affect
+# signal the engine already tracked had never been used for anything.
+#
+# It was also unbuildable until the same release, and that is worth recording
+# rather than repeating: memories were taking the character's raw self-report
+# instead of their resolved affect, which measured 0% negative against a true
+# 22%. Ranking on it then was ranking on a constant -- built once, measured as
+# inert, and withdrawn. It works now because the axis does.
+#
+# Deliberately small, and in the same band as the salience term for the reason
+# the belief-credence comment beside it already gives: this should break a tie
+# between comparably relevant memories, never outrank an actual match. And
+# deliberately bounded, because congruence is a FEEDBACK loop -- a character in
+# despair recalling only despair deepens the despair. That may be exactly right
+# for fiction (it is what rumination is), but it should be a chosen intensity
+# rather than an emergent one.
+_MOOD_CONGRUENCE = 0.05
+
+_MOOD_VALENCE = (
+    (("afraid", "fear", "fearful", "terrified", "scared", "anxious", "dread",
+      "panic", "angry", "furious", "rage", "resentful", "bitter", "grief",
+      "grieving", "ashamed", "humiliated", "guilty", "miserable", "despair",
+      "hopeless", "lonely", "hurt", "sad", "sick", "desperate", "wary",
+      "distrustful", "uneasy", "unease", "tense", "shaken"), -1.0),
+    (("happy", "glad", "delighted", "elated", "warm", "fond", "affectionate",
+      "content", "calm", "safe", "relieved", "hopeful", "proud", "amused",
+      "playful", "curious", "eager", "tender", "grateful", "trusting",
+      "composed", "steady"), 1.0),
+)
+
+
+def _mood_axis(text):
+    """The signed valence a mood/goal string implies, or None if it implies
+    none. Word-matched against a small closed vocabulary rather than embedded:
+    this is a tiebreak, and a wrong sign is worse than no sign."""
+    words = set(re.split(r"[^a-z']+", str(text or "").casefold()))
+    if not words:
+        return None
+    score = 0.0
+    for vocab, sign in _MOOD_VALENCE:
+        score += sign * len(words & set(vocab))
+    return None if score == 0 else (1.0 if score > 0 else -1.0)
+
+
 def _rrf_add(scores, reasons, ranking, weight, reason):
     for rank, mid in enumerate(ranking, 1):
-        scores[mid] += weight / (60.0 + rank)
+        scores[mid] += (weight * _RRF_SCALE) / (60.0 + rank)
         if rank <= 12 and reason not in reasons[mid]:
             reasons[mid].append(reason)
 
@@ -1268,6 +1365,15 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
             ranked = [mid for _s, mid in sorted(scored, reverse=True)][:60]
             _rrf_add(fused, reasons, ranked, _ASPECT_WEIGHT, label)
     tmode = _temporal_mode(query_text)
+    # From the aspects when the caller supplied them (that is where mood
+    # actually travels), falling back to the query itself.
+    mood_axis = None
+    for label, text in _aspects:
+        if "feel" in label.casefold():
+            mood_axis = _mood_axis(text)
+            break
+    if mood_axis is None:
+        mood_axis = _mood_axis(query_text)
     known_turns = [m["turn_idx"] for m in memories.values() if m["turn_idx"] is not None]
     max_turn = current_turn_idx if current_turn_idx is not None else max(known_turns, default=0)
     for mid, mem in memories.items():
@@ -1289,6 +1395,15 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
             elif mem["confidence"] <= 0.25:
                 reasons[mid].append("belief the character has since revised")
         fused[mid] += 0.08 * _exact_cue_score(mem, query_text)
+        if mood_axis is not None:
+            # Same-signed feeling pulls up, opposite pushes down, scaled by how
+            # strongly the memory itself is charged. A neutral memory (valence
+            # 0) is untouched either way.
+            congruent = mood_axis * float(mem["valence"] or 0.0)
+            if congruent:
+                fused[mid] += _MOOD_CONGRUENCE * congruent
+                if congruent > 0 and "matches how you feel" not in reasons[mid]:
+                    reasons[mid].append("matches how you feel")
         ti = mem["turn_idx"]
         if ti is not None and max_turn:
             age = _clamp((max_turn - ti) / max(max_turn, 1))
@@ -1388,6 +1503,16 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
 # pure read -- unlike search_memories it must never touch access_count,
 # because it runs mid-pipeline at character-stage time.
 
+# How hard semantic distance pushes an unbidden memory away from the beat.
+# Comparable to the token penalty (0.8) rather than larger: the structural
+# axis is exact and has been carrying this since the beginning, so the vector
+# joins it instead of replacing it.
+_CONTRAST_SEMANTIC = 0.7
+
+# What share of the bank must be comparable with the live model before the
+# semantic axis is used at all. See the inversion note in contrast_memory.
+_CONTRAST_SEMANTIC_COVERAGE = 0.9
+
 # Below this many rows, "far from the recent window" barely means anything.
 _CONTRAST_MIN_BANK = 20
 # Obligation-tier categories never intrude as texture: surfacing a promise
@@ -1405,11 +1530,18 @@ def contrast_memory(chat_id, char_id, query_text, current_turn_idx, *,
     """Up to `k` high-salience memories DISSIMILAR to the current beat.
 
     Deliberately ignores `confidence`: a belief the character has since set
-    aside is exactly the sort of thing that returns unprompted. Deliberately
-    does not use embedding cosine as the dissimilarity axis -- on a corpus
-    embedded with the local-hash fallback that is a fuzzy-lexical signal, so
-    the structural fields (tokens, location, entities, turn distance) carry
-    the contrast instead; they are exact.
+    aside is exactly the sort of thing that returns unprompted.
+
+    Dissimilarity is carried by the structural fields (tokens, location,
+    entities, turn distance), which are exact, PLUS semantic distance where
+    the bank can supply it. The semantic half was deliberately absent until
+    alpha 6.3.1: on a corpus embedded with the local-hash fallback, cosine was
+    a fuzzy-lexical signal and would only have restated the token penalty.
+    With real vectors it says something the token axis structurally cannot --
+    that "the alley smelled of wet brick and chip fat" and "the backstreet
+    stank of damp masonry and frying grease" are the SAME memory, not a
+    perfect contrast. It is gated on near-total model coverage; see the
+    inversion note in the body for why that gate is not optional.
 
     Same epistemic envelope as search_memories: this character's own rows
     only, hard turn cutoff, frame visibility. No writes.
@@ -1432,6 +1564,36 @@ def contrast_memory(chat_id, char_id, query_text, current_turn_idx, *,
             continue
     here_cf = str(here or "").strip().casefold()
     query_cf = str(query_text or "").casefold()
+
+    # THE INVERSION TRAP, and why this is gated so carefully.
+    #
+    # A row embedded by a different model scores 0.0 against any query. In
+    # `search_memories` that makes it invisible, which is a silent omission.
+    # Here the axis is INVERTED -- distance is the thing being rewarded -- so
+    # the same 0.0 would read as maximally contrasting, and unbidden recall
+    # would preferentially surface precisely the memories that have not been
+    # rebuilt yet. The identical number flips from an omission into a
+    # systematic bias, so only rows that are actually comparable get the
+    # semantic term; the rest keep the structural axis alone, exactly as
+    # before. A story mid-rebuild degrades to the old behaviour rather than to
+    # a wrong one.
+    qv = None
+    comparable = {}
+    try:
+        embedded = embed_texts_meta([query_text or "memory"])
+        for r in rows:
+            if (r["embedding"] and r["embedding_model"] == embedded.model_key
+                    and r["embedding_dim"] == embedded.dimensions):
+                comparable[r["id"]] = _vec(r["embedding"])
+        # Only worth the axis if MOST of the bank can be compared; a bank that
+        # is half rebuilt would otherwise rank on which half a row is in.
+        if len(comparable) >= _CONTRAST_SEMANTIC_COVERAGE * len(rows):
+            qv = embedded.vectors[0]
+        else:
+            comparable = {}
+    except Exception:
+        qv, comparable = None, {}
+
     scored = []
     for r in rows:
         if r["id"] in excluded:
@@ -1458,6 +1620,16 @@ def contrast_memory(chat_id, char_id, query_text, current_turn_idx, *,
         score -= 0.8 * _jaccard_text(
             query_text,
             f"{mem['gist']} {' '.join(mem['key_phrases'] or [])}")
+        if qv is not None:
+            # Semantic distance, once the vectors can carry it. The token
+            # penalty above can only see DIFFERENT WORDS, and different words
+            # routinely mean the same thing -- "the alley smelled of wet brick
+            # and chip fat" against "the backstreet stank of damp masonry and
+            # frying grease" shares nothing lexically and is the same memory.
+            # A lexical axis calls that a perfect contrast; this one does not.
+            fv = comparable.get(mem["id"])
+            if fv is not None:
+                score -= _CONTRAST_SEMANTIC * _cos(qv, fv)
         if here_cf and str(mem["location"] or "").strip().casefold() == here_cf:
             score -= 0.3
         ents = [str(e) for e in (mem["entities"] or []) if str(e).strip()]
@@ -1557,7 +1729,7 @@ def save_memory_summary(chat_id, char_id, summary, *, scope="autobiographical", 
         embedding, embedding_model, embedding_dim, time.time()))
 
 def build_character_memory_context(chat_id, char_id, current_turn_idx, current_view, active_state, *,
-                                   recent_turns=4, recall_limit=8, here=None,
+                                   recent_turns=4, recall_limit=_RECALL_LIMIT, here=None,
                                    in_sight=None):
     active_state = active_state or {}
     recent = recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=recent_turns, limit=12)
@@ -2594,6 +2766,130 @@ def rebuild_embeddings(chat_id=None, char_id=None, *, batch=_REBUILD_BATCH,
     _STRANDED_REPORTED.clear()
     logger.info("memory: rebuilt %d memories and %d summaries onto %s",
                 report["memories"], report["summaries"], target_key)
+    return report
+
+
+def _memory_vector_key(char_id, content):
+    """What decides a memory's vector: whose it is, and what it says.
+
+    Checkpoint dumps carry no row id, so the join is on the content itself --
+    which is the honest key anyway, since the vector is a pure function of the
+    document built from it. Scoped per character because two minds can hold
+    word-identical memories that are still different rows.
+    """
+    body = " ".join(str(content or "").split())
+    return (char_id, hashlib.sha1(body.encode("utf-8", "ignore")).hexdigest())
+
+
+def rebuild_checkpoint_embeddings(chat_id=None, *, dry_run=True, progress=None):
+    """Carry a completed rebuild back through a story's saved states.
+
+    A checkpoint stores each memory's vector verbatim so that restoring one
+    never re-embeds a bank (see `_blob_to_b64`). That is right, and it means a
+    checkpoint written BEFORE a rebuild holds the old vectors and the old model
+    key -- so rolling back to it silently undoes the rebuild. Measured live:
+    one reroll put 637 of 642 rows back on the crc32 fallback.
+
+    **This re-embeds nothing.** A vector is a pure function of the memory's
+    content, and the same memory appears in dozens of checkpoints unchanged --
+    chat 38 held 40,224 memory copies across its checkpoints and only 526
+    distinct by content, 90.7% of which already had a rebuilt vector in the
+    live table. So the fix is substitution, not computation: look each saved
+    memory up by (character, content) and write in the vector already earned.
+
+    Deliberately conservative, because this rewrites rollback history:
+
+    * a saved row with no live match is left EXACTLY as it was, never blanked
+      and never guessed at (those are memories since deleted; if one is ever
+      restored, `start_rebuild_if_needed` picks it up);
+    * a blob is rewritten only if something actually changed, and only after
+      re-parsing to prove it is still valid JSON with the same row count;
+    * `dry_run` is the default -- it reports what it would do and writes
+      nothing.
+
+    Resumable by construction: a checkpoint already carrying the live model
+    key has nothing to substitute and is skipped on the next pass.
+    """
+    live = embed_texts_meta(["status"])
+    key, dim = live.model_key, live.dimensions
+    where, args = ["1=1"], []
+    if chat_id is not None:
+        where.append("chat_id=?"); args.append(chat_id)
+    clause = " AND ".join(where)
+
+    vectors = {}
+    for row in q(f"SELECT char_id, content, embedding, cue_embedding "
+                 f"FROM memories WHERE {clause} AND embedding_model=? "
+                 f"AND embedding_dim=?", tuple(args) + (key, dim)):
+        vectors[_memory_vector_key(row["char_id"], row["content"])] = (
+            _blob_to_b64(row["embedding"]), _blob_to_b64(row["cue_embedding"]))
+    summaries = {}
+    for row in q(f"SELECT char_id, summary, embedding FROM memory_summaries "
+                 f"WHERE {clause} AND embedding_model=? AND embedding_dim=?",
+                 tuple(args) + (key, dim)):
+        summaries[_memory_vector_key(row["char_id"], row["summary"])] = (
+            _blob_to_b64(row["embedding"]))
+
+    report = {"model": key, "checkpoints": 0, "rewritten": 0,
+              "memories_repaired": 0, "summaries_repaired": 0,
+              "memories_unmatched": 0, "dry_run": bool(dry_run)}
+    if not vectors and not summaries:
+        return report
+
+    rows = q(f"SELECT id, chat_id, turn_idx, blob FROM checkpoints "
+             f"WHERE {clause} ORDER BY id", tuple(args))
+    for row in rows:
+        report["checkpoints"] += 1
+        try:
+            blob = json.loads(row["blob"])
+        except (TypeError, ValueError):
+            continue          # an unreadable checkpoint is left untouched
+        changed = 0
+        for mem in (blob.get("memories") or []):
+            if not isinstance(mem, dict):
+                continue
+            if mem.get("embedding_model") == key and mem.get("embedding_dim") == dim:
+                continue
+            hit = vectors.get(_memory_vector_key(mem.get("char_id"),
+                                                 mem.get("content")))
+            if hit is None:
+                report["memories_unmatched"] += 1
+                continue
+            mem["embedding"], mem["cue_embedding"] = hit
+            mem["embedding_model"], mem["embedding_dim"] = key, dim
+            changed += 1
+            report["memories_repaired"] += 1
+        for summ in (blob.get("memory_summaries") or []):
+            if not isinstance(summ, dict):
+                continue
+            if summ.get("embedding_model") == key and summ.get("embedding_dim") == dim:
+                continue
+            hit = summaries.get(_memory_vector_key(summ.get("char_id"),
+                                                   summ.get("summary")))
+            if hit is None:
+                continue
+            summ["embedding"] = hit
+            summ["embedding_model"], summ["embedding_dim"] = key, dim
+            changed += 1
+            report["summaries_repaired"] += 1
+        if not changed or dry_run:
+            continue
+        text = json.dumps(blob, ensure_ascii=False)
+        # Prove it before it replaces rollback history: parseable, and the
+        # same number of rows it went in with.
+        check = json.loads(text)
+        if (len(check.get("memories") or []) != len(blob.get("memories") or [])
+                or sorted(check) != sorted(blob)):
+            continue
+        qi("UPDATE checkpoints SET blob=? WHERE id=?", (text, row["id"]))
+        report["rewritten"] += 1
+        if progress:
+            progress(report["rewritten"], report["checkpoints"])
+    if not dry_run and report["rewritten"]:
+        logger.info("memory: carried the rebuild into %d checkpoint(s); "
+                    "%d saved memories repaired, %d left unmatched",
+                    report["rewritten"], report["memories_repaired"],
+                    report["memories_unmatched"])
     return report
 
 

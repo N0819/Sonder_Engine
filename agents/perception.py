@@ -290,6 +290,7 @@ from .common import (
     _contextual_rooms,
     _perceptible_entities,
     _dedupe_view_sentences,
+    _player_name_forms,
     _ensure_environment,
     _fallback_perception_views,
     _inject_action,
@@ -661,6 +662,69 @@ def _pronouns_for_perceiver(all_pronouns, perceiver, known):
     }
 
 
+# Sentence boundaries, tolerating a closing quote between the terminal
+# punctuation and the space ('...to me!?" The voice is...'). A lone
+# `(?<=[.!?])\s+` cannot split there, which silently made a whole passage one
+# "sentence" and let the self-narration guard pass everything. Two alternated
+# lookbehinds rather than an optional group, because Python requires them
+# fixed-width -- and this way the quote stays attached to the sentence it
+# closes instead of being eaten by the split.
+_SENTENCE_SPLIT = re.compile(r'(?<=[.!?])\s+|(?<=[.!?]["\u201d\u2019\'])\s+')
+
+
+def _strip_self_narration(view, perceiver_name):
+    """Drop sentences that narrate the PERCEIVER from outside their own view.
+
+    A view is what one mind receives. It may say "you" and it may describe
+    anyone else; what it must never do is stand outside the perceiver and
+    report them as a third party -- least of all their own face, which they
+    cannot see.
+
+    Live, alpha 6.3: Elyndra's own view read "Elyndra's gaze stays fixed on
+    the shifting lump, her teasing smile faltering as she watches the genuine
+    terror in that tiny trembling form", in a view that elsewhere said "You
+    see Hinami." Both halves are wrong from her side -- she is not watching
+    her own smile falter, and she cannot know another mind's terror is
+    genuine. Tracing it: `director_resolve` had written "Elyndra's teasing
+    smile falters completely at the shrill, panicked cry", and perception
+    COPIED the omniscient sentence into her view rather than rendering the
+    beat from her frame. Per-observer calls did not prevent it; each observer
+    got its own call and this one simply echoed its input.
+
+    Dropping the sentence rather than rewriting it, and dropping only whole
+    sentences whose SUBJECT is the perceiver: the rest of the view is
+    untouched and still coherent, and no prose is invented to replace what
+    goes. A pronoun subject is never guessed at -- "She watches the lump"
+    could be anyone in the beat, and guessing would gut legitimate views.
+    """
+    if not view or not perceiver_name:
+        return view, []
+    forms = _player_name_forms(perceiver_name)
+    if not forms:
+        return view, []
+    kept, dropped = [], []
+    # A closing quote may sit between the terminal punctuation and the space
+    # ('...to me!?" The voice is...'), and a naive lookbehind cannot split
+    # there -- which silently made a whole passage one "sentence" and let this
+    # guard pass everything.
+    for sentence in _SENTENCE_SPLIT.split(str(view)):
+        stripped = sentence.strip()
+        if not stripped:
+            continue
+        if any(re.match(rf"^{re.escape(f)}(?:'s)?\b", stripped) for f in forms):
+            dropped.append(stripped)
+        else:
+            kept.append(stripped)
+    if not dropped:
+        return view, []
+    # Never empty a view entirely: a perceiver who received something must be
+    # told something. If every sentence named them, the view is beyond repair
+    # by deletion and is left alone for the warning to carry.
+    if not kept:
+        return view, []
+    return " ".join(kept), dropped
+
+
 def _scrub_view_for(ctx, stage, view, perceiver_name, known, roster):
     """Apply the deterministic identity floor to one perceiver's view:
     every roster identity the perceiver does not recognize (and is not) is
@@ -679,6 +743,11 @@ def _scrub_view_for(ctx, stage, view, perceiver_name, known, roster):
         ctx.warnings.append(
             f"{stage}: scrubbed unearned identity {leaked} "
             f"from the view of {perceiver_name}")
+    view, self_narrated = _strip_self_narration(view, perceiver_name)
+    for sentence in self_narrated:
+        ctx.warnings.append(
+            f"{stage}: dropped self-narration from the view of "
+            f"{perceiver_name}: {sentence[:120]!r}")
     return view
 
 def _behind_rooms(scene, observer):
@@ -1493,6 +1562,18 @@ def perception_act(ctx, nonce):
                 ctx.warnings.append(
                     f"perception_act: scrubbed unearned identity {leaked} "
                     f"from the view of {p['name']}")
+        # Pass 1 applies the identity floor directly rather than through
+        # `_scrub_view_for`, so it needs this explicitly -- and it is the pass
+        # that most needs it. The act view is written closest to the Director's
+        # own resolved_event, which is omniscient by construction, so an
+        # observer's view here is the likeliest place for that omniscience to
+        # be copied through intact. Measured on a fresh 4-turn run: 1 of 17
+        # views narrated its own perceiver.
+        view, self_narrated = _strip_self_narration(view, p["name"])
+        for sentence in self_narrated:
+            ctx.warnings.append(
+                f"perception_act: dropped self-narration from the view of "
+                f"{p['name']}: {sentence[:120]!r}")
         clean_views[pid] = _dedupe_view_sentences(view) or None
 
     _disguise_leak_check(ctx, "perception_act", clean_views, perceivers,

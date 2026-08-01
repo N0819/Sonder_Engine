@@ -1946,6 +1946,97 @@ def _check_character_speech_authority(resolved_event, silent_names):
     return warnings
 
 
+# Interior states a resolved_event may not assert about the PLAYER. Nouns and
+# adjectives that name what is INSIDE a mind, as against the surface a body
+# shows: "trembling", "wide eyes", "a shrill cry" are observable and always
+# allowed; "terror", "panic", "she realises" are not.
+_INTERIOR_STATES = (
+    "terror", "terrified", "panic", "panicked", "fear", "afraid", "frightened",
+    "dread", "horror", "horrified", "anguish", "despair", "grief", "sorrow",
+    "misery", "miserable", "shame", "ashamed", "humiliation", "humiliated",
+    "guilt", "regret", "remorse", "rage", "fury", "furious", "resentment",
+    "bitterness", "envy", "jealousy", "loneliness", "longing", "yearning",
+    "desire", "arousal", "lust", "joy", "elation", "delight", "relief",
+    "relieved", "contentment", "gratitude", "hope", "anxiety", "anxious",
+    "unease", "uneasy", "embarrassment", "embarrassed", "confusion",
+    "confused", "curiosity", "curious", "trust", "distrust", "affection",
+)
+
+# Verbs that report a mind's own operation rather than its body's motion.
+_INTERIOR_VERBS = (
+    "realise", "realize", "understand", "know", "believe", "doubt", "wonder",
+    "want", "wish", "hope", "fear", "decide", "intend", "remember", "recall",
+    "feel", "sense", "notice that", "recognise", "recognize", "regret",
+)
+
+# Words that assert an interior state is TRUE, which no observer may know.
+_INTERIOR_CERTAINTY = ("genuine", "real", "true", "unmistakable", "obvious",
+                       "clearly", "plainly", "evident", "undisguised")
+
+
+def _check_player_interiority_authority(resolved_event, player_name,
+                                        declared_text=""):
+    """Interior states a resolved_event asserts about the PLAYER.
+
+    The mirror of `_check_player_act_authority` for feeling rather than doing,
+    and the same boundary. The Director owns objective causality; it does not
+    own what is inside the protagonist. It may report every observable the
+    body shows -- trembling, wide eyes, a shrill cry -- and must stop there,
+    because naming the state behind them decides for the player what their
+    character feels.
+
+    Live, alpha 6.3, chat 52 turn 19: the player typed only "W-what did you do
+    to me!?" and the resolve wrote "the shrill, PANICKED cry" and "she takes in
+    the GENUINE TERROR in those wide eyes". Perception then copied both into
+    another character's view, so an invented interior state became something a
+    second mind had observed as fact.
+
+    Exempt: anything the player themselves wrote. If they declared the fear,
+    it is theirs to declare -- this catches what arrives from nowhere.
+    `_INTERIOR_CERTAINTY` is flagged only ALONGSIDE an interior word, because
+    "genuine" is unremarkable on its own and damning next to "terror".
+    """
+    if not resolved_event or not player_name:
+        return []
+    declared = str(declared_text or "").casefold()
+    warnings = []
+    for sentence in re.split(r"(?<=[.!?])\s+", str(resolved_event)):
+        body = sentence.strip()
+        if not body:
+            continue
+        low = body.casefold()
+        if not _mentions_player(low, player_name):
+            continue
+        hits = [w for w in _INTERIOR_STATES
+                if re.search(rf"\b{re.escape(w)}\b", low)
+                and not re.search(rf"\b{re.escape(w)}\b", declared)]
+        hits += [v for v in _INTERIOR_VERBS
+                 if re.search(rf"\b{re.escape(v)}(?:s|es|d|ed|ing)?\b", low)
+                 and not re.search(rf"\b{re.escape(v)}", declared)]
+        if not hits:
+            continue
+        certainty = [c for c in _INTERIOR_CERTAINTY
+                     if re.search(rf"\b{re.escape(c)}\b", low)]
+        warnings.append(
+            "Player interior state not declared this beat "
+            "(player-interiority authority): "
+            f"{sorted(set(hits))[:3]}"
+            + (f" asserted as {certainty[0]!r}" if certainty else "")
+            + f": {body[:120]!r}")
+    return warnings
+
+
+def _mentions_player(low_sentence, player_name):
+    """Whether a sentence is ABOUT the player -- their name, or a possessive
+    reaching for them. Pronouns are not guessed at: "her terror" in a
+    two-woman scene could be either of them, and a guess here would flag
+    ordinary NPC description."""
+    for form in _player_name_forms(player_name):
+        if re.search(rf"\b{re.escape(form.casefold())}\b", low_sentence):
+            return True
+    return False
+
+
 def _check_player_act_authority(resolved_event, declared_actions, player_name):
     """Physical acts a resolved_event gives the PLAYER on a beat where they
     declared none (live: Elevator Adventure t63 -- the player said only
@@ -3554,6 +3645,54 @@ def _check_portal_fidelity(prose, portal_states):
     return warnings
 
 
+# The player's own interiority, in the second person the narrator writes in.
+# "you feel", "your terror", "terror grips you" -- the same boundary
+# `_check_player_interiority_authority` defends on the Director's side, at the
+# last stage before the reader.
+_YOU_INTERIOR = re.compile(
+    r"\byou(?:r)?\s+(?:own\s+)?(?:" + "|".join(
+        re.escape(w) for w in _INTERIOR_STATES) + r")\b"
+    r"|\byou\s+(?:feel|felt|realise|realised|realize|realized|know|knew|"
+    r"want|wanted|wish|wished|hope|hoped|fear|feared|understand|understood|"
+    r"remember|remembered|decide|decided|sense|sensed)\b"
+    r"|\b(?:" + "|".join(re.escape(w) for w in _INTERIOR_STATES) +
+    r")\s+(?:grips|grip|floods|flood|washes|wash|rises|rise|takes|take|"
+    r"fills|fill|seizes|seize|surges|surge)\s+(?:through\s+)?you\b",
+    re.I)
+
+
+def _check_player_interiority_prose(prose, view=""):
+    """Interior states the NARRATOR asserts about the player.
+
+    The narrator renders the player-facing slice; it does not get to tell the
+    player what their character feels. It may render every observable the view
+    delivered -- a shaking hand, a held breath, a step back -- and stop there.
+
+    Anything already in the VIEW is exempt: perception is the narrator's
+    source of truth, so a feeling that reached it legitimately (the player
+    declared it, or a character's own delivered cue carried it) may be
+    rendered. This catches what the narrator adds on its own.
+
+    Second person, because that is what the narrator writes in: the Director's
+    counterpart matches the player's NAME and would never fire here.
+    """
+    prose = str(prose or "")
+    if not prose:
+        return []
+    source = str(view or "").casefold()
+    warnings = []
+    for match in _YOU_INTERIOR.finditer(prose):
+        phrase = match.group(0)
+        # Present in the view already -> the narrator is rendering, not adding.
+        if phrase.casefold() in source:
+            continue
+        sentence = prose[max(0, match.start() - 60):match.end() + 60]
+        warnings.append(
+            "Narrator asserted the player's interior state "
+            f"(player-interiority fidelity): {phrase!r} in {sentence.strip()[:120]!r}")
+    return warnings
+
+
 def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
                              cast_pronouns=None, player_name=None,
                              narration_person=None, player_aliases=None,
@@ -3562,6 +3701,7 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     warnings = []
     view_text = str(view or "")
     prose = out.get("prose") or ""
+    warnings.extend(_check_player_interiority_prose(prose, view_text))
     view_names = set(re.findall(
         r"\b[A-Z][a-z]+(?:\s+(?:of\s+)?(?:the\s+)?[A-Z][a-z]+)+\b", view_text))
     for name in view_names:

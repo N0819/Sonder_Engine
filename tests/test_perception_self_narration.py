@@ -1,0 +1,155 @@
+"""A view is what ONE mind receives — it must not narrate that mind from outside.
+
+Live, alpha 6.3, chat 52 "Elyndra — Hinami ⎇16 ⎇1" turn 19. Elyndra's own
+perception view read:
+
+    "Elyndra's gaze stays fixed on the shifting lump, her teasing smile
+     faltering as she watches the genuine terror in that tiny trembling form."
+
+in a view that elsewhere said "You see Hinami." Two things wrong from her side:
+she is not watching her own smile falter, and she cannot know another mind's
+terror is genuine.
+
+Traced upstream, perception did not invent it. `director_resolve` had written
+"Elyndra's teasing smile falters completely at the shrill, panicked cry", and
+perception COPIED the omniscient sentence into her view rather than rendering
+the beat from her frame. Per-observer calls did not prevent it: each observer
+gets its own call, and this one echoed its input.
+"""
+
+from __future__ import annotations
+
+from agents.perception import _strip_self_narration
+
+VIEW = (
+    'A thin, high cry rises from the rumpled quilt — the words cut through '
+    'clear enough: "W-what did you do to me!?" The voice is breathy and '
+    'shrill. '
+    "Elyndra's gaze stays fixed on the shifting lump, her teasing smile "
+    'faltering as she watches. '
+    'The hearth coals pulse low orange. You see Hinami.'
+)
+
+
+def test_the_live_failure_is_removed():
+    kept, dropped = _strip_self_narration(VIEW, "Elyndra")
+    assert len(dropped) == 1
+    assert "teasing smile" in dropped[0]
+    assert "teasing smile" not in kept
+
+
+def test_everything_else_survives_intact():
+    kept, _ = _strip_self_narration(VIEW, "Elyndra")
+    for surviving in ("A thin, high cry", "The voice is breathy",
+                      "hearth coals pulse", "You see Hinami"):
+        assert surviving in kept
+
+
+def test_a_closing_quote_is_not_eaten_by_the_split():
+    """`(?<=[.!?])\\s+` alone cannot split after '!?"' — the quote sits between
+    the punctuation and the space. That made whole passages one "sentence" and
+    let this guard pass everything."""
+    kept, _ = _strip_self_narration(VIEW, "Elyndra")
+    assert 'to me!?"' in kept
+
+
+def test_a_pronoun_subject_is_never_guessed_at():
+    """"She watches the lump" could be anyone in the beat, and guessing would
+    gut legitimate views."""
+    assert _strip_self_narration("She watches the lump.", "Elyndra")[1] == []
+
+
+def test_another_character_is_left_alone():
+    assert _strip_self_narration("Hinami trembles.", "Elyndra")[1] == []
+
+
+def test_a_view_is_never_emptied_entirely():
+    """A perceiver who received something must be told something. If every
+    sentence named them, the view is beyond repair by deletion."""
+    view = "Elyndra smiles. Elyndra steps closer."
+    kept, dropped = _strip_self_narration(view, "Elyndra")
+    assert kept == view and dropped == []
+
+
+def test_the_possessive_form_is_caught():
+    kept, dropped = _strip_self_narration(
+        "Elyndra's wings fold tight. The lamp gutters.", "Elyndra")
+    assert dropped and "The lamp gutters." in kept
+
+
+def test_missing_inputs_are_noops():
+    assert _strip_self_narration("", "Elyndra") == ("", [])
+    assert _strip_self_narration("Anything.", "") == ("Anything.", [])
+
+
+def test_every_perception_stage_applies_the_guard():
+    """Pass 1 applies the identity floor DIRECTLY rather than through
+    `_scrub_view_for`, so it needs the guard wired explicitly — and it is the
+    pass that most needs it. The act view is written closest to the Director's
+    resolved_event, which is omniscient by construction, so it is the likeliest
+    place for that omniscience to be copied through intact.
+
+    Measured on a fresh 4-turn live run: 1 of 17 views narrated its own
+    perceiver, and it was a pass-1 view.
+    """
+    import inspect
+
+    from agents import perception
+    for stage in (perception.perception_act,
+                  perception.perception_establish,
+                  perception.perception_outcome):
+        src = inspect.getsource(stage)
+        assert ("_strip_self_narration" in src
+                or "_scrub_view_for" in src), stage.__name__
+
+
+# --- the same boundary at the last stage ------------------------------------
+#
+# The chain that produced the live failure ran Director -> perception ->
+# narrator. The Director asserted "the genuine terror"; perception copied it
+# into another mind's view; the narrator renders what reaches the reader. A
+# guard at the first two stages leaves the third able to add it back on its
+# own — and there it becomes what the story SAID happened.
+
+from agents.common import _check_player_interiority_prose
+
+VIEW_SRC = "Your hands shake. The crimson figure leans closer."
+
+
+def test_the_narrator_may_not_tell_the_player_what_they_feel():
+    assert _check_player_interiority_prose(
+        "You feel a genuine terror rising.", VIEW_SRC)
+
+
+def test_an_emotion_that_acts_on_you_is_the_same_assertion():
+    """"Terror grips you" asserts the state as surely as "you feel terror"."""
+    assert _check_player_interiority_prose(
+        "Terror grips you as she leans in.", VIEW_SRC)
+    assert _check_player_interiority_prose("Your fear is unmistakable.", VIEW_SRC)
+
+
+def test_the_body_is_always_the_narrators_to_render():
+    for prose in ("Your hands shake as she leans closer.",
+                  "Your hands shake and you take a step back.",
+                  "Your breath catches and you go still."):
+        assert _check_player_interiority_prose(prose, VIEW_SRC) == [], prose
+
+
+def test_a_feeling_the_view_already_carried_is_rendering_not_adding():
+    """Perception is the narrator's source of truth. A feeling that reached
+    the view legitimately may be rendered; this catches what the narrator
+    invents."""
+    view = "You feel the cold through the floorboards."
+    assert _check_player_interiority_prose(
+        "You feel the cold through the floorboards.", view) == []
+
+
+def test_it_is_enforced_rather_than_merely_warned():
+    """It is the LAST stage — an interior state asserted here reaches the
+    reader as fact, so it earns a rewrite rather than a note nobody reads."""
+    from agents.narration import _ENFORCEABLE_PREFIXES
+    assert any("interior state" in p for p in _ENFORCEABLE_PREFIXES)
+
+
+def test_empty_prose_is_a_noop():
+    assert _check_player_interiority_prose("", VIEW_SRC) == []
