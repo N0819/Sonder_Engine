@@ -10,7 +10,7 @@
 | `agents/__init__.py` | 86 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 809 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/character.py` | 2227 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
-| `agents/common.py` | 4277 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/common.py` | 4289 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/director.py` | 3643 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 553 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 202 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
@@ -47,7 +47,7 @@
 | `prompts.py` | 3470 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1977 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 493 |  | — |
-| `scene.py` | 1234 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
+| `scene.py` | 1241 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 3500 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 4638 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 975 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
@@ -102,14 +102,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 1070 | 161 lines |
-| `_scrub_invented_dialogue()` | 3325 | 145 lines |
-| `_extract_authority_claims()` | 810 | 106 lines |
-| `_check_quote_attribution()` | 3863 | 91 lines |
-| `_check_narrator_fidelity()` | 4130 | 84 lines |
-| `_check_player_act_authority()` | 2417 | 81 lines |
-| `_perceptible_entities()` | 433 | 78 lines |
-| `authored_other_subject()` | 595 | 77 lines |
+| `norm_sequence()` | 1082 | 161 lines |
+| `_scrub_invented_dialogue()` | 3337 | 145 lines |
+| `_extract_authority_claims()` | 822 | 106 lines |
+| `_check_quote_attribution()` | 3875 | 91 lines |
+| `_check_narrator_fidelity()` | 4142 | 84 lines |
+| `_check_player_act_authority()` | 2429 | 81 lines |
+| `_perceptible_entities()` | 445 | 78 lines |
+| `authored_other_subject()` | 607 | 77 lines |
 
 ### `agents/director.py`
 
@@ -525,14 +525,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `recent_events_for_observer()` | 698 | 59 lines |
-| `director_context()` | 758 | 53 lines |
-| `awareness_conditions()` | 419 | 47 lines |
-| `private_knowledge_for()` | 1191 | 44 lines |
+| `recent_events_for_observer()` | 705 | 59 lines |
+| `director_context()` | 765 | 53 lines |
+| `awareness_conditions()` | 426 | 47 lines |
+| `private_knowledge_for()` | 1198 | 44 lines |
 | `_seed_scene_initial_attire()` | 84 | 31 lines |
 | `active_cast()` | 116 | 31 lines |
-| `active_disguises()` | 311 | 31 lines |
-| `normalize_style_guide()` | 1099 | 31 lines |
+| `active_disguises()` | 318 | 31 lines |
+| `normalize_style_guide()` | 1106 | 31 lines |
 
 ### `schemas.py`
 

@@ -405,13 +405,25 @@ def attire_view(entry, body=""):
     """
     if not isinstance(entry, dict):
         return {}
-    regions = attire_model.normalize_regions(entry)
+    # Through `rederive_entry`, not straight off the stored dict. `wearing` and
+    # `state` used to be passed through verbatim while only `regions` was
+    # normalised, so this view could -- and did -- hand a character a coherent
+    # region breakdown next to a flat list contradicting it. Live in chat 52:
+    # the regions were clean and `wearing` still read
+    # `[... 'corset', 'worn', 'skirt']`, with a phantom garment named after a
+    # state, because every repair to the ledger's normalisation was bypassed
+    # for exactly the two fields anyone reads first.
+    #
+    # A read path, so this presents the three representations agreeing without
+    # writing anything back; commit still owns the stored shape.
+    coherent = attire_model.rederive_entry(entry)
+    regions = coherent.get("regions") or {}
     lines = attire_model.describe(
         regions, beneath_visible=_beneath_visible(), body=body)
     exposed = attire_model.exposed_regions(regions)
     return {
-        "wearing": entry.get("wearing") or [],
-        "state": entry.get("state") or [],
+        "wearing": coherent.get("wearing") or [],
+        "state": coherent.get("state") or [],
         **({"regions": lines} if lines else {}),
         # Stated rather than left to be worked out from the lines above. What
         # a body shows is exactly this list -- a garment that is loosened or

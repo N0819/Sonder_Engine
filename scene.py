@@ -283,6 +283,13 @@ def get_scene(chat_id, chat=None):
 def appearance_of(name, base, scene):
     ov = (scene.get("overlays") or {}).get(name) or []
     att = (scene.get("attire") or {}).get(name) or {}
+    # Same reason as `agents.common.attire_view`: read the ledger through its
+    # own normalisation rather than off the stored dict, or a stale or
+    # malformed flat list reaches every observer of this body verbatim. This
+    # is the string other characters are told, so a garment named "worn" here
+    # is a garment they can see.
+    if att:
+        att = attire_model.rederive_entry(att)
     s = base or "no notable appearance recorded"
     if att.get("wearing"):
         s += "; wearing: " + ", ".join(map(str, att["wearing"]))
