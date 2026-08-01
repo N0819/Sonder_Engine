@@ -665,3 +665,112 @@ def test_clothing_undisturbed_says_nothing_happened():
     assert attire.is_no_change_note("undisturbed")
     assert attire.is_no_change_note("Unchanged.")
     assert not attire.is_no_change_note("hem rucked up")
+
+
+class TestAStateWordIsNotAGarment:
+    """From chat 52 ("Elyndra — Hinami ⎇16 ⎇1"), reported as a character not
+    understanding her own clothing state. The ledger was carrying, on two
+    different bodies:
+
+        Hinami  torso: {"name": "removed", "state": "worn"}
+        Elyndra torso: {"name": "worn",    "state": "worn"}
+
+    so `wearing` read `['removed']` and `[... 'corset', 'worn', 'skirt']`. A
+    character handed that cannot reason about being dressed, and the fault was
+    never the model's.
+
+    `interpret_attire_notes` reading 3 takes a note whose handle names no known
+    garment and reads its TEXT as a garment being put on. When the text is just
+    a state -- `{"sandals": "removed"}` -- that mints clothing named after a
+    participle.
+    """
+
+    def test_a_bare_state_never_becomes_a_garment(self):
+        import commit
+        worn = ["fitted tank top", "travel shorts"]
+        for text in ("removed", "worn", "off", "shed", "gone", "loosened", "open"):
+            out = commit.interpret_attire_notes({"notes": {"cloak": text}}, worn, {})
+            added = [str(i).casefold() for i in (out.get("add") or [])]
+            assert text not in added, f"{text!r} became a garment"
+
+    def test_a_removal_note_takes_the_handle_off(self):
+        import commit
+        out = commit.interpret_attire_notes(
+            {"notes": {"cloak": "removed"}}, ["fitted tank top"], {})
+        assert out.get("remove") == ["cloak"]
+        assert not out.get("add")
+
+    def test_a_wear_note_puts_the_handle_on(self):
+        import commit
+        out = commit.interpret_attire_notes(
+            {"notes": {"corset": "worn"}}, ["fitted tank top"], {})
+        assert out.get("add") == ["corset"]
+        assert (out.get("conditions") or {}).get("corset") == "worn"
+
+    def test_a_real_description_still_names_the_garment(self):
+        """Reading 3 is why authored detail reaches the ledger at all; the
+        guard must not cost it."""
+        import commit
+        out = commit.interpret_attire_notes(
+            {"notes": {"shift": "linen shift, hem rucked up"}}, ["travel shorts"], {})
+        assert out.get("add") == ["linen shift"]
+
+    def test_a_garment_whose_name_contains_a_state_word_survives(self):
+        """The guard is on the WHOLE text, not a substring -- 'a worn leather
+        jerkin' is a jerkin."""
+        import attire
+        assert not attire.is_bare_garment_state("a worn leather jerkin")
+        out = attire.rederive_entry({"wearing": ["a worn leather jerkin"], "regions": {}})
+        assert out["wearing"] == ["a worn leather jerkin"]
+
+    def test_an_existing_phantom_is_dropped_on_the_next_beat(self):
+        """No migration: the stories already carrying one heal the next time
+        the ledger is normalised. Both doors -- the authored regions and the
+        flat `wearing` list it also landed in."""
+        import attire
+        healed = attire.rederive_entry({
+            "wearing": ["corset", "worn", "skirt"],
+            "regions": {"torso": {"garments": [
+                {"name": "corset", "state": "worn"},
+                {"name": "worn", "state": "worn"}]}}})
+        assert "worn" not in healed["wearing"]
+        assert [g["name"] for g in healed["regions"]["torso"]["garments"]] == ["corset"]
+
+
+class TestDerivedStateDoesNotAccumulate:
+    """The same body carried three mutually contradictory undress notes:
+
+        "bare at the head, arms, waist, groin, legs, feet"
+        "bare at the head, groin, legs"
+        "bare at the groin"
+
+    `rederive_entry` keeps anything in `state` that is not CURRENTLY derived,
+    on the reasoning that it must be authored prose. A note it wrote itself on
+    an earlier beat stops matching the moment the body changes, so every
+    successive undress left its predecessor behind as evidence.
+    """
+
+    def test_only_the_current_undress_note_survives(self):
+        import attire
+        out = attire.rederive_entry({
+            "state": ["bare at the head, arms, waist, groin, legs, feet",
+                      "bare at the head, groin, legs", "bare at the groin"],
+            "regions": {"groin": {"garments": [
+                {"name": "travel shorts", "state": "removed"}]}}})
+        bare = [s for s in out["state"] if s.startswith("bare at the")]
+        assert len(bare) == 1, out["state"]
+
+    def test_authored_prose_still_survives(self):
+        """The whole point of keeping a `state` list."""
+        import attire
+        out = attire.rederive_entry({
+            "state": ["bare at the groin", "her hair is still damp"],
+            "regions": {"groin": {"garments": [
+                {"name": "travel shorts", "state": "removed"}]}}})
+        assert "her hair is still damp" in out["state"]
+
+    def test_a_loosened_note_is_ours_too(self):
+        import attire
+        assert attire.is_derived_state_note("silk robe loosened")
+        assert attire.is_derived_state_note("bare at the torso")
+        assert not attire.is_derived_state_note("she is shivering")

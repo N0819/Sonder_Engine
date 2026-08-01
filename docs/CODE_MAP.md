@@ -20,7 +20,7 @@
 | `agents/storage.py` | 92 | Step and active-variant persistence helpers. | `db` |
 | `ambience.py` | 2043 |  | `backdrops`, `db`, `weather` |
 | `app.py` | 4374 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `ambience`, `attire`, `auth_routes`, `backdrops`, `character_schema`, `chat_archive`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `survival`, `updates` |
-| `attire.py` | 1123 |  | — |
+| `attire.py` | 1195 |  | — |
 | `auth_routes.py` | 143 | Typed host-authentication HTTP routes and cookie transport. | `guest_access` |
 | `authored_events.py` | 124 |  | `db` |
 | `backdrops.py` | 1143 |  | `db`, `spatial`, `weather` |
@@ -29,7 +29,7 @@
 | `chat_archive.py` | 1089 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1016 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 295 |  | `spatial` |
-| `commit.py` | 5584 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 5607 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `db.py` | 1447 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 193 |  | `db` |
 | `greetings.py` | 375 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
@@ -223,14 +223,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_regions()` | 256 | 101 lines |
-| `dedupe_regions()` | 563 | 82 lines |
-| `coerce_diff_shape()` | 668 | 77 lines |
-| `resolve_garment()` | 493 | 68 lines |
-| `decisive_targets()` | 764 | 67 lines |
-| `apply_flat_change()` | 956 | 66 lines |
-| `advance()` | 833 | 56 lines |
-| `describe()` | 908 | 46 lines |
+| `normalize_regions()` | 256 | 117 lines |
+| `dedupe_regions()` | 579 | 82 lines |
+| `coerce_diff_shape()` | 711 | 77 lines |
+| `resolve_garment()` | 509 | 68 lines |
+| `decisive_targets()` | 807 | 67 lines |
+| `apply_flat_change()` | 999 | 66 lines |
+| `advance()` | 876 | 56 lines |
+| `describe()` | 951 | 46 lines |
 
 ### `auth_routes.py`
 
@@ -327,14 +327,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 4234 | 993 lines |
-| `prepare_scene_commit()` | 1621 | 445 lines |
-| `track_background_presences()` | 2707 | 225 lines |
-| `commit_world_entities()` | 2203 | 168 lines |
+| `prepare_memory_commit()` | 4257 | 993 lines |
+| `prepare_scene_commit()` | 1644 | 445 lines |
+| `track_background_presences()` | 2730 | 225 lines |
+| `commit_world_entities()` | 2226 | 168 lines |
 | `_prepare_destruction()` | 697 | 158 lines |
 | `update_place_graph()` | 72 | 153 lines |
-| `prepare_mapping_commit()` | 3549 | 133 lines |
-| `commit_mapping()` | 3684 | 120 lines |
+| `prepare_mapping_commit()` | 3572 | 133 lines |
+| `commit_mapping()` | 3707 | 120 lines |
 
 ### `db.py`
 

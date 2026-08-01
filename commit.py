@@ -1523,6 +1523,29 @@ def interpret_attire_notes(diff, worn, entry=None):
             if attire_model.resolve_garment(name, worn) is not None:
                 marks.setdefault(handle, text)
                 continue
+            # A note whose text is just a STATE is not naming a garment, it is
+            # naming what happened to the handle. Reading it as reading 3 minted
+            # a garment called "removed" -- literally, `{"name": "removed",
+            # "state": "worn"}` on Hinami's torso -- and another called "worn"
+            # on Elyndra's, each sitting in the ledger alongside the real
+            # clothes and appearing in the `wearing` list the character reads.
+            # A body wearing "removed" cannot reason about being dressed.
+            #
+            # `{"sandals": "removed"}` means the sandals came off, even when the
+            # handle failed to resolve against the wardrobe; route it to the
+            # field that says so rather than inventing a body part's worth of
+            # new clothing named after a participle.
+            if attire_model.is_bare_garment_state(name):
+                if attire_model.is_removal_state(name):
+                    diff.setdefault("remove", []).append(handle)
+                    notes_read.append(
+                        f"attire: read your note on {handle!r} as taking it off.")
+                else:
+                    diff.setdefault("add", []).append(handle)
+                    marks.setdefault(handle, name)
+                    notes_read.append(
+                        f"attire: read your note on {handle!r} as putting it on.")
+                continue
             diff.setdefault("add", []).append(name)
             if mark:
                 marks.setdefault(name, mark)
