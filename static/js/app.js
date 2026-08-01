@@ -914,5 +914,9 @@ async function erOfferRebuild(chatId, bank) {
   erWatch();
 }
 
+// `body.page-hidden` (the CSS hook for "nobody is looking at this") is
+// stamped by theme-init.js, which every themed page loads -- including guest
+// and login, which never load this file.
+
 boot()
   .catch(e => toast("Could not load the app: " + (e?.message || e), "err", 0));

@@ -870,9 +870,16 @@ function renderWorkspaceTree(state, container) {
   // Rebuild only the tree list on filter input so the filter input itself
   // stays in the DOM and keeps focus while typing. Store the RAW value and
   // trim only when applying the filter, so mid-word trailing spaces survive.
+  // Debounced: renderTreeList rebuilds the whole tree (and loreVisibleIds
+  // walks every book's ancestor chain) -- per KEYSTROKE that briefly froze
+  // typing in a large workspace. 120ms is under the gap between keystrokes
+  // when typing deliberately, so the tree still feels live; the stored value
+  // updates immediately so nothing else reads a stale filter.
+  let filterDebounce = null;
   filterInput.oninput = () => {
     loreUI.filter = filterInput.value;
-    renderTreeList();
+    clearTimeout(filterDebounce);
+    filterDebounce = setTimeout(renderTreeList, 120);
   };
 
   const byParent = loreBooksByParent(state.books);
@@ -1712,7 +1719,15 @@ function renderLoreEntries(state, container) {
     }
   }
 
-  searchInput.oninput = renderList;
+  // Search is debounced for the same reason as the tree filter above:
+  // renderList destroys and rebuilds every entry card (including three
+  // JSON.parse per card) on each call. The category select stays immediate --
+  // it is one discrete choice, not a stream of keystrokes.
+  let searchDebounce = null;
+  searchInput.oninput = () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(renderList, 120);
+  };
   categorySelect.onchange = renderList;
 
   container.append(toolbar, list);

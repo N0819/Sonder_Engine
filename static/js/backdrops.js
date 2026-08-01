@@ -104,10 +104,38 @@ function applyBackdropContrast(img) {
   document.body.dataset.backdropLum = lum > 0.55 ? "bright" : "dark";
 }
 
+// Drop a faded-out layer's bitmap once it is genuinely invisible.
+//
+// `opacity:0` hides an image; it does not free it. A decoded 1024x1024 backdrop
+// is several megabytes of GPU texture -- more once `background-size:cover`
+// upscales it to the viewport -- and this app holds TWO layers to crossfade
+// between. Without this, every backdrop the story ever showed stays resident
+// for the life of the tab, on a laptop whose GPU memory is the same memory
+// everything else is using.
+//
+// Guarded on the layer still being off when the transition finishes: a fast
+// scroll can hand this same node the NEXT backdrop before the fade completes,
+// and clearing then would blank an image that is on its way in.
+function releaseBackdropLayer(layer) {
+  if (!layer) return;
+  const done = () => {
+    layer.removeEventListener("transitionend", done);
+    if (!layer.classList.contains("on")) layer.style.backgroundImage = "";
+  };
+  layer.addEventListener("transitionend", done);
+  // `transitionend` never fires if the layer was already at opacity 0 (nothing
+  // animates), and reduced-motion removes the transition entirely -- so the
+  // listener alone would leak exactly the cases that need no animation.
+  setTimeout(done, 1400);
+}
+
 function clearBackdrop() {
   BD.signature = null;
   document.body.classList.remove("has-backdrop");
-  if (BD.layers) for (const layer of BD.layers) layer.classList.remove("on");
+  if (BD.layers) for (const layer of BD.layers) {
+    layer.classList.remove("on");
+    releaseBackdropLayer(layer);
+  }
 }
 
 // Cross-fades to `url`. The image is decoded BEFORE the fade starts, so the
@@ -123,7 +151,9 @@ function showBackdrop(url, signature) {
     const next = layers[1 - BD.front];
     next.style.backgroundImage = `url("${url}")`;
     next.classList.add("on");
-    layers[BD.front].classList.remove("on");
+    const outgoing = layers[BD.front];
+    outgoing.classList.remove("on");
+    releaseBackdropLayer(outgoing);
     BD.front = 1 - BD.front;
     // Reveal FIRST, measure second. The contrast pass reads pixels back off a
     // canvas, and no failure in it -- an unsupported API, a locked-down

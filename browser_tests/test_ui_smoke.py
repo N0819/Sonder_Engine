@@ -489,6 +489,53 @@ def test_snow_falls_differently_from_rain(page: Page, ui_base_url: str) -> None:
     assert page_errors == []
 
 
+def test_a_hidden_tab_pauses_every_weather_animation(
+    page: Page,
+    ui_base_url: str,
+) -> None:
+    """Snow animates on two nodes, and only one of them used to stop.
+
+    `wfx-sway` runs on the drift wrapper -- which is what `WFX.layers` holds --
+    and `wfx-fall` on the tile layer inside it. The visibilitychange handler
+    walked `WFX.layers`, so a hidden tab kept three infinite composited
+    animations falling forever. Nothing caught it because nothing checked the
+    inner node, which is the whole reason this test names it explicitly.
+    """
+    page_errors: list[str] = []
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    _mock_with_weather(page, {"sky": "overcast", "precipitation": "snow",
+                              "intensity": "moderate", "sky_visible": True,
+                              "wind": "still", "audible": False})
+    page.goto(f"{ui_base_url}/static/index.html")
+    page.get_by_label("Open First").click()
+    page.wait_for_function("() => WFX.kind.startsWith('snow')", timeout=10000)
+    # Snow really does nest: wrappers outside, tile layers within.
+    assert page.evaluate(
+        "() => WFX.layers.filter(l => l.querySelector('.wfx-layer')).length") > 0
+
+    def play_states() -> list[str]:
+        return page.evaluate(
+            "() => WFX.layers.flatMap(l => [l, ...l.querySelectorAll('.wfx-layer')])"
+            "        .map(n => getComputedStyle(n).animationPlayState)")
+
+    assert set(play_states()) == {"running"}
+
+    page.evaluate("""() => {
+        Object.defineProperty(document, "hidden",
+                              { value: true, configurable: true });
+        document.dispatchEvent(new Event("visibilitychange"));
+    }""")
+    assert set(play_states()) == {"paused"}, "a hidden tab must stop all of it"
+
+    page.evaluate("""() => {
+        Object.defineProperty(document, "hidden",
+                              { value: false, configurable: true });
+        document.dispatchEvent(new Event("visibilitychange"));
+    }""")
+    assert set(play_states()) == {"running"}, "and coming back must resume it"
+    assert page_errors == []
+
+
 def test_thunder_follows_the_flash_rather_than_leading_it(
     page: Page,
     ui_base_url: str,
