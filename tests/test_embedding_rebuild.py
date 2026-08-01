@@ -240,11 +240,46 @@ class TestCarryingARebuildBackThroughSavedStates:
         """Two minds can hold word-identical memories that are still different
         rows, and a dump carries no row id to join on."""
         import memory
-        a = memory._memory_vector_key(1, "she crossed the bridge")
-        b = memory._memory_vector_key(2, "she crossed the bridge")
-        c = memory._memory_vector_key(1, "she crossed the  bridge  ")
+        def mem(char_id, content):
+            return {"char_id": char_id, "content": content}
+        a = memory._memory_vector_key(mem(1, "she crossed the bridge"))
+        b = memory._memory_vector_key(mem(2, "she crossed the bridge"))
+        c = memory._memory_vector_key(mem(1, "she crossed the  bridge  "))
         assert a != b
         assert a == c, "whitespace must not make a memory a different memory"
+
+    def test_two_memories_sharing_content_are_not_the_same_row(self):
+        """The bug this key used to have. A vector is a pure function of the
+        memory but NOT of its `content`: `_memory_document` also folds in turn,
+        location, category, key_phrases, entities, gist, provenance and
+        emotional_context. Keying on content alone let the substitution hand
+        one memory the vector earned by another.
+
+        Taken from the case that exposed it -- checkpoint 855 of chat 36 held
+        "You are in Ten Forward." at turn 42 and again at turn 44, same
+        character, two different embedding payloads.
+        """
+        import memory
+        base = {"char_id": 1, "content": "You are in Ten Forward.",
+                "category": "episode", "location": "Ten Forward"}
+        assert (memory._memory_vector_key({**base, "turn_idx": 42})
+                != memory._memory_vector_key({**base, "turn_idx": 44}))
+        assert (memory._memory_vector_key({**base, "turn_idx": 42})
+                != memory._memory_vector_key({**base, "turn_idx": 42,
+                                              "location": "Sickbay"}))
+
+    def test_a_summary_is_keyed_on_what_was_actually_embedded(self):
+        """`upsert_memory_summary` embeds `_summary_retrieval_text` -- the
+        summary WITH its key phrases and unresolved threads -- so keying on the
+        `summary` field alone had the same collision."""
+        import memory
+        base = {"char_id": 1, "summary": "The courier never arrived."}
+        assert (memory._summary_vector_key({**base, "key_phrases": ["dock"]})
+                != memory._summary_vector_key({**base,
+                                               "key_phrases": ["harbour"]}))
+        assert (memory._summary_vector_key({**base, "unresolved_threads": []})
+                != memory._summary_vector_key(
+                    {**base, "unresolved_threads": ["who sent him"]}))
 
     def test_a_dry_run_writes_nothing(self, bank):
         import memory

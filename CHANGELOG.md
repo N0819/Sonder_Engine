@@ -1,5 +1,109 @@
 # Changelog
 
+## alpha 6.6 — What the vector was actually made of
+
+Housekeeping that turned out not to be housekeeping. Four fixes, and three of
+them were things the codebase already knew and had written down against itself.
+
+### A feature that had never once run
+
+`schemas.py` lets an item model NAME which field a name-keyed map's key belongs
+in — `GoalImpact._subject_field = "serves"` — because the positional rules
+cannot see a subject field carrying a non-empty default. Without it,
+`{"reach the tower": {"impact": 0.6}}` filed the goal in `why`, recording the
+goal as its own explanation and leaving `serves` generic, where `commit.py`'s
+goal matching cannot use it.
+
+It was read back with a bare `getattr`. On Pydantic 1 that returns the string.
+On Pydantic 2 it returns a `ModelPrivateAttr` wrapper, and the next line —
+`slot not in fields` — raises `TypeError: unhashable type: 'ModelPrivateAttr'`.
+`constraints.txt` pins Pydantic 2. **The declaration has never worked in a
+default install; it crashed the coercion instead.**
+
+The CI job that existed to catch exactly this kind of drift is the one that
+hid it: the `pydantic1` job was added because "every other job exercises only
+one side of the declared range", and it was green, so the failure looked like
+the 1.x side being special rather than the 2.x side being broken.
+
+`_subject_field_of` reads the declaration on either major. Verified in a real
+Pydantic 2.11.7 environment, which this repo had never had locally: 3 failures
+before, 0 after, and the full suite green on both majors.
+
+### Five tests that were passing for the wrong reason
+
+The same CI run had been red for four commits on `test_ambience` and
+`test_backdrops`, reported as environment drift. It was not. Two backdrop tests
+reached `generate_backdrop`, which reads `settings`, without ever requesting
+`temp_db` — they passed locally only because a populated `engine.db` was
+sitting there, which `CLAUDE.md` forbids outright.
+
+The ambience three are the more interesting half. `refine_layers` wraps its
+whole model call — prompt fetch included — in a bare `except` that returns the
+draft unchanged, which is right in production and silent in a test. Reading
+the prompt hits the database, so on a checkout without one every test in that
+group took the fallback: three failed, **and the two asserting the plan is
+UNCHANGED passed while exercising nothing at all.**
+
+Reproduced with `ENGINE_DB` pointed at a fresh file: `5 failed`. Fixed, then
+verified under the full CI condition — clean database *and* Pydantic 2 —
+green.
+
+### One memory's vector, filed onto another
+
+`memory.vector_address` was moved to byte-addressing when the compaction
+verifier refused four stories, and it left a note behind:
+
+> NOTE: `_memory_vector_key` still carries the old assumption, and
+> `rebuild_checkpoint_embeddings` still joins on it. That is a pre-existing bug
+> of the same shape (it can substitute one memory's vector onto another).
+
+It did. A vector is a pure function of the memory but **not of its `content`**:
+`_memory_document` also folds in turn, location, category, key_phrases,
+entities, gist, provenance and emotional_context. Two rows can agree on content
+and hold genuinely different vectors — chat 36 held "You are in Ten Forward."
+at turn 42 and again at turn 44, same character, two different payloads — and
+the join could hand one the other's. The summary side had it too, keying on
+`summary` while `upsert_memory_summary` embeds `_summary_retrieval_text`.
+
+Both now key on the text the vector was actually computed from.
+
+### Authored scaffolding stopped getting louder
+
+A greeting's `knowledge_seeds` land in the character's own memory at whatever
+salience the model claims, and the model claims 1.00 — all four of chat 53's,
+against the 0.78 of the single memory the pipeline minted that turn.
+Consolidation archives below 0.72, so they never age out, and `contrast_memory`
+scores `salience + 0.4 * (age / current_turn)`, so their chance of intruding
+*unbidden* GROWS with story length. Authored scaffolding outranked lived
+experience permanently and got louder the longer you played.
+
+Capped at 0.7 — under the floor, so a seed decays like anything the character
+actually lived. The cap is at the write, not only in the schema:
+`start_story` reads a STORED extraction off the character card, so cards
+written before the cap never pass through validation at all.
+
+The prompt also stops inviting the other three failures from that launch:
+seeds are written first person as the character holds them (the model had been
+writing wiki summaries of him into his own memory), psychology is not authored
+(his card already carried the real version), and the no-outside-canon rule is
+restated where it was actually being broken — the prose said "the thing" and
+"a blue box", the seeds said Dalek and Earth. Those are prompt rules, so treat
+them as unproven until observed in conduct.
+
+### Also
+
+`_cos` is a plain dot product. Both producers already normalise, so it was
+computing `norm(a) * norm(b)` to divide by 1.0 twice per candidate row —
+measured 4.4x (4.99 ms → 1.13 ms over 442 real rows). Verified rather than
+assumed: over 8,000 stored vectors, scores agree to 8.7e-06 and the top-8,
+top-20 and top-60 sets are identical.
+
+Seeds carry a stable `event_key`, so routing one twice updates one row. The
+register claimed a re-launch duplicated them; it does not — `start_story`
+always creates a fresh chat — and that half of the entry is corrected rather
+than "fixed".
+
+
 ## alpha 6.5 — Whose hands those are
 
 One report — the Director was *"dictating actions for the player"* in *Run!* —

@@ -237,3 +237,97 @@ class TestQuickStartLorebook:
         chat_id, _tid = greetings.start_story(
             cid_char, pid, greeting_index=0, already_known=False)
         assert wget(chat_id, "known", {}) == {}
+
+
+class TestKnowledgeSeedRouting:
+    """What a greeting's seeds become once they are inside the character.
+
+    `tests/test_greetings.py` had 30 tests and none of them touched seed
+    routing, which is how chat 53 launched with four authored seeds at
+    salience 1.00 sitting permanently above the 0.78 of the one memory the
+    pipeline actually minted that turn. See docs/UNBUILT.md 1.16.
+    """
+
+    def _launch(self, monkeypatch, seeds):
+        import greetings
+        monkeypatch.setattr(greetings, "extract_greeting",
+                            lambda sheet, prose: {"knowledge_seeds": seeds,
+                                                  "time": "now"})
+        monkeypatch.setattr(greetings, "_run_pipeline", lambda cid, tid: iter(()))
+        cid_char, _ = importers.import_character(_card(), reinterpret=False)
+        pid, _ = importers.import_persona({"name": "Dana"}, reinterpret=False)
+        return greetings.start_story(cid_char, pid, greeting_index=0)
+
+    def test_a_seed_reaches_the_characters_own_memory(self, temp_db, monkeypatch):
+        from db import q
+        chat_id, _tid = self._launch(monkeypatch, [
+            {"content": "I have been waiting three nights for a courier.",
+             "salience": 0.6, "revealed_in_prose": False}])
+        rows = q("SELECT content, salience, event_key FROM memories "
+                 "WHERE chat_id=?", (chat_id,))
+        assert len(rows) == 1
+        assert rows[0]["content"] == "I have been waiting three nights for a courier."
+
+    def test_a_seed_can_never_outrank_the_consolidation_floor(self, temp_db,
+                                                              monkeypatch):
+        """The defect exactly. Consolidation archives below 0.72, so a seed at
+        1.00 never ages out, while `contrast_memory` scores
+        `salience + 0.4 * (age / current_turn)` -- making authored scaffolding
+        MORE likely to intrude unbidden the longer the story runs.
+
+        Note what this goes through: the stub hands `start_story` a raw dict,
+        exactly as a STORED extraction on a character card does. Nothing here
+        passes `GreetingKnowledgeSeed`, which is precisely why the ceiling
+        cannot live in the schema alone."""
+        from db import q
+        chat_id, _tid = self._launch(monkeypatch, [
+            {"content": "The Doctor has a deep-seated fear of Daleks.",
+             "salience": 1.0, "revealed_in_prose": False}])
+        salience = q("SELECT salience FROM memories WHERE chat_id=?",
+                     (chat_id,))[0]["salience"]
+        assert salience <= 0.7
+        assert salience < 0.72, "a seed that never archives is permanent"
+
+    def test_the_schema_is_where_the_ceiling_lives(self, temp_db):
+        """Both routing sites read the validated model, so the cap belongs
+        there rather than at one call site that the other can bypass."""
+        from schemas import GreetingKnowledgeSeed
+        assert GreetingKnowledgeSeed(content="x", salience=1.0).salience == 0.7
+        assert GreetingKnowledgeSeed(content="x", salience=0.5).salience == 0.5
+        # Still tolerant of nonsense, like every other lenient field.
+        assert GreetingKnowledgeSeed(content="x", salience="nope").salience == 0.6
+
+    def test_seeds_carry_a_stable_identity(self, temp_db, monkeypatch):
+        """`add_memory` upserts on (chat, character, event_key). Without one,
+        routing the same seed twice writes it twice."""
+        from db import q
+        chat_id, _tid = self._launch(monkeypatch, [
+            {"content": "I have been waiting three nights for a courier.",
+             "salience": 0.6, "revealed_in_prose": False}])
+        key = q("SELECT event_key FROM memories WHERE chat_id=?",
+                (chat_id,))[0]["event_key"]
+        assert key.startswith("greeting_seed:")
+
+    def test_routing_the_same_seed_twice_updates_one_row(self, temp_db,
+                                                         monkeypatch):
+        from db import q
+        from memory import add_memory
+        chat_id, _tid = self._launch(monkeypatch, [
+            {"content": "I have been waiting three nights for a courier.",
+             "salience": 0.6, "revealed_in_prose": False}])
+        row = q("SELECT char_id, content, event_key FROM memories "
+                "WHERE chat_id=?", (chat_id,))[0]
+        add_memory(chat_id, row["char_id"], None, "episode", "remembered",
+                   0.6, row["content"], turn_idx=0, event_key=row["event_key"])
+        assert len(q("SELECT id FROM memories WHERE chat_id=?", (chat_id,))) == 1
+
+    def test_a_bad_seed_does_not_abort_the_launch(self, temp_db, monkeypatch):
+        """A launch that half-builds a story is worse than a lost seed."""
+        chat_id, _tid = self._launch(monkeypatch, [
+            {"content": "", "salience": 0.6},
+            {"content": "I know the harbour road floods at spring tide.",
+             "salience": 0.6}])
+        from db import q
+        rows = q("SELECT content FROM memories WHERE chat_id=?", (chat_id,))
+        assert [r["content"] for r in rows] == [
+            "I know the harbour road floods at spring tide."]

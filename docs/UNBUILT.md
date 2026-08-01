@@ -513,14 +513,24 @@ both vectors per row, growing at the measured ~3.5 rows per turn per character:
 | 200,000 | 57,000 — a novel series in one chat | 2.2 s |
 
 Beside an LLM call measured in seconds, none of that is a cost worth an index.
-And two trivial optimisations sit in front of one anyway, because **`_cos`
-recomputes `norm(a) * norm(b)` on every call although every stored vector is
-already normalised** (`providers.cheap_embed` and `embed_texts_meta` both
-normalise before returning). Dropping the redundant norms is one line and ~4x;
-stacking the rows into a matrix for a single matmul is a few more and ~20x
-total — 35 ms at 10,000 turns, 350 ms at 285,000. So the scan is not "fine for
-now": there is no story length at which it becomes the reason to add an ANN
-index. That question is settled permanently, not provisionally.
+And two trivial optimisations sat in front of one anyway, because `_cos`
+recomputed `norm(a) * norm(b)` on every call although every stored vector is
+already normalised (`providers.cheap_embed` and `embed_texts_meta` both
+normalise before returning).
+
+**The first landed in alpha 6.6: `_cos` is a plain dot product, measured 4.4x
+(4.99 ms → 1.13 ms over 442 real rows), matching the prediction.** Verified
+equivalent rather than assumed: across 8,000 stored vectors the norms are unit
+to 9.2e-06, scores agree to 8.7e-06, and the only ranking differences are three
+adjacent-pair swaps at ranks 743, 1289 and 1808 — float32 noise on effective
+ties, all far past the `[:60]` cut. Top-8, top-20 and top-60 are identical.
+
+Stacking the rows into a matrix for a single matmul is a few lines more and
+~20x total — 35 ms at 10,000 turns, 350 ms at 285,000 — and is **not queued**:
+the scan after the first fix is already far below the LLM call beside it, and
+the reason to record the number is that there is no story length at which the
+scan becomes the reason to add an ANN index. That question is settled
+permanently, not provisionally.
 
 ### 1.16 A greeting's knowledge seeds outrank everything the story then lives
 
@@ -547,11 +557,15 @@ person, about what happened.
 Five distinct problems, none of them covered by a test —
 `tests/test_greetings.py` has 30 tests and none touches seed routing:
 
-1. **Salience is the model's unbounded self-report, and it says 1.00.**
-   Consolidation archives below 0.72 (`memory.py`), so these never age out;
-   `contrast_memory` scores `salience + 0.4 * (age / current_turn)`, so their
-   chance of intruding *unbidden* GROWS with story length. Authored scaffolding
-   permanently outranks lived experience and gets louder. Clamp to ~0.5–0.7.
+1. ~~**Salience is the model's unbounded self-report, and it says 1.00.**~~
+   **Fixed in alpha 6.6.** Capped at 0.7, just under the 0.72 consolidation
+   floor, so a seed decays like anything the character went on to actually
+   live. The cap is at the WRITE (`greetings._seed_salience`), not only in
+   `GreetingKnowledgeSeed`: `start_story` reads `rec["extraction"]`, a stored
+   extraction persisted on the character card at import time, so cards written
+   before the cap — or edited by hand — reach the routing site without ever
+   passing through the schema. Both are capped; the write is the boundary that
+   matters. Covered by `TestKnowledgeSeedRouting`.
 2. **Third person, about the character.** The schema's own example is first
    person (`"I have been waiting here for three nights for a courier."`); the
    prompt never states the voice, and the model wrote what reads as a wiki
@@ -581,8 +595,25 @@ Five distinct problems, none of them covered by a test —
    That is a smaller and more general problem than the name leak was, and it
    belongs with §3.1 rather than here.
 
-**Also unbuilt from that design, and cheap:** seeds carry no `event_key`, so a
-re-launch or greeting swipe duplicates them; and `start_story` uses exactly two
+**Items 2, 3 and 4 are now prompt rules** (`greeting_interpret`): write the
+seed first person as the character holds it, never third person about
+themselves; author no psychology, because dispositions are on the card already
+and a flattened seed copy competes with the authored version; and the
+no-outside-canon rule restated inside the seed instruction, which is where it
+was being broken. Treat all three as **unproven until observed in conduct** —
+two separate correct sheet edits have already failed to change behaviour
+(`CLAUDE.md`), and a prompt rule is the same kind of claim. Nothing tests them,
+because nothing offline can.
+
+~~seeds carry no `event_key`, so a re-launch or greeting swipe duplicates
+them~~ — **half wrong, and now moot.** Seeds carry an `event_key` as of alpha
+6.6 (`greeting_seed:<sha1 of content>`), so routing one twice updates a single
+row. But there was never a duplication bug to fix: `start_story` creates a
+fresh chat every time and is the only site that routes seeds, so a re-launch is
+a different story with its own copy, which is correct. The `event_key` buys
+identity and a safely repeatable launch, not deduplication.
+
+**Also unbuilt from that design, and cheap:** `start_story` uses exactly two
 fields of the extraction (`time`, `knowledge_seeds`). The `rooms`, `positions`,
 `entities`, `attire`, `character_state`, `player_room`, `location` and
 `scene_description` it spent most of the prompt producing are discarded, and

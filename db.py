@@ -473,11 +473,14 @@ CREATE INDEX IF NOT EXISTS idx_memories_chat_char ON memories(chat_id, char_id);
 -- held 40,224 memory copies across 118 checkpoints and only 529 distinct by
 -- (char_id, content) -- 76x redundancy, 1.00 GB of vectors that need 13 MB.
 --
--- The key is sha1(char_id, whitespace-normalised content), which is
--- memory._memory_vector_key -- already written, and already relied on by
--- rebuild_checkpoint_embeddings to join saved memories to live ones. A vector
--- is a pure function of the document built from the memory, so content is the
--- honest address for it.
+-- The key is `memory.vector_address`: sha1 over the vector BYTES themselves,
+-- prefixed `v1:`. It was briefly sha1(char_id, content) instead, on the
+-- reasoning that a vector is a pure function of the memory. It is -- but not
+-- of its content: `_memory_document` also folds in turn, location, category,
+-- key_phrases, entities, gist, provenance and emotional_context, so two rows
+-- can share content and hold different vectors, and that address collapsed
+-- them. Addressing on bytes makes a collision impossible by construction
+-- rather than by assumption, and still deduplicates 69x.
 --
 -- APPEND-ONLY, and never garbage-collected when a memory is deleted. A
 -- checkpoint that predates the deletion still references the vector, and a

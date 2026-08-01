@@ -332,6 +332,28 @@ def _field_required(field):
     return bool(getattr(field, "required", False))      # v1 ModelField
 
 
+def _subject_field_of(model):
+    """The field an item model NAMES as its subject, either major.
+
+    A leading-underscore class attribute is a plain string on Pydantic 1 and a
+    `ModelPrivateAttr` wrapper on Pydantic 2, where the name lives in
+    `.default`. Reading it with a bare `getattr` therefore worked on 1 and
+    raised `TypeError: unhashable type: 'ModelPrivateAttr'` on 2 -- the major
+    `constraints.txt` pins. The declaration has never once been honoured in a
+    default install; it crashed the coercion instead, and only the Pydantic 1
+    job was green enough to hide it.
+
+    Returns None for anything that is not a non-empty string, so a typo'd or
+    absent declaration falls back to the positional rules rather than raising.
+    """
+    slot = getattr(model, "_subject_field", None)
+    if not isinstance(slot, str):
+        # v2 wrapper; `.default` is PydanticUndefined when none was declared,
+        # which the isinstance check below rejects along with everything else.
+        slot = getattr(slot, "default", None)
+    return slot if isinstance(slot, str) and slot else None
+
+
 def _declared(field):
     """Read one field's declared shape off whichever Pydantic is installed."""
     factory = getattr(field, "default_factory", None)
@@ -622,7 +644,7 @@ def _lenient_coerce(value, declared):
             # The information survived and landed where nothing reads it.
             # Declaring the slot is how a model says which field is its
             # subject, rather than the shape rules guessing.
-            slot = getattr(declared.item_type, "_subject_field", None)
+            slot = _subject_field_of(declared.item_type)
             if slot is not None and slot not in fields:
                 slot = None
             if slot is None:
@@ -2229,13 +2251,24 @@ class GreetingKnowledgeSeed(LenientModel):
     content: str = ""
     about_entity: str = "self"      # 'self' = the character
     kind: str = "fact"              # fact|goal|relationship|recent_event
-    salience: float = Field(default=0.6, ge=0.0, le=1.0)
+    # Capped BELOW the 0.72 consolidation floor (`memory.py`), not at 1.0.
+    #
+    # Salience used to be the model's unbounded self-report, and the model says
+    # 1.00: all four seeds of chat 53's launch came in at 1.00 against the 0.78
+    # of the one memory the pipeline actually minted that turn. Nothing above
+    # 0.72 is ever archived, so those never age out -- and `contrast_memory`
+    # scores `salience + 0.4 * (age / current_turn)`, so their chance of
+    # intruding UNBIDDEN grows with story length. Authored scaffolding
+    # permanently outranked lived experience and got louder the longer the
+    # story ran. A ceiling under the floor lets a seed decay like everything
+    # else the character went on to live.
+    salience: float = Field(default=0.6, ge=0.0, le=0.7)
     # true = the greeting states it openly on the page (player legitimately
     # sees it); false = implied/secret -> routes to CHARACTER memory only.
     revealed_in_prose: bool = False
 
     _clamp_salience = validator("salience", pre=True, allow_reuse=True)(
-        lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.6)
+        lambda cls, v: _clamp_float(v, 0.0, 0.7, 0.6)
     )
 
 class GreetingInterpret(LenientModel):

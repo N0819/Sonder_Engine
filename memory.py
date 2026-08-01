@@ -159,8 +159,21 @@ def _kw_scores(fts_table, query, limit=50):
         return {}
 
 def _cos(a, b):
+    """Cosine between two STORED vectors, which are already unit length.
+
+    Both producers normalise before returning -- `providers.cheap_embed`
+    divides by its norm, and `embed_texts_meta` does the same to every vector
+    a provider hands back -- so the divisor here was two `np.linalg.norm`
+    calls per comparison that both computed 1.0. Dropping them makes this a
+    plain dot product and about 4x faster, which is the whole cost of the
+    retrieval scan: `search_memories` calls this twice per candidate row.
+
+    A zero vector is the one input that is not unit length, and it is still
+    correct: its dot product is 0.0, which is what the old expression returned
+    for it too.
+    """
     if a is None or b is None or len(a) != len(b): return 0.0
-    return float(np.dot(a, b) / ((np.linalg.norm(a) * np.linalg.norm(b)) + 1e-8))
+    return float(np.dot(a, b))
 
 # ---- Hierarchical Lorebook Functions ----
 
@@ -2241,10 +2254,12 @@ def vector_address(embedding, cue_embedding) -> str:
     converted checkpoints are unaffected -- and they are known-good, because a
     story whose entries collided could not have passed verification.
 
-    NOTE: `_memory_vector_key` still carries the old assumption, and
-    `rebuild_checkpoint_embeddings` still joins on it. That is a pre-existing
-    bug of the same shape (it can substitute one memory's vector onto
-    another), tracked separately -- see docs/UNBUILT.md.
+    `_memory_vector_key` carried the same old assumption for a while longer
+    and `rebuild_checkpoint_embeddings` joined on it, which is the same bug
+    one layer over: it could substitute one memory's vector onto another. That
+    key now hashes the whole `_memory_document` (and a summary's whole
+    `_summary_retrieval_text`), so both addresses are computed from the text
+    the vector was actually built from.
     """
     digest = hashlib.sha1()
     digest.update(embedding or b"")
@@ -3208,16 +3223,41 @@ def rebuild_embeddings(chat_id=None, char_id=None, *, batch=_REBUILD_BATCH,
     return report
 
 
-def _memory_vector_key(char_id, content):
-    """What decides a memory's vector: whose it is, and what it says.
+def _vector_key(char_id, text):
+    """Address a saved row by whose it is and the exact text that was embedded.
 
-    Checkpoint dumps carry no row id, so the join is on the content itself --
-    which is the honest key anyway, since the vector is a pure function of the
-    document built from it. Scoped per character because two minds can hold
-    word-identical memories that are still different rows.
+    Checkpoint dumps carry no row id, so the join has to be on content. What
+    counts as "the content" is the whole point: it must be the string the
+    vector was actually computed FROM, or the join can hand a row someone
+    else's vector.
+
+    The first version keyed a memory on its `content` field alone, reasoning
+    that a vector is a pure function of the memory. It is -- but not of its
+    content: `_memory_document` also folds in turn, location, category,
+    key_phrases, entities, gist, provenance and emotional_context, and a
+    summary's vector comes from `_summary_retrieval_text`, not its `summary`
+    field. Two rows can therefore agree on the keyed field and hold genuinely
+    different vectors. `vector_address` hit exactly this in production --
+    checkpoint 855 of chat 36 held "You are in Ten Forward." at turn 42 and
+    again at turn 44, same character, two different embedding payloads -- and
+    was moved to byte-addressing; the note it left said this join still
+    carried the old assumption. It no longer does.
     """
-    body = " ".join(str(content or "").split())
+    body = " ".join(str(text or "").split())
     return (char_id, hashlib.sha1(body.encode("utf-8", "ignore")).hexdigest())
+
+
+def _memory_vector_key(data):
+    """Address a memory by the document its vector is computed from."""
+    return _vector_key(data.get("char_id"), _memory_document(data))
+
+
+def _summary_vector_key(data):
+    """Address a summary by the retrieval text its vector is computed from."""
+    return _vector_key(data.get("char_id"),
+                       _summary_retrieval_text(data.get("summary"),
+                                               data.get("key_phrases"),
+                                               data.get("unresolved_threads")))
 
 
 def rebuild_checkpoint_embeddings(chat_id=None, *, dry_run=True, progress=None):
@@ -3256,18 +3296,34 @@ def rebuild_checkpoint_embeddings(chat_id=None, *, dry_run=True, progress=None):
         where.append("chat_id=?"); args.append(chat_id)
     clause = " AND ".join(where)
 
+    # Every column `_memory_document` reads, because the key is that document
+    # and not the `content` slice of it.
     vectors = {}
-    for row in q(f"SELECT char_id, content, embedding, cue_embedding "
+    for row in q(f"SELECT char_id, category, turn_idx, location, entities, "
+                 f"key_phrases, gist, content, provenance, emotional_context, "
+                 f"embedding, cue_embedding "
                  f"FROM memories WHERE {clause} AND embedding_model=? "
                  f"AND embedding_dim=?", tuple(args) + (key, dim)):
-        vectors[_memory_vector_key(row["char_id"], row["content"])] = (
-            _blob_to_b64(row["embedding"]), _blob_to_b64(row["cue_embedding"]))
+        vectors[_memory_vector_key({
+            "char_id": row["char_id"], "category": row["category"],
+            "turn_idx": row["turn_idx"], "location": row["location"],
+            "entities": _json_list(row["entities"]),
+            "key_phrases": _json_list(row["key_phrases"]),
+            "gist": row["gist"], "content": row["content"],
+            "provenance": row["provenance"],
+            "emotional_context": row["emotional_context"],
+        })] = (_blob_to_b64(row["embedding"]),
+               _blob_to_b64(row["cue_embedding"]))
     summaries = {}
-    for row in q(f"SELECT char_id, summary, embedding FROM memory_summaries "
+    for row in q(f"SELECT char_id, summary, key_phrases, unresolved_threads, "
+                 f"embedding FROM memory_summaries "
                  f"WHERE {clause} AND embedding_model=? AND embedding_dim=?",
                  tuple(args) + (key, dim)):
-        summaries[_memory_vector_key(row["char_id"], row["summary"])] = (
-            _blob_to_b64(row["embedding"]))
+        summaries[_summary_vector_key({
+            "char_id": row["char_id"], "summary": row["summary"],
+            "key_phrases": _json_list(row["key_phrases"]),
+            "unresolved_threads": _json_list(row["unresolved_threads"]),
+        })] = _blob_to_b64(row["embedding"])
 
     report = {"model": key, "checkpoints": 0, "rewritten": 0,
               "memories_repaired": 0, "summaries_repaired": 0,
@@ -3289,8 +3345,7 @@ def rebuild_checkpoint_embeddings(chat_id=None, *, dry_run=True, progress=None):
                 continue
             if mem.get("embedding_model") == key and mem.get("embedding_dim") == dim:
                 continue
-            hit = vectors.get(_memory_vector_key(mem.get("char_id"),
-                                                 mem.get("content")))
+            hit = vectors.get(_memory_vector_key(mem))
             if hit is None:
                 report["memories_unmatched"] += 1
                 continue
@@ -3303,8 +3358,7 @@ def rebuild_checkpoint_embeddings(chat_id=None, *, dry_run=True, progress=None):
                 continue
             if summ.get("embedding_model") == key and summ.get("embedding_dim") == dim:
                 continue
-            hit = summaries.get(_memory_vector_key(summ.get("char_id"),
-                                                   summ.get("summary")))
+            hit = summaries.get(_summary_vector_key(summ))
             if hit is None:
                 continue
             summ["embedding"] = hit
