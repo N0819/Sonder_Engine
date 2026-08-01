@@ -2218,13 +2218,39 @@ def maybe_consolidate_character_memory(chat_id, char_id, current_turn_idx, *, fr
 
 # ---- Snapshot dump/restore ----
 
-def vector_address(char_id, content) -> str:
-    """The string form of `_memory_vector_key`, for the `memory_vectors.vkey`
-    column. Built FROM that function rather than beside it, so the checkpoint
-    store and `rebuild_checkpoint_embeddings` can never disagree about what
-    identifies a vector."""
-    char_part, digest = _memory_vector_key(char_id, content)
-    return "%s:%s" % (char_part, digest)
+def vector_address(embedding, cue_embedding) -> str:
+    """Address a vector pair by ITS OWN BYTES.
+
+    The first version of this addressed on `(char_id, content)` -- reusing
+    `_memory_vector_key` on the reasoning that a vector is a pure function of
+    the memory. It is, but not of its CONTENT: `_memory_document` also folds in
+    `turn`, `location`, `category`, `key_phrases`, `entities`, `gist`,
+    `provenance` and `emotional_context`. Two memories can therefore share
+    content and hold different vectors, and that address collapses them.
+
+    Found in production, by the compaction verifier refusing four stories:
+    checkpoint 855 of chat 36 held "You are in Ten Forward." at turn 42 and
+    again at turn 44 -- same character, same content, two different embedding
+    payloads. Addressing on bytes makes a collision impossible by construction
+    rather than by assumption, and costs almost nothing: across chat 38's
+    40,224 stored entries, content-addressing found 529 distinct and
+    byte-addressing finds 583, still 69x deduplication.
+
+    The `v1:` prefix distinguishes these from addresses written by the earlier
+    scheme. Those rows stay in `memory_vectors` and keep resolving, so already
+    converted checkpoints are unaffected -- and they are known-good, because a
+    story whose entries collided could not have passed verification.
+
+    NOTE: `_memory_vector_key` still carries the old assumption, and
+    `rebuild_checkpoint_embeddings` still joins on it. That is a pre-existing
+    bug of the same shape (it can substitute one memory's vector onto
+    another), tracked separately -- see docs/UNBUILT.md.
+    """
+    digest = hashlib.sha1()
+    digest.update(embedding or b"")
+    digest.update(b"|")
+    digest.update(cue_embedding or b"")
+    return "v1:" + digest.hexdigest()
 
 
 def put_memory_vector(vkey, embedding, cue_embedding, model, dim):
@@ -2316,7 +2342,7 @@ def dump_chat_memories(chat_id, *, inline_vectors=True):
                 if r["embedding"] is None or r["cue_embedding"] is None:
                     continue
                 put_memory_vector(
-                    vector_address(r["char_id"], r["content"]),
+                    vector_address(r["embedding"], r["cue_embedding"]),
                     r["embedding"], r["cue_embedding"],
                     r["embedding_model"], r["embedding_dim"])
     return [
@@ -2337,7 +2363,7 @@ def dump_chat_memories(chat_id, *, inline_vectors=True):
          **({"embedding": _blob_to_b64(r["embedding"]),
              "cue_embedding": _blob_to_b64(r["cue_embedding"])}
             if inline_vectors else
-            {"vkey": vector_address(r["char_id"], r["content"])}),
+            {"vkey": vector_address(r["embedding"], r["cue_embedding"])}),
          "embedding_model": r["embedding_model"],
          "embedding_dim": r["embedding_dim"]}
         for r in rows

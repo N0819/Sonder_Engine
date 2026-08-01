@@ -134,49 +134,101 @@ def test_dry_run_writes_nothing(temp_db):
 
 # --- loss is refused, per story --------------------------------------------
 
-def test_a_story_that_cannot_be_proved_lossless_is_left_alone(temp_db):
-    """Two memories in one checkpoint that share content but differ in vector
-    bytes: one content address cannot represent both, so compacting would
-    silently lose one. The story is named, skipped, and left byte-identical --
-    and the stories either side of it still convert."""
+def _corrupt_candidate_for(monkeypatch, chat_name):
+    """Make the compacted candidate for one story silently wrong.
+
+    The verifier's job is to catch a candidate that does not restore to its
+    original, whatever produced it. Injecting the fault at the candidate --
+    rather than in the stored data -- tests the refusal machinery without
+    depending on any particular way of being wrong, which matters because the
+    ORIGINAL way (two memories sharing content but not vectors) is now handled
+    rather than refused: addresses are the vector's own bytes.
+    """
+    import checkpoints as C
+    real = C._candidate_blob
+
+    def fake(blob):
+        candidate, pending, moved = real(blob)
+        mems = candidate.get("memories") or []
+        if moved and mems and blob.get("_story") == chat_name:
+            mems[0]["salience"] = 0.123456          # a value the original lacks
+        return candidate, pending, moved
+
+    monkeypatch.setattr(C, "_candidate_blob", fake)
+
+
+def test_a_story_that_cannot_be_proved_lossless_is_left_alone(temp_db, monkeypatch):
+    """The story is named, its originals stand byte-identical, and the stories
+    either side of it still convert."""
     good1, _ = _story(temp_db, "Good One")
     bad, _ = _story(temp_db, "Bad Story")
     good2, _ = _story(temp_db, "Good Two")
     for cid in (good1, bad, good2):
         ensure_checkpoint(cid, 0)
         _make_legacy(temp_db, cid)
-
-    r = temp_db.q("SELECT id, blob FROM checkpoints WHERE chat_id=?", (bad,), one=True)
-    blob = json.loads(r["blob"])
-    blob["memories"][2]["content"] = blob["memories"][1]["content"]
-    temp_db.qi("UPDATE checkpoints SET blob=? WHERE id=?",
-               (json.dumps(blob), r["id"]))
+    # Tag the bad story's blob so the injected fault lands only on it.
+    for r in temp_db.q("SELECT id, blob FROM checkpoints WHERE chat_id=?", (bad,)):
+        blob = json.loads(r["blob"]); blob["_story"] = "Bad Story"
+        temp_db.qi("UPDATE checkpoints SET blob=? WHERE id=?",
+                   (json.dumps(blob), r["id"]))
+    _corrupt_candidate_for(monkeypatch, "Bad Story")
 
     before = {x["id"]: x["blob"] for x in temp_db.q("SELECT id, blob FROM checkpoints")}
     rep = compact_checkpoints(dry_run=False)
     after = {x["id"]: x["blob"] for x in temp_db.q("SELECT id, blob FROM checkpoints")}
 
     assert [s["name"] for s in rep["skipped"]] == ["Bad Story"]
-    assert rep["skipped"][0]["reason"]
-    bad_ids = {x["id"] for x in temp_db.q("SELECT id FROM checkpoints WHERE chat_id=?", (bad,))}
+    assert "salience changed" in rep["skipped"][0]["reason"]
+    bad_ids = {x["id"] for x in temp_db.q(
+        "SELECT id FROM checkpoints WHERE chat_id=?", (bad,))}
     assert all(before[i] == after[i] for i in bad_ids), "the original must be untouched"
     ok_ids = {x["id"] for x in temp_db.q(
         "SELECT id FROM checkpoints WHERE chat_id IN (?,?)", (good1, good2))}
     assert all(before[i] != after[i] for i in ok_ids), "other stories still convert"
 
 
-def test_a_refused_story_leaves_no_vectors_behind(temp_db):
+def test_a_refused_story_leaves_no_vectors_behind(temp_db, monkeypatch):
     """Vectors are written in the same transaction as the blobs, so a story
     that fails verification contributes nothing at all."""
     bad, _ = _story(temp_db, "Only Bad", n=5)
     ensure_checkpoint(bad, 0)
     _make_legacy(temp_db, bad)
-    r = temp_db.q("SELECT id, blob FROM checkpoints", one=True)
-    blob = json.loads(r["blob"])
-    blob["memories"][2]["content"] = blob["memories"][1]["content"]
-    temp_db.qi("UPDATE checkpoints SET blob=? WHERE id=?", (json.dumps(blob), r["id"]))
+    for r in temp_db.q("SELECT id, blob FROM checkpoints"):
+        blob = json.loads(r["blob"]); blob["_story"] = "Only Bad"
+        temp_db.qi("UPDATE checkpoints SET blob=? WHERE id=?",
+                   (json.dumps(blob), r["id"]))
+    _corrupt_candidate_for(monkeypatch, "Only Bad")
     compact_checkpoints(dry_run=False)
     assert temp_db.q("SELECT COUNT(*) n FROM memory_vectors", one=True)["n"] == 0
+
+
+def test_two_memories_with_one_content_and_two_vectors_now_convert(temp_db):
+    """The production failure that forced byte-addressing.
+
+    Chat 36 held "You are in Ten Forward." at turn 42 and again at turn 44 --
+    same character, same content, different embedding payloads, because a
+    vector is built from `_memory_document` (which folds in turn, location,
+    category, key phrases) and not from content alone. Addressing on
+    `(char_id, content)` collapsed the two, the verifier refused the story, and
+    the four largest stories in the database went unconverted.
+    """
+    cid, ch = _story(temp_db, "Ten Forward", n=4)
+    ensure_checkpoint(cid, 0)
+    _make_legacy(temp_db, cid)
+    r = temp_db.q("SELECT id, blob FROM checkpoints WHERE chat_id=?", (cid,), one=True)
+    blob = json.loads(r["blob"])
+    a, b = blob["memories"][0], blob["memories"][1]
+    b["content"] = a["content"]                     # same content...
+    assert b["embedding"] != a["embedding"]         # ...different vectors
+    temp_db.qi("UPDATE checkpoints SET blob=? WHERE id=?",
+               (json.dumps(blob), r["id"]))
+
+    rep = compact_checkpoints(dry_run=False)
+    assert rep["skipped"] == [], rep["skipped"]
+    assert rep["rewritten"] == 1
+    stored = json.loads(temp_db.q("SELECT blob FROM checkpoints WHERE id=?",
+                                  (r["id"],), one=True)["blob"])["memories"]
+    assert stored[0]["vkey"] != stored[1]["vkey"], "distinct vectors need distinct addresses"
 
 
 def test_an_unreadable_checkpoint_is_left_exactly_as_it_is(temp_db):
