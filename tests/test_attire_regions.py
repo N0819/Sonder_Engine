@@ -830,3 +830,73 @@ class TestTheViewsReadThroughNormalisation:
             "regions": {"torso": {"garments": [
                 {"name": "a worn leather jerkin", "state": "worn"}]}}})
         assert view["wearing"] == ["a worn leather jerkin"]
+
+
+class TestANoteMayOnlyIntroduceWhatTheStorySaid:
+    """Reading 3 lets a note put a garment the ledger has never heard of ONTO
+    a body. It exists for a real case -- the narration has described a linen
+    shift since beat 0 while the ledger still holds the travel clothes off her
+    card -- and it cannot otherwise tell that from the Director imagining
+    clothing. The difference is not structural: "linen shift, hem rucked up"
+    and "corset, unlaced and hanging open" are the same shape, and an earlier
+    attempt to separate them by whether the region was already dressed broke
+    the shift case, whose torso is dressed too.
+
+    What separates them is whether the story ever said it. Measured on chat 52:
+    a `corset` and a `skirt` reached Elyndra's ledger and NEITHER WORD appears
+    in any of the 23 turns of narration -- two garments the fiction never once
+    mentioned, on top of the four her card authors.
+    """
+
+    def _worn(self):
+        return ["lightweight travel jacket", "travel shorts"]
+
+    def test_the_shift_case_still_works(self):
+        import commit
+        out = commit.interpret_attire_notes(
+            {"notes": {"shift": "linen shift, hem rucked up where her hand slipped"}},
+            self._worn(), {"wearing": self._worn()},
+            prose="The hem of her shift rides up where his hand slipped beneath.")
+        assert out.get("add") == ["linen shift"]
+
+    def test_a_garment_the_prose_never_mentions_is_refused(self):
+        import commit
+        out = commit.interpret_attire_notes(
+            {"notes": {"corset": "corset, unlaced and hanging open"}},
+            self._worn(), {"wearing": self._worn()},
+            prose="Elyndra leans closer, horns burning faint gold in the dim room.")
+        assert not out.get("add")
+
+    def test_the_director_is_told_what_was_ignored_and_how_to_mean_it(self):
+        import commit
+        out = commit.interpret_attire_notes(
+            {"notes": {"corset": "corset, unlaced"}},
+            self._worn(), {"wearing": self._worn()},
+            prose="She leans closer.")
+        told = " ".join(out.get("_notes_read") or [])
+        assert "corset" in told and "`add`" in told
+
+    def test_the_head_noun_is_enough(self):
+        """A note introduces "linen shift"; prose says "your shift"."""
+        import commit
+        out = commit.interpret_attire_notes(
+            {"notes": {"x": "linen shift, rucked"}}, self._worn(),
+            {"wearing": self._worn()}, prose="the hem of your shift")
+        assert out.get("add") == ["linen shift"]
+
+    def test_an_explicit_add_is_never_gated(self):
+        """The gate is on NOTES. A Director that means it says so."""
+        import commit
+        out = commit.interpret_attire_notes(
+            {"add": ["corset"]}, self._worn(), {"wearing": self._worn()},
+            prose="nothing about clothing here")
+        assert out.get("add") == ["corset"]
+
+    def test_omitting_prose_leaves_behaviour_unchanged(self):
+        """Every existing caller, and the rerun-from-stage path that replays
+        diffs stored before this existed."""
+        import commit
+        out = commit.interpret_attire_notes(
+            {"notes": {"shift": "linen shift, rucked"}},
+            self._worn(), {"wearing": self._worn()})
+        assert out.get("add") == ["linen shift"]
