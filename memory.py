@@ -2218,8 +2218,107 @@ def maybe_consolidate_character_memory(chat_id, char_id, current_turn_idx, *, fr
 
 # ---- Snapshot dump/restore ----
 
-def dump_chat_memories(chat_id):
+def vector_address(char_id, content) -> str:
+    """The string form of `_memory_vector_key`, for the `memory_vectors.vkey`
+    column. Built FROM that function rather than beside it, so the checkpoint
+    store and `rebuild_checkpoint_embeddings` can never disagree about what
+    identifies a vector."""
+    char_part, digest = _memory_vector_key(char_id, content)
+    return "%s:%s" % (char_part, digest)
+
+
+def put_memory_vector(vkey, embedding, cue_embedding, model, dim):
+    """File a vector pair under its content address. Idempotent, append-only.
+
+    `INSERT OR IGNORE`, not upsert: the address IS the content, so a second
+    write for the same key is the same vector. If it somehow is not -- a model
+    change without a rekey -- the FIRST one wins, because that is the one the
+    existing checkpoints were written against and a rollback has to reproduce
+    what it saved, not what is current.
+    """
+    if not vkey or embedding is None or cue_embedding is None:
+        return False
+    qi("INSERT OR IGNORE INTO memory_vectors"
+       "(vkey,embedding,cue_embedding,embedding_model,embedding_dim,created) "
+       "VALUES(?,?,?,?,?,?)",
+       (vkey, embedding, cue_embedding, model or "", dim, time.time()))
+    return True
+
+
+def get_memory_vectors(vkeys):
+    """{vkey: (embedding_blob, cue_blob, model, dim)} for the keys that exist."""
+    keys = [str(k) for k in (vkeys or []) if str(k or "").strip()]
+    if not keys:
+        return {}
+    out = {}
+    # Chunked: a long story's restore can ask for hundreds of keys at once and
+    # SQLite caps host parameters.
+    for i in range(0, len(keys), 400):
+        part = keys[i:i + 400]
+        marks = ",".join("?" for _ in part)
+        for r in q("SELECT * FROM memory_vectors WHERE vkey IN (%s)" % marks,
+                   tuple(part)):
+            out[r["vkey"]] = (r["embedding"], r["cue_embedding"],
+                              r["embedding_model"], r["embedding_dim"])
+    return out
+
+
+def dump_memory_vectors(vkeys):
+    """Content-addressed vectors, base64'd, for a portable archive."""
+    out = []
+    for vkey, (full, cue, model, dim) in sorted(get_memory_vectors(vkeys).items()):
+        out.append({"vkey": vkey, "embedding": _blob_to_b64(full),
+                    "cue_embedding": _blob_to_b64(cue),
+                    "embedding_model": model, "embedding_dim": dim})
+    return out
+
+
+def restore_memory_vectors(entries):
+    """File an archive's vectors into this database's store.
+
+    Additive and idempotent -- the address is the content, so an entry that is
+    already here is the same vector. Never deletes: another chat's checkpoints
+    may reference the same address.
+    """
+    n = 0
+    with transaction():
+        for e in entries or []:
+            if not isinstance(e, dict):
+                continue
+            if put_memory_vector(e.get("vkey"), _b64_to_blob(e.get("embedding")),
+                                 _b64_to_blob(e.get("cue_embedding")),
+                                 e.get("embedding_model"), e.get("embedding_dim")):
+                n += 1
+    return n
+
+
+def dump_chat_memories(chat_id, *, inline_vectors=True):
+    """The chat's memory bank, for a checkpoint or a portable archive.
+
+    `inline_vectors` is the difference between the two callers, and it matters:
+
+    * a CHECKPOINT lives in the same database as the vector store, so it can
+      reference vectors by content address and carry none of the payload.
+      That is the whole compaction -- the two vector fields are 96.9% of a
+      checkpoint, re-stored on every turn for the life of the story.
+    * a portable ARCHIVE is imported into a DIFFERENT database, where no such
+      store exists, so it must carry the vectors with it or the import
+      re-embeds the whole bank (expensive, and a provider hiccup during it
+      silently downgrades every vector to the crc32 fallback).
+
+    The restore path accepts either shape, so an old checkpoint written before
+    this existed still restores from its inline vectors unchanged.
+    """
     rows = q("SELECT * FROM memories WHERE chat_id=? ORDER BY CASE WHEN turn_idx IS NULL THEN 1 ELSE 0 END, turn_idx, id", (chat_id,))
+    if not inline_vectors:
+        with transaction():
+            for r in rows:
+                if r["embedding"] is None or r["cue_embedding"] is None:
+                    continue
+                put_memory_vector(
+                    vector_address(r["char_id"], r["content"]),
+                    r["embedding"], r["cue_embedding"],
+                    r["embedding_model"], r["embedding_dim"])
     return [
         {"char_id": r["char_id"], "turn_id": r["turn_id"], "turn_idx": r["turn_idx"],
          "frame_id": r["frame_id"],
@@ -2235,8 +2334,10 @@ def dump_chat_memories(chat_id):
          # memory bank on every checkpoint restore (expensive, and a
          # provider hiccup during it silently downgrades every vector
          # to the crc32 fallback, which then scores 0.0 forever).
-         "embedding": _blob_to_b64(r["embedding"]),
-         "cue_embedding": _blob_to_b64(r["cue_embedding"]),
+         **({"embedding": _blob_to_b64(r["embedding"]),
+             "cue_embedding": _blob_to_b64(r["cue_embedding"])}
+            if inline_vectors else
+            {"vkey": vector_address(r["char_id"], r["content"])}),
          "embedding_model": r["embedding_model"],
          "embedding_dim": r["embedding_dim"]}
         for r in rows
@@ -2261,6 +2362,10 @@ def prepare_chat_memory_restore(chat_id, mems):
     verbatim; only legacy dumps without them are re-embedded."""
     entries = []
     legacy_items = []
+    # One lookup for every address in the dump, before the loop: a restore
+    # should not issue a query per memory.
+    vector_store = get_memory_vectors(
+        [m.get("vkey") for m in (mems or []) if isinstance(m, dict) and m.get("vkey")])
     for m in mems or []:
         if not m.get("content"):
             continue
@@ -2289,6 +2394,16 @@ def prepare_chat_memory_restore(chat_id, mems):
         full_blob = _b64_to_blob(m.get("embedding"))
         cue_blob = _b64_to_blob(m.get("cue_embedding"))
         model = m.get("embedding_model") or ""
+        # A compacted checkpoint carries a content address instead of the
+        # payload. Resolve it here, in the same read-only phase the inline
+        # shape is handled in, so the write phase stays identical for both.
+        if (full_blob is None or cue_blob is None) and m.get("vkey"):
+            hit = vector_store.get(m["vkey"])
+            if hit:
+                full_blob, cue_blob = hit[0], hit[1]
+                model = model or hit[2]
+                if not m.get("embedding_dim"):
+                    m = {**m, "embedding_dim": hit[3]}
         if full_blob is not None and cue_blob is not None and model:
             full_vec = _vec(full_blob)
             cue_vec = _vec(cue_blob)

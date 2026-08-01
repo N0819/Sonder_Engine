@@ -23,6 +23,8 @@ from providers import (
 from pipeline_context import PipelineContext, ChatData, TurnData
 from checkpoints import (ensure_checkpoint, restore_checkpoint, snapshot_state,
                          refresh_checkpoint, insert_world_tables,
+                         checkpoint_storage_status, compaction_progress,
+                         start_compaction,
                          PRESERVED_SETTING_KEYS)
 from frames import create_frame, get_frame, list_frames
 import paradox
@@ -1142,6 +1144,35 @@ def updates_check():
 @app.post("/api/updates/install")
 def updates_install():
     return updates.install_updates()
+
+@app.get("/api/maintenance/checkpoints")
+def maintenance_checkpoints():
+    """How much of the checkpoint store is still in the legacy inline-vector
+    format, plus any conversion in flight.
+
+    Lives beside the update routes because that is where a host looks after
+    pulling a version whose storage format changed. Safe to poll: the status
+    scan is sizes plus a one-entry probe per blob, not a full parse.
+    """
+    out = {"progress": compaction_progress()}
+    try:
+        out.update(checkpoint_storage_status())
+    except Exception as exc:
+        out["error"] = str(exc)
+    return out
+
+@app.post("/api/maintenance/checkpoints/compact")
+def maintenance_compact(body: dict = Body(default={})):
+    """Convert legacy checkpoints to the content-addressed format.
+
+    Rewrites rollback history, so it is never automatic -- a host asks for it.
+    Nothing is re-embedded and nothing is deleted: each vector moves into
+    `memory_vectors` under its content address and the checkpoint keeps a
+    reference. Resumable; already-converted checkpoints are skipped.
+    """
+    body = body or {}
+    cid = body.get("chat_id")
+    return start_compaction(int(cid) if cid else None)
 
 # ============================ LOREBOOK TREE & LINKS ============================
 from memory import (

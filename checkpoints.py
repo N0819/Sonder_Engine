@@ -1,6 +1,9 @@
-import json, time, re, hashlib
+import json, time, re, hashlib, threading, logging
 from db import active_frame_id, q, qi, transaction, wget, wset
+logger = logging.getLogger(__name__)
+
 from memory import (
+    put_memory_vector, get_memory_vectors, vector_address, _b64_to_blob,
     dump_chat_memories, restore_chat_memories,
     prepare_chat_memory_restore, apply_chat_memory_restore,
     dump_memory_summaries, restore_memory_summaries,
@@ -139,7 +142,11 @@ def snapshot_state(chat_id):
     return {
         "world": world, "chars": chars, "char_frames": char_frames,
         "frames": frames, "chat_personas": chat_personas,
-        "memories": dump_chat_memories(chat_id),
+        # Vectors by content address, not inline: they are 96.9% of a
+        # checkpoint and identical in every checkpoint that contains the
+        # same memory. The archive export still inlines them, because it
+        # is imported into a database with no vector store.
+        "memories": dump_chat_memories(chat_id, inline_vectors=False),
         "memory_summaries": dump_memory_summaries(chat_id),
         "lore": lore, "lorebooks": books,
         "lorebook_links": links,
@@ -621,6 +628,293 @@ def _lore_cache_fingerprint(entry):
     content = re.sub(r"\s+", " ", str(entry.get("content") or "").strip().casefold())
     digest = hashlib.sha256(f"{keys}\x1f{content}".encode("utf-8")).hexdigest()
     return f"content:{digest}"
+
+def checkpoint_storage_status(chat_id=None):
+    """How much of the checkpoint store is still in the legacy inline-vector
+    format, for the maintenance panel. Cheap: one scan of sizes plus a probe of
+    each blob's first memory entry rather than a full parse.
+    """
+    where, args = ["1=1"], []
+    if chat_id is not None:
+        where.append("chat_id=?"); args.append(chat_id)
+    clause = " AND ".join(where)
+    rows = q("SELECT id, length(blob) sz FROM checkpoints WHERE " + clause, tuple(args))
+    total_bytes = sum(r["sz"] or 0 for r in rows)
+    legacy = legacy_bytes = 0
+    for r in rows:
+        blob = q("SELECT blob FROM checkpoints WHERE id=?", (r["id"],), one=True)
+        try:
+            mems = json.loads(blob["blob"]).get("memories") or []
+        except (TypeError, ValueError):
+            continue
+        # An inline entry carries the payload; a compacted one carries `vkey`.
+        if any(isinstance(m, dict) and m.get("embedding") for m in mems[:1]):
+            legacy += 1
+            legacy_bytes += r["sz"] or 0
+    return {"checkpoints": len(rows), "legacy": legacy,
+            "bytes": total_bytes, "legacy_bytes": legacy_bytes}
+
+
+def _candidate_blob(blob):
+    """A compacted copy of one checkpoint, plus the vectors it now references.
+
+    Returns (candidate, pending, moved) and mutates nothing: the original dict
+    is left exactly as it was so it can be compared against afterwards.
+    """
+    candidate = json.loads(json.dumps(blob))     # deep copy, cheap enough here
+    pending, moved = [], 0
+    for m in candidate.get("memories") or []:
+        if not isinstance(m, dict) or not m.get("embedding"):
+            continue
+        full = _b64_to_blob(m.get("embedding"))
+        cue = _b64_to_blob(m.get("cue_embedding"))
+        if full is None or cue is None:
+            continue                              # nothing safe to move
+        vkey = vector_address(m.get("char_id"), m.get("content"))
+        pending.append((vkey, full, cue, m.get("embedding_model"),
+                        m.get("embedding_dim")))
+        m.pop("embedding", None)
+        m.pop("cue_embedding", None)
+        m["vkey"] = vkey
+        moved += 1
+    return candidate, pending, moved
+
+
+def _verify_no_loss(original, candidate, vectors):
+    """Prove the candidate restores to exactly what the original held.
+
+    Not a checksum of the file -- a field-by-field comparison of what a RESTORE
+    would produce, because that is the only thing a checkpoint is for. Returns
+    a reason string on the first discrepancy, or None when the two are
+    equivalent.
+
+    `vectors` is {vkey: (embedding_bytes, cue_bytes)} covering both what is
+    already in the store and what this run is about to add, so verification
+    asks the same question the restore path will: can every reference be
+    resolved, and does it resolve to the same bytes.
+    """
+    if sorted(original) != sorted(candidate):
+        return "top-level keys differ"
+    for key in original:
+        if key == "memories":
+            continue
+        if original[key] != candidate[key]:
+            return "%s changed" % key
+    o_mems = original.get("memories") or []
+    c_mems = candidate.get("memories") or []
+    if len(o_mems) != len(c_mems):
+        return "memory count %d -> %d" % (len(o_mems), len(c_mems))
+    for i, (o, c) in enumerate(zip(o_mems, c_mems)):
+        if not isinstance(o, dict) or not isinstance(c, dict):
+            if o != c:
+                return "entry %d is not comparable" % i
+            continue
+        # Every field except the vectors themselves must survive untouched.
+        for key in set(o) | set(c):
+            if key in ("embedding", "cue_embedding", "vkey"):
+                continue
+            if o.get(key) != c.get(key):
+                return "entry %d: %s changed" % (i, key)
+        o_full, o_cue = _b64_to_blob(o.get("embedding")), _b64_to_blob(o.get("cue_embedding"))
+        if o_full is None and o_cue is None:
+            # Nothing was there to move; the entry must be unchanged.
+            if c.get("vkey") and not o.get("vkey"):
+                return "entry %d gained a reference to nothing" % i
+            continue
+        vkey = c.get("vkey")
+        if not vkey:
+            return "entry %d lost its vectors without a reference" % i
+        got = vectors.get(vkey)
+        if got is None:
+            return "entry %d references a vector that is not stored" % i
+        if got[0] != o_full or got[1] != o_cue:
+            return "entry %d resolves to different vector bytes" % i
+    return None
+
+
+def compact_checkpoints(chat_id=None, *, dry_run=True, progress=None):
+    """Convert legacy checkpoints to the leaner content-addressed format.
+
+    A checkpoint used to carry every memory's two embedding vectors inline.
+    Because a checkpoint is a full pre-turn snapshot of the bank, the same
+    vector was re-stored on every turn for the life of the story. Measured on a
+    live database: checkpoints were 94.5% of a 4.4 GB file, `memories` was
+    98.9% of each checkpoint, and the vectors were 96.9% of that -- one story
+    held 40,224 memory copies across 118 checkpoints and 529 distinct by
+    content, a 76x duplication of 1.00 GB that needs 13 MB.
+
+    Nothing is re-embedded. A vector is a pure function of the memory's
+    content, so this changes where the bytes live, not what they are.
+
+    **LOSS IS NOT ACCEPTED, and that is enforced rather than intended.** The
+    work happens per STORY, on a duplicate, and the original is not touched
+    until the duplicate has been proved equivalent:
+
+    1. every checkpoint in the story is compacted into an in-memory candidate,
+       leaving the stored blob untouched;
+    2. each candidate is verified field-by-field against its original --
+       including resolving every vector reference back to the exact bytes it
+       replaced (`_verify_no_loss`), which is the question a restore will ask;
+    3. only if EVERY checkpoint in the story verifies are the vectors and the
+       blobs written, in ONE transaction;
+    4. if any checkpoint fails, the story is reported by name, its candidates
+       are discarded, its original blobs stand untouched, and the run moves on
+       to the next story.
+
+    The duplicate is held in memory rather than as a copied chat row: it gives
+    the same guarantee -- the original is never mutated until the copy is
+    proved -- without duplicating a gigabyte of story to do it, and with no
+    half-written copy to clean up if the process dies.
+
+    Resumable: an already-compacted checkpoint has no inline vectors left to
+    move and is skipped.
+    """
+    where, args = ["1=1"], []
+    if chat_id is not None:
+        where.append("chat_id=?"); args.append(chat_id)
+    clause = " AND ".join(where)
+    chats = q("SELECT DISTINCT chat_id FROM checkpoints WHERE " + clause, tuple(args))
+    total = q("SELECT COUNT(*) n FROM checkpoints WHERE " + clause, tuple(args),
+              one=True)["n"]
+    report = {"checkpoints": total, "rewritten": 0, "vectors_stored": 0,
+              "bytes_before": 0, "bytes_after": 0, "stories": len(chats),
+              "stories_done": 0, "skipped": [], "dry_run": bool(dry_run),
+              "error": ""}
+    seen = 0
+    for row in chats:
+        cid = row["chat_id"]
+        name = (q("SELECT name FROM chats WHERE id=?", (cid,), one=True)
+                or {"name": "chat %s" % cid})["name"]
+        cps = q("SELECT id, blob FROM checkpoints WHERE chat_id=? ORDER BY id", (cid,))
+        candidates, pending_all, story_before, story_after = [], {}, 0, 0
+        reason = None
+        for cp in cps:
+            raw = cp["blob"]
+            story_before += len(raw or "")
+            try:
+                blob = json.loads(raw)
+            except (TypeError, ValueError):
+                story_after += len(raw or "")
+                continue              # unreadable: left exactly as it is
+            candidate, pending, moved = _candidate_blob(blob)
+            if not moved:
+                story_after += len(raw or "")
+                continue
+            for vkey, full, cue, model, dim in pending:
+                pending_all[vkey] = (full, cue, model, dim)
+            text = json.dumps(candidate, ensure_ascii=False)
+            story_after += len(text)
+            candidates.append((cp["id"], text, blob, candidate))
+
+        if candidates:
+            # Everything the verifier may need to resolve: what this run is
+            # about to store, plus whatever is already stored.
+            resolvable = {k: (v[0], v[1]) for k, v in pending_all.items()}
+            for vkey, (full, cue, _m, _d) in get_memory_vectors(
+                    [k for _i, _t, _o, c in candidates
+                     for m in (c.get("memories") or [])
+                     if isinstance(m, dict) and (k := m.get("vkey"))]).items():
+                resolvable.setdefault(vkey, (full, cue))
+            for _cid_, _text, original, candidate in candidates:
+                reason = _verify_no_loss(original, candidate, resolvable)
+                if reason:
+                    break
+
+        seen += len(cps)
+        if reason:
+            # The duplicate is discarded and the original stands. Nothing was
+            # written for this story, so there is nothing to undo.
+            report["skipped"].append(
+                {"chat_id": cid, "name": name, "reason": reason})
+            logger.warning("checkpoints: cannot compact %r (%s) -- original left "
+                           "untouched", name, reason)
+            report["bytes_before"] += story_before
+            report["bytes_after"] += story_before
+        elif candidates and not dry_run:
+            with transaction():
+                for vkey, (full, cue, model, dim) in pending_all.items():
+                    if put_memory_vector(vkey, full, cue, model, dim):
+                        report["vectors_stored"] += 1
+                for cp_id, text, _o, _c in candidates:
+                    qi("UPDATE checkpoints SET blob=? WHERE id=?", (text, cp_id))
+            report["rewritten"] += len(candidates)
+            report["bytes_before"] += story_before
+            report["bytes_after"] += story_after
+        else:
+            if candidates:
+                report["rewritten"] += len(candidates)
+                report["vectors_stored"] += len(pending_all)
+            report["bytes_before"] += story_before
+            report["bytes_after"] += story_after
+        report["stories_done"] += 1
+        if progress:
+            progress(seen, total, report)
+    return report
+
+
+_COMPACT_LOCK = threading.Lock()
+_COMPACT_STATE = {"running": False, "done": 0, "total": 0, "rewritten": 0,
+                  "bytes_before": 0, "bytes_after": 0, "finished_at": 0.0,
+                  "error": "", "skipped": []}
+
+
+def compaction_progress():
+    with _COMPACT_LOCK:
+        return dict(_COMPACT_STATE)
+
+
+def _run_compaction(chat_id=None):
+    with _COMPACT_LOCK:
+        _COMPACT_STATE.update(running=True, done=0, total=0, rewritten=0,
+                              bytes_before=0, bytes_after=0, error="",
+                              finished_at=0.0, skipped=[])
+    try:
+        def _tick(done, total, rep):
+            with _COMPACT_LOCK:
+                _COMPACT_STATE.update(done=done, total=total,
+                                      rewritten=rep["rewritten"],
+                                      bytes_before=rep["bytes_before"],
+                                      bytes_after=rep["bytes_after"],
+                                      skipped=list(rep["skipped"]))
+        rep = compact_checkpoints(chat_id, dry_run=False, progress=_tick)
+        with _COMPACT_LOCK:
+            _COMPACT_STATE.update(skipped=list(rep["skipped"]))
+    except Exception as exc:            # never take the server down for this
+        logger.warning("checkpoints: compaction failed: %s", exc)
+        with _COMPACT_LOCK:
+            _COMPACT_STATE.update(error=str(exc))
+    finally:
+        with _COMPACT_LOCK:
+            _COMPACT_STATE.update(running=False, finished_at=time.time())
+
+
+def start_compaction(chat_id=None):
+    """Run the conversion in the background. One at a time.
+
+    Refuses outright when there is no legacy data. A conversion that has
+    nothing to convert still walks every checkpoint, parses every blob and
+    holds the write lock per story -- expensive work whose only possible
+    outcome is "nothing changed" -- and on the rollback path the safest run is
+    the one that does not happen. A host who clicks it twice gets told so
+    rather than watching a bar for a no-op.
+    """
+    with _COMPACT_LOCK:
+        if _COMPACT_STATE["running"]:
+            return {"started": False, "reason": "already running"}
+    try:
+        status = checkpoint_storage_status(chat_id)
+    except Exception as exc:
+        return {"started": False, "reason": "could not check: %s" % exc}
+    if not status["checkpoints"]:
+        return {"started": False, "reason": "no checkpoints stored",
+                **status}
+    if not status["legacy"]:
+        return {"started": False, "reason": "nothing to convert",
+                **status}
+    threading.Thread(target=_run_compaction, args=(chat_id,),
+                     daemon=True).start()
+    return {"started": True, **status}
+
 
 def ensure_checkpoint(chat_id, turn_idx):
     """Ensure a checkpoint exists for the given turn index.

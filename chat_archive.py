@@ -42,7 +42,9 @@ from memory import (
     dump_lorebook,
     dump_lorebook_links,
     dump_memory_summaries,
+    dump_memory_vectors,
     restore_chat_memories,
+    restore_memory_vectors,
     restore_lorebook,
     restore_lorebook_links,
     restore_memory_summaries,
@@ -89,6 +91,12 @@ class ChatArchiveData(LenientModel):
     char_frames: list[dict[str, Any]] = Field(default_factory=list)
     memories: list[dict[str, Any]] = Field(default_factory=list)
     memory_summaries: list[dict[str, Any]] = Field(default_factory=list)
+    # Content-addressed vectors the CHECKPOINTS reference. Declared, because an
+    # undeclared field validates cleanly and is then silently dropped by
+    # extra="ignore" -- the failure that kept `stations` inert for 45 scenes
+    # and stripped every opening turn's authored attire. Without this an
+    # imported story's checkpoints would restore with no vectors at all.
+    memory_vectors: list[dict[str, Any]] = Field(default_factory=list)
     events: list[dict[str, Any]] = Field(default_factory=list)
     checkpoints: list[dict[str, Any]] = Field(default_factory=list)
     lorebook: dict[str, Any] | None = None
@@ -105,6 +113,7 @@ class ChatArchiveData(LenientModel):
         "char_frames",
         "memories",
         "memory_summaries",
+        "memory_vectors",
         "events",
         "checkpoints",
         "lorebooks",
@@ -451,6 +460,24 @@ class ChatArchiveService:
         # Validate our own boundary without filtering migration-era or
         # forward-compatible fields from the returned dictionary.
         _model_validate(ChatArchiveData, export)
+        # Vectors the CHECKPOINTS reference by content address. A checkpoint
+        # carries `vkey` rather than the payload (memory.dump_chat_memories),
+        # and the importing database has no such store -- so the referenced
+        # vectors travel with the archive, deduped. That is what the addressing
+        # buys here too: one story's checkpoints held 1.00 GB of duplicated
+        # vectors and only 13 MB of distinct ones.
+        wanted = set()
+        for checkpoint in export["checkpoints"]:
+            try:
+                blob = (json.loads(checkpoint["blob"])
+                        if isinstance(checkpoint["blob"], str)
+                        else checkpoint["blob"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+            for mem in (blob or {}).get("memories") or []:
+                if isinstance(mem, dict) and mem.get("vkey"):
+                    wanted.add(mem["vkey"])
+        export["memory_vectors"] = dump_memory_vectors(sorted(wanted))
         return export
 
     def import_chat(
@@ -943,6 +970,11 @@ class ChatArchiveService:
             restore_lorebook_links(
                 new_chat_id, bookmap, data.get("lorebook_links") or []
             )
+
+            # Before the checkpoints that reference them. A checkpoint blob
+            # carries content addresses, not payloads, so without these an
+            # imported story could not roll back without re-embedding.
+            restore_memory_vectors(data.get("memory_vectors") or [])
 
             for checkpoint in data.get("checkpoints") or []:
                 blob = (
