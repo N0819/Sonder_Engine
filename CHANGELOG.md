@@ -1,5 +1,118 @@
 # Changelog
 
+## alpha 6.4.1 — Nobody in the room is called "the player"
+
+A patch release from one report: *"I do not think Player is an acceptable
+substitute for hinami when the does know check box is unticked."* It was right,
+and pulling on it found the same defect in two unrelated places, plus an
+opening-turn bug underneath both.
+
+### A character calls the player something a character could say
+
+Three possible handles for the protagonist, and the engine was reaching for the
+two wrong ones.
+
+- **"the player" was reaching character memory.** Live in *Run!*, three of The
+  Doctor's four turn-0 memories read "The Doctor knows **the player** was being
+  chased by a Dalek", "intrigued by **the player's** appearance". That is the
+  engine's own out-of-fiction word for the protagonist, sitting inside a
+  fictional mind at salience 1.0. `{{PLAYER}}` appeared in none of them: the
+  model wrote the literal English words instead of the token, so the
+  substitution that exists for exactly this had nothing to replace.
+- **And the opposite failure, from the same launch path.** An earlier run of
+  the same card DID contain the token, so it resolved to "Hinami" — and the
+  character began the story knowing a name the launch had explicitly said he
+  did not know. `already_known=False` never reached the seeds.
+- **One answer now, in one place.** `greetings.player_handle_for`: recognised →
+  the persona's name; not recognised → a DESCRIPTION, built by the same
+  `_unknown_actor_label` every perception path already uses, so the greeting
+  launch cannot drift from the identity floor the rest of the engine enforces.
+  `_substitute_player_slot` rewrites the token AND the bare words, keeps
+  possessives, and is anchored on a leading article so an in-fiction "a lute
+  player" keeps their job.
+- **The second source, which the report did not point at.** `commit.py`'s
+  dialogue-memory path rewrote the player to the literal `"the player"` and
+  then EXEMPTED them from the recognition gate every other speaker passes
+  through. **68 rows across the live corpus**, including `the player said "My
+  Name is Hinami." to Dr. Moon` — the memory in which that character learns her
+  name, attributed to a word from outside the story. The player is a body in
+  the room like any other now: the persona's real name goes in and the gate
+  decides.
+- **`_unknown_actor_label` stopped promising a clause it does not deliver.**
+  Appearance summaries overwhelmingly read "<body> appearing in her early
+  twenties", so the five-word cap landed on the participle: "the beautiful
+  young woman appearing". It trimmed one only when it fell last, so "the
+  broad-shouldered smuggler wearing a patched" survived. It now truncates AT
+  the participle. Only linking verbs are listed — a bare `-ing` rule would eat
+  "the figure in mourning".
+
+### An opening establishes one moment, not a passage
+
+Found first, in the same story. A scenario usually narrates a SEQUENCE — a
+character-card greeting always does, because that is what a first message is —
+and the establishment prompt was written end to end as though it described a
+standing situation.
+
+- **Bodies froze at different beats of the same passage.** *Run!* narrates five:
+  cornered / rescued / hauled inside / lever thrown / turns to look. The player
+  was recorded mid-motion at the doors from beat 2 while the character stood at
+  the console with the lever already thrown from beat 4 — and the creature the
+  whole opening is about kept a present-tense "weapon charging with a rising
+  whine" from beat 0, a vortex away. The prompt now names the last moment as the
+  one being established and requires every field to agree with it; anything the
+  passage finishes is consequence, not an in-progress posture.
+- **An agent the opening declares now has to be somewhere.** That creature had a
+  full description, a live `entity_states` entry and the scene's only open
+  `world_pressure` thread, and appeared in `positions` nowhere at all — so
+  `agents/background.py` dropped it from co-presence by construction ("cannot
+  prove co-presence, leave out"), meaning it could never be perceived and never
+  act, while the pressure ledger kept demanding later beats advance a threat
+  with no location. Validation was checking exactly two things: rooms non-empty,
+  positions non-empty.
+
+  **Scoped by measurement, because this error aborts an opening.** Across all 48
+  live scenes, 17 carry an unplaced non-portable entity and 53 exist in total —
+  framed diplomas, a shoe rack, a captain's chair, a bell tower, ward doors, a
+  day-room television. Requiring a room of all of those would have killed
+  roughly a third of openings to tidy up furniture. Reusing the existing
+  inert-kind deny-list still failed 3 scenes, 2 of them wrongly. An allow-list
+  of animate kinds yields exactly one hit in that corpus, and one in 57 stored
+  establish variants: the creature.
+- **An opening can express a hold.** `DirectorEstablish` had no way to say two
+  bodies are touching, so a greeting whose entire event was a hand seizing a
+  wrist and hauling a body through a door committed with `contacts: []` — the
+  grab had never happened. `contact_ops` is declared on it now and routed into
+  the same merge every later beat uses.
+- **Arriving inside something is not climbing into it.** The enclosure branch of
+  `infer_threshold_crossings` fires on `was_hidden != now_hidden`, and on turn 0
+  there is no previous scene — so every body standing in any interior read as
+  having just entered it. Both occupants of a vehicle got a crossing record,
+  including the one whose vehicle it was and who had not moved.
+
+### Documentation
+
+- **`docs/MEMORY.md`** — a full account of the memory system: what a turn mints
+  and at what salience, the six provenance classes and the three summary scopes
+  they route to, the two hard filters that run before any ranking, the four
+  fused rankings and every scalar bonus with the measurement behind it,
+  unbidden recall and its inversion trap, belief reconciliation, embeddings and
+  the rebuild paths, and why there is no vector index. Every constant in it was
+  diffed against source rather than quoted from memory.
+- **Two register entries were found already landed** and deleted per the repo's
+  own rule: §1.9 (consolidation flattens provenance — shipped as the three
+  summary scopes) and §3.7a (unbidden recall avoids embeddings — shipped as the
+  gated semantic axis). Both now have `Design.md` conformance rows.
+
+### Known limits
+
+The existing memories in the affected stories still say "the player"; this
+changes what gets written, not what is written. The establishment fix is
+prompt-plus-validation — the validation half is tested, the "pick one moment"
+half is a prompt rule and unverifiable from source. And the rest of
+`docs/UNBUILT.md` §1.16 stands: greeting seeds are still third person about the
+character, still salience 1.00, and still import canon the establishment
+correctly refused.
+
 ## alpha 6.4 — What nothing was checking
 
 Alpha 6.3 fixed three ledgers keyed on words a model writes fresh each beat.

@@ -11,6 +11,7 @@ character memory and is never shown to the player.
 from __future__ import annotations
 
 import json
+import re
 import time
 
 import db
@@ -25,6 +26,70 @@ from agents.storage import active_content
 
 EXTRACTOR_VERSION = 1
 PLAYER_TOKEN = "{{PLAYER}}"
+
+# Every way the player's slot arrives in seed prose. The token is what the
+# prompt asks for; the bare words are what models write instead, and they are
+# the reason this is a regex rather than a string replace.
+#
+# "the player" is not a name the character has not learned yet -- it is a word
+# from OUTSIDE the fiction, in a fictional mind's own memory. Observed live in
+# "Run!": three of four seeds reached The Doctor's memory as "The Doctor knows
+# THE PLAYER was being chased by a Dalek", "intrigued by THE PLAYER'S
+# appearance", "THE PLAYER'S unique traits make them a potential candidate".
+# The {{PLAYER}} token was not in any of them, so the substitution that exists
+# for exactly this had nothing to replace and the engine's own vocabulary went
+# straight into the bank at salience 1.0.
+#
+# Deliberately anchored on a leading article or the token, so an in-fiction
+# "a lute player" is left alone.
+_PLAYER_SLOT = re.compile(
+    r"\{\{\s*(?:player|user)\s*\}\}(?P<tposs>'s|s')?"
+    r"|(?<![\w-])(?P<art>the\s+)player(?P<poss>'s|s')?(?![\w-])",
+    re.IGNORECASE,
+)
+
+
+def _substitute_player_slot(text: str, handle: str) -> str:
+    """Rewrite every player reference in `text` to one in-fiction handle,
+    preserving possessives ("the player's appearance" -> "<handle>'s
+    appearance"). `handle` already carries its own article when it needs one
+    ("the beautiful young woman"), so the matched article is consumed.
+
+    A description handle is lower-case by construction, so it is capitalised
+    where it lands at the start of a sentence -- these strings are read as
+    prose in a memory panel, and "the beautiful young woman's ears were flat"
+    mid-paragraph is a different kind of wrong from the one being fixed.
+    """
+    body = str(text or "")
+
+    def _swap(match):
+        poss = match.group("tposs") or match.group("poss") or ""
+        out = handle + ("'s" if poss else "")
+        before = body[:match.start()].rstrip()
+        if not before or before[-1] in ".!?":
+            out = out[:1].upper() + out[1:]
+        return out
+
+    return _PLAYER_SLOT.sub(_swap, body)
+
+
+def player_handle_for(persona_sheet: dict, *, already_known: bool) -> str:
+    """What a character legitimately calls the player in their own memory.
+
+    Known -> the persona's name. Not known -> a DESCRIPTION, built by the same
+    `_unknown_actor_label` every perception path uses, so the greeting launch
+    cannot drift from the identity floor the rest of the engine enforces. Not
+    the name, and never "the player".
+    """
+    from agents.common import _unknown_actor_label, character_scene_keys
+    name = persona_name(persona_sheet)
+    if already_known:
+        return name
+    return _unknown_actor_label(
+        name,
+        character_appearance(persona_sheet),
+        character_scene_keys(persona_sheet)[1:],
+    )
 
 
 def extract_greeting(sheet: dict, greeting_prose: str) -> dict:
@@ -119,6 +184,11 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     def sub(s):  # deterministic {{PLAYER}} -> persona name
         return str(s or "").replace(PLAYER_TOKEN, p_name)
 
+    # What the CHARACTER may call the player in their own private memory. The
+    # verbatim prose above is shown to the player and keeps the persona's name;
+    # a seed is knowledge inside a mind and obeys that mind's identity floor.
+    seed_handle = player_handle_for(psheet, already_known=already_known)
+
     prose_final = sub(prose_tok)
 
     # chat + cast. Scenario = the full (substituted) greeting so establishment
@@ -156,7 +226,15 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     # unrevealed-in-prose seed is knowledge the character has and the player
     # does not -- the whole point of the extraction.
     for seed in extraction.get("knowledge_seeds") or []:
-        content = sub(seed.get("content") or "").strip()
+        # NOT `sub`. That resolves the player's slot to the persona's name,
+        # which is right for the prose the player reads and wrong for a
+        # character's private memory: it hands the name over on beat zero,
+        # defeating `already_known=False`. `seed_handle` is the name only when
+        # the character is meant to know it, and a description otherwise --
+        # and either way this is the one path that also rewrites the literal
+        # words "the player", which `sub` cannot see (see _PLAYER_SLOT).
+        content = _substitute_player_slot(seed.get("content") or "",
+                                          seed_handle).strip()
         if not content:
             continue
         try:

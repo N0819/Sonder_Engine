@@ -1413,6 +1413,18 @@ class DirectorEstablish(LenientModel):
     entity_states: dict[str, InitialEntityState] = Field(default_factory=dict)
     # Where in each room the opening puts people: {name: {at, near:[]}}.
     stations: dict[str, dict] = Field(default_factory=dict)
+    # Holds the opening passage leaves standing -- same op shape as
+    # StateDiff.contact_ops, routed into it by the establish tail so it reaches
+    # spatial.apply_contact_ops through the one merge every other beat uses.
+    #
+    # Declared because an opening that narrates a sequence usually contains the
+    # scene's only physical act, and establishment had no way to express one:
+    # observed live, a greeting whose whole event was a hand seizing a wrist
+    # and hauling a body through a door committed with `contacts: []`, so the
+    # grab had never happened and the body it moved had never been anywhere
+    # else. Prose is not state; if the hold is still true when play begins it
+    # has to arrive as an op.
+    contact_ops: list[dict] = Field(default_factory=list)
     sensory_events: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
     opening: str = ""
@@ -2913,6 +2925,8 @@ OUTPUT_EXAMPLES = {
         "rooms": {},
         "entities": {},
         "positions": {},
+        "stations": {},
+        "contact_ops": [],
         "attire": {},
         "entity_states": {},
         "sensory_events": [],
@@ -3134,6 +3148,85 @@ OUTPUT_EXAMPLES = {
 def output_example(step_key: str) -> dict:
     return OUTPUT_EXAMPLES.get(step_key, {})
 
+
+# Entity kinds that must occupy a room: things with agency, which can act and
+# be acted on. An ALLOW-list, and deliberately the opposite shape to
+# commit._INERT_ENTITY_KINDS, which asks the neighbouring question (is this a
+# potential background presence) with a deny-list.
+#
+# The asymmetry is the whole design. Over-including there costs a tracked
+# object that never reacts anyway; over-including HERE aborts an opening,
+# because a semantic error gets one repair attempt, then the fallback
+# candidates, then raises. Measured against all 48 live scenes: 17 of them
+# carry an unplaced non-portable entity, 53 such entities in total -- framed
+# diplomas, a shoe rack, a captain's chair, bell towers, ward doors, a day-room
+# television, `location`-kind stand-ins for a whole starship. Requiring a room
+# of all of those would have killed roughly a third of openings to tidy up
+# furniture. Reusing the deny-list still failed 3 scenes, 2 of them wrongly (a
+# `portal` door spans two rooms by design and belongs to neither; a
+# `technology` TV is furniture). This list yields exactly one hit across the
+# corpus: the creature that was the entire premise of the opening it went
+# missing from.
+#
+# A kind this list does not know stays unplaced exactly as it does today, so
+# missing one costs nothing that is not already the status quo.
+_ANIMATE_ENTITY_KINDS = frozenset({
+    "person", "people", "npc", "character", "human", "humanoid", "alien",
+    "creature", "monster", "beast", "animal", "mount", "swarm",
+    "robot", "android", "drone", "automaton", "construct", "golem",
+    "spirit", "ghost", "wraith", "demon", "angel", "deity", "god",
+    "undead", "zombie", "revenant",
+    "agent", "actor", "guard", "soldier", "crew", "crewmember",
+})
+
+# A bodiless voice -- a ship's computer, a station AI, a PA -- needs no room,
+# and positioning one is the category error scene.is_ubiquitous_entity exists
+# to prevent. No separate kind list is needed here: none of the kinds in
+# scene.UBIQUITOUS_KINDS ("computer", "ai", "system", "intercom", ...) is an
+# animate kind above, so they are already exempt by shape, and the explicit
+# `ubiquitous` flag covers one tagged with a kind that is.
+
+
+def _unplaced_establish_entities(output: dict) -> list[str]:
+    """AGENTS the opening declared and then left nowhere.
+
+    An unplaced agent is not merely untidy -- it is excluded from co-presence
+    by construction (agents/background.py: "unplaced presence: cannot prove
+    co-presence, leave out"), so it can never be perceived and never act.
+    Observed live: an opening whose entire premise was a creature closing in
+    gave it a full description and a present-tense `entity_states` entry, put
+    it in no room at all, and then opened a `world_pressure` thread demanding
+    every later beat advance a threat with no location.
+
+    A `portable` thing may be carried and inventory is not `positions`; a
+    bodiless voice has no room by definition; a `state.link` portal spans two
+    rooms and is in neither. `positions` may be keyed by entity id or by
+    display name -- readers accept both, so both satisfy this.
+    """
+    entities = output.get("entities")
+    positions = output.get("positions")
+    if not isinstance(entities, dict) or not isinstance(positions, dict):
+        return []
+    placed = {str(k).strip().casefold() for k in positions if str(k).strip()}
+    missing = []
+    for eid, ent in entities.items():
+        if not isinstance(ent, dict) or ent.get("portable") or ent.get("ubiquitous"):
+            continue
+        if str(ent.get("kind") or "").strip().casefold() not in _ANIMATE_ENTITY_KINDS:
+            continue
+        state = ent.get("state")
+        if isinstance(state, dict) and state.get("link"):
+            continue
+        keys = {str(eid).strip().casefold(), str(ent.get("name") or "").strip().casefold()}
+        if not (keys - {""}) & placed:
+            missing.append(str(eid))
+    if not missing:
+        return []
+    return ["entities %s declared but absent from positions -- an entity in no "
+            "room cannot be perceived or acted on; place it in the room it is "
+            "in, even one the party has left" % ", ".join(sorted(missing)[:6])]
+
+
 def semantic_output_errors(
     step_key: str,
     output: dict,
@@ -3162,6 +3255,8 @@ def semantic_output_errors(
 
         if not output.get("positions"):
             errors.append("positions is empty")
+
+        errors.extend(_unplaced_establish_entities(output))
 
     elif step_key == "director_resolve":
         # Only required when there was something to resolve. Doing nothing is

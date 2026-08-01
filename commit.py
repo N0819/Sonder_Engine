@@ -2576,6 +2576,11 @@ def _background_fired_reactions(br):
 # must not fall through, whereas a mistracked object is harmless -- it never
 # qualifies to react. Ambiguous kinds ("machine", "device") are deliberately
 # NOT listed, so a sentient robot tagged that way is still tracked.
+#
+# schemas._ANIMATE_ENTITY_KINDS asks a neighbouring question -- must this thing
+# occupy a room -- and deliberately answers it with an ALLOW-list instead. The
+# asymmetry is the point: over-including here costs a tracked object that never
+# reacts, over-including there aborts an opening.
 _INERT_ENTITY_KINDS = frozenset({
     "object", "item", "fixture", "furniture", "furnishing", "appliance",
     "vehicle", "structure", "building", "terrain", "feature", "landmark",
@@ -4224,8 +4229,19 @@ def prepare_memory_commit(ctx, *, scene=None):
             _hearer_known = set(_known_map.get(cname) or [])
             for d in dlog:
                 spk = d.get("speaker", "")
-                if _is_player(spk, chat):
-                    spk = "the player"
+                # The player used to be rewritten to the literal "the player"
+                # here and then EXEMPTED from the recognition gate below, so a
+                # character's own memory read `the player said "My Name is
+                # Hinami." to Dr. Moon` -- the engine's out-of-fiction word for
+                # the protagonist, inside a fictional mind, in the very memory
+                # where they learned her name. 68 rows across the live corpus.
+                # The player is a body in the room like any other: pass the
+                # persona's real name in and let the gate decide, exactly as it
+                # does for every character.
+                _spk_is_player = _is_player(spk, chat)
+                if _spk_is_player:
+                    from scene import persona_of
+                    spk = persona_name(persona_of(ctx.chat)) or spk
                 if spk == cname:
                     continue
                 # Recognition gate: the canonical name only if the hearer knows
@@ -4234,14 +4250,18 @@ def prepare_memory_commit(ctx, *, scene=None):
                 # hand-rolled copy of it -- the copy truncated at a fixed 60
                 # characters and cut mid-word, and two implementations of the
                 # identity floor drift apart exactly where it matters.
-                if spk != "the player" and spk not in _hearer_known:
+                if spk not in _hearer_known:
                     from agents.common import (
                         _unknown_actor_label, character_scene_keys)
-                    _spk_sheet = next(
-                        (sheet for sheet in
-                         (json.loads(_cr["sheet"]) for _cr in ctx.cast)
-                         if character_name(sheet) == spk),
-                        None)
+                    if _spk_is_player:
+                        from scene import persona_of
+                        _spk_sheet = persona_of(ctx.chat)
+                    else:
+                        _spk_sheet = next(
+                            (sheet for sheet in
+                             (json.loads(_cr["sheet"]) for _cr in ctx.cast)
+                             if character_name(sheet) == spk),
+                            None)
                     spk_label = _unknown_actor_label(
                         spk,
                         _char_appearance(_spk_sheet) if _spk_sheet else None,

@@ -53,9 +53,26 @@ def test_trims_trailing_dangling_function_word():
     assert label == "the young woman five-foot-seven-inches"
     assert not label.rstrip().endswith((" a", " with", " in", " of"))
 
+    # A LINKING PARTICIPLE dangles exactly as a preposition does, and is the
+    # commoner slice: appearance summaries overwhelmingly read "<body>
+    # appearing in her early twenties" / "<body> wearing a grey cloak", so the
+    # 5-word cap lands on the participle and the phrase it introduced is gone.
+    # "the beautiful young woman appearing" promises a clause and delivers
+    # none. It matters more than it reads: this label is what a character's
+    # own MEMORY calls a stranger.
     label2 = _unknown_actor_label(
         "Hinami",
         "A beautiful young woman appearing in her early twenties, with golden "
         "fox ears and six golden tails",
     )
-    assert label2 == "the beautiful young woman appearing"
+    assert label2 == "the beautiful young woman"
+
+    assert _unknown_actor_label(
+        "Vrenak", "A broad-shouldered smuggler wearing a patched flight jacket",
+    ) == "the broad-shouldered smuggler"
+
+    # Only verbs that INTRODUCE a following phrase are trimmed -- a bare -ing
+    # rule would eat real nouns.
+    assert _unknown_actor_label(
+        "Grey", "A veiled figure in mourning",
+    ) == "the veiled figure in mourning"

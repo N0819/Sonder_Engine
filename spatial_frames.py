@@ -418,9 +418,19 @@ def infer_threshold_crossings(chat_id, frame_id, prev_scene, new_scene,
         # -- a carried body's position is its carrier's -- so the step above
         # cannot see this happen, and without it a body being enclosed would
         # blink out exactly as one crossing a doorway used to.
+        #
+        # A body with no PREVIOUS position did not climb into anything: it
+        # simply came into the scene already inside. `old_r` guards that.
+        # Without it the opening turn -- where prev_scene is empty, so every
+        # body reads was_hidden=False -- recorded everyone standing in any
+        # interior as having just entered it. Observed live: a scene opening
+        # inside a vehicle gave BOTH occupants a {from: X, to: X} crossing,
+        # including the one whose vehicle it was and who had not moved. The
+        # same holds for a body that joins the cast mid-story already enclosed;
+        # nobody watched it go in, because it was not there to be watched.
         was_hidden = bool(_hiding_holders(prev_scene, name))
         now_hidden = bool(_hiding_holders(new_scene, name))
-        if new_r and was_hidden != now_hidden:
+        if old_r and new_r and was_hidden != now_hidden:
             crossings[name] = {"from": new_r, "to": new_r,
                                "beats": THRESHOLD_CROSSING_BEATS}
             changed = True
