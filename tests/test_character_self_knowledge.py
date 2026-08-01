@@ -151,3 +151,57 @@ def test_character_payload_never_includes_another_bodys_vitals(temp_db, monkeypa
     blob = json.dumps(captured["payload"])
     for forbidden in ("0.123456", "0.234567", "0.345678", "0.987654"):
         assert forbidden not in blob
+
+
+class TestACharacterKnowsWhatItIsWearing:
+    """`self.attire` was reaching the payload and nothing was reading it.
+
+    Reported from chat 57: NPCs behaving as if unaware of their own clothing.
+    The data was never missing -- `agents/character.py` has passed a full
+    region-by-region view of the character's OWN attire for as long as the
+    field has existed, and chat 57's Doctor carried six garments with
+    descriptions. The 44,888-character `character` prompt simply never
+    mentioned it, so nothing told the character the field was there or that it
+    was allowed to act on it.
+
+    That is the failure mode CLAUDE.md warns about from the other direction: a
+    field that is populated, valid, and read by nobody fails silently and looks
+    like a model problem fifty beats later.
+    """
+
+    def test_the_prompt_tells_the_character_the_field_exists(self):
+        from prompts import DEFAULT_PROMPTS
+        prompt = DEFAULT_PROMPTS["character"]
+        assert "self.attire" in prompt
+
+    def test_it_names_the_three_parts_the_payload_actually_carries(self):
+        """`attire_view` returns wearing/regions/state. A prompt that only said
+        'you have clothes' would leave the structure unusable."""
+        from prompts import DEFAULT_PROMPTS
+        prompt = DEFAULT_PROMPTS["character"]
+        for part in ("wearing", "regions", "state"):
+            assert f"`{part}`" in prompt, part
+
+    def test_it_is_framed_as_the_present_not_the_starting_outfit(self):
+        """`scene.attire` is the mutable story ledger, not `initial_outfit`.
+        A character reading it as 'what I put on this morning' would contradict
+        anything the story has since changed."""
+        from prompts import DEFAULT_PROMPTS
+        assert "LEDGER" in DEFAULT_PROMPTS["character"]
+
+    def test_it_keeps_the_firewall(self):
+        """Own clothing is interoception; another body's is perception's to
+        deliver or withhold. The prompt must not invite reading someone else's
+        off this field."""
+        from prompts import DEFAULT_PROMPTS
+        prompt = DEFAULT_PROMPTS["character"]
+        assert "do not describe another person's clothing" in prompt.lower()
+
+    def test_the_payload_still_carries_it(self):
+        """The other half of the pair: if this field is ever renamed or
+        dropped, the prompt above becomes a promise about nothing."""
+        import inspect
+
+        import agents.character as character
+        src = inspect.getsource(character)
+        assert '"attire": attire_view(' in src
