@@ -2496,6 +2496,15 @@ def _check_player_act_authority(resolved_event, declared_actions, player_name,
     return warnings
 
 
+# Both quote-span shapes below are constants, hoisted to module level like the
+# other hot-path patterns in this file (_QUOTED_SPAN_RE etc.) -- each was being
+# re-compiled on every narrator validation pass. The capper keeps the
+# surrounding marks (it rewrites spans); the fidelity check needs only the
+# body, and tolerates shorter lines.
+_QUOTE_SPAN_RE = re.compile(r'(["“])([^"“”]{6,})(["”])')
+_QUOTE_BODY_RE = re.compile(r'["“]([^"“”]{4,})["”]')
+
+
 def _cap_repeated_quotes(prose, view, exclude_bodies=()):
     """Cap each spoken line's occurrences in the prose at how many times it
     actually appears in the authoritative source (the view). (Fable A1 / backlog
@@ -2509,7 +2518,7 @@ def _cap_repeated_quotes(prose, view, exclude_bodies=()):
     if not prose:
         return prose
     excluded = {re.sub(r"\s+", " ", str(b).casefold()) for b in (exclude_bodies or [])}
-    quote_re = re.compile(r'(["“])([^"“”]{6,})(["”])')
+    quote_re = _QUOTE_SPAN_RE
     source_text = re.sub(r"\s+", " ", str(view or "").casefold())
     # Source count per body: how many times the view presents that exact line.
     source_counts = {}
@@ -4173,7 +4182,7 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         re.sub(r"\s+", " ", _quote_body(q).casefold())
         for q in (exclude_quotes or []) if _quote_body(q)
     }
-    quote_pattern = re.compile(r'["“]([^"“”]{4,})["”]')
+    quote_pattern = _QUOTE_BODY_RE
     normalized_prose = re.sub(r"\s+", " ", prose.casefold())
     for match in quote_pattern.finditer(view_text):
         quote = re.sub(r"\s+", " ", match.group(1).strip())

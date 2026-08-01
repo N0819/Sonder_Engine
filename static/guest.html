@@ -177,9 +177,19 @@ function stopPolling() {
 
 async function pollOnce() {
   if (!polling) return;
-  await refresh();
+  // Skip the request while the tab is hidden -- a guest page left open in a
+  // background tab was the one unconditional poll in the app, waking the
+  // machine every ten seconds forever to fetch state nobody is looking at.
+  // The visibilitychange handler below refreshes immediately on return, so
+  // coming back to the tab still shows current state rather than up-to-ten-
+  // seconds-stale.
+  if (!document.hidden) await refresh();
   if (polling) pollHandle = setTimeout(pollOnce, 10000);
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && polling) refresh();
+});
 
 function startPolling() {
   // Callers already hold fresh state (from join or session restore), so wait

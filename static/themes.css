@@ -1079,6 +1079,25 @@ body.has-backdrop .prose {
                               rgba(255, 168, 74, .16), transparent 62%);
   animation: tavern-hearth 7.3s ease-in-out infinite;
 }
+/* Stop animating it when nobody can see it. This is a full-viewport fixed
+   layer blending on every frame at the panel's refresh rate, for as long as
+   the tab is open -- the largest standing GPU cost in the app for anyone on
+   this theme, and on an integrated GPU that is the same memory bandwidth the
+   rest of the page is competing for.
+
+   Neither case below changes anything visible. Under a scene backdrop the
+   comment above already says this layer disappears (#scene-backdrop is a
+   fixed sibling at z-index 0, this is at -1) -- so it was blending behind an
+   opaque photograph. And a hidden tab is not being looked at at all; browsers
+   throttle background animation but throttled is not stopped, which is the
+   same argument weather-fx.js makes for pausing outright.
+
+   The visible, backdrop-less case is the theme's actual feature and is
+   untouched. */
+:root[data-theme="tavern"] body.has-backdrop::before,
+:root[data-theme="tavern"] body.page-hidden::before {
+  animation: none;
+}
 @keyframes tavern-hearth {
   /* A flame is not a sine wave: mostly steady, with irregular dips of
      unequal depth. The range stays inside ~12% on purpose -- wider reads as

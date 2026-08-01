@@ -114,4 +114,19 @@
   // Run before the stylesheet is parsed to prevent a light/dark flash.
   applyTheme(readStored(THEME_KEY, DEFAULT_THEME), { persist: false });
   applyProseSize(readStored(PROSE_SIZE_KEY, DEFAULT_PROSE_SIZE), { persist: false });
+
+  // `page-hidden` on <body>: the CSS hook for "nobody is looking at this".
+  // There is no selector for `document.hidden`, and purely decorative
+  // infinite animations (the tavern hearth in themes.css) should not run
+  // against a tab that is not on screen -- browsers throttle them, but
+  // throttled is not stopped, and a full-viewport composited layer keeps the
+  // GPU awake either way. Lives here rather than app.js so every page that
+  // loads a theme gets it (guest and login load themes.css too). This script
+  // runs in <head>, before <body> exists, so the initial state is stamped on
+  // DOMContentLoaded rather than immediately.
+  function syncPageHidden() {
+    if (document.body) document.body.classList.toggle("page-hidden", document.hidden);
+  }
+  document.addEventListener("visibilitychange", syncPageHidden);
+  document.addEventListener("DOMContentLoaded", syncPageHidden);
 })();

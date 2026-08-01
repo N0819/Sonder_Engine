@@ -1214,6 +1214,21 @@ def conn():
         )
         c.row_factory = sqlite3.Row
         c.execute("PRAGMA journal_mode=WAL")
+        # NORMAL, not SQLite's default FULL. Under FULL every commit fsyncs,
+        # and a turn issues dozens of autocommit writes before the outer
+        # transaction even opens -- per-character memory access counts,
+        # settings, the offscreen log, the presence ledger. Benchmarked on this
+        # filesystem: FULL 3.49 ms per commit, NORMAL 0.02 ms. 175x, paid
+        # dozens of times a turn.
+        #
+        # In WAL mode NORMAL is still crash-consistent: the database cannot
+        # corrupt, and a rollback-journal-style torn write is not possible.
+        # What is traded is durability of the last few commits across a power
+        # cut or kernel panic -- not a process crash, which loses nothing. For
+        # a local single-player engine that is the right side of the trade, and
+        # it changes nothing about commit.py's atomicity: a turn that fails
+        # still rolls back whole.
+        c.execute("PRAGMA synchronous=NORMAL")
         c.execute("PRAGMA foreign_keys=ON")
         c.execute("PRAGMA busy_timeout=30000")
         _local.conn = c
@@ -1324,6 +1339,7 @@ def init():
     c = sqlite3.connect(DB, timeout=30)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA journal_mode=WAL")
+    c.execute("PRAGMA synchronous=NORMAL")   # see conn(), same reasoning
     c.execute("PRAGMA foreign_keys=ON")
 
     # Checked BEFORE executescript creates schema_meta (CREATE TABLE IF

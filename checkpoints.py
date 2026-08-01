@@ -922,6 +922,24 @@ def ensure_checkpoint(chat_id, turn_idx):
     Captures the current world/character/lore state so it can be
     restored if the turn is deleted or re-run.
     """
+    # Cheap existence check FIRST. This runs twice for the same turn -- once
+    # from the route (app.py) and once from the pipeline (agents/runtime.py) --
+    # and building the blob before looking meant the second call assembled the
+    # entire snapshot (every world KV, all chat_chars, all lorebooks and
+    # entries, every memory and summary -- about half a megabyte on a long
+    # chat) and then threw it away. An unindexed read outside the lock is the
+    # right way to answer "is this already done".
+    #
+    # It is a fast path, not the guard: the authoritative check is still inside
+    # the transaction below, because two concurrent callers can both pass this
+    # one.
+    existing = q(
+        "SELECT id FROM checkpoints WHERE chat_id=? AND turn_idx=?",
+        (chat_id, turn_idx),
+        one=True,
+    )
+    if existing:
+        return existing["id"]
     # Snapshot outside the transaction: snapshot_state makes many
     # read-only q() calls and does no writes, so it needs no lock.
     # Holding the write lock for the duration of a snapshot would

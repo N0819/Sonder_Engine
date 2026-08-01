@@ -1449,7 +1449,12 @@ function embeddingBankBlock() {
       body.append(el("div", {}, `Rebuilding — ${(p.done || 0).toLocaleString()} of `
                                 + `${(p.total || 0).toLocaleString()} done. `
                                 + `You can close this panel; it keeps going.`));
-      setTimeout(render, 1500);
+      // The panel it draws into may be gone -- the copy above says so
+      // explicitly, and a rebuild on a long story runs for minutes. Re-arming
+      // unconditionally kept a 1.5s poll alive against a detached node, paying
+      // a server query each time to update something nobody can see. The
+      // rebuild does keep going; it simply stops being watched.
+      if (body.isConnected) setTimeout(render, 1500);
       return;
     }
     body.append(el("div", {},

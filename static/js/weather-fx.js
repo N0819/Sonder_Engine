@@ -489,8 +489,18 @@ function weatherFxForTurn(state) {
 // it also stops the lightning timer firing thunder at an empty room.
 document.addEventListener("visibilitychange", () => {
   const paused = document.hidden;
+  const state = paused ? "paused" : "running";
   for (const layer of WFX.layers) {
-    layer.style.animationPlayState = paused ? "paused" : "running";
+    layer.style.animationPlayState = state;
+    // Snow animates on TWO nodes: `wfx-sway` on the drift wrapper, which is
+    // what `WFX.layers` holds, and `wfx-fall` on the tile layer inside it.
+    // Pausing only the entry stopped the sideways drift and left the falling
+    // running, so a hidden tab still ran three infinite composited animations
+    // -- the exact cost this file exists to avoid. Rain has no wrapper and no
+    // descendants, so this loop is empty for it.
+    for (const inner of layer.querySelectorAll(".wfx-layer")) {
+      inner.style.animationPlayState = state;
+    }
   }
   if (paused) {
     clearTimeout(WFX.flashTimer);
