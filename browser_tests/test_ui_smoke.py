@@ -442,8 +442,13 @@ def test_rain_draws_only_where_the_sky_is_visible(page: Page, ui_base_url: str) 
     page.wait_for_function("() => WFX.layers.length === 3", timeout=10000)
     # Each layer is a real repeating tile, and each travels exactly one tile so
     # the loop cannot be seen.
+    # Quote-tolerant: Chromium serialises `background-image` as
+    # url("data:...") on some versions and url(data:...) on others, so
+    # matching the bare form made this assert a browser build rather than the
+    # feature. The tile itself is what matters.
     assert page.evaluate(
-        "() => WFX.layers.every(l => l.style.backgroundImage.startsWith('url(data:image/png'))")
+        "() => WFX.layers.every(l =>"
+        " /^url\\([\"']?data:image\\/png/.test(l.style.backgroundImage))")
     assert page.evaluate(
         "() => WFX.layers.every(l => l.style.getPropertyValue('--wfx-travel')"
         " === l.style.backgroundSize.split(' ')[0])")

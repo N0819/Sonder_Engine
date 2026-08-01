@@ -88,6 +88,31 @@ A durable field or table change is incomplete until all applicable paths are upd
 7. Cleanup behavior under foreign keys.
 8. Regression tests using the temporary database fixture.
 
+### `memory_vectors` — the one table that is append-only
+
+Embedding vectors are stored once, addressed by `sha1(char_id, normalised
+content)` (`memory.vector_address`). Checkpoints reference that address rather
+than carrying the payload, which is what keeps them small: a checkpoint is a
+full pre-turn snapshot, so an inline vector was re-stored on every turn for the
+life of the story.
+
+Two rules follow, and neither is optional:
+
+* **Never garbage-collect it.** A checkpoint written before a memory was
+  deleted still references that memory's vector, and a rollback that cannot
+  restore one is a worse failure than a few kilobytes of orphaned rows.
+* **A portable archive must carry the vectors its checkpoints reference.**
+  `chat_archive` exports the deduped set under `memory_vectors` and restores it
+  before the checkpoints that point at it; the archive's own top-level
+  `memories` keep their vectors INLINE, because the importing database has no
+  store to resolve against. `dump_chat_memories(inline_vectors=...)` is that
+  distinction.
+
+`tools`-free conversion of an existing database lives in
+`checkpoints.compact_checkpoints`, exposed in the UI under Software updates. It
+verifies each story against its original before writing anything and refuses
+any story it cannot prove lossless.
+
 Per-story card overrides are preserved by portable chat archives and branches.
 They are intentionally not rolled back by turn checkpoints: like other explicit
 authoring configuration, editing a card is not an event inside the beat being
