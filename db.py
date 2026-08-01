@@ -1275,6 +1275,22 @@ def transaction():
         if outermost:
             _write_lock.release()
 
+def data_version():
+    """A counter that changes when ANOTHER connection commits.
+
+    SQLite guarantees two readings from the same connection differ if and only
+    if some other connection committed in between; this connection's own writes
+    never move it. Connections here are thread-local, so "another connection"
+    means any other request, pipeline thread or background job.
+
+    That makes this the exact test for "is a snapshot I built a moment ago
+    still current" -- which a turn-id comparison is not, because lorebook
+    edits, character-sheet edits, memory edits and background world writes all
+    change checkpointed state without inserting a turn row.
+    """
+    return conn().execute("PRAGMA data_version").fetchone()[0]
+
+
 def q(sql, args=(), one=False):
     c = conn()
     rows = c.execute(sql, args).fetchall()

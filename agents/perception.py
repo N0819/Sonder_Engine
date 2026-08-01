@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from character_schema import (
     character_appearance,
     character_name,
+    character_name_from_text,
     character_senses,
     persona_appearance,
     persona_name,
@@ -1802,7 +1803,7 @@ def perception_outcome(ctx, nonce):
     # spatial_facts from this same oriented scene, not the stale committed KV.
     try:
         from spatial_frames import infer_came_from, infer_focus, infer_facing
-        _o_names = [character_name(json.loads(c["sheet"])) for c in ctx.cast]
+        _o_names = [character_name_from_text(c["sheet"]) for c in ctx.cast]
         infer_came_from(chat["id"], ctx.turn.frame_id, prev_scene, sc, _o_names)
         infer_focus(chat["id"], ctx.turn.frame_id, prev_scene, sc, res, _o_names)
         infer_facing(chat["id"], ctx.turn.frame_id, prev_scene, sc, _o_names)
@@ -1964,7 +1965,7 @@ def perception_outcome(ctx, nonce):
     p_rdata = (sc.get("rooms") or {}).get(p_room) if p_room else None
     # name -> cast id, so perception can pull each present character's authored
     # `manifest` (surface demeanor + tells) and gate delivery per observer.
-    cast_by_name = {character_name(json.loads(c["sheet"])): c["id"] for c in ctx.cast}
+    cast_by_name = {character_name_from_text(c["sheet"]): c["id"] for c in ctx.cast}
 
     perceivers = [{
         "id": "player", "name": p_name, "room": p_room,

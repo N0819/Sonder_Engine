@@ -11,6 +11,7 @@ from character_schema import (
     character_appearance,
     character_knowledge_config,
     character_name,
+    character_name_from_text,
     normalize_character_data,
     persona_name,
 )
@@ -515,7 +516,7 @@ def _char_known_tags(sheet):
     return tags, config.get("excluded_titles") or []
 
 def _character_display_name(row):
-    return character_name(json.loads(row["sheet"]))
+    return character_name_from_text(row["sheet"])
 
 def _normalize_scene_patch(value):
     patch = dict(value or {})
@@ -555,7 +556,7 @@ def _asks_player(result, chat, cast=None):
     cast_names = set()
     for row in (cast or []):
         try:
-            cast_names.add(character_name(json.loads(row["sheet"])).casefold())
+            cast_names.add(character_name_from_text(row["sheet"]).casefold())
         except Exception:
             continue
     if addresses & cast_names:
@@ -4218,7 +4219,7 @@ def _llm_resolve_player_room(sc, pers, cast, interp, player_input):
     char_names = []
     for c in (cast or []):
         try:
-            char_names.append(character_name(json.loads(c["sheet"])))
+            char_names.append(character_name_from_text(c["sheet"]))
         except Exception:
             pass
     payload = {
@@ -4262,7 +4263,7 @@ def _resolve_player_room(sc, pers, interp, cast, player_input=None):
     char_names = set()
     for c in (cast or []):
         try:
-            char_names.add(character_name(json.loads(c["sheet"])).lower().strip())
+            char_names.add(character_name_from_text(c["sheet"]).lower().strip())
         except Exception:
             pass
     candidates = [v for k, v in (sc.get("positions") or {}).items()

@@ -71,9 +71,17 @@ body[data-mood="triumphant"]{--mood-tint:rgba(178,152,54,.15)}
    Two stacked layers cross-fade opacity, for the same reason the mood tint
    is a solid colour: a background-image swap on one element cannot be
    transitioned, so it would snap between rooms instead of dissolving. */
+/* visibility rides the same transition as opacity: it animates discretely,
+   flipping to hidden only at the END of the fade-out and back to visible at
+   the START of the fade-in -- so the dissolve is untouched, but once faded
+   out the whole stack (two promoted .bd-layer, vignette, veil) is guaranteed
+   not painted and its composited buffers droppable, instead of four
+   permanent full-viewport layers sitting at opacity:0 for the life of the
+   tab. */
 #scene-backdrop{position:fixed;inset:0;z-index:0;pointer-events:none;
-overflow:hidden;opacity:0;transition:opacity .7s ease}
-body.has-backdrop #scene-backdrop{opacity:1}
+overflow:hidden;opacity:0;visibility:hidden;
+transition:opacity .7s ease,visibility .7s}
+body.has-backdrop #scene-backdrop{opacity:1;visibility:visible}
 .bd-layer{position:absolute;inset:0;background-size:cover;background-position:center;
 opacity:0;transition:opacity 1.1s ease;transform:scale(1.03)}
 .bd-layer.on{opacity:1}
@@ -409,6 +417,16 @@ background:var(--card-bg);border:1px solid var(--card-border)}
    card: no border, no shadow, just enough to separate text from picture. */
 #vitals,#vitals-npcs{background:color-mix(in srgb,var(--bg) 58%,transparent);
 border-radius:9px;backdrop-filter:blur(3px);padding:9px 11px 10px}
+/* While precipitation is animating behind them, the plates drop their blur.
+   A backdrop-filter re-samples and re-blurs its backdrop on every frame
+   anything behind it changes -- and behind these panels during weather is
+   exactly the thing that changes every frame. The translucent plate alone
+   keeps the meters readable; a 3px blur of moving streaks is not a legible
+   difference. !important because the themed variants of this rule
+   (themes.css) carry higher specificity, and this is an unconditional
+   performance gate, not a look. */
+body.has-weather-fx #vitals,
+body.has-weather-fx #vitals-npcs{backdrop-filter:none!important}
 .cast-location{display:inline-flex;align-items:center;min-width:0}
 .cast-room-select{max-width:210px;font-size:12px}
 .chip{display:inline-flex;align-items:center;padding:2px 8px;margin:2px 3px 2px 0;
@@ -456,9 +474,13 @@ font-weight:600;transition:all .2s;min-height:auto}
    ON the interface rather than beyond it.) */
 #weather-fx{position:fixed;inset:0;width:100%;height:100%;z-index:0;
 pointer-events:none;opacity:0;transition:opacity .9s ease;overflow:hidden}
-/* Deliberately not full strength: this passes over the text, so it has to
-   stay at the edge of noticeable. */
-#weather-fx.on{opacity:.55}
+/* Full strength HERE on purpose: the restraint (weather passes over the
+   text, so it stays at the edge of noticeable) is baked into each layer's
+   own opacity by weather-fx.js (WFX_STACK_OPACITY). A group opacity below 1
+   on an animating subtree forces an offscreen compositing pass every frame;
+   at 1 the layers composite directly, and only the .9s entry/exit fade
+   passes through fractional values. */
+#weather-fx.on{opacity:1}
 /* The wind's slant, applied to the whole stack at once so that every layer and
    its own travel stay on one axis -- drops sliding across their own direction
    is the tell that weather is a texture rather than something falling.

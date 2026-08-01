@@ -14,6 +14,7 @@ from character_schema import (
     character_initial_active_state,
     character_initial_stance,
     character_name,
+    character_name_from_text,
     character_opening_context,
     character_private_history,
     character_public_history,
@@ -198,7 +199,7 @@ def all_cast_name_to_id(chat_id):
     nonexistent_cast recognition backstop, which must correctly gate a
     dormant not-yet-existing character exactly like an active one."""
     return {
-        character_name(json.loads(r["sheet"])): r["char_id"]
+        character_name_from_text(r["sheet"]): r["char_id"]
         for r in q(
             "SELECT ch.id AS char_id,COALESCE(cc.sheet,ch.sheet) AS sheet "
             "FROM chat_chars cc "

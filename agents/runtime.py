@@ -8,7 +8,8 @@ import logging
 import queue
 import threading
 
-from character_schema import character_name, normalize_persona_data, persona_appearance
+from character_schema import (character_name, character_name_from_text,
+                              normalize_persona_data, persona_appearance)
 from checkpoints import ensure_checkpoint, restore_checkpoint
 from commit import commit_all
 from db import active_frame_id, q, qi, wset
@@ -404,7 +405,7 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     # character acts on the NEXT beat, matching the onset/outcome separation.
     if chat_id is not None and reactors:
         amap = awareness_map(chat_id)
-        _names_by_id = {int(row["id"]): character_name(json.loads(row["sheet"]))
+        _names_by_id = {int(row["id"]): character_name_from_text(row["sheet"])
                         for row in cast_rows}
         reactors = [cid for cid in reactors
                     if awareness_of(amap, _names_by_id.get(cid, "")) not in NON_AWAKE_GATED]
@@ -423,7 +424,7 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
         if autonomy > 0:
             plan.append(("interaction_loop", "Characters · interaction loop"))
         elif not contested:
-            names = {row["id"]: character_name(json.loads(row["sheet"])) for row in cast_rows}
+            names = {row["id"]: character_name_from_text(row["sheet"]) for row in cast_rows}
             for char_id in reactors:
                 plan.append((f"character:{char_id}", f"Character · {names[char_id]}"))
         # Contested at autonomy == 0: reaction_loop above already gives every

@@ -916,11 +916,18 @@ def start_compaction(chat_id=None):
     return {"started": True, **status}
 
 
-def ensure_checkpoint(chat_id, turn_idx):
+def ensure_checkpoint(chat_id, turn_idx, blob=None):
     """Ensure a checkpoint exists for the given turn index.
 
     Captures the current world/character/lore state so it can be
     restored if the turn is deleted or re-run.
+
+    `blob` lets a caller that must run inside a transaction (the turn-creation
+    route) hand in a snapshot it serialized BEFORE taking the write lock,
+    instead of paying for the full snapshot while holding it. The caller owns
+    the staleness question: pass a blob only when nothing that belongs in the
+    checkpoint can have changed since it was built (app.py re-checks the
+    latest turn id under the lock and rebuilds on a race).
     """
     # Cheap existence check FIRST. This runs twice for the same turn -- once
     # from the route (app.py) and once from the pipeline (agents/runtime.py) --
@@ -944,7 +951,8 @@ def ensure_checkpoint(chat_id, turn_idx):
     # read-only q() calls and does no writes, so it needs no lock.
     # Holding the write lock for the duration of a snapshot would
     # needlessly block other writers.
-    blob = json.dumps(snapshot_state(chat_id))
+    if blob is None:
+        blob = json.dumps(snapshot_state(chat_id))
     # Check-then-insert inside a transaction so two concurrent calls
     # for the same (chat_id, turn_idx) can't both pass the existence
     # check and race on the UNIQUE(chat_id, turn_idx) insert.
