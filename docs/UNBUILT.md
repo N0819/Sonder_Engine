@@ -49,25 +49,50 @@ Rules that keep it honest:
 Live bugs and unfinished corrections — places the engine is currently wrong,
 not places it is merely thin.
 
-### 1.1 The Director can put words in a character's mouth
+### 1.1a Conduct authority: what the guards still do not reach
 
-**Found:** live, alpha 6.0.2 session.
+**Found:** landing the character-authority guards (chat 56 t1391). The defect
+they fix is closed; these are the edges they deliberately do not cover.
 
-A character agent declared silence — empty sequence, `stop_reason: "natural
-silence"`, no `dialogue_log` entry — and the Director's `resolved_event` said
-"<the character> adds a further comment" anyway. Perception rendered a speech
-event with no content; the narrator, having nothing to quote, dressed the
-absence as inaudibility. Read as a muffling bug; was a fabrication.
+- **The PLAYER-side checks still refuse to resolve pronouns.**
+  `_player_subject_sentences` reads only sentences OPENING with the player's
+  name, which is exactly the hole that hid the character case for a whole
+  release: the Director names someone once and then writes four sentences
+  about "he". `_sentence_subjects` fixes it for characters and is general
+  enough to serve the player too, but switching `_check_player_act_authority`
+  and `_check_player_interiority_authority` over widens what they flag, and
+  those two are load-bearing on a large existing suite. Worth doing on its
+  own, with its own measurement, rather than as a rider here.
 
-The player side of this boundary has a guard
-(`agents/common._check_player_act_authority`, used at two sites in
-`agents/director.py`). Characters have none, so nothing objects when the
-Director authors conduct for a mind that owns it.
+- **A character who declared a non-locomotive act is guarded only against
+  MOVEMENT.** Handing something over, drawing a weapon, striking — additions
+  that are not movement — are still unflagged for a character who declared
+  any act at all. This is the same "separating elaboration from addition
+  needs more than a verb list" problem the player check punted on, and it is
+  punted on here for the same reason. Movement was carved out because
+  distance decides what perception delivers and what contact is possible, so
+  getting it wrong has consequences beyond the sentence.
 
-**Fix.** The mirror of the player check, at `director_resolve`: speech
-attributed to a character who declared none this beat is stripped and warned. It
-generalises past this case — it catches every content-free "X says something",
-whatever produced it.
+- **`_check_prose_quote_authority` ignores quoted spans under three words.**
+  A readout reading `"STABLE"` and the word `"safe"` in scare quotes are not
+  utterances, and there is no way to tell them from a genuinely invented
+  `"Run."` without reading the sentence around them. Short fabricated lines
+  survive; the speech check catches them only if an attribution verb is
+  present.
+
+- **The locomotion verb list is unproven in live play.** It was tuned against
+  one live resolved_event and the existing suite, and it includes posture
+  verbs that double as ordinary elaboration — "leans in", "settles". A
+  character who declared a non-locomotive act and is then written as leaning
+  toward someone will fire a correction retry. That is the intended reading
+  (leaning in IS a distance change, and distance is the character's to
+  declare), but it is a judgement call made on one example, and the honest
+  status is that the false-positive rate is unmeasured. The blast radius is
+  bounded — one retry, kept only if it lowers the violation count, so a
+  spurious flag costs a call and cannot corrupt the beat — but if it proves
+  noisy the fix is to drop the posture verbs, not to widen the window.
+
+- **All of it is prose matching**, with everything §3.1 says about that.
 
 ### 1.2 Nothing validates the geometry of an asserted doorway
 

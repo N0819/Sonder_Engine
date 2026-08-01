@@ -24,6 +24,8 @@ be flagged. Only an act arriving from nowhere is.
 
 from __future__ import annotations
 
+import re
+
 from agents.common import _check_player_act_authority, _player_subject_sentences
 
 PLAYER = "Hinami"
@@ -161,9 +163,21 @@ def test_a_worse_retry_never_wins():
 
 def test_surviving_violations_are_attached_to_the_step():
     """If the retry still offends, it must at least be visible in the
-    step/variant inspector rather than vanishing into ctx.warnings."""
+    step/variant inspector rather than vanishing into ctx.warnings.
+
+    Matched on the assignment and its operands rather than one literal line:
+    the character-authority guards joined the same list (`_cacts`, `_quotes`)
+    and reflowed it across two lines, which a substring match on the old
+    single-line form read as the feature having been removed.
+    """
     source = open("agents/director.py").read()
-    assert 'out["player_act_warnings"] = _invented' in source
+    assign = re.search(
+        r'out\["player_act_warnings"\]\s*=\s*\(?\s*([^\n)]*(?:\n[^\n)]*)?)',
+        source)
+    assert assign, 'player_act_warnings is no longer attached to the step'
+    operands = assign.group(1)
+    for required in ("_invented", "_mute", "_felt"):
+        assert required in operands, f"{required} no longer reaches the step"
 
 
 # ---- False positives caught by the existing suite ----

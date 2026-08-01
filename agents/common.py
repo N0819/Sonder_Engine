@@ -1876,6 +1876,97 @@ def _player_subject_sentences(prose, player_name):
     return out
 
 
+# A sentence whose subject is a bare pronoun, optionally after a short leading
+# adverbial ("After a moment, he lowers the device"). Bounded so it cannot
+# reach past a genuine subject into a subordinate clause.
+_SUBJECT_PRONOUN_RE = re.compile(r"^(?:[^,]{0,40},\s*)?(?:he|she|they)\b", re.I)
+
+
+def _sentence_subjects(prose, names):
+    """Each sentence of `prose` paired with the name that is plainly its subject.
+
+    `_player_subject_sentences` deliberately refuses to resolve pronouns, on
+    the ground that "She lifts it" could be anyone in the beat. That is true of
+    a pronoun read in ISOLATION and false of one read in sequence: prose
+    establishes a subject by name and then continues it, which is why the
+    live miss (chat 56 t1391) slipped through -- the Director named the Doctor
+    once, then wrote four more sentences about him as "he", and a check that
+    only reads sentence-opening names saw only the one legitimate sentence.
+
+    So: track the most recently NAMED subject and let a pronoun-subject
+    sentence continue it. A new named subject takes over, which is what keeps
+    this honest -- "The Doctor draws it. Hinami flinches. She says nothing."
+    binds the pronoun to Hinami, not to the Doctor. Where no name has been
+    established yet, the pronoun binds to nobody rather than to a guess.
+
+    Yields (sentence, subject_name_or_None) in order.
+    """
+    current = None
+    for sentence in re.split(r"(?<=[.!?])\s+", prose or ""):
+        stripped = sentence.strip()
+        if not stripped:
+            continue
+        matched = None
+        for cand in (names or []):
+            for form in _player_name_forms(cand):
+                if re.match(rf"^{re.escape(form)}(?:'s)?\b", stripped):
+                    matched = cand
+                    break
+            if matched:
+                break
+        if matched:
+            current = matched
+            yield stripped, matched
+        elif _SUBJECT_PRONOUN_RE.match(stripped):
+            yield stripped, current
+        else:
+            yield stripped, None
+
+
+# A conjunct that introduces its OWN subject is not the tracked body's doing.
+_NEW_SUBJECT_RE = re.compile(
+    r"^(?:he|she|they|it|who|which|that|i|we|you)\b", re.I)
+
+
+def _predicate_heads(tail, window):
+    """The head words of each conjunct of a predicate.
+
+    One subject governs several verbs -- "takes a half-step closer, hands open
+    at his sides, and speaks in a low, steady voice" is one body doing two
+    things -- so a window measured from the NAME sees only the first verb and
+    the second escapes. That is exactly how the live case slipped past: the
+    attribution verb sat twelve words past the subject, and the window is
+    three. Measuring the window from each conjunct instead keeps the check on
+    what this body is DOING (rather than any word anywhere in a long sentence)
+    while letting it reach the later verbs of a compound predicate.
+
+    Conjuncts that introduce their own subject are dropped: in "The Doctor
+    lowers the device, and she says nothing" the saying is hers.
+
+    Returns (head, clause) pairs -- the head for verb matching, the whole
+    clause for tests that read wider than the verb (see `_PROXIMITY_RE`).
+    """
+    heads = []
+    for part in re.split(r",|\band\b|\bthen\b|;", tail or "", flags=re.I):
+        part = part.strip()
+        if not part or _NEW_SUBJECT_RE.match(part):
+            continue
+        heads.append(
+            (" ".join(re.findall(r"[A-Za-z']+", part)[:window]), part))
+    return heads
+
+
+def _strip_subject(sentence, name):
+    """A sentence's predicate: everything past its subject, whether that
+    subject was written as the name or as a pronoun continuing it."""
+    for form in _player_name_forms(name):
+        match = re.match(rf"^{re.escape(form)}(?:'s)?\b", sentence)
+        if match:
+            return sentence[match.end():]
+    match = _SUBJECT_PRONOUN_RE.match(sentence)
+    return sentence[match.end():] if match else ""
+
+
 # Speech verbs, as the stem-plus-inflection pattern `_PLAYER_ACT_VERBS` uses.
 # Only verbs that ASSERT an utterance: "considers", "hesitates", "looks" are
 # not speech, and a character who declared silence is entitled to all of them.
@@ -1912,7 +2003,8 @@ _ATTRIBUTION_VERBS = "|".join(_inflect(stem) for stem in _ATTRIBUTION_STEMS)
 _SPEECH_VERB_WINDOW = 3
 
 
-def _check_character_speech_authority(resolved_event, silent_names):
+def _check_character_speech_authority(resolved_event, silent_names,
+                                      other_names=()):
     """Speech a resolved_event gives a character who declared none this beat.
 
     The mirror of `_check_player_act_authority`, and the boundary it defends is
@@ -1936,32 +2028,169 @@ def _check_character_speech_authority(resolved_event, silent_names):
     `silent_names` is who declared nothing; a character who spoke is not
     checked, because separating an elaborated line from an added one needs
     more than a verb list.
+
+    Subject resolution is pronoun-continuation-aware (`_sentence_subjects`)
+    and the verb window is measured per conjunct (`_predicate_heads`). Both
+    were added after chat 56 t1391, where the guard was armed and silent: the
+    Director wrote the fabrication as "He takes a half-step closer, hands open
+    at his sides, and speaks in a low, steady voice", which the original
+    name-anchored, three-words-from-the-name check could not see at all.
     """
     warnings = []
-    for name in (silent_names or []):
-        forms = _player_name_forms(name)
-        if not forms:
+    all_names = list(silent_names or []) + list(other_names or [])
+    for sentence, subject in _sentence_subjects(resolved_event, all_names):
+        if subject is None or subject not in (silent_names or []):
             continue
-        for sentence in _player_subject_sentences(resolved_event, name):
-            # A quoted span is the dialogue path's business, not this one:
-            # a fabricated LINE is caught (and whitelisted) by the dialogue
-            # fidelity checks, while what this catches is the contentless
-            # attribution those cannot see -- "X adds a comment" quotes
-            # nothing, so nothing downstream can tell it was invented.
-            without_quotes = re.sub(r'"[^"]*"|“[^”]*”', " ", sentence)
-            for form in forms:
-                match = re.match(rf"^{re.escape(form)}(?:'s)?\b", without_quotes)
-                if match:
-                    tail = without_quotes[match.end():]
-                    break
-            else:
-                continue
-            head = " ".join(re.findall(r"[A-Za-z']+", tail)[:_SPEECH_VERB_WINDOW])
+        # A quoted span is `_check_prose_quote_authority`'s business, not
+        # this one: what this catches is the contentless attribution a quote
+        # check cannot see -- "X adds a comment" quotes nothing, so nothing
+        # downstream can tell it was invented.
+        without_quotes = re.sub(r'"[^"]*"|“[^”]*”', " ", sentence)
+        tail = _strip_subject(without_quotes, subject)
+        for head, _clause in _predicate_heads(tail, _SPEECH_VERB_WINDOW):
             if re.search(rf"\b(?:{_ATTRIBUTION_VERBS})\b", head, re.I):
                 warnings.append(
                     "Speech attributed to a character who declared none "
-                    f"(character-speech authority): {name}: {sentence[:120]!r}"
+                    f"(character-speech authority): {subject}: "
+                    f"{sentence[:120]!r}"
                 )
+                break
+    return warnings
+
+
+# Verbs that change where a body IS or how far it is from someone else. The
+# Director may render a declared act richly; it may not relocate a character
+# who declared no movement, because distance is load-bearing -- it decides
+# what perception delivers, what contact is possible, and (chat 56 t1391) it
+# can directly reverse the intent the character declared, which was to scan
+# her "without crowding her".
+_LOCOMOTION_STEMS = (
+    "step", "walk", "stride", "move", "approach", "advance", "close",
+    "cross", "back", "retreat", "withdraw", "edge", "inch", "sidle",
+    "lean", "kneel", "crouch", "climb", "duck", "slide", "settle",
+    "follow", "enter", "leave", "come", "came", "go", "went", "reach",
+    "closes the distance", "draw closer", "draw nearer",
+)
+_LOCOMOTION_VERBS = "|".join(_inflect(stem) for stem in _LOCOMOTION_STEMS)
+
+# Movement is not always written as a locomotion VERB. The live case wrote it
+# as a verb plus a distance noun -- "takes a half-step closer" -- whose head
+# verb is "take", which is no more locomotive than taking a screwdriver. What
+# marks it as movement is the distance word, so read the clause for one.
+_PROXIMITY_RE = re.compile(
+    r"\b(?:closer|nearer|half[-\s]?step|a\s+step|steps?\s+"
+    r"(?:closer|nearer|back|away|toward|towards|forward)"
+    r"|closes?\s+the\s+distance|within\s+(?:arm|reach))\b", re.I)
+
+
+def _check_character_act_authority(resolved_event, declared_actions, name,
+                                   other_names=()):
+    """Physical acts a resolved_event gives a CHARACTER they did not declare.
+
+    The third side of the same boundary `_check_player_act_authority` and
+    `_check_character_speech_authority` defend, and the one nothing guarded:
+    act authority was enforced for the player only, so a character could be
+    handed conduct freely. Live, chat 56 t1391: the Doctor declared a scan
+    "from several feet away", "while staying at distance", and the resolve had
+    him take "a half-step closer". The narrator dropped it, so it was invisible
+    in play -- and it still committed as his own episodic memory of what he did.
+
+    Two scopes, because the two cases admit different certainty:
+
+    * The character declared NO action at all. Silence about conduct is a
+      declaration, so any act is invented by construction -- the full act-verb
+      list applies, exactly as for the player.
+
+    * The character declared actions, none of them locomotive. Elaborating a
+      declared act is the Director's job and is NOT flagged; separating
+      elaboration from addition in general needs more than a verb list, so
+      this narrows to the one addition that is unambiguous and consequential:
+      MOVEMENT. A character who declared no movement was not moved.
+    """
+    if not name:
+        return []
+    declared_text = " ".join(
+        f"{a.get('attempt', '')} {a.get('observable', '')}"
+        for a in (declared_actions or []) if isinstance(a, dict)
+    )
+    if declared_actions:
+        # Already moving under their own declaration: the Director may render
+        # that movement however it likes.
+        if re.search(rf"\b(?:{_LOCOMOTION_VERBS})\b", declared_text, re.I):
+            return []
+        verbs, kind, proximity = (
+            _LOCOMOTION_VERBS, "undeclared movement", True)
+    else:
+        verbs, kind, proximity = _PLAYER_ACT_VERBS, "act not declared", False
+
+    warnings = []
+    all_names = [name] + [n for n in (other_names or []) if n != name]
+    for sentence, subject in _sentence_subjects(resolved_event, all_names):
+        if subject != name:
+            continue
+        without_quotes = re.sub(r'"[^"]*"|“[^”]*”', " ", sentence)
+        tail = _strip_subject(without_quotes, subject)
+        for head, clause in _predicate_heads(tail, 3):
+            if re.search(rf"\b(?:{verbs})\b", head, re.I) or (
+                    proximity and _PROXIMITY_RE.search(clause)):
+                warnings.append(
+                    f"Character {kind} this beat (character-act authority): "
+                    f"{name}: {sentence[:120]!r}"
+                )
+                break
+    return warnings
+
+
+# Quoted spans, in every style the resolve model actually produces. The single
+# -quote form must not mistake an apostrophe for a delimiter, so a quote may
+# only OPEN where no letter precedes it and CLOSE where no letter follows --
+# which leaves "You're" intact inside the span.
+_PROSE_QUOTE_RES = (
+    re.compile(r'"([^"]+)"'),
+    re.compile(r"“([^”]+)”"),
+    re.compile(r"‘([^’]+)’"),
+    re.compile(r"(?<![A-Za-z])'((?:[^']|'(?=[A-Za-z]))+)'(?![A-Za-z])"),
+)
+
+# Below this, a quoted span is a label or a scare quote rather than an
+# utterance -- a readout reading "STABLE", the word "safe".
+_PROSE_QUOTE_MIN_WORDS = 3
+
+
+def _check_prose_quote_authority(resolved_event, allowed_bodies):
+    """Spoken lines in resolved_event PROSE that nobody declared.
+
+    The dialogue_log backstop (director.py) drops a director-invented line for
+    a registered character by comparing its `exact_quote` against that
+    character's own declaration. It is a good guard and it was inert in chat 56
+    t1391, because `dialogue_log` was EMPTY: the invented line existed only in
+    the resolved_event prose. The speech check meanwhile strips quoted spans on
+    the stated assumption that the dialogue path covers them. Each guard
+    assumed the other held the ground, and a quote in prose with no log entry
+    fell between them.
+
+    This closes it from the other side, and needs no subject resolution to do
+    it: a line nobody declared is invented no matter WHO the prose says said
+    it. `allowed_bodies` is every quote body that was legitimately declared
+    this beat -- by the player, by any character, or by an unsheeted background
+    presence the Director is licensed to voice.
+    """
+    warnings = []
+    seen = set()
+    for pattern in _PROSE_QUOTE_RES:
+        for span in pattern.findall(resolved_event or ""):
+            body = _quote_body(span)
+            if not body or body in seen:
+                continue
+            seen.add(body)
+            if len(re.findall(r"[A-Za-z']+", body)) < _PROSE_QUOTE_MIN_WORDS:
+                continue
+            if body in allowed_bodies:
+                continue
+            warnings.append(
+                "Spoken line in resolved_event that nobody declared "
+                f"(prose-quote authority): {body[:120]!r}"
+            )
     return warnings
 
 
