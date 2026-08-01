@@ -2482,6 +2482,116 @@ def name_in_roster(name, roster):
     return any(bare and bare == strip_name_titles(r).casefold() for r in roster)
 
 
+_PRESENCE_ARTICLES = ("a ", "an ", "the ")
+
+
+def _presence_identity(name):
+    """What makes two background names the SAME presence.
+
+    The ledger is keyed by whatever string the prose used, and the prose does
+    not hold a determiner steady: chat 57 accumulated `A Dalek`, `Dalek` and
+    `The Dalek` as three separate presences for the one Dalek standing in the
+    one room. Each carried its own dialogue history, so the same creature had
+    three partial memories of itself and none of them knew what the others
+    said; `max_managed` counted all three against a cap of six; and promotion
+    thresholds were measured against a third of the evidence.
+
+    Articles only, deliberately. Titles are NOT stripped here -- `strip_name_titles`
+    exists for roster matching, where "Dr. Crusher" and "Crusher" are one
+    person, but among unregistered background figures a title is often the only
+    thing telling two of them apart ("the guard" and "the captain" are not one
+    presence). An article never distinguishes anybody.
+    """
+    cf = " ".join(str(name or "").split()).casefold()
+    for article in _PRESENCE_ARTICLES:
+        if cf.startswith(article):
+            cf = cf[len(article):].strip()
+            break
+    return cf
+
+
+def _bodies_answering_to(identity, scene):
+    """How many entities in the scene answer to this identity.
+
+    The scene is the authority on how many bodies exist -- names are not.
+    "A Dalek" and "The Dalek" are the same creature when the room holds one
+    Dalek and two different ones when it holds two, and nothing in the strings
+    themselves can tell those apart. That ambiguity is a real property of a
+    generic name, not a bug in the matching: a fiction with three Daleks needs
+    three names, and until it has them the engine should not guess.
+
+    So merging is gated on the scene showing at most ONE such body. With two,
+    the separate ledgers are left alone -- an over-merge silently welds two
+    characters into one, which is worse than a split that a name would fix.
+    """
+    identity = str(identity or "")
+    if not identity:
+        return 0
+    seen = 0
+    for entity in ((scene or {}).get("entities") or {}).values():
+        if not isinstance(entity, dict):
+            continue
+        if _presence_identity(entity.get("name")) == identity:
+            seen += 1
+    return seen
+
+
+def _resolve_presence_name(name, presences, scene=None):
+    """The key `name` should be filed under, given what is already tracked.
+
+    First-seen spelling wins, so an established presence keeps the name every
+    other record already refers to it by rather than being renamed by whichever
+    determiner the model reached for this beat.
+    """
+    identity = _presence_identity(name)
+    if not identity:
+        return name
+    if _bodies_answering_to(identity, scene) > 1:
+        return name          # more than one such body; the article may be doing work
+    for existing in presences:
+        if _presence_identity(existing) == identity:
+            return existing
+    return name
+
+
+def _fold_duplicate_presences(presences, scene=None):
+    """Merge presences that were split by an article before they were resolved
+    on write. Runs on load, so a story already carrying the split heals on its
+    next turn instead of needing a migration.
+
+    The earliest first_turn wins the name -- that is the spelling the rest of
+    the story has been using.
+    """
+    by_identity = {}
+    for name in list(presences):
+        by_identity.setdefault(_presence_identity(name), []).append(name)
+    for identity, names in by_identity.items():
+        if len(names) < 2:
+            continue
+        if _bodies_answering_to(identity, scene) > 1:
+            continue         # genuinely a crowd; see _bodies_answering_to
+        names.sort(key=lambda n: (presences[n].get("first_turn", 0), n))
+        keeper, rest = names[0], names[1:]
+        target = presences[keeper]
+        for other_name in rest:
+            other = presences.pop(other_name)
+            for field in ("dialogue_turns", "mention_turns", "addressed_turns"):
+                merged = set(target.get(field) or []) | set(other.get(field) or [])
+                if merged:
+                    target[field] = sorted(merged)
+            target["first_turn"] = min(target.get("first_turn", 0),
+                                       other.get("first_turn", 0))
+            target["last_turn"] = max(target.get("last_turn", 0),
+                                      other.get("last_turn", 0))
+            # A sketch the duplicate carried is still objective description of
+            # the same body; keep anything the keeper is missing.
+            for key, value in (other.get("sketch") or {}).items():
+                target.setdefault("sketch", {}).setdefault(key, value)
+            if other.get("pending_reply") and not target.get("pending_reply"):
+                target["pending_reply"] = other["pending_reply"]
+    return presences
+
+
 def _background_name_mentioned(name, text):
     """resolved_event prose almost never repeats someone's full tracked
     name after their first introduction -- "Crusher" carries a scene once
@@ -2721,9 +2831,16 @@ def track_background_presences(ctx, nonce):
             candidates.add(br_name)
             dialogue_speakers.add(br_name.casefold())
 
-    presences = wget(cid, "background_presences", {})
+    live_scene = wget(cid, "scene", {}) or {}
+    presences = _fold_duplicate_presences(
+        wget(cid, "background_presences", {}), live_scene)
     for name in candidates:
-        record = presences.setdefault(name, {
+        # `A Dalek`, `Dalek` and `The Dalek` are one creature WHEN THE ROOM
+        # HOLDS ONE DALEK -- the scene decides that, not the string. Resolve to
+        # the name already tracked before creating anything, or the ledger
+        # grows a fresh presence every time the prose changes its determiner.
+        key = _resolve_presence_name(name, presences, live_scene)
+        record = presences.setdefault(key, {
             "first_turn": turn_idx, "last_turn": turn_idx,
             "dialogue_turns": [], "mention_turns": [],
         })
@@ -3138,7 +3255,13 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None):
         ])
 
     presences = wget(cid, "background_presences", {})
-    presences.pop(name, None)
+    # Every spelling of them, not just the one promotion was called with: a
+    # leftover `The Dalek` after `A Dalek` is promoted would go on being
+    # tracked as an unregistered passer-by while the same body now has a
+    # character sheet, and could be selected to react against itself.
+    identity = _presence_identity(name)
+    for tracked in [n for n in presences if _presence_identity(n) == identity]:
+        presences.pop(tracked, None)
     wset(cid, "background_presences", presences)
 
     return char_id

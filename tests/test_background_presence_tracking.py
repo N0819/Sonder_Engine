@@ -324,3 +324,104 @@ def test_promotable_after_mention_threshold(temp_db):
     result = promotable_background_presences(chat_id)
     crusher = next(r for r in result if r["name"] == "Dr. Crusher")
     assert crusher["promotable"] is True
+
+
+class TestOneCreatureIsOnePresence:
+    """The ledger is keyed by whatever string the prose used, and prose does
+    not hold a determiner steady.
+
+    Live in chat 57 ("Run! ⎇10"): one Dalek entity standing in one room, and
+    THREE presences tracking it -- `A Dalek` (25 turns, 10 of them speaking),
+    `Dalek` (from turn 19) and `The Dalek` (from turn 23). Each carried its own
+    dialogue history, so the same creature had three partial memories of itself
+    and none knew what the others had said; `max_managed` counted all three
+    against a cap of six; and promotion thresholds were measured against a
+    third of the evidence.
+    """
+
+    def test_an_article_does_not_make_a_second_presence(self):
+        from commit import _presence_identity
+        assert (_presence_identity("A Dalek") == _presence_identity("Dalek")
+                == _presence_identity("The Dalek") == "dalek")
+
+    def test_case_and_spacing_are_not_identity_either(self):
+        from commit import _presence_identity
+        assert _presence_identity("  the   DALEK ") == _presence_identity("Dalek")
+
+    def test_a_title_still_distinguishes_two_strangers(self):
+        """Articles only. Among unregistered figures a title is often the only
+        thing telling two of them apart -- unlike `strip_name_titles`, which is
+        right for roster matching and wrong here."""
+        from commit import _presence_identity
+        assert _presence_identity("the guard") != _presence_identity("the captain")
+        assert _presence_identity("Dr. Crusher") != _presence_identity("Crusher")
+
+    def test_the_established_spelling_wins(self):
+        from commit import _resolve_presence_name
+        presences = {"A Dalek": {"first_turn": 0}}
+        assert _resolve_presence_name("The Dalek", presences) == "A Dalek"
+        assert _resolve_presence_name("Dalek", presences) == "A Dalek"
+        assert _resolve_presence_name("A Judoon", presences) == "A Judoon"
+
+    def test_an_already_split_ledger_heals(self):
+        """Chat 57's exact shape. Folding happens on load so a story already
+        carrying the split repairs on its next turn, with no migration."""
+        from commit import _fold_duplicate_presences
+        folded = _fold_duplicate_presences({
+            "A Dalek": {"first_turn": 0, "last_turn": 25,
+                        "dialogue_turns": [1, 2, 17], "mention_turns": [3, 5],
+                        "sketch": {"role_hint": "bronze shell"}},
+            "Dalek": {"first_turn": 19, "last_turn": 25,
+                      "dialogue_turns": [19, 20], "mention_turns": []},
+            "The Dalek": {"first_turn": 23, "last_turn": 25,
+                          "dialogue_turns": [24], "mention_turns": [23],
+                          "sketch": {"station_room": "alley_room"}},
+        })
+        assert list(folded) == ["A Dalek"], "the first-seen spelling keeps the name"
+        record = folded["A Dalek"]
+        assert record["dialogue_turns"] == [1, 2, 17, 19, 20, 24]
+        assert record["mention_turns"] == [3, 5, 23]
+        assert record["first_turn"] == 0 and record["last_turn"] == 25
+        # A sketch the duplicate carried describes the same body.
+        assert record["sketch"]["role_hint"] == "bronze shell"
+        assert record["sketch"]["station_room"] == "alley_room"
+
+    def test_folding_leaves_genuinely_different_presences_alone(self):
+        from commit import _fold_duplicate_presences
+        folded = _fold_duplicate_presences({
+            "A Dalek": {"first_turn": 0, "last_turn": 3, "dialogue_turns": []},
+            "A Judoon": {"first_turn": 1, "last_turn": 3, "dialogue_turns": []},
+        })
+        assert sorted(folded) == ["A Dalek", "A Judoon"]
+
+    def test_two_bodies_in_the_room_are_left_as_two(self):
+        """The scene is the authority on how many there are, not the name.
+
+        `A Dalek` and `The Dalek` are one creature when the room holds one and
+        two when it holds two, and nothing in the strings can tell those apart.
+        An over-merge silently welds two characters into one, which is worse
+        than a split a name would fix -- so two bodies means hands off.
+        """
+        from commit import _fold_duplicate_presences, _resolve_presence_name
+        crowd = {"entities": {
+            "e1": {"name": "A Dalek"},
+            "e2": {"name": "The Dalek"},
+        }}
+        ledger = {
+            "A Dalek": {"first_turn": 0, "last_turn": 3, "dialogue_turns": [1]},
+            "The Dalek": {"first_turn": 2, "last_turn": 3, "dialogue_turns": [3]},
+        }
+        assert sorted(_fold_duplicate_presences(dict(ledger), crowd)) == [
+            "A Dalek", "The Dalek"]
+        assert _resolve_presence_name("Dalek", ledger, crowd) == "Dalek"
+
+    def test_one_body_in_the_room_still_merges(self):
+        from commit import _fold_duplicate_presences, _resolve_presence_name
+        alone = {"entities": {"e1": {"name": "A Dalek",
+                                     "kind": "dalek war machine"}}}
+        ledger = {
+            "A Dalek": {"first_turn": 0, "last_turn": 3, "dialogue_turns": [1]},
+            "The Dalek": {"first_turn": 2, "last_turn": 3, "dialogue_turns": [3]},
+        }
+        assert list(_fold_duplicate_presences(dict(ledger), alone)) == ["A Dalek"]
+        assert _resolve_presence_name("Dalek", ledger, alone) == "A Dalek"
