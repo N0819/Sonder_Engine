@@ -622,6 +622,46 @@ That is why the two disagree about the creature: two interpretations of one
 passage, and the discarded one is the only one that read it as a greeting.
 
 
+### 1.17 A generic name cannot count
+
+**Found 2026-08-01**, investigating chat 57 ("Run! ⎇10"), where scene life was
+on, the Dalek was speaking, and the ledger still looked wrong.
+
+`background_presences` is keyed by whatever string the prose used. Chat 57 held
+ONE Dalek entity in one room and three presences tracking it — `A Dalek` (from
+turn 0, 10 speaking turns), `Dalek` (turn 19) and `The Dalek` (turn 23) — split
+by nothing but the article. Each carried its own dialogue history, so the same
+creature had three partial memories of itself and none knew what the others had
+said; `max_managed: 6` counted all three; and promotion thresholds were measured
+against a third of the evidence.
+
+**Fixed as far as it can be**: `_presence_identity` ignores a leading article,
+`_resolve_presence_name` files a new spelling under the established one, and
+`_fold_duplicate_presences` heals a story already carrying the split on its next
+turn. Articles only — a title is often the only thing telling two background
+figures apart ("the guard" and "the captain" are not one presence), unlike
+roster matching where `strip_name_titles` is right.
+
+**What is NOT fixed, and cannot be at this layer.** `A Dalek` and `The Dalek`
+are one creature when the room holds one and two when it holds two, and nothing
+in the strings can distinguish those cases. The merge is therefore gated on the
+scene showing at most one such body (`_bodies_answering_to`), because an
+over-merge silently welds two characters into one and a split is only a naming
+problem. That gate is a guard, not an answer: with three Daleks in a room the
+engine has three presences it cannot tell apart, and the first one to speak
+collects everything.
+
+The real fix is that an unregistered presence should be identified by the scene
+ENTITY it belongs to — entities already have stable ids (`45c0c640bb354e97`),
+and the ledger should key on that, falling back to the name only for presences
+with no entity (a voice through a door). That is a schema change to
+`background_presences` plus a migration, and it wants doing before any story
+seriously tries to run a crowd of identical bodies.
+
+Until then, the practical guidance is the one the failure teaches: **a fiction
+with several of the same thing needs several names.** The engine cannot count
+`a Dalek`.
+
 
 ---
 

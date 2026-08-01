@@ -29,7 +29,7 @@
 | `chat_archive.py` | 1089 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1016 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 295 |  | `spatial` |
-| `commit.py` | 5461 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 5584 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `db.py` | 1447 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 193 |  | `db` |
 | `greetings.py` | 375 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
@@ -327,14 +327,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 4111 | 993 lines |
+| `prepare_memory_commit()` | 4234 | 993 lines |
 | `prepare_scene_commit()` | 1621 | 445 lines |
-| `track_background_presences()` | 2597 | 218 lines |
+| `track_background_presences()` | 2707 | 225 lines |
 | `commit_world_entities()` | 2203 | 168 lines |
 | `_prepare_destruction()` | 697 | 158 lines |
 | `update_place_graph()` | 72 | 153 lines |
-| `prepare_mapping_commit()` | 3426 | 133 lines |
-| `commit_mapping()` | 3561 | 120 lines |
+| `prepare_mapping_commit()` | 3549 | 133 lines |
+| `commit_mapping()` | 3684 | 120 lines |
 
 ### `db.py`
 
