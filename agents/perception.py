@@ -291,6 +291,7 @@ from .common import (
     _perceptible_entities,
     _dedupe_view_sentences,
     _player_name_forms,
+    _sentence_subjects,
     _ensure_environment,
     _fallback_perception_views,
     _inject_action,
@@ -672,7 +673,7 @@ def _pronouns_for_perceiver(all_pronouns, perceiver, known):
 _SENTENCE_SPLIT = re.compile(r'(?<=[.!?])\s+|(?<=[.!?]["\u201d\u2019\'])\s+')
 
 
-def _strip_self_narration(view, perceiver_name):
+def _strip_self_narration(view, perceiver_name, other_names=()):
     """Drop sentences that narrate the PERCEIVER from outside their own view.
 
     A view is what one mind receives. It may say "you" and it may describe
@@ -694,24 +695,35 @@ def _strip_self_narration(view, perceiver_name):
     Dropping the sentence rather than rewriting it, and dropping only whole
     sentences whose SUBJECT is the perceiver: the rest of the view is
     untouched and still coherent, and no prose is invented to replace what
-    goes. A pronoun subject is never guessed at -- "She watches the lump"
-    could be anyone in the beat, and guessing would gut legitimate views.
+    goes.
+
+    Subject resolution is pronoun-continuation-aware (`_sentence_subjects`),
+    which is how the live case was found. Chat 56 ("Run!") t6, in the PLAYER's
+    own view: "She feels her arms still wrapped tightly, her breathing slowing,
+    the terror in her eyes beginning to recede." Third person, about the
+    perceiver, in a view addressed to them -- the Director's omniscient
+    sentence copied through whole, exactly the shape this guard exists to
+    catch, and invisible to it because the subject was written as "She". An
+    unanchored pronoun still binds to nobody rather than to a guess, so a view
+    that never names the perceiver is left alone.
     """
     if not view or not perceiver_name:
         return view, []
     forms = _player_name_forms(perceiver_name)
     if not forms:
         return view, []
+    names = [perceiver_name] + [
+        n for n in (other_names or []) if n and n != perceiver_name]
     kept, dropped = [], []
     # A closing quote may sit between the terminal punctuation and the space
     # ('...to me!?" The voice is...'), and a naive lookbehind cannot split
     # there -- which silently made a whole passage one "sentence" and let this
     # guard pass everything.
-    for sentence in _SENTENCE_SPLIT.split(str(view)):
-        stripped = sentence.strip()
+    for stripped, subject in _sentence_subjects(
+            str(view), names, split=_SENTENCE_SPLIT):
         if not stripped:
             continue
-        if any(re.match(rf"^{re.escape(f)}(?:'s)?\b", stripped) for f in forms):
+        if subject == perceiver_name:
             dropped.append(stripped)
         else:
             kept.append(stripped)
@@ -743,7 +755,8 @@ def _scrub_view_for(ctx, stage, view, perceiver_name, known, roster):
         ctx.warnings.append(
             f"{stage}: scrubbed unearned identity {leaked} "
             f"from the view of {perceiver_name}")
-    view, self_narrated = _strip_self_narration(view, perceiver_name)
+    view, self_narrated = _strip_self_narration(
+        view, perceiver_name, [s["name"] for s in roster])
     for sentence in self_narrated:
         ctx.warnings.append(
             f"{stage}: dropped self-narration from the view of "
@@ -1569,7 +1582,8 @@ def perception_act(ctx, nonce):
         # observer's view here is the likeliest place for that omniscience to
         # be copied through intact. Measured on a fresh 4-turn run: 1 of 17
         # views narrated its own perceiver.
-        view, self_narrated = _strip_self_narration(view, p["name"])
+        view, self_narrated = _strip_self_narration(
+            view, p["name"], [p_name, *self_forms_by_name])
         for sentence in self_narrated:
             ctx.warnings.append(
                 f"perception_act: dropped self-narration from the view of "

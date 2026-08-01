@@ -153,3 +153,54 @@ def test_it_is_enforced_rather_than_merely_warned():
 
 def test_empty_prose_is_a_noop():
     assert _check_player_interiority_prose("", VIEW_SRC) == []
+
+
+# Chat 56 ("Run!") t6, verbatim from perception_outcome.views["player"]: the
+# Director's omniscient sentence copied whole into the PLAYER's own view, in
+# the third person, naming an interior state the player never declared.
+T6_PLAYER_VIEW = (
+    "Warm amber light fills the console chamber, the roundel walls glowing "
+    "faintly. Hinami stands by the doors. She feels her arms still wrapped "
+    "tightly, her breathing slowing, the terror in her eyes beginning to "
+    "recede."
+)
+
+
+def test_third_person_self_narration_under_a_pronoun_is_dropped():
+    view, dropped = _strip_self_narration(
+        T6_PLAYER_VIEW, "Hinami", ["Hinami", "The Doctor"])
+    assert dropped, "the perceiver cannot watch her own terror recede"
+    assert "terror in her eyes" not in view
+    assert "Warm amber light" in view, "the rest of the view must survive"
+
+
+def test_a_view_that_never_names_the_perceiver_is_left_alone():
+    """An unanchored pronoun binds to nobody rather than to a guess."""
+    view, dropped = _strip_self_narration(
+        "She watches the shifting lump.", "Hinami", ["Hinami", "The Doctor"])
+    assert dropped == []
+
+
+def test_another_bodys_sentences_are_not_dropped():
+    view, dropped = _strip_self_narration(
+        "The Doctor steps back. He raises both hands.", "Hinami",
+        ["Hinami", "The Doctor"])
+    assert dropped == []
+    assert "raises both hands" in view
+
+
+def test_narrator_may_not_name_the_players_interior_state_at_a_distance():
+    """Chat 56 t6, verbatim narrator prose. Every branch of _YOU_INTERIOR
+    required the state to sit beside "you"/"your" or govern it through a short
+    verb list; here "your" attaches to "eyes" and the verb is "pulls back"."""
+    assert _check_player_interiority_prose(
+        "The terror that had been living wide-open in your eyes pulls back to "
+        "something smaller, something that can blink.", VIEW_SRC)
+
+
+def test_observable_surface_at_a_distance_is_still_allowed():
+    """The widened branch must not swallow ordinary description."""
+    for prose in ("The tremor that had been running through your hands eases.",
+                  "The light in your eyes steadies.",
+                  "The grip on your arm loosens."):
+        assert _check_player_interiority_prose(prose, VIEW_SRC) == [], prose

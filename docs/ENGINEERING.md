@@ -202,8 +202,10 @@ player's declaration into a structured `sequence`, then later resolves what
 actually happened. It is entitled to omniscience because it cannot resolve a
 beat it may not see. It must **not** silently replace the player's declared
 speech or action, and must not author character psychology or conduct. The
-player-side guard is `_check_player_act_authority`; a character-side equivalent
-is a known gap ([`UNBUILT.md`](UNBUILT.md) §1.1).
+player-side guard is `_check_player_act_authority`; the character-side
+equivalents are `_check_character_act_authority`,
+`_check_character_speech_authority` and `_check_prose_quote_authority`, all
+folded into the same one-retry loop.
 
 **Perception** (`agents/perception.py`) — a stateless filter deciding what each
 observer legitimately receives. Runs twice per beat: once on the action *onset*

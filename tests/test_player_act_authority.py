@@ -24,6 +24,8 @@ be flagged. Only an act arriving from nowhere is.
 
 from __future__ import annotations
 
+import re
+
 from agents.common import _check_player_act_authority, _player_subject_sentences
 
 PLAYER = "Hinami"
@@ -161,9 +163,21 @@ def test_a_worse_retry_never_wins():
 
 def test_surviving_violations_are_attached_to_the_step():
     """If the retry still offends, it must at least be visible in the
-    step/variant inspector rather than vanishing into ctx.warnings."""
+    step/variant inspector rather than vanishing into ctx.warnings.
+
+    Matched on the assignment and its operands rather than one literal line:
+    the character-authority guards joined the same list (`_cacts`, `_quotes`)
+    and reflowed it across two lines, which a substring match on the old
+    single-line form read as the feature having been removed.
+    """
     source = open("agents/director.py").read()
-    assert 'out["player_act_warnings"] = _invented' in source
+    assign = re.search(
+        r'out\["player_act_warnings"\]\s*=\s*\(?\s*([^\n)]*(?:\n[^\n)]*)?)',
+        source)
+    assert assign, 'player_act_warnings is no longer attached to the step'
+    operands = assign.group(1)
+    for required in ("_invented", "_mute", "_felt"):
+        assert required in operands, f"{required} no longer reaches the step"
 
 
 # ---- False positives caught by the existing suite ----
@@ -338,3 +352,113 @@ def test_interior_verbs_are_caught_too():
 def test_empty_and_missing_inputs_are_noops():
     assert _check_player_interiority_authority("", PLAYER) == []
     assert _check_player_interiority_authority("Hinami is afraid.", "") == []
+
+
+# --------------------------------------------------------------------------
+# Chat 56 ("Run!"): the player narrates a gesture every single beat, which
+# under the old blanket `if declared_actions: return []` disarmed the act
+# guard for the entire story. Verbatim from the stored steps.
+# --------------------------------------------------------------------------
+
+T10_INPUT = '"Heh? What are we doing what\'s going on?" You look genuinely confused.'
+T10_DECLARED = [{
+    "attempt": "She looks genuinely confused, her expression open and uncertain.",
+    "observable": "widens her eyes, brow furrowing, ears twitching",
+}]
+T10_RESOLVE = (
+    "Hinami stands by the sealed police-box doors, her copper-gold hair "
+    "catching the warm light, the feather clip askew from the chaos of the "
+    "alley. She widens her eyes, brow furrowing, her fox ears twitching as she "
+    "looks around the vaulted chamber. Hinami blinks, her ears flattening "
+    "slightly as she processes. She takes a ragged breath, her hands coming up "
+    "to grip the edge of the console, fingers finding a lever as if to steady "
+    "herself."
+)
+
+
+def test_an_act_the_player_never_declared_is_caught_on_a_beat_they_did_act():
+    """The reported symptom. The player declared a look; the Director had her
+    take hold of a lever, and her NEXT input was "Which lever?!" -- the
+    fabricated act replayed a beat later."""
+    got = _check_player_act_authority(
+        T10_RESOLVE, T10_DECLARED, PLAYER, ["The Doctor"], T10_INPUT)
+    assert got, "the invented lever grip must be flagged"
+    assert any("'edge'" in w for w in got), got
+
+
+def test_restating_where_the_player_already_stands_is_not_an_act():
+    """"Hinami stands by the sealed doors" re-establishes a position the beat
+    already holds. Ordinary scene-setting, not conduct."""
+    got = _check_player_act_authority(
+        "Hinami stands by the sealed police-box doors, her hair catching the "
+        "warm light.", T10_DECLARED, PLAYER, ["The Doctor"], T10_INPUT)
+    assert got == [], got
+
+
+def test_elaborating_a_declared_act_is_still_not_flagged():
+    """t3: the player declared leaning on the wall and holding her chest, and
+    the resolve rendered exactly that, richly. The Director's job."""
+    declared = [{
+        "attempt": "Leaning against the wall, holding chest, breathing ragged "
+                   "breaths, throat raw, appearing in pain from overexertion",
+        "observable": "leans back against the wall, one hand pressed to her "
+                      "chest, breathing hard in ragged gasps",
+    }]
+    got = _check_player_act_authority(
+        "Hinami leans back against the pale wall, one hand pressed to her "
+        "chest, her breath coming in ragged, audible gasps.",
+        declared, PLAYER, ["The Doctor"],
+        "You continue to breath raged breaths leaning against the wall "
+        "holding your chest.")
+    assert got == [], got
+
+
+def test_a_declared_act_elaborated_under_a_pronoun_subject_is_not_flagged():
+    """t8: declared standing, tails lowering, ears rising -- rendered back
+    under a pronoun subject. Vocabulary shared, so not an addition."""
+    declared = [{
+        "attempt": "She stands up, tails lowering, ears raising slightly.",
+        "observable": "rises to her feet, tails swaying, ears lifting",
+    }]
+    got = _check_player_act_authority(
+        "Hinami is by the doors. She rises to her feet, her tails lowering "
+        "into a slow, shaking sway, her ears lifting from their pinned "
+        "position.", declared, PLAYER, ["The Doctor"],
+        "You slowly stand up still trembling slightly but your tails slowly "
+        "lower going into a slow shaking sway your ears raising slightly.")
+    assert got == [], got
+
+
+def test_declaring_nothing_still_flags_everything():
+    """The original scope is untouched: no declared action means any act is
+    invented by construction."""
+    assert _check_player_act_authority(
+        "Hinami takes the bottle and drinks from it.", [], PLAYER)
+
+
+T6_INPUT = (
+    '"I mean... they were ranting... about how we were inferior lifeforms. '
+    'Before they started screaming EXTERMINATE!" You imitate them slightly '
+    'and shudder.'
+)
+T6_RESOLVE = (
+    "Hinami's voice wavers as she speaks, then rises into a harsh, metallic "
+    "imitation of the Dalek's cry. She looks at him, still shaky, but the "
+    "terror in her eyes has begun to recede."
+)
+
+
+def test_player_interiority_under_a_pronoun_subject_is_caught():
+    """t6. The player declared a shudder; the Director decided her emotional
+    arc. The name-only test could not see a pronoun subject."""
+    got = _check_player_interiority_authority(
+        T6_RESOLVE, PLAYER, T6_INPUT, ["The Doctor"])
+    assert got, "the invented receding terror must be flagged"
+    assert any("terror" in w for w in got), got
+
+
+def test_a_feeling_the_player_declared_is_still_theirs_to_declare():
+    """The exemption survives the pronoun widening."""
+    assert _check_player_interiority_authority(
+        "Hinami is afraid. She is still afraid.", PLAYER,
+        "You are afraid and shaking.", ["The Doctor"]) == []

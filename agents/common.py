@@ -1925,6 +1925,104 @@ def _player_subject_sentences(prose, player_name):
     return out
 
 
+# A sentence whose subject is a bare pronoun, optionally after a short leading
+# adverbial ("After a moment, he lowers the device"). Bounded so it cannot
+# reach past a genuine subject into a subordinate clause.
+_SUBJECT_PRONOUN_RE = re.compile(r"^(?:[^,]{0,40},\s*)?(?:he|she|they)\b", re.I)
+
+
+def _sentence_subjects(prose, names, split=None):
+    """Each sentence of `prose` paired with the name that is plainly its subject.
+
+    `_player_subject_sentences` deliberately refuses to resolve pronouns, on
+    the ground that "She lifts it" could be anyone in the beat. That is true of
+    a pronoun read in ISOLATION and false of one read in sequence: prose
+    establishes a subject by name and then continues it, which is why the
+    live miss (chat 56 t1391) slipped through -- the Director named the Doctor
+    once, then wrote four more sentences about him as "he", and a check that
+    only reads sentence-opening names saw only the one legitimate sentence.
+
+    So: track the most recently NAMED subject and let a pronoun-subject
+    sentence continue it. A new named subject takes over, which is what keeps
+    this honest -- "The Doctor draws it. Hinami flinches. She says nothing."
+    binds the pronoun to Hinami, not to the Doctor. Where no name has been
+    established yet, the pronoun binds to nobody rather than to a guess.
+
+    Yields (sentence, subject_name_or_None) in order.
+
+    `split` overrides the sentence splitter for callers that need a different
+    one -- perception's tolerates a closing quote between the terminal
+    punctuation and the space, and losing that would silently make a whole
+    passage one "sentence" again.
+    """
+    current = None
+    pieces = (split.split(prose or "") if split is not None
+              else re.split(r"(?<=[.!?])\s+", prose or ""))
+    for sentence in pieces:
+        stripped = sentence.strip()
+        if not stripped:
+            continue
+        matched = None
+        for cand in (names or []):
+            for form in _player_name_forms(cand):
+                if re.match(rf"^{re.escape(form)}(?:'s)?\b", stripped):
+                    matched = cand
+                    break
+            if matched:
+                break
+        if matched:
+            current = matched
+            yield stripped, matched
+        elif _SUBJECT_PRONOUN_RE.match(stripped):
+            yield stripped, current
+        else:
+            yield stripped, None
+
+
+# A conjunct that introduces its OWN subject is not the tracked body's doing.
+_NEW_SUBJECT_RE = re.compile(
+    r"^(?:he|she|they|it|who|which|that|i|we|you)\b", re.I)
+
+
+def _predicate_heads(tail, window):
+    """The head words of each conjunct of a predicate.
+
+    One subject governs several verbs -- "takes a half-step closer, hands open
+    at his sides, and speaks in a low, steady voice" is one body doing two
+    things -- so a window measured from the NAME sees only the first verb and
+    the second escapes. That is exactly how the live case slipped past: the
+    attribution verb sat twelve words past the subject, and the window is
+    three. Measuring the window from each conjunct instead keeps the check on
+    what this body is DOING (rather than any word anywhere in a long sentence)
+    while letting it reach the later verbs of a compound predicate.
+
+    Conjuncts that introduce their own subject are dropped: in "The Doctor
+    lowers the device, and she says nothing" the saying is hers.
+
+    Returns (head, clause) pairs -- the head for verb matching, the whole
+    clause for tests that read wider than the verb (see `_PROXIMITY_RE`).
+    """
+    heads = []
+    for part in re.split(r",|\band\b|\bthen\b|;", tail or "", flags=re.I):
+        part = part.strip()
+        if not part or _NEW_SUBJECT_RE.match(part):
+            continue
+        heads.append(
+            (" ".join(re.findall(r"[A-Za-z']+", part)[:window]), part))
+    return heads
+
+
+def _strip_subject(sentence, name):
+    """A sentence's predicate: everything past its subject, whether that
+    subject was written as the name or as a pronoun continuing it."""
+    for form in _player_name_forms(name):
+        match = re.match(rf"^{re.escape(form)}(?:'s)?\b", sentence)
+        if match:
+            return sentence[match.end():]
+    match = _SUBJECT_PRONOUN_RE.match(sentence)
+    return sentence[match.end():] if match else ""
+
+
 # Speech verbs, as the stem-plus-inflection pattern `_PLAYER_ACT_VERBS` uses.
 # Only verbs that ASSERT an utterance: "considers", "hesitates", "looks" are
 # not speech, and a character who declared silence is entitled to all of them.
@@ -1961,7 +2059,8 @@ _ATTRIBUTION_VERBS = "|".join(_inflect(stem) for stem in _ATTRIBUTION_STEMS)
 _SPEECH_VERB_WINDOW = 3
 
 
-def _check_character_speech_authority(resolved_event, silent_names):
+def _check_character_speech_authority(resolved_event, silent_names,
+                                      other_names=()):
     """Speech a resolved_event gives a character who declared none this beat.
 
     The mirror of `_check_player_act_authority`, and the boundary it defends is
@@ -1985,32 +2084,169 @@ def _check_character_speech_authority(resolved_event, silent_names):
     `silent_names` is who declared nothing; a character who spoke is not
     checked, because separating an elaborated line from an added one needs
     more than a verb list.
+
+    Subject resolution is pronoun-continuation-aware (`_sentence_subjects`)
+    and the verb window is measured per conjunct (`_predicate_heads`). Both
+    were added after chat 56 t1391, where the guard was armed and silent: the
+    Director wrote the fabrication as "He takes a half-step closer, hands open
+    at his sides, and speaks in a low, steady voice", which the original
+    name-anchored, three-words-from-the-name check could not see at all.
     """
     warnings = []
-    for name in (silent_names or []):
-        forms = _player_name_forms(name)
-        if not forms:
+    all_names = list(silent_names or []) + list(other_names or [])
+    for sentence, subject in _sentence_subjects(resolved_event, all_names):
+        if subject is None or subject not in (silent_names or []):
             continue
-        for sentence in _player_subject_sentences(resolved_event, name):
-            # A quoted span is the dialogue path's business, not this one:
-            # a fabricated LINE is caught (and whitelisted) by the dialogue
-            # fidelity checks, while what this catches is the contentless
-            # attribution those cannot see -- "X adds a comment" quotes
-            # nothing, so nothing downstream can tell it was invented.
-            without_quotes = re.sub(r'"[^"]*"|“[^”]*”', " ", sentence)
-            for form in forms:
-                match = re.match(rf"^{re.escape(form)}(?:'s)?\b", without_quotes)
-                if match:
-                    tail = without_quotes[match.end():]
-                    break
-            else:
-                continue
-            head = " ".join(re.findall(r"[A-Za-z']+", tail)[:_SPEECH_VERB_WINDOW])
+        # A quoted span is `_check_prose_quote_authority`'s business, not
+        # this one: what this catches is the contentless attribution a quote
+        # check cannot see -- "X adds a comment" quotes nothing, so nothing
+        # downstream can tell it was invented.
+        without_quotes = re.sub(r'"[^"]*"|“[^”]*”', " ", sentence)
+        tail = _strip_subject(without_quotes, subject)
+        for head, _clause in _predicate_heads(tail, _SPEECH_VERB_WINDOW):
             if re.search(rf"\b(?:{_ATTRIBUTION_VERBS})\b", head, re.I):
                 warnings.append(
                     "Speech attributed to a character who declared none "
-                    f"(character-speech authority): {name}: {sentence[:120]!r}"
+                    f"(character-speech authority): {subject}: "
+                    f"{sentence[:120]!r}"
                 )
+                break
+    return warnings
+
+
+# Verbs that change where a body IS or how far it is from someone else. The
+# Director may render a declared act richly; it may not relocate a character
+# who declared no movement, because distance is load-bearing -- it decides
+# what perception delivers, what contact is possible, and (chat 56 t1391) it
+# can directly reverse the intent the character declared, which was to scan
+# her "without crowding her".
+_LOCOMOTION_STEMS = (
+    "step", "walk", "stride", "move", "approach", "advance", "close",
+    "cross", "back", "retreat", "withdraw", "edge", "inch", "sidle",
+    "lean", "kneel", "crouch", "climb", "duck", "slide", "settle",
+    "follow", "enter", "leave", "come", "came", "go", "went", "reach",
+    "closes the distance", "draw closer", "draw nearer",
+)
+_LOCOMOTION_VERBS = "|".join(_inflect(stem) for stem in _LOCOMOTION_STEMS)
+
+# Movement is not always written as a locomotion VERB. The live case wrote it
+# as a verb plus a distance noun -- "takes a half-step closer" -- whose head
+# verb is "take", which is no more locomotive than taking a screwdriver. What
+# marks it as movement is the distance word, so read the clause for one.
+_PROXIMITY_RE = re.compile(
+    r"\b(?:closer|nearer|half[-\s]?step|a\s+step|steps?\s+"
+    r"(?:closer|nearer|back|away|toward|towards|forward)"
+    r"|closes?\s+the\s+distance|within\s+(?:arm|reach))\b", re.I)
+
+
+def _check_character_act_authority(resolved_event, declared_actions, name,
+                                   other_names=()):
+    """Physical acts a resolved_event gives a CHARACTER they did not declare.
+
+    The third side of the same boundary `_check_player_act_authority` and
+    `_check_character_speech_authority` defend, and the one nothing guarded:
+    act authority was enforced for the player only, so a character could be
+    handed conduct freely. Live, chat 56 t1391: the Doctor declared a scan
+    "from several feet away", "while staying at distance", and the resolve had
+    him take "a half-step closer". The narrator dropped it, so it was invisible
+    in play -- and it still committed as his own episodic memory of what he did.
+
+    Two scopes, because the two cases admit different certainty:
+
+    * The character declared NO action at all. Silence about conduct is a
+      declaration, so any act is invented by construction -- the full act-verb
+      list applies, exactly as for the player.
+
+    * The character declared actions, none of them locomotive. Elaborating a
+      declared act is the Director's job and is NOT flagged; separating
+      elaboration from addition in general needs more than a verb list, so
+      this narrows to the one addition that is unambiguous and consequential:
+      MOVEMENT. A character who declared no movement was not moved.
+    """
+    if not name:
+        return []
+    declared_text = " ".join(
+        f"{a.get('attempt', '')} {a.get('observable', '')}"
+        for a in (declared_actions or []) if isinstance(a, dict)
+    )
+    if declared_actions:
+        # Already moving under their own declaration: the Director may render
+        # that movement however it likes.
+        if re.search(rf"\b(?:{_LOCOMOTION_VERBS})\b", declared_text, re.I):
+            return []
+        verbs, kind, proximity = (
+            _LOCOMOTION_VERBS, "undeclared movement", True)
+    else:
+        verbs, kind, proximity = _PLAYER_ACT_VERBS, "act not declared", False
+
+    warnings = []
+    all_names = [name] + [n for n in (other_names or []) if n != name]
+    for sentence, subject in _sentence_subjects(resolved_event, all_names):
+        if subject != name:
+            continue
+        without_quotes = re.sub(r'"[^"]*"|“[^”]*”', " ", sentence)
+        tail = _strip_subject(without_quotes, subject)
+        for head, clause in _predicate_heads(tail, 3):
+            if re.search(rf"\b(?:{verbs})\b", head, re.I) or (
+                    proximity and _PROXIMITY_RE.search(clause)):
+                warnings.append(
+                    f"Character {kind} this beat (character-act authority): "
+                    f"{name}: {sentence[:120]!r}"
+                )
+                break
+    return warnings
+
+
+# Quoted spans, in every style the resolve model actually produces. The single
+# -quote form must not mistake an apostrophe for a delimiter, so a quote may
+# only OPEN where no letter precedes it and CLOSE where no letter follows --
+# which leaves "You're" intact inside the span.
+_PROSE_QUOTE_RES = (
+    re.compile(r'"([^"]+)"'),
+    re.compile(r"“([^”]+)”"),
+    re.compile(r"‘([^’]+)’"),
+    re.compile(r"(?<![A-Za-z])'((?:[^']|'(?=[A-Za-z]))+)'(?![A-Za-z])"),
+)
+
+# Below this, a quoted span is a label or a scare quote rather than an
+# utterance -- a readout reading "STABLE", the word "safe".
+_PROSE_QUOTE_MIN_WORDS = 3
+
+
+def _check_prose_quote_authority(resolved_event, allowed_bodies):
+    """Spoken lines in resolved_event PROSE that nobody declared.
+
+    The dialogue_log backstop (director.py) drops a director-invented line for
+    a registered character by comparing its `exact_quote` against that
+    character's own declaration. It is a good guard and it was inert in chat 56
+    t1391, because `dialogue_log` was EMPTY: the invented line existed only in
+    the resolved_event prose. The speech check meanwhile strips quoted spans on
+    the stated assumption that the dialogue path covers them. Each guard
+    assumed the other held the ground, and a quote in prose with no log entry
+    fell between them.
+
+    This closes it from the other side, and needs no subject resolution to do
+    it: a line nobody declared is invented no matter WHO the prose says said
+    it. `allowed_bodies` is every quote body that was legitimately declared
+    this beat -- by the player, by any character, or by an unsheeted background
+    presence the Director is licensed to voice.
+    """
+    warnings = []
+    seen = set()
+    for pattern in _PROSE_QUOTE_RES:
+        for span in pattern.findall(resolved_event or ""):
+            body = _quote_body(span)
+            if not body or body in seen:
+                continue
+            seen.add(body)
+            if len(re.findall(r"[A-Za-z']+", body)) < _PROSE_QUOTE_MIN_WORDS:
+                continue
+            if body in allowed_bodies:
+                continue
+            warnings.append(
+                "Spoken line in resolved_event that nobody declared "
+                f"(prose-quote authority): {body[:120]!r}"
+            )
     return warnings
 
 
@@ -2043,7 +2279,7 @@ _INTERIOR_CERTAINTY = ("genuine", "real", "true", "unmistakable", "obvious",
 
 
 def _check_player_interiority_authority(resolved_event, player_name,
-                                        declared_text=""):
+                                        declared_text="", other_names=()):
     """Interior states a resolved_event asserts about the PLAYER.
 
     The mirror of `_check_player_act_authority` for feeling rather than doing,
@@ -2063,17 +2299,28 @@ def _check_player_interiority_authority(resolved_event, player_name,
     it is theirs to declare -- this catches what arrives from nowhere.
     `_INTERIOR_CERTAINTY` is flagged only ALONGSIDE an interior word, because
     "genuine" is unremarkable on its own and damning next to "terror".
+
+    A sentence counts as being about the player when it NAMES them (they may be
+    its object -- "she takes in the genuine terror in those wide eyes" is about
+    the player from another body's side) or when subject tracking resolves it
+    to them. The second was added after chat 56 ("Run!") t6: against a player
+    who declared only "You imitate them slightly and shudder", the resolve
+    wrote "She looks at him, still shaky, but the terror in her eyes has begun
+    to recede" -- deciding the player's emotional arc for them. The name-only
+    test could not see a pronoun subject, so nothing fired, and perception
+    copied the sentence into the player's OWN view.
     """
     if not resolved_event or not player_name:
         return []
     declared = str(declared_text or "").casefold()
+    all_names = [player_name] + [
+        n for n in (other_names or []) if n and n != player_name]
     warnings = []
-    for sentence in re.split(r"(?<=[.!?])\s+", str(resolved_event)):
-        body = sentence.strip()
+    for body, subject in _sentence_subjects(resolved_event, all_names):
         if not body:
             continue
         low = body.casefold()
-        if not _mentions_player(low, player_name):
+        if subject != player_name and not _mentions_player(low, player_name):
             continue
         hits = [w for w in _INTERIOR_STATES
                 if re.search(rf"\b{re.escape(w)}\b", low)
@@ -2105,12 +2352,74 @@ def _mentions_player(low_sentence, player_name):
     return False
 
 
-def _check_player_act_authority(resolved_event, declared_actions, player_name):
-    """Physical acts a resolved_event gives the PLAYER on a beat where they
-    declared none (live: Elevator Adventure t63 -- the player said only
-    "Let's get going?" and the Director had them take a bottle, drink from it
-    and nod; t59 -- the player ASKED "I hope you don't mind if I lean on you"
-    and the Director performed the leaning for them).
+# Verbs that put a body in contact with something outside itself.
+# Deliberately excludes verbs that read as manipulation but usually are not:
+# "catch" ("her hair catching the warm light"), "draw" ("draws a breath"),
+# "find" ("finds the words"). The list must earn its flags -- an act guard
+# that fires on scenery is one a maintainer learns to ignore.
+_MANIPULATION_STEMS = (
+    "grip", "grab", "take", "took", "hold", "held", "pull", "push", "press",
+    "lift", "open", "close", "drop", "place", "put", "set", "hand", "accept",
+    "drink", "eat", "clutch", "seize", "tug", "twist", "touch", "grasp",
+    "wrap", "pick", "pocket", "snatch", "shove", "haul",
+)
+_MANIPULATION_VERBS = "|".join(_inflect(stem) for stem in _MANIPULATION_STEMS)
+
+# The player's own body is not a new object. An act on it re-describes what
+# they are doing with themselves, which is elaboration however it is worded --
+# "pushes herself upright" for a declared "slowly stands up".
+_OWN_BODY_NOUNS = frozenset("""
+hand hands finger fingers fist fists arm arms elbow elbows chest head hair
+face eye eyes ear ears tail tails mouth lips lip throat neck shoulder shoulders
+back knee knees leg legs foot feet body breath breaths weight skin palm palms
+cheek cheeks jaw brow chin waist hip hips heart lungs ribs stomach nose tongue
+herself himself themselves itself myself yourself ourselves
+""".split())
+
+# The DIRECT object a verb takes -- the noun it acts ON, with no preposition
+# in between. "grip the edge" is taking hold of the world; "pressed flat
+# AGAINST the cold metal" is a body bracing itself, and reading that as
+# seizing the metal is how a guard starts crying wolf on ordinary prose.
+# The captured group is the whole noun phrase after the article; the HEAD noun
+# is its last word, so "the warm light" reads as "light" rather than "warm".
+_DIRECT_OBJECT_RE = re.compile(
+    r"^(?:\s+(?!(?:against|on|onto|at|to|from|with|beneath|under|over|into|"
+    r"in|toward|towards|across|by|around|through|near|beside|behind)\b)"
+    r"[A-Za-z']+){0,2}\s+(?:the|a|an)"
+    # Stop the noun phrase at a preposition or conjunction, or "the edge of
+    # the console" reads its head noun as "the".
+    r"((?:\s+(?!(?:of|in|on|at|to|from|with|for|as|and|but|by|into|onto)\b)"
+    r"[A-Za-z']+){1,3})", re.I)
+
+
+def _undeclared_world_object(clause, declared_low):
+    """The world object a clause has the player take hold of, when the player's
+    own declaration never mentions it. None when the clause touches only their
+    own body, reaches for nothing, or names something they already declared."""
+    for match in re.finditer(rf"\b(?:{_MANIPULATION_VERBS})\b", clause, re.I):
+        obj = _DIRECT_OBJECT_RE.match(clause[match.end():])
+        if not obj:
+            continue
+        phrase = obj.group(1).split()
+        noun = phrase[-1].casefold()
+        # A phrase headed by the player's own body is elaboration whatever
+        # sits in front of it: "the edge of the console" is the console.
+        if noun in _OWN_BODY_NOUNS or any(
+                w.casefold() in _OWN_BODY_NOUNS for w in phrase):
+            continue
+        if re.search(rf"\b{re.escape(noun)}", declared_low):
+            continue
+        return noun
+    return None
+
+
+def _check_player_act_authority(resolved_event, declared_actions, player_name,
+                                other_names=(), declared_text=""):
+    """Physical acts a resolved_event gives the PLAYER that they did not declare
+    (live: Elevator Adventure t63 -- the player said only "Let's get going?" and
+    the Director had them take a bottle, drink from it and nod; t59 -- the player
+    ASKED "I hope you don't mind if I lean on you" and the Director performed the
+    leaning for them).
 
     Adding detail to a declared act is legitimate and is NOT flagged -- the
     Director is supposed to render an act richly. What this catches is an act
@@ -2118,36 +2427,72 @@ def _check_player_act_authority(resolved_event, declared_actions, player_name):
     beat later, so the same moment happens twice and the scene falls out of
     order.
 
-    Scoped to the unambiguous case: the player declared NO action at all this
-    beat, so any physical act attributed to them is invented by construction.
-    A beat WITH declared actions is left alone, because separating elaboration
-    from addition there needs more than a verb list.
+    Two scopes, as for characters (`_check_character_act_authority`) -- but the
+    second is drawn differently, because a character's latitude is not the
+    player's. The Director may elaborate a character freely and is narrowed
+    only on MOVEMENT; the player owns all of their conduct, so the question
+    here is not "what kind of act" but "is this act the one they declared".
+
+    * The player declared NO action this beat: any act is invented by
+      construction, and the full verb list applies. Unchanged.
+
+    * The player declared actions: rendering those richly is the Director's
+      job and stays untouched however it is worded -- "pushes herself upright"
+      elaborates a declared "slowly stands up" and shares not one word with it,
+      so no vocabulary test can separate the two. What CAN be separated is
+      WHAT the act touches. Elaboration re-describes the player's own body;
+      fabrication reaches out and takes hold of the world. So this narrows to
+      the one addition that is both unambiguous and consequential: the player
+      given a grip on a world object their declaration never mentions.
+
+      Live, chat 56 ("Run!") t10: the player typed `"Heh? What are we doing
+      what's going on?" You look genuinely confused.` and the resolve wrote
+      "her hands coming up to grip the edge of the console, fingers finding a
+      lever as if to steady herself". Perception copied it into the player's
+      OWN view as "I grip the console edge", the narrator rendered it as fact,
+      and the player's very next input was "Which lever?!" -- the fabricated
+      act replayed a beat later, which is the exact failure this guard was
+      written to stop. The old blanket `if declared_actions: return []` let it
+      through, and this player narrated a gesture on every single beat, so the
+      guard was disarmed for the entire story.
     """
-    if declared_actions:
+    if not player_name:
         return []
-    forms = _player_name_forms(player_name)
+    declared_low = None
+    if declared_actions:
+        declared_low = " ".join(
+            f"{a.get('attempt', '')} {a.get('observable', '')}"
+            for a in declared_actions if isinstance(a, dict)
+        ).casefold() + " " + str(declared_text or "").casefold()
     warnings = []
-    for sentence in _player_subject_sentences(resolved_event, player_name):
-        # Speech attribution ("Hinami says, ...") is not a physical act; the
-        # quote itself is guarded separately by the dialogue_log check.
-        without_quotes = re.sub(r'"[^"]*"|“[^“”]*”', " ", sentence)
-        # Only the sentence's MAIN verb counts -- the act must be what the
-        # player is doing, not a word appearing anywhere in a long sentence.
-        # "The Stranger asks Mara how she is holding up" has the player merely
-        # ASKING; "holding" belongs to a subordinate clause about someone else.
-        for form in forms:
-            match = re.match(rf"^{re.escape(form)}(?:'s)?\b", without_quotes)
-            if match:
-                tail = without_quotes[match.end():]
-                break
-        else:
+    all_names = [player_name] + [
+        n for n in (other_names or []) if n and n != player_name]
+    for sentence, subject in _sentence_subjects(resolved_event, all_names):
+        if subject != player_name:
             continue
-        head = " ".join(re.findall(r"[A-Za-z']+", tail)[:3])
-        if re.search(rf"\b(?:{_PLAYER_ACT_VERBS})\b", head, re.I):
+        # Speech attribution ("Hinami says, ...") is not a physical act; the
+        # quote itself is guarded separately by the dialogue_log check and by
+        # `_check_prose_quote_authority`.
+        without_quotes = re.sub(r'"[^"]*"|“[^“”]*”', " ", sentence)
+        tail = _strip_subject(without_quotes, subject)
+        # Per conjunct, not three words from the subject: one subject governs
+        # several verbs, and a window measured from the name sees only the
+        # first (see `_predicate_heads`).
+        for head, clause in _predicate_heads(tail, 3):
+            if declared_low is None:
+                if not re.search(rf"\b(?:{_PLAYER_ACT_VERBS})\b", head, re.I):
+                    continue
+                detail = ""
+            else:
+                noun = _undeclared_world_object(clause, declared_low)
+                if not noun:
+                    continue
+                detail = f" (undeclared hold on {noun!r})"
             warnings.append(
-                "Player act not declared this beat (player-act authority): "
-                f"{sentence[:120]!r}"
+                "Player act not declared this beat (player-act authority)"
+                f"{detail}: {sentence[:120]!r}"
             )
+            break
     return warnings
 
 
@@ -3725,7 +4070,18 @@ _YOU_INTERIOR = re.compile(
     r"remember|remembered|decide|decided|sense|sensed)\b"
     r"|\b(?:" + "|".join(re.escape(w) for w in _INTERIOR_STATES) +
     r")\s+(?:grips|grip|floods|flood|washes|wash|rises|rise|takes|take|"
-    r"fills|fill|seizes|seize|surges|surge)\s+(?:through\s+)?you\b",
+    r"fills|fill|seizes|seize|surges|surge)\s+(?:through\s+)?you\b"
+    # A named interior state anywhere in a clause that also reaches for the
+    # player. The three patterns above all require the state to sit directly
+    # beside "you"/"your" or to govern it through a short verb list, and prose
+    # does not oblige: chat 56 ("Run!") t6 rendered the Director's invented
+    # "the terror in her eyes has begun to recede" as "The terror that had
+    # been living wide-open in YOUR eyes pulls back to something smaller",
+    # where "your" attaches to "eyes" and the verb is "pulls back". One word
+    # out of reach of every branch, and the guard was silent.
+    r"|\b(?:the|that|this|a|an)\s+(?:"
+    + "|".join(re.escape(w) for w in _INTERIOR_STATES)
+    + r")\b(?=[^.!?]{0,60}\byou(?:r)?\b)",
     re.I)
 
 
