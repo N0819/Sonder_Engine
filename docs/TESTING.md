@@ -6,22 +6,55 @@ deliberately different verification levels.
 ## Test commands
 
 ```bash
-make test-fast     # broad Python suite, excluding explicitly marked slow tests
-make test-full     # every Python regression test
+make test-full     # every Python regression test (~36s)
+make test-lf       # last-failed first, then the rest -- the fix-verify loop
 make test-browser  # optional Chromium behavior tests
-make check-fast    # compile, structure/map freshness, then test-fast
-make check         # compile, code map, structure checks, then test-full
+make check-fast    # compile, structure/map freshness, then the full suite
+make check         # compile, code map, structure checks, then the full suite
+make test-fast     # CI matrix-breadth only -- see the warning below
 ```
 
-`make test` remains an alias for the full Python suite. Tests requesting the
-shared `temp_db` fixture are marked `slow` during collection: an instrumented
-local run measured their isolated database setup at roughly 1.2--1.6 seconds
-per test. This makes the fast tier a broad set of pure contracts, schemas,
-spatial rules, prompt boundaries, and frontend guards while the full tier
-retains every persistence invariant. Other tests should receive the `slow`
-marker only when measured cost shows that they exercise similarly expensive
-concurrency or integration boundaries. Never mark a test slow merely because
-it is inconvenient or intermittently failing.
+`make test` remains an alias for the full Python suite. **Both `check` and
+`check-fast` now run every test**; they differ only in that `check`
+regenerates `docs/CODE_MAP.md` while `check-fast` verifies the copy on disk is
+current.
+
+### Why the fast tier is no longer a tier you should use
+
+Tests requesting the shared `temp_db` fixture are still marked `slow` during
+collection, and `make test-fast` still deselects them. Do not reach for it to
+check your own work: it skips **159 of 252 test files**, including the
+persistence and information-firewall suites — the invariants this repo exists
+to keep honest. It is kept for one job, the CI matrix-breadth run, which proves
+the pure-contract tests pass on a second interpreter without paying for the
+database tier twice.
+
+That split was a real trade when it was written. `db.init()` is fsync-bound —
+`executescript(SCHEMA)` auto-commits ~117 DDL statements against a brand-new
+file — and a `temp_db` setup measured 1.2–1.6s on a loaded checkout against
+test bodies of 0.02–0.10s. That one call was ~90% of the suite's wall clock.
+
+Moving the fixture's temp directory to tmpfs (`tests/conftest.py`,
+`_fast_tmp_dir`) removed it: **15m35s → 36s for all 3799 tests**, measured.
+Nothing about the database changed — same schema, same WAL, same isolation,
+same per-test file; only the storage backing moved, so no test can tell the
+difference. `ENGINE_TEST_TMPDIR` overrides the location, and platforms without
+`/dev/shm` fall back to tempfile's default and are merely slow, not wrong.
+
+Apply the `slow` marker to a new test only when measured cost shows it
+exercises similarly expensive concurrency or integration boundaries. Never mark
+a test slow because it is inconvenient or intermittently failing.
+
+### On running only the tests near what you changed
+
+Investigated and deliberately **not** built. A subsystem partition of the 252
+test files was designed and simulated against 300 real commits: it would run a
+median 42% of the suite, ~2x, at the cost of a mapping table that must be
+maintained forever and that leaks in ways nothing detects — most sharply for
+tests that couple by `monkeypatch.setattr("agents.director._foo", ...)`, a
+string path no import graph can see. Against a 36-second full suite that is not
+a trade worth making. Use `make test-lf` while iterating and run everything
+before you are done.
 
 A fast-tier test must also be order-independent on a clean checkout. Do not let
 pure prompt or schema tests call runtime settings helpers that implicitly open
