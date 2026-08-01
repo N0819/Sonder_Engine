@@ -44,7 +44,7 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 3455 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 3470 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1977 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 493 |  | — |
 | `scene.py` | 1234 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
@@ -490,10 +490,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 3446 | 10 lines |
-| `presets()` | 3437 | 2 lines |
-| `active_preset()` | 3440 | 2 lines |
-| `nsfw_enabled()` | 3443 | 2 lines |
+| `get_prompt()` | 3461 | 10 lines |
+| `presets()` | 3452 | 2 lines |
+| `active_preset()` | 3455 | 2 lines |
+| `nsfw_enabled()` | 3458 | 2 lines |
 
 ### `providers.py`
 
