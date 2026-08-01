@@ -91,6 +91,16 @@ class PipelineContext:
     _simulation_clock: Optional[dict] = None
 
     warnings: list[str] = field(default_factory=list)
+    # What the deterministic layer DID with this beat's model output, in the
+    # Director's own terms, carried to the NEXT beat through engine_notices.
+    #
+    # Distinct from `warnings`, which is a developer channel nothing in
+    # production reads (docs/UNBUILT.md 1.11). This one is for the model: when
+    # commit silently reinterprets or discards something it emitted, saying so
+    # is the difference between a mistake it repeats forever and one it can
+    # correct. A stage that cannot see what happened to its output is
+    # guessing every beat.
+    engine_feedback: list[str] = field(default_factory=list)
     _extra: dict[str, Any] = field(default_factory=dict)
 
     def get(self, key: str, default=None):
@@ -166,3 +176,9 @@ class PipelineContext:
 
     def add_warning(self, msg: str):
         self.warnings.append(msg)
+
+    def tell_director(self, msg: str):
+        """Report what the engine made of the model's output, for next beat."""
+        msg = str(msg or "").strip()
+        if msg and msg not in self.engine_feedback:
+            self.engine_feedback.append(msg)

@@ -138,6 +138,14 @@ _ENFORCEABLE_PREFIXES = (
     # _check_player_person) only fires on the player's literal name outside
     # quoted dialogue -- unambiguous enough to spend a rewrite on.
     "Player named in third person",
+    # The player's own interiority. The narrator renders the player-facing
+    # slice; it does not get to tell the player what their character feels.
+    # Enforced rather than warned because it is the LAST stage -- a feeling
+    # asserted here reaches the reader as fact and becomes what the story
+    # said happened. The check exempts anything already in the view, so it
+    # only ever fires on what the narrator added on its own, which is
+    # unambiguous enough to spend a rewrite on.
+    "Narrator asserted the player's interior state",
     # F1: a response rendered before its stimulus breaks causality on the
     # page; the check (_check_event_order) fires only on a strict verbatim
     # position inversion between two located quotes.

@@ -181,3 +181,101 @@ class TestAspectsGetTheirOwnRanking:
     def test_an_aspect_never_outranks_the_beat_itself(self, bank):
         """It breaks ties; it does not win arguments about what the beat is."""
         assert memory._ASPECT_WEIGHT < 1.0
+
+
+class TestARestoreDoesNotUndoARebuild:
+    """Checkpoint restore puts stored vectors back byte-identically —
+    deliberately, so a reroll never re-embeds a bank and never risks a
+    provider hiccup downgrading it to the crc32 fallback. That is correct on
+    its own terms, and it has a consequence nobody chose: a checkpoint taken
+    BEFORE an embedding rebuild carries the old vectors AND the old model key,
+    so restoring it silently undoes the rebuild.
+
+    Measured live: rerolling one turn of a 642-memory story put 637 rows back
+    on `cheap:crc32:256` after a completed rebuild. The host saw only the
+    rebuild prompt reappearing; what was actually lost was the rebuild.
+
+    Re-embedding inline would be the wrong fix — it is what the verbatim
+    restore exists to avoid, and it would put a provider call on the reroll
+    path. The reconciler already does this work in the background, resumably,
+    and refuses to write a fallback over real vectors.
+    """
+
+    def test_restore_hands_the_bank_back_to_the_reconciler(self):
+        import inspect
+
+        import checkpoints
+        # restore_checkpoint delegates to _restore_checkpoint_body,
+        # which is where the work (and the reconciliation) lives.
+        src = inspect.getsource(checkpoints._restore_checkpoint_body)
+        assert "start_rebuild_if_needed" in src
+
+    def test_a_failing_reconciler_never_fails_the_restore(self):
+        """A maintenance task must not be able to break a reroll."""
+        import inspect
+
+        import checkpoints
+        src = inspect.getsource(checkpoints._restore_checkpoint_body)
+        i = src.index("start_rebuild_if_needed")
+        assert "try:" in src[max(0, i - 300):i]
+        assert "except Exception" in src[i:i + 300]
+
+
+class TestCarryingARebuildBackThroughSavedStates:
+    """A checkpoint stores each memory's vector verbatim so a restore never
+    re-embeds a bank. Correct — and it means a checkpoint written BEFORE a
+    rebuild holds the old vectors and the old model key, so rolling back to it
+    undoes the rebuild.
+
+    The repair re-embeds NOTHING. A vector is a pure function of the memory's
+    content, and the same memory recurs unchanged across every checkpoint:
+    chat 38 held 40,224 memory copies across 118 checkpoints and only 526
+    distinct by content. So it substitutes vectors already earned, joined on
+    (character, content). Measured on that story: 36,392 saved memories
+    repaired in 23.8 seconds and zero embedding calls, against 36,392 API
+    calls for the brute-force alternative.
+    """
+
+    def test_the_join_key_is_the_content_and_the_character(self):
+        """Two minds can hold word-identical memories that are still different
+        rows, and a dump carries no row id to join on."""
+        import memory
+        a = memory._memory_vector_key(1, "she crossed the bridge")
+        b = memory._memory_vector_key(2, "she crossed the bridge")
+        c = memory._memory_vector_key(1, "she crossed the  bridge  ")
+        assert a != b
+        assert a == c, "whitespace must not make a memory a different memory"
+
+    def test_a_dry_run_writes_nothing(self, bank):
+        import memory
+        r = memory.rebuild_checkpoint_embeddings(dry_run=True)
+        assert r["dry_run"] is True and r["rewritten"] == 0
+
+    def test_a_bank_with_nothing_rebuilt_is_a_noop(self, bank):
+        """Nothing to substitute FROM means nothing to do — never a blanking."""
+        import memory
+        r = memory.rebuild_checkpoint_embeddings(dry_run=False)
+        assert r["rewritten"] == 0 and r["memories_repaired"] == 0
+
+    def test_unmatched_rows_are_reported_not_blanked(self):
+        """A saved memory since deleted has no live vector to inherit. It is
+        left exactly as it was — the alternative is destroying rollback
+        history to tidy a number."""
+        import inspect
+
+        import memory
+        src = inspect.getsource(memory.rebuild_checkpoint_embeddings)
+        # The unmatched branch increments the counter and moves on; nothing
+        # between the miss and the next row touches the saved vector.
+        i = src.index("if hit is None:")
+        branch = src[i:i + 220]
+        assert "memories_unmatched" in branch and "continue" in branch
+        assert "embedding" not in branch.split("continue")[0]
+
+    def test_a_blob_is_proven_before_it_replaces_history(self):
+        import inspect
+
+        import memory
+        src = inspect.getsource(memory.rebuild_checkpoint_embeddings)
+        assert "check = json.loads(text)" in src
+        assert "!= len(blob.get(\"memories\")" in src

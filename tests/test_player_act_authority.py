@@ -268,3 +268,73 @@ def test_empty_and_missing_inputs_are_noops():
     assert _check_character_speech_authority("", SILENT) == []
     assert _check_character_speech_authority("Elyndra says something.", []) == []
     assert _check_character_speech_authority("Elyndra says something.", [""]) == []
+
+
+# --- what the player FEELS is theirs as much as what they do ----------------
+#
+# Live, alpha 6.3, chat 52 "Elyndra — Hinami ⎇16 ⎇1" turn 19. The player typed
+# only "W-what did you do to me!?" and director_resolve wrote:
+#
+#   "Elyndra's teasing smile falters completely at the shrill, PANICKED cry."
+#   "...as she takes in the GENUINE TERROR in those wide eyes."
+#
+# Perception then copied both into Elyndra's own view, so an interior state the
+# player never declared became something a second mind had observed as fact.
+# The Director owns objective causality; it does not own what is inside the
+# protagonist. It may report every observable a body shows and must stop there.
+
+from agents.common import _check_player_interiority_authority
+
+PLAYER = "Hinami"
+
+
+def test_the_live_failure_is_caught():
+    assert _check_player_interiority_authority(
+        "Elyndra takes in the genuine terror in Hinami's wide eyes.",
+        PLAYER, "W-what did you do to me!?")
+
+
+def test_the_certainty_word_is_reported_with_it():
+    """'genuine' is unremarkable alone and damning beside 'terror' — an
+    observer cannot know an interior state is authentic."""
+    got = _check_player_interiority_authority(
+        "Elyndra sees the genuine terror in Hinami's eyes.", PLAYER)
+    assert got and "genuine" in got[0]
+
+
+def test_observable_surface_is_always_allowed():
+    """Trembling, wide eyes, a shrill cry — the body's own showing is the
+    Director's to report, and is what the prose should carry."""
+    for prose in ("Hinami trembles, her golden ears flattened.",
+                  "Hinami's eyes go wide and she steps back.",
+                  "A shrill cry comes from the bundle where Hinami is."):
+        assert _check_player_interiority_authority(prose, PLAYER) == [], prose
+
+
+def test_a_feeling_the_player_declared_is_theirs_to_declare():
+    assert _check_player_interiority_authority(
+        "Hinami is terrified and cannot speak.", PLAYER,
+        "I am terrified, I can't speak") == []
+
+
+def test_an_npcs_interior_state_is_not_the_players_business():
+    """The Director resolves NPC conduct; this guard is only about the player."""
+    assert _check_player_interiority_authority(
+        "Elyndra feels a flicker of doubt.", PLAYER) == []
+
+
+def test_a_pronoun_subject_is_not_guessed_at():
+    """"her terror" in a two-woman scene could be either of them, and guessing
+    would flag ordinary NPC description."""
+    assert _check_player_interiority_authority(
+        "She takes in the terror in those wide eyes.", PLAYER) == []
+
+
+def test_interior_verbs_are_caught_too():
+    assert _check_player_interiority_authority(
+        "Hinami realises what has happened to her.", PLAYER)
+
+
+def test_empty_and_missing_inputs_are_noops():
+    assert _check_player_interiority_authority("", PLAYER) == []
+    assert _check_player_interiority_authority("Hinami is afraid.", "") == []

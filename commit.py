@@ -1495,6 +1495,7 @@ def interpret_attire_notes(diff, worn, entry=None):
     if not isinstance(notes, dict) or not notes:
         return diff
     marks = dict(diff.get("conditions") or {})
+    notes_read = diff.setdefault("_notes_read", [])
     for handle, text in notes.items():
         text = str(text or "").strip()
         if not text or attire_model.is_no_change_note(text):
@@ -1523,6 +1524,9 @@ def interpret_attire_notes(diff, worn, entry=None):
             diff.setdefault("add", []).append(name)
             if mark:
                 marks.setdefault(name, mark)
+            notes_read.append(
+                f"attire: read your note on {handle!r} as putting {name!r} on "
+                "them, since they were not wearing it.")
     if marks:
         diff["conditions"] = marks
     return diff
@@ -1679,7 +1683,16 @@ def prepare_scene_commit(ctx):
                 if isinstance(_st, dict):
                     _stations.setdefault(_who, _st)
 
-    sc = merge_scene_with_diff(prev_scene, diff)
+    _contact_report = []
+    sc = merge_scene_with_diff(prev_scene, diff, contact_report=_contact_report)
+    # Tell the Director what its re-descriptions were read AS. A hold it wrote
+    # under a new part noun was taken as the same limb MOVING; if it meant a
+    # second limb it can qualify the part next beat ("her other hand"), which
+    # is a correction it can only make if it knows the reading happened.
+    for _was, _now in _contact_report:
+        ctx.tell_director(
+            f"contact: read {_now} as {_was} moving, not as a second contact. "
+            "Qualify the part (left/right/other) if you meant a different limb.")
     if destruction:
         # Guard-approved departures (cast_changes) left stale positions
         # that merge's occupied-room refusal honored; vacate them and
@@ -1856,6 +1869,8 @@ def prepare_scene_commit(ctx):
         d = interpret_attire_notes(
             d, attire_model.flat_wearing(attire_model.normalize_regions(cur)),
             cur)
+        for _read in d.pop("_notes_read", None) or []:
+            ctx.tell_director(_read)
         # A whole-outfit write (`wearing` with no add/remove/replace) is what
         # director_establish sends. It used to `continue` straight past the
         # reconciliation below, which made it the one shape that could still
@@ -2147,6 +2162,11 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
                     "WHERE chat_id=? AND condition_id=?", (cid, op[1]))
                 expired += 1
 
+        # What the deterministic layer made of this beat's output, in the
+        # Director's own terms. Carried on the same channel as the mechanical
+        # notices because it is the same kind of message: here is what
+        # actually happened, as against what you asked for.
+        notices = list(notices) + list(getattr(ctx, "engine_feedback", []) or [])
         wset(cid, "engine_notices", notices)
 
     return {"fired": fired, "scheduled": scheduled, "expired": expired,
@@ -3994,6 +4014,26 @@ def _salience_of(text):
             s += 0.08
     return round(min(s, 0.95), 3)
 
+# Views that record no perceptible event. Matched on the engine's OWN
+# placeholders rather than on prose: `agents/perception.py` writes "an
+# unspecified area" when it cannot name a room, and `agents/character.py`
+# falls back to "You register nothing new this beat." Both mean the same
+# thing -- this mind perceived nothing this beat -- and neither is an episode.
+_EMPTY_VIEW_MARKERS = (
+    "you are in an unspecified area",
+    "you register nothing new",
+)
+
+
+def _is_empty_view(text):
+    """True when a perception view records no event worth remembering."""
+    body = " ".join(str(text or "").split()).strip().casefold().rstrip(".")
+    if not body:
+        return True
+    return any(body == m or body.startswith(m) and len(body) < len(m) + 25
+               for m in _EMPTY_VIEW_MARKERS)
+
+
 def prepare_memory_commit(ctx, *, scene=None):
     """Build and embed all per-character memory mutations without writes."""
     chat = ctx.chat
@@ -4038,6 +4078,7 @@ def prepare_memory_commit(ctx, *, scene=None):
         sh = json.loads(char_row["sheet"])
         st = json.loads(char_row["cstate"] or "{}")
         v = views.get(str(ccid))
+        episode_content = ""
         cname = character_name(sh)
         char_room = _room_of(sc, cname)
         room_data = (sc.get("rooms") or {}).get(char_room, {})
@@ -4071,7 +4112,32 @@ def prepare_memory_commit(ctx, *, scene=None):
         # emotional_context text was stored but valence/arousal stayed at their
         # 0.0 default on every memory (the memory editor showed them as always
         # zero). Mirror the label onto the numeric axes for this beat's memories.
-        _surface = (active_state.get("affect") or {}).get("surface") or {}
+        # THE MOOD THIS MEMORY WAS FORMED IN -- the character's RESOLVED affect,
+        # not the self-report they opened the beat with.
+        #
+        # `resolve_affect` is what turns a model's proposed mood into the one
+        # the character actually holds: decayed toward baseline, moved by this
+        # beat's appraisal, and cross-checked against the label. It runs at the
+        # psychology commit, ~500 lines below this one, so a memory minted here
+        # can never see it -- it took the raw proposal instead.
+        #
+        # Measured across the same characters: the raw self-report averages
+        # +0.773 with 0% negative, while their resolved affect averages +0.467
+        # with 22% negative. The two disagree by +0.31, and only one of them is
+        # a mood. Stored memories inherited the saturated one: newer stories
+        # sat at a median valence of +0.85 with 4 negatives in 3,162 rows,
+        # which is not an emotional axis, it is a constant -- and it silently
+        # disables everything downstream that reads affect.
+        #
+        # The stored value is last beat's resolution, i.e. the mood the
+        # character carried INTO this event. That is what encoding-time affect
+        # should be: how you felt while it was happening, before the beat's own
+        # appraisal moved you. The self-report is kept as the fallback for a
+        # character with no resolved affect yet (their first beat).
+        _surface = (((st.get("active_state") or {}).get("affect") or {})
+                    .get("surface") or {})
+        if not _surface:
+            _surface = (active_state.get("affect") or {}).get("surface") or {}
         try:
             _mem_valence = float(_surface.get("valence") or 0.0)
             _mem_arousal = float(_surface.get("arousal") or 0.0)
@@ -4212,6 +4278,24 @@ def prepare_memory_commit(ctx, *, scene=None):
                             ),
                         })
             episode_content = v
+            # A view that says only "you are somewhere unspecified" is the
+            # ABSENCE of an event, and an absence is not an episode. Minted
+            # anyway, it becomes a retrievable memory carrying no information:
+            # measured live, 356 rows across five stories -- 7.3% of the whole
+            # bank, and a THIRD of one story's -- were the single sentence
+            # "You are in an unspecified area.", all at salience 0.47, all
+            # identical, all eligible to be handed to a character instead of
+            # something that happened.
+            #
+            # It arises legitimately (an NPC off in unloaded space) and
+            # illegitimately (`character_room`'s docstring calls the same
+            # phrase "leaking a false empty view" from a position it could not
+            # resolve). The cause does not change the remedy: either way there
+            # is nothing to remember, so nothing is written. The turn still
+            # happened and the turn index still records it.
+            if _is_empty_view(episode_content):
+                episode_content = ""
+        if episode_content:
             pending_memories.append({
                 "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
                 "turn_idx": turn.idx, "kind": "episodic", "category": "episode",

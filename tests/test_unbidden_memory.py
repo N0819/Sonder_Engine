@@ -383,3 +383,44 @@ def test_ledger_untouched_for_a_character_with_no_probe(temp_db):
     ctx.character_results = {}
     led = _ledger_of(commit.prepare_memory_commit(ctx), char_id)
     assert led == cstate["unbidden"]
+
+
+class TestTheSemanticAxisAndItsInversionTrap:
+    """Unbidden recall gained a semantic distance term in alpha 6.3.1, and
+    the gate on it is the interesting part.
+
+    A row embedded by a different model scores 0.0 against any query. In
+    `search_memories` that makes it invisible — a silent omission. Here the
+    axis is INVERTED, so the same 0.0 reads as maximally contrasting and
+    unbidden recall would preferentially surface exactly the memories that
+    have not been rebuilt yet. One number, two opposite failures.
+    """
+
+    def test_the_axis_is_off_unless_almost_the_whole_bank_is_comparable(self):
+        import memory
+        assert memory._CONTRAST_SEMANTIC_COVERAGE >= 0.9, (
+            "a half-rebuilt bank would rank on which half a row is in")
+
+    def test_it_joins_the_token_axis_rather_than_replacing_it(self):
+        """The structural fields are exact and have carried this since the
+        beginning; the vector is a second opinion, not a successor."""
+        import memory
+        assert memory._CONTRAST_SEMANTIC <= 0.8
+
+    def test_a_stranded_bank_falls_back_to_the_old_behaviour(self, temp_db,
+                                                             monkeypatch):
+        """Degrade to the previous answer, never to a wrong one."""
+        import memory
+        import providers
+        seen = {}
+        real = memory.embed_texts_meta
+
+        def fake(texts):
+            got = real(texts)
+            seen["model"] = got.model_key
+            return got
+
+        monkeypatch.setattr(memory, "embed_texts_meta", fake)
+        # No rows at all -> no crash, no picks, and never an exception from
+        # the embedding path taking the function down with it.
+        assert memory.contrast_memory(1, 1, "anything", 5) == []
