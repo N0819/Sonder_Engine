@@ -774,3 +774,59 @@ class TestDerivedStateDoesNotAccumulate:
         assert attire.is_derived_state_note("silk robe loosened")
         assert attire.is_derived_state_note("bare at the torso")
         assert not attire.is_derived_state_note("she is shivering")
+
+
+class TestTheViewsReadThroughNormalisation:
+    """Every repair to the ledger's normalisation was reaching `regions` and
+    bypassing the two fields anyone reads first.
+
+    Chat 52, after the phantom-garment fix had already landed:
+
+        regions: torso: ... corset (unlaced and hanging open) ...   <- clean
+        wearing: [..., 'corset', 'worn', 'skirt']                   <- not
+
+    `attire_view` returned `entry.get("wearing")` and `entry.get("state")`
+    verbatim while normalising only the region lines, so a character was handed
+    a coherent breakdown of its body next to a flat list contradicting it. Both
+    views are READ paths -- they present the three representations agreeing
+    without writing anything back.
+    """
+
+    def _corrupt(self):
+        return {
+            "wearing": ["corset", "worn", "skirt"],
+            "state": ["bare at the groin", "bare at the head, groin"],
+            "regions": {"torso": {"garments": [
+                {"name": "corset", "state": "worn"},
+                {"name": "worn", "state": "worn"}]}},
+        }
+
+    def test_the_character_view_drops_a_phantom_from_wearing(self):
+        from agents.common import attire_view
+        view = attire_view(self._corrupt())
+        assert "worn" not in [str(w).casefold() for w in view["wearing"]]
+        assert "corset" in view["wearing"]
+
+    def test_the_character_view_does_not_pass_through_stale_state(self):
+        from agents.common import attire_view
+        view = attire_view(self._corrupt())
+        bare = [s for s in view["state"] if str(s).startswith("bare at the")]
+        assert len(bare) <= 1, view["state"]
+
+    def test_what_other_observers_are_told_is_normalised_too(self):
+        """`appearance_of` is the string handed to everyone who can see this
+        body -- a garment named "worn" there is one they can see."""
+        from scene import appearance_of
+        text = appearance_of("Elyndra", "a woman",
+                             {"attire": {"Elyndra": self._corrupt()}})
+        assert ", worn," not in text and not text.endswith(", worn")
+        assert "corset" in text
+
+    def test_a_healthy_entry_is_unchanged(self):
+        from agents.common import attire_view
+        view = attire_view({
+            "wearing": ["a worn leather jerkin"],
+            "state": [],
+            "regions": {"torso": {"garments": [
+                {"name": "a worn leather jerkin", "state": "worn"}]}}})
+        assert view["wearing"] == ["a worn leather jerkin"]
