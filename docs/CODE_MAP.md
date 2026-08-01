@@ -29,7 +29,7 @@
 | `chat_archive.py` | 1089 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1016 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 295 |  | `spatial` |
-| `commit.py` | 5607 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 5647 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `db.py` | 1447 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 193 |  | `db` |
 | `greetings.py` | 375 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
@@ -327,14 +327,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 4257 | 993 lines |
-| `prepare_scene_commit()` | 1644 | 445 lines |
-| `track_background_presences()` | 2730 | 225 lines |
-| `commit_world_entities()` | 2226 | 168 lines |
+| `prepare_memory_commit()` | 4297 | 993 lines |
+| `prepare_scene_commit()` | 1684 | 445 lines |
+| `track_background_presences()` | 2770 | 225 lines |
+| `commit_world_entities()` | 2266 | 168 lines |
 | `_prepare_destruction()` | 697 | 158 lines |
 | `update_place_graph()` | 72 | 153 lines |
-| `prepare_mapping_commit()` | 3572 | 133 lines |
-| `commit_mapping()` | 3707 | 120 lines |
+| `prepare_mapping_commit()` | 3612 | 133 lines |
+| `commit_mapping()` | 3747 | 120 lines |
 
 ### `db.py`
 

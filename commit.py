@@ -1463,7 +1463,24 @@ def _beat_voices(ctx, res):
 _NOTE_NAME_HEAD = 40
 
 
-def interpret_attire_notes(diff, worn, entry=None):
+def _garment_named_in(text, name):
+    """Does this beat's prose actually mention the garment a note is minting?
+
+    Matched on the head noun rather than the whole phrase: a note introduces
+    "linen shift" and the prose says "the hem of your shift". Any word of the
+    name that is long enough to be the garment itself counts, so a two-word
+    name matches on either.
+    """
+    body = str(text or "").casefold()
+    if not body:
+        return False
+    for word in re.findall(r"[a-z]+", str(name or "").casefold()):
+        if len(word) >= 4 and re.search(rf"\b{re.escape(word)}s?\b", body):
+            return True
+    return False
+
+
+def interpret_attire_notes(diff, worn, entry=None, prose=None):
     """Read an attire diff's free-form notes as the change they describe.
 
     `StateDiff.attire` had an untyped inner dict, and the commit loop below
@@ -1545,6 +1562,29 @@ def interpret_attire_notes(diff, worn, entry=None):
                     marks.setdefault(handle, name)
                     notes_read.append(
                         f"attire: read your note on {handle!r} as putting it on.")
+                continue
+            # A note may only INTRODUCE a garment the beat's prose actually
+            # mentions. Reading 3 exists for the case where the narration has
+            # been describing a shift since beat 0 while the ledger still holds
+            # the travel clothes off her card -- there, the prose says "shift"
+            # and the note is catching the ledger up. It cannot otherwise tell
+            # that from the Director simply imagining clothing, and the
+            # difference is not structural: "linen shift, hem rucked up" and
+            # "corset, unlaced and hanging open" are the same shape.
+            #
+            # What separates them is whether the story ever said it. Measured
+            # on chat 52: a `corset` and a `skirt` reached Elyndra's ledger and
+            # neither word appears in ANY of the 23 turns of narration. She was
+            # carrying two garments the fiction had never mentioned, on top of
+            # the four her card authors.
+            #
+            # `prose` omitted means no gate, so every existing caller and the
+            # rerun path behave exactly as before.
+            if prose is not None and not _garment_named_in(prose, name):
+                notes_read.append(
+                    f"attire: ignored your note on {handle!r} -- it would have "
+                    f"put {name!r} on them, and this beat's prose never "
+                    "mentions it. Use `add` if they really are wearing it.")
                 continue
             diff.setdefault("add", []).append(name)
             if mark:
@@ -1893,7 +1933,7 @@ def prepare_scene_commit(ctx):
 
         d = interpret_attire_notes(
             d, attire_model.flat_wearing(attire_model.normalize_regions(cur)),
-            cur)
+            cur, prose=str(res.get("resolved_event") or ""))
         for _read in d.pop("_notes_read", None) or []:
             ctx.tell_director(_read)
         # A whole-outfit write (`wearing` with no add/remove/replace) is what
