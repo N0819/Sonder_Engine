@@ -8,35 +8,6 @@ background:radial-gradient(circle at 72% -10%,rgba(82,105,175,.15),transparent 3
 radial-gradient(circle at 10% 95%,rgba(108,73,166,.11),transparent 30%),var(--bg);
 color:var(--fg);height:100vh;height:100dvh;overflow:hidden;position:relative}
 
-/* ---- Scene mood ---- */
-/* An ambient tint driven purely client-side by a keyword read of the latest
-   (or, while scrolling, most-visible) turn's prose -- see applySceneMood /
-   observeSceneMood in chat.js. No backend signal required.
-   WHERE it is painted is the load-bearing decision: #msgs paints it, so the
-   mood colours THE STORY AREA AND NOTHING ELSE. It used to be a fixed
-   full-viewport layer (body::before, z-index:-1) plus a swap of --acc/--acc2,
-   which meant a keyword read of the prose repainted the sidebar buttons, the
-   tab underline, every focus ring, the modal header and most border colours,
-   while every translucent panel additionally sampled the wash underneath it.
-   Interface chrome changing identity because a character got scared reads as
-   a rendering fault, not as atmosphere. Colouring the transcript itself makes
-   that structural: there is no tinted layer under the chrome to bleed through.
-   HOW MUCH: tuned on a real screen, not derived. A first pass at ~.30 read as
-   far too intense and came back twice for 30% off, landing at ~.15 (calm .08).
-   That is a touch above the original ~.12 -- enough to carry the effect now
-   that the accent swap is gone, without the transcript looking gelled.
-   `calm` is tinted too -- with nothing for the default state, the quarter of
-   turns that read as calm made the feature look broken, and a transition is
-   only legible if both ends of it have a colour. (Measured over the real
-   database: 43% tense, 27% calm, 23% warm, 7% somber, 0.4% triumphant.)
-   A solid background-color genuinely animates, which a gradient does not --
-   transitioning the gradient directly, as the first version did, was a silent
-   no-op that snapped on every scroll-driven re-evaluation. */
-body[data-mood="calm"]{--mood-tint:rgba(58,86,140,.08)}
-body[data-mood="tense"]{--mood-tint:rgba(158,52,52,.15)}
-body[data-mood="warm"]{--mood-tint:rgba(190,138,62,.14)}
-body[data-mood="somber"]{--mood-tint:rgba(66,80,108,.15)}
-body[data-mood="triumphant"]{--mood-tint:rgba(178,152,54,.15)}
 
 /* OPAQUE CHROME (an invariant, enforced rule by rule below): every surface
    that sits DIRECTLY over the page background -- #side, #top, #composer,
@@ -65,12 +36,11 @@ body[data-mood="triumphant"]{--mood-tint:rgba(178,152,54,.15)}
    now an ordinary positioned layer at z-index 0 with #app lifted to 1 above
    it. Unambiguous, and it survives someone later giving body or #app a
    background of its own.
-   #msgs is transparent apart from the mood tint, so the image shows through
-   the transcript and the mood grades it; the chrome around it is opaque and
-   covers the picture, which is intended.
-   Two stacked layers cross-fade opacity, for the same reason the mood tint
-   is a solid colour: a background-image swap on one element cannot be
-   transitioned, so it would snap between rooms instead of dissolving. */
+   #msgs is transparent, so the image shows through the transcript; the chrome
+   around it is opaque and covers the picture, which is intended.
+   Two stacked layers cross-fade opacity because a background-image swap on one
+   element cannot be transitioned, so it would snap between rooms instead of
+   dissolving. */
 /* visibility rides the same transition as opacity: it animates discretely,
    flipping to hidden only at the END of the fade-out and back to visible at
    the START of the fade-in -- so the dissolve is untouched, but once faded
@@ -109,10 +79,6 @@ body.has-backdrop .prose{background:rgba(9,12,19,var(--bd-panel,.89));
 border:1px solid rgba(255,255,255,.055);border-radius:12px;
 padding:13px 18px 15px;max-width:68ch;
 box-shadow:0 12px 34px rgba(0,0,0,.26);text-shadow:0 1px 2px rgba(0,0,0,.5)}
-/* Over a picture the mood only needs to GRADE it: the image and its veil are
-   already doing the atmospheric work, and a full-strength wash would flatten
-   what was just paid for. */
-body.has-backdrop #msgs{background-color:color-mix(in srgb,var(--mood-tint,transparent) 50%,transparent)}
 @media(prefers-reduced-motion:reduce){
   #scene-backdrop,.bd-layer,.bd-veil{transition:none}
 }
@@ -128,8 +94,7 @@ button:hover:not(:disabled){border-color:var(--acc);background:linear-gradient(1
 button:active:not(:disabled){transform:translateY(1px)}
 button:disabled{opacity:.5;cursor:default}
 /* Routed through --acc/--acc2 rather than a hardcoded blue so the accent is
-   themeable in one place. (These properties were briefly repurposed by the
-   scene-mood system; they no longer are -- see the mood block above.) */
+   themeable in one place. */
 button.primary{border-color:var(--acc);
 background:linear-gradient(180deg,var(--acc),color-mix(in srgb,var(--acc) 70%,#0b0e14));color:#fff}
 button.primary:hover:not(:disabled){background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 80%,#fff),var(--acc))}
@@ -217,11 +182,7 @@ font-size:12px;background:transparent;color:var(--fg);opacity:.7}
 border-color:color-mix(in srgb, var(--acc) 55%, var(--bd))}
 #msgs{flex:1;overflow:auto;padding:14px 18px;display:flex;
 flex-direction:column;gap:12px;scroll-behavior:smooth;
-/* The scene-mood wash. A solid background-color genuinely animates (a
-   gradient does not -- see the mood block at the top of this file), so the
-   light changes over ~2s instead of snapping on every scroll-driven
-   re-evaluation. */
-background-color:var(--mood-tint,transparent);transition:background-color 1.8s ease}
+}
 /* `content-visibility` is the single biggest thing this file does for power.
    A long story is hundreds of turns, and with a backdrop up EVERY one of them
    carries a 34px box-shadow -- composited, and re-evaluated on every scrolled
@@ -742,3 +703,34 @@ transition:width .3s ease}
 /* An inline caution inside help text — the embeddings-role note, where the
    consequence of a change is not visible from the control itself. */
 .warn-note{color:#d9c27e}
+
+/* ---- Effects level ---- */
+/* Set by theme-init.js from the Appearance menu; see the comment there for why
+   this exists. The short version: a composited animation costs the main thread
+   nothing and costs the MACHINE a repaint of every affected pixel at the panel
+   refresh rate, in the browser's compositor and again in the system's. These
+   rules stop things moving without stopping them being drawn.
+
+   `animation:none` rather than `animation-play-state:paused` on purpose --
+   paused still leaves the element on its own composited layer holding GPU
+   memory, and we want the layer gone, not held still. */
+:root[data-effects="reduced"] #weather-fx .wfx-layer,
+:root[data-effects="reduced"] #weather-fx .wfx-drift {
+  animation: none;
+}
+:root[data-effects="reduced"] #scene-backdrop,
+:root[data-effects="reduced"] .bd-layer,
+:root[data-effects="reduced"] .bd-veil {
+  transition: none;
+}
+/* Weather is not drawn at all at `off`, so there is nothing to hold still. The
+   host is hidden rather than the layers removed so that turning it back on is
+   a repaint and not a rebuild. weather-fx.js also stops generating tiles. */
+:root[data-effects="off"] #weather-fx {
+  display: none;
+}
+:root[data-effects="off"] #scene-backdrop,
+:root[data-effects="off"] .bd-layer,
+:root[data-effects="off"] .bd-veil {
+  transition: none;
+}
