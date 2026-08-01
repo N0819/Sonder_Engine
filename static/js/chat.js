@@ -473,19 +473,56 @@ function turnStatusStop() {
 }
 
 // Reading scrollHeight straight after writing text into #live forces a
-// synchronous layout, and the token path does that PER TOKEN for the whole
-// length of a run. Coalesced into one write per painted frame instead: the log
-// still sits at the bottom of every frame anyone sees, and stops re-laying-out
-// between the frames nobody does.
-let _liveScrollPinned = false;
-function pinLiveLog() {
-  if (_liveScrollPinned) return;
-  _liveScrollPinned = true;
-  requestAnimationFrame(() => {
-    _liveScrollPinned = false;
-    const L = $("#live");
-    if (L) L.scrollTop = L.scrollHeight;
-  });
+// synchronous layout, and the token path used to do that PER TOKEN for the
+// whole length of a run. It is now one write per painted frame, inside
+// `liveFlush` below: the log still sits at the bottom of every frame anyone
+// sees, and stops re-laying-out between the frames nobody does.
+
+// The toggle is a fixed element in the document, so looking it up once beats
+// a `querySelector` per token.
+let _streamTgl = null;
+function _streamOn() {
+  if (!_streamTgl) _streamTgl = $("#streamtgl");
+  return !!(_streamTgl && _streamTgl.checked);
+}
+
+// Token deltas arrive far faster than a screen can show them, and the naive
+// spelling of this did three things PER TOKEN: a `$("#streamtgl")` document
+// query, a `getElementById`, and `p.textContent += delta`.
+//
+// The last is the expensive one, and it is not linear. Reading `textContent`
+// serialises the node, and assigning it destroys the text node and builds a
+// new one -- so appending the Nth token copies the whole transcript again,
+// making the visible cost of streaming grow as the square of its length, with
+// a layout invalidation on every single token. On a fast local model emitting
+// hundreds of tokens a second that is the most expensive thing the page does.
+//
+// Deltas are buffered per step and flushed once per animation frame instead,
+// which caps DOM work at the refresh rate no matter how fast tokens arrive,
+// and appends a text node rather than rewriting the whole string. The scroll
+// pin rides along in the same frame, so it stops being a second rAF per token.
+// Nothing reads this element's text back -- it is display-only -- so adjacent
+// text nodes are as good as one, and `generation_reset` clears both the node
+// and any deltas still buffered behind it.
+const _liveBuf = new Map();
+let _liveFlushQueued = false;
+
+function liveFlush() {
+  _liveFlushQueued = false;
+  for (const [key, text] of _liveBuf) {
+    const p = document.getElementById("lt-" + safeId(key));
+    if (p) p.append(text);
+  }
+  _liveBuf.clear();
+  const L = $("#live");
+  if (L) L.scrollTop = L.scrollHeight;
+}
+
+function liveAppend(key, delta) {
+  _liveBuf.set(key, (_liveBuf.get(key) || "") + delta);
+  if (_liveFlushQueued) return;
+  _liveFlushQueued = true;
+  requestAnimationFrame(liveFlush);
 }
 
 function liveStep(key, label) {
@@ -502,12 +539,9 @@ function handleEvt(ev) {
     liveStep(ev.key, ev.label);
     turnStatusSet(ev.key, ev.label);
   } else if (ev.type === "token") {
-    const p = document.getElementById("lt-" + safeId(ev.key));
-    if (p && $("#streamtgl").checked) {
-      p.textContent += ev.delta;
-      pinLiveLog();
-    }
+    if (_streamOn()) liveAppend(ev.key, ev.delta);
   } else if (ev.type === "generation_reset") {
+    _liveBuf.delete(ev.key);
     const pre = document.getElementById(
       "lt-" + safeId(ev.key)
     );

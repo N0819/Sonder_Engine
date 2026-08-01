@@ -267,13 +267,29 @@ function promptModalWithToggle(message, toggleLabel, opts = {}) {
 }
 
 // ---- Toasts ----
+// The host is declared in index.html, and `toast` still must not assume it is
+// there. A toast is what the app reaches for when something ELSE has already
+// gone wrong, so throwing here replaces a handled failure with an uncaught
+// TypeError inside the handler that was reporting it -- the caller's remaining
+// cleanup never runs, and the message the user needed is the one that is lost.
+// Recreated by id, so the stylesheet dresses it identically.
+function toastHost() {
+  let host = $("#toasts");
+  if (!host) {
+    host = el("div", { id: "toasts", "aria-live": "polite",
+                       "aria-atomic": "false" });
+    document.body.append(host);
+  }
+  return host;
+}
+
 function toast(message, type = "ok", timeout = 4200) {
   const icon = { ok: "✓", err: "!", warn: "▲", info: "•" }[type] || "•";
   const node = el("div", { class: "toast " + type },
     el("span", { class: "badge " + type }, icon),
     el("div", { class: "toast-body" }, String(message)),
     el("button", { class: "ghost", title: "Dismiss", onclick: () => node.remove() }, "✕"));
-  $("#toasts").append(node);
+  toastHost().append(node);
   if (timeout) setTimeout(() => { if (node.isConnected) node.remove() }, timeout);
   return node;
 }
