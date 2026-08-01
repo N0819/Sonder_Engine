@@ -1371,12 +1371,31 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
         # ("Hinami, a fox-eared..." -> "a fox-eared..."); re-strip it.
         while words and words[0].lower() in ("a", "an", "the"):
             words = words[1:]
+        # A LINKING PARTICIPLE introduces a phrase, and the 5-word cap cuts
+        # that phrase off part-way: appearance summaries overwhelmingly read
+        # "<body> appearing in her early twenties" or "<body> wearing a
+        # patched flight jacket", which cap to "...woman appearing" and
+        # "...smuggler wearing a patched" -- both promising a clause neither
+        # delivers. Truncating AT the participle rather than trimming it off
+        # the end is what fixes the second case, where the participle is not
+        # the last word. Only verbs that introduce a following phrase are
+        # listed; a bare -ing rule would eat real nouns ("the figure in
+        # mourning"). Applied before the cap so the kept words are the
+        # distinguishing head of the description rather than its filler.
+        _LINKING_PARTICIPLES = {
+            "appearing", "wearing", "dressed", "clad", "wrapped", "standing",
+            "sitting", "holding", "carrying", "looking", "seeming", "aged",
+        }
+        for _i, _w in enumerate(words):
+            if _i and re.sub(r"[^\w]", "", _w).casefold() in _LINKING_PARTICIPLES:
+                words = words[:_i]
+                break
         words = words[:5]
-        # The 5-word cap can slice mid-phrase and leave a dangling function
-        # word ("...five-foot-seven-inches with a" / "...appearing in"), which
-        # reads as broken prose when this label is injected inline. Trim any
-        # trailing article/preposition/conjunction/possessive so the label
-        # ends on a content word.
+        # The cap can still slice mid-phrase and leave a dangling function
+        # word ("...five-foot-seven-inches with a"), which reads as broken
+        # prose when this label is injected inline. Trim any trailing
+        # article/preposition/conjunction/possessive so the label ends on a
+        # content word.
         _DANGLING = {"a", "an", "the", "with", "of", "and", "or", "in", "on",
                      "at", "to", "for", "from", "by", "her", "his", "their",
                      "its", "as"}

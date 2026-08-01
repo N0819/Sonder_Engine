@@ -228,13 +228,6 @@ holding entitled information tagged as though they had seen it.
 The widest surviving instance of "the omniscient record re-enters a later
 context".
 
-### 1.9 Consolidation flattens provenance (P8)
-
-`memory.consolidate_character_memory` melts `heard` / `inferred` / `told` rows
-into one flat autobiographical string, fed back wholesale each turn. **The
-provenance distinction the engine's thesis rests on does not survive the summary
-layer.**
-
 ### 1.10 Entity `state` staleness is instrumented, not fixed (S3-A8)
 
 Nothing reconciles an entity's free-text `state` / `description` against the
@@ -490,6 +483,74 @@ stacking the rows into a matrix for a single matmul is a few more and ~20x
 total — 35 ms at 10,000 turns, 350 ms at 285,000. So the scan is not "fine for
 now": there is no story length at which it becomes the reason to add an ANN
 index. That question is settled permanently, not provisionally.
+
+### 1.16 A greeting's knowledge seeds outrank everything the story then lives
+
+**Found 2026-08-01**, investigating chat 53 ("Run!"). Separate from the
+establishment-sequence defect that investigation started from, which is fixed;
+these are the parts of the same launch that were left alone.
+
+`greetings.start_story` routes `greeting_interpret`'s `knowledge_seeds` into
+character memory. The four seeds it wrote for that launch:
+
+```
+sal 1.00  The Doctor knows that Daleks are among the most dangerous creatures
+          in the universe, and their presence on Earth is a serious threat.
+sal 1.00  The Doctor is aware that Hinami has six tail fox ears ...
+sal 1.00  The Doctor has a deep-seated fear of Daleks, but he masks it with
+          bravado and excitement.
+sal 1.00  The Doctor is always on the lookout for new companions, and Hinami's
+          ... make them a candidate.
+```
+
+The one memory the actual pipeline minted that turn: salience 0.78, first
+person, about what happened.
+
+Five distinct problems, none of them covered by a test —
+`tests/test_greetings.py` has 30 tests and none touches seed routing:
+
+1. **Salience is the model's unbounded self-report, and it says 1.00.**
+   Consolidation archives below 0.72 (`memory.py`), so these never age out;
+   `contrast_memory` scores `salience + 0.4 * (age / current_turn)`, so their
+   chance of intruding *unbidden* GROWS with story length. Authored scaffolding
+   permanently outranks lived experience and gets louder. Clamp to ~0.5–0.7.
+2. **Third person, about the character.** The schema's own example is first
+   person (`"I have been waiting here for three nights for a courier."`); the
+   prompt never states the voice, and the model wrote what reads as a wiki
+   summary of him into his own memory.
+3. **Invented psychology.** Two of the four are dispositions, not knowledge.
+   `director_interpret`'s prompt says flatly "You never author psychology";
+   `greeting_interpret`'s asks for what the character "knows, remembers, feels,
+   or intends", which invites it. His card already carried the real, better
+   version (a Time War `private_history` entry, a `drive.taboo`), served
+   through `private_knowledge_for` — so the seed is a flattened knockoff of
+   authored material, competing with it.
+4. **Outside canon, which the same launch's establishment correctly refused.**
+   The prose says "EXTERMINATE", "the thing", "a blue box" — never "Dalek",
+   never "Earth". `director_establish` respected that and named the creature
+   "The Metal Hunter" with `dalek` demoted to an alias. `greeting_interpret`
+   went full canon in the same launch, against its own prompt rule ("Names are
+   opaque labels; import no outside canon"). The character's private memory and
+   the objective world now disagree about what the enemy is and what planet
+   they are on.
+5. ~~**`already_known=False` does not reach the seeds.**~~ **Fixed** —
+   `greetings.player_handle_for` + `_substitute_player_slot`. See `Design.md`,
+   "A character calls the player what they may legitimately call them".
+   One residual: the fiction may justify knowledge the engine cannot account
+   for — The Doctor could know she was running because the TARDIS has a
+   scanner — but there is no scanner in the scene: no anchor, no entity, no
+   `world_fact`. The seed asserts a conclusion whose channel does not exist.
+   That is a smaller and more general problem than the name leak was, and it
+   belongs with §3.1 rather than here.
+
+**Also unbuilt from that design, and cheap:** seeds carry no `event_key`, so a
+re-launch or greeting swipe duplicates them; and `start_story` uses exactly two
+fields of the extraction (`time`, `knowledge_seeds`). The `rooms`, `positions`,
+`entities`, `attire`, `character_state`, `player_room`, `location` and
+`scene_description` it spent most of the prompt producing are discarded, and
+`director_establish` re-derives the world independently from the raw prose.
+That is why the two disagree about the creature: two interpretations of one
+passage, and the discarded one is the only one that read it as a greeting.
 
 
 
@@ -934,52 +995,6 @@ the current behaviour.
 `tests/test_pipeline_audit_leak_gaps.py` covers D1, D2, B3, B5, X14, F1, F2/P1,
 S3-A4, S3-A5, S3-A8, X18 and X4. **A1 and B4 still have no dedicated test**, and
 A1 is a confirmed leak class.
-
-### 3.7a Unbidden recall avoids embeddings for a reason that is expiring
-
-`memory.contrast_memory` (SIGMA SRIP-14 §XXII, "retrieval as perturbation")
-picks a high-salience memory DISSIMILAR to the current beat, and its docstring
-says plainly why it does not use embedding cosine as the dissimilarity axis:
-on a corpus embedded with the crc32 fallback, cosine is a fuzzy-lexical signal,
-so structural fields (tokens, location, entities, turn distance) carry the
-contrast instead because they are exact.
-
-That reasoning was correct and is about to stop being true. Once an embeddings
-provider is configured and `rebuild_embeddings` has run, the vectors ARE
-semantic — and semantic dissimilarity is precisely what "structurally
-dissimilar" is reaching for. Measured: the crc32 corpus scores 0% recall at
-every k on paraphrase retrieval, while a real model reaches median rank 2, so
-the signal the function declined genuinely did not exist and now does.
-
-**Measured, so the next reader does not have to.** Across six real beats from
-a 441-memory story, scoring what the token axis picked against a real
-embedding model: it consistently selects memories at **~0.27 cosine** to the
-current beat, while the genuinely most-distant memory available sits at
-**~0.07**. It lands ~0.21 above the floor every time, with a spread of only
-0.05 across all six.
-
-That is not obviously a defect, and the framing matters. A memory at 0.05 is
-unrelated noise — surfacing a snack mid-crisis is random, not evocative —
-while ~0.27 is *related but not redundant*, which is a defensible place for
-an unbidden memory to come from. So the real finding is that **0.27 is an
-accident of lexical statistics rather than a chosen band.** Embeddings would
-turn it into a dial: "high salience, semantic similarity between X and Y",
-designed and tunable against play instead of emergent.
-
-One thing an embedding axis would strictly fix: the FALSE contrast. "The
-alley smelled of wet brick and chip fat" and "the backstreet stank of damp
-masonry and frying grease" share no words, so the token axis reads them as
-maximally different — and they are the same memory. A lexical axis cannot
-tell "different words, same meaning" from "different words, different
-meaning"; that distinction is the whole of what an embedding buys.
-
-**The blocker is the mixed bank, and it must be handled first.** A story
-part-way through a rebuild holds both kinds of row, and the compatibility
-check scores the stranded ones 0.0. In `search_memories` that makes them
-invisible. On an INVERTED (dissimilarity) axis it makes them maximally
-visible — so unbidden recall would preferentially surface precisely the
-memories that have not been rebuilt yet. The same number, read the other way
-round, flips from a silent omission to a systematic bias.
 
 ### 3.8 A structural risk, not a finding
 

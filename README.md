@@ -37,14 +37,16 @@ flow, including the different opening-turn path.
 3. [`docs/PIPELINE.md`](docs/PIPELINE.md) — stage-by-stage execution.
 4. [`docs/DATABASE.md`](docs/DATABASE.md) — schema, write helpers, and the
    checklist every new persistent field must satisfy.
-5. [`docs/CODE_MAP.md`](docs/CODE_MAP.md) — generated index of modules,
+5. [`docs/MEMORY.md`](docs/MEMORY.md) — what a character remembers: minting,
+   provenance, ranking, unbidden recall, belief revision, embeddings.
+6. [`docs/CODE_MAP.md`](docs/CODE_MAP.md) — generated index of modules,
    functions, routes, and tables. Regenerate with `make map`; never hand-edit.
-6. [`docs/TESTING.md`](docs/TESTING.md) — test tiers and CI policy.
-7. [`docs/FEATURES.md`](docs/FEATURES.md) — every feature in plain language:
+7. [`docs/TESTING.md`](docs/TESTING.md) — test tiers and CI policy.
+8. [`docs/FEATURES.md`](docs/FEATURES.md) — every feature in plain language:
    what the app does, one line each.
-8. [`Design.md`](Design.md) — philosophy, architecture, and a verified
+9. [`Design.md`](Design.md) — philosophy, architecture, and a verified
    built / partial / not-built conformance table.
-9. [`docs/UNBUILT.md`](docs/UNBUILT.md) — the single register of known defects
+10. [`docs/UNBUILT.md`](docs/UNBUILT.md) — the single register of known defects
    and unbuilt work. [`CHANGELOG.md`](CHANGELOG.md) is the history.
 
 ## Run locally

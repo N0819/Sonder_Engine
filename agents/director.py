@@ -250,6 +250,12 @@ def director_establish(ctx, nonce):
         "remove_entities": [],
         "remove_rooms": [],
         "stations": out.get("stations") if isinstance(out.get("stations"), dict) else {},
+        # The opening's standing holds, through the same merge every later beat
+        # uses (spatial.apply_contact_ops). Without this the one physical act a
+        # greeting usually contains -- a grip, a carry, a body pinned -- was
+        # unrepresentable at establishment and the scene opened with contacts:[].
+        "contact_ops": (out.get("contact_ops")
+                        if isinstance(out.get("contact_ops"), list) else []),
         "attire": out.get("attire") if isinstance(out.get("attire"), dict) else {},
         "world_facts": out.get("world_facts") if isinstance(out.get("world_facts"), list) else [],
         "time": None,
