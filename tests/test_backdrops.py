@@ -236,7 +236,8 @@ def test_real_time_of_day_still_changes_the_picture():
 
 # --- paying only once ------------------------------------------------------
 
-def test_concurrent_requests_for_one_room_generate_one_image(tmp_path, monkeypatch):
+def test_concurrent_requests_for_one_room_generate_one_image(temp_db, tmp_path,
+                                                             monkeypatch):
     """The same signature is very easy to ask for twice at once -- two turns in
     the same room scroll into view together, a second tab is open, the reader
     scrolls back. Each duplicate is a real image generation with a real price,
@@ -285,7 +286,7 @@ def test_concurrent_requests_for_one_room_generate_one_image(tmp_path, monkeypat
     assert (tmp_path / "7" / ("a" * 24 + ".png")).read_bytes() == b"\x89PNG fake"
 
 
-def test_no_half_written_image_is_ever_visible(tmp_path, monkeypatch):
+def test_no_half_written_image_is_ever_visible(temp_db, tmp_path, monkeypatch):
     """Readers hit the PNG route while generation is in flight; a partially
     written file would be served as a corrupt image."""
     import backdrops as bd

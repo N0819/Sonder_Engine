@@ -10,6 +10,7 @@ character memory and is never shown to the player.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import time
@@ -142,6 +143,34 @@ def _override_narrator(tid: int, prose: str) -> None:
           (step["id"], json.dumps(content, ensure_ascii=False), time.time()))
 
 
+# Ceiling on an authored seed's salience, just under the 0.72 floor below
+# which `memory.consolidate_character_memory` archives a memory.
+#
+# A seed is scaffolding for a story that has not happened yet, and salience
+# used to be the model's unbounded self-report: chat 53 launched with four
+# seeds at 1.00 against the 0.78 of the single memory the pipeline minted that
+# turn. Above 0.72 nothing is ever archived, and `contrast_memory` scores
+# `salience + 0.4 * (age / current_turn)` -- so those seeds not only outranked
+# lived experience permanently, their chance of intruding UNBIDDEN grew with
+# the length of the story. Under the floor, a seed decays like anything else
+# the character went on to actually live.
+#
+# `GreetingKnowledgeSeed` caps this too, and that is not enough on its own:
+# `start_story` reads `rec["extraction"]`, a STORED extraction persisted on the
+# character card at import time. Cards written before the cap -- or edited by
+# hand -- reach this line without ever passing through the schema. The write is
+# the boundary that matters.
+_SEED_SALIENCE_MAX = 0.7
+
+
+def _seed_salience(value) -> float:
+    try:
+        salience = float(value)
+    except (TypeError, ValueError):
+        return 0.6
+    return max(0.0, min(_SEED_SALIENCE_MAX, salience))
+
+
 def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                 lorebook_id: int | None = None,
                 already_known: bool = True) -> tuple[int, int]:
@@ -238,8 +267,24 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
         if not content:
             continue
         try:
+            # Give each seed a stable identity. `add_memory` upserts on
+            # (chat, character, event_key), so routing the same seed twice
+            # updates one row instead of writing a second -- which is what
+            # every other memory writer in the engine already gets, and what
+            # makes a retried or partially-failed launch safe to repeat.
+            #
+            # It does NOT dedupe across launches, and should not: `start_story`
+            # creates a fresh chat every time, so a second launch is a
+            # different story that has its own copy. (docs/UNBUILT.md 1.16 said
+            # a re-launch duplicates them; there is no in-chat re-routing path,
+            # so that half of the entry was wrong.)
+            #
+            # Keyed by content, not position, so editing or reordering the
+            # greeting does not silently orphan the old row.
+            digest = hashlib.sha1(content.encode("utf-8", "ignore")).hexdigest()
             add_memory(cid, char_id, None, "episode", "remembered",
-                       float(seed.get("salience", 0.6) or 0.6), content, turn_idx=0)
+                       _seed_salience(seed.get("salience")), content,
+                       turn_idx=0, event_key="greeting_seed:%s" % digest[:16])
         except Exception:
             pass  # a bad seed must not abort the launch
 

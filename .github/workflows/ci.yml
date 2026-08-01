@@ -8,8 +8,13 @@ permissions:
   contents: read
 
 jobs:
+  # Named `fast` for history (it is a required check elsewhere), but it has not
+  # been the reduced tier since test databases moved to tmpfs: `make check-fast`
+  # now compiles, runs the structure/map checks, and runs EVERY test, on both
+  # interpreters, in about 40 seconds. The separate `full` job that used to sit
+  # after this one was a strict subset of it and was deleted.
   fast:
-    name: Fast checks (Python ${{ matrix.python-version }})
+    name: Checks (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -29,30 +34,21 @@ jobs:
       - name: Run fast checks
         run: make check-fast
 
-  full:
-    name: Full Python suite
-    needs: fast
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            constraints.txt
-            requirements*.txt
-      - name: Install test dependencies
-        run: python -m pip install -c constraints.txt -r requirements-dev.txt
-      - name: Run full suite
-        run: make test-full
-
   pydantic1:
     # `constraints.txt` pins Pydantic 2, so every other job exercises only one
     # side of the declared `pydantic>=1.10.13,<3` range. `schemas.py` carries a
     # branch per major (`_declared`), and the 1.x branch had no coverage here at
     # all -- which is how a 1.x-only internal reached import scope and stopped
     # the engine starting for anyone who resolved to 2.x. See docs/TESTING.md.
+    #
+    # The failure runs the other way too, and this job could not see it. It ran
+    # `make test-fast`, which deselects every database-backed test -- so a
+    # 2.x-only defect was invisible to CI unless it happened to sit in the
+    # non-database half. `_subject_field` was read with a bare `getattr`, which
+    # returns a plain string on 1.x and an unhashable `ModelPrivateAttr` on 2.x;
+    # the 1.x job stayed green, and the feature never worked in a default
+    # install. Both directions now run the WHOLE suite, which is affordable
+    # since it costs ~40s.
     name: Schemas on Pydantic 1.x
     needs: fast
     runs-on: ubuntu-latest
@@ -77,11 +73,11 @@ jobs:
               f"this job must run Pydantic 1.x, got {pydantic.VERSION}")
           print("pydantic", pydantic.VERSION)
           EOF
-      # The fast tier, not just the schema tests: the exposure is not limited to
+      # Everything, not just the schema tests: the exposure is not limited to
       # `schemas.py`. Any module reaching for a 2.x-only API (`model_validate`,
-      # `model_dump`) breaks 1.x the same way, and the whole tier costs ~10s.
-      - name: Run the fast tier on Pydantic 1.x
-        run: make test-fast
+      # `model_dump`) breaks 1.x the same way.
+      - name: Run the full suite on Pydantic 1.x
+        run: make test-full
 
   browser:
     name: Browser behavior

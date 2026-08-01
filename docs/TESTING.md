@@ -115,8 +115,18 @@ the same reason.
 
 Because the constraints pin is 2.x, the other side of that range needs its own
 job: `pydantic1` installs the pinned set, downgrades past the constraint, and
-runs the fast tier. It exists because a range is only a promise if something
+runs the suite. It exists because a range is only a promise if something
 checks it.
+
+It ran only the fast tier until alpha 6.6, and that hid the failure running the
+other way. `schemas.py` lets an item model name its own subject slot
+(`GoalImpact._subject_field`), read back with a bare `getattr` — a plain string
+on 1.x, an unhashable `ModelPrivateAttr` on 2.x, where the next line raises
+`TypeError`. The 1.x job was green, so the red 2.x test read as "the 1.x side
+is the special one" rather than "the pinned major is broken", and the feature
+never once ran in a default install. Both directions run everything now, which
+is affordable at ~40s. **Symmetry is the point: a job that covers one major
+more thoroughly than the other will mislead you about which one is wrong.**
 
 Worth being exact about how the 1.x-only import above survived, because the
 lesson is not the one it looks like: **CI caught it immediately.** The next push

@@ -867,12 +867,24 @@ def test_reuse_ignores_pins_and_one_shots(tmp_path, monkeypatch):
 
 @pytest.fixture
 def model_says(monkeypatch):
-    """Stub the ambience_prompt role with one canned answer."""
+    """Stub the ambience_prompt role with one canned answer.
+
+    `get_prompt` is stubbed too, and that is not a detail. `refine_layers`
+    wraps the whole model call -- prompt fetch included -- in a bare `except`
+    that returns the draft plan unchanged, which is right in production (a
+    nicety, never a dependency) and silent in a test. Reading the prompt hits
+    the database, so on a checkout with no populated `engine.db` every test
+    here took the fallback: three failed, and the two asserting the plan is
+    UNCHANGED passed while exercising nothing at all. Stubbing the fetch keeps
+    these about `refine_layers`'s own logic and makes them true anywhere.
+    """
     def install(answer):
         import agents.common
+        import prompts
         import providers
         monkeypatch.setattr(providers, "resolve_role_candidates",
                             lambda role: [("x", "y")])
+        monkeypatch.setattr(prompts, "get_prompt", lambda *a, **kw: "stub")
         monkeypatch.setattr(
             agents.common, "_agent_json",
             lambda *a, **kw: (_ for _ in ()).throw(answer)
