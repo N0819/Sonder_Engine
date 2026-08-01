@@ -670,7 +670,7 @@ def _candidate_blob(blob):
         cue = _b64_to_blob(m.get("cue_embedding"))
         if full is None or cue is None:
             continue                              # nothing safe to move
-        vkey = vector_address(m.get("char_id"), m.get("content"))
+        vkey = vector_address(full, cue)
         pending.append((vkey, full, cue, m.get("embedding_model"),
                         m.get("embedding_dim")))
         m.pop("embedding", None)
