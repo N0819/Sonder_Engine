@@ -951,14 +951,35 @@ dissimilar" is reaching for. Measured: the crc32 corpus scores 0% recall at
 every k on paraphrase retrieval, while a real model reaches median rank 2, so
 the signal the function declined genuinely did not exist and now does.
 
-Not changed on a hunch. What it needs is a measurement of its own — does an
-embedding-distance axis surface BETTER unbidden memories than the token axis,
-judged on something other than "it is more sophisticated" — plus a decision
-about mixed banks, since a story part-way through a rebuild has both kinds of
-row and the compatibility check silently scores the stranded ones 0.0, which
-an inverted (dissimilarity) axis would read as maximally contrasting. That
-inversion is the trap: the same 0.0 that makes a stranded row invisible to
-`search_memories` would make it maximally VISIBLE here.
+**Measured, so the next reader does not have to.** Across six real beats from
+a 441-memory story, scoring what the token axis picked against a real
+embedding model: it consistently selects memories at **~0.27 cosine** to the
+current beat, while the genuinely most-distant memory available sits at
+**~0.07**. It lands ~0.21 above the floor every time, with a spread of only
+0.05 across all six.
+
+That is not obviously a defect, and the framing matters. A memory at 0.05 is
+unrelated noise — surfacing a snack mid-crisis is random, not evocative —
+while ~0.27 is *related but not redundant*, which is a defensible place for
+an unbidden memory to come from. So the real finding is that **0.27 is an
+accident of lexical statistics rather than a chosen band.** Embeddings would
+turn it into a dial: "high salience, semantic similarity between X and Y",
+designed and tunable against play instead of emergent.
+
+One thing an embedding axis would strictly fix: the FALSE contrast. "The
+alley smelled of wet brick and chip fat" and "the backstreet stank of damp
+masonry and frying grease" share no words, so the token axis reads them as
+maximally different — and they are the same memory. A lexical axis cannot
+tell "different words, same meaning" from "different words, different
+meaning"; that distinction is the whole of what an embedding buys.
+
+**The blocker is the mixed bank, and it must be handled first.** A story
+part-way through a rebuild holds both kinds of row, and the compatibility
+check scores the stranded ones 0.0. In `search_memories` that makes them
+invisible. On an INVERTED (dissimilarity) axis it makes them maximally
+visible — so unbidden recall would preferentially surface precisely the
+memories that have not been rebuilt yet. The same number, read the other way
+round, flips from a silent omission to a systematic bias.
 
 ### 3.8 A structural risk, not a finding
 
