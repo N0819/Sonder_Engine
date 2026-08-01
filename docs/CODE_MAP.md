@@ -10,12 +10,12 @@
 | `agents/__init__.py` | 86 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 809 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/character.py` | 2227 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
-| `agents/common.py` | 3911 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/director.py` | 3529 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
+| `agents/common.py` | 4267 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/director.py` | 3642 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 552 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 202 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 883 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/perception.py` | 2458 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
+| `agents/perception.py` | 2472 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 976 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 92 | Step and active-variant persistence helpers. | `db` |
 | `ambience.py` | 2043 |  | `backdrops`, `db`, `weather` |
@@ -38,7 +38,7 @@
 | `llm_quality.py` | 292 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `mechanics.py` | 274 |  | `spatial`, `spatial_frames` |
-| `memory.py` | 3546 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
+| `memory.py` | 3572 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
 | `paradox.py` | 489 |  | `character_schema`, `db`, `frames` |
 | `pipeline_context.py` | 184 | Typed mutable context passed through a turn pipeline. | `db` |
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
@@ -103,26 +103,26 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `norm_sequence()` | 1069 | 161 lines |
-| `_scrub_invented_dialogue()` | 2970 | 145 lines |
+| `_scrub_invented_dialogue()` | 3315 | 145 lines |
 | `_extract_authority_claims()` | 809 | 106 lines |
-| `_check_quote_attribution()` | 3508 | 91 lines |
-| `_check_narrator_fidelity()` | 3764 | 84 lines |
+| `_check_quote_attribution()` | 3853 | 91 lines |
+| `_check_narrator_fidelity()` | 4120 | 84 lines |
+| `_check_player_act_authority()` | 2416 | 81 lines |
 | `_perceptible_entities()` | 432 | 78 lines |
 | `authored_other_subject()` | 594 | 77 lines |
-| `_check_pronoun_fidelity()` | 3300 | 76 lines |
 
 ### `agents/director.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 2689 | 841 lines |
-| `director_interpret()` | 318 | 334 lines |
-| `_reconcile_resolution()` | 2221 | 302 lines |
-| `_reconcile_interpretation()` | 800 | 119 lines |
-| `director_establish()` | 162 | 105 lines |
-| `_awareness_exits()` | 1422 | 98 lines |
-| `_evidence_present()` | 1985 | 97 lines |
-| `_guard_approach_is_not_arrival()` | 2607 | 80 lines |
+| `director_resolve()` | 2691 | 952 lines |
+| `director_interpret()` | 320 | 334 lines |
+| `_reconcile_resolution()` | 2223 | 302 lines |
+| `_reconcile_interpretation()` | 802 | 119 lines |
+| `director_establish()` | 164 | 105 lines |
+| `_awareness_exits()` | 1424 | 98 lines |
+| `_evidence_present()` | 1987 | 97 lines |
+| `_guard_approach_is_not_arrival()` | 2609 | 80 lines |
 
 ### `agents/loops.py`
 
@@ -158,14 +158,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `perception_outcome()` | 1754 | 705 lines |
-| `perception_act()` | 1157 | 428 lines |
-| `perception_establish()` | 989 | 167 lines |
-| `_observer_scene_payload()` | 319 | 106 lines |
-| `_redact_concealed_from_event()` | 1687 | 66 lines |
-| `_touch_only_sources()` | 1586 | 62 lines |
-| `_source_channels()` | 510 | 56 lines |
-| `_strip_self_narration()` | 675 | 51 lines |
+| `perception_outcome()` | 1768 | 705 lines |
+| `perception_act()` | 1170 | 429 lines |
+| `perception_establish()` | 1002 | 167 lines |
+| `_observer_scene_payload()` | 320 | 106 lines |
+| `_redact_concealed_from_event()` | 1701 | 66 lines |
+| `_strip_self_narration()` | 676 | 62 lines |
+| `_touch_only_sources()` | 1600 | 62 lines |
+| `_source_channels()` | 511 | 56 lines |
 
 ### `agents/runtime.py`
 
@@ -432,10 +432,10 @@
 |---|---:|---:|
 | `search_memories()` | 1522 | 219 lines |
 | `contrast_memory()` | 1776 | 117 lines |
-| `rebuild_embeddings()` | 3067 | 116 lines |
-| `rebuild_checkpoint_embeddings()` | 3197 | 110 lines |
+| `rebuild_embeddings()` | 3093 | 116 lines |
+| `rebuild_checkpoint_embeddings()` | 3223 | 110 lines |
 | `consolidate_character_memory()` | 2091 | 95 lines |
-| `restore_lorebook()` | 2627 | 79 lines |
+| `restore_lorebook()` | 2653 | 79 lines |
 | `monitoring_subtree()` | 567 | 78 lines |
 | `resolve_lorebook_graph()` | 379 | 76 lines |
 

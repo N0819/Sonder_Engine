@@ -67,9 +67,11 @@ from .common import (
     _extract_authority_claims,
     _list,
     _normalize_scene_patch,
+    _check_character_act_authority,
     _check_character_speech_authority,
     _check_player_act_authority,
     _check_player_interiority_authority,
+    _check_prose_quote_authority,
     _quote_body,
     _requires_reaction_phase,
     _resolve_player_room,
@@ -2798,9 +2800,24 @@ def director_resolve(ctx, nonce):
                                   "visibility": "overt", "conceal_from": []})
             if speeches:
                 char_speech.setdefault(cname, []).extend(speeches)
+            # The SEQUENCE first, exactly as the loop branch above reads it.
+            # This branch used to read `dk["action"]` alone, so a declaration
+            # that carried its acts only in the sequence -- the canonical
+            # field, which is why `_sync_sequence_mirrors` exists -- produced
+            # an EMPTY char_actions entry for a character who had plainly
+            # acted. Latent while nothing consequential read char_actions for
+            # this branch; character-act authority reads it to decide whether
+            # a character declared any act at all, and an empty entry there
+            # means "declared nothing", which is the strictest reading there
+            # is. It also fed `_declared_act_texts` and the resolve payload
+            # short.
+            acts = [e for e in (dk.get("sequence") or [])
+                    if e.get("type") == "action" and e.get("attempt")]
             dk_act = dk.get("action") or {}
-            if dk_act.get("attempt"):
-                char_actions.setdefault(cname, []).append(dk_act)
+            if not acts and dk_act.get("attempt"):
+                acts = [dk_act]
+            if acts:
+                char_actions.setdefault(cname, []).extend(acts)
 
     sc = get_scene(chat["id"], chat)
     # Each declaring character's own heading, exactly as the player already
@@ -3042,22 +3059,67 @@ def director_resolve(ctx, nonce):
         if str(d.get("name") or "").strip()
         and not (char_speech.get(str(d.get("name") or "").strip()))
     ]
+    # Every body the prose could be talking about. Subject resolution needs the
+    # full roster, not just the accused: it is the presence of the OTHER names
+    # that stops a pronoun being bound to the wrong person (see
+    # `_sentence_subjects`).
+    _declared_names = [
+        str(d.get("name") or "").strip() for d in decls
+        if str(d.get("name") or "").strip()
+    ]
+    _all_names = [n for n in ([_player_name] + _declared_names) if n]
     _mute = _check_character_speech_authority(
-        out.get("resolved_event") or "", _silent_names)
+        out.get("resolved_event") or "", _silent_names, _all_names)
+    # CHARACTER-ACT AUTHORITY. The third side of the boundary, and the one
+    # nothing held: act authority was enforced for the player alone, so the
+    # Director could hand a character conduct freely. Live (chat 56 t1391) it
+    # moved a character who had declared a scan "from several feet away" and
+    # whose own declared want was to act "without crowding her".
+    _cacts = []
+    for _cname in _declared_names:
+        _cacts.extend(_check_character_act_authority(
+            out.get("resolved_event") or "",
+            char_actions.get(_cname) or [], _cname, _all_names))
+    # PROSE-QUOTE AUTHORITY. The dialogue_log backstop further down drops an
+    # invented line for a registered character, but only one that reached the
+    # LOG; t1391's fabrication lived solely in resolved_event prose, with
+    # dialogue_log empty, so that guard never saw it. `_allowed_quote_bodies`
+    # is everything legitimately declared this beat -- the player's lines, every
+    # character's lines, and any line the resolve attributes to a speaker who
+    # is neither cast nor the player (the prompt licenses the Director to voice
+    # unsheeted background presences).
+    _allowed_quote_bodies = {
+        _quote_body(s) for s in player_speech_lines(interp)}
+    for _speeches in char_speech.values():
+        _allowed_quote_bodies.update(_quote_body(s["text"]) for s in _speeches)
+    for _d in (out.get("dialogue_log") or []):
+        _spk = str(_d.get("speaker") or "")
+        if (_spk.casefold() not in {
+                character_name(json.loads(c["sheet"])).casefold()
+                for c in ctx.cast}
+                and not is_player_speaker(_spk, chat)):
+            _allowed_quote_bodies.add(_quote_body(_d.get("exact_quote", "")))
+    _quotes = _check_prose_quote_authority(
+        out.get("resolved_event") or "", _allowed_quote_bodies)
+    # The player's own raw text is what their declaration MEANS -- the
+    # interpret stage's `observable` compresses it, and an act is elaboration
+    # only against what the player actually wrote.
+    _player_declared_text = " ".join(str(x) for x in (
+        ctx.input or "",
+        (interp.get("speech") or ""),
+        json.dumps(interp.get("sequence") or [])))
     _invented = _check_player_act_authority(
-        out.get("resolved_event") or "", _declared_player_actions, _player_name)
+        out.get("resolved_event") or "", _declared_player_actions, _player_name,
+        _all_names, ctx.input or "")
     # What the player FEELS is theirs as much as what they do. Everything the
     # player wrote this beat is exempt -- declared feeling is declared.
     _felt = _check_player_interiority_authority(
         out.get("resolved_event") or "", _player_name,
-        " ".join(str(x) for x in (
-            ctx.input or "",
-            (interp.get("speech") or ""),
-            json.dumps(interp.get("sequence") or []))))
-    if _invented or _mute or _felt:
-        # ONE retry covering both violations. They are the same boundary from
-        # two sides, they are detected at the same moment, and asking twice
-        # would cost a second call to say the same thing.
+        _player_declared_text, _all_names)
+    if _invented or _mute or _felt or _cacts or _quotes:
+        # ONE retry covering every violation. They are the same boundary from
+        # several sides, they are detected at the same moment, and asking
+        # separately would cost a call apiece to say the same thing.
         _parts = []
         if _invented:
             _parts.append(
@@ -3089,6 +3151,28 @@ def director_resolve(ctx, nonce):
                 "and be described -- write what they DO, or let the silence "
                 "stand. Offending sentences: "
                 + " | ".join(w.split(": ", 1)[-1] for w in _mute))
+        if _cacts:
+            _parts.append(
+                "Your previous resolved_event gave a CHARACTER physical acts "
+                "they did not declare this beat -- most likely moving someone "
+                "who declared no movement. A character's declared act is "
+                "yours to RESOLVE, not to extend: you decide whether it "
+                "works, what it achieves and what it costs. You do not decide "
+                "that they also stepped closer, reached out or turned away. "
+                "Distance especially is theirs -- a character who chose to "
+                "keep their distance kept it. Rewrite keeping every other "
+                "fact identical. Offending sentences: "
+                + " | ".join(w.split(": ", 1)[-1] for w in _cacts))
+        if _quotes:
+            _parts.append(
+                "Your previous resolved_event contains spoken lines that "
+                "nobody declared this beat. You may not write dialogue for a "
+                "character with a sheet -- their words come from their own "
+                "declaration and from nowhere else, and a line you invent for "
+                "them becomes their memory of having said it. Remove the "
+                "invented lines; describe what is done and let the silence "
+                "stand. Offending lines: "
+                + " | ".join(w.split(": ", 1)[-1] for w in _quotes))
         _note = " ".join(_parts)
         _retry = _agent_json(
             "director",
@@ -3100,27 +3184,37 @@ def director_resolve(ctx, nonce):
         )
         _retry_invented = _check_player_act_authority(
             _retry.get("resolved_event") or "",
-            _declared_player_actions, _player_name)
+            _declared_player_actions, _player_name, _all_names,
+            ctx.input or "")
         _retry_mute = _check_character_speech_authority(
-            _retry.get("resolved_event") or "", _silent_names)
+            _retry.get("resolved_event") or "", _silent_names, _all_names)
+        _retry_cacts = []
+        for _cname in _declared_names:
+            _retry_cacts.extend(_check_character_act_authority(
+                _retry.get("resolved_event") or "",
+                char_actions.get(_cname) or [], _cname, _all_names))
+        _retry_quotes = _check_prose_quote_authority(
+            _retry.get("resolved_event") or "", _allowed_quote_bodies)
         _retry_felt = _check_player_interiority_authority(
             _retry.get("resolved_event") or "", _player_name,
-            " ".join(str(x) for x in (
-                ctx.input or "", (interp.get("speech") or ""),
-                json.dumps(interp.get("sequence") or []))))
+            _player_declared_text, _all_names)
         # Kept only if it reduces the TOTAL, so a rewrite that fixes the
         # player's acts by inventing a line for a silent character loses.
         if (len(_retry_invented) + len(_retry_mute) + len(_retry_felt)
-                < len(_invented) + len(_mute) + len(_felt)):
-            out, _invented, _mute, _felt = (
-                _retry, _retry_invented, _retry_mute, _retry_felt)
-        for _w in _invented + _mute + _felt:
+                + len(_retry_cacts) + len(_retry_quotes)
+                < len(_invented) + len(_mute) + len(_felt)
+                + len(_cacts) + len(_quotes)):
+            out, _invented, _mute, _felt, _cacts, _quotes = (
+                _retry, _retry_invented, _retry_mute, _retry_felt,
+                _retry_cacts, _retry_quotes)
+        for _w in _invented + _mute + _felt + _cacts + _quotes:
             ctx.add_warning(_w)
     # Surfaced on the step itself, not only in ctx.warnings -- a content
     # violation that survives the retry must at least be visible in the
     # step/variant inspector rather than vanishing.
-    if _invented or _mute or _felt:
-        out["player_act_warnings"] = _invented + _mute + _felt
+    if _invented or _mute or _felt or _cacts or _quotes:
+        out["player_act_warnings"] = (
+            _invented + _mute + _felt + _cacts + _quotes)
 
     # Warning-only re-normalization; strict validation already ran inside
     # _agent_json (see director_establish above).
@@ -3374,6 +3468,25 @@ def director_resolve(ctx, nonce):
                 continue
         checked_dlog.append(d)
     dlog = checked_dlog
+
+    # `dialogue_order` is a bare list of names carried to perception, and
+    # nothing checked it against who actually spoke. In chat 56 t1391 it read
+    # ["The Doctor"] on a beat where he declared no speech and dialogue_log was
+    # empty -- a registered character marked as a speaker with no line anywhere
+    # to support it. Drop any cast name that has no surviving declared speech;
+    # names that are not cast are left alone, since the Director may voice an
+    # unsheeted background presence.
+    _ordered = []
+    for _spk in (out.get("dialogue_order") or []):
+        _cf = str(_spk).casefold()
+        if _cf in cast_names_lower and _cf not in char_speech_bodies:
+            ctx.add_warning(
+                f"Dropped {_spk!r} from dialogue_order: a registered "
+                "character with no declared speech this beat."
+            )
+            continue
+        _ordered.append(_spk)
+    out["dialogue_order"] = _ordered
 
     # Deterministic concealment backstop: the director model is asked to
     # carry visibility/conceal_from/volume onto each dialogue_log entry,

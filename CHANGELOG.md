@@ -1,5 +1,106 @@
 # Changelog
 
+## alpha 6.5 — Whose hands those are
+
+One report — the Director was *"dictating actions for the player"* in *Run!* —
+and an open pull request nobody had merged, which turned out to be the same
+defect from the other side. Both are one sentence-level fact the engine could
+not read: **who a pronoun refers to.**
+
+Every conduct-authority guard in the engine was anchored on a body's literal
+NAME as sentence subject, each with the same reasoning written into its
+docstring — a pronoun subject "could refer to any character in the beat, and
+guessing would make this cry wolf on ordinary narration." That is true of a
+pronoun read in isolation and false of one read in sequence. Prose names
+someone once and then continues with "she". Four guards, one blind spot, and
+between them they missed a fabricated act, a fabricated line, a fabricated
+emotion, and an omniscient sentence copied into the mind it was about.
+
+### The player's hands
+
+Chat 56 t10. The player typed, in full:
+
+> `"Heh? What are we doing what's going on?" You look genuinely confused.`
+
+The resolve wrote *"her hands coming up to grip the edge of the console,
+fingers finding a lever as if to steady herself."* Perception copied it into
+the player's **own** view as *"I grip the console edge."* The narrator rendered
+it as fact. The player's very next input:
+
+> `"Which lever?!"`
+
+The fabricated act replayed a beat later — precisely the failure
+`_check_player_act_authority` was written to stop. It never ran. The guard
+opened with `if declared_actions: return []`, and this player narrated a
+gesture on every single beat, so it was disarmed for the entire story.
+
+Elaboration cannot be told from addition by vocabulary: *"pushes herself
+upright"* elaborates a declared *"slowly stands up"* and shares not one word
+with it. What CAN be told apart is what the act **touches**. Elaboration
+re-describes the player's own body; fabrication reaches out and takes hold of
+the world. The widened scope flags one thing: a manipulation verb taking a
+direct object that is neither the player's own body nor anything their
+declaration mentions. *"Pressed flat against the cold metal"* is a body bracing
+itself, and is not a grip on the metal.
+
+### The player's feelings
+
+Same chat, t6. Against a player who declared only *"You imitate them slightly
+and shudder"*, the resolve wrote:
+
+> *"She looks at him, still shaky, but the terror in her eyes has begun to
+> recede."*
+
+Deciding the player's emotional **arc** is the same violation as naming their
+emotion. Nothing fired — pronoun subject. Perception then copied the sentence
+into the player's own view in the third person (*"She feels her arms still
+wrapped tightly…"*), which `_strip_self_narration` also could not see, for the
+same reason. The narrator rendered it as *"The terror that had been living
+wide-open in **your** eyes pulls back to something smaller"* — where "your"
+attaches to "eyes" and the verb is "pulls back", one word out of reach of every
+branch of `_YOU_INTERIOR`.
+
+Three stages, three misses, one sentence.
+
+### A character's conduct (PR #16, folded in)
+
+The mirror, found independently in the same story at t1391. The Doctor declared
+one act — scan *"from several feet away"*, *"while staying at distance"* — and
+`speech: null`. The resolve had him take *"a half-step closer"* and say
+*"You're alright, Hinami…"*. `_check_character_speech_authority` was armed and
+blind: it read only sentences opening with the literal name (every fabricated
+sentence opened with "He") and measured its verb window three words from that
+name (the attribution verb sat twelve words out, in a compound predicate). The
+`dialogue_log` backstop that would have caught the line was inert because
+`dialogue_log` was empty — the line lived only in prose, and the speech check
+strips quoted spans assuming the dialogue path covers them. Each guard held
+ground the other had.
+
+The narrator dropped both fabrications, so **nothing was visible in play** — and
+both still committed as the Doctor's own episodic memory of what he did. That
+is the shape this defends: a fabrication invisible in the player-facing prose
+that still becomes a mind's memory of its own conduct.
+
+### What changed
+
+- `_sentence_subjects` binds a pronoun subject to the most recent **named**
+  subject; a newer name takes it, an unanchored pronoun binds to nobody rather
+  than to a guess. Now shared by every conduct guard and by perception's
+  self-narration strip.
+- `_predicate_heads` measures the verb window per conjunct, so a shared
+  subject's later verbs are reachable.
+- `_check_character_act_authority` and `_check_prose_quote_authority`, new.
+- `_check_player_act_authority` gains its second scope; `_YOU_INTERIOR` reads a
+  named state anywhere in a clause that also reaches for the player.
+- All of it folds into the **existing single correction retry**, kept only if it
+  lowers the total violation count — no extra model call on an honest beat, and
+  a worse rewrite can never win.
+
+Residuals are recorded in `docs/UNBUILT.md` §1.1a, including the two things
+this does not do: a player who declared an act is still guarded only against
+taking hold of the world, and perception still has no player-action scrub of
+its own.
+
 ## alpha 6.4.1 — Nobody in the room is called "the player"
 
 A patch release from one report: *"I do not think Player is an acceptable
