@@ -282,6 +282,16 @@ def normalize_regions(outfit):
                 name = _clean(name, GARMENT_NAME_LIMIT)
                 if not name:
                     continue
+                # Nobody wears "removed". A note whose whole text was a state
+                # used to be read as naming a garment, so two live bodies ended
+                # up carrying `{"name": "removed", "state": "worn"}` and
+                # `{"name": "worn", ...}` in their regions -- and therefore in
+                # the `wearing` list the character reads about itself. The note
+                # path no longer mints these; dropping them here is what heals
+                # the stories already holding one, on the next beat that
+                # touches the ledger, without a migration.
+                if is_bare_garment_state(name):
+                    continue
                 state = str(item.get("state") or "worn").strip().casefold()
                 attaches = item.get("attaches")
                 garment = {
@@ -334,7 +344,13 @@ def normalize_regions(outfit):
         # spelling it had before a region edit renamed it would otherwise file
         # a SECOND copy of it -- the three-outfits bug, arriving by the one
         # door the exact-match check left open.
-        if not name or resolve_garment(name, placed, allow_head_noun=False):
+        # Same guard as the authored branch above: nobody wears "removed".
+        # This is the door the phantom actually came back through -- dropping
+        # it from the regions is undone one loop later if the flat `wearing`
+        # list still names it, because that list is where it also landed.
+        if not name or is_bare_garment_state(name):
+            continue
+        if resolve_garment(name, placed, allow_head_noun=False):
             continue
         attaches = attaches_only(name)
         # Every region it covers, not just its anchor. A kimono placed on the
@@ -663,6 +679,33 @@ _DIFF_KNOWN_KEYS = ("wearing", "add", "remove", "replace", "state",
 def is_no_change_note(text):
     """Does this note say, in as many words, that nothing happened?"""
     return str(text or "").strip().casefold().strip(".") in _NO_CHANGE_NOTES
+
+
+# Words that describe what happened TO a garment rather than naming one. A note
+# whose whole text is one of these ("removed", "worn") is a state, and reading
+# it as a garment name mints clothing called "removed" -- which is exactly what
+# chat 52 was carrying on two bodies. Kept to the closed `GARMENT_STATES`
+# vocabulary plus the handful of plain synonyms a Director actually writes; a
+# word not on this list is still treated as a garment, because inventing one is
+# recoverable and dropping real clothing is not.
+_BARE_STATE_WORDS = frozenset(GARMENT_STATES) | frozenset({
+    "on", "off", "shed", "gone", "gone now", "gone entirely", "taken off",
+    "put on", "gone from her", "discarded", "gone completely",
+})
+_REMOVAL_STATE_WORDS = frozenset({
+    "removed", "off", "shed", "gone", "gone now", "gone entirely", "taken off",
+    "discarded", "gone from her", "gone completely",
+})
+
+
+def is_bare_garment_state(text):
+    """Is this note's whole text a state, with no garment named in it?"""
+    return str(text or "").strip().casefold().strip(".") in _BARE_STATE_WORDS
+
+
+def is_removal_state(text):
+    """Of the bare states, does this one mean the garment came OFF?"""
+    return str(text or "").strip().casefold().strip(".") in _REMOVAL_STATE_WORDS
 
 
 def coerce_diff_shape(diff):
@@ -1101,6 +1144,21 @@ def flat_state(regions):
     return notes
 
 
+def is_derived_state_note(note):
+    """Did `flat_state` write this note, on this beat or an earlier one?
+
+    It emits exactly two shapes -- "bare at the <regions>" and
+    "<garment> loosened"/"<garment> open" -- so recognising them is closed and
+    cheap. Anything else is prose somebody chose, and is kept.
+    """
+    text = " ".join(str(note or "").split()).casefold().strip(".")
+    if not text:
+        return False
+    if text.startswith("bare at the "):
+        return True
+    return any(text.endswith(" " + state) for state in ("loosened", "open"))
+
+
 def rederive_entry(entry):
     """One attire ledger entry with its three representations agreeing again.
 
@@ -1117,7 +1175,21 @@ def rederive_entry(entry):
     entry = entry if isinstance(entry, dict) else {}
     regions = normalize_regions(entry)
     derived = flat_state(regions)
+    # "Not currently derived" is not the same as "authored". A note this
+    # function emitted on an EARLIER beat stops matching the moment the body
+    # changes, and was then preserved as though a human had written it -- so
+    # every successive undress left its predecessor behind. Chat 52 carried
+    # three of them at once on one body:
+    #
+    #   "bare at the head, arms, waist, groin, legs, feet"
+    #   "bare at the head, groin, legs"
+    #   "bare at the groin"
+    #
+    # all true at different moments and mutually contradictory as a set, which
+    # is what a character reading `state` had to work with. A derived-shaped
+    # note is always ours to rebuild, whether or not it is current.
     authored = [str(note) for note in (entry.get("state") or [])
-                if isinstance(note, str) and note.strip() and note not in derived]
+                if isinstance(note, str) and note.strip() and note not in derived
+                and not is_derived_state_note(note)]
     return {**entry, "regions": regions,
             "wearing": flat_wearing(regions), "state": derived + authored}
