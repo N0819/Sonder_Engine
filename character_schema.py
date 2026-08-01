@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import functools
 import json
 import re
 import uuid
@@ -1008,6 +1009,27 @@ def normalize_persona_data(value: dict) -> dict:
 
 def character_name(sheet: dict) -> str:
     return str(normalize_character_data(sheet).get("identity", {}).get("name") or "Unnamed")
+
+
+@functools.lru_cache(maxsize=512)
+def character_name_from_text(sheet_text: str | None) -> str:
+    """`character_name` keyed on the raw stored sheet TEXT.
+
+    The pipeline resolves names with `character_name(json.loads(row["sheet"]))`
+    from ~20 call sites, several inside per-cast and per-observer loops -- and
+    `character_name` runs the FULL sheet normalization (default-tree build,
+    recursive merge, shape repair) just to read one string. The sheet text a
+    row carries is byte-identical for the whole turn, so the derivation is a
+    pure function of it and safe to memoize. An edited sheet is a different
+    string and therefore a different cache entry; normalization stays the one
+    authority on how a name is derived (no fast-path re-implementation to
+    drift out of sync). Cached strings are immutable, so no copying is needed.
+    """
+    try:
+        data = json.loads(sheet_text or "{}")
+    except Exception:
+        data = {}
+    return character_name(data if isinstance(data, dict) else {})
 
 def character_tier(sheet: dict) -> str:
     return str(normalize_character_data(sheet).get("simulation", {}).get("tier", "mid"))

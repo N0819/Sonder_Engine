@@ -9,7 +9,8 @@ import attire
 import guest_access as guest
 
 import db
-from db import q, qi, qtx, transaction, wget, wset, get_setting, set_setting, parse_scoped_world_key
+from db import (q, qi, qtx, transaction, wget, wset, get_setting, set_setting,
+                parse_scoped_world_key, data_version)
 from db import _FRAME_KEY_SEP
 from providers import (
     chat_complete, chat_complete_async, token_sink, cancel_event,
@@ -294,12 +295,32 @@ def _stream(gen):
     thread.start()
 
     def w():
+        # Batched drain: one blocking get(), then everything already queued.
+        # Starlette drives this sync generator through iterate_in_threadpool,
+        # which pays a threadpool dispatch AND a fresh contextvars copy for
+        # every yielded item -- per TOKEN, when yielded one at a time. During
+        # generation the producer runs well ahead of the ASGI consumer, so
+        # draining the backlog into one yield hands the same NDJSON lines
+        # (framing unchanged -- one JSON object per line) to one dispatch.
+        # When the producer is slower than the consumer the inner loop finds
+        # the queue empty and each event still goes out immediately, so
+        # latency to first byte of any event is untouched.
         try:
             while True:
                 evt = evt_queue.get()
                 if evt is DONE:
                     return
-                yield json.dumps(evt) + "\n"
+                batch = [evt]
+                while True:
+                    try:
+                        nxt = evt_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    if nxt is DONE:
+                        yield "".join(json.dumps(e) + "\n" for e in batch)
+                        return
+                    batch.append(nxt)
+                yield "".join(json.dumps(e) + "\n" for e in batch)
         finally:
             thread.join()
     return StreamingResponse(w(), media_type="application/x-ndjson")
@@ -3296,10 +3317,33 @@ def turn_new(cid: int, body: dict = Body(...)):
         # writer, not just against itself.  The checkpoint must be in this same
         # transaction: if capturing it fails, no stepless turn may survive to
         # block the frame's next submission.
+        #
+        # The snapshot itself is serialized BEFORE the transaction. It is the
+        # single most expensive read in the app (every world KV, every
+        # chat_chars row, every lorebook entry, every memory and summary),
+        # ensure_checkpoint's own contract says it belongs outside the lock,
+        # and building it here held the global write lock -- blocking every
+        # other writer, including background backdrop/ambience jobs -- for
+        # the whole serialization.
+        #
+        # Staleness is decided by `db.data_version`, NOT by comparing turn ids.
+        # A turn-id check only catches another frame's pipeline committing a
+        # turn, and plenty of writers change checkpointed state without
+        # inserting a turn row: a lorebook edited in another tab, a character
+        # sheet saved, a memory edited, a background job writing a world key.
+        # SQLite moves `data_version` on any OTHER connection's commit and
+        # never on this connection's own, and connections here are
+        # thread-local, so every concurrent writer is visible to it. A false
+        # positive -- some unrelated write landing in the window -- costs one
+        # rebuild under the lock, which is exactly the pre-change behaviour.
+        pre_version = data_version()
+        pre_blob = json.dumps(snapshot_state(cid))
         with transaction():
             last = _latest_turn(cid)
             idx = (last["idx"] + 1) if last else 0
-            ensure_checkpoint(cid, idx)
+            if data_version() != pre_version:
+                pre_blob = json.dumps(snapshot_state(cid))
+            ensure_checkpoint(cid, idx, blob=pre_blob)
             tid = qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
                      (cid, idx, _player_input(body), time.time(), frame_id))
     except BaseException:

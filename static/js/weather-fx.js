@@ -101,6 +101,13 @@ const WFX_SEVERITY = {
   catastrophic: { density: 2.2, speed: 1.6, opacity: 1.3 },
 };
 
+// The whole stack's restraint: weather passes over the prose, so it stays at
+// the edge of noticeable. Applied PER LAYER (see the opacity line in
+// weatherFxBuild) rather than as a group opacity on #weather-fx, which would
+// cost an offscreen compositing pass every frame. styles.css's #weather-fx.on
+// is opacity:1 for the same reason; the .9s fade to/from 1 still animates.
+const WFX_STACK_OPACITY = 0.55;
+
 // The three layers: tile size in CSS pixels, how much faster or slower than the
 // base fall, and how strongly it reads. Near ones are bigger, faster, clearer.
 const WFX_LAYERS = [
@@ -276,7 +283,17 @@ function weatherFxBuild(kind, weather) {
     layer.style.backgroundPosition =
       Math.round(spec.size * 0.37 * specs.indexOf(spec)) + "px "
       + Math.round(spec.size * 0.61 * specs.indexOf(spec)) + "px";
-    layer.style.opacity = String(Math.min(1, spec.opacity * severity.opacity));
+    // The stack's overall restraint (WFX_STACK_OPACITY) is baked into each
+    // layer here rather than set as `opacity:.55` on #weather-fx. A group
+    // opacity below 1 over an animating subtree forces the compositor to
+    // render the three oversized layers into an offscreen buffer and blend
+    // that buffer every frame -- measured as the largest sustained GPU cost
+    // in the app whenever precipitation was visible. Per-layer opacity
+    // composites each layer directly instead. The only difference is where
+    // two streaks overlap (individually-dimmed layers stack slightly
+    // brighter than a dimmed composite); at this density it is not visible.
+    layer.style.opacity = String(
+      WFX_STACK_OPACITY * Math.min(1, spec.opacity * severity.opacity));
     // Travel is exactly one tile, so the end of the animation is pixel-for-
     // pixel the start of it and the loop cannot be seen.
     layer.style.setProperty("--wfx-travel", spec.size + "px");

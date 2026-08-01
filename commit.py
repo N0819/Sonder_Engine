@@ -20,7 +20,8 @@ from providers import embed_texts
 from prompts import get_prompt
 import affect
 import psychology_runtime
-from character_schema import (character_name, new_uid, character_psychology,
+from character_schema import (character_name, character_name_from_text,
+                              new_uid, character_psychology,
                               character_interoception,
                               character_initial_outfit,
                               character_initial_active_state, effective_drive,
@@ -2015,7 +2016,7 @@ def prepare_scene_commit(ctx):
     _advance_ground(cid, sc)
 
     infer_vehicle_zones(cid, ctx.turn.frame_id, prev_scene, sc)
-    _carry_names = [character_name(json.loads(c["sheet"])) for c in ctx.cast]
+    _carry_names = [character_name_from_text(c["sheet"]) for c in ctx.cast]
     infer_companion_carry(
         cid, ctx.turn.frame_id, prev_scene, sc,
         _carry_names,
@@ -2106,7 +2107,7 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
     clock = prepared.get("clock") or wget(cid, "simulation_clock", {}) or {}
     res = ctx.director_resolve or ctx.director_establish or {}
     diff = res.get("state_diff") or {}
-    cast_names = [character_name(json.loads(c["sheet"])) for c in ctx.cast]
+    cast_names = [character_name_from_text(c["sheet"]) for c in ctx.cast]
 
     with transaction():
         pending = [dict(r) for r in q(
@@ -2181,7 +2182,7 @@ def commit_cast_changes(ctx, nonce):
     res = ctx.director_resolve or {}
     diff = res.get("state_diff") or {}
     name2id = {
-        character_name(json.loads(r["sheet"])).lower(): r["id"]
+        character_name_from_text(r["sheet"]).lower(): r["id"]
         for r in q(
             "SELECT ch.id,COALESCE(cc.sheet,ch.sheet) AS sheet "
             "FROM chat_chars cc "
@@ -2385,7 +2386,7 @@ def _known_name_roster(chat, cast):
         if name:
             roster.append(name)
     for row in cast:
-        roster.append(character_name(json.loads(row["sheet"])))
+        roster.append(character_name_from_text(row["sheet"]))
     return roster
 
 def _resolve_roster_name(value, roster):
@@ -3467,7 +3468,7 @@ def prepare_mapping_commit(ctx):
         " ".join(map(str, specifics)) or res.get("summary", ""), k=10,
     )
     dormant = [
-        character_name(json.loads(r["sheet"]))
+        character_name_from_text(r["sheet"])
         for r in q(
             "SELECT COALESCE(cc.sheet,ch.sheet) AS sheet "
             "FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
@@ -3659,7 +3660,7 @@ def commit_mapping(ctx, nonce, *, prepared=None):
 
     known = wget(cid, "known", {})
     roster = _known_name_roster(chat, ctx.cast)
-    name_to_id = {character_name(json.loads(r["sheet"])): r["id"] for r in ctx.cast}
+    name_to_id = {character_name_from_text(r["sheet"]): r["id"] for r in ctx.cast}
     for vi in (mout.get("validated_introductions") or []):
         if not isinstance(vi, dict) or not vi.get("ok"):
             continue
@@ -4148,6 +4149,20 @@ def prepare_memory_commit(ctx, *, scene=None):
     else:
         _clock_seconds = float(_clock.get("elapsed_seconds") or 0.0)
 
+    # Loop-invariant inputs to the place-claim rekey below, hoisted: the scene
+    # rooms, the cast roster, and the persona do not change while this loop
+    # runs, but they were being rebuilt (a full room walk plus a name
+    # resolution per cast member) inside EVERY iteration that carried
+    # mind_model_updates -- O(cast^2) name derivations on a full table.
+    from scene import persona_of as _persona_of
+    _rekey_place_names = [
+        str((room or {}).get("name") or rid)
+        for rid, room in (sc.get("rooms") or {}).items()
+    ]
+    _rekey_protected = [character_name_from_text(_r["sheet"])
+                        for _r in ctx.cast]
+    _rekey_protected.append(persona_name(_persona_of(chat)))
+
     for char_row in ctx.cast:
         ccid = char_row["id"]
         sh = json.loads(char_row["sheet"])
@@ -4170,16 +4185,8 @@ def prepare_memory_commit(ctx, *, scene=None):
         # live hypothesis and demoted the row as abandoned from the start.
         _mm_updates = own_result.get("mind_model_updates") or []
         if _mm_updates:
-            _place_names = [
-                str((room or {}).get("name") or rid)
-                for rid, room in (sc.get("rooms") or {}).items()
-            ]
-            from scene import persona_of as _persona_of
-            _people = [character_name(json.loads(_r["sheet"]))
-                       for _r in ctx.cast]
-            _people.append(persona_name(_persona_of(chat)))
             _mm_updates = rekey_place_claims(
-                _mm_updates, _place_names, protected=_people)
+                _mm_updates, _rekey_place_names, protected=_rekey_protected)
         active_state = own_result.get("active_state") or {}
         mood = str(active_state.get("mood") or "")
         # The character's blended surface affect this beat carries the numeric
@@ -5114,7 +5121,7 @@ def _consolidate_committed_memories(ctx):
             )
             if result:
                 return (
-                    f"{character_name(json.loads(char_row['sheet']))}: "
+                    f"{character_name_from_text(char_row['sheet'])}: "
                     "autobiographical summary updated"
                 )
         except Exception as exc:

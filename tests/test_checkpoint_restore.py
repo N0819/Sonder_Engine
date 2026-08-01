@@ -261,3 +261,70 @@ def test_restore_replaces_existing_chat_memories(
     assert [row["content"] for row in rows] == [
         "New restored memory.",
     ]
+
+
+class TestASnapshotBuiltOutsideTheLockIsStillCurrent:
+    """`turn_new` serialises the checkpoint snapshot BEFORE taking the write
+    lock -- it is the most expensive read in the app and holding the global
+    write lock for it blocked every other writer. That is only safe if
+    something detects a write landing in the window between building the blob
+    and acquiring the lock.
+
+    The first version compared the latest turn id, on the reasoning that the
+    only writer that could slip in was another frame's pipeline committing a
+    turn. That is not true: lorebook edits, character-sheet saves, memory
+    edits and background world writes all change checkpointed state without
+    inserting a turn row, and a turn-id check misses every one of them.
+    `db.data_version` is the exact test instead.
+    """
+
+    def test_it_moves_when_another_connection_commits(self, temp_db):
+        import sqlite3
+        import db
+
+        before = db.data_version()
+        other = sqlite3.connect(db.DB)
+        other.execute("INSERT INTO settings(key,value) VALUES(?,?)",
+                      ("cpu_probe", "1"))
+        other.commit()
+        other.close()
+        assert db.data_version() != before, (
+            "a write from another connection must be detectable")
+
+    def test_it_does_not_move_for_this_connections_own_writes(self, temp_db):
+        """Or every snapshot would be treated as stale and rebuilt, which is
+        the cost this avoids."""
+        import db
+
+        db.qi("INSERT INTO settings(key,value) VALUES(?,?)", ("own_probe", "1"))
+        before = db.data_version()
+        db.qi("INSERT INTO settings(key,value) VALUES(?,?)", ("own_probe2", "1"))
+        assert db.data_version() == before
+
+    def test_a_lorebook_edit_is_caught_where_a_turn_id_check_would_miss_it(
+            self, temp_db):
+        """The concrete case the turn-id guard was blind to."""
+        import sqlite3
+        import db
+
+        cid = db.qi("INSERT INTO chats(name,created) VALUES(?,?)", ("S", 0.0))
+        latest_before = db.q(
+            "SELECT id FROM turns WHERE chat_id=? ORDER BY idx DESC LIMIT 1",
+            (cid,), one=True)
+        before = db.data_version()
+
+        other = sqlite3.connect(db.DB)
+        other.execute(
+            "INSERT INTO lorebooks(name,book_type,summary) VALUES(?,?,?)",
+            ("Edited elsewhere", "general", ""))
+        other.commit()
+        other.close()
+
+        latest_after = db.q(
+            "SELECT id FROM turns WHERE chat_id=? ORDER BY idx DESC LIMIT 1",
+            (cid,), one=True)
+        # No turn row was inserted, so the old guard sees nothing...
+        assert (latest_before["id"] if latest_before else None) == (
+            latest_after["id"] if latest_after else None)
+        # ...and the real one sees it.
+        assert db.data_version() != before

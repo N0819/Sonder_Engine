@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 
-from character_schema import character_appearance, character_name
+from character_schema import (character_appearance, character_name,
+                              character_name_from_text)
 from db import wget
 from scene import (
     NON_AWAKE_GATED,
@@ -144,7 +145,7 @@ def _drop_non_awake(ctx, reactor_ids):
     if not reactor_ids:
         return reactor_ids
     amap = awareness_map(ctx.chat.id)
-    id_to_name = {c["id"]: character_name(json.loads(c["sheet"])) for c in ctx.cast}
+    id_to_name = {c["id"]: character_name_from_text(c["sheet"]) for c in ctx.cast}
     return [rid for rid in reactor_ids
             if awareness_of(amap, id_to_name.get(rid, "")) not in NON_AWAKE_GATED]
 

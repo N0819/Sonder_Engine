@@ -12,6 +12,7 @@ from character_schema import (
     character_appearance,
     character_initial_outfit,
     character_name,
+    character_name_from_text,
     character_public_history,
     persona_abilities,
     persona_appearance,
@@ -2856,7 +2857,7 @@ def director_resolve(ctx, nonce):
     # AUTHORITY APPRAISAL rule -- an order across a standing gap is
     # contestable, not auto-executed.
     social_standing = {
-        character_name(json.loads(c["sheet"])):
+        character_name_from_text(c["sheet"]):
             (character_public_history(json.loads(c["sheet"])) or "")[:240]
         for c in ctx.cast
     }
@@ -2924,7 +2925,7 @@ def director_resolve(ctx, nonce):
         ],
         "character_declarations": decls,
         "character_abilities": {
-            character_name(json.loads(c["sheet"])): character_abilities(json.loads(c["sheet"]))
+            character_name_from_text(c["sheet"]): character_abilities(json.loads(c["sheet"]))
             for c in ctx.cast
         },
         "dice_results_final": dice,
@@ -3095,7 +3096,7 @@ def director_resolve(ctx, nonce):
     for _d in (out.get("dialogue_log") or []):
         _spk = str(_d.get("speaker") or "")
         if (_spk.casefold() not in {
-                character_name(json.loads(c["sheet"])).casefold()
+                character_name_from_text(c["sheet"]).casefold()
                 for c in ctx.cast}
                 and not is_player_speaker(_spk, chat)):
             _allowed_quote_bodies.add(_quote_body(_d.get("exact_quote", "")))
@@ -3425,7 +3426,7 @@ def director_resolve(ctx, nonce):
     # in that character's own declared speech -- a deterministic backstop
     # regardless of how well the prompt's scoping is actually followed.
     cast_names_lower = {
-        character_name(json.loads(c["sheet"])).casefold() for c in ctx.cast
+        character_name_from_text(c["sheet"]).casefold() for c in ctx.cast
     }
     char_speech_bodies = {
         cname.casefold(): {_quote_body(s["text"]) for s in speeches}
@@ -3625,7 +3626,7 @@ def director_resolve(ctx, nonce):
     out["dialogue_log"] = deduped
 
     tracked_names = [
-        character_name(json.loads(c["sheet"])) for c in ctx.cast
+        character_name_from_text(c["sheet"]) for c in ctx.cast
     ] + [p_name]
 
     # W2 backstop: warn on any player-authored world assertion the resolve

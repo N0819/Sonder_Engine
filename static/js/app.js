@@ -688,15 +688,27 @@ async function toggleNSFW() {
 
 // ---- Composer ----
 
+// Coalesced to one measure per painted frame: the body forces a synchronous
+// layout (height:auto, then scrollHeight), and it used to run per `input`
+// event -- every keystroke, plus a second cascade when the height change
+// tripped the #composer ResizeObserver. A frame of delay on a textarea
+// growing is imperceptible; the forced layout per keystroke was not free.
+let _composerResizeQueued = false;
 function resizeComposer() {
-  const input = $("#input");
-  input.style.height = "auto";
-  // The ceiling lives in CSS (#input's max-height) rather than being repeated
-  // here -- it is viewport-relative now, and two copies of the same number
-  // drift the moment one of them is tuned.
-  const max = parseFloat(getComputedStyle(input).maxHeight);
-  input.style.height =
-    Math.min(input.scrollHeight, Number.isFinite(max) ? max : 220) + "px";
+  if (_composerResizeQueued) return;
+  _composerResizeQueued = true;
+  requestAnimationFrame(() => {
+    _composerResizeQueued = false;
+    const input = $("#input");
+    if (!input) return;
+    input.style.height = "auto";
+    // The ceiling lives in CSS (#input's max-height) rather than being
+    // repeated here -- it is viewport-relative now, and two copies of the
+    // same number drift the moment one of them is tuned.
+    const max = parseFloat(getComputedStyle(input).maxHeight);
+    input.style.height =
+      Math.min(input.scrollHeight, Number.isFinite(max) ? max : 220) + "px";
+  });
 }
 
 $("#input").addEventListener("input", resizeComposer);

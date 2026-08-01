@@ -533,13 +533,19 @@ function vitalMeter(value, invert) {
 const VITALS_MIN_GUTTER = 186;
 const VITALS_MAX_WIDTH = 232;
 
-function syncVitalsGutter() {
+function syncVitalsGutterNow() {
   const composer = $("#composer");
   const inner = $("#composer-inner");
   if (!composer || !inner) {
     return;
   }
 
+  // ALL layout reads first, then all writes. This handler used to interleave
+  // them (set --vitals-bottom, then read the player panel's offsetHeight),
+  // which forces the browser to run layout synchronously mid-handler -- and
+  // this runs on every resize frame and, via the ResizeObserver below, on
+  // every keystroke that grows the composer.
+  //
   // The input box is capped and centred inside #composer, so the gutter is
   // the real distance from the composer's left edge to the box. Measured from
   // the elements rather than assumed from the viewport, because the sidebar
@@ -559,17 +565,21 @@ function syncVitalsGutter() {
   const npcHost = $("#vitals-npcs");
 
   const playerVisible = playerHost && !playerHost.classList.contains("hidden");
+  // Read up here with the other measurements: the panel's own height does not
+  // depend on the --vitals-bottom write below (that only moves it), so the
+  // value is identical to the old post-write read, minus the forced layout.
+  const playerHeight = playerVisible ? playerHost.offsetHeight : 0;
   if (playerHost) {
     playerHost.style.setProperty("--vitals-bottom", (band + 12) + "px");
   }
   if (npcHost) {
-    const above = playerVisible ? playerHost.offsetHeight + 10 : 0;
+    const above = playerVisible ? playerHeight + 10 : 0;
     npcHost.style.setProperty("--vitals-bottom", (band + 12 + above) + "px");
   }
   const fits = usable >= VITALS_MIN_GUTTER;
   const width = Math.min(Math.max(usable, 0), VITALS_MAX_WIDTH) + "px";
 
-  for (const host of [$("#vitals"), $("#vitals-npcs")]) {
+  for (const host of [playerHost, npcHost]) {
     if (!host) {
       continue;
     }
@@ -582,6 +592,21 @@ function syncVitalsGutter() {
       host.classList.remove("fits");
     }
   }
+}
+
+// Public form: coalesced to one run per painted frame. Resize fires this per
+// frame while dragging the window edge, the ResizeObserver fires it per
+// keystroke, and refreshVitalsHud calls it twice back-to-back -- each call
+// was a full measure-and-write pass. One pass per frame is all the screen
+// can show anyway.
+let _vitalsGutterQueued = false;
+function syncVitalsGutter() {
+  if (_vitalsGutterQueued) return;
+  _vitalsGutterQueued = true;
+  requestAnimationFrame(() => {
+    _vitalsGutterQueued = false;
+    syncVitalsGutterNow();
+  });
 }
 
 window.syncVitalsGutter = syncVitalsGutter;
