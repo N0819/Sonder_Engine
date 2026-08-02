@@ -64,7 +64,7 @@ def parse_scoped_world_key(key):
     return key, None
 
 DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -530,8 +530,21 @@ CREATE TABLE IF NOT EXISTS memory_summaries(
     embedding_model TEXT NOT NULL DEFAULT '',
     embedding_dim INTEGER,
     updated REAL NOT NULL,
-    UNIQUE(chat_id, char_id, scope)
+    -- One row per WINDOW, not one per character. The key was
+    -- (chat_id, char_id, scope) until v23, so a character's autobiography was
+    -- a single row overwritten on every consolidation -- which meant the
+    -- summary layer could not be searched, because there was nothing to search
+    -- BETWEEN. Every summary already carried a maintained `embedding`
+    -- (computed on write, re-embedded on a model change, carried through every
+    -- archive and checkpoint) that no retrieval path had ever read.
+    --
+    -- `end_turn_idx` completes the key so consolidation APPENDS a window and
+    -- re-running the same consolidation still updates in place rather than
+    -- duplicating.
+    UNIQUE(chat_id, char_id, scope, end_turn_idx)
 );
+CREATE INDEX IF NOT EXISTS idx_memory_summaries_window
+    ON memory_summaries(chat_id, char_id, scope, end_turn_idx);
 
 CREATE TABLE IF NOT EXISTS events(
     id INTEGER PRIMARY KEY,
@@ -1151,6 +1164,44 @@ MIGRATIONS = [
         "embedding_model TEXT NOT NULL DEFAULT '',"
         "embedding_dim INTEGER,"
         "created REAL NOT NULL)",
+    ],
+    # v22 -> v23
+    [
+        # Summary WINDOWS. The old key was (chat_id, char_id, scope), so a
+        # character's autobiography was one row overwritten on every
+        # consolidation -- which is why the summary layer could not be
+        # searched: there was nothing to search between. Each row already
+        # carried a maintained embedding no retrieval path had ever read.
+        #
+        # A rebuild rather than an ALTER: SQLite cannot drop a UNIQUE declared
+        # inline on CREATE TABLE (it owns an implicit auto-index). Existing
+        # rows copy across unchanged and become each character's first window.
+        "CREATE TABLE IF NOT EXISTS memory_summaries_v23("
+        "id INTEGER PRIMARY KEY,"
+        "chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,"
+        "char_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,"
+        "scope TEXT NOT NULL DEFAULT 'autobiographical',"
+        "start_turn_idx INTEGER NOT NULL DEFAULT 0,"
+        "end_turn_idx INTEGER NOT NULL DEFAULT 0,"
+        "summary TEXT NOT NULL DEFAULT '',"
+        "key_phrases TEXT NOT NULL DEFAULT '[]',"
+        "unresolved_threads TEXT NOT NULL DEFAULT '[]',"
+        "embedding BLOB,"
+        "embedding_model TEXT NOT NULL DEFAULT '',"
+        "embedding_dim INTEGER,"
+        "updated REAL NOT NULL,"
+        "UNIQUE(chat_id, char_id, scope, end_turn_idx))",
+        "INSERT INTO memory_summaries_v23("
+        "id, chat_id, char_id, scope, start_turn_idx, end_turn_idx, summary,"
+        "key_phrases, unresolved_threads, embedding, embedding_model,"
+        "embedding_dim, updated) "
+        "SELECT id, chat_id, char_id, scope, start_turn_idx, end_turn_idx,"
+        "summary, key_phrases, unresolved_threads, embedding, embedding_model,"
+        "embedding_dim, updated FROM memory_summaries",
+        "DROP TABLE memory_summaries",
+        "ALTER TABLE memory_summaries_v23 RENAME TO memory_summaries",
+        "CREATE INDEX IF NOT EXISTS idx_memory_summaries_window"
+        " ON memory_summaries(chat_id, char_id, scope, end_turn_idx)",
     ],
 ]
 

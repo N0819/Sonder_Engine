@@ -1962,7 +1962,23 @@ def recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=4, limit=12, 
 # ---- Memory Summaries ----
 
 def get_memory_summary(chat_id, char_id, scope="autobiographical"):
-    row = q("SELECT * FROM memory_summaries WHERE chat_id=? AND char_id=? AND scope=?", (chat_id, char_id, scope), one=True)
+    """The character's CURRENT summary for this scope: the latest window.
+
+    Since v23 a scope holds one row per window rather than one row overall,
+    so this orders. Behaviour is unchanged for every existing bank -- each had
+    exactly one row, which is trivially the latest -- and unchanged going
+    forward for the payload, because consolidation still folds the previous
+    summary into the new window. The windows BEHIND the latest are what
+    `search_memory_summaries` exists to reach.
+
+    `end_turn_idx` first, `id` as the tiebreak: two windows can legitimately
+    close on the same turn (different scopes are separate rows, but a rerun
+    that lands on the same boundary updates in place, and a restore renumbers
+    ids), so the later row wins.
+    """
+    row = q("SELECT * FROM memory_summaries WHERE chat_id=? AND char_id=? "
+            "AND scope=? ORDER BY end_turn_idx DESC, id DESC LIMIT 1",
+            (chat_id, char_id, scope), one=True)
     if not row:
         return {"scope": scope, "start_turn_idx": 0, "end_turn_idx": 0, "summary": "",
                 "key_phrases": [], "unresolved_threads": [], "updated": None}
@@ -1973,6 +1989,78 @@ def get_memory_summary(chat_id, char_id, scope="autobiographical"):
 def _summary_retrieval_text(summary, key_phrases, unresolved_threads):
     return "\n".join([summary or "", ", ".join(key_phrases or []),
                       "\n".join(unresolved_threads or [])])
+
+def search_memory_summaries(chat_id, char_id, query, k=3, *,
+                            scope="autobiographical", before_turn_idx=None,
+                            exclude_latest=True):
+    """Rank a character's summary WINDOWS by semantic similarity to `query`.
+
+    The layer above raw recall: which ERA of my life is this beat about. Every
+    summary has carried a maintained embedding since summaries existed -- built
+    from `_summary_retrieval_text`, re-embedded on a model change, carried
+    verbatim through every archive and checkpoint -- and until v23 no retrieval
+    path read a single one of them, because the table held exactly one row per
+    character per scope and there was nothing to rank.
+
+    Scoped exactly like `search_memories`:
+
+    - **char_id** is the bank. A summary is one character's autobiography and
+      is never comparable across characters.
+    - **before_turn_idx** is the same exclusive cutoff the read seam applies.
+      A window that closed at or after the deciding turn describes how this
+      beat turned out, and a mind deciding turn N must not read it. Windows
+      are ranked on `end_turn_idx` because that is when the window's knowledge
+      became complete.
+    - **exclude_latest** drops the window `get_memory_summary` already returns,
+      so a caller that sends both does not send it twice. Turn it off to rank
+      the whole history.
+
+    A window whose vector was built by a different embedding model scores 0.0
+    and is skipped rather than compared -- the same rule the memory rankings
+    follow, for the same reason: a cross-model cosine is noise wearing the
+    shape of a score.
+
+    Returns [{...window..., "score": float}], best first, `k` at most.
+    """
+    rows = q("SELECT * FROM memory_summaries WHERE chat_id=? AND char_id=? "
+             "AND scope=? ORDER BY end_turn_idx DESC, id DESC",
+             (chat_id, char_id, scope))
+    if not rows:
+        return []
+    if exclude_latest:
+        rows = rows[1:]
+    if before_turn_idx is not None:
+        cutoff = int(before_turn_idx)
+        rows = [r for r in rows if (r["end_turn_idx"] or 0) < cutoff]
+    rows = [r for r in rows if (r["summary"] or "").strip()]
+    if not rows:
+        return []
+    embedded = embed_texts_meta([str(query or "")])
+    qv = np.asarray(embedded.vectors[0], dtype=np.float32)
+    live_model = embedded.model_key
+    scored = []
+    for r in rows:
+        if (r["embedding_model"] or "") != live_model:
+            continue
+        v = _vec(r["embedding"])
+        if v is None or v.shape != qv.shape:
+            continue
+        scored.append((_cos(qv, v), r))
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    out = []
+    for score, r in scored[:k]:
+        out.append({
+            "scope": r["scope"],
+            "start_turn_idx": r["start_turn_idx"],
+            "end_turn_idx": r["end_turn_idx"],
+            "summary": r["summary"],
+            "key_phrases": _json_list(r["key_phrases"]),
+            "unresolved_threads": _json_list(r["unresolved_threads"]),
+            "updated": r["updated"],
+            "score": float(score),
+        })
+    return out
+
 
 def save_memory_summary(chat_id, char_id, summary, *, scope="autobiographical", start_turn_idx=0,
                         end_turn_idx=0, key_phrases=None, unresolved_threads=None,
@@ -1990,7 +2078,8 @@ def save_memory_summary(chat_id, char_id, summary, *, scope="autobiographical", 
         embedding_dim = embedded.dimensions
     qi("""INSERT INTO memory_summaries(chat_id,char_id,scope,start_turn_idx,end_turn_idx,summary,
         key_phrases,unresolved_threads,embedding,embedding_model,embedding_dim,updated)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(chat_id,char_id,scope) DO UPDATE SET
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(chat_id,char_id,scope,end_turn_idx) DO UPDATE SET
         start_turn_idx=excluded.start_turn_idx, end_turn_idx=excluded.end_turn_idx,
         summary=excluded.summary, key_phrases=excluded.key_phrases,
         unresolved_threads=excluded.unresolved_threads, embedding=excluded.embedding,
@@ -2561,7 +2650,11 @@ def dump_memory_summaries(chat_id):
          "embedding": _blob_to_b64(r["embedding"]),
          "embedding_model": r["embedding_model"],
          "embedding_dim": r["embedding_dim"]}
-        for r in q("SELECT * FROM memory_summaries WHERE chat_id=? ORDER BY char_id, scope", (chat_id,))
+        # end_turn_idx joins the ordering since v23: a scope holds one row per
+        # WINDOW, so (char_id, scope) alone no longer identifies a row and an
+        # export's order would depend on rowid.
+        for r in q("SELECT * FROM memory_summaries WHERE chat_id=? "
+                   "ORDER BY char_id, scope, end_turn_idx, id", (chat_id,))
     ]
 
 def prepare_memory_summary_restore(summaries):
