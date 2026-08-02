@@ -509,7 +509,24 @@ def _ubiquitous_names(sc):
         return frozenset()
 
 
-def _source_channels(sc, perceiver_name, perceiver_room, sources):
+def _saw_across_beat(sc, prev_sc, perceiver_name, source_name, rel):
+    """Visual channel to one source, over the whole beat (see _source_channels).
+
+    Per-body and light-aware via `visual_level_between` when the perceiver has
+    a position, room-level otherwise. Answered against the outcome scene first;
+    only if that says no does the pre-diff scene get asked, so this can add a
+    channel the beat closed and can never remove one it opened.
+    """
+    def _at(scene):
+        if not scene:
+            return False
+        if room_of(scene, perceiver_name) is not None:
+            return visual_level_between(scene, perceiver_name, source_name) != "none"
+        return has_visual(rel)
+    return _at(sc) or _at(prev_sc)
+
+
+def _source_channels(sc, perceiver_name, perceiver_room, sources, prev_sc=None):
     """spatial_to_sources / visual_channel_to_sources for ONE perceiver.
 
     Concealment by containment belongs here rather than at the call sites. A
@@ -542,12 +559,44 @@ def _source_channels(sc, perceiver_name, perceiver_room, sources):
 
     Returns the two keys to splat into a perceiver entry, so the answer is
     computed once and cannot drift between them.
+
+    THE BEAT, NOT ITS LAST FRAME. `prev_sc` is the scene as it stood BEFORE
+    this turn's diff, and when it is given a source counts as perceptible if it
+    was reachable at either end of the beat. Without it an act that closes a
+    channel erases the perception of the act itself, because perception only
+    ever ran against the outcome scene.
+
+    Live (chat 58, t27): the player ran through the TARDIS's open doors, the
+    doors slammed, and the ship went `in_transit` -- which correctly severs the
+    interior's exterior edges. All three happened in one beat, so by the time
+    the Doctor's view was built the room she had run into was not adjacent to
+    anywhere, and his view records the doors closing on an empty doorway. He
+    never saw her go in. The same shape covers every act that shuts a channel
+    it is seen through: a slammed door, a drawn curtain, stepping into a
+    container, a vehicle pulling away.
+
+    Union, not replacement: whichever end of the beat grants MORE is used. A
+    body that was never reachable and still is not stays unreachable, so this
+    opens nothing that was closed for the whole beat -- it only refuses to
+    pretend the beat's own transition never happened.
     """
     rels = {}
     for s in sources:
         rel = spatial_rel(sc, s["room"], perceiver_room)
         if containment_conceals(sc, perceiver_name, s["name"]):
             rel = {**rel, "concealed": True}
+        if prev_sc:
+            prev_rel = spatial_rel(
+                prev_sc,
+                room_of(prev_sc, s["name"]) or s["room"],
+                room_of(prev_sc, perceiver_name) or perceiver_room)
+            if containment_conceals(prev_sc, perceiver_name, s["name"]):
+                prev_rel = {**prev_rel, "concealed": True}
+            # Only ever upgrades. `has_visual` is the room-level question and
+            # is the one that goes false when an edge is severed mid-beat --
+            # which is exactly the transition this exists to preserve.
+            if has_visual(prev_rel) and not has_visual(rel):
+                rel = {**prev_rel, "was_reachable_at_beat_start": True}
         # One-way: the perceiver is inside THIS source, so the source's voice
         # is conducted through the mass around them rather than transmitted
         # through a barrier. hear_level reads it; sight is untouched.
@@ -558,9 +607,7 @@ def _source_channels(sc, perceiver_name, perceiver_room, sources):
     return {
         "spatial_to_sources": rels,
         "visual_channel_to_sources": {
-            n: (visual_level_between(sc, perceiver_name, n) != "none"
-                if room_of(sc, perceiver_name) is not None
-                else has_visual(rels[n]))
+            n: (_saw_across_beat(sc, prev_sc, perceiver_name, n, rels[n]))
             for n in rels
         },
         "scent_channel_to_sources": {n: scent_level(r) for n, r in rels.items()},
@@ -738,7 +785,64 @@ def _strip_self_narration(view, perceiver_name, other_names=()):
     return " ".join(kept), dropped
 
 
-def _scrub_view_for(ctx, stage, view, perceiver_name, known, roster):
+def _strip_unreachable_bodies(view, perceiver_name, scene, roster):
+    """Drop sentences about a body the perceiver has NO sensory channel to.
+
+    A view is the whole information budget one mind receives, and the engine
+    already knows who is reachable -- `spatial_rel` answers it for every pair
+    on the scene. Nothing consumed that answer when the view was prose, so a
+    body could be described in full to an observer with no way to perceive it.
+
+    Live (chat 58, t28): Hinami slammed the TARDIS doors and stood in the
+    console room; the Dalek stood outside. `visual_level_between` returns
+    'none' for that pair and `spatial_rel` calls it `separated`/`far` -- no
+    connecting geometry at all -- and her actions were still narrated into the
+    Dalek's view, which then fed the Dalek's own next-turn context.
+
+    Deliberately the HARD case only: no channel whatsoever. A body the
+    perceiver cannot SEE but can still hear through a shut door is left alone,
+    because dropping it would deny a legitimate perception -- that narrower
+    case (sight asserted where only hearing exists) needs sense-cue analysis
+    and is not this guard's job. Over-denial here would be the worse failure:
+    a view is what a mind gets, and silence about someone audibly present is
+    its own lie.
+
+    Same shape as `_strip_self_narration`: whole sentences, subject only,
+    nothing invented to replace what goes, and never empties a view.
+    """
+    if not view or not perceiver_name or not scene:
+        return view, []
+    names = [r["name"] for r in (roster or []) if r.get("name")]
+    unreachable = set()
+    for name in names:
+        if name == perceiver_name:
+            continue
+        rel = spatial_rel(scene, cast_room(scene, perceiver_name, []),
+                          cast_room(scene, name, []))
+        # `separated` means no edge was found between the two rooms; `unknown`
+        # means one of them has no room at all. Every other barrier is a real
+        # relationship the perceiver may sense across at SOME volume.
+        if str(rel.get("barrier") or "").lower() in ("separated", "unknown") \
+                and not rel.get("same_room"):
+            unreachable.add(name)
+    if not unreachable:
+        return view, []
+    kept, dropped = [], []
+    for stripped, subject in _sentence_subjects(
+            str(view), names, split=_SENTENCE_SPLIT):
+        if not stripped:
+            continue
+        if subject in unreachable:
+            dropped.append(stripped)
+        else:
+            kept.append(stripped)
+    if not dropped or not kept:
+        return view, []
+    return " ".join(kept), dropped
+
+
+def _scrub_view_for(ctx, stage, view, perceiver_name, known, roster,
+                    scene=None):
     """Apply the deterministic identity floor to one perceiver's view:
     every roster identity the perceiver does not recognize (and is not) is
     scrubbed outside quoted spans. Surfaces a pipeline warning per leak --
@@ -762,6 +866,12 @@ def _scrub_view_for(ctx, stage, view, perceiver_name, known, roster):
         ctx.warnings.append(
             f"{stage}: dropped self-narration from the view of "
             f"{perceiver_name}: {sentence[:120]!r}")
+    view, unreachable = _strip_unreachable_bodies(
+        view, perceiver_name, scene, roster)
+    for sentence in unreachable:
+        ctx.warnings.append(
+            f"{stage}: dropped a body with no sensory channel from the view "
+            f"of {perceiver_name}: {sentence[:120]!r}")
     return view
 
 def _behind_rooms(scene, observer):
@@ -2028,7 +2138,7 @@ def perception_outcome(ctx, nonce):
         "visible_rooms": visible_adjacent_rooms(sc, p_room),
         "senses": senses_of(pers), "attention": "engaged",
         "knows_identity": True,
-        **_source_channels(sc, p_name, p_room, sources),
+        **_source_channels(sc, p_name, p_room, sources, prev_sc=prev_scene),
         "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
         "behind_sources": _behind_sources(sc, p_name, sources),
         "room_layout": room_layout(sc, p_name),
@@ -2049,7 +2159,7 @@ def perception_outcome(ctx, nonce):
             "visible_rooms": visible_adjacent_rooms(sc, e_room),
             "senses": senses_of(extra), "attention": "engaged",
             "knows_identity": True,
-            **_source_channels(sc, e_name, e_room, sources),
+            **_source_channels(sc, e_name, e_room, sources, prev_sc=prev_scene),
             "proximity_to_sources": _proximity_to_sources(sc, e_name, sources),
             "behind_sources": _behind_sources(sc, e_name, sources),
             "room_layout": room_layout(sc, e_name),
@@ -2075,7 +2185,7 @@ def perception_outcome(ctx, nonce):
             "senses": senses_of(sh),
             "attention": act.get("goal") or "ambient",
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
-            **_source_channels(sc, character_name(sh), r, sources),
+            **_source_channels(sc, character_name(sh), r, sources, prev_sc=prev_scene),
             "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), sources),
             "behind_sources": _behind_sources(sc, character_name(sh), sources),
             "room_layout": room_layout(sc, character_name(sh)),
@@ -2473,7 +2583,8 @@ def perception_outcome(ctx, nonce):
         # model's free prose is scrubbed per-source against THIS
         # perceiver's recognized set; quoted speech survives verbatim.
         view = _scrub_view_for(
-            ctx, "perception_outcome", view, p["name"], known, ident_roster)
+            ctx, "perception_outcome", view, p["name"], known, ident_roster,
+            scene=sc)
         # PLAYER-SPEECH AUTHORITY (perception layer): the player's OWN view must
         # not put words in the player's mouth. Drop any player-attributed quote
         # the player did not declare this beat (the perception LLM sometimes

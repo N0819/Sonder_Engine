@@ -204,3 +204,53 @@ def test_observable_surface_at_a_distance_is_still_allowed():
                   "The light in your eyes steadies.",
                   "The grip on your arm loosens."):
         assert _check_player_interiority_prose(prose, VIEW_SRC) == [], prose
+
+
+# ---- the article belongs to the prose, not to the name ----
+#
+# Live, chat 58 t28. The Dalek's own view read "The Dalek's visual sensors pick
+# up...", "The Dalek hears the Doctor's sharp call", "The Dalek's own base
+# grinds forward" — third person about its own perceiver, in the view addressed
+# to it, and invisible to this guard. Its registered name is "A Dalek", so the
+# subject forms were "A Dalek" and "Dalek", and neither opens a sentence that
+# begins "The Dalek's". The article is the only difference — the same trap
+# docs/UNBUILT.md §1.17 documents for presence identity.
+
+def test_a_body_named_with_an_article_is_caught_under_another_article():
+    view = ("The Dalek's visual sensors pick up the man in the trench coat. "
+            "The Dalek hears a sharp call. "
+            "Rain hisses on the wet pavement.")
+    kept, dropped = _strip_self_narration(view, "A Dalek", ["The Doctor"])
+    assert len(dropped) == 2
+    assert "Rain hisses" in kept
+    assert "visual sensors" not in kept
+    assert "hears a sharp call" not in kept
+
+
+def test_the_bare_name_and_the_registered_form_both_still_bind():
+    for opener in ("A Dalek swivels its eye-stalk.",
+                   "Dalek swivels its eye-stalk.",
+                   "An Dalek swivels its eye-stalk."):
+        kept, dropped = _strip_self_narration(
+            opener + " Rain hisses on the pavement.", "A Dalek", [])
+        assert dropped, opener
+        assert "Rain hisses" in kept
+
+
+def test_an_article_does_not_let_one_body_absorb_another():
+    # "The Doctor" must not be read as the Dalek merely because both can carry
+    # a leading article.
+    view = ("The Doctor raises the sonic screwdriver. "
+            "The Dalek grinds forward.")
+    kept, dropped = _strip_self_narration(view, "A Dalek", ["The Doctor"])
+    assert dropped == ["The Dalek grinds forward."]
+    assert "The Doctor raises" in kept
+
+
+def test_the_article_tolerance_does_not_swallow_a_title():
+    # §1.17's line: a TITLE often is the only thing telling two bodies apart,
+    # so it is never treated as a droppable leader here.
+    view = "The captain signals the guard. The guard does not move."
+    kept, dropped = _strip_self_narration(view, "The guard", ["The captain"])
+    assert "The captain signals" in kept
+    assert dropped == ["The guard does not move."]

@@ -777,6 +777,110 @@ identity pass, since every widening of this gate is a candidate identity leak �
 the exact failure `_unknown_actor_label` was built to close when a label
 derived from an appearance summary leaked the canonical name inside it.
 
+### 1.20 A body's room changes with no warrant, and the scene never recovers
+
+**Found 2026-08-02**, investigating chat 58 ("Run! ⎇10 ⎇20"), where the final
+turn's perception made no narrative sense and `director_resolve` produced
+incoherent output on strong models. Shelved deliberately: the guard is easy to
+write and easy to write WRONG, and getting it wrong blocks legitimate movement
+in every story.
+
+Nothing validates that a position change was earned. `state_diff.positions` is
+merged as written, so the Director can relocate a body on a beat where nothing
+moved, and every later beat inherits it.
+
+Measured, from each turn's own `state_diff`:
+
+| turn | player input | positions written |
+|---|---|---|
+| t23–24 | throws a rock, ducks | everyone `alley_room` |
+| **t25** | *"You pick up a rock again and chuck it… at the Dalek's eyestalk"* | **Doctor + Hinami → `street_outside`**, a room minted this turn |
+| t26 | rolls behind a dumpster | Dalek → `street_outside` |
+| t27 | dashes for the TARDIS | Hinami → `alley_room`; the other two stay |
+| t28 | charges in, slams the doors | Hinami → `tardis_console_room` |
+
+Nobody moved at t25. The map itself is fine — `tardis_console_room —(closed
+door)— alley_room —(open)— street_outside` — and the TARDIS is in the alley.
+The POSITIONS are wrong, and the whole fight is written as happening at the
+TARDIS doors while two of its three participants stand a room away.
+
+Everything downstream follows, and none of it is separately broken:
+
+- `spatial_rel(tardis_console_room, street_outside)` is `separated`/`far`, so
+  the Doctor's `normal`-volume lines reach Hinami only through
+  `_dialogue_hear_level`'s by-name floor. That floor is NOT the bug: put the
+  Doctor where the fiction puts him and `hear_level(closed_door, "normal")` is
+  `fragment` — a muffled voice through slammed doors, exactly right.
+- The Doctor declared *"steps between Hinami and the advancing Dalek"* and
+  *"Hinami—behind me, now!"* for someone two rooms away behind a door she had
+  just slammed. Correct conduct given his view; the view was wrong.
+- `director_resolve` is then asked to resolve one continuous fight between
+  three bodies the geometry says cannot see, hear or reach each other. There
+  is no coherent resolution of that input. A stronger model returns more
+  confident nonsense — which is what "failing even on strong models" looks
+  like from the outside.
+
+The scene also contradicts itself in prose by t28: `alley_room.desc` says "a
+blue box appeared and vanished, leaving only empty air… The TARDIS is no
+longer here" while `positions` still holds the TARDIS entity in `alley_room`,
+and `tardis_console_room.desc` says the doors "stand sealed" while its own
+`notes` say they "now stand open". And the Dalek's position key changed from
+its entity uid (t23–24) to its name (t26 on), orphaning the entity record —
+§1.17's fragmentation, in `positions` this time rather than
+`background_presences`.
+
+**The rule wants to be:** a body's room may only change with a warrant this
+beat. **Why it is not written yet:** there are three warrants and only two are
+legible. The player's `director_interpret.movement.to_room` is explicit, and a
+character's declared locomotive action is inspectable — but Director-driven NPC
+movement (someone walks in, someone flees) has no signal beyond the resolve's
+own prose naming them moving, which is exactly the fuzzy test that would make
+the guard either useless or a blocker on ordinary play. Prove that third
+warrant before writing the guard; a check that silently pins NPCs in place is
+worse than the drift it replaces.
+
+Two consequences of the same investigation ARE fixed, because they hold on any
+geometry: `_strip_unreachable_bodies` (a body with no sensory channel is not
+described to a perceiver) and `_subject_opener` (a leading article belongs to
+the prose, not the name, so a body registered "A Dalek" is caught when the
+prose writes "The Dalek's"). See `Design.md`.
+
+### 1.21 A character can be handed the relevant era of their life, and is not
+
+**Found 2026-08-02**, implementing summary windows. The storage and retrieval
+halves landed (schema v23, `search_memory_summaries`); this is the half that
+deliberately did not.
+
+`get_memory_summary` returns ONE summary -- now the latest window -- and that is
+still all `build_character_memory_context` sends. A character whose story has
+run 200 turns receives a summary of roughly the last era and nothing about the
+ones before it, exactly as before. The windows behind it are now stored,
+embedded and rankable, and nothing asks for them.
+
+**Why it was not done in the same change.** The obvious move -- latest window
+plus the top-k retrieved older ones -- changes what every character in every
+story receives, and if it is wrong it fails the way `CLAUDE.md` warns about: no
+error, no warning, and a character who behaves wrongly fifty beats later where
+the cause looks like a model problem. Three specific hazards:
+
+- Today's summary is CUMULATIVE. Consolidation folds the previous summary into
+  each new window, so the latest window is not "the last 40 turns", it is
+  "everything, most recently restated". Bounded windows are safe in the payload
+  only once retrieval reliably returns the older ones, and *reliably* is the
+  word doing the work.
+- Retrieval ranks by similarity to the current beat. A character's
+  FOUNDATIONAL era -- who they are, why they set out -- is frequently
+  dissimilar to whatever is happening now, which is exactly when it should
+  still be present. A pure top-k drops it in the beats where it matters most.
+- The payload has a budget. Three windows plus recall plus the beat is a lot of
+  prose, and nobody has measured what it displaces.
+
+**Build it in this order:** (1) measure, on the live bank, how often a
+retrieved window would differ from the latest one -- before changing any
+payload; (2) decide the always-include rule for a character's first window,
+because an origin is not a similarity match; (3) then wire it behind a setting
+and compare CONDUCT across a maze arm, not by reading one turn.
+
 
 ---
 
