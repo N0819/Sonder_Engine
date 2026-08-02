@@ -675,6 +675,68 @@ Until then, the practical guidance is the one the failure teaches: **a fiction
 with several of the same thing needs several names.** The engine cannot count
 `a Dalek`.
 
+### 1.18 The fallback is doing all the work
+
+**Found 2026-08-01**, investigating whether embeddings could make the engine's
+word tables "fire and catch" more often. Shelved deliberately after the
+measurements pointed somewhere else. Recorded so nobody re-derives it.
+
+The engine carries **196 hand-maintained word tables** (30 in `spatial.py`, 29
+in `agents/common.py`, 19 in `weather.py`). Two of them decide physical facts
+and were measured against the live database:
+
+| table | matches |
+|---|---|
+| `weather._ENCLOSED_WORDS` (36 entries) | 42.6% of 155 distinct live room names |
+| `attire._REGION_CUES` (154 entries) | 53.3% of 152 distinct live garment names |
+
+**Embeddings are not the fix, measured.** With the real provider
+(`perplexity/pplx-embed-v1-4b`, 2560d):
+
+* Region classification: nearest-exemplar 52%, sentence-prototype 47.5%,
+  leave-one-out on the cue table itself 52.7% — all LOSING to the dumb
+  `DEFAULT_REGION="torso"` fallback at 72.5%, because the unknown tail is
+  "…uniform", "…suit", "casual clothing", whose right answer is torso.
+* Binary membership is easier and still unsafe: on 20 hand-labelled real room
+  names the table scores 10/20 and the best embedding threshold 15/20, but the
+  distributions OVERLAP — "back alley" (0.413) outranks "cargo bay 3" (0.305),
+  "command deck" (0.332) and "cozy inn" (0.378). No threshold separates them.
+* The precision gates are immune by construction: "she lifts her hand toward
+  his face" vs "she lowers her hand toward his face" cosine **0.943**;
+  "faint"/"faints" 0.784; "puts on"/"takes off" 0.612. Direction, polarity and
+  part of speech are invisible to cosine, and those are exactly what
+  `_inverted_motion_check` and `_UNCONSCIOUSNESS_CUE` turn on.
+* Latency 262 ms for one text against `db.py`'s 0.02 ms commit budget, so
+  nothing of this shape may enter the write path regardless.
+
+**What the numbers actually pointed at.** `weather.room_exposure` consults
+`_ENCLOSED_WORDS` only when `room.exposure` is unset — and `RoomDef.exposure`
+exists in the schema, the prompt says "give every room an `exposure`", and it
+is set on **8 of 289 rooms (2.8%)**. The 36-word list is deciding 281 of them.
+`scene.attire[].regions` is authored on **13 of 135 entries (9.6%)**, so the
+cue table decides the rest.
+
+So the tables are not the mechanism; they are the fallback that became the
+mechanism because the authoritative field is never populated. Worse,
+`room_exposure` recomputes the guess from the room NAME on every read and
+never stores it, so a wrong guess cannot be corrected by a user and changing
+the word list silently rewrites the past.
+
+**The proportionate fix, when it is wanted:** seed `exposure` once at commit
+from the existing guess and STORE it, so downstream reads a stored fact that
+can be edited; and emit a reconciliation signal when a room is created without
+one, the same shape as `restraint_scan` and `unconsciousness_scan` already
+use. Then the word list serves ~3% of rooms instead of 97% and its gaps stop
+mattering. Same question first for any other table: **is there an
+authoritative field this is standing in for?** Where there is not
+(`_SPEECH_VERBS` parsing model prose, `_BARRIER_ALIASES`), the table really is
+the mechanism and coverage work is legitimate.
+
+**Rejected outright:** embeddings in any precision gate; embedding region
+classification; embedding identity matching for presences (an over-merge welds
+two characters); `cheap_embed` for anything semantic (29.5% on the region
+task); any provider call inside the write lock.
+
 
 ---
 
