@@ -845,41 +845,88 @@ described to a perceiver) and `_subject_opener` (a leading article belongs to
 the prose, not the name, so a body registered "A Dalek" is caught when the
 prose writes "The Dalek's"). See `Design.md`.
 
-### 1.21 A character can be handed the relevant era of their life, and is not
+### 1.21 A character's origin cannot be reached by similarity, and 53 banks have none to reach
 
-**Found 2026-08-02**, implementing summary windows. The storage and retrieval
-halves landed (schema v23, `search_memory_summaries`); this is the half that
-deliberately did not.
+**Found 2026-08-02**, implementing summary windows. **Mostly landed 2026-08-02**
+— the payload half is built (`earlier_in_my_life`, see `Design.md`). What
+remains is the one hazard the original entry named that measurement did NOT
+dissolve, plus a consequence of the old design that cannot be repaired by
+reading.
 
-`get_memory_summary` returns ONE summary -- now the latest window -- and that is
-still all `build_character_memory_context` sends. A character whose story has
-run 200 turns receives a summary of roughly the last era and nothing about the
-ones before it, exactly as before. The windows behind it are now stored,
-embedded and rankable, and nothing asks for them.
+The original entry deferred the payload on three hazards. Two are answered:
 
-**Why it was not done in the same change.** The obvious move -- latest window
-plus the top-k retrieved older ones -- changes what every character in every
-story receives, and if it is wrong it fails the way `CLAUDE.md` warns about: no
-error, no warning, and a character who behaves wrongly fifty beats later where
-the cause looks like a model problem. Three specific hazards:
+- *"Today's summary is CUMULATIVE, so bounded windows would cost early
+  history."* **False in practice.** The consolidator is told to merge forward
+  and told just as firmly to shed low-salience detail; shedding wins.
+  Successive live windows share 3-16% of their text. The singleton was not
+  holding a life, it was holding the last chapter of one.
+- *"The payload has a budget and nobody has measured what it displaces."*
+  Measured: two windows, and across 48 probes on the live bank a mean 14% of the
+  sixteen recalled raw memories fall inside the sent window's turn span, so the
+  window is mostly reaching turns raw recall did not.
 
-- Today's summary is CUMULATIVE. Consolidation folds the previous summary into
-  each new window, so the latest window is not "the last 40 turns", it is
-  "everything, most recently restated". Bounded windows are safe in the payload
-  only once retrieval reliably returns the older ones, and *reliably* is the
-  word doing the work.
-- Retrieval ranks by similarity to the current beat. A character's
-  FOUNDATIONAL era -- who they are, why they set out -- is frequently
-  dissimilar to whatever is happening now, which is exactly when it should
-  still be present. A pure top-k drops it in the beats where it matters most.
-- The payload has a budget. Three windows plus recall plus the beat is a lot of
-  prose, and nobody has measured what it displaces.
+**The third stands, and is now sharper.** Retrieval ranks by similarity to the
+current beat, and a character's FOUNDATIONAL era -- who they are, why they set
+out -- is frequently dissimilar to whatever is happening now, which is exactly
+when it should still be present. Top-k drops it in the beats where it matters
+most. An origin is not a similarity match. What that rule should be is open:
+always-include costs a slot every beat for something usually irrelevant;
+include-on-drift needs a drift signal; include-when-nothing-else-scores needs
+the absolute floor the compressed 0.45-0.55 cosine band cannot provide.
 
-**Build it in this order:** (1) measure, on the live bank, how often a
-retrieved window would differ from the latest one -- before changing any
-payload; (2) decide the always-include rule for a character's first window,
-because an origin is not a similarity match; (3) then wire it behind a setting
-and compare CONDUCT across a maze arm, not by reading one turn.
+**The missing windows themselves are now rebuildable** --
+`backfill_memory_summary_windows`, run against chat 38 (see `Design.md`) -- so
+what is left here is only the ranking question above, plus the fact that no
+caller runs the backfill automatically: it is a library function, and 53 banks
+still have the hole.
+
+**Still unmeasured:** conduct. Everything above measures payload composition.
+Whether a character behaves differently for having their earlier chapters is a
+maze-arm question, not a one-turn read.
+
+### 1.22 One window answers most beats, because every view describes the same person
+
+**Found 2026-08-02**, measuring the window layer against chat 38's real
+perception views rather than hand-written probes. The distinction turned out to
+be the whole finding.
+
+Asked a query that NAMES an era, the layer is accurate: "the replicator logs,
+the miso soup and the mochi" returns windows (50,59) and (60,69) at 0.486/0.409;
+"the Jefferies tube and the phase-doubled conduits" returns (90,99) and (80,89).
+Raw recall agrees -- it returns turns 50-66 and 89-106 for the same two.
+
+Asked a REAL view, it collapses. Across 30 of the Doctor's actual
+`perception_act` views spanning turns 30-117, the origin window (0,9) wins **24
+of 30 beats**, including deep inside the Deck-14 anomaly, and **7 of his 11
+windows are never returned at all**.
+
+The cause is that a real view is mostly a description of who is standing there,
+and in a two-hander that never changes. His views nearly all describe Hinami,
+and the window that describes her most is the one where they met. The layer is
+ranking on the constant component of the beat instead of the variable one.
+
+**What was tried and did not work.** Hubness correction -- subtract each
+window's mean similarity across all views, so a window that matches everything
+matches nothing. Measured against raw recall's era as reference, it made
+targeting WORSE (median distance 12 turns vs 7; 4/30 exact-era hits vs 6/30).
+Recorded because it is the obvious first idea.
+
+**What did help, partially.** Every view carries a boilerplate tail -- `You see
+A beautiful young woman appearing in her early twenties, with golden fox ears
+and six golden tails.; wearing: modern casual attire.` -- identical on every
+beat and ~24% of an average view's length. Stripping it FROM THE RETRIEVAL
+QUERY ONLY (not from the view the character reads) drops the hub from 24/30 to
+19/30 and lifts two starved windows from 1 pick to 4 each. Cheap and worth
+doing, but it is not the whole cause.
+
+**The fix that fits the engine's own precedent** is the one that already solved
+this exact shape for raw memories: rank the windows against the ASPECTS as well
+as the view -- goal, mood, unresolved threads -- fused, rather than against one
+long string whose bulk is constant. `search_memories` learned this when a mood
+fragment concatenated onto a 1,015-character view moved the query vector by
+nothing (cosine 0.994); `search_memory_summaries` is still doing the
+concatenated thing, with one ranking and no aspects. The aspect vectors are
+already in the shared `EmbeddingBatch` it receives, so the cost is a loop.
 
 
 ---
@@ -1180,6 +1227,86 @@ all built (`Design.md`, "Clothing by body region"). What remains:
   only SPEED, never who may know what — but it is prose matching, and §3.1
   applies to it as much as anywhere. A structured "this act was decisive"
   signal on the declaration would retire it.
+
+---
+
+### 2.15 Movement is an arrival, never a crossing
+
+**Raised 2026-08-02**, after "step outside" landed correctly and still read
+wrong.
+
+A turn that moves a body renders the destination and nothing else. The engine
+has no representation of the crossing itself, so `positions` changes, the new
+room's view is composed, and the beat reads as a cut: the body was there, now it
+is here. For a step through a doorway that is fine. For anything with distance
+in it — crossing a plaza, walking a corridor, riding an elevator between floors
+— it flattens the part of the movement the player was interested in.
+
+The player's own framing, which is the design: **narrate the movement, then the
+arrival, then what the surroundings turn out to be.** Three beats of one action
+rather than one snapshot of its result.
+
+This is craft, not a defect, and it is recorded here so it stays separable from
+the two things it kept getting confused with:
+
+- `northern_plaza` reading empty was **not** distance. That room was an island
+  — no edge reached it in either direction — so "looking around" correctly
+  reported the only neighbour the map admitted. Fixed by
+  `connect_orphan_new_rooms`; see `Design.md`.
+- A view built only from the END state was a separate defect again, fixed by
+  `_source_channels(prev_sc=…)`.
+
+Neither of those would have been fixed by travel narration, and travel
+narration would not have fixed either of them. What it WOULD change is a beat
+that is currently correct and thin.
+
+**What it needs, in order.** (1) Decide who owns the crossing — the Director
+resolving it as a sequence, or the Narrator given `prev_room`/`room` and told
+to render the passage. The Narrator already receives `co_present_positions`
+with `prev_room` and a `moved` flag, so the data is half there. (2) Decide what
+a body PERCEIVES mid-crossing, because that is a perception question and the
+honest answer is "both rooms, briefly" — which is the same union
+`_source_channels` now computes across a beat, and may be the same mechanism.
+(3) Gate it on distance, or it will bloat every doorway step in the engine.
+
+### 2.16 A summary window should be an INDEX over raw memory, not more prose
+
+**Raised 2026-08-02**, in review of the summary-window work, and the right
+destination for that layer rather than a defect in what landed.
+
+Today the earlier windows travel *beside* raw recall: two paragraphs added to a
+payload that separately ranks sixteen raw memories. That is the supplemental
+form -- cheapest, and measurement says it is not redundant (14% mean overlap
+with what raw recall already surfaced). It is not the strong form.
+
+The strong form uses a window's **turn range** rather than its prose:
+
+```
+what does this beat remind me of
+        -> rank the windows            (which stretch of my life)
+        -> take that window's turns    (an index, not a payload)
+        -> rank raw memories INSIDE it (the actual episodes)
+```
+
+The summary stops being autobiography dumped into context and becomes an index
+over eras; the raw rows stay the episodic evidence. A character then recalls the
+way recall works -- find the period, then the moments in it -- instead of one
+flat similarity sweep over everything they have ever known.
+
+**What it needs first.** The turn-range semantics are *emergent, not
+contractual*. `memory_consolidate` says "merge the new batch into an updated
+summary"; nothing in it promises a window describes its own range. It happens to
+(3-16% carried text, measured), because the same prompt also demands
+low-salience detail be shed. An index built on that would rest on behaviour a
+prompt edit could silently revoke. Either the prompt states it, or something
+measures it and refuses to steer when it fails.
+
+**And a fallback for when the index is empty**, which for 53 of 67 live banks it
+is over their opening turns (§1.21). A progressive form answers both -- rank raw
+memories normally, and only reach for a window when the first pass returns
+nothing convincing -- but "nothing convincing" needs an absolute confidence
+signal, and the cosine band is 0.45-0.55 wide for everything, which is exactly
+the floor that does not exist.
 
 ---
 

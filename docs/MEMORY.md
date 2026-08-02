@@ -162,8 +162,10 @@ working_memory:            event_id "current", current_perception, mood, goal,
                            active_concerns (≤6)
 recent_episodes:           recent_memory_buffer — last 4 turns, ≤12 rows
 recalled_old_memories:     search_memories, k=16, minus anything already recent
-autobiographical_summary:  first-hand only
+autobiographical_summary:  first-hand only — the LATEST window (§8)
 summary_key_phrases, unresolved_threads
+earlier_in_my_life:        ≤2 earlier first-hand windows the beat ranks up,
+                           oldest first, dated relatively; absent when none
 what_i_was_told:           hearsay summary, if any
 what_i_concluded:          surmise summary, if any
 surfaces_unbidden:         one contrast memory, when triggered (§6)
@@ -590,14 +592,83 @@ out), and a window whose vector came from a different embedding model is
 skipped rather than compared. `exclude_latest` defaults to true so a caller
 sending both this and `get_memory_summary` does not send the same window twice.
 
-**What a character receives is unchanged.** `get_memory_summary` now returns the
-*latest* window, which is identical behaviour for every existing bank — each had
-one row — and identical going forward, because consolidation still folds the
-previous summary into the new one. Making bounded windows the payload without a
-retrieval path to reach the older ones would silently cost every character their
-early history, which is the failure mode `CLAUDE.md` warns shows up fifty beats
-later looking like a model problem. That half is deliberately unbuilt; see
-`docs/UNBUILT.md`.
+`get_memory_summary` returns the *latest* window, which was identical behaviour
+for every bank alive at the migration — each had exactly one row.
+
+### A window is a chapter, not a life — and the singleton was losing the rest
+
+The payload half was deferred on the reasoning that summaries are CUMULATIVE:
+consolidation folds the previous summary into each new window, so sending
+bounded windows without a reliable path to the older ones would cost a character
+their early history. **Measurement inverted that**, and the inversion is the
+reason the payload half then landed.
+
+The consolidator is told to merge the previous summary forward. It is told just
+as firmly to keep low-salience detail out, and shedding wins:
+
+| | successive live windows |
+|---|---|
+| shared text | **3–16%** |
+| cosine | 0.57–0.88 |
+
+The Doctor's second window (chat 58) recaps the first in one clause — *"escaped
+the Dalek into the TARDIS and dematerialized"* — and is otherwise entirely about
+its own ten turns. Six pairs is a small sample and the direction is not
+marginal.
+
+So the latest window is the latest **chapter**. Which means the pre-v23
+singleton was not holding a life and overwriting nothing; it was overwriting
+every chapter before the last one. **53 of the 67 live banks have no summary
+covering their opening turns** — the earliest surviving window starts after turn
+1. For the Doctor that is 91 raw memories across turns 0–18 with nothing above
+them in the summary layer. Windows did not create that risk; they are the first
+thing that stops it.
+
+The raw rows survive — nothing was deleted and `search_memories` reaches
+archived rows — so the loss is in the summary layer only, and is recoverable by
+re-consolidating those ranges. Nothing does that yet (`docs/UNBUILT.md` §1.21).
+
+### Reading the earlier chapters
+
+`build_character_memory_context` ranks the earlier windows against the beat's
+own query and sends the best `_SUMMARY_RECALL_LIMIT` (2) beside the current one:
+
+```
+earlier_in_my_life: [{what_i_lived_through_then, when}, ...]
+```
+
+- **First-hand scope only.** Hearsay and surmise have windows too; three
+  provenances in one field is the collapse the separate scopes exist to prevent.
+- **Chronological, oldest first.** Ranking chooses *which*; it must not choose
+  the order a life is read in.
+- **`when` is relative** — "between about 40 and 50 beats ago", never an
+  absolute index. `turn_idx` is global play order shared by every frame, so an
+  absolute number would tell a mind where a flash-forward sits in the story's
+  construction. Every dated thing in the payload obeys this (see
+  `_unbidden_entry`).
+- **Absent, not empty**, when there is nothing to send — like the provenance
+  summaries. An empty key still spends attention.
+- Same guarantees as raw recall: one character's bank, the same exclusive turn
+  cutoff, a cross-model vector skipped rather than compared, and
+  `exclude_latest` so `autobiographical_summary` is never sent twice.
+
+**No minimum score, deliberately.** Every prose vector scores every window
+somewhere in a compressed 0.45–0.55 band, so an absolute floor drops everything
+or nothing depending on the embedding model — and would silently become
+"nothing" the day the model changes. What the band *does* separate is rank: a
+memory formed inside a window ranks that window above the other one 97% and 82%
+of the time across the Doctor's two windows (176 embedded memories). The
+ordering is trustworthy where the magnitude is not.
+
+**It costs no extra round trip.** `search_memories` has always batched the query
+with its aspects; the windows rank against the same query vector, so both take
+one shared `EmbeddingBatch`. Both re-embed if what they are handed does not line
+up with the aspects they derive — ranking against the wrong facet silently would
+be worse than the round trip it saves.
+
+**And it duplicates little.** Across 48 probes on the live bank, a mean **14%**
+(median 12%) of the sixteen recalled raw memories fall inside the sent window's
+own turn span. The window is mostly reaching turns raw recall did not.
 
 ---
 
@@ -802,9 +873,12 @@ Raised in review and still open:
   mechanism; it wants siblings — echo (structurally or affectively similar),
   unfinished (tied to an open concern), identity (challenges the self-concept),
   intrusion (highly charged despite low relevance).
-- **Hierarchical summary retrieval** — the *payload* half. Storage and
-  retrieval landed in schema v23 (§8); what is still unbuilt is any caller
-  that sends a retrieved window to a character. See `docs/UNBUILT.md`.
+- **Hierarchical summary retrieval** — storage, retrieval and the payload all
+  landed (v23, then `earlier_in_my_life`; §8). What remains is that an ORIGIN
+  cannot be reached by similarity: a character's foundational era is usually
+  dissimilar to whatever is happening now, which is exactly when it should be
+  present, and top-k drops it there. Plus the 53 banks with no opening window
+  to reach. See `docs/UNBUILT.md` §1.21.
 
 ### Sense as a retrieval channel — built, measured, reverted
 
@@ -868,28 +942,20 @@ not be spent until something in play actually asks for it.
 
 Not in the register, and true:
 
-- **Summary retrieval needs windows before it can be ranked, and does not have
-  them.** `memory_summaries` carries an `embedding` column that only the
-  rebuild paths read, which reads like an easy wiring job and is not:
-  `UNIQUE(chat_id, char_id, scope)` means there is exactly **one row per scope**
-  — 54 rows across the whole live corpus, 54 distinct keys. There is nothing
-  to rank *across*. Each consolidation pass merges the previous summary with
-  the new window and overwrites, so the older windows do not survive to be
-  retrieved.
+- **Summary retrieval needed windows before it could be ranked.** *Landed —
+  schema v23 and `earlier_in_my_life`; see §8.* Kept here for the shape of the
+  argument, which was right about the problem and wrong about the cost. It
+  predicted the consolidation cursor as the risk and expected the fix to need
+  `save_memory_summary` rewritten to append: in the event, consolidation was
+  **already** computing correct bounded windows and the constraint was
+  destroying each one on the next write, so completing the key was the whole
+  change and the cursor kept working untouched. What the entry did not
+  anticipate is that the destroyed windows were never coming back — 53 of 67
+  banks have no summary over their opening turns.
 
-  The real feature is durable summary **windows**: keep turns 0–40 and 41–80 as
-  separate rows, retrieve the ones relevant to the beat, and use their turn
-  ranges to narrow which raw memories to pull — a long-horizon hierarchy
-  instead of one ever-growing block. That needs the `UNIQUE` constraint
-  replaced, `save_memory_summary` to append rather than overwrite,
-  and the consolidation cursor (`get_memory_summary(...)["end_turn_idx"]`) to
-  become a max across windows, plus the dump/restore/archive/rebuild paths.
-
-  Deliberately not built in the same pass as the two columns above. The cursor
-  is the risk: get it wrong and consolidation either re-folds the same
-  memories forever or silently skips a window, and neither shows up as an
-  error — it shows up as a character who has forgotten a stretch of their own
-  story, fifty beats later. It wants its own change and its own verification.
+  The half it describes that is still unbuilt is the one it mentions in
+  passing: using a window's turn range to **narrow which raw memories to
+  pull**. Today the windows travel beside raw recall rather than steering it.
 - **Provenance can still blur inside a scope.** The three scopes are separate
   rows, which a model cannot collapse; but within the first-hand paragraph the
   model's prose can still lose which specific memory a clause came from.

@@ -11,12 +11,10 @@ the engine.
 v23 completes the key with `end_turn_idx`, so consolidation appends a window
 and `search_memory_summaries` can rank the vectors that were already there.
 
-What deliberately did NOT change is what a character receives.
-`get_memory_summary` still returns one summary — now defined as the latest
-window — because consolidation still folds the previous summary into the new
-one. Wiring retrieved windows into the payload is a separate change with its
-own evidence; making bounded windows the payload without it would silently cost
-every character their early history.
+`get_memory_summary` returns one summary — now defined as the latest window.
+What reads the windows BEHIND it is `build_character_memory_context`, tested in
+`test_summary_window_recall.py`; this file covers storage, ranking and
+portability.
 """
 
 from __future__ import annotations

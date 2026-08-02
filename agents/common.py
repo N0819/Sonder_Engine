@@ -22,6 +22,7 @@ from providers import chat_complete
 from scene import get_scene, persona_of, NON_AWAKE_GATED
 from schemas import normalize_speech_volume
 from spatial import (
+    _body_interior_holder,
     ambient_scope,
     containment_conceals,
     entity_arc,
@@ -491,6 +492,10 @@ def _perceptible_entities(sc, perceiver_names=None):
         return entities
 
     names = [str(n).strip() for n in (perceiver_names or []) if str(n or "").strip()]
+    _inhabited_by_a_perceiver = {
+        holder for holder in (_body_interior_holder(sc, n) for n in names)
+        if holder
+    }
 
     def _state_reaches_anyone(ent_name):
         if not names or not ent_name:
@@ -518,6 +523,22 @@ def _perceptible_entities(sc, perceiver_names=None):
         drop = set(_ENTITY_LOOKUP_ONLY_FIELDS)
         if not _state_reaches_anyone(name or eid):
             drop.add("state")
+        if eid in _inhabited_by_a_perceiver:
+            # YOU CANNOT SEE THE OUTSIDE OF WHAT YOU ARE STANDING INSIDE.
+            # `description` is an entity's EXTERIOR -- what a body in the room
+            # around it takes in. Handed to its own occupant it reads as a
+            # thing across the way. Live (chat 58, t38): the player stood in
+            # the TARDIS console room and her view had "a blue police box --
+            # its paint darkened by rain -- settles with a heavy thud on the
+            # cobbles", which is the box she was standing in, landing, seen
+            # from inside itself.
+            #
+            # The entity itself STAYS -- the room's own `parent_entity`
+            # already tells the reader what they are inside, and presence is
+            # not the leak. Only the outward appearance goes. (`state` is
+            # separately withheld here by the containment gate above, which
+            # predates this and is not changed by it.)
+            drop.add("description")
         projected[key] = {k: v for k, v in ent.items() if k not in drop}
     return projected
 

@@ -1,5 +1,100 @@
 # Changelog
 
+## alpha 6.7 — The chapters a mind was quietly losing
+
+A character's summary layer turned out to be holding one chapter of a life and
+overwriting the rest. This release reads the chapters that survived, rebuilds
+the ones that did not, and stops both paths summarising an absence.
+
+### A character now receives the era the beat is about
+
+Schema v23 made summary windows durable and rankable, and then deliberately
+stopped: nothing sent a retrieved window to a character. The stated reason was
+that summaries are cumulative, so bounded windows would cost a character their
+early history.
+
+**Measurement inverted that.** The consolidator is told to merge the previous
+summary forward and told just as firmly to shed low-salience detail; shedding
+wins. Across the six live window pairs, successive windows share **3–16% of
+their text** at cosine 0.57–0.88. The Doctor's second window recaps the first in
+one clause and is otherwise entirely about its own ten turns.
+
+So the latest window is the latest *chapter* — and the pre-v23 singleton was
+not holding a life and overwriting nothing, it was overwriting every chapter
+before the last. **53 of the 67 live banks have no summary over their opening
+turns.**
+
+`build_character_memory_context` now ranks the earlier first-hand windows
+against the beat's own query and sends the best two as `earlier_in_my_life`:
+first-hand scope only, chronological oldest-first, each dated relatively
+(`turn_idx` is global play order shared by every frame, so an absolute index
+would tell a mind where a flash-forward sits in the story's construction),
+absent rather than empty when there is nothing. Same guarantees as raw recall —
+one character's bank, the same exclusive turn cutoff, cross-model vectors
+skipped, and the current summary never sent twice.
+
+It costs **no extra round trip**: `search_memories` has always batched the
+query with its aspects, and the windows rank against the same query vector, so
+both take one shared `EmbeddingBatch`. Both re-embed if what they are handed
+does not line up with the aspects they derive.
+
+Measured on the live bank: a mean **14%** of the sixteen recalled raw memories
+fall inside the sent window's span, so the window is mostly reaching turns raw
+recall did not.
+
+### Rebuild the eras a destroyed summary took with it
+
+`backfill_memory_summary_windows`, and a **Rebuild earlier eras** button in the
+Memories panel that appears only where there is actually a hole and says what
+it will cost first.
+
+It walks forward from a character's first memory to the earliest surviving
+window in aligned steps, chaining each result into the next exactly as the
+forward path would have. It never archives, and it never moves the
+consolidation cursor — `get_memory_summary` orders by `end_turn_idx DESC`, so
+older rows leave the newest one holding it. That is load-bearing, and tested.
+
+Run against the longest story (118 turns, three characters, 641 memories): **27
+windows in 336 seconds**, summary coverage **8–18% → 92–98%**.
+
+### An absence is not an era
+
+The backfill surfaced a rule consolidation did not have. `commit.py` already
+refuses to mint a memory from a view that says only "You are in an unspecified
+area" — an absence is not an episode — but banks written before that guard
+still carry them (369 rows corpus-wide; 85 of one character's 101 in the
+longest story), and consolidation had no such rule.
+
+So **13 of the 27 backfilled windows spent a model call rendering an absence
+into prose**, to hand a character as a stretch of life they lived. `_is_empty_view`
+moved to `memory.py` and both consolidation paths now drop placeholder rows.
+The forward path cannot simply skip — the cursor lives on that row — so it
+advances the cursor carrying the previous account forward, and asks no model at
+all. On the same story this cuts one character's rebuild from 9 windows to 2
+and another's from 8 to 4.
+
+### Also
+
+- Declared destinations always exist and are reachable: a room named as a
+  movement target is created with a description and an edge back to where the
+  mover came from, instead of arriving as a name with no room behind it.
+- An interior no longer shows its own exterior — a character inside the TARDIS
+  was being told the TARDIS was present.
+- A room created this turn that no edge reaches, in either direction, is
+  attached to the busiest room of the scene before the merge. `northern_plaza`
+  was an island: nothing pointed at it and it pointed nowhere.
+
+### Known, measured, not fixed
+
+Against **real perception views** rather than hand-written probes, the window
+layer picks the origin window on 24 of 30 beats, and 7 of 11 windows are never
+returned. A real view is mostly a description of who is standing there, and in
+a two-hander that never changes. Hubness correction made targeting worse;
+stripping the boilerplate appearance tail from the retrieval query helps
+partially (24/30 → 19/30). The fix that fits the engine's own precedent — rank
+the windows against the aspects, not one long string whose bulk is constant —
+is recorded in `docs/UNBUILT.md` §1.22.
+
 ## alpha 6.6.1 — What the room told the mind standing in it
 
 A point release: four defects found in one story, three of them in perception

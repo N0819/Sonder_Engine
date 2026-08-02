@@ -68,6 +68,7 @@ from memory import (
     add_memories_batch,
     search_memories, build_character_memory_context,
     get_memory_summary, consolidate_character_memory,
+    backfill_memory_summary_windows, memory_summary_coverage,
     restore_chat_memories, restore_lorebook, dump_lorebook,
     dump_chat_memories, dump_memory_summaries, restore_memory_summaries,
     chat_lorebook_ids, delete_turn_memories,
@@ -3245,6 +3246,32 @@ def mem_consolidate(cid: int, ch: int, body: dict = Body(default={})):
         )
     except Exception as exc:
         raise HTTPException(502, str(exc))
+
+@app.post("/api/chats/{cid}/characters/{ch}/memories/backfill")
+def mem_backfill(cid: int, ch: int, body: dict = Body(default={})):
+    """Rebuild the summary windows the pre-v23 singleton overwrote.
+
+    One LLM call per missing window, so it is a button the host presses rather
+    than anything that runs on its own. Idempotent: once a bank's windows reach
+    back to its first memory there is nothing below the floor and a second
+    press does nothing.
+    """
+    try:
+        return backfill_memory_summary_windows(
+            cid, ch, window=int(body.get("window") or 10))
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, str(exc))
+
+@app.get("/api/chats/{cid}/characters/{ch}/memories/coverage")
+def mem_coverage(cid: int, ch: int):
+    """How much of this character's life has a summary above it.
+
+    What the backfill button needs to know before it offers itself: a bank
+    whose windows already reach its first memory has nothing to rebuild.
+    """
+    return memory_summary_coverage(cid, ch)
 
 @app.post("/api/chats/{cid}/characters/{ch}/memories")
 def mem_add(cid: int, ch: int, body: dict = Body(...)):

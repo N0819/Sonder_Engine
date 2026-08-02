@@ -1431,6 +1431,21 @@ _RRF_SCALE = 12.0
 # so this stops where the curve does.
 _RECALL_LIMIT = 16
 
+# How many EARLIER summary windows travel beside the current one. Two, for the
+# same attention-budget reason the number above stops at 16 -- and because the
+# windows are long-form paragraphs, not one-line gists, so each one costs
+# several times what a recalled memory does.
+#
+# There is deliberately no minimum score. Measured on the live bank (chat 58,
+# the Doctor, 176 embedded memories against two windows): every prose vector
+# scores its window somewhere in 0.45-0.55, so an absolute floor either drops
+# everything or nothing depending on the embedding model, and would silently
+# become "nothing" the day the model changes. What the band DOES separate is
+# rank -- a memory formed inside a window ranks that window above the other one
+# 97% and 82% of the time across the two windows -- so the ordering is
+# trustworthy where the magnitude is not, and top-k is the honest way to use it.
+_SUMMARY_RECALL_LIMIT = 2
+
 
 # Mood-congruent recall: what you feel shapes what comes back.
 #
@@ -1534,7 +1549,7 @@ _ASPECT_WEIGHT = 0.55
 
 def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
                     current_turn_idx=None, chronological=True, viewer_frame_id=_UNSET,
-                    here=None, in_sight=None, aspects=None):
+                    here=None, in_sight=None, aspects=None, embedded=None):
     """Retrieve, fusing the main query with any `aspects` given alongside it.
 
     `aspects` is [(label, text), ...] -- short, separate facets of what the
@@ -1573,8 +1588,16 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
     # and the round trip is what costs, so separating the rankings is free.
     _aspects = [(str(lbl), str(txt).strip()) for lbl, txt in (aspects or [])
                 if str(txt or "").strip()]
-    embedded = embed_texts_meta([query_text or "memory"]
-                                + [txt for _lbl, txt in _aspects])
+    # A caller that has already embedded this exact batch passes it in rather
+    # than paying a second round trip -- build_character_memory_context embeds
+    # once and ranks both raw memories and summary windows from it. The length
+    # check is the guard: if the aspect filter above disagrees with what the
+    # caller sent, these are not the vectors this function thinks they are, so
+    # embed properly instead of silently ranking against the wrong facet.
+    if (embedded is None
+            or len(getattr(embedded, "vectors", ()) or ()) != 1 + len(_aspects)):
+        embedded = embed_texts_meta([query_text or "memory"]
+                                    + [txt for _lbl, txt in _aspects])
     qv = embedded.vectors[0]
     aspect_vectors = list(zip((lbl for lbl, _t in _aspects),
                               embedded.vectors[1:]))
@@ -1964,12 +1987,19 @@ def recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=4, limit=12, 
 def get_memory_summary(chat_id, char_id, scope="autobiographical"):
     """The character's CURRENT summary for this scope: the latest window.
 
-    Since v23 a scope holds one row per window rather than one row overall,
-    so this orders. Behaviour is unchanged for every existing bank -- each had
-    exactly one row, which is trivially the latest -- and unchanged going
-    forward for the payload, because consolidation still folds the previous
-    summary into the new window. The windows BEHIND the latest are what
-    `search_memory_summaries` exists to reach.
+    Since v23 a scope holds one row per window rather than one row overall, so
+    this orders. Behaviour is unchanged for every bank that existed at the
+    migration -- each had exactly one row, which is trivially the latest.
+
+    What this does NOT return is the character's life. The consolidator is told
+    to merge the previous summary forward, but it is told just as firmly to shed
+    low-salience detail, and measurement says shedding wins: successive live
+    windows share 3-16% of their text. So the latest window is the latest
+    CHAPTER, and under the pre-v23 singleton the chapters before it were
+    overwritten -- 53 of the 67 live banks have no summary covering their
+    opening turns, and never will. The windows behind the latest are what
+    `search_memory_summaries` reaches and what
+    `build_character_memory_context` now sends alongside this one.
 
     `end_turn_idx` first, `id` as the tiebreak: two windows can legitimately
     close on the same turn (different scopes are separate rows, but a rerun
@@ -1992,7 +2022,7 @@ def _summary_retrieval_text(summary, key_phrases, unresolved_threads):
 
 def search_memory_summaries(chat_id, char_id, query, k=3, *,
                             scope="autobiographical", before_turn_idx=None,
-                            exclude_latest=True):
+                            exclude_latest=True, embedded=None):
     """Rank a character's summary WINDOWS by semantic similarity to `query`.
 
     The layer above raw recall: which ERA of my life is this beat about. Every
@@ -2035,7 +2065,11 @@ def search_memory_summaries(chat_id, char_id, query, k=3, *,
     rows = [r for r in rows if (r["summary"] or "").strip()]
     if not rows:
         return []
-    embedded = embed_texts_meta([str(query or "")])
+    # `embedded` lets a caller that already vectorised this same query hand the
+    # batch over; vectors[0] is the query in both this function's own call and
+    # in search_memories', which is what makes them shareable.
+    if embedded is None or not (getattr(embedded, "vectors", None) or ()):
+        embedded = embed_texts_meta([str(query or "")])
     qv = np.asarray(embedded.vectors[0], dtype=np.float32)
     live_model = embedded.model_key
     scored = []
@@ -2114,6 +2148,27 @@ def _with_reading(mem):
     return out
 
 
+def _beats_ago_span(current_turn_idx, start_turn_idx, end_turn_idx):
+    """When an earlier window happened, in the character's own units.
+
+    RELATIVE, never the absolute turn index, and that is a firewall rule rather
+    than a style choice: `turn_idx` is GLOBAL play order shared by every frame,
+    so an absolute number tells a character where a flash-forward or flashback
+    sits in the story's construction -- something no mind in the fiction has any
+    way to know. Every other dated thing in the payload says "about N beats ago"
+    for the same reason (see `_unbidden_entry`).
+    """
+    if current_turn_idx is None:
+        return ""
+    oldest = int(current_turn_idx) - int(start_turn_idx or 0)
+    newest = int(current_turn_idx) - int(end_turn_idx or 0)
+    if oldest <= 0:
+        return "just now"
+    if newest <= 0 or oldest == newest:
+        return f"about {oldest} beats ago"
+    return f"between about {newest} and {oldest} beats ago"
+
+
 def build_character_memory_context(chat_id, char_id, current_turn_idx, current_view, active_state, *,
                                    recent_turns=4, recall_limit=_RECALL_LIMIT, here=None,
                                    in_sight=None):
@@ -2153,11 +2208,52 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # would already fail on None), so search_memories' F1 turn cutoff always
     # fires on this path -- the character context can never see turn N's own
     # committed memories while deciding turn N, reroll or not.
+    # One embedding for everything ranked from this beat. search_memories has
+    # always batched the query with its aspects; the summary windows rank
+    # against the same query vector, so sharing the batch is what keeps the
+    # window layer free rather than a second round trip per character per beat.
+    _aspects = [(str(lbl), str(txt).strip()) for lbl, txt in aspects
+                if str(txt or "").strip()]
+    embedded = embed_texts_meta([query_text or "memory"]
+                                + [txt for _lbl, txt in _aspects])
     recalled = search_memories(chat_id, char_id, query_text, k=recall_limit,
                                include_archived=True, current_turn_idx=current_turn_idx,
                                chronological=True, here=here, in_sight=in_sight,
-                               aspects=aspects)
+                               aspects=aspects, embedded=embedded)
     recalled = [m for m in recalled if m["id"] not in recent_ids]
+    # The layer between the summary and the raw rows: which EARLIER stretch of
+    # this life the present beat is about.
+    #
+    # `summary` above is only the latest window, and a window is in practice
+    # about its own turns -- the consolidator is told to merge the previous
+    # summary in, but it is told just as firmly to shed low-salience detail, and
+    # shedding wins. Measured across the six live window pairs, successive
+    # windows share 3-16% of their text and sit at cosine 0.57-0.88; the
+    # Doctor's second window recaps the first in a single clause and is
+    # otherwise entirely about its own ten turns.
+    #
+    # So the singleton design was not holding a life story, it was holding the
+    # most recent chapter of one, and overwriting the rest. 53 of the 67 live
+    # banks have no summary at all over their opening turns. Windows stopped the
+    # loss; this is what reads what they kept.
+    #
+    # First-hand scope only. Hearsay and surmise have windows too, and folding
+    # them in here would put three provenances in one field -- the same collapse
+    # `provenance_summaries` exists to prevent.
+    earlier = search_memory_summaries(
+        chat_id, char_id, query_text, k=_SUMMARY_RECALL_LIMIT,
+        scope=SUMMARY_SCOPE_FIRSTHAND, before_turn_idx=current_turn_idx,
+        exclude_latest=True, embedded=embedded)
+    # Chronological, oldest first: these are stretches of a life, and rank order
+    # would present it out of sequence. Ranking has already done its work by
+    # choosing WHICH ones. Absent rather than empty when there are none, like
+    # the provenance summaries below -- an empty key still spends attention.
+    earlier_payload = {"earlier_in_my_life": [
+        {"what_i_lived_through_then": w.get("summary") or "",
+         "when": _beats_ago_span(current_turn_idx, w.get("start_turn_idx"),
+                                 w.get("end_turn_idx"))}
+        for w in sorted(earlier, key=lambda w: (w.get("end_turn_idx") or 0))
+    ]} if earlier else {}
     return {
         "working_memory": {
             # A citable id for the PRESENT beat. Without one, the only ids in
@@ -2187,46 +2283,56 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         "autobiographical_summary": summary.get("summary") or "",
         "summary_key_phrases": summary.get("key_phrases") or [],
         "unresolved_threads": summary.get("unresolved_threads") or [],
+        **earlier_payload,
         **provenance_summaries,
     }
 
-def consolidate_character_memory(chat_id, char_id, *, through_turn_idx=None, archive_old=True,
-                                 viewer_frame_id=_UNSET):
-    char = q("SELECT name FROM characters WHERE id=?", (char_id,), one=True)
-    if not char:
-        raise ValueError("Character not found")
-    old_summary = get_memory_summary(chat_id, char_id)
-    # Everything up to old_summary["end_turn_idx"] is already folded into
-    # old_summary (sent below as previous_summary) and archived rows were
-    # already folded into some still-earlier summary -- resending either
-    # gets the consolidator no new information but made the payload (and
-    # its cost) grow without bound across a long chat's repeated
-    # consolidation passes, since every call previously re-sent the
-    # complete history since turn 0 regardless of what had already been
-    # summarized.
-    # turn_idx is GLOBAL play order shared by every frame, not per-era -- so
-    # without the seam's frame filter, memories formed during a
-    # flash-forward/-back would be folded into the singleton autobiographical
-    # summary the moment play returns to the present and turn_idx catches up,
-    # handing a character knowledge of events they have not diegetically
-    # reached. `before_turn_idx` is exclusive and this window is inclusive of
-    # `through_turn_idx`, hence the +1.
-    rows = visible_memory_rows(
-        chat_id, char_id,
-        before_turn_idx=(None if through_turn_idx is None
-                         else int(through_turn_idx) + 1),
-        viewer_frame_id=viewer_frame_id,
-        include_archived=False,
-        since_turn_idx=(old_summary.get("end_turn_idx") or 0) + 1,
-        require_turn_idx=True,
-    )
-    rows.sort(key=lambda r: (r["turn_idx"], r["id"]))
-    memories = [_row_memory(r) for r in rows]
-    if not memories:
-        return old_summary
+# Views that record no perceptible event. Matched on the engine's OWN
+# placeholders rather than on prose: `agents/perception.py` writes "an
+# unspecified area" when it cannot name a room, and `agents/character.py`
+# falls back to "You register nothing new this beat." Both mean the same
+# thing -- this mind perceived nothing this beat -- and neither is an episode.
+#
+# Lives here rather than in `commit.py` (which owns the write-side rule and
+# imports it back) because consolidation needs the same answer. Banks written
+# before the write-side guard still carry these rows -- 369 across the live
+# corpus -- and a consolidator handed ten of them summarises an absence into
+# prose, which is then handed to a character as something they lived through.
+_EMPTY_VIEW_MARKERS = (
+    "you are in an unspecified area",
+    "you register nothing new",
+)
+
+
+def _is_empty_view(text):
+    """True when a perception view records no event worth remembering."""
+    body = " ".join(str(text or "").split()).strip().casefold().rstrip(".")
+    if not body:
+        return True
+    return any(body == m or body.startswith(m) and len(body) < len(m) + 25
+               for m in _EMPTY_VIEW_MARKERS)
+
+
+def _substantive(memories):
+    """The memories in this window that record something that happened."""
+    return [m for m in memories
+            if not _is_empty_view(m.get("content") or m.get("gist") or "")]
+
+
+def _write_consolidated_window(chat_id, char_id, char_name, memories, previous_summary):
+    """The consolidator call and the rows it produces, for ONE window.
+
+    Shared by the forward path (`consolidate_character_memory`, which then
+    archives) and the backward one (`backfill_memory_summary_windows`, which
+    must not). Factored out when the second caller arrived rather than
+    duplicated: the epistemic-scope rule below is the kind of thing that gets
+    fixed in one copy.
+
+    Returns the parsed consolidator result.
+    """
     payload = {
-        "character": char["name"],
-        "previous_summary": old_summary,
+        "character": char_name,
+        "previous_summary": previous_summary,
         "memories_chronological": [
             {"id": m["id"], "turn_idx": m["turn_idx"], "category": m["category"],
              "provenance": m["provenance"], "salience": m["salience"], "confidence": m["confidence"],
@@ -2263,6 +2369,192 @@ def consolidate_character_memory(chat_id, char_id, *, through_turn_idx=None, arc
                          if scope == SUMMARY_SCOPE_FIRSTHAND else []),
             unresolved_threads=(result.get("unresolved_threads") or []
                                 if scope == SUMMARY_SCOPE_FIRSTHAND else []))
+    return result
+
+
+def memory_summary_coverage(chat_id, char_id, *, window=10):
+    """How much of this character's life has a summary above it.
+
+    The question the backfill button asks before offering itself. Counts only
+    memories that record something -- a bank of empty-view placeholders has
+    nothing to summarise and offering to rebuild it would burn a call per
+    window to describe an absence.
+
+    Returns {total, covered, uncovered, first_turn, floor, windows,
+    missing_windows}.
+    """
+    rows = q("SELECT turn_idx, content, gist FROM memories WHERE chat_id=? AND "
+             "char_id=? AND turn_idx IS NOT NULL", (chat_id, char_id))
+    mems = [dict(r) for r in rows]
+    real = _substantive(mems)
+    spans = q("SELECT start_turn_idx s, end_turn_idx e FROM memory_summaries "
+              "WHERE chat_id=? AND char_id=? AND scope=?",
+              (chat_id, char_id, SUMMARY_SCOPE_FIRSTHAND))
+    spans = [(r["s"], r["e"]) for r in spans]
+    covered = sum(1 for m in real
+                  if any(s <= m["turn_idx"] <= e for s, e in spans))
+    first = min((m["turn_idx"] for m in real), default=None)
+    floor = min((s for s, _e in spans), default=None)
+    missing = 0
+    if first is not None and floor is not None and floor > first:
+        below = sorted({m["turn_idx"] for m in real if m["turn_idx"] < floor})
+        edges = set()
+        for t in below:
+            edges.add(floor - ((floor - t + int(window) - 1) // int(window)) * int(window))
+        missing = len(edges)
+    return {
+        "total": len(real), "covered": covered,
+        "uncovered": len(real) - covered,
+        "placeholders": len(mems) - len(real),
+        "first_turn": first, "floor": floor,
+        "windows": len(spans), "missing_windows": missing,
+    }
+
+
+def backfill_memory_summary_windows(chat_id, char_id, *, window=10,
+                                    viewer_frame_id=_UNSET, on_window=None):
+    """Rebuild the summary windows the pre-v23 singleton destroyed.
+
+    Until schema v23 a scope held one row and each consolidation overwrote it,
+    so a long story ends up with a summary of its most recent ten turns and
+    nothing behind it. Measured on the live bank: 53 of 67 banks have no
+    summary over their opening turns, and in the longest story (chat 38, 118
+    turns) 82-87% of every character's memories sit under no summary at all.
+
+    The raw memories survive -- nothing was ever deleted -- so the era is
+    recoverable by consolidating it again. This walks FORWARD from the
+    character's first memory to the earliest surviving window, in `window`-turn
+    steps aligned to that window's boundary so the reconstructed cadence
+    matches the live one, chaining each result into the next as
+    `previous_summary` exactly as the forward path would have.
+
+    Two things it deliberately does not do:
+
+    - **It does not archive.** The forward path archives low-salience memories
+      it has just folded in; doing that here would retire hundreds of rows at
+      once on the strength of a summary written years after the fact.
+    - **It does not move the consolidation cursor.**
+      `maybe_consolidate_character_memory` reads the first-hand row's
+      `end_turn_idx` as its cursor, and `get_memory_summary` orders by
+      `end_turn_idx DESC` -- so writing OLDER windows leaves the cursor on the
+      newest row, untouched. That is load-bearing, and tested.
+
+    `on_window(start, end, count)` is called before each consolidator request,
+    for progress on a long run.
+
+    Returns {"windows": n_written, "turns": (lo, hi), "skipped": n_empty}.
+    """
+    char = q("SELECT name FROM characters WHERE id=?", (char_id,), one=True)
+    if not char:
+        raise ValueError("Character not found")
+    row = q("SELECT MIN(start_turn_idx) AS s FROM memory_summaries "
+            "WHERE chat_id=? AND char_id=?", (chat_id, char_id), one=True)
+    floor = row["s"] if row else None
+    if floor is None:
+        # Nothing has ever been consolidated; the forward path is the right
+        # tool and will produce the same windows without this one guessing.
+        return {"windows": 0, "turns": None, "skipped": 0}
+    rows = visible_memory_rows(
+        chat_id, char_id, before_turn_idx=int(floor),
+        viewer_frame_id=viewer_frame_id, include_archived=False,
+        require_turn_idx=True)
+    if not rows:
+        return {"windows": 0, "turns": None, "skipped": 0}
+    rows.sort(key=lambda r: (r["turn_idx"], r["id"]))
+    memories = [_row_memory(r) for r in rows]
+    lo, hi = memories[0]["turn_idx"], memories[-1]["turn_idx"]
+    # Aligned to the SURVIVING window's boundary and counted backwards, so the
+    # reconstructed windows abut it instead of overlapping it by a few turns.
+    edges = []
+    edge = int(floor)
+    while edge > lo:
+        edges.append(edge)
+        edge -= int(window)
+    edges.append(min(edge, lo))
+    edges.reverse()
+    previous = {"scope": SUMMARY_SCOPE_FIRSTHAND, "start_turn_idx": 0,
+                "end_turn_idx": 0, "summary": "", "key_phrases": [],
+                "unresolved_threads": []}
+    written = skipped = 0
+    for start, stop in zip(edges, edges[1:]):
+        chunk = _substantive([m for m in memories
+                              if start <= m["turn_idx"] < stop])
+        if not chunk:
+            # Either nobody was there, or every row is the engine's own
+            # "unspecified area" placeholder from an off-screen beat. Neither
+            # is an era, and summarising one writes a character fifty turns of
+            # authored amnesia they never lived.
+            skipped += 1
+            continue
+        if on_window:
+            on_window(start, stop - 1, len(chunk))
+        result = _write_consolidated_window(chat_id, char_id, char["name"],
+                                            chunk, previous)
+        written += 1
+        previous = {
+            "scope": SUMMARY_SCOPE_FIRSTHAND,
+            "start_turn_idx": chunk[0]["turn_idx"],
+            "end_turn_idx": chunk[-1]["turn_idx"],
+            "summary": str(result.get("summary") or ""),
+            "key_phrases": result.get("key_phrases") or [],
+            "unresolved_threads": result.get("unresolved_threads") or [],
+        }
+    return {"windows": written, "turns": (lo, hi), "skipped": skipped}
+
+
+def consolidate_character_memory(chat_id, char_id, *, through_turn_idx=None, archive_old=True,
+                                 viewer_frame_id=_UNSET):
+    char = q("SELECT name FROM characters WHERE id=?", (char_id,), one=True)
+    if not char:
+        raise ValueError("Character not found")
+    old_summary = get_memory_summary(chat_id, char_id)
+    # Everything up to old_summary["end_turn_idx"] is already folded into
+    # old_summary (sent below as previous_summary) and archived rows were
+    # already folded into some still-earlier summary -- resending either
+    # gets the consolidator no new information but made the payload (and
+    # its cost) grow without bound across a long chat's repeated
+    # consolidation passes, since every call previously re-sent the
+    # complete history since turn 0 regardless of what had already been
+    # summarized.
+    # turn_idx is GLOBAL play order shared by every frame, not per-era -- so
+    # without the seam's frame filter, memories formed during a
+    # flash-forward/-back would be folded into the singleton autobiographical
+    # summary the moment play returns to the present and turn_idx catches up,
+    # handing a character knowledge of events they have not diegetically
+    # reached. `before_turn_idx` is exclusive and this window is inclusive of
+    # `through_turn_idx`, hence the +1.
+    rows = visible_memory_rows(
+        chat_id, char_id,
+        before_turn_idx=(None if through_turn_idx is None
+                         else int(through_turn_idx) + 1),
+        viewer_frame_id=viewer_frame_id,
+        include_archived=False,
+        since_turn_idx=(old_summary.get("end_turn_idx") or 0) + 1,
+        require_turn_idx=True,
+    )
+    rows.sort(key=lambda r: (r["turn_idx"], r["id"]))
+    memories = [_row_memory(r) for r in rows]
+    if not memories:
+        return old_summary
+    start_turn = min(m["turn_idx"] for m in memories)
+    end_turn = max(m["turn_idx"] for m in memories)
+    substantive = _substantive(memories)
+    if not substantive:
+        # Every row in this window is the engine's own empty-view placeholder
+        # (an off-screen character), so there is nothing to consolidate. The
+        # cursor still has to advance -- maybe_consolidate reads THIS row's
+        # end_turn_idx, and stalling it re-consolidates the same rows every
+        # ten turns forever -- so carry the previous account forward unchanged
+        # rather than asking a model to summarise an absence. No LLM call.
+        save_memory_summary(
+            chat_id, char_id, old_summary.get("summary") or "",
+            scope=SUMMARY_SCOPE_FIRSTHAND,
+            start_turn_idx=start_turn, end_turn_idx=end_turn,
+            key_phrases=old_summary.get("key_phrases") or [],
+            unresolved_threads=old_summary.get("unresolved_threads") or [])
+        return get_memory_summary(chat_id, char_id)
+    result = _write_consolidated_window(chat_id, char_id, char["name"],
+                                        substantive, old_summary)
     if archive_old:
         cutoff = max(start_turn, end_turn - 12)
         # Archive ONLY memories that were part of THIS (frame-visible)

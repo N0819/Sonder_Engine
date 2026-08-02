@@ -1118,6 +1118,18 @@ function memModal(p) {
     const consolidateButton = el("button", {
       onclick: () => consolidateMemories()
     }, "✨ Consolidate");
+    // Hidden until the coverage check says there is a hole. A bank whose
+    // windows already reach its first memory has nothing to rebuild, and a
+    // button that does nothing teaches the wrong thing about the one that does.
+    const backfillButton = el("button", {
+      style: "display:none",
+      title: "Rebuild the earlier summaries this story lost"
+    }, "⟲ Rebuild earlier eras");
+    const backfillNote = el("div", {
+      class: "small dim", style: "margin-top:6px; display:none"
+    });
+    backfillButton.onclick = () => backfillMemoryEras();
+    checkMemoryCoverage(backfillButton, backfillNote);
 
     const toolbar = el("div", { class: "toolbar" },
       searchInput, searchButton, clearButton,
@@ -1139,13 +1151,14 @@ function memModal(p) {
       el("div", { class: "section-title", style: "margin-top:0" },
         "Memory tools"),
       el("div", { class: "row" },
-        consolidateButton, contextButton),
+        consolidateButton, contextButton, backfillButton),
       el("div", {
         class: "small dim",
         style: "margin-top:8px"
       }, "Consolidation updates the character's subjective "
         + "long-term summary. Context preview shows what the "
-        + "agent receives."));
+        + "agent receives."),
+      backfillNote);
     sidebar.append(el("div", { class: "memory-sidebar-sticky" },
       consolidateCard, summaryBox));
 
@@ -1715,6 +1728,51 @@ function showNewMemoryForm(layout) {
     block: "start"
   });
   det.focus();
+}
+
+async function checkMemoryCoverage(button, note) {
+  // Before schema v23 a scope held one summary row and every consolidation
+  // overwrote it, so a long story kept a summary of its last ten turns and
+  // lost the rest. The raw memories survived, so the eras are rebuildable —
+  // but only where there is a hole, which this asks.
+  const cid = memCharId();
+  if (!cid) return;
+  let cov;
+  try {
+    cov = await api("GET",
+      `/api/chats/${S.chatId}/characters/${cid}/memories/coverage`);
+  } catch (e) { return; }
+  if (!cov || !cov.missing_windows) return;
+  const pct = cov.total
+    ? Math.round((cov.covered / cov.total) * 100) : 0;
+  button.style.display = "";
+  note.style.display = "";
+  note.textContent =
+    `${cov.uncovered} of ${cov.total} memories sit under no summary `
+    + `(${pct}% covered). Rebuilding costs about ${cov.missing_windows} `
+    + `model calls.`;
+}
+
+function backfillMemoryEras() {
+  const cid = memCharId();
+  if (!cid) return;
+  const name = S.memoryCharacter?.name || "character";
+  // backgroundTask closes the modal and onSuccess reopens it, exactly as
+  // Consolidate does -- one long model job, the panel rebuilt from the result.
+  backgroundTask("Rebuilding " + name + "'s earlier eras",
+    () => api("POST",
+      `/api/chats/${S.chatId}/characters/${cid}/memories/backfill`, {}),
+    {
+      onSuccess: async () => {
+        if (S.memoryCharacter)
+          await memModal(S.memoryCharacter);
+      },
+      successMessage: r =>
+        r?.windows
+          ? `Rebuilt ${r.windows} earlier ${r.windows === 1 ? "era" : "eras"}.`
+          : "Nothing to rebuild — every era already has a summary.",
+      errorPrefix: "Rebuild failed"
+    });
 }
 
 function consolidateMemories() {
