@@ -1698,7 +1698,66 @@ def cast_room(sc, name, cast):
             continue
         if target in {key.lower() for key in character_scene_keys(sheet)}:
             return character_room(sc, sheet)
-    return None
+    return entity_room_by_name(sc, target)
+
+
+def entity_room_by_name(sc, name):
+    """Room of an UNREGISTERED scene presence, resolved from its NAME.
+
+    `canonicalize_positions` rewrites only keys that identify a cast character
+    or the player, and says so: "unregistered background presences are left
+    untouched". Correct -- they are not cast -- but nothing mapped the name
+    back the other way, so a presence placed under its entity uid was
+    unreachable by name from the moment it was placed. Every reader that asks
+    where a background speaker is got None, and `spatial_rel(None, room)`
+    answers "remote, no known spatial channel".
+
+    Measured live (chat 58, t23): a Dalek standing in the player's own alley
+    with its gun-stick trained on her chest sat in `positions` under
+    `40af0ac4bf2644a1`. `cast_room(sc, "A Dalek", cast)` returned None, so
+    perception's hearing gate classified it as remote and dropped its line for
+    every observer, and the view rendered it as "something" and "the source"
+    rather than the machine she had just thrown a rock at. Corpus-wide, 47 of
+    78 background lines never reached a single view.
+
+    Name before aliases, so an alias can never outrank a real name. A name
+    matching more than one entity resolves to NOBODY: two Daleks in a room are
+    exactly the case this must not guess between, and a wrong room is worse
+    than the None every one of them used to get.
+    """
+    target = str(name or "").strip().lower()
+    entities = (sc or {}).get("entities")
+    if not target or not isinstance(entities, dict):
+        return None
+    positions = (sc or {}).get("positions")
+    positions = positions if isinstance(positions, dict) else {}
+    pos_ci = {str(k).strip().lower(): v for k, v in positions.items()}
+
+    def _match(by_alias):
+        hits = []
+        for eid, ent in entities.items():
+            if not isinstance(ent, dict):
+                continue
+            if by_alias:
+                forms = {str(a).strip().lower() for a in (ent.get("aliases") or [])}
+            else:
+                forms = {str(ent.get("name") or "").strip().lower()}
+            if target in forms - {""}:
+                hits.append(eid)
+        return hits[0] if len(hits) == 1 else None
+
+    eid = _match(False) or _match(True)
+    if not eid:
+        return None
+    # The uid is the position key in practice; an entity may also carry its own
+    # `room`, which is authoritative only when no position exists for it.
+    room = pos_ci.get(str(eid).strip().lower())
+    if room is None:
+        room = pos_ci.get(target)
+    if room is None:
+        ent = entities.get(eid) or {}
+        room = ent.get("room")
+    return room or None
 
 def canonicalize_positions(positions, cast, player_name=None):
     """Rewrite any positions key that identifies a registered cast character
@@ -3843,6 +3902,67 @@ def _check_event_order(prose, event_order):
     return warnings
 
 
+# _NARR_LOWERING and _NARR_RAISING are deliberately TIGHTER than a natural
+# reading of "goes down" / "goes up": only verbs naming a deliberate directed
+# movement, plus the unambiguous adverbs. Bare "up"/"down" ("heat scorching up
+# your neck"), "rise"/"rose" (a chest rises; rose-gold motes) and "sink"/"drop"
+# all appear constantly in ordinary prose, and every one of them would turn
+# this into a false-positive generator that spends a rewrite on correct pages.
+_NARR_LOWERING = re.compile(
+    r"\b(?:lower(?:s|ed|ing)?|descend(?:s|ed|ing)?|downwards?)\b", re.I)
+_NARR_RAISING = re.compile(
+    r"\b(?:lift(?:s|ed|ing)?|rais(?:e|es|ed|ing)|hoist(?:s|ed|ing)?|"
+    r"upwards?)\b", re.I)
+
+
+def _check_action_direction(prose, event_order):
+    """F5: an ACT listed in event_order, rendered in the wrong direction or
+    dropped from the page entirely.
+
+    An act is prose, not a quote, so unlike DIALOGUE FIDELITY there is no
+    verbatim string to search for, and demanding a vocabulary match would
+    force stilted wording ("the floor rising to meet him" is a correct
+    rendering of a descent). Two findings, at different confidence:
+
+    - REVERSED (enforceable): the act names exactly one direction and the
+      prose names only the other. Judged without interpretation. From play:
+      the Director resolved one character carrying another downward and the
+      page rendered a lift.
+    - MISSING (warning only): the act names a direction and the prose names
+      neither. Legitimate prose can carry a descent with no directional verb
+      at all, so this stays visible in fidelity_warnings for review rather
+      than buying a rewrite it might not deserve.
+    """
+    if not prose or not event_order:
+        return []
+    p_low = bool(_NARR_LOWERING.search(prose))
+    p_high = bool(_NARR_RAISING.search(prose))
+    warnings = []
+    for ev in event_order:
+        if not isinstance(ev, dict) or ev.get("kind") != "action":
+            continue
+        act = str(ev.get("action") or "")
+        a_low = bool(_NARR_LOWERING.search(act))
+        a_high = bool(_NARR_RAISING.search(act))
+        if a_low == a_high:
+            continue                # the act says both directions, or neither
+        said = "downward" if a_low else "upward"
+        if (a_low and p_high and not p_low) or (a_high and p_low and not p_high):
+            warnings.append(
+                "Physical direction reversed: event_order has "
+                f"{ev.get('actor')} moving {said} "
+                f"(\"{act[:60]}\") but the prose renders the opposite. "
+                "Render the act in the direction the record gives."
+            )
+        elif not p_low and not p_high:
+            warnings.append(
+                "Physical act from event_order may be missing in narrator "
+                f"prose: {ev.get('actor')} moving {said} "
+                f"(\"{act[:60]}\")."
+            )
+    return warnings
+
+
 def _actor_reference_patterns(display):
     """Compiled patterns that count as a prose reference to one actor.
 
@@ -4221,6 +4341,7 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     warnings.extend(_check_position_fidelity(
         prose, position_facts, room_names))
     warnings.extend(_check_portal_fidelity(prose, portal_states))
+    warnings.extend(_check_action_direction(prose, event_order))
 
     return warnings
 

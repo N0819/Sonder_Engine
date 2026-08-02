@@ -737,6 +737,46 @@ classification; embedding identity matching for presences (an over-merge welds
 two characters); `cheap_embed` for anything semantic (29.5% on the region
 task); any provider call inside the write lock.
 
+### 1.19 An unregistered presence has no name to be called by
+
+**Found 2026-08-02**, fixing the Dalek whose acts never rendered (chat 58,
+"Run! ⎇10 ⎇20", t23). Shelved deliberately: the fix is a change to the identity
+gate, and widening that on a hunch is worse than the wrong label.
+
+Two defects behind that turn were fixed. `cast_room` could not map a background
+presence's NAME to its uid-keyed position, so `spatial_rel(None, room)` called
+a machine standing in the player's own alley "remote, no known spatial channel"
+and the hearing gate dropped its line for every observer — 47 of 78 background
+lines corpus-wide never reached a view. And `_ordered_beat_events` collected
+only a reaction's `dialogue_log_entry`, never its `action`, so a presence's act
+reached the narrator nowhere. Both are closed; see `Design.md`.
+
+**What is still wrong.** The act now renders, attributed to **"the unfamiliar
+person"**. `wget(58, "known")` is `{"Hinami": ["The Doctor"], "The Doctor":
+["Hinami"]}` — the Dalek is not in it, so `_speaker_display` sends it to
+`_unknown_actor_label`, which derives a short descriptor from the actor's
+appearance summary. An entity has no cast sheet, so there is no appearance, and
+it falls through to the generic string. Wrong twice over: a Dalek is not a
+person, and it is not unfamiliar — she had been warned about them and had just
+thrown a rock at this one.
+
+**The fix, and why it is not in yet.** The recognition gate exists so a
+perceiver does not use a PROPER NAME they have not earned. An unregistered
+presence's `name` is not that: it is authored as a descriptor — `A Dalek`,
+`station engineer`, `Docking Control Operator` — and entities carry no
+`identity`/`uid`/`known_to` machinery at all (both entities in chat 58 have
+`identity: None`). So an entity should display under its own name, and only a
+cast character's name should have to be earned.
+
+Not done because the label is decided in two places and perception's is the
+authority: perception wrote "something rolls forward a half-meter" and "The
+Doctor steps between her and **the source**" into that same view. Fixing the
+narrator's binding alone would leave the page and the view disagreeing about
+what the player is looking at. The change wants both ends and an adversarial
+identity pass, since every widening of this gate is a candidate identity leak —
+the exact failure `_unknown_actor_label` was built to close when a label
+derived from an appearance summary leaked the canonical name inside it.
+
 
 ---
 
