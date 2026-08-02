@@ -46,7 +46,15 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   `frame_id`.
 - `steps`, `variants`: inspectable intermediate pipeline outputs and rerolls.
 - `events`: one summarized committed event per turn.
-- `memories`, `memory_summaries`: character-owned experience records and consolidation.
+- `memories`, `memory_summaries`: character-owned experience records and
+  consolidation. `memory_summaries` is keyed
+  `(chat_id, char_id, scope, end_turn_idx)` since **v23** — one row per
+  WINDOW, not one per character. It was `(chat_id, char_id, scope)`, so every
+  consolidation overwrote the one row a scope had, which is why the summary
+  layer could not be searched: there was nothing to search between. The v23
+  migration is a table REBUILD, because SQLite cannot drop a UNIQUE declared
+  inline on CREATE TABLE; existing rows copy across unchanged and become each
+  character's first window.
 - `world`: JSON key/value state for the chat, including the current scene and pipeline caches. Inside the frame-scoped `scene` blob, `positions` is which room each person is in, `stations` their within-room position, `scales` each body's size relative to its own baseline (absent = normal; not pruned by position, since a size is not a co-location), `contained` who is being carried by what (a contained body's position is derived from its carrier's, transitively), and `contacts` a flat list of who is in physical contact with whom and by which body parts — a relation stored once rather than on either body, pruned at every merge by `spatial.normalize_scene_contacts` (contact between two people not in the same room cannot survive, so movement ends a hold deterministically). `attire` is the live per-story clothing state: a card's `initial_outfit` may seed a missing entry at scene creation or first attachment/promotion, but must never reset an entry already changed by story events.
 - `checkpoints`: whole-state restoration blobs keyed by chat and turn index.
 

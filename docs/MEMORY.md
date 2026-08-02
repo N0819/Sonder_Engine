@@ -528,11 +528,13 @@ into the truth layer, which is the one distinction this engine exists to keep.
 
 `maybe_consolidate_character_memory` fires when the character is ≥10 turns past
 their last summary **or** has ≥40 unarchived memories since it. It refuses to
-run outside the present frame: a singleton per-character summary has nowhere to
-put "as of the present era" versus "as of the flash-forward", and consolidating
-outside the present would permanently blend eras with no way to un-blend them.
-A frame visited away from the present just accumulates raw memories until play
-returns.
+run outside the present frame: a per-character summary has nowhere to put "as
+of the present era" versus "as of the flash-forward", and consolidating outside
+the present would permanently blend eras with no way to un-blend them. A frame
+visited away from the present just accumulates raw memories until play returns.
+(Windows do not change this. They are bounded by turn index, which is *global*
+play order shared by every frame, so a window still cannot separate two eras
+that interleave in it.)
 
 `frame_id` is passed **explicitly** rather than read from the ambient
 contextvar, because the real caller runs each character on a
@@ -541,7 +543,7 @@ contextvar, because the real caller runs each character on a
 `consolidate_character_memory` sends only memories **after** the previous
 summary's `end_turn_idx` — the earlier ones are already folded in, and re-sending
 them made the payload grow without bound across a long chat. It writes one
-`memory_summaries` row per scope. The first-hand row is written unconditionally,
+`memory_summaries` row per scope, **per window**. The first-hand row is written unconditionally,
 even for a window that produced nothing first-hand, because its `end_turn_idx`
 *is* the cursor — skip it on a hearsay-only window and the same memories
 re-consolidate forever.
@@ -558,6 +560,44 @@ re-consolidate forever.
 Archived rows are not deleted. `search_memories` defaults to
 `include_archived=True`, so they remain retrievable; archiving removes them
 from the consolidation window and the recent buffer.
+
+### Windows — one row per era, not one per character
+
+Until schema **v23** the key was `UNIQUE(chat_id, char_id, scope)`, so a scope
+held exactly one row and every consolidation overwrote it. The cost was not
+storage. It was that **the summary layer could not be searched**, because there
+was nothing to search between — while every summary already carried a
+maintained `embedding`, computed on write, re-embedded on a model change,
+carried verbatim through every archive and checkpoint, and read by no retrieval
+path in the engine. Sixty-seven vectors on the live bank, maintained for years
+of turns, never once ranked.
+
+v23 completes the key with `end_turn_idx`. Two things follow, and the first is
+the notable one:
+
+**Consolidation did not change.** It was already computing bounded windows —
+`start_turn = min(turn_idx)` and `end_turn = max(turn_idx)` over the memories of
+*that pass only*, which are already the ones after the previous summary's
+`end_turn_idx`. Correct windows were being computed and then thrown away by the
+constraint on the next write. Completing the key was the entire fix; re-running
+a consolidation that lands on the same boundary still updates in place rather
+than duplicating.
+
+**`search_memory_summaries` ranks them.** Scoped exactly like `search_memories`:
+`char_id` is the bank, `before_turn_idx` applies the same exclusive cutoff (a
+window that closed at or after the deciding turn describes how this beat turned
+out), and a window whose vector came from a different embedding model is
+skipped rather than compared. `exclude_latest` defaults to true so a caller
+sending both this and `get_memory_summary` does not send the same window twice.
+
+**What a character receives is unchanged.** `get_memory_summary` now returns the
+*latest* window, which is identical behaviour for every existing bank — each had
+one row — and identical going forward, because consolidation still folds the
+previous summary into the new one. Making bounded windows the payload without a
+retrieval path to reach the older ones would silently cost every character their
+early history, which is the failure mode `CLAUDE.md` warns shows up fifty beats
+later looking like a model problem. That half is deliberately unbuilt; see
+`docs/UNBUILT.md`.
 
 ---
 
@@ -762,7 +802,9 @@ Raised in review and still open:
   mechanism; it wants siblings — echo (structurally or affectively similar),
   unfinished (tied to an open concern), identity (challenges the self-concept),
   intrusion (highly charged despite low relevance).
-- **Hierarchical summary retrieval**, below.
+- **Hierarchical summary retrieval** — the *payload* half. Storage and
+  retrieval landed in schema v23 (§8); what is still unbuilt is any caller
+  that sends a retrieved window to a character. See `docs/UNBUILT.md`.
 
 ### Sense as a retrieval channel — built, measured, reverted
 
