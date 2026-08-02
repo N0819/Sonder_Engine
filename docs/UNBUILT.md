@@ -369,10 +369,23 @@ defends for speech and action, unguarded for position.
 This is the actual long-term durability defect in memory retrieval; the vector
 index was never it.
 
+> **SUPERSEDED as of 2026-08-01, for the premise below.** A real provider is
+> now configured and the bank is fully migrated: `embedding_model_key()`
+> returns `openrouter:3:perplexity/pplx-embed-v1-4b`, and all **5,236** rows in
+> `memories` carry that key at 2560 dimensions — none on the crc32 fallback.
+> The measurements in "One" describe the state before that and are kept because
+> they are what justified the design decisions still standing (no ANN index,
+> the mismatch guard, the rebuild path), NOT because they describe the engine
+> today. **Semantic recall is live**, so anything below that reasons from "the
+> vectors are lexical in disguise" no longer holds — in particular, the
+> conclusion that mood/goal aspect ranking is limited by a hash. The cliff in
+> "Two" is unchanged and is exactly what a further model change would still do.
+
 Two facts that only bite together.
 
-**One: nothing in this database has ever been semantically embedded.** All
-4,894 memory rows carry `embedding_model: "cheap:crc32:256"` — the FALLBACK
+**One: nothing in this database had ever been semantically embedded** (as of
+2026-07-31; see the note above). All
+4,894 memory rows carried `embedding_model: "cheap:crc32:256"` — the FALLBACK
 `providers.cheap_embed`, a hashed character trigram/4-gram signature. It is a
 fuzzy *lexical* signature, not a semantic vector. So two of `search_memories`'s
 four fused lists — "semantic match" (weight 1.0) and "cue-vector match" (weight
