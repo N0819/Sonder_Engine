@@ -205,3 +205,65 @@ class TestACharacterKnowsWhatItIsWearing:
         import agents.character as character
         src = inspect.getsource(character)
         assert '"attire": attire_view(' in src
+
+
+class TestSilenceIsSomethingThePlayerDid:
+    """A beat where the player acts without speaking produced a payload with no
+    line from them in it -- indistinguishable, from inside, from a beat whose
+    line had simply not been mentioned. The nearest thing to an unanswered
+    remark was then whatever they last said several beats back, and characters
+    answered that.
+
+    Measured in chat 57: two consecutive action-only inputs ("You get behind
+    him, tails still bristled and thrashing a little") whose perception view
+    describes the movement in full and never says whether she spoke.
+    """
+
+    def _sc(self, player_room="alley", char_room="alley"):
+        return {"positions": {"Hinami": player_room, "The Doctor": char_room}}
+
+    def _sh(self):
+        return {"identity": {"name": "The Doctor"}}
+
+    def _chat(self):
+        return {"id": 1, "persona_id": None,
+                "persona_sheet": {"identity": {"name": "Hinami"}}}
+
+    def test_silence_in_the_same_room_is_reported(self, monkeypatch):
+        import agents.character as character
+        monkeypatch.setattr(character, "persona_of",
+                            lambda chat: {"identity": {"name": "Hinami"}})
+        note = character._player_silence_note(
+            self._sc(), self._chat(), self._sh(), "")
+        assert note.get("player_said_nothing") is True
+        assert note.get("player_name") == "Hinami"
+
+    def test_a_beat_they_spoke_on_says_nothing(self, monkeypatch):
+        """Absent rather than False, so its presence is the whole signal."""
+        import agents.character as character
+        monkeypatch.setattr(character, "persona_of",
+                            lambda chat: {"identity": {"name": "Hinami"}})
+        assert character._player_silence_note(
+            self._sc(), self._chat(), self._sh(), "Which lever?!") == {}
+
+    def test_a_character_elsewhere_is_told_nothing(self, monkeypatch):
+        """Whether the player spoke is not this character's business when the
+        player is not in the room -- the same boundary perception keeps."""
+        import agents.character as character
+        monkeypatch.setattr(character, "persona_of",
+                            lambda chat: {"identity": {"name": "Hinami"}})
+        assert character._player_silence_note(
+            self._sc(player_room="console_room"), self._chat(),
+            self._sh(), "") == {}
+
+    def test_the_prompt_forbids_answering_an_older_line(self):
+        from prompts import DEFAULT_PROMPTS
+        prompt = DEFAULT_PROMPTS["character"]
+        assert "decision.player_said_nothing" in prompt
+        assert "player_name" in prompt
+
+    def test_the_prompt_frames_silence_as_an_act(self):
+        """"No input" invites reaching backwards; "they chose not to speak"
+        does not."""
+        from prompts import DEFAULT_PROMPTS
+        assert "Silence is something they DID" in DEFAULT_PROMPTS["character"]
