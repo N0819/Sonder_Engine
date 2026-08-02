@@ -300,3 +300,64 @@ def test_director_floor_does_not_flag_conscious_bystander():
     assert _untracked_unconsciousness_subjects(
         "The falling beam knocks Dr. Moon out cold.",
         [], {}, names) == ["Dr. Moon"]
+
+
+class TestFaintIsUsuallyAnAdjective:
+    """"faint" is a verb and an adjective, and prose overwhelmingly uses the
+    adjective. Bare `faints?` matched "a FAINT pulse of rose-gold motes" and,
+    with a name five tokens away, told the Director that Elyndra had lost
+    consciousness in the middle of an act she was performing.
+
+    Measured on chat 52's last beat. It wrote a real condition --
+    `elyndra_awareness`, kind `awareness`, `state.level: "dazed"` -- and a
+    dazed body perceives badly, so her own perception view came back as
+    "Details are blurred, only the presence of the small kitsune and the
+    pressure of the hold are clear." Both halves of the report ("her action is
+    not passed to perception" and "the director marked her unconscious") are
+    that one word.
+
+    This scan is the deterministic floor UNDER the semantic omission auditor,
+    so a false positive costs much more than a miss: it instructs the Director
+    to knock a character out, while a real faint is still caught above it.
+    """
+
+    ADJECTIVE = [
+        "Elyndra's horns emit a faint pulse of rose-gold motes",
+        "the faint smell of smoke",
+        "a faint glow behind the door",
+        "her voice was faint",
+        "a faint tremor ran through the floor",
+    ]
+    VERB = [
+        "she faints in his arms",
+        "Hinami fainted on the spot",
+        "she is fainting",
+        "she might faint",
+        "she was about to faint",
+        "he looked ready to faint",
+    ]
+
+    def test_the_adjective_never_fires(self):
+        from agents.director import _UNCONSCIOUSNESS_CUE
+        for text in self.ADJECTIVE:
+            assert not _UNCONSCIOUSNESS_CUE.search(text.lower()), text
+
+    def test_the_verb_still_fires(self):
+        from agents.director import _UNCONSCIOUSNESS_CUE
+        for text in self.VERB:
+            assert _UNCONSCIOUSNESS_CUE.search(text.lower()), text
+
+    def test_the_sleep_cue_agrees(self):
+        """`_SLEEP_CUE` carried the same bare alternation, and errs toward
+        KEEPING an onset -- so a false positive there puts the player under."""
+        from agents.director import _SLEEP_CUE
+        for text in self.ADJECTIVE:
+            assert not _SLEEP_CUE.search(text.lower()), text
+        for text in self.VERB:
+            assert _SLEEP_CUE.search(text.lower()), text
+
+    def test_the_other_cues_are_untouched(self):
+        from agents.director import _UNCONSCIOUSNESS_CUE
+        for text in ("he was knocked out", "she blacks out", "the blow makes "
+                     "you pass out", "she is out cold", "losing consciousness"):
+            assert _UNCONSCIOUSNESS_CUE.search(text.lower()), text

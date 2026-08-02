@@ -1030,6 +1030,19 @@ def _untracked_restraint_subjects(resolved_event, dialogue_log, conditions,
 # Moon kneels beside the unconscious anomaly") is never flagged. It is the
 # deterministic floor UNDER the broad semantic omission auditor, never the
 # mechanism.
+# "faint" is a verb and an adjective, and the adjective is far commoner in
+# prose. Bare `faints?` matched "a FAINT pulse of rose-gold motes" and, with a
+# name five tokens away, told the Director that Elyndra had lost consciousness
+# mid-scene -- measured on chat 52's last beat, where she was doing nothing of
+# the kind. This scan is the deterministic floor UNDER the semantic auditor, so
+# a false positive costs far more than a miss: it instructs the Director to
+# knock a character out, and the auditor above it still catches a real faint.
+#
+# The inflections are unambiguous, and the bare form is admitted only where a
+# modal or infinitive marker makes it a verb ("might faint", "about to faint").
+_FAINT_VERB = (r"faint(?:s|ed|ing)|"
+               r"(?:will|would|might|may|can|could|should|must|to|nearly|"
+               r"almost|about\s+to|going\s+to)\s+faint")
 _UNCONSCIOUSNESS_CUE = re.compile(
     r"\b(?:"
     r"unconscious|out\s+cold|"
@@ -1039,7 +1052,7 @@ _UNCONSCIOUSNESS_CUE = re.compile(
     # blow makes you pass out") escaped the floor entirely.
     r"black(?:s|ed)?\s+out|"
     r"pass(?:es|ed)?\s+out|"
-    r"faints?|fainted|"
+    + _FAINT_VERB + r"|"
     r"los(?:e|es|t|ing)\s+consciousness|"
     r"go(?:es)?\s+limp|went\s+limp|slumps?\s+unconscious|"
     r"sedated|put\s+under"
@@ -1100,7 +1113,7 @@ _SLEEP_CUE = re.compile(
     r"go(?:es)?\s+to\s+sleep|went\s+to\s+sleep|going\s+to\s+sleep|"
     r"knocked?\s+out|out\s+cold|unconscious|"
     r"black(?:s|ed)?\s+out|"
-    r"pass(?:es|ed)?\s+out|faints?|fainted|"
+    r"pass(?:es|ed)?\s+out|" + _FAINT_VERB + r"|"
     r"los(?:e|es|t|ing)\s+consciousness|"
     r"sedated|drugged|put\s+under"
     r")\b"
