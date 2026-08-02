@@ -2002,6 +2002,39 @@ def _player_subject_sentences(prose, player_name):
 # reach past a genuine subject into a subordinate clause.
 _SUBJECT_PRONOUN_RE = re.compile(r"^(?:[^,]{0,40},\s*)?(?:he|she|they)\b", re.I)
 
+_SUBJECT_OPENERS = {}
+
+
+def _subject_opener(form):
+    """Does a sentence OPEN with this name, as subject or possessive?
+
+    Tolerates a LEADING ARTICLE, because the article belongs to the prose and
+    not to the name. A body registered as "A Dalek" is written "The Dalek" the
+    moment it stops being new, and the article is the only difference -- the
+    same trap `docs/UNBUILT.md` §1.17 documents for presence identity. Without
+    this every subject-anchored guard silently missed such a body: live
+    (chat 58, t28) the Dalek's own view read "The Dalek's visual sensors pick
+    up...", "The Dalek hears...", "The Dalek's own base grinds forward" --
+    third person about its own perceiver, straight past `_strip_self_narration`,
+    whose forms were "A Dalek" and "Dalek" and neither of which opens that
+    sentence.
+
+    ONLY the three articles. A TITLE is frequently the only thing telling two
+    bodies apart ("the guard" is not "the captain"), so `_NAME_LEADERS` stays
+    out of this deliberately -- the same line §1.17 draws.
+
+    The name itself keeps its case sensitivity: a capitalised form matches
+    case-sensitively as before, so an ordinary noun that happens to spell a
+    name does not bind.
+    """
+    pat = _SUBJECT_OPENERS.get(form)
+    if pat is None:
+        pat = re.compile(
+            rf"^(?:[Tt]he\s+|[Aa]n?\s+)?{re.escape(form)}(?:'s|’s)?\b",
+            re.I if form[:1].islower() else 0)
+        _SUBJECT_OPENERS[form] = pat
+    return pat
+
 
 def _sentence_subjects(prose, names, split=None):
     """Each sentence of `prose` paired with the name that is plainly its subject.
@@ -2037,7 +2070,7 @@ def _sentence_subjects(prose, names, split=None):
         matched = None
         for cand in (names or []):
             for form in _player_name_forms(cand):
-                if re.match(rf"^{re.escape(form)}(?:'s)?\b", stripped):
+                if _subject_opener(form).match(stripped):
                     matched = cand
                     break
             if matched:
@@ -3560,6 +3593,35 @@ _VIEW_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])(\s+)")
 _VIEW_QUOTE_CHARS = ('"', "“", "”")
 _VIEW_DEDUPE_MIN_WORDS = 5
 
+_VIEW_QUOTED_SPAN_RE = re.compile(
+    r'["“][^"“”]*["”]'          # "..." / “...”
+    r"|(?<!\w)'[^']{3,}?'(?!\w)"  # '...' , not an apostrophe
+)
+_VIEW_MASK = "\x00Q%d\x00"
+
+
+def _mask_quoted_spans(text):
+    """Replace each quoted span with a single opaque token.
+
+    The token carries no whitespace and no terminal punctuation, so a sentence
+    splitter cannot cut a quotation into pieces -- which is the whole point.
+    Returns (masked_text, spans) for `_unmask_quoted_spans`.
+    """
+    spans = []
+
+    def _swap(match):
+        spans.append(match.group(0))
+        return _VIEW_MASK % (len(spans) - 1)
+
+    return _VIEW_QUOTED_SPAN_RE.sub(_swap, text), spans
+
+
+def _unmask_quoted_spans(text, spans):
+    for i, span in enumerate(spans):
+        text = text.replace(_VIEW_MASK % i, span)
+    return text
+
+
 def _dedupe_view_sentences(text):
     """Drop a sentence that repeats an EARLIER sentence of the same text
     verbatim (case/whitespace/terminal-punctuation-insensitive), keeping the
@@ -3572,12 +3634,34 @@ def _dedupe_view_sentences(text):
       ("No. No.") and terse stage directions must survive;
     - only exact normalized repeats go; paraphrase is out of scope.
 
+    QUOTED SPANS ARE MASKED BEFORE SPLITTING, because that first rule was
+    defeated by the splitter for years. The check is per-SENTENCE ("does this
+    fragment contain a quote character"), and a spoken line containing its own
+    terminal punctuation is cut into several fragments -- only the two on the
+    ends keep a quote mark, and every fragment between them is judged naked and
+    dropped if it echoes anything earlier in the view.
+
+    Live (chat 58, t30). The player answered a direct question with "Seven? I
+    think? There might have been more... they began to spread out..." -- four
+    terminators, so four fragments. This runs LAST in `perception_act`, after
+    the deterministic delivery, and ate the interior of the quotation:
+
+        Hinami says: "Seven? I think? There might have been more... they began
+                      to spread out..."
+        ->  Hinami says: "Seven? I think? they began to spread out..."
+
+    The character then answered as though the line had never been said, asking
+    the question that had just been answered. Perception_act is the view a
+    character DECIDES from, so unlike a narrator-side drop this is invisible in
+    play -- it surfaces only as a non-sequitur that reads like a model failure.
+
     Returns the text unchanged (same object) when nothing repeats.
     """
     text = str(text or "")
     if not text.strip():
         return text
-    pieces = _VIEW_SENTENCE_SPLIT_RE.split(text)
+    masked, spans = _mask_quoted_spans(text)
+    pieces = _VIEW_SENTENCE_SPLIT_RE.split(masked)
     seen = set()
     kept = []
     dropped = False
@@ -3591,6 +3675,10 @@ def _dedupe_view_sentences(text):
         key = re.sub(r"\s+", " ", sent).strip().strip(".!?…").casefold()
         droppable = (
             len(key.split()) >= _VIEW_DEDUPE_MIN_WORDS
+            # A masked span means this sentence carries a quotation. The raw
+            # check stays alongside it for an UNTERMINATED quote, which the
+            # span regex cannot match and which must still be protected.
+            and "\x00" not in sent
             and not any(qc in sent for qc in _VIEW_QUOTE_CHARS)
         )
         if droppable:
@@ -3602,7 +3690,7 @@ def _dedupe_view_sentences(text):
         kept.append(sep)
     if not dropped:
         return text
-    return "".join(kept).rstrip()
+    return _unmask_quoted_spans("".join(kept).rstrip(), spans)
 
 _NARRATION_QUOTE_RE = re.compile(r'["“][^"“”]*["”]')
 _NARRATION_SQUOTE_RE = re.compile(r"(?<!\w)'[^']{3,}?'(?!\w)")
