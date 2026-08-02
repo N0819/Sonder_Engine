@@ -4350,6 +4350,76 @@ def _shield_standing_bearings(prior_rooms, incoming_rooms):
     return out
 
 
+def connect_orphan_new_rooms(scene: dict, prev_scene: dict) -> list:
+    """A room created this turn must be reachable from somewhere.
+
+    Adjacency resolves BOTH ways, so a room with an empty `adjacent` is fine as
+    long as something points AT it -- which is why `alley_room` works while
+    carrying no edges of its own. The failure is the stronger one: a room no
+    edge reaches in EITHER direction. `spatial_rel` answers `separated`/`far`
+    for every pair involving it, so it is an island, and the only thing its
+    occupants can perceive is whatever happens to be standing in it with them.
+
+    Live (chat 58): `northern_plaza` was minted with `adjacent: []` and nothing
+    pointing at it. The player stepped out of the TARDIS into a described city
+    plaza -- shuttered buildings, dripping awnings, an alley the Dalek was
+    grinding out of -- and her view could only offer her the police box she had
+    just left, because the dock edge was the single edge the map admitted.
+
+    Applied ONLY to rooms that are new in this merge, and only at the moment
+    they are created, because that is the one point where the engine still has
+    the context to place them: where the bodies were standing immediately
+    before. After the fact there is nothing left to infer from, which is why
+    this cannot be a periodic repair pass.
+
+    Interiors are skipped: a `parent_entity` room's doorway is DERIVED by
+    `apply_transit_dock_edges` (which runs straight after this), and a sealed
+    or in-transit hull is severed from the world on purpose.
+
+    Mutates `scene` in place. Returns [(room_id, attached_to), ...].
+    """
+    rooms = scene.get("rooms")
+    if not isinstance(rooms, dict) or len(rooms) < 2:
+        return []
+    known = set((prev_scene or {}).get("rooms") or {})
+    fresh = [rid for rid in rooms if rid not in known]
+    if not fresh:
+        return []
+
+    reached = set()
+    for rid, room in rooms.items():
+        for edge in (room.get("adjacent") or []):
+            if isinstance(edge, dict) and edge.get("to"):
+                reached.add(str(edge["to"]))
+                reached.add(str(rid))
+
+    # Where the bodies were standing BEFORE this turn's diff -- the scene's
+    # centre of gravity, and the only honest guess available.
+    counts = {}
+    for room_id in ((prev_scene or {}).get("positions") or {}).values():
+        if room_id and room_id in rooms:
+            counts[room_id] = counts.get(room_id, 0) + 1
+    attached = []
+    for rid in fresh:
+        room = rooms[rid]
+        if not isinstance(room, dict) or room.get("parent_entity"):
+            continue
+        if rid in reached:
+            continue
+        anchor = max((r for r in counts if r != rid),
+                     key=counts.get, default=None)
+        if anchor is None:
+            anchor = next((r for r in rooms if r != rid), None)
+        if not anchor:
+            continue
+        room.setdefault("adjacent", []).append(
+            {"to": anchor, "barrier": "open", "distance": "near"})
+        reached.add(rid)
+        reached.add(anchor)
+        attached.append((rid, anchor))
+    return attached
+
+
 def merge_scene_with_diff(
     scene: dict,
     diff: dict | None,
@@ -4474,6 +4544,12 @@ def merge_scene_with_diff(
     # (commit preparation, perception's mid-turn merges) sees the same
     # correct doorways. Runs before barrier normalization, which then
     # canonicalizes whatever the rewrite emitted.
+    # A room minted this turn that no edge reaches is an island: every pair
+    # involving it answers `separated`/`far`, so its occupants can perceive
+    # nothing but each other. Runs BEFORE the dock rewrite, which owns
+    # interiors and is left to derive those on its own.
+    connect_orphan_new_rooms(merged, scene)
+
     apply_transit_dock_edges(merged)
 
     # Collapse duplicate same-target adjacency edges across EVERY room, not

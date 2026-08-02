@@ -14,7 +14,7 @@ from memory import (
     knowledge_for_character, get_relationships,
     save_relationships, update_relationships_from_inference,
     apply_relationship_updates, maybe_consolidate_character_memory,
-    reconcile_inference_confidence,
+    reconcile_inference_confidence, _is_empty_view,
 )
 from providers import embed_texts
 from prompts import get_prompt
@@ -1781,15 +1781,57 @@ def prepare_scene_commit(ctx):
     target_room = room_renames.get(target_room, target_room)
 
     if target_room and target_room not in sc.get("rooms", {}):
-        for entry in staged:
-            if entry.get("category") == "layout" and entry.get("content"):
-                sc.setdefault("rooms", {})[target_room] = {
-                    "name": target_room.replace("_", " ").title(),
-                    "desc": entry["content"],
-                    "adjacent": [],
-                    "notes": entry["content"][:500],
-                }
+        # A DECLARED DESTINATION ALWAYS EXISTS. Going somewhere is the
+        # strongest possible assertion that it is there -- stronger than
+        # naming it, which is why this is keyed on movement rather than on
+        # mention: a character can talk about Gallifrey all day without the
+        # engine minting it, but the moment a body walks toward a place, the
+        # place has to be somewhere for them to arrive.
+        #
+        # This used to happen ONLY as a side effect of lore staging: the room
+        # was created if this turn's mapping happened to stage a `layout`
+        # entry, and otherwise not at all. So a destination existed or not
+        # depending on whether the lore layer had something to say about it,
+        # and a mover could be sent to a room that was never created. Live
+        # (chat 58): t25's movement targeted `alley_mouth`, an ANCHOR inside
+        # `street_outside` rather than a room; nothing staged layout lore for
+        # it, so nothing was made.
+        _desc = next((entry["content"] for entry in staged
+                      if entry.get("category") == "layout"
+                      and entry.get("content")), "")
+        # Somewhere to come back from. A room with no edges is unreachable
+        # from every other room in the scene -- perception then treats it as
+        # `separated`/`far`, which is how an interior falls out of the world.
+        _origin = None
+        _p_name = _player_name_or_none(ctx)
+        _mover = str((mv or {}).get("mover") or "self").strip()
+        _who = _p_name if _mover in ("", "self") else _mover
+        for _key in (_who, _p_name):
+            if not _key:
+                continue
+            _origin = (prev_scene.get("positions") or {}).get(_key)
+            if _origin:
                 break
+        if not _origin:
+            # The mover could not be named (no persona resolved, an unnamed
+            # mover). Fall back to where the bodies actually were, because the
+            # one outcome this must never produce is the disconnected room it
+            # exists to prevent -- an unreachable destination is worse than an
+            # edge drawn from the busiest room in the scene.
+            _counts = {}
+            for _room in (prev_scene.get("positions") or {}).values():
+                if _room:
+                    _counts[_room] = _counts.get(_room, 0) + 1
+            _origin = max(_counts, key=_counts.get) if _counts else None
+        sc.setdefault("rooms", {})[target_room] = {
+            "name": target_room.replace("_", " ").title(),
+            "desc": _desc,
+            "adjacent": ([{"to": _origin, "barrier": "open",
+                           "distance": "near"}]
+                         if _origin and _origin in sc.get("rooms", {})
+                         and _origin != target_room else []),
+            "notes": _desc[:500],
+        }
 
     # Mapping's scene_patch is advisory -- the Director is expected to fold
     # it into state_diff -- but models reliably echo room CREATIONS while
@@ -4273,26 +4315,6 @@ def _salience_of(text):
         if w in (text or "").lower():
             s += 0.08
     return round(min(s, 0.95), 3)
-
-# Views that record no perceptible event. Matched on the engine's OWN
-# placeholders rather than on prose: `agents/perception.py` writes "an
-# unspecified area" when it cannot name a room, and `agents/character.py`
-# falls back to "You register nothing new this beat." Both mean the same
-# thing -- this mind perceived nothing this beat -- and neither is an episode.
-_EMPTY_VIEW_MARKERS = (
-    "you are in an unspecified area",
-    "you register nothing new",
-)
-
-
-def _is_empty_view(text):
-    """True when a perception view records no event worth remembering."""
-    body = " ".join(str(text or "").split()).strip().casefold().rstrip(".")
-    if not body:
-        return True
-    return any(body == m or body.startswith(m) and len(body) < len(m) + 25
-               for m in _EMPTY_VIEW_MARKERS)
-
 
 def prepare_memory_commit(ctx, *, scene=None):
     """Build and embed all per-character memory mutations without writes."""
