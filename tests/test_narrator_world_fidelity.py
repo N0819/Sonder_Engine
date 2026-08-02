@@ -26,9 +26,11 @@ from agents.common import (
     _check_event_order,
     _check_portal_fidelity,
     _check_position_fidelity,
+    _check_action_direction,
     _check_quote_attribution,
 )
 from agents.narration import (
+    _ENFORCEABLE_PREFIXES,
     _ordered_beat_events,
     _position_delta_payload,
     _visible_portal_states,
@@ -514,3 +516,211 @@ def test_ordered_beat_events_unrecognized_speaker_gets_label(temp_db):
     # canonical name the player has not learned.
     assert "Mara" not in events[0]["actor"]
     assert "woman" in events[0]["actor"]
+
+
+# ---- F5: a character's physical act is an event, not scenery ----
+#
+# The fixture is a plain one -- one character lowers a lantern into a well
+# shaft while the player watches -- chosen so the assertions turn on the
+# MECHANISM (act vs speech, overt vs concealed, seen vs unseen, direction) and
+# nothing else. The defect these cover was found in play on a very different
+# scene; none of that belongs in a regression test.
+
+_SEEN = {"rooms": {"yard": {"name": "Well Yard"}},
+         "positions": {"Mara": "yard", "Player": "yard"}}
+
+
+def _lowering_round(visibility="overt"):
+    return [{"round": 0, "speaker_id": 1, "speaker": "Mara",
+             "result": {"sequence": [
+                 {"type": "action",
+                  # `attempt` is private: intent, appraisal, what she is
+                  # watching for. None of it may reach the narrator.
+                  "attempt": "lower the lantern to read the water level while "
+                             "checking whether the rope will hold my weight",
+                  "observable": "slowly lowers the lantern into the well shaft",
+                  "visibility": visibility},
+                 {"type": "speech", "text": "It goes down further than I "
+                                            "thought."},
+             ]}}]
+
+
+def test_npc_act_enters_the_event_record(temp_db):
+    # The defect this closes: for every character except the player,
+    # event_order was speech-only, so the beat's actual physical event never
+    # reached the narrator as an event at all.
+    ctx = _mk_ctx(temp_db, _SEEN)
+    ctx.director_interpret = {"sequence": []}
+    ctx.interaction_loop = {"rounds": _lowering_round()}
+    view = ('The lantern sinks away from you into the shaft. '
+            'You hear Mara says: "It goes down further than I thought."')
+    events = _ordered_beat_events(
+        ctx, "Player", view, {"Mara"},
+        {"Mara": {"appearance": "", "aliases": []}},
+        scene=_SEEN, p_room="yard")
+    assert [(e["actor"], e["kind"]) for e in events] == [
+        ("Mara", "action"), ("Mara", "speech")]
+    # Declaration order is preserved: the act caused the line.
+    assert [e["n"] for e in events] == [1, 2]
+    assert "lowers the lantern" in events[0]["action"]
+    # The OBSERVABLE surface, never the private attempt: no intent leaks.
+    assert "rope" not in events[0]["action"]
+    assert "weight" not in events[0]["action"]
+
+
+def test_concealed_act_stays_out_of_the_event_record(temp_db):
+    ctx = _mk_ctx(temp_db, _SEEN)
+    ctx.director_interpret = {"sequence": []}
+    ctx.interaction_loop = {"rounds": _lowering_round(visibility="concealed")}
+    view = 'You hear Mara says: "It goes down further than I thought."'
+    events = _ordered_beat_events(
+        ctx, "Player", view, {"Mara"},
+        {"Mara": {"appearance": "", "aliases": []}},
+        scene=_SEEN, p_room="yard")
+    assert [e["kind"] for e in events] == ["speech"]
+
+
+def test_unseen_actor_act_stays_out_of_the_event_record(temp_db):
+    # Same act, but the player cannot perceive the actor -- another room, no
+    # sight line. The line still arrives (it is audible and IS in the view);
+    # the act must not, or the narrator learns something unperceived.
+    scene = {"rooms": {"yard": {"name": "Well Yard"},
+                       "cellar": {"name": "Cellar", "barrier": "wall"}},
+             "positions": {"Mara": "cellar", "Player": "yard"}}
+    ctx = _mk_ctx(temp_db, scene)
+    ctx.director_interpret = {"sequence": []}
+    ctx.interaction_loop = {"rounds": _lowering_round()}
+    view = 'You hear Mara says: "It goes down further than I thought."'
+    events = _ordered_beat_events(
+        ctx, "Player", view, {"Mara"},
+        {"Mara": {"appearance": "", "aliases": []}},
+        scene=scene, p_room="yard")
+    assert [e["kind"] for e in events] == ["speech"]
+
+
+def test_act_omitted_without_a_scene_fails_closed(temp_db):
+    # No scene/room to judge perception with -> no act is listed. A thin beat
+    # is recoverable; a leaked one is not.
+    ctx = _mk_ctx(temp_db, _SEEN)
+    ctx.director_interpret = {"sequence": []}
+    ctx.interaction_loop = {"rounds": _lowering_round()}
+    view = 'You hear Mara says: "It goes down further than I thought."'
+    events = _ordered_beat_events(
+        ctx, "Player", view, {"Mara"},
+        {"Mara": {"appearance": "", "aliases": []}})
+    assert [e["kind"] for e in events] == ["speech"]
+
+
+def _act(actor, action):
+    return [{"n": 1, "actor": actor, "kind": "action", "action": action}]
+
+
+def test_reversed_direction_fires_and_is_enforceable():
+    order = _act("Mara", "slowly lowers the lantern into the well shaft")
+    prose = "Mara lifts the lantern clear of the shaft, rope creaking."
+    warnings = _check_action_direction(prose, order)
+    assert len(warnings) == 1
+    assert warnings[0].startswith("Physical direction reversed")
+    assert warnings[0].startswith(_ENFORCEABLE_PREFIXES)
+
+
+def test_direction_rendered_correctly_passes():
+    order = _act("Mara", "slowly lowers the lantern into the well shaft")
+    prose = "The lantern lowers past the lip of the well, light shrinking."
+    assert _check_action_direction(prose, order) == []
+
+
+def test_missing_act_warns_but_does_not_buy_a_rewrite():
+    # The observed failure: the motion simply never appeared on the page.
+    order = _act("Mara", "slowly lowers the lantern into the well shaft")
+    prose = ("Mara's mouth tightens. The rope creaks in her fist and the yard "
+             "smells suddenly of wet stone.")
+    warnings = _check_action_direction(prose, order)
+    assert len(warnings) == 1
+    assert warnings[0].startswith("Physical act from event_order may be missing")
+    # Deliberately NOT enforceable: correct prose can render a descent with no
+    # directional verb in it at all.
+    assert not warnings[0].startswith(_ENFORCEABLE_PREFIXES)
+
+
+def test_direction_check_ignores_ordinary_prose():
+    # Neither the act nor the page names a direction -> nothing to judge.
+    order = _act("Mara", "sets the mug down on the table")
+    prose = "Mara sets the mug down, the ceramic clicking against the wood."
+    assert _check_action_direction(prose, order) == []
+    # The tightened vocabulary must not read a rose-gold light, a rising heat
+    # or a dropped voice as a body being moved.
+    order2 = _act("Mara", "lowers the lantern into the shaft")
+    prose2 = ("Rose-gold light drifts up the shaft as heat rises off the "
+              "stones. Her voice drops. The lantern lowers out of sight.")
+    assert _check_action_direction(prose2, order2) == []
+
+
+def test_speech_only_record_is_unaffected():
+    order = [{"n": 1, "actor": "Mara", "kind": "speech", "quote": "I lifted it."}]
+    assert _check_action_direction("Mara says she lowered it.", order) == []
+
+
+def _bg_ctx(temp_db, scene, action, quote="STOP WHERE YOU ARE."):
+    ctx = _mk_ctx(temp_db, scene)
+    ctx.director_interpret = {"sequence": []}
+    ctx._extra["background_react"] = {
+        "fired": True, "name": "A Machine",
+        "reactions": [{
+            "name": "A Machine",
+            "dialogue_log_entry": {"speaker": "A Machine",
+                                   "exact_quote": quote,
+                                   "visibility": "overt"},
+            "action": action,
+        }],
+        "selected": ["A Machine"],
+    }
+    return ctx
+
+
+def test_background_presence_act_enters_the_event_record(temp_db):
+    # A background presence's act has a different SHAPE from a character's
+    # declared sequence -- one prose string on the reaction, no
+    # observable/visibility pair -- so the `_seq_events` path cannot see it and
+    # it was collected nowhere.
+    scene = {"rooms": {"yard": {"name": "Yard"}},
+             "positions": {"Player": "yard", "A Machine": "yard"}}
+    action = "Its lens swivels and locks on you, the weapon holding its aim."
+    ctx = _bg_ctx(temp_db, scene, action)
+    view = 'You hear A Machine says: "STOP WHERE YOU ARE."'
+    events = _ordered_beat_events(
+        ctx, "Player", view, {"A Machine"},
+        {"A Machine": {"appearance": "", "aliases": []}},
+        scene=scene, p_room="yard")
+    assert [e["kind"] for e in events] == ["speech", "action"]
+    assert events[1]["actor"] == "A Machine"
+    assert events[1]["action"] == action
+
+
+def test_background_act_from_an_unseen_presence_is_withheld(temp_db):
+    # The line is audible through the wall and IS in the view; the act is not
+    # perceptible and must not be listed.
+    scene = {"rooms": {"yard": {"name": "Yard"},
+                       "vault": {"name": "Vault", "barrier": "wall"}},
+             "positions": {"Player": "yard", "A Machine": "vault"}}
+    ctx = _bg_ctx(temp_db, scene, "Its lens swivels and locks on you.")
+    view = 'You hear A Machine says: "STOP WHERE YOU ARE."'
+    events = _ordered_beat_events(
+        ctx, "Player", view, {"A Machine"},
+        {"A Machine": {"appearance": "", "aliases": []}},
+        scene=scene, p_room="yard")
+    assert [e["kind"] for e in events] == ["speech"]
+
+
+def test_background_act_survives_a_reaction_with_no_line(temp_db):
+    # A presence that only ACTS still emits an event. Nothing about the act
+    # depends on it having spoken.
+    scene = {"rooms": {"yard": {"name": "Yard"}},
+             "positions": {"Player": "yard", "A Machine": "yard"}}
+    ctx = _bg_ctx(temp_db, scene, "It rolls a half-meter closer.", quote="")
+    events = _ordered_beat_events(
+        ctx, "Player", "The yard is quiet.", {"A Machine"},
+        {"A Machine": {"appearance": "", "aliases": []}},
+        scene=scene, p_room="yard")
+    assert [e["kind"] for e in events] == ["action"]
+    assert "half-meter closer" in events[0]["action"]

@@ -189,3 +189,80 @@ def test_perception_act_resolves_uid_keyed_reactor_room(temp_db, monkeypatch):
     assert "unspecified area" not in view
     # Same room as the actor -> the player's action is injected into the view.
     assert "shoji" in view
+
+
+# ---- the same gap, one layer out: an UNREGISTERED presence ----
+#
+# canonicalize_positions folds a uid key back onto the name only for a
+# REGISTERED cast character. An unregistered background presence is not cast,
+# so its key is left as the entity uid by design -- and nothing mapped the
+# name back, leaving it unreachable by name from the moment it was placed.
+# Live (chat 58, t23): a machine standing in the player's own room with its
+# weapon trained on her was resolved to None, so the hearing gate saw
+# `spatial_rel(None, room)` -> "remote, no known spatial channel" and dropped
+# its line for every observer.
+
+def _presence_scene(entities, positions):
+    return {"rooms": {"alley": {"name": "Alley"}, "yard": {"name": "Yard"}},
+            "positions": positions, "entities": entities}
+
+
+def test_unregistered_presence_resolves_by_name():
+    sc = _presence_scene(
+        {"40af0ac4": {"name": "A Dalek", "aliases": ["the metal thing"]}},
+        {"Hinami": "alley", "40af0ac4": "alley"})
+    assert cast_room(sc, "A Dalek", []) == "alley"
+
+
+def test_unregistered_presence_resolves_by_alias():
+    sc = _presence_scene(
+        {"40af0ac4": {"name": "A Dalek", "aliases": ["the metal thing"]}},
+        {"40af0ac4": "alley"})
+    assert cast_room(sc, "the metal thing", []) == "alley"
+
+
+def test_presence_name_outranks_another_presence_alias():
+    # Two presences; the query is one's NAME and the other's ALIAS. The name
+    # must win -- an alias is a nickname, not an identity.
+    sc = _presence_scene(
+        {"a1": {"name": "A Dalek", "aliases": []},
+         "b2": {"name": "The TARDIS", "aliases": ["A Dalek"]}},
+        {"a1": "alley", "b2": "yard"})
+    assert cast_room(sc, "A Dalek", []) == "alley"
+
+
+def test_ambiguous_presence_name_resolves_to_nobody():
+    # Two Daleks in two rooms. Guessing is worse than the None every
+    # unregistered presence used to get.
+    sc = _presence_scene(
+        {"a1": {"name": "A Dalek", "aliases": []},
+         "a2": {"name": "A Dalek", "aliases": []}},
+        {"a1": "alley", "a2": "yard"})
+    assert cast_room(sc, "A Dalek", []) is None
+
+
+def test_presence_falls_back_to_its_own_room_field():
+    sc = _presence_scene({"a1": {"name": "A Dalek", "room": "yard"}}, {})
+    assert cast_room(sc, "A Dalek", []) == "yard"
+
+
+def test_unknown_presence_name_is_still_none():
+    sc = _presence_scene({"a1": {"name": "A Dalek"}}, {"a1": "alley"})
+    assert cast_room(sc, "Something Else Entirely", []) is None
+
+
+def test_registered_cast_still_wins_over_the_entity_table():
+    # The entity fallback runs LAST. A real cast character with the same name
+    # must still resolve through its sheet, not through a stray entity row.
+    sheet = _doctor_sheet()
+    sc = {"rooms": {"alley": {"name": "Alley"}, "yard": {"name": "Yard"}},
+          "positions": {"tenth_doctor": "alley", "ghost": "yard"},
+          "entities": {"ghost": {"name": "The Doctor"}}}
+    cast = [{"id": 1, "sheet": json.dumps(sheet), "cstate": "{}",
+             "status": "active"}]
+    assert cast_room(sc, "The Doctor", cast) == "alley"
+
+
+def test_presence_lookup_survives_a_scene_with_no_entities():
+    sc = {"rooms": {}, "positions": {"Hinami": "alley"}}
+    assert cast_room(sc, "A Dalek", []) is None

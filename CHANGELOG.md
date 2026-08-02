@@ -1,9 +1,18 @@
 # Changelog
 
-## alpha 6.6 — What the vector was actually made of
+## alpha 6.6 — What the engine knew and never used
 
-Housekeeping that turned out not to be housekeeping. Four fixes, and three of
-them were things the codebase already knew and had written down against itself.
+Seven defects, and one thread running through all of them: in every case the
+engine already held what it needed. A declaration nothing ever read. A test
+suite that agreed with itself. A vector addressed by the wrong key. An act
+that reached the last stage and stopped there. A body standing in the room
+with no way to be found by name.
+
+The first four were housekeeping that turned out not to be housekeeping —
+three of them things the codebase already knew and had written down against
+itself. The last three were found in play, and share a shape: the engine
+resolved an event correctly, committed it correctly, and dropped it before
+the page.
 
 ### A feature that had never once run
 
@@ -103,6 +112,83 @@ register claimed a re-launch duplicated them; it does not — `start_story`
 always creates a fresh chat — and that half of the entry is corrected rather
 than "fixed".
 
+### An act is an event; the record only held speech
+
+`event_order` is handed to the narrator described as "the engine's numbered
+record of what actually happened this beat". For everyone except the player it
+was speech-only. `_ordered_beat_events` collected `type == "speech"` from each
+character's declared sequence and silently discarded `type == "action"`, so no
+physical event a character performed was ever listed.
+
+Live (chat 52, t26), across three rerolls: the Director resolved one character
+carrying another downward, perception delivered the direction correctly ("a
+steady pressure that pulls you downward"), and all three narrator drafts
+dropped it. The beat's only physical event reached the last stage as a single
+clause buried mid-paragraph in the view, competing with the hearth and the
+writing desk, carrying `fidelity: "ambiguous"` — with nothing anywhere
+requiring it to survive. Two of the three also *halted* a motion the view said
+was still going ("pauses mid-stroke" against "moving in a slow circle").
+
+Acts now enter the record, gated on `visibility == "overt"` and the
+`_player_sees_character` test `co_present_positions` already uses, carrying
+only the Director-authored `observable` surface and never the private
+`attempt` with its intent and appraisal in it. It fails CLOSED with no scene
+or no player room: a thin beat is recoverable, a leaked one is not.
+
+The narrator prompt now says an `action` entry is a physical thing that
+happened, on the same footing as a quote — rendered rather than reproduced,
+with two hard limits. Its DIRECTION and its CONTINUATION are facts, not style:
+if the record lowers someone the prose may not raise them, and a motion stops
+only when the record says it stopped.
+
+`_check_action_direction` backs it deterministically at two confidences. An
+act is prose, not a quote, so there is no verbatim string to search for, and
+demanding a vocabulary match would force stilted wording — "the floor rising
+to meet him" is a correct rendering of a descent. So a REVERSED direction is
+enforceable and buys a rewrite; an absent one is a warning only. Its
+vocabulary is deliberately tight: bare "up"/"down", "rise"/"rose" and
+"sink"/"drop" all appear constantly in ordinary prose and each would turn the
+check into a false-positive generator spending rewrites on correct pages.
+
+### A background presence was standing nowhere
+
+`canonicalize_positions` folds a uid position key back onto the display name
+only for a REGISTERED cast character, and says so: "unregistered background
+presences are left untouched". Correct — they are not cast. But nothing mapped
+the name back the other way, so a presence placed under its entity uid was
+unreachable by name from the moment it was placed. Every reader asking where a
+background speaker stood got `None`, and `spatial_rel(None, room)` answers
+"remote, no known spatial channel".
+
+Live (chat 58, t23): a machine standing in the player's own alley with its
+gun-stick trained on her chest sat in `positions` under `40af0ac4bf2644a1`.
+`cast_room` returned `None`, so perception's hearing gate classified it as
+remote and dropped its line for every observer, and the view rendered it as
+"something" and "the source" rather than the thing she had just thrown a rock
+at. **Corpus-wide, 47 of 78 background lines never reached a single view.**
+
+`cast_room` now falls through to `entity_room_by_name`, matching
+`scene.entities` on name first and aliases second so a nickname cannot outrank
+a real name, and resolving an ambiguous name to NOBODY — two of the same
+machine in two rooms is precisely the case that must not be guessed, and a
+wrong room is worse than the `None` they all used to get.
+
+### That presence's act reached no record either
+
+A reaction's act is one prose string on the reaction, with no
+`observable`/`visibility` pair, so the character path above cannot see it —
+and `_ordered_beat_events` read only `dialogue_log_entry`. A presence could
+speak and act, and the engine would render neither. Its act is now collected
+under the same perceptibility gate.
+
+### Known residual
+
+What that presence is CALLED is still wrong. The act renders, attributed to
+"the unfamiliar person", because `_unknown_actor_label` derives its descriptor
+from an appearance summary and an entity has no cast sheet to carry one.
+Recorded as `docs/UNBUILT.md` §1.19 with the fix and the reason it is parked:
+perception writes the same label into the view and its view is the authority,
+so both ends want changing together, behind an adversarial identity pass.
 
 ## alpha 6.5 — Whose hands those are
 

@@ -160,6 +160,12 @@ _ENFORCEABLE_PREFIXES = (
     # F3: a shut portal rendered open (or vice versa) contradicts committed
     # world state (_check_portal_fidelity).
     "Portal state contradicts the scene",
+    # F5: an act rendered in the OPPOSITE direction to the one the record
+    # gives -- the page saying "lifts" where the beat lowered. Only the
+    # reversal is enforced; _check_action_direction's weaker "may be missing"
+    # finding stays a warning, because correct prose can carry a descent with
+    # no directional verb in it at all.
+    "Physical direction reversed",
 )
 
 # Deterministic craft screen: AI-tell phrases the PROSE CRAFT prompt bans. A
@@ -239,13 +245,15 @@ def _speaker_display(name, recognized, appearance=None, aliases=None):
     return _unknown_actor_label(name, stripped, aliases)
 
 
-def _ordered_beat_events(ctx, p_name, view, recognized, cast_info):
+def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
+                         scene=None, p_room=None):
     """F1/F4: the pipeline's own numbered causal record of this beat, built
     from step order + the loop call sequences (stimulus -> response pairs):
     player declaration first, then reaction rounds, then interaction rounds in
     call order, then parallel character declarations, then background
     reactions. Info-barrier: an NPC line enters ONLY if its quote actually
-    reached the player's view; speakers render under the same display
+    reached the player's view, and an NPC ACT only if it is overt and the
+    player can perceive its actor; speakers render under the same display
     (name or anonymous label) the view used."""
     raw = []
     di = ctx.get("director_interpret") or {}
@@ -259,21 +267,67 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info):
             if surface:
                 raw.append((p_name, "action", surface))
 
-    def _seq_speech(name, seq):
+    seen_cache = {}
+
+    def _player_perceives(name):
+        """Can the player place this actor's overt physical act this beat.
+
+        The same gate `co_present_positions` already uses. An act is listed by
+        its Director-authored `observable` surface -- the intent-free
+        bystander view -- so listing one hands the narrator no more than the
+        position payload it already holds for that character. Fails CLOSED
+        (no scene, no player room, actor unseen): a thin beat is a worse page,
+        a leaked act is a broken firewall.
+        """
+        if not name or not scene or not p_room:
+            return False
+        if name not in seen_cache:
+            seen_cache[name] = _player_sees_character(
+                scene, p_name, p_room, name, room_of(scene, name))
+        return seen_cache[name]
+
+    def _seq_events(name, seq):
+        """Every outward element of one character's declared sequence, in the
+        order they declared it.
+
+        Speech was always collected here; an ACT was not, which left the
+        record the narrator is told is "what actually happened this beat"
+        speech-only for everyone except the player. A beat's one physical
+        event -- a character moving the player's own body -- therefore reached
+        the narrator as a single clause buried mid-paragraph in the view,
+        competing with the room's furniture and carrying an `ambiguous`
+        fidelity, and nothing anywhere required it to survive onto the page.
+        Measured over three rerolls of the same turn, it did not survive any
+        of them. Acts are rendered, not quoted, so they are listed for ORDER
+        and COVERAGE and never for verbatim reproduction.
+        """
+        perceives = None
         for e in seq or []:
-            if isinstance(e, dict) and e.get("type") == "speech" \
-                    and e.get("text"):
+            if not isinstance(e, dict):
+                continue
+            if e.get("type") == "speech" and e.get("text"):
                 raw.append((name, "speech", e["text"]))
+            elif e.get("type") == "action":
+                if str(e.get("visibility") or "overt").strip().lower() \
+                        != "overt":
+                    continue          # concealed: the player was not shown it
+                surface = observable_action_text(e)
+                if not surface:
+                    continue          # purely mental beat, no outward surface
+                if perceives is None:
+                    perceives = _player_perceives(name)
+                if perceives:
+                    raw.append((name, "action", surface))
 
     covered = set()
     for r in (ctx.reaction_loop or {}).get("rounds") or []:
-        _seq_speech(r.get("reactor"), (r.get("result") or {}).get("sequence"))
+        _seq_events(r.get("reactor"), (r.get("result") or {}).get("sequence"))
         try:
             covered.add(int(r.get("reactor_id")))
         except (TypeError, ValueError):
             pass
     for r in (ctx.interaction_loop or {}).get("rounds") or []:
-        _seq_speech(r.get("speaker"), (r.get("result") or {}).get("sequence"))
+        _seq_events(r.get("speaker"), (r.get("result") or {}).get("sequence"))
         try:
             covered.add(int(r.get("speaker_id")))
         except (TypeError, ValueError):
@@ -290,7 +344,7 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info):
         if not isinstance(d, dict):
             continue
         name = d.get("name")
-        _seq_speech(name, d.get("sequence"))
+        _seq_events(name, d.get("sequence"))
         if not (d.get("sequence")) and d.get("speech"):
             raw.append((name, "speech", d["speech"]))
     br = ctx.get("background_react") or {}
@@ -300,8 +354,20 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info):
                      else [])
     for r in reactions:
         entry = (r or {}).get("dialogue_log_entry") or {}
+        speaker = entry.get("speaker") or (r or {}).get("name")
         if entry.get("exact_quote") and entry.get("speaker"):
             raw.append((entry["speaker"], "speech", entry["exact_quote"]))
+        # A background presence's ACT was collected nowhere. Its shape differs
+        # from a character's declared sequence -- one prose string on the
+        # reaction, no `observable`/`visibility` pair -- so the `_seq_events`
+        # path above cannot see it, and the beat's one physical event from an
+        # unregistered presence (a gun-stick holding its aim on the player's
+        # chest) reached the narrator only inside the omniscient resolved_event
+        # prose. background.py authors the act as the outward surface already;
+        # the perceptibility gate is the same one the cast path uses.
+        act = str((r or {}).get("action") or "").strip()
+        if act and speaker and _player_perceives(speaker):
+            raw.append((speaker, "action", act))
 
     view_norm = re.sub(r"\s+", " ", str(view or "")).casefold()
     events = []
@@ -630,7 +696,8 @@ def narrator(ctx, nonce):
             }
         p_room = ctx.get("_player_room") or room_of(_scene_for_frame, player_name)
         event_order = _ordered_beat_events(
-            ctx, player_name, view, recognized, cast_info)
+            ctx, player_name, view, recognized, cast_info,
+            scene=_scene_for_frame, p_room=p_room)
         pos_payload, pos_facts, room_names = _position_delta_payload(
             ctx, chat, player_name, p_room, recognized, cast_info)
         # S3-A5: pass visible rooms so portal states for unseen rooms are
