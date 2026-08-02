@@ -939,6 +939,59 @@ def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map)
     return visible, payload, known_to
 
 
+# Vertical motion, and nothing else. A beat can legitimately open and close a
+# door, or have one body approach while another retreats, so most antonym pairs
+# generate false positives -- but a hand cannot rise and descend in the same
+# instant, and that is the one that bit. Deliberately narrow: this is a
+# tripwire, and a tripwire nobody trusts gets ignored.
+_RAISING = re.compile(r"\b(?:lift(?:s|ed|ing)?|rais(?:e|es|ed|ing)|"
+                      r"hoist(?:s|ed|ing)?)\b")
+_LOWERING = re.compile(r"\b(?:lower(?:s|ed|ing)?|descend(?:s|ed|ing)?)\b")
+
+
+def _inverted_motion_check(ctx, stage, views, resolved_event):
+    """Flag a view that reverses a physical direction the Director resolved.
+
+    Perception's structured observations are re-derived from the scrubbed prose
+    view precisely so a second representation cannot widen the information
+    budget -- but nothing checks the PROSE against the objective event it is
+    supposed to be a view of. A model that rewrites the beat is invisible.
+
+    Measured on chat 52's last beat. Elyndra declared "lowering her steadily
+    toward exposed groin"; the Director resolved "begins to lower her hand
+    steadily toward the parted robe and hiked skirt", with no form of "lift"
+    anywhere in it; and the player's view arrived as "lifting you to eye
+    level". The narrator, which renders the view and not the event, then had no
+    lowering to describe -- so the beat the story had actually committed to
+    never reached the page.
+
+    A WARNING, never a scrubber, for the same reason `_disguise_leak_check` is:
+    the fix belongs upstream in what perception is handed, and rewriting a view
+    on a regex would be a worse authority than the model it is policing.
+    """
+    event = str(resolved_event or "").casefold()
+    if not event:
+        return
+    event_lowers = bool(_LOWERING.search(event))
+    event_raises = bool(_RAISING.search(event))
+    if event_lowers == event_raises:
+        return                      # says both, or says neither
+    for pid, view in (views or {}).items():
+        text = str(view or "").casefold()
+        if not text:
+            continue
+        if event_lowers and _RAISING.search(text) and not _LOWERING.search(text):
+            said, saw = "lowering", "raising"
+        elif event_raises and _LOWERING.search(text) and not _RAISING.search(text):
+            said, saw = "raising", "lowering"
+        else:
+            continue
+        ctx.warnings.append(
+            f"{stage}: the view for {pid} describes {saw} where the resolved "
+            f"event describes {said} -- perception has reversed a physical "
+            "direction the Director committed to.")
+
+
 def _disguise_leak_check(ctx, stage, views, perceivers, subject_name,
                          concealed_terms, known_to):
     """Deterministic fidelity tripwire (a WARNING, never a scrubber). Flags an
@@ -2467,6 +2520,8 @@ def perception_outcome(ctx, nonce):
 
     _disguise_leak_check(ctx, "perception_outcome", clean_views, perceivers,
                          p_name, p_disguise_terms, p_disguise_known)
+    _inverted_motion_check(ctx, "perception_outcome", clean_views,
+                           res.get("resolved_event"))
     return {
         "views": clean_views,
         "observations": _observations_from_clean_views(clean_views),

@@ -15,7 +15,7 @@
 | `agents/loops.py` | 553 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 202 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 883 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/perception.py` | 2473 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
+| `agents/perception.py` | 2528 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 977 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 92 | Step and active-variant persistence helpers. | `db` |
 | `ambience.py` | 2043 |  | `backdrops`, `db`, `weather` |
@@ -158,13 +158,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `perception_outcome()` | 1769 | 705 lines |
-| `perception_act()` | 1171 | 429 lines |
-| `perception_establish()` | 1003 | 167 lines |
+| `perception_outcome()` | 1822 | 707 lines |
+| `perception_act()` | 1224 | 429 lines |
+| `perception_establish()` | 1056 | 167 lines |
 | `_observer_scene_payload()` | 321 | 106 lines |
-| `_redact_concealed_from_event()` | 1702 | 66 lines |
+| `_redact_concealed_from_event()` | 1755 | 66 lines |
 | `_strip_self_narration()` | 677 | 62 lines |
-| `_touch_only_sources()` | 1601 | 62 lines |
+| `_touch_only_sources()` | 1654 | 62 lines |
 | `_source_channels()` | 512 | 56 lines |
 
 ### `agents/runtime.py`
