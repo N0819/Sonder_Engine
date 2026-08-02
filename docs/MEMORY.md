@@ -39,7 +39,7 @@ One row in `memories` (`db.py`). The fields that do work:
 | `location` | Room name. A retrieval cue (§5). |
 | `valence`, `arousal` | The affect the character carried *into* the event. |
 | `embedding`, `cue_embedding` | Two float32 blobs (§4). |
-| `embedding_model`, `embedding_dim` | Which model made them. A mismatch scores 0.0 forever (§8). |
+| `embedding_model`, `embedding_dim` | Which model made them. A mismatch scores 0.0 forever (§9). |
 | `archived` | Folded into a summary and retired from the default read. |
 | `event_key` | Idempotency key. Re-minting the same key UPDATEs instead of inserting. |
 
@@ -584,20 +584,58 @@ fallback aborts the run and reports what it managed, because marking rows
 migrated while downgrading them is the one outcome worse than not running.
 
 **`rebuild_checkpoint_embeddings`** carries a completed rebuild back through
-saved states. A checkpoint stores each vector verbatim so restoring one never
+saved states. A checkpoint holds each vector so that restoring one never
 re-embeds a bank — which means a checkpoint written *before* a rebuild holds
 the old vectors, and rolling back silently undoes the rebuild. Measured live:
 one reroll put **637 of 642 rows** back on the crc32 fallback.
 
-It **re-embeds nothing**. A vector is a pure function of content, and the same
-memory appears in dozens of checkpoints unchanged — one chat held 40,224 memory
-copies across its checkpoints and only 526 distinct by content, 90.7% of which
+It **re-embeds nothing**. A vector is a pure function of the memory, and the
+same memory appears in dozens of checkpoints unchanged — one chat held 40,224
+memory copies across its checkpoints and only 526 distinct, 90.7% of which
 already had a rebuilt vector in the live table. So the fix is substitution:
-look each saved memory up by `(char_id, sha1(normalised content))` and write in
-the vector already earned. A saved row with no live match is left exactly as it
-was, never blanked and never guessed at. A blob is rewritten only after
-re-parsing to prove it is still valid JSON with the same row count. `dry_run`
-is the default.
+look each saved memory up by `_memory_vector_key` and write in the vector
+already earned. A saved row with no live match is left exactly as it was, never
+blanked and never guessed at. A blob is rewritten only after re-parsing to
+prove it is still valid JSON with the same row count. `dry_run` is the default.
+
+That key is `(char_id, sha1(the exact text that was embedded))`, and *which*
+text is the whole point. It keyed on the `content` field until alpha 6.6, on
+the reasoning that a vector is a pure function of the memory. It is — but not
+of its content: `_memory_document` also folds in turn, location, category,
+key_phrases, entities, gist, provenance and emotional_context, and a summary's
+vector comes from `_summary_retrieval_text`, not its `summary` field. Two rows
+could therefore agree on content, hold different vectors, and be handed each
+other's. `_memory_vector_key` now hashes the whole document and
+`_summary_vector_key` the whole retrieval text.
+
+### Where a checkpoint's vectors actually live
+
+Not inline, since alpha 6.6. A checkpoint is a full snapshot of the bank, so
+storing two float32 blobs per memory re-stored the same vector on every turn
+for the life of the story. Measured on a live database: checkpoints were 94.5%
+of a 4.4 GB file, `memories` was 98.9% of each checkpoint, and the two vector
+fields were 96.9% of that — one story held 40,224 memory copies and 583
+distinct vectors, 1.00 GB that needs 13 MB.
+
+`checkpoints.compact_checkpoints` lifts them into `memory_vectors`, keyed by
+**`memory.vector_address`: sha1 over the vector BYTES**, prefixed `v1:`. The
+entry keeps a `vkey` reference in place of its blobs. Note the two addressing
+schemes answer different questions and must not be confused: `_vector_key`
+above joins a *saved memory to a live rebuilt row* and so keys on the embedded
+text; `vector_address` deduplicates *identical stored vectors* and so keys on
+the bytes, which makes a collision impossible by construction rather than by
+assumption. Byte-addressing was the fix for a real production collision — chat
+36 held "You are in Ten Forward." at turn 42 and again at turn 44, same
+character, same content, two different embedding payloads.
+
+Each checkpoint stays **independently restorable**: this is content-addressing,
+not delta encoding, so there is no chain to walk backwards and no intermediate
+whose corruption poisons what follows. `_verify_no_loss` proves a compacted
+blob restores field-for-field to what the original held before the rewrite
+commits. `memory_vectors` is **append-only and never garbage-collected** — a
+checkpoint predating a deletion still references the vector, and a rollback
+that cannot resolve one is a worse failure than some orphaned rows. Schema and
+operational detail in [`docs/DATABASE.md`](DATABASE.md).
 
 **`start_rebuild_if_needed`** is the standing reconciler. It is deliberately
 *not* a one-time migration: a mismatch appears whenever the embedding model
@@ -644,9 +682,13 @@ looks like.
 **Workload, and it is a measurement, so it can go stale.** Measured: 126 ms at
 3,500 memories, 709 ms at 35,000, 2.2 s at 200,000. Beside an LLM call measured
 in seconds that is not a cost worth an index, and two unbuilt optimisations sit
-in front of one anyway (`_cos` recomputes norms although every stored vector is
-already normalised; stacking rows into one matmul is ~20x). See
-`docs/UNBUILT.md`.
+in front of one anyway. One of the two has since landed: `_cos` is now a plain
+dot product, because both producers already normalise and the two
+`np.linalg.norm` calls per comparison were dividing by 1.0 twice — measured
+4.4x (4.99 ms → 1.13 ms over 442 real rows), and verified rather than assumed,
+with scores agreeing to 8.7e-06 over 8,000 stored vectors and identical top-8,
+top-20 and top-60 sets. Stacking rows into one matmul (~20x) is still unbuilt;
+see `docs/UNBUILT.md`.
 
 Read that table carefully: it is **per character**, at the measured growth of
 ~3.5 rows per turn *per character*. 200,000 rows is one character with roughly
@@ -685,14 +727,16 @@ and follow different rules:
 
 ## 12. Current state and known gaps
 
-The live corpus: **4,939 memories across 34 chats**, all on
-`openrouter:3:perplexity/pplx-embed-v1-4b` — 2,028 episodes, 1,873 inferences,
-1,019 self, 15 dialogue, 4 promises; 115 archived; 48 autobiographical
-summaries, 5 surmise, 1 hearsay.
+The live corpus, as of 2026-08-02: **5,283 memories across 36 chats**, all on
+`openrouter:3:perplexity/pplx-embed-v1-4b` — 2,126 episodes, 1,998 inferences,
+1,091 self, 63 dialogue, 5 promises; 115 archived; 52 autobiographical
+summaries, 9 surmise, 6 hearsay.
 
 Open, and tracked in [`docs/UNBUILT.md`](UNBUILT.md):
 
-- **§1.15** the rebuild story above. The remaining gap is announcement: a host
+- **§1.15** the rebuild story above, now marked SUPERSEDED for its premise: a
+  real provider is configured and the whole bank is on it, so the split-era
+  scenario is no longer hypothetical. The remaining gap is announcement: a host
   is told their bank is split when they open a story or open the settings
   panel, not at startup.
 - **§1.16** greeting knowledge seeds enter memory at salience 1.00 in third
