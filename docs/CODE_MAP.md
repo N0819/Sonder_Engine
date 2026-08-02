@@ -11,7 +11,7 @@
 | `agents/background.py` | 809 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/character.py` | 2268 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 4289 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/director.py` | 3643 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
+| `agents/director.py` | 3656 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 553 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 202 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 883 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
@@ -115,14 +115,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 2692 | 952 lines |
+| `director_resolve()` | 2705 | 952 lines |
 | `director_interpret()` | 321 | 334 lines |
-| `_reconcile_resolution()` | 2224 | 302 lines |
+| `_reconcile_resolution()` | 2237 | 302 lines |
 | `_reconcile_interpretation()` | 803 | 119 lines |
 | `director_establish()` | 165 | 105 lines |
-| `_awareness_exits()` | 1425 | 98 lines |
-| `_evidence_present()` | 1988 | 97 lines |
-| `_guard_approach_is_not_arrival()` | 2610 | 80 lines |
+| `_awareness_exits()` | 1438 | 98 lines |
+| `_evidence_present()` | 2001 | 97 lines |
+| `_guard_approach_is_not_arrival()` | 2623 | 80 lines |
 
 ### `agents/loops.py`
 
