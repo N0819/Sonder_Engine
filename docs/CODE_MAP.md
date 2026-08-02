@@ -9,7 +9,7 @@
 | `affect.py` | 1852 |  | `theory_of_mind` |
 | `agents/__init__.py` | 86 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 809 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/character.py` | 2227 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
+| `agents/character.py` | 2268 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 4289 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/director.py` | 3643 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 553 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
@@ -44,7 +44,7 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 3470 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 3483 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1977 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 493 |  | — |
 | `scene.py` | 1241 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
@@ -89,14 +89,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 1599 | 629 lines |
-| `_annotate_known_exits()` | 1020 | 445 lines |
-| `_destination_from_goals()` | 598 | 109 lines |
-| `sprint_offers()` | 1500 | 97 lines |
-| `_verdict()` | 442 | 72 lines |
-| `_annotate_goal_currency()` | 883 | 67 lines |
-| `_en_route()` | 952 | 66 lines |
-| `_unbidden_trigger()` | 257 | 54 lines |
+| `character_step()` | 1622 | 647 lines |
+| `_annotate_known_exits()` | 1043 | 445 lines |
+| `_destination_from_goals()` | 621 | 109 lines |
+| `sprint_offers()` | 1523 | 97 lines |
+| `_verdict()` | 465 | 72 lines |
+| `_annotate_goal_currency()` | 906 | 67 lines |
+| `_en_route()` | 975 | 66 lines |
+| `_unbidden_trigger()` | 280 | 54 lines |
 
 ### `agents/common.py`
 
@@ -490,10 +490,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 3461 | 10 lines |
-| `presets()` | 3452 | 2 lines |
-| `active_preset()` | 3455 | 2 lines |
-| `nsfw_enabled()` | 3458 | 2 lines |
+| `get_prompt()` | 3474 | 10 lines |
+| `presets()` | 3465 | 2 lines |
+| `active_preset()` | 3468 | 2 lines |
+| `nsfw_enabled()` | 3471 | 2 lines |
 
 ### `providers.py`
 

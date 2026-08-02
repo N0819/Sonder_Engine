@@ -144,6 +144,29 @@ def _self_line_tokens(line):
         _REFRAIN_RUN_RE.sub(r"\1\1", str(line or "").lower()))
 
 
+def _player_silence_note(sc, chat, sh, spoke):
+    """`{"player_said_nothing": True}` when the player is here and did not speak.
+
+    Absent otherwise -- when they spoke, and when they are not in the room,
+    since a character elsewhere has no standing to know either way. Omitted
+    rather than set False, so its presence IS the signal and a beat that says
+    nothing about it reads as an ordinary one.
+    """
+    if spoke:
+        return {}
+    try:
+        player = character_name(persona_of(chat))
+    except Exception:
+        return {}
+    if not player:
+        return {}
+    positions = (sc or {}).get("positions") or {}
+    here = positions.get(character_name(sh))
+    if not here or positions.get(player) != here:
+        return {}
+    return {"player_said_nothing": True, "player_name": player}
+
+
 def _self_line_refrain(lines):
     """The SHAPE this character's recent lines keep reusing, or None.
 
@@ -2047,6 +2070,24 @@ def character_step(ctx, cid, nonce):
             "deep_tom_requested": cid in _tom,
             "dialogue_mode": bool(_flow.get("dialogue_mode", False)),
             "speech_budget": dialogue_budget(chat, ctx.turn, cid, nonce),
+            # Silence is a thing the player DID, and nothing was saying so.
+            #
+            # A beat where they act without speaking produced a payload with no
+            # line from them in it -- indistinguishable, from inside, from a
+            # beat whose line had simply not been mentioned. The nearest thing
+            # to an unanswered remark was then whatever they last said, several
+            # beats back, and characters answered that: measured in chat 57,
+            # two consecutive action-only inputs ("You get behind him, tails
+            # still bristled") whose perception view describes the movement in
+            # full and never says whether she spoke.
+            #
+            # Present only when the player is in the room, because otherwise it
+            # is not this character's business whether the player spoke -- and
+            # `positions` is the objective scene, the same source `attire`
+            # above reads.
+            **_player_silence_note(
+                sc, chat, sh,
+                str((ctx.get("director_interpret") or {}).get("speech") or "").strip()),
         },
         "simulation_clock": _sim_clock,
         "variant_seed": nonce,
