@@ -1,5 +1,118 @@
 # Changelog
 
+## alpha 6.6.1 — What the room told the mind standing in it
+
+A point release: four defects found in one story, three of them in perception
+and every one of them invisible in play. Each surfaces only as a character
+behaving oddly, which reads like a model problem and is not.
+
+### A delivered line was edited inside its own quotation marks
+
+`_dedupe_view_sentences` has always documented that "sentences containing
+quoted dialogue are never dropped — quotes must survive verbatim". The sentence
+splitter defeated it. The check is per-**sentence**, and a spoken line carrying
+its own terminal punctuation is cut into fragments — only the two on the ends
+keep a quote mark, and every fragment between them is judged naked and dropped
+if it echoes anything earlier in the view.
+
+The player answered a direct question with *"Seven? I think? There might have
+been more… they began to spread out…"* — four terminators, four fragments. This
+runs **last** in `perception_act`, after the deterministic delivery, and ate the
+interior of the quotation. The character then asked *"How many? Where exactly?"*
+— the question that had just been answered.
+
+`perception_act` is the view a character **decides** from, so unlike a
+narrator-side drop nothing is visible on the page. `_mask_quoted_spans` now
+replaces each quoted span with an opaque token carrying no whitespace and no
+terminal punctuation before splitting, so a quotation cannot be cut apart. The
+raw quote-character check stays alongside it for an unterminated quote the span
+regex cannot match. Ordinary echoed prose is still deduped; a line a character
+repeats on purpose is still kept twice.
+
+### A beat's transition erased itself
+
+Perception ran against the outcome scene alone, so any act that closed a channel
+destroyed the perception of that act. The player ran through a ship's open
+doors, the doors slammed, and the ship went `in_transit` — which correctly
+severs an interior's exterior edges — all in one beat. By the time the observer
+outside had a view built, the room she had run into was adjacent to nothing. His
+view records the doors closing on an empty doorway.
+
+Nothing in the transit model was wrong. A ship in flight *is* cut off, and
+`in_transit` with no destination is a legitimate state — a destination need not
+be declared at the moment of departure, and the gap is room for later play. The
+question was simply asked at the wrong moment.
+
+`_source_channels` now takes the scene as it stood *before* the turn's diff, and
+a source counts as perceptible if it was reachable at **either** end of the
+beat. It only ever upgrades: a body unreachable at both ends stays unreachable.
+This covers every act that shuts a channel it is seen through — a slammed door,
+a drawn curtain, stepping into a container, a vehicle pulling away.
+
+### A view described bodies the perceiver cannot reach
+
+The engine already knew — `visual_level_between` returns `none` for the pair and
+`spatial_rel` calls the rooms `separated` — and nothing consumed either answer
+once the view was prose. A machine standing two rooms away with no connecting
+edge was still being told what the player did behind a closed door, and that
+reached its own next-turn context.
+
+`_strip_unreachable_bodies` drops whole sentences whose subject is a body with
+**no sensory channel at all**, warning per drop and never emptying a view.
+Deliberately the hard case only: a body the perceiver cannot see but can still
+hear through a shut door is left alone, because over-denial is the worse failure
+— silence about someone audibly present is its own lie.
+
+The subject match was the other half of it. Every subject-anchored guard read
+the bare registered name, so a body registered `A Dalek` and written as *"The
+Dalek's visual sensors"* slipped past all of them — which is why that view
+narrated its own perceiver in the third person. `_subject_opener` now tolerates
+a leading article: the three articles only, never a title, since a title is
+frequently the sole thing telling two bodies apart.
+
+### A character's history is one row per era
+
+`memory_summaries` was keyed `(chat_id, char_id, scope)`, so a scope held exactly
+one row and every consolidation overwrote it. The cost was not storage — it was
+that the summary layer could not be **searched**, because there was nothing to
+search between. Meanwhile every summary already carried a maintained embedding,
+computed on write, re-embedded on a model change, carried verbatim through every
+archive and checkpoint, and read by no retrieval path in the engine: 67 vectors
+on the live bank, maintained across years of turns, never once ranked.
+
+Schema **v23** completes the key with `end_turn_idx`.
+
+Consolidation needed no change at all. It was already computing bounded windows
+— `min`/`max` turn index over that pass's memories, which are already only the
+ones after the previous summary — and the constraint was throwing each one away
+on the next write. Completing the key was the entire fix.
+
+`search_memory_summaries` ranks them under the same scoping as `search_memories`:
+the character is the bank, the same exclusive turn cutoff applies (a window that
+closed at or after the deciding turn describes how this beat turned out), and a
+vector from a different embedding model is skipped rather than compared.
+
+The migration is a table rebuild, since SQLite cannot drop a `UNIQUE` declared
+inline on `CREATE TABLE`. Run against a copy of the live database: **67 rows in,
+67 out, byte-identical**, `memories` untouched.
+
+**What a character receives is unchanged.** `get_memory_summary` returns the
+latest window, which is identical behaviour for every existing bank. Wiring a
+retrieved window into the payload is a separate change — bounded windows without
+it would silently cost every character their early history — and
+`docs/UNBUILT.md` §1.21 records the hazards and the order to build it in.
+
+### Recorded, not fixed
+
+`docs/UNBUILT.md` **§1.20** — a body's room changes with no warrant. This is the
+root cause of the geometry all three perception defects were found in: on a beat
+whose only input was throwing a rock, the Director minted a room and relocated
+two people into it, and the scene never recovered. The guard is easy to write
+and easy to write wrong — of the three movement warrants only two are legible,
+and a check that silently pins NPCs in place is worse than the drift it
+replaces. The entry records what to prove first.
+
+
 ## alpha 6.6 — What the engine knew and never used
 
 Seven defects, and one thread running through all of them: in every case the
