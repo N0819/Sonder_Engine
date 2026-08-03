@@ -970,6 +970,61 @@ def ensure_checkpoint(chat_id, turn_idx, blob=None):
             (chat_id, turn_idx, blob, time.time()),
         )
 
+
+def propagate_memory_summaries_to_checkpoints(chat_id, char_id=None):
+    """Carry reconstructed legacy summary windows into saved pre-turn state.
+
+    Backfill derives prose from memories that already existed in the old
+    timeline. A later checkpoint restore must not erase that repair. Only a
+    window that closed strictly before a checkpoint's turn is eligible, which
+    preserves the same temporal firewall used by the live read seam. Existing
+    snapshot rows win; this helper adds missing derived windows and mutates no
+    other checkpoint state.
+    """
+    summaries = dump_memory_summaries(chat_id)
+    if char_id is not None:
+        summaries = [s for s in summaries if s.get("char_id") == char_id]
+    if not summaries:
+        return 0
+    changed = 0
+    candidates = []
+    for row in q("SELECT id, turn_idx, blob FROM checkpoints WHERE chat_id=? "
+                 "ORDER BY turn_idx, id", (chat_id,)):
+        try:
+            blob = json.loads(row["blob"])
+        except Exception:
+            logger.warning("checkpoint %s has invalid JSON; summary propagation skipped",
+                           row["id"])
+            continue
+        existing = blob.get("memory_summaries") or []
+        keys = {
+            (s.get("char_id"), s.get("scope", "autobiographical"),
+             int(s.get("end_turn_idx") or 0))
+            for s in existing if isinstance(s, dict)
+        }
+        additions = []
+        for summary in summaries:
+            end = int(summary.get("end_turn_idx") or 0)
+            key = (summary.get("char_id"),
+                   summary.get("scope", "autobiographical"), end)
+            if end < int(row["turn_idx"]) and key not in keys:
+                additions.append(summary)
+                keys.add(key)
+        if additions:
+            blob["memory_summaries"] = sorted(
+                [*existing, *additions],
+                key=lambda s: (s.get("char_id") or 0,
+                               s.get("scope") or "",
+                               int(s.get("end_turn_idx") or 0)))
+            candidates.append((row["id"], json.dumps(blob)))
+    if candidates:
+        with transaction():
+            for checkpoint_id, blob_text in candidates:
+                qi("UPDATE checkpoints SET blob=? WHERE id=?",
+                   (blob_text, checkpoint_id))
+                changed += 1
+    return changed
+
 def refresh_checkpoint(chat_id, turn_idx):
     """Patch ONLY the lorebook-related sections of the checkpoint at
     turn_idx to reflect a lorebook attach/detach.

@@ -28,7 +28,8 @@ import time
 import pytest
 
 import memory
-from db import q
+import checkpoints
+from db import q, qi
 
 
 @pytest.fixture
@@ -98,7 +99,7 @@ def test_the_windows_abut_the_survivor_rather_than_overlapping_it(story,
     """Counted BACKWARD from the surviving window's boundary. Aligning to turn
     0 instead would leave a ragged seam wherever the live cadence had drifted,
     and two windows both claiming the same turns."""
-    q("DELETE FROM memory_summaries WHERE chat_id=?", (story["chat"],))
+    qi("DELETE FROM memory_summaries WHERE chat_id=?", (story["chat"],))
     memory.save_memory_summary(story["chat"], story["char"], "Recently.",
                                start_turn_idx=93, end_turn_idx=99)
     memory.backfill_memory_summary_windows(story["chat"], story["char"])
@@ -163,6 +164,35 @@ def test_running_it_twice_changes_nothing(story, _consolidator):
     # nothing left below it. Idempotent by the floor, not by a guard.
     assert _windows(story) == first
     assert len(_consolidator) == calls
+
+
+def test_backfilled_windows_can_be_carried_through_checkpoint_restore(
+        story, _consolidator):
+    checkpoints.ensure_checkpoint(story["chat"], 100)
+    memory.backfill_memory_summary_windows(story["chat"], story["char"])
+    assert checkpoints.propagate_memory_summaries_to_checkpoints(
+        story["chat"], story["char"]) == 1
+    qi("DELETE FROM memory_summaries WHERE chat_id=?", (story["chat"],))
+    checkpoints.restore_checkpoint(story["chat"], 100)
+    assert _windows(story) == [
+        (0, 9), (10, 19), (20, 29), (30, 39), (40, 49),
+        (50, 59), (60, 69), (70, 79), (80, 89), (90, 99)]
+
+
+def test_summary_propagation_never_puts_future_windows_in_an_early_checkpoint(
+        story, _consolidator):
+    blob = checkpoints.snapshot_state(story["chat"])
+    blob["memory_summaries"] = []
+    qi("INSERT INTO checkpoints(chat_id,turn_idx,blob,created) VALUES(?,?,?,?)",
+       (story["chat"], 50, json.dumps(blob), time.time()))
+    memory.backfill_memory_summary_windows(story["chat"], story["char"])
+    checkpoints.propagate_memory_summaries_to_checkpoints(
+        story["chat"], story["char"])
+    row = q("SELECT blob FROM checkpoints WHERE chat_id=? AND turn_idx=50",
+            (story["chat"],), one=True)
+    stored = json.loads(row["blob"])["memory_summaries"]
+    assert stored
+    assert all(int(s["end_turn_idx"]) < 50 for s in stored)
 
 
 # ---- edges ----

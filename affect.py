@@ -464,9 +464,18 @@ def appraise(goal_impacts, priority_of, dimensions=None, unresolved_drive=0.0):
     somatic = somatic if isinstance(somatic, dict) else {}
     pain = _clamp01(somatic.get("pain"), fallback=0.0)
     pleasure = _clamp01(somatic.get("pleasure"), fallback=0.0)
+    memory_echo = dimensions.get("memory_echo")
+    memory_echo = memory_echo if isinstance(memory_echo, dict) else {}
+    remembered_somatic = _clamp(
+        memory_echo.get("somatic"), -0.2, 0.2, 0.0)
     d_v += intrinsic * 0.25 + norm * 0.08 + congruence * 0.08
     d_v += pleasure * 0.2 - pain * 0.25
     d_a += novelty * 0.12 + max(pain, pleasure) * 0.12
+    # A remembered danger can tighten the chest; a remembered pleasure can
+    # bring warmth. It nudges mood/arousal but never enters somatic_impact, so
+    # the runtime cannot reinterpret it as current injury or stimulation.
+    d_v += remembered_somatic * 0.2
+    d_a += abs(remembered_somatic) * 0.1
 
     # An appetite still carrying its charge has not been satisfied, whatever
     # the goal ledger says it just achieved. Withdraw that share of the
@@ -499,6 +508,13 @@ def appraise(goal_impacts, priority_of, dimensions=None, unresolved_drive=0.0):
                 "pain": pain, "pleasure": pleasure,
                 "why": str(somatic.get("why") or ""),
             },
+            "memory_echo": {
+                "somatic": remembered_somatic,
+                "threat_bias": _clamp01(
+                    memory_echo.get("threat_bias"), fallback=0.0),
+                "why": str(memory_echo.get("why") or ""),
+                "temporal_source": "remembered_past",
+            } if memory_echo else {},
         })
     return result
 

@@ -172,6 +172,60 @@ def test_perception_act_does_not_inject_concealed_speech(temp_db, monkeypatch):
         )
 
 
+def test_perception_act_projects_speech_turn_speech_in_declared_order(
+        temp_db, monkeypatch):
+    """Structured chronology outranks the perception model's paraphrase.
+
+    Live (chat 38, turn 125): interpret correctly produced awe line -> turn ->
+    teasing line. Perception returned turn -> awe line -> teasing line, dropped
+    the first tone, softened the second gesture, and narrated its own delivery
+    mechanics. The observer view must be rebuilt from the ordered sequence.
+    """
+    import agents.perception as perception
+
+    ctx, char_id = _make_director_ctx(temp_db)
+    ctx["_player_room"] = "room1"
+    first = "It's really beautiful..."
+    second = "So do you pick up girls and attempt to woo them?"
+    ctx.director_interpret.update({
+        "sequence": [
+            {"type": "speech", "text": first, "volume": "normal",
+             "tone": "genuine awe", "visibility": "overt",
+             "conceal_from": []},
+            {"type": "action", "attempt": "turn back toward Reya",
+             "observable": "turns back toward Reya, ears perked",
+             "visibility": "overt", "conceal_from": []},
+            {"type": "speech", "text": second, "volume": "normal",
+             "tone": "teasing smirk", "visibility": "overt",
+             "conceal_from": []},
+        ],
+        "speech": first,
+    })
+
+    def fake_agent_json(role, step_key, system, payload, **kwargs):
+        pid = str(payload["perceivers"][0]["id"])
+        return {"views": {pid: (
+            "The warm console room hums around you, the stranger's ears "
+            "perked as she turns from the viewport toward you. "
+            f'She says, "{first}" The words reach you clearly. '
+            f'She then looks at you with a teasing smile and adds, "{second}" '
+            "You hear both lines in full."
+        )}}
+
+    monkeypatch.setattr(perception, "_agent_json", fake_agent_json)
+
+    view = perception.perception_act(ctx, nonce=0)["views"][str(char_id)]
+
+    assert view.count(first) == 1
+    assert view.count(second) == 1
+    turn_at = view.casefold().index("turns back toward you")
+    assert view.index(first) < turn_at < view.index(second)
+    assert "genuine awe" in view[:turn_at]
+    assert "teasing smirk" in view[turn_at:]
+    assert "words reach you clearly" not in view.casefold()
+    assert "hear both lines in full" not in view.casefold()
+
+
 def test_perception_outcome_does_not_inject_concealed_dialogue(temp_db, monkeypatch):
     """Same reproduction at the outcome stage: a dialogue_log entry marked
     visibility:'concealed' must never reach a perceiver's view via

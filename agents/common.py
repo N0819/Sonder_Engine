@@ -345,12 +345,20 @@ def _merge_character_results(existing, new):
         "intent_ops",
         "belief_updates",
         "association_updates",
+        "present_evidence_used",
+        "memory_evidence_used",
+        "observations_used",
+        "remember_lines",
+        "memory_disputes",
+        "memory_effects",
     ):
         combined = _concat_dedup(existing.get(field), new.get(field))
         if combined or field in existing or field in new:
             merged[field] = combined
     if not new.get("active_state") and existing.get("active_state"):
         merged["active_state"] = existing.get("active_state")
+    if not new.get("ponder") and existing.get("ponder"):
+        merged["ponder"] = existing.get("ponder")
     return merged
 
 def _contextual_rooms(sc, cast, *extra_room_ids, hops=1):
@@ -1148,6 +1156,15 @@ def norm_sequence(out):
                     "_raw_vis": e.get("visibility"),
                     "_raw_vol": e.get("volume"),
                 })
+        elif t == "ponder":
+            # Private cognitive action. It never enters the public sequence,
+            # Director resolution, perception, or narration. Commit stores one
+            # bounded query for the next character turn.
+            query = " ".join(str(e.get("query") or "").split())[:240]
+            why = " ".join(str(e.get("why") or "").split())[:240]
+            if query and why:
+                out["ponder"] = {
+                    "type": "ponder", "query": query, "why": why}
         elif t in ("event", "environment", "environmental", "world"):
             # Actor-less environmental event ("the lights go out", "a
             # monster enters") declared by the player. These used to be
@@ -2720,7 +2737,7 @@ def _muffled_fragment(body):
 
 
 def _inject_dialogue(view, display, quote, level, volume, can_see,
-                    conducted=False):
+                    conducted=False, tone=""):
     if level == "none":
         return view
     body = _quote_body(quote)
@@ -2742,8 +2759,16 @@ def _inject_dialogue(view, display, quote, level, volume, can_see,
         verb = "says under their breath"
     else:
         verb = "says"
+    manner = ""
+    tone = str(tone or "").strip()
+    if tone and can_see:
+        if re.search(r"\b(smirk|smile|grin|expression|look|gesture)\b", tone, re.I):
+            article = "" if re.match(r"^(?:a|an|the)\b", tone, re.I) else "a "
+            manner = f" with {article}{tone}"
+        else:
+            manner = f" with {tone} in their voice"
     if can_see:
-        add = f'{display} {verb}: "{body}"'
+        add = f'{display} {verb}{manner}: "{body}"'
     else:
         add = f'You hear {display} {verb}: "{body}"'
     return _append_once(view, add)
@@ -3071,6 +3096,13 @@ def _inject_visible_actor(
 
     if appearance:
         prose = _appearance_as_prose(appearance)
+        # The perception model may already have rendered the same visible
+        # body in natural prose. Exact-marker dedupe cannot recognize a
+        # paraphrase, which produced a second mechanical "You see ..." tail
+        # on the live chat-38 view. Use the same conservative content-overlap
+        # test as action injection before adding the deterministic floor.
+        if prose and _action_already_rendered(text, display, prose):
+            return text
         return _append_once(
             text,
             f"You see {prose}.",

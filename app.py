@@ -26,6 +26,7 @@ from checkpoints import (ensure_checkpoint, restore_checkpoint, snapshot_state,
                          refresh_checkpoint, insert_world_tables,
                          checkpoint_storage_status, compaction_progress,
                          start_compaction,
+                         propagate_memory_summaries_to_checkpoints,
                          PRESERVED_SETTING_KEYS)
 from frames import create_frame, get_frame, list_frames
 import paradox
@@ -3257,8 +3258,11 @@ def mem_backfill(cid: int, ch: int, body: dict = Body(default={})):
     press does nothing.
     """
     try:
-        return backfill_memory_summary_windows(
+        result = backfill_memory_summary_windows(
             cid, ch, window=int(body.get("window") or 10))
+        result["checkpoints_updated"] = (
+            propagate_memory_summaries_to_checkpoints(cid, ch))
+        return result
     except ValueError as exc:
         raise HTTPException(404, str(exc))
     except Exception as exc:
@@ -3291,6 +3295,10 @@ def mem_add(cid: int, ch: int, body: dict = Body(...)):
         entities=body.get("entities"),
         location=body.get("location", ""),
         emotional_context=body.get("emotional_context", ""),
+        valence=body.get("valence", 0.0),
+        arousal=body.get("arousal", 0.0),
+        encoding_valence=body.get("encoding_valence", 0.0),
+        encoding_arousal=body.get("encoding_arousal", 0.0),
         event_key=body.get("event_key", ""),
     )
     return {"id": mid}
@@ -3308,6 +3316,8 @@ def mem_edit(mid: int, body: dict = Body(...)):
         emotional_context=body.get("emotional_context"),
         valence=body.get("valence"),
         arousal=body.get("arousal"),
+        encoding_valence=body.get("encoding_valence"),
+        encoding_arousal=body.get("encoding_arousal"),
         confidence=body.get("confidence"),
         archived=body.get("archived"),
     )

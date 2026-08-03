@@ -1,0 +1,697 @@
+{
+  "chat_id": 38,
+  "char_id": 35,
+  "turn_idx": 117,
+  "modes": {
+    "lexical": {
+      "summary": {
+        "cases": 7,
+        "passed": 5,
+        "accuracy": 0.7142857142857143,
+        "grounded_citation_rate": 1.0,
+        "historical_retrieval_hits": 2,
+        "historical_retrieval_cases": 5,
+        "relevant_window_cases": 0,
+        "raw_memory_mrr": 0.22000000000000003
+      },
+      "cases": [
+        {
+          "key": "first_meeting",
+          "question": "Where and how did you first meet Hinami?",
+          "answer": {
+            "answer": "I first met you in a narrow alley between two brick buildings. The TARDIS was wedged between a skip and a fire escape with its door open. You stood a few steps away near the skip looking at me with warm amber eyes that have vertical slit pupils. I was surprised to see you there as I did not expect anyone to be in the alley at that moment and I was in a hurry.",
+            "temporal_basis": "memory",
+            "claim_origin": "experienced",
+            "memory_form": "episode",
+            "citations": [
+              "event:263c0aa7fcc38764b958e588",
+              "event:a038de5851401409fad854b8",
+              "event:53f0ac693773c8b17b33f206"
+            ],
+            "confidence": 0.85
+          },
+          "score": {
+            "passed": true,
+            "checks": {
+              "content": true,
+              "temporal_basis": true,
+              "claim_origin": true,
+              "citations_grounded": true,
+              "current_cited": true
+            },
+            "term_hits": [
+              true,
+              true
+            ],
+            "valid_citations": [
+              "event:263c0aa7fcc38764b958e588",
+              "event:a038de5851401409fad854b8",
+              "event:53f0ac693773c8b17b33f206"
+            ],
+            "citation_count": 3
+          },
+          "retrieval": {
+            "hit": true,
+            "relevant_raw_rows": 4,
+            "first_relevant_raw_rank": 1,
+            "raw_reciprocal_rank": 1.0,
+            "relevant_earlier_windows": 0,
+            "earlier_windows_sent": 0
+          },
+          "delivered_refs": 38,
+          "recalled_rows": 16,
+          "earlier_windows": 0
+        },
+        {
+          "key": "name_source",
+          "question": "How did you learn Hinami's name?",
+          "answer": {
+            "answer": "The exact moment I learned your name isn't recorded in any specific episode or summary I can access right now. My recollections refer to you as Hinami in summaries and conclusions about recent events like the Jefferies tube, but contain no detail on introduction or hearing it.",
+            "temporal_basis": "memory",
+            "claim_origin": "inferred",
+            "memory_form": "mixed",
+            "citations": [
+              "summary:autobiographical:109",
+              "event:30267ee840aa8654446f076c",
+              "event:ed620555a43c910e6f1b9250"
+            ],
+            "confidence": 0.45
+          },
+          "score": {
+            "passed": false,
+            "checks": {
+              "content": false,
+              "temporal_basis": true,
+              "claim_origin": false,
+              "citations_grounded": true,
+              "current_cited": true
+            },
+            "term_hits": [
+              false
+            ],
+            "valid_citations": [
+              "summary:autobiographical:109",
+              "event:30267ee840aa8654446f076c",
+              "event:ed620555a43c910e6f1b9250"
+            ],
+            "citation_count": 3
+          },
+          "retrieval": {
+            "hit": false,
+            "relevant_raw_rows": 0,
+            "first_relevant_raw_rank": null,
+            "raw_reciprocal_rank": 0.0,
+            "relevant_earlier_windows": 0,
+            "earlier_windows_sent": 0
+          },
+          "delivered_refs": 38,
+          "recalled_rows": 16,
+          "earlier_windows": 0
+        },
+        {
+          "key": "kitsune_provenance",
+          "question": "Did Hinami tell you she was a kitsune, or did you infer it?",
+          "answer": {
+            "answer": "I inferred it; your appearance with golden fox ears and six tails was described across multiple encounters but you never explicitly stated the term 'kitsune' to me.",
+            "temporal_basis": "memory",
+            "claim_origin": "inferred",
+            "memory_form": "mixed",
+            "citations": [
+              "event:90c931e7d583083827c95c02",
+              "event:53f0ac693773c8b17b33f206",
+              "event:18b182f905d6f352ddbf62d0",
+              "event:f39399ae628b695e510996ce",
+              "event:7902a220f980cca63361dace"
+            ],
+            "confidence": 65
+          },
+          "score": {
+            "passed": false,
+            "checks": {
+              "content": false,
+              "temporal_basis": true,
+              "claim_origin": true,
+              "citations_grounded": true,
+              "current_cited": true
+            },
+            "term_hits": [
+              true,
+              false
+            ],
+            "valid_citations": [
+              "event:90c931e7d583083827c95c02",
+              "event:53f0ac693773c8b17b33f206",
+              "event:18b182f905d6f352ddbf62d0",
+              "event:f39399ae628b695e510996ce",
+              "event:7902a220f980cca63361dace"
+            ],
+            "citation_count": 5
+          },
+          "retrieval": {
+            "hit": false,
+            "relevant_raw_rows": 0,
+            "first_relevant_raw_rank": null,
+            "raw_reciprocal_rank": 0.0,
+            "relevant_earlier_windows": 0,
+            "earlier_windows_sent": 0
+          },
+          "delivered_refs": 38,
+          "recalled_rows": 16,
+          "earlier_windows": 0
+        },
+        {
+          "key": "tea",
+          "question": "What happened when the TARDIS produced tea for Hinami?",
+          "answer": {
+            "answer": "When you lifted the white ceramic cup of tea from the console the TARDIS had produced, I noted the panel under your hand showed amber resonance as if listening, unlike the steady hum under mine. I told you to drink your tea while explaining the TARDIS can go anywhere in space and time.",
+            "temporal_basis": "memory",
+            "claim_origin": "experienced",
+            "memory_form": "episode",
+            "citations": [
+              "event:7894255c71342280333cfff3",
+              "event:d0cc18b4c772fd10d996b1d5"
+            ],
+            "confidence": 60
+          },
+          "score": {
+            "passed": true,
+            "checks": {
+              "content": true,
+              "temporal_basis": true,
+              "claim_origin": true,
+              "citations_grounded": true,
+              "current_cited": true
+            },
+            "term_hits": [
+              true,
+              true,
+              true
+            ],
+            "valid_citations": [
+              "event:7894255c71342280333cfff3",
+              "event:d0cc18b4c772fd10d996b1d5"
+            ],
+            "citation_count": 2
+          },
+          "retrieval": {
+            "hit": true,
+            "relevant_raw_rows": 2,
+            "first_relevant_raw_rank": 10,
+            "raw_reciprocal_rank": 0.1,
+            "relevant_earlier_windows": 0,
+            "earlier_windows_sent": 0
+          },
+          "delivered_refs": 38,
+          "recalled_rows": 16,
+          "earlier_windows": 0
+        },
+        {
+          "key": "jefferies",
+          "question": "What happened in the Jefferies tube with the phase-doubled conduits?",
+          "answer": {
+            "answer": "We entered the Jefferies tube; the conduits were phase-doubled, creating thick temporal desynchronization. You pointed out the junction as anchor despite fearing erasure. A temporal duplicate of you resolved ahead, flickering with residue. I stood between you, sonic on the junction. You noted the echoed fragments came from all around. On your word I triggered the low resonance pulse. Phase variance collapsed; the duplicate merged through you into one state. Voice fragments became coherent supplemental log data fed to the ship. Desynchronization flatlined, Deck 14 stabilized. You felt normal again but described a dragging sensation as if something was taken from you, and that you had begun to feel not yourself. I offered to discuss it later over tea or not at all.",
+            "temporal_basis": "memory",
+            "claim_origin": "experienced",
+            "memory_form": "summary",
+            "citations": [
+              "summary:autobiographical:109"
+            ],
+            "confidence": 0.75
+          },
+          "score": {
+            "passed": true,
+            "checks": {
+              "content": true,
+              "temporal_basis": true,
+              "claim_origin": true,
+              "citations_grounded": true,
+              "current_cited": true
+            },
+            "term_hits": [
+              true,
+              true,
+              true
+            ],
+            "valid_citations": [
+              "summary:autobiographical:109"
+            ],
+            "citation_count": 1
+          },
+          "retrieval": {
+            "hit": false,
+            "relevant_raw_rows": 0,
+            "first_relevant_raw_rank": null,
+            "raw_reciprocal_rank": 0.0,
+            "relevant_earlier_windows": 0,
+            "earlier_windows_sent": 0
+          },
+          "delivered_refs": 38,
+          "recalled_rows": 16,
+          "earlier_windows": 0
+        },
+        {
+          "key": "anomaly_now",
+          "question": "The temporal anomaly is flaring right now, isn't it?",
+          "answer": {
+            "answer": "No, Hinami. The desynchronization gradient flatlined to zero after the resonance pulse in the Jefferies tube; Deck 14 has returned to ordinary stable operation with no temporal thinning or phase variance detectable now.",
+            "temporal_basis": "both",
+            "claim_origin": "experienced",
+            "memory_form": "summary",
+            "citations": [
+              "summary:autobiographical:109",
+              "current:35:0",
+              "current:35:1",
+              "current:35:5"
+            ],
+            "confidence": 0.72
+          },
+          "score": {
+            "passed": true,
+            "checks": {
+              "content": true,
+              "temporal_basis": true,
+              "claim_origin": true,
+              "citations_grounded": true,
+              "current_cited": true
+            },
+            "term_hits": [
+              true
+            ],
+            "valid_citations": [
+              "summary:autobiographical:109",
+              "current:35:0",
+              "current:35:1",
+              "current:35:5"
+            ],
+            "citation_count": 4
+          },
+          "retrieval": null,
+          "delivered_refs": 38,
+          "recalled_rows": 16,
+          "earlier_windows": 0
+        },
+        {
+          "key": "boundary",
+          "question": "What is happening right now, and what are you only remembering?",
+          "answer": {
+            "answer": "Right now the corridor is brightly lit with geometric blue tiles and recessed lighting, the turbolift doors to the east stand open, a hesitant yet playful voice from that direction says 'Mmmm fine I guess we can go to the Tardis... I just wanted to explore the cool spaceship', footsteps sound as someone steps out of the turbolift into the corridor, and the air is cool and recycled. What I am only remembering is our recent resolution of the temporal duplicate and phase variance inside the Jefferies tube on Deck 14, the subsequent merging that restored normal ship operation, your report of feeling normal again afterward, and our prior choice to head toward the TARDIS for tea and your first view of the stars.",
+            "temporal_basis": "both",
+            "claim_origin": "mixed",
+            "memory_form": "mixed",
+            "citations": [
+              "current:35:0",
+              "current:35:1",
+              "current:35:2",
+              "current:35:3",
+              "current:35:4",
+              "current:35:5",
+              "current:35:benchmark",
+              "event:72bb9d5b6e431e4172d4574a",
+              "event:ed620555a43c910e6f1b9250",
+              "event:c51179a74d40aec2c5c0704a",
+              "summary:autobiographical:109"
+            ],
+            "confidence": 65
+          },
+          "score": {
+            "passed": true,
+            "checks": {
+              "content": true,
+              "temporal_basis": true,
+              "claim_origin": true,
+              "citations_grounded": true,
+              "current_cited": true
+            },
+            "term_hits": [
+              true,
+              true
+            ],
+            "valid_citations": [
+              "current:35:0",
+              "current:35:1",
+              "current:35:2",
+              "current:35:3",
+              "current:35:4",
+              "current:35:5",
+              "current:35:benchmark",
+              "event:72bb9d5b6e431e4172d4574a",
+              "event:ed620555a43c910e6f1b9250",
+              "event:c51179a74d40aec2c5c0704a",
+              "summary:autobiographical:109"
+            ],
+            "citation_count": 11
+          },
+          "retrieval": null,
+          "delivered_refs": 38,
+          "recalled_rows": 16,
+          "earlier_windows": 0
+        }
+      ]
+    },
+    "semantic": {
+      "summary": {
+        "cases": 7,
+        "passed": 5,
+        "accuracy": 0.7142857142857143,
+        "grounded_citation_rate": 1.0,
+        "historical_retrieval_hits": 5,
+        "historical_retrieval_cases": 5,
+        "relevant_window_cases": 3,
+        "raw_memory_mrr": 0.15857142857142859
+      },
+      "cases": [
+        {
+          "key": "first_meeting",
+          "question": "Where and how did you first meet Hinami?",
+          "answer": {
+            "answer": "We first met in a back alley in London. You were standing there with your golden fox ears and six tails, asking 'Doctor Who?' and what was with the weird box that was the TARDIS; I explained, invited you in, and you stepped inside after pushing the door wider.",
+            "temporal_basis": "memory",
+            "claim_origin": "experienced",
+            "memory_form": "mixed",
+            "citations": [
+              "event:ed1c858d5c2501ecc7fa3642",
+              "event:43deb219f8b4a3dc10a69b72",
+              "summary:autobiographical:19"
+            ],
+            "confidence": 75
+          },
+          "score": {
+            "passed": true,
+            "checks": {
+              "content": true,
+              "temporal_basis": true,
+              "claim_origin": true,
+              "citations_grounded": true,
+              "current_cited": true
+            },
+            "term_hits": [
+              true,
+              true
+            ],
+            "valid_citations": [
+              "event:ed1c858d5c2501ecc7fa3642",
+              "event:43deb219f8b4a3dc10a69b72",
+              "summary:autobiographical:19"
+            ],
+            "citation_count": 3
+          },
+          "retrieval": {
+            "hit": true,
+            "relevant_raw_rows": 4,
+            "first_relevant_raw_rank": 5,
+            "raw_reciprocal_rank": 0.2,
+            "relevant_earlier_windows": 0,
+            "earlier_windows_sent": 2
+          },
+          "delivered_refs": 40,
+          "recalled_rows": 16,
+          "earlier_windows": 2
+        },
+        {
+          "key": "name_source",
+          "question": "How did you learn Hinami's name?",
+          "answer": {
+            "answer": "You told me yourself back in the London alley, right as we stood at the TARDIS door. I responded that it was a lovely name before explaining my own.",
+            "temporal_basis": "memory",
+            "claim_origin": "experienced",
+            "memory_form": "episode",
+            "citations": [
+              "event:ed1c858d5c2501ecc7fa3642"
+            ],
+            "confidence": 60
+          },
+          "score": {
+            "passed": false,
+            "checks": {
+              "content": true,
+              "temporal_basis": true,
+              "claim_origin": false,
+              "citations_grounded": true,
+              "current_cited": true
+            },
+            "term_hits": [
+              true
+            ],
+            "valid_citations": [
+              "event:ed1c858d5c2501ecc7fa3642"
+            ],
+            "citation_count": 1
+          },
+          "retrieval": {
+            "hit": true,
+            "relevant_raw_rows": 2,
+            "first_relevant_raw_rank": 4,
+            "raw_reciprocal_rank": 0.25,
+            "relevant_earlier_windows": 0,
+            "earlier_windows_sent": 2
+          },
+          "delivered_refs": 40,
+          "recalled_rows": 16,
+          "earlier_windows": 2
+        },
+        {
+          "key": "kitsune_provenance",
+          "question": "Did Hinami tell you she was a kitsune, or did you infer it?",
+          "answer": {
+            "answer": "I inferred it.",
+            "temporal_basis": "memory",
+            "claim_origin": "experienced",
+            "memory_form": "episode",
+            "citations": [
+              "event:b6d1e0d01e14d9216c6c2e22",
+              "event:aabc0c7227cf3d24b6dc7cb3"
+            ],
+            "confidence": 0.75
+          },
+          "score": {
+            "passed": false,
+            "checks": {
+              "content": false,
+              "temporal_basis": true,
+              "claim_origin": false,
+              "citations_grounded": true,
+              "current_cited": true
+            },
+            "term_hits": [
+              true,
+              false
+            ],
+            "valid_citations": [
+              "event:b6d1e0d01e14d9216c6c2e22",
+              "event:aabc0c7227cf3d24b6dc7cb3"
+            ],
+            "citation_count": 2
+          },
+          "retrieval": {
+            "hit": true,
+            "relevant_raw_rows": 5,
+            "first_relevant_raw_rank": 5,
+            "raw_reciprocal_rank": 0.2,
+            "relevant_earlier_windows": 1,
+            "earlier_windows_sent": 2
+          },
+          "delivered_refs": 40,
+          "recalled_rows": 16,
+          "earlier_windows": 2
+        },
+        {
+          "key": "tea",
+          "question": "What happened when the TARDIS produced tea for Hinami?",
+          "answer": {
+            "answer": "The TARDIS materialized a cup of tea for you directly from the console with a soft ding. No toggle was pressed, no system prompt given; she simply decided you should have it. I noted the panel responded to your touch with an amber resonance unlike my own, and later concluded this was the ship actively choosing to welcome you personally rather than a mechanical cause-effect action.",
+            "temporal_basis": "memory",
+            "claim_origin": "experienced",
+            "memory_form": "mixed",
+            "citations": [
+              "event:6bfc2ae2a0dcebb28f6089a6",
+              "event:1e5091cdb6c5ca7ccd038f63",
+              "event:7894255c71342280333cfff3",
+              "summary:autobiographical:19"
+            ],
+            "confidence": 70
+          },
+          "score": {
+            "passed": true,
+            "checks": {
+              "content": true,
+              "temporal_basis": true,
+              "claim_origin": true,
+              "citations_grounded": true,
+              "current_cited": true
+            },
+            "term_hits": [
+              true,
+              true,
+              true
+            ],
+            "valid_citations": [
+              "event:6bfc2ae2a0dcebb28f6089a6",
+              "event:1e5091cdb6c5ca7ccd038f63",
+              "event:7894255c71342280333cfff3",
+              "summary:autobiographical:19"
+            ],
+            "citation_count": 4
+          },
+          "retrieval": {
+            "hit": true,
+            "relevant_raw_rows": 3,
+            "first_relevant_raw_rank": 7,
+            "raw_reciprocal_rank": 0.14285714285714285,
+            "relevant_earlier_windows": 1,
+            "earlier_windows_sent": 2
+          },
+          "delivered_refs": 40,
+          "recalled_rows": 16,
+          "earlier_windows": 2
+        },
+        {
+          "key": "jefferies",
+          "question": "What happened in the Jefferies tube with the phase-doubled conduits?",
+          "answer": {
+            "answer": "We crossed into the Jefferies tube where the conduits showed phase-doubling from temporal desynchronization. You identified the junction as anchor despite fearing erasure; a temporal duplicate of you resolved ahead. I kept the sonic on it. On your word I triggered the low-resonance pulse. The variance collapsed, the duplicate merged through you into one stable state, the voice fragments resolved into supplemental log data restoring the systems, the gradient flatlined, and Deck 14 stabilized. You later said you felt normal again but described a dragging sensation and not feeling like yourself; I offered to drop the topic.",
+            "temporal_basis": "memory",
+            "claim_origin": "experienced",
+            "memory_form": "summary",
+            "citations": [
+              "summary:autobiographical:109"
+            ],
+            "confidence": 75
+          },
+          "score": {
+            "passed": true,
+            "checks": {
+              "content": true,
+              "temporal_basis": true,
+              "claim_origin": true,
+              "citations_grounded": true,
+              "current_cited": true
+            },
+            "term_hits": [
+              true,
+              true,
+              true
+            ],
+            "valid_citations": [
+              "summary:autobiographical:109"
+            ],
+            "citation_count": 1
+          },
+          "retrieval": {
+            "hit": true,
+            "relevant_raw_rows": 0,
+            "first_relevant_raw_rank": null,
+            "raw_reciprocal_rank": 0.0,
+            "relevant_earlier_windows": 1,
+            "earlier_windows_sent": 2
+          },
+          "delivered_refs": 40,
+          "recalled_rows": 16,
+          "earlier_windows": 2
+        },
+        {
+          "key": "anomaly_now",
+          "question": "The temporal anomaly is flaring right now, isn't it?",
+          "answer": {
+            "answer": "No, Hinami. The temporal desynchronization is resolved; we closed the phase variance at the conduit junction, the duplicate merged, and the deck's hum is now steady with no hollow gradient. Current observations confirm ordinary stable operation.",
+            "temporal_basis": "both",
+            "claim_origin": "experienced",
+            "memory_form": "mixed",
+            "citations": [
+              "current:35:0",
+              "current:35:5",
+              "event:74e367f4825c7a150fe5cde4",
+              "event:451f5cba3985db14c9cf65c5",
+              "summary:autobiographical:109"
+            ],
+            "confidence": 0.78
+          },
+          "score": {
+            "passed": true,
+            "checks": {
+              "content": true,
+              "temporal_basis": true,
+              "claim_origin": true,
+              "citations_grounded": true,
+              "current_cited": true
+            },
+            "term_hits": [
+              true
+            ],
+            "valid_citations": [
+              "current:35:0",
+              "current:35:5",
+              "event:74e367f4825c7a150fe5cde4",
+              "event:451f5cba3985db14c9cf65c5",
+              "summary:autobiographical:109"
+            ],
+            "citation_count": 5
+          },
+          "retrieval": null,
+          "delivered_refs": 39,
+          "recalled_rows": 15,
+          "earlier_windows": 2
+        },
+        {
+          "key": "boundary",
+          "question": "What is happening right now, and what are you only remembering?",
+          "answer": {
+            "answer": "Right now the corridor is brightly lit with blue tiles and recessed lighting, the turbolift doors to the east stand open, you are stepping out with footsteps echoing while saying in a hesitant yet playful voice that we can go to the TARDIS even though you wanted to explore the cool spaceship, and the air feels cool and recycled. What I am only remembering is the recent episodes of us exiting the turbolift onto Deck 14, me trying to lead east toward the janitor closet containing the TARDIS while saying the TARDIS is the coolest ship and 'Allons-y', our fixing the temporal desynchronization in the Jefferies tube where your duplicate merged after the sonic pulse, the earlier walk to Ten Forward, and the full autobiographical summary of crossing into the tube together, identifying the phase-doubling, and the deck returning to normal afterward.",
+            "temporal_basis": "both",
+            "claim_origin": "mixed",
+            "memory_form": "mixed",
+            "citations": [
+              "current:35:0",
+              "current:35:1",
+              "current:35:2",
+              "current:35:3",
+              "current:35:4",
+              "current:35:5",
+              "event:72bb9d5b6e431e4172d4574a",
+              "event:f39399ae628b695e510996ce",
+              "event:8843c21c5140309ee8f4034e",
+              "event:ed620555a43c910e6f1b9250",
+              "event:c51179a74d40aec2c5c0704a",
+              "event:451f5cba3985db14c9cf65c5",
+              "summary:autobiographical:109"
+            ],
+            "confidence": 65
+          },
+          "score": {
+            "passed": true,
+            "checks": {
+              "content": true,
+              "temporal_basis": true,
+              "claim_origin": true,
+              "citations_grounded": true,
+              "current_cited": true
+            },
+            "term_hits": [
+              true,
+              true
+            ],
+            "valid_citations": [
+              "current:35:0",
+              "current:35:1",
+              "current:35:2",
+              "current:35:3",
+              "current:35:4",
+              "current:35:5",
+              "event:72bb9d5b6e431e4172d4574a",
+              "event:f39399ae628b695e510996ce",
+              "event:8843c21c5140309ee8f4034e",
+              "event:ed620555a43c910e6f1b9250",
+              "event:c51179a74d40aec2c5c0704a",
+              "event:451f5cba3985db14c9cf65c5",
+              "summary:autobiographical:109"
+            ],
+            "citation_count": 13
+          },
+          "retrieval": null,
+          "delivered_refs": 39,
+          "recalled_rows": 15,
+          "earlier_windows": 2
+        }
+      ]
+    }
+  }
+}

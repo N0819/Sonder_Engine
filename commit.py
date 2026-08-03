@@ -4272,7 +4272,7 @@ def _marked_for_memory(own_result, qbody):
     """
     body = " ".join(str(qbody or "").split()).casefold()
     if not body or not isinstance(own_result, dict):
-        return False
+        return None
     for mark in own_result.get("remember_lines") or []:
         if not isinstance(mark, dict):
             continue
@@ -4281,8 +4281,8 @@ def _marked_for_memory(own_result, qbody):
         if not want:
             continue
         if want == body or want in body or body in want:
-            return True
-    return False
+            return mark
+    return None
 
 
 def _quote_body(quote):
@@ -4433,6 +4433,9 @@ def prepare_memory_commit(ctx, *, scene=None):
             _mem_arousal = float(_surface.get("arousal") or 0.0)
         except (TypeError, ValueError):
             _mem_valence, _mem_arousal = 0.0, 0.0
+        # Fallback for legacy/no-psychology turns: after equals before.  The
+        # resolved appraisal below replaces these when it exists.
+        _encoding_valence, _encoding_arousal = _mem_valence, _mem_arousal
         # --- Unbidden-recall ledger: the character stage proposed this beat's
         # probe on its step output (deterministic trigger state, and whether a
         # contrasting memory was surfaced); commit is the only writer of the
@@ -4445,6 +4448,14 @@ def prepare_memory_commit(ctx, *, scene=None):
         _probe = own_result.get("unbidden_probe")
         if isinstance(_probe, dict):
             _led = dict(st.get("unbidden") or {})
+            _probe_ref = str(_probe.get("memory_ref") or "")
+            _effectful = any(
+                isinstance(e, dict)
+                and str(e.get("memory_ref") or "") == _probe_ref
+                and str(e.get("disposition") or "").casefold()
+                    not in {"", "dismissed", "ignored", "none"}
+                and bool(str(e.get("changed") or "").strip())
+                for e in (own_result.get("memory_effects") or []))
             _goal_before = str(((st.get("active_state") or {}).get("goal"))
                                or "")
             _goal_now = str((active_state.get("goal")
@@ -4484,15 +4495,17 @@ def prepare_memory_commit(ctx, *, scene=None):
                              if isinstance(i, int) and i != _mid]
                     _led["recent_ids"] = (_rids + [_mid])[-8:]
                     _led["clear_seen"] = False
-                    if _goal_now and _goal_now != _goal_before:
+                    if _effectful or (_goal_now and _goal_now != _goal_before):
                         # Helped on the injection beat itself.
                         _led["outcomes"] = ([
                             o for o in (_led.get("outcomes") or [])
                             if isinstance(o, dict)]
                             + [{"turn": turn.idx, "helped": True}])[-4:]
                     else:
-                        _led["pending"] = {"turn": turn.idx,
-                                           "goal": _goal_now}
+                        _led["pending"] = {
+                            "turn": turn.idx, "goal": _goal_now,
+                            **({"memory_ref": _probe_ref}
+                               if _probe_ref else {})}
             _led["repeat_flag"] = bool(_probe.get("repeat_survived"))
             st["unbidden"] = _led
         if est and not v:
@@ -4566,6 +4579,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                 qbody = _quote_body(quote)
                 if qbody and (quote in v or qbody in v):
                     category = _durable_dialogue_category(qbody)
+                    memory_mark = _marked_for_memory(own_result, qbody)
                     # This mind asked to keep the line. The phrase list is a
                     # floor of what ANYONE would remember; what a particular
                     # character finds durable is a fact about that character,
@@ -4575,7 +4589,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                     # must have been said this beat and must have reached THIS
                     # observer's view, so a mark can only preserve something
                     # already heard.
-                    if not category and _marked_for_memory(own_result, qbody):
+                    if not category and memory_mark:
                         category = "dialogue"
                     if category:
                         pending_memories.append({
@@ -4586,7 +4600,15 @@ def prepare_memory_commit(ctx, *, scene=None):
                             "content": f"{spk_label} said {quote}" + (f" to {tgt}" if tgt else ""),
                             "gist": f"{spk_label}: {qbody}", "key_phrases": [qbody, spk_label],
                             "entities": [spk_label], "location": room_name,
-                            "emotional_context": mood,
+                            "emotional_context": " — ".join(
+                                p for p in (
+                                    mood,
+                                    ("kept because " + str(
+                                        memory_mark.get("why") or "").strip())
+                                    if memory_mark and str(
+                                        memory_mark.get("why") or "").strip()
+                                    else "",
+                                ) if p),
                             "valence": _mem_valence, "arousal": _mem_arousal,
                             "event_key": _stable_event_key(
                                 turn.id, ccid, "dialogue", d.get("speaker"),
@@ -4622,6 +4644,36 @@ def prepare_memory_commit(ctx, *, scene=None):
                 "event_key": _stable_event_key(turn.id, ccid, "episode"),
             })
         if own_result:
+            # Ponder is a private, deliberate retrieval request for the NEXT
+            # character turn. The character stage removed it from the public
+            # sequence, so it never becomes a world action. Consume an older
+            # pending query only when this mind actually produced a committed
+            # result, then optionally stage one new bounded query.
+            _pending_ponder = (st.get("memory_ponder")
+                               if isinstance(st.get("memory_ponder"), dict)
+                               else {})
+            try:
+                _ponder_due = int(_pending_ponder.get("set_turn")) < turn.idx
+            except (TypeError, ValueError):
+                _ponder_due = False
+            if _ponder_due:
+                st.pop("memory_ponder", None)
+            _new_ponder = (own_result.get("ponder")
+                           if isinstance(own_result.get("ponder"), dict)
+                           else {})
+            _ponder_query = " ".join(
+                str(_new_ponder.get("query") or "").split())[:240]
+            _ponder_why = " ".join(
+                str(_new_ponder.get("why") or "").split())[:240]
+            if _ponder_query and _ponder_why:
+                st["memory_ponder"] = {
+                    "query": _ponder_query,
+                    "why": _ponder_why,
+                    "set_turn": turn.idx,
+                }
+                # Telemetry only, never a gate: a useful answer is allowed to
+                # raise a new deliberate question immediately.
+                st["last_ponder_turn"] = turn.idx
             seq = own_result.get("sequence") or []
             own_salience = float(own_result.get("salience", 0.0))
             should_store_own_acts = bool(seq) and (
@@ -4830,7 +4882,56 @@ def prepare_memory_commit(ctx, *, scene=None):
                 wants, enacted, suppressed = affect.normalize_wants(
                     asv.get("wants") or [], valid_ids | _project_ids)
 
-                appraisal_input = own_result.get("appraisal") or {}
+                appraisal_input = dict(own_result.get("appraisal") or {})
+                # Past experience may change familiarity, expectation and
+                # perceived coping resources. It may also produce a mild body
+                # echo or prime threat detection, but may not manufacture
+                # current pain/pleasure, a present threat, or a goal event.
+                # Apply every contribution only through the separately
+                # grounded memory_modulation lane.
+                _mod = appraisal_input.get("memory_modulation")
+                _memory_echo = {}
+                if isinstance(_mod, dict) and _mod.get("evidence"):
+                    try:
+                        _familiarity = max(
+                            0.0, min(1.0, float(_mod.get("familiarity") or 0.0)))
+                        _coping_effect = max(
+                            -1.0, min(1.0, float(
+                                _mod.get("coping_effect") or 0.0)))
+                        _somatic_echo = max(
+                            -1.0, min(1.0, float(
+                                _mod.get("somatic_echo") or 0.0)))
+                        _threat_bias = max(
+                            0.0, min(1.0, float(
+                                _mod.get("threat_bias") or 0.0)))
+                    except (TypeError, ValueError):
+                        (_familiarity, _coping_effect,
+                         _somatic_echo, _threat_bias) = 0.0, 0.0, 0.0, 0.0
+                    appraisal_input["novelty"] = max(
+                        0.0, min(1.0,
+                                 float(appraisal_input.get("novelty") or 0.0)
+                                 * (1.0 - 0.35 * _familiarity)))
+                    appraisal_input["coping_potential"] = max(
+                        0.0, min(1.0,
+                                 float(appraisal_input.get(
+                                     "coping_potential") or 0.5)
+                                 + 0.25 * _coping_effect))
+                    # The model reports a normalized tendency; the engine
+                    # decides how much reaches live state. One recalled beat
+                    # can move either axis by at most 0.2, and the result stays
+                    # explicitly labelled remembered_past.
+                    _memory_echo = {
+                        "somatic": round(0.2 * _somatic_echo, 4),
+                        "threat_bias": round(0.2 * _threat_bias, 4),
+                        "why": str(_mod.get("why") or "")[:240],
+                        "source_refs": [
+                            str(e.get("event_id") or "")
+                            for e in (_mod.get("evidence") or [])
+                            if isinstance(e, dict) and e.get("event_id")
+                        ],
+                        "temporal_source": "remembered_past",
+                    }
+                    appraisal_input["memory_echo"] = _memory_echo
                 proposed_hedonic = (
                     asv.get("hedonic") if isinstance(asv.get("hedonic"), dict)
                     else {}
@@ -4862,6 +4963,11 @@ def prepare_memory_commit(ctx, *, scene=None):
                 new_affect = affect.resolve_affect(
                     prev_affect, appraisal_out, baseline, elapsed_units,
                     proposed=asv.get("affect") or asv.get("mood"))
+                _encoded_surface = new_affect.get("surface") or {}
+                _encoding_valence = float(
+                    _encoded_surface.get("valence") or 0.0)
+                _encoding_arousal = float(
+                    _encoded_surface.get("arousal") or 0.0)
                 body_state = vitals_of(sc, cname)
                 # World-side comfort, from the settled scene: what this body
                 # is verifiably against (station/contact/posture, closed
@@ -4914,6 +5020,9 @@ def prepare_memory_commit(ctx, *, scene=None):
                     "affect_seconds": _clock_seconds,
                     "stress": new_stress,
                     "hedonic": new_hedonic,
+                    # One-beat, source-labelled state. Deliberately separate
+                    # from hedonic pain/pleasure and from current observations.
+                    "memory_echo": _memory_echo,
                     "active_concerns": (
                         asv.get("active_concerns")
                         or prev_as.get("active_concerns")
@@ -5270,7 +5379,8 @@ def prepare_memory_commit(ctx, *, scene=None):
                 if isinstance(_d, dict):
                     memory_disputes.append(
                         (cid, ccid, str(_d.get("gist") or ""),
-                         str(_d.get("now_reads") or ""), turn.idx))
+                         str(_d.get("now_reads") or ""), turn.idx,
+                         str(_d.get("memory_ref") or "")))
             # Consequence, not popularity: a memory the character cited as
             # EVIDENCE for a belief they formed this beat turned out to be
             # load-bearing. Retrieval alone never moves importance -- that
@@ -5279,6 +5389,14 @@ def prepare_memory_commit(ctx, *, scene=None):
             _cited = _cited_memory_ids(own_result)
             if _cited:
                 importance_bumps.append((ccid, _cited))
+        # Every memory minted for this mind on this beat records both the
+        # affect carried into the event (valence/arousal) and the resolved
+        # affect after appraisal (encoding_*).  Assign here, after every
+        # possible append including inference memories.
+        for _memory in pending_memories:
+            if _memory.get("char_id") == ccid:
+                _memory["encoding_valence"] = _encoding_valence
+                _memory["encoding_arousal"] = _encoding_arousal
         state_updates.append((cid, ccid, json.dumps(st)))
 
     event_content = json.dumps({
@@ -5382,10 +5500,11 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
         # A mind re-reading one of its own memories. Scoped to that character's
         # own rows inside record_dispute, so this can never reach across the
         # firewall however the model phrased the gist.
-        for chat_id, char_id, _gist, _reading, _tidx in prepared.get(
+        for chat_id, char_id, _gist, _reading, _tidx, _ref in prepared.get(
                 "memory_disputes") or []:
             try:
-                record_dispute(chat_id, char_id, _gist, _reading, _tidx)
+                record_dispute(chat_id, char_id, _gist, _reading, _tidx,
+                               memory_ref=_ref)
             except Exception as exc:
                 ctx.add_warning(f"memory dispute not recorded: {exc}")
         # Memories that turned out to be load-bearing for a belief. Once each,

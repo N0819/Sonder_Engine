@@ -1,5 +1,50 @@
 # Changelog
 
+## alpha 6.8 — Memory and psychology share an honest boundary
+
+- Action-onset perception now treats the Director's structured sequence as
+  chronology, not as prose suggestions. Model prose supplies ambient sensory
+  detail; declared speech and visible action are removed from that paraphrase
+  and projected last through the observer's hearing/sight/concealment gates in
+  exact order, wording, and tone. This closes the live chat-38 failure where
+  `awe line -> turn -> teasing line` became `turn -> untoned line -> tease`,
+  along with delivery metacommentary such as “You hear both lines in full.”
+  Mixed environment/action sentences retain their ambient clauses, and a
+  natural appearance description no longer receives a duplicate mechanical
+  `You see ...` tail. Interpret reconciliation now counts `tone` and
+  `observable` as declaration-bearing fields, preventing it from appending a
+  redundant fourth action for delivery already represented structurally.
+- Character output now separates `present_evidence_used` from
+  `memory_evidence_used`; present observations, raw memories, and summary
+  windows occupy disjoint grounded namespaces. Current perception/mood/goal no
+  longer appear inside `memory`, and micro-round observation ids carry their
+  nonce.
+- Model-visible memory rows are allow-listed. Database/turn/frame ids, access
+  counters, archive/vector metadata, and retrieval scores remain host-only;
+  each delivered item states `temporal_status`, `memory_form`, relative time,
+  and `epistemic_origin`.
+- Appraisal separates current cause from bounded remembered modulation.
+  Unsupported somatic/goal/relationship changes are zeroed, derived summaries
+  cannot independently reinforce durable beliefs, and absorption narrows
+  deliberate recall while preserving a four-item recognition lane.
+- A recalled danger or pleasure may create a separately labelled, one-beat
+  `memory_echo`: mild somatic warmth/tension and threat priming, each capped
+  at 0.2 and grounded to exact past refs. It nudges affect/stress without
+  becoming current pain, pleasure, injury, goal impact, or proof of danger.
+- Characters can exceptionally choose a private `ponder` action with one
+  concrete query and reason. It is removed from the public action stream,
+  retrieved on top of normal recall next character turn, labelled
+  `deliberate_ponder` in the resulting memories, and consumed on commit.
+  It is absent from the default output shape; a result can raise a new query
+  immediately, but results alone are explicitly not a reason to ponder again.
+- Dialogue keep-reasons survive into the memory's emotional context; disputes
+  use exact stable refs plus present evidence; memory effects distinguish a row
+  being retrieved from it actually changing conduct, including unbidden-recall
+  outcome telemetry. All accumulate safely across dialogue micro-rounds.
+- Schema v24 adds post-appraisal `encoding_valence` / `encoding_arousal` beside
+  the pre-event axes and carries them through checkpoints, archives, portable
+  character banks, the API, and the memory editor.
+
 ## alpha 6.7 — The chapters a mind was quietly losing
 
 A character's summary layer turned out to be holding one chapter of a life and
@@ -35,8 +80,7 @@ skipped, and the current summary never sent twice.
 
 It costs **no extra round trip**: `search_memories` has always batched the
 query with its aspects, and the windows rank against the same query vector, so
-both take one shared `EmbeddingBatch`. Both re-embed if what they are handed
-does not line up with the aspects they derive.
+both take one shared `EmbeddingBatch`.
 
 Measured on the live bank: a mean **14%** of the sixteen recalled raw memories
 fall inside the sent window's span, so the window is mostly reaching turns raw
@@ -75,6 +119,15 @@ and another's from 8 to 4.
 
 ### Also
 
+- Present observations, raw memories and summary windows now have disjoint,
+  durable evidence handles. Legacy memory rows are assigned deterministic
+  `event_key`s before retrieval; all evidence-bearing character outputs are
+  grounded against exactly what that mind received. Invalid references are
+  dropped, and a missing present citation is warned rather than fabricated.
+- Every summary surface applies the same exclusive deciding-turn cutoff,
+  including latest autobiographical/hearsay/surmise and drift-triggered origin
+  reads. Backfilled windows are propagated into eligible checkpoints so a
+  later reroll cannot erase the repair.
 - Declared destinations always exist and are reachable: a room named as a
   movement target is created with a description and an edge back to where the
   mover came from, instead of arriving as a name with no room behind it.

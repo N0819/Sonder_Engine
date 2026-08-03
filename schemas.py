@@ -1763,9 +1763,86 @@ def _coerce_evidence_refs(value):
     return out
 
 
+# Legacy spellings of the current-beat event id that models wrote before the
+# prompt pointed at real observation_ids. Each is mapped back to the canonical
+# sentinel so no existing citation is lost. The real ids ("current:<pid>:<n>")
+# are left untouched. Measured across 1,254 stored character variants: 4,939
+# of 6,404 citations used one of these invented labels, 1,172 used the old
+# magic string "current", and 38 used a real id. (UNBUILT §2.1)
+_LEGACY_EVENT_IDS = {
+    "current_perception", "perception", "perception_current",
+    "perception:view", "perception:current", "event:current_perception",
+    "event:current", "current_perception:view", "current:view",
+    "current_event", "this_beat", "this_turn", "now",
+    "current_perception_event", "perception_event",
+}
+
+
+def _normalize_event_id(value):
+    """Map legacy current-beat spellings to the canonical sentinel.
+
+    A real observation id (``current:<perceiver>:<n>``) is left untouched.
+    The old magic string ``"current"`` and the ~15 invented labels models used
+    before the prompt was updated are all mapped to ``"current"`` so downstream
+    code can treat them uniformly.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return text
+    # A real observation id carries a colon-separated perceiver and index.
+    if text.startswith("current:") and text.count(":") >= 2:
+        return text
+    if text == "current":
+        return text
+    if text in _LEGACY_EVENT_IDS:
+        return "current"
+    return text
+
+
 class EvidenceRef(LenientModel):
     event_id: str = ""
     fact: str = ""
+
+    _normalize_eid = validator("event_id", pre=True, allow_reuse=True)(
+        lambda cls, v: _normalize_event_id(v)
+    )
+
+
+class MemoryEvidenceUse(LenientModel):
+    """A past item deliberately brought to bear on the present decision."""
+    event_id: str = ""
+    fact: str = ""
+    use: str = "recognition"
+
+    _normalize_eid = validator("event_id", pre=True, allow_reuse=True)(
+        lambda cls, v: _normalize_event_id(v)
+    )
+
+
+class RememberLine(LenientModel):
+    quote: str = ""
+    why: str = ""
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+
+    _coerce_evidence = validator("evidence", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_evidence_refs(v))
+
+
+class MemoryDispute(LenientModel):
+    memory_ref: str = ""
+    gist: str = ""  # legacy locator; grounded to memory_ref before commit
+    now_reads: str = ""
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+
+    _coerce_evidence = validator("evidence", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_evidence_refs(v))
+
+
+class MemoryEffect(LenientModel):
+    memory_ref: str = ""
+    use: str = "recognition"
+    disposition: str = "integrated"
+    changed: str = ""
 
 class MindHypothesis(LenientModel):
     about_entity: str
@@ -1808,6 +1885,10 @@ class GoalImpact(LenientModel):
     agency: str = "none"
     intentionality: float = Field(default=0.0, ge=0.0, le=1.0)
     why: str = ""
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+
+    _coerce_evidence = validator("evidence", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_evidence_refs(v))
 
     _impact = validator("impact", pre=True, allow_reuse=True)(
         lambda cls, value: _clamp_float(value, -1.0, 1.0, 0.0)
@@ -1825,10 +1906,40 @@ class SomaticImpact(LenientModel):
     pain: float = Field(default=0.0, ge=0.0, le=1.0)
     pleasure: float = Field(default=0.0, ge=0.0, le=1.0)
     why: str = ""
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+
+    _coerce_evidence = validator("evidence", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_evidence_refs(v))
 
     _axes = validator("pain", "pleasure", pre=True, allow_reuse=True)(
         lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0)
     )
+
+
+class MemoryModulation(LenientModel):
+    """How remembered past changes appraisal without becoming perception."""
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+    familiarity: float = Field(default=0.0, ge=0.0, le=1.0)
+    expectation: str = ""
+    anticipatory_emotion: str = ""
+    coping_effect: float = Field(default=0.0, ge=-1.0, le=1.0)
+    # A recollection can make the body tense or warm and can prime danger
+    # detection. These are NOT current pain/pleasure or proof of a present
+    # threat; commit caps them into a separate one-beat memory echo.
+    somatic_echo: float = Field(default=0.0, ge=-1.0, le=1.0)
+    threat_bias: float = Field(default=0.0, ge=0.0, le=1.0)
+    why: str = ""
+
+    _coerce_evidence = validator("evidence", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_evidence_refs(v))
+    _axes = validator("familiarity", pre=True, allow_reuse=True)(
+        lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
+    _coping = validator("coping_effect", pre=True, allow_reuse=True)(
+        lambda cls, value: _clamp_float(value, -1.0, 1.0, 0.0))
+    _echo = validator("somatic_echo", pre=True, allow_reuse=True)(
+        lambda cls, value: _clamp_float(value, -1.0, 1.0, 0.0))
+    _threat = validator("threat_bias", pre=True, allow_reuse=True)(
+        lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
 
 
 class CharacterAppraisal(LenientModel):
@@ -1844,6 +1955,11 @@ class CharacterAppraisal(LenientModel):
     intrinsic_pleasantness: float = Field(default=0.0, ge=-1.0, le=1.0)
     somatic_impact: SomaticImpact = Field(default_factory=SomaticImpact)
     goal_impacts: list[GoalImpact] = Field(default_factory=list)
+    present_evidence: list[EvidenceRef] = Field(default_factory=list)
+    memory_modulation: MemoryModulation = Field(default_factory=MemoryModulation)
+
+    _coerce_present = validator("present_evidence", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_evidence_refs(v))
 
     _unit_axes = validator(
         "controllability", "coping_potential",
@@ -2046,9 +2162,12 @@ class InteractionControl(LenientModel):
 
 class CharacterOutput(LenientModel):
     observations_used: list[EvidenceRef] = Field(default_factory=list)
+    present_evidence_used: list[EvidenceRef] = Field(default_factory=list)
+    memory_evidence_used: list[MemoryEvidenceUse] = Field(default_factory=list)
 
     _coerce_observations = validator(
-        "observations_used", pre=True, allow_reuse=True)(
+        "observations_used", "present_evidence_used", "memory_evidence_used",
+        pre=True, allow_reuse=True)(
         lambda cls, v: _coerce_evidence_refs(v))
     appraisal: CharacterAppraisal = Field(default_factory=CharacterAppraisal)
     considered_responses: list[str] = Field(default_factory=list)
@@ -2090,12 +2209,16 @@ class CharacterOutput(LenientModel):
     # said this beat AND actually reached this observer's view, so this can
     # only ever preserve something already heard, never invent one.
     # [{"quote": str, "why": str}]
-    remember_lines: list[dict] = Field(default_factory=list)
+    remember_lines: list[RememberLine] = Field(default_factory=list)
     # A memory this mind now reads differently. NOT a correction of the record:
     # the event stays true and untouched, and only the character's reading of
     # it is recorded as having changed -- what deception, disguise and
     # misidentification actually do. [{"gist": str, "now_reads": str}]
-    memory_disputes: list[dict] = Field(default_factory=list)
+    memory_disputes: list[MemoryDispute] = Field(default_factory=list)
+    # What recalled material actually did to this decision.  Retrieval is not
+    # impact; this makes the distinction measurable and gives unbidden recall
+    # a consequence signal stronger than "the goal string changed".
+    memory_effects: list[MemoryEffect] = Field(default_factory=list)
 
     _coerce_remember_lines = validator(
         "remember_lines", pre=True, allow_reuse=True)(
@@ -2107,7 +2230,9 @@ class CharacterOutput(LenientModel):
         "memory_disputes", pre=True, allow_reuse=True)(
         lambda cls, v: [
             item for item in (v if isinstance(v, (list, tuple)) else [])
-            if isinstance(item, dict) and str(item.get("gist") or "").strip()
+            if isinstance(item, dict) and (
+                str(item.get("memory_ref") or "").strip() or
+                str(item.get("gist") or "").strip())
             and str(item.get("now_reads") or "").strip()
         ] if isinstance(v, (list, tuple)) else [])
 
@@ -3043,6 +3168,8 @@ OUTPUT_EXAMPLES = {
     },
     "character": {
         "observations_used": [],
+        "present_evidence_used": [],
+        "memory_evidence_used": [],
         "appraisal": {},
         "considered_responses": [],
         "response_candidates": [],
@@ -3052,6 +3179,9 @@ OUTPUT_EXAMPLES = {
         "association_updates": [],
         "mind_model_updates": [],
         "relationship_updates": [],
+        "remember_lines": [],
+        "memory_disputes": [],
+        "memory_effects": [],
         "interaction": {
             "addresses": [],
             "expects_response": False,

@@ -286,12 +286,15 @@ def _observations_from_clean_views(clean_views):
 
 from .common import (
     _agent_json,
+    _action_already_rendered,
     _append_micro_view,
     _append_once,
+    _contains_quote,
     _contextual_rooms,
     _perceptible_entities,
     _dedupe_view_sentences,
     _player_name_forms,
+    _quote_body,
     _sentence_subjects,
     _ensure_environment,
     _fallback_perception_views,
@@ -496,6 +499,207 @@ def _concealed_from_perceiver(entry, perceiver):
         or str(perceiver.get("id") or "").casefold() in refs
         or f"character:{perceiver.get('id')}".casefold() in refs
     )
+
+
+def _inject_onset_speech(view, speech_elems, perceiver, rel, display, can_see):
+    """Deliver every player line this observer is allowed to hear.
+
+    This is deliberately safe to call twice. The first pass lets ordinary
+    model prose keep its natural ordering; `_inject_dialogue` adds only a line
+    that is not already present. The second pass runs after every destructive
+    view scrub and is the actual fidelity floor: a scrub must not erase a line
+    merely because the model first placed it inside prose the scrub rejected.
+
+    Live (chat 38, turn 125): the Doctor's raw view evidently contained
+    ``It's really beautiful...`` inside a sentence narrated from outside the
+    Doctor. `_inject_dialogue` saw the quote and avoided a duplicate, then
+    `_strip_self_narration` removed that whole sentence. With no final delivery
+    check, the Doctor decided the beat having heard only the player's second
+    line. A restored earlier line is anchored before the next surviving line,
+    with its declared tone, rather than appended after it. Keeping the
+    audibility/concealment calculation in one helper prevents the two passes
+    from drifting apart.
+    """
+    events = list(speech_elems or [])
+
+    def _body_match(text, body):
+        words = re.split(r"(\s+)", str(body or ""))
+        pattern = "".join(r"\s+" if part.isspace() else re.escape(part)
+                          for part in words if part)
+        return re.search(pattern, str(text or ""), re.I) if pattern else None
+
+    def _clause_start(text, pos):
+        """Start of the prose clause containing a later spoken line."""
+        inside_quote = False
+        start = 0
+        for index, char in enumerate(str(text or "")[:pos]):
+            if char in '"“”':
+                inside_quote = not inside_quote
+            elif char in ".!?…" and not inside_quote:
+                start = index + 1
+        while start < len(text) and text[start].isspace():
+            start += 1
+        return start
+
+    for index, event in enumerate(events):
+        if event.get("visibility") == "concealed" and (
+            not event.get("conceal_from")
+            or _concealed_from_perceiver(event, perceiver)
+        ):
+            continue
+        level = hear_level(
+            rel, event.get("volume", "normal"),
+            proximity=perceiver.get("proximity_to_actor"),
+        )
+        body = _quote_body(event.get("text"))
+        if level == "none" or not body or _contains_quote(view, body):
+            continue
+
+        # Append is normally sufficient, but if a later declared line already
+        # survived the model/scrub path it would put this restored EARLIER line
+        # after it. Anchor the missing line immediately before the next
+        # surviving line's clause, preserving the player's speech order and
+        # therefore its emotional progression.
+        next_match = None
+        for later in events[index + 1:]:
+            next_body = _quote_body(later.get("text"))
+            match = _body_match(view, next_body)
+            if match:
+                next_match = match
+                break
+        if next_match and level != "fragment":
+            delivered = _inject_dialogue(
+                "", display, event.get("text"), level,
+                event.get("volume", "normal"), can_see,
+                conducted=bool(rel.get("inside_source")),
+                tone=event.get("tone", ""),
+            )
+            insert_at = _clause_start(view, next_match.start())
+            view = (
+                view[:insert_at].rstrip() + " " + delivered + " "
+                + view[insert_at:].lstrip()
+            ).strip()
+        else:
+            view = _inject_dialogue(
+                view, display, event.get("text"), level,
+                event.get("volume", "normal"), can_see,
+                conducted=bool(rel.get("inside_source")),
+                tone=event.get("tone", ""),
+            )
+    return view
+
+
+_DELIVERY_META_RE = re.compile(
+    r"^(?:the words? (?:reach|reaches) you(?: clearly)?|"
+    r"you hear (?:both|all|the) (?:lines?|words?) (?:in full|clearly))"
+    r"[.!?]*$",
+    re.I,
+)
+
+
+def _strip_onset_rendering(view, sequence, display):
+    """Remove the model's paraphrase of declared onset events.
+
+    The perception model remains useful for selecting ambient sensory detail,
+    but it cannot be the authority on the ORDER of an already structured
+    player sequence.  A live two-line beat was returned as turn -> first line
+    -> second line, even though interpret correctly held first line -> turn ->
+    second line.  It also added delivery metacommentary ("The words reach you
+    clearly", "You hear both lines in full") that describes the filter rather
+    than the fiction.
+
+    Strip only material that can be tied back to a declared speech/action:
+    exact quote bodies, the two high-precision delivery-meta shapes above, and
+    clauses with the same conservative content overlap `_inject_action` uses
+    for duplicate detection.  Mixed environment/action sentences are handled
+    clause-by-clause so a trailing turn does not erase the room description.
+    The caller then projects the authorized sequence deterministically.
+    """
+    text = str(view or "").strip()
+    if not text:
+        return text
+    speech_bodies = [
+        _quote_body(event.get("text"))
+        for event in (sequence or [])
+        if isinstance(event, dict) and event.get("type") == "speech"
+        and event.get("text")
+    ]
+    action_surfaces = [
+        observable_action_text(event)
+        for event in (sequence or [])
+        if isinstance(event, dict) and event.get("type") == "action"
+        and observable_action_text(event)
+    ]
+
+    kept = []
+    for sentence in _SENTENCE_SPLIT.split(text):
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        if any(body and _contains_quote(sentence, body)
+               for body in speech_bodies):
+            continue
+        if _DELIVERY_META_RE.fullmatch(sentence.strip()):
+            continue
+
+        if any(_action_already_rendered(sentence, display, surface)
+               for surface in action_surfaces):
+            # A model often tacks the visible act onto a useful environment
+            # sentence after a comma: "The console glows..., her ears perk as
+            # she turns." Remove just that clause when possible.
+            pieces = re.split(r"([,;\u2014\u2013]\s+)", sentence)
+            clauses = pieces[::2]
+            retained = []
+            for index, clause in enumerate(clauses):
+                if any(_action_already_rendered(
+                        clause, display, surface)
+                       for surface in action_surfaces):
+                    continue
+                if clause.strip():
+                    retained.append(clause.strip())
+            if retained and len(retained) < len(clauses):
+                sentence = ", ".join(retained).strip(" ,;\u2014\u2013")
+                if sentence and sentence[-1] not in ".!?\u2026":
+                    sentence += "."
+            else:
+                continue
+        if sentence:
+            kept.append(sentence)
+    return " ".join(kept).strip()
+
+
+def _inject_onset_sequence(view, sequence, perceiver, rel, display, can_see,
+                           scene, actor_name, self_forms):
+    """Project authorized speech/actions in their declared order."""
+    delivered = set()
+    sentence_display = str(display or "")
+    if sentence_display:
+        sentence_display = sentence_display[:1].upper() + sentence_display[1:]
+    for event in sequence or []:
+        if not isinstance(event, dict):
+            continue
+        if event.get("visibility") == "concealed" and (
+            not event.get("conceal_from")
+            or _concealed_from_perceiver(event, perceiver)
+        ):
+            continue
+        if event.get("type") == "speech":
+            view = _inject_onset_speech(
+                view, [event], perceiver, rel, sentence_display, can_see)
+            continue
+        if event.get("type") != "action":
+            continue
+        surface = observable_action_text(event)
+        if not surface or entity_arc(
+                scene, perceiver.get("name"), actor_name) == "rear":
+            continue
+        view = _inject_action(
+            view, sentence_display, surface, can_see,
+            event_id=event.get("event_id"), delivered=delivered,
+            self_forms=self_forms,
+        )
+    return view
+
 
 def _ubiquitous_names(sc):
     """Bodiless voices in this scene (ship AI, station PA), casefolded.
@@ -1622,26 +1826,14 @@ def perception_act(ctx, nonce):
     clean_views = _per_observer_model_views(
         awake_perceivers, _act_payload)
 
-    # Deterministic action delivery uses the intent-free `observable` surface,
-    # NOT the raw attempt. Each element is tagged with its surface here; a
-    # mental beat (observable "") is dropped so it is never injected into any
-    # observer's view (an observer cannot perceive "remember the runes").
-    action_elems = []
-    for e in (interp.get("sequence") or []):
-        if e.get("type") != "action":
-            continue
-        surface = observable_action_text(e)
-        if surface:
-            action_elems.append({**e, "_surface": surface})
-    # Mirror the action_elems concealment filter for speech: a speech
-    # element marked visibility:'concealed' must never reach the blanket
-    # hear_level-based injection below, which has no concept of an
-    # excluded audience.  The perception LLM also receives only overt
-    # speech/actions in the declared_act payload above (concealed entries
-    # are listed separately in concealed_actions metadata), so both the
-    # deterministic and LLM channels agree: a concealed line reaches only
-    # the perceivers the conceal_from list excludes.
-    audible_speech_elems = list(speech_elems)
+    # The structured sequence is the authority on chronology. Scalar speech is
+    # retained only as a legacy fallback for stored interpretations predating
+    # sequence speech elements.
+    onset_sequence = list(interp.get("sequence") or [])
+    if speech_elems and not any(
+            isinstance(e, dict) and e.get("type") == "speech"
+            for e in onset_sequence):
+        onset_sequence.extend(speech_elems)
 
     # Each perceiver's own name/alias forms, so the action backstop renders
     # them in second person inside their OWN view: the player's declared
@@ -1655,7 +1847,7 @@ def perception_act(ctx, nonce):
 
     onset_targets = {str(t).casefold() for t in (action.get("targets") or [])}
     onset_loud = any(str(e.get("volume", "")).lower() in ("loud", "shout")
-                     for e in audible_speech_elems)
+                     for e in speech_elems)
     for p in perceivers:
         pid = str(p["id"])
         if p.get("awareness") in NON_AWAKE_GATED:
@@ -1672,6 +1864,10 @@ def perception_act(ctx, nonce):
         knows_identity = bool(p.get("knows_identity"))
         display = p_name if knows_identity else _unknown_actor_label(p_name, p_visible)
         view = clean_views.get(pid)
+        # The model supplies ambient sensory prose; the declared event sequence
+        # is removed and rebuilt below from structured data. It must not be
+        # allowed to reorder two lines around the gesture between them.
+        view = _strip_onset_rendering(view, onset_sequence, display)
         view = _ensure_environment(view, p, display, rel, vis, action_desc)
 
         if vis:
@@ -1691,37 +1887,7 @@ def perception_act(ctx, nonce):
                 relation=rel,
             )
 
-        delivered = set()
-        for e in audible_speech_elems:
-            if e.get("visibility") == "concealed" and (
-                not e.get("conceal_from")
-                or _concealed_from_perceiver(e, p)
-            ):
-                continue
-            level = hear_level(
-                rel, e.get("volume", "normal"),
-                proximity=p.get("proximity_to_actor"),
-            )
-            view = _inject_dialogue(
-                view, display, e.get("text"),
-                level, e.get("volume", "normal"),
-                _in_plain_view(rel, vis),
-                conducted=bool(rel.get("inside_source")),
-            )
         can_see = _in_plain_view(rel, vis)
-        for e in action_elems:
-            if e.get("visibility") == "concealed" and (
-                not e.get("conceal_from")
-                or _concealed_from_perceiver(e, p)
-            ):
-                continue
-            if entity_arc(sc, p["name"], p_name) == "rear":
-                continue
-            view = _inject_action(
-                view, display, e["_surface"], can_see,
-                event_id=e.get("event_id"), delivered=delivered,
-                self_forms=self_forms_by_name.get(p["name"]) or [p["name"]],
-            )
         # Deterministic identity floor, LAST: the LLM's free prose was
         # never checked against knows_identity, so a model that wrote the
         # player's canonical name into a stranger's view walked straight
@@ -1752,7 +1918,18 @@ def perception_act(ctx, nonce):
             ctx.warnings.append(
                 f"perception_act: dropped self-narration from the view of "
                 f"{p['name']}: {sentence[:120]!r}")
-        clean_views[pid] = _dedupe_view_sentences(view) or None
+        view = _dedupe_view_sentences(view)
+        # Canonical onset projection is LAST. The model decides what ambient
+        # detail legitimately reaches this observer; this deterministic pass
+        # decides the exact order, wording and declared delivery of the
+        # player's speech/actions. That makes speech -> turn -> speech an
+        # invariant rather than a prompt preference.
+        view = _inject_onset_sequence(
+            view, onset_sequence, p, rel, display, can_see,
+            sc, p_name,
+            self_forms_by_name.get(p["name"]) or [p["name"]],
+        )
+        clean_views[pid] = view or None
 
     _disguise_leak_check(ctx, "perception_act", clean_views, perceivers,
                          p_name, p_disguise_terms, p_disguise_known)

@@ -1477,6 +1477,14 @@ function memoryCard(m) {
     type: "number", min: "0", max: "1", step: "0.05",
     value: m.arousal ?? 0
   });
+  const encValIn = el("input", {
+    type: "number", min: "-1", max: "1", step: "0.05",
+    value: m.encoding_valence ?? 0
+  });
+  const encAroIn = el("input", {
+    type: "number", min: "0", max: "1", step: "0.05",
+    value: m.encoding_arousal ?? 0
+  });
   const archIn = el("input", {
     type: "checkbox",
     ...(m.archived ? { checked: "" } : {})
@@ -1503,6 +1511,8 @@ function memoryCard(m) {
           confidence: numOr(conIn.value, 1),
           valence: numOr(valIn.value, 0),
           arousal: numOr(aroIn.value, 0),
+          encoding_valence: numOr(encValIn.value, 0),
+          encoding_arousal: numOr(encAroIn.value, 0),
           archived: archIn.checked
         });
         toast("Memory saved.", "ok");
@@ -1573,8 +1583,10 @@ function memoryCard(m) {
       fieldWrap("Emotional context", emoIn),
       fieldWrap("Salience", salIn),
       fieldWrap("Confidence", conIn),
-      fieldWrap("Valence", valIn),
-      fieldWrap("Arousal", aroIn),
+      fieldWrap("Affect before — valence", valIn),
+      fieldWrap("Affect before — arousal", aroIn),
+      fieldWrap("Affect after — valence", encValIn),
+      fieldWrap("Affect after — arousal", encAroIn),
       el("div", { class: "full row" },
         el("label", { class: "tgl" },
           archIn, " archived"),

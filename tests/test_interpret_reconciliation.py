@@ -278,6 +278,34 @@ def test_covered_interpretation_makes_no_repair_call(temp_db, monkeypatch):
     assert out["interpret_reconciliation"]["uncovered"] == []
 
 
+def test_tone_and_observable_cover_authored_dialogue_progression():
+    """Delivery and visible gesture are real declaration channels.
+
+    Live (chat 38, turn 125), both were present in structured output, but the
+    coverage corpus ignored them and appended the whole bridge as a redundant
+    repair action. That gave perception two competing chronologies.
+    """
+    from agents.director import _uncovered_declarations
+
+    raw = ('"It\'s really beautiful..." You say in genuine awe before '
+           'turning back to him with a teasing smirk "So do you pick up '
+           'girls and attempt to woo them?"')
+    interpreted = {
+        "sequence": [
+            {"type": "speech", "text": "It's really beautiful...",
+             "tone": "genuine awe"},
+            {"type": "action", "attempt": "turn back toward him",
+             "observable": "turns back toward him"},
+            {"type": "speech",
+             "text": "So do you pick up girls and attempt to woo them?",
+             "tone": "teasing smirk"},
+        ],
+        "flow": {},
+    }
+
+    assert _uncovered_declarations(raw, interpreted) == []
+
+
 def test_failed_repair_falls_back_to_verbatim_generation_request(
     temp_db, monkeypatch,
 ):

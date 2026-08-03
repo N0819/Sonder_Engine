@@ -66,6 +66,40 @@ def _committed_state(out, char_id):
     raise AssertionError("no state update for character")
 
 
+def test_ponder_is_staged_for_next_turn_and_may_chain_a_new_question(
+        temp_db):
+    chat_id, char_id, cast = _story(temp_db, {})
+    first = _commit_ctx(chat_id, char_id, cast, 5, {
+        "ponder": {
+            "type": "ponder",
+            "query": "Who carried the violet sigil?",
+            "why": "I must decide whom to trust.",
+        }})
+    st1 = _committed_state(prepare_memory_commit(first), char_id)
+    assert st1["memory_ponder"] == {
+        "query": "Who carried the violet sigil?",
+        "why": "I must decide whom to trust.",
+        "set_turn": 5,
+    }
+    assert st1["last_ponder_turn"] == 5
+
+    # On the result turn the old query is consumed, but its answer may
+    # legitimately raise a new concrete question immediately.
+    chat2, char2, cast2 = _story(temp_db, st1)
+    second = _commit_ctx(chat2, char2, cast2, 6, {
+        "ponder": {
+            "type": "ponder", "query": "What did Rowan hide?",
+            "why": "The first answer raised another question.",
+        }})
+    st2 = _committed_state(prepare_memory_commit(second), char2)
+    assert st2["memory_ponder"] == {
+        "query": "What did Rowan hide?",
+        "why": "The first answer raised another question.",
+        "set_turn": 6,
+    }
+    assert st2["last_ponder_turn"] == 6
+
+
 # ---- W6: the rupture window re-opens while strain stays at rupture level ----
 
 def test_expired_rupture_window_extends_while_strain_high(temp_db):

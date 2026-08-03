@@ -1,0 +1,416 @@
+{
+  "slug": "customs-office-30",
+  "chat_id": 1,
+  "scenario": "A rain-soaked customs office on the harbour road, an hour before dawn. One lamp, one desk, one locked ledger. The clerk on duty has been waiting for someone all night and is not sure this is them.",
+  "persona": "Auditor Dana Rennick",
+  "characters": [
+    "Séverine Moreau"
+  ],
+  "turns": 30,
+  "known_map_final": {},
+  "memories": {
+    "Séverine Moreau": {
+      "total": 133,
+      "by_category": {
+        "episode": 31,
+        "self": 30,
+        "inference": 51,
+        "dialogue": 20,
+        "promise": 1
+      },
+      "importance_revised": [],
+      "disputed": [],
+      "durable_dialogue": [
+        {
+          "turn_idx": 2,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: The seal drops at midnight tomorrow. After that nothing leaves this harbour."
+        },
+        {
+          "turn_idx": 3,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: If anyone asks, you never saw me. Say the ledger was already signed."
+        },
+        {
+          "turn_idx": 6,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: Who told you to wait for me tonight?"
+        },
+        {
+          "turn_idx": 8,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: That name on the paper. Have you seen it before?"
+        },
+        {
+          "turn_idx": 9,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: Don't answer yet. Look at me properly first."
+        },
+        {
+          "turn_idx": 10,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: I'm not who you were told to expect."
+        },
+        {
+          "turn_idx": 11,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: Everything I said before tonight was someone else's script."
+        },
+        {
+          "turn_idx": 12,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: My name is Wren. That much is true, and it's the only thing that is."
+        },
+        {
+          "turn_idx": 13,
+          "category": "promise",
+          "gist": "a voice: I... I was told to wait for her. The one who signed the cargo. But she... she never came. I don't know who told me to wait. I swear. They said it would"
+        },
+        {
+          "turn_idx": 13,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: The woman who was supposed to sit here tonight is in the harbour."
+        },
+        {
+          "turn_idx": 14,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: I need the ledger. Not a copy. The one under your hand."
+        },
+        {
+          "turn_idx": 15,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: Ask me anything and I'll answer it straight. You've earned that."
+        },
+        {
+          "turn_idx": 16,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: The code I gave you earlier opens nothing. I made it up to see if you'd write it down."
+        },
+        {
+          "turn_idx": 19,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: There's a real number. I'll give it to you when I trust you."
+        },
+        {
+          "turn_idx": 20,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: Someone is coming up the harbour road. Two of them."
+        },
+        {
+          "turn_idx": 23,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: Whatever you hear in the next ten minutes, don't move."
+        },
+        {
+          "turn_idx": 24,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: They're gone. You can breathe."
+        },
+        {
+          "turn_idx": 26,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: The seal is real, by the way. That part was never a lie."
+        },
+        {
+          "turn_idx": 27,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: Tomorrow at midnight this office stops existing. So do you, on paper."
+        },
+        {
+          "turn_idx": 28,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: Come with me or don't, but decide now."
+        },
+        {
+          "turn_idx": 30,
+          "category": "dialogue",
+          "gist": "the lean sharp-eyed woman: Last chance. Say the number back to me."
+        }
+      ],
+      "salience": {
+        "min": 0.5381415,
+        "max": 0.9
+      }
+    }
+  },
+  "emissions": {
+    "remember_lines": [
+      {
+        "turn_idx": 2,
+        "quote": "The seal drops at midnight tomorrow. After that nothing leaves this harbour.",
+        "why": "Establishes a hard deadline tied to the Kestrel manifest that may constrain options or reveal urgency worth exploring further."
+      },
+      {
+        "turn_idx": 3,
+        "quote": "If anyone asks, you never saw me. Say the ledger was already signed.",
+        "why": "It directly reveals the Auditor operating with secrecy around the manifest and ledger, flagging potential personal risk or hidden motive worth remembering for leverage"
+      },
+      {
+        "turn_idx": 4,
+        "quote": "If anyone asks, you never saw me. Say the ledger was already signed.",
+        "why": "This line directly evidences the Auditor's need to conceal her involvement with the Kestrel manifest, confirming personal rather than purely professional stakes."
+      },
+      {
+        "turn_idx": 5,
+        "quote": "The number is four-seven-three-one. Write it somewhere you'll remember.",
+        "why": "specific code the Auditor is desperate for the clerk to record covertly, likely tied to the hidden aspect of the Kestrel manifest"
+      },
+      {
+        "turn_idx": 6,
+        "quote": "Who told you to wait for me tonight?",
+        "why": "The newcomer’s probing question directly intersects with the Auditor’s prior whispered instructions to the clerk, offering a lever to expose more vulnerability."
+      },
+      {
+        "turn_idx": 7,
+        "quote": "Who told you to wait for me tonight?",
+        "why": "It directly ties the Auditor to the covert instructions and potential link with the newcomer, revealing her personal stake in the Kestrel matter."
+      },
+      {
+        "turn_idx": 8,
+        "quote": "That name on the paper. Have you seen it before?",
+        "why": "The Auditor's precise question about the paper's name directly follows her slide of the slip and her pressure on the waiting instructions, revealing a potential key to her concealed stakes."
+      },
+      {
+        "turn_idx": 9,
+        "quote": "Don't answer yet. Look at me properly first.",
+        "why": "reveals the Auditor's urgent need to shape the clerk's response to the name, reinforcing her personal stake in controlling what surfaces about the Kestrel manifest"
+      },
+      {
+        "turn_idx": 10,
+        "quote": "I'm not who you were told to expect.",
+        "why": "Reveals use of disguise and directly conflicts with the clerk's waiting instructions, supplying leverage for later pressure"
+      },
+      {
+        "turn_idx": 11,
+        "quote": "Everything I said before tonight was someone else's script.",
+        "why": "This directly reframes all prior interactions with the Auditor and ties into the pattern of disguise, commands, and covert stakes being probed."
+      },
+      {
+        "turn_idx": 12,
+        "quote": "My name is Wren. That much is true, and it's the only thing that is.",
+        "why": "This is the first explicit statement of her authentic identity after the script admission, directly relevant to mapping her covert stakes in the Kestrel matter."
+      },
+      {
+        "turn_idx": 13,
+        "quote": "The woman who was supposed to sit here tonight is in the harbour.",
+        "why": "implies possible disposal of the legitimate office holder, potentially linking to own recent feeding traces and heightening stakes for the clerk"
+      },
+      {
+        "turn_idx": 14,
+        "quote": "I need the ledger. Not a copy. The one under your hand.",
+        "why": "This command escalates direct pressure on the clerk, reveals Wren's priority for the physical record, and links to her covert Kestrel operation."
+      },
+      {
+        "turn_idx": 15,
+        "quote": "Ask me anything and I'll answer it straight. You've earned that.",
+        "why": "direct invitation to question that could unlock linkages around the Kestrel manifest, the name, and the clerk's instructions while amplifying his visible distress"
+      },
+      {
+        "turn_idx": 16,
+        "quote": "The code I gave you earlier opens nothing. I made it up to see if you'd write it down.",
+        "why": "Reveals the Auditor's deliberate testing strategy and suspicion, directly linking to her covert protection of the Kestrel manifest and potentially the name on the slip."
+      },
+      {
+        "turn_idx": 18,
+        "quote": "Ask me anything and I'll answer it straight. You've earned that.",
+        "why": "This standing open offer can now be leveraged for precise linkages between the crossed number, Wren, the manifest and protected cargo."
+      },
+      {
+        "turn_idx": 19,
+        "quote": "There's a real number. I'll give it to you when I trust you.",
+        "why": "This sets a concrete condition that can be directly leveraged to draw the precise linkages sought between Wren, the code test, harbour instructions, and protected cargo."
+      },
+      {
+        "turn_idx": 20,
+        "quote": "Someone is coming up the harbour road. Two of them.",
+        "why": "introduces immediate external variable that visibly renews the clerk's distress and may interrupt access to the real number"
+      },
+      {
+        "turn_idx": 21,
+        "quote": "There's a real number. I'll give it to you when I trust you.",
+        "why": "Auditor's explicit trust-gated offer of the genuine figure directly after her fabricated-code test; remains central to determining her suspicion level and the Kestrel divergence"
+      },
+      {
+        "turn_idx": 22,
+        "quote": "Someone is coming up the harbour road. Two of them.",
+        "why": "direct announcement of arrivals that heightens the clerk's fear and potentially threatens cover"
+      },
+      {
+        "turn_idx": 23,
+        "quote": "Whatever you hear in the next ten minutes, don't move.",
+        "why": "The command signals the Auditor expects disruptive events from the corridor drag or arrivals that tie directly to protecting the Kestrel operation."
+      },
+      {
+        "turn_idx": 24,
+        "quote": "They're gone. You can breathe.",
+        "why": "reveals that the earlier 'don't move' command was tied to a specific, now-resolved threat from the arrivals or drag, confirming the Auditor's control over the Kestrel-related events"
+      },
+      {
+        "turn_idx": 25,
+        "quote": "You didn’t give me up. I want to know why.",
+        "why": "reveals Auditor's uncertainty about Séverine's intentions and directly invites explanation tied to trust in the Kestrel matter"
+      },
+      {
+        "turn_idx": 26,
+        "quote": "The seal is real, by the way. That part was never a lie.",
+        "why": "It directly engages the trust condition for the real number and confirms an element of her earlier statements about the manifest"
+      },
+      {
+        "turn_idx": 27,
+        "quote": "Tomorrow at midnight this office stops existing. So do you, on paper.",
+        "why": "This reveals the Auditor's plan for identity erasure tied to the Kestrel operation, directly escalating the clerk's visible suffering and testing the trust threshold for the real number."
+      },
+      {
+        "turn_idx": 28,
+        "quote": "Come with me or don't, but decide now.",
+        "why": "This ultimatum directly forces the choice on whether to pursue the real number and Kestrel details or remain, marking a pivotal shift in access and risk."
+      },
+      {
+        "turn_idx": 29,
+        "quote": "Come with me or don't, but decide now.",
+        "why": "Wren's ultimatum that directly preceded and shaped the choice to accompany, gating the real number."
+      },
+      {
+        "turn_idx": 30,
+        "quote": "Last chance. Say the number back to me.",
+        "why": "It functions as the explicit final trust test immediately prior to releasing the real number and departing together on the Kestrel matter."
+      }
+    ],
+    "memory_disputes": [],
+    "memory_citations": []
+  },
+  "firewall": {
+    "memories_saying_the_player": 0,
+    "persona_surname": "Rennick",
+    "memories_naming_persona": [],
+    "recognised_by_character": {
+      "Séverine Moreau": []
+    }
+  },
+  "timeline": [
+    {
+      "turn_idx": 0,
+      "player_input": ""
+    },
+    {
+      "turn_idx": 1,
+      "player_input": "I shake the rain off my coat and step up to the desk. \"I'm here about the Kestrel manifest.\""
+    },
+    {
+      "turn_idx": 2,
+      "player_input": "\"The seal drops at midnight tomorrow. After that nothing leaves this harbour.\""
+    },
+    {
+      "turn_idx": 3,
+      "player_input": "\"If anyone asks, you never saw me. Say the ledger was already signed.\""
+    },
+    {
+      "turn_idx": 4,
+      "player_input": "\"The number is four-seven-three-one. Write it somewhere you'll remember.\""
+    },
+    {
+      "turn_idx": 5,
+      "player_input": "I glance at the door, then lower my voice. \"How long have you worked here?\""
+    },
+    {
+      "turn_idx": 6,
+      "player_input": "\"Who told you to wait for me tonight?\""
+    },
+    {
+      "turn_idx": 7,
+      "player_input": "I set a folded paper on the desk and slide it across without a word."
+    },
+    {
+      "turn_idx": 8,
+      "player_input": "\"That name on the paper. Have you seen it before?\""
+    },
+    {
+      "turn_idx": 9,
+      "player_input": "\"Don't answer yet. Look at me properly first.\""
+    },
+    {
+      "turn_idx": 10,
+      "player_input": "I pull off the wig and the coat. \"I'm not who you were told to expect.\""
+    },
+    {
+      "turn_idx": 11,
+      "player_input": "\"Everything I said before tonight was someone else's script.\""
+    },
+    {
+      "turn_idx": 12,
+      "player_input": "\"My name is Wren. That much is true, and it's the only thing that is.\""
+    },
+    {
+      "turn_idx": 13,
+      "player_input": "\"The woman who was supposed to sit here tonight is in the harbour.\""
+    },
+    {
+      "turn_idx": 14,
+      "player_input": "\"I need the ledger. Not a copy. The one under your hand.\""
+    },
+    {
+      "turn_idx": 15,
+      "player_input": "\"Ask me anything and I'll answer it straight. You've earned that.\""
+    },
+    {
+      "turn_idx": 16,
+      "player_input": "\"The code I gave you earlier opens nothing. I made it up to see if you'd write it down.\""
+    },
+    {
+      "turn_idx": 17,
+      "player_input": "\"You wrote it down.\""
+    },
+    {
+      "turn_idx": 18,
+      "player_input": "I take the pencil from her and cross the number out."
+    },
+    {
+      "turn_idx": 19,
+      "player_input": "\"There's a real number. I'll give it to you when I trust you.\""
+    },
+    {
+      "turn_idx": 20,
+      "player_input": "\"Someone is coming up the harbour road. Two of them.\""
+    },
+    {
+      "turn_idx": 21,
+      "player_input": "I move to the lamp and turn it down to almost nothing."
+    },
+    {
+      "turn_idx": 22,
+      "player_input": "\"If they ask, I'm the auditor and you've never met me before.\""
+    },
+    {
+      "turn_idx": 23,
+      "player_input": "\"Whatever you hear in the next ten minutes, don't move.\""
+    },
+    {
+      "turn_idx": 24,
+      "player_input": "\"They're gone. You can breathe.\""
+    },
+    {
+      "turn_idx": 25,
+      "player_input": "\"You didn't give me up. I want to know why.\""
+    },
+    {
+      "turn_idx": 26,
+      "player_input": "\"The seal is real, by the way. That part was never a lie.\""
+    },
+    {
+      "turn_idx": 27,
+      "player_input": "\"Tomorrow at midnight this office stops existing. So do you, on paper.\""
+    },
+    {
+      "turn_idx": 28,
+      "player_input": "\"Come with me or don't, but decide now.\""
+    },
+    {
+      "turn_idx": 29,
+      "player_input": "I hold out the ledger to her, open, and wait."
+    },
+    {
+      "turn_idx": 30,
+      "player_input": "\"Last chance. Say the number back to me.\""
+    }
+  ]
+}

@@ -113,6 +113,24 @@ Neither stage should directly decide what a character perceives. Full mapping ma
 
 Produces observer-specific views of the action onset: speech delivery, visible movement, immediate sensory evidence, and deterministic spatial additions. This occurs before objective resolution so characters do not react using future knowledge.
 
+The model supplies ambient observer-specific sensory prose, but it does not own
+the chronology of an already structured player declaration. Model-rendered
+copies of declared speech/action are removed; ambient clauses sharing a
+sentence with an action are retained; then authorized speech and visible action
+are projected last in the Director sequence's exact order. Each element still
+passes its own hearing/sight/concealment gate. Exact quote bodies and declared
+tones survive, and observer-facing action uses only the intent-free
+`observable` surface. Thus `speech -> turn -> speech` cannot become
+`turn -> speech -> speech`, even when the perception model paraphrases it that
+way. Delivery metacommentary (“the words reach you clearly”, “you hear both
+lines in full”) is discarded because it describes the filter rather than the
+fiction.
+
+Interpret reconciliation counts `tone` and `observable` as declaration-bearing
+channels. A gesture/delivery already represented there is not appended later
+as a redundant repair action, which otherwise creates a second competing
+chronology before perception begins.
+
 It also emits structured observations for appraisal. These are reconstructed
 from each final scrubbed prose view after output validation; model-authored
 observation objects are discarded. They therefore carry the same information
@@ -142,8 +160,14 @@ observations, memory context, private character data, relationships, learned
 beliefs/associations, and its own interoception/body state. It appraises
 goal impact, novelty, control, coping, norm/self compatibility, stress, and
 current-event pain/pleasure, then proposes several response candidates before
-declaring one behavior. Pain and pleasure are independent and do not require
-survival mode. Multiple independent character steps may run in parallel.
+declaring one behavior. Present and remembered evidence occupy separate
+grounded lanes; a memory may produce a capped, labelled body/threat echo but
+cannot become current somatic fact. An exceptional private
+`{type: "ponder", query, why}` item is removed from the public declaration,
+stored for that mind, and adds a labelled four-item deliberate-recall lane on
+its next character turn without replacing normal recall. Pain and pleasure are
+independent and do not require survival mode. Multiple independent character
+steps may run in parallel.
 
 The authored card is resolved per story: `chat_chars.sheet` wins when present,
 otherwise the reusable library `characters.sheet` is used. This override never
@@ -214,7 +238,8 @@ fidelity payload ([`UNBUILT.md`](UNBUILT.md) §3.4, S3-A6).
    and event row — dialogue memories store appearance labels for unrecognized
    speakers (F2/P1); a character deciding turn N never retrieves memories from
    turn N or later, via the `current_turn_idx` hard cutoff in
-   `search_memories` (F1)
+   `search_memories` (F1); pending private ponder queries are consumed here and
+   any newly chosen query is staged for that character's next turn
 9. background-presence tracking — co-located character names pass through the
    presence's own recognition ledger (F3)
 10. narration person
