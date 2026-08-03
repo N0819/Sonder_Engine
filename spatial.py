@@ -4420,6 +4420,101 @@ def connect_orphan_new_rooms(scene: dict, prev_scene: dict) -> list:
     return attached
 
 
+def _position_key(scene: dict, name) -> Optional[str]:
+    """Canonical existing position key for an actor label, case-insensitive."""
+    label = str(name or "").strip()
+    if not label:
+        return None
+    positions = scene.get("positions") or {}
+    if label in positions:
+        return label
+    folded = label.casefold()
+    return next(
+        (key for key in positions
+         if str(key).strip().casefold() == folded),
+        None,
+    )
+
+
+def apply_following_ops(scene: dict, operations) -> dict:
+    """Apply voluntary durable follower -> target relations to ``scene``.
+
+    Following records intention and ordinary travel affiliation; it never
+    changes a position here. Movement follow-through is deliberately owned by
+    the Director, where pace, barriers, and actor decisions are available.
+    This function only maintains the durable ledger used equally by mid-turn
+    perception merges, commit, checkpoints, branches, and rerolls.
+    """
+    following = scene.get("following")
+    if not isinstance(following, dict):
+        following = scene["following"] = {}
+
+    for raw in operations or []:
+        if not isinstance(raw, dict):
+            continue
+        op = str(raw.get("op") or "").strip().casefold()
+        follower = _position_key(scene, raw.get("follower"))
+        if follower is None:
+            continue
+        if op == "stop":
+            for key in list(following):
+                if str(key).strip().casefold() == follower.casefold():
+                    following.pop(key, None)
+            continue
+        if op != "start":
+            continue
+        target = _position_key(scene, raw.get("target"))
+        if target is None or target.casefold() == follower.casefold():
+            continue
+
+        # A follows B follows A is not travel; it is an ownerless cycle. Longer
+        # cycles are rejected on the same terms. Case-tolerant because older
+        # scenes can carry human-authored labels.
+        cursor = target
+        visited = {follower.casefold()}
+        cyclic = False
+        while cursor:
+            folded = cursor.casefold()
+            if folded in visited:
+                cyclic = True
+                break
+            visited.add(folded)
+            rec = next(
+                (value for key, value in following.items()
+                 if str(key).strip().casefold() == folded
+                 and isinstance(value, dict)),
+                None,
+            )
+            cursor = _position_key(scene, (rec or {}).get("target"))
+        if cyclic:
+            continue
+
+        # Replace a case-variant/old target in place; one body follows at most
+        # one target at a time.
+        for key in list(following):
+            if str(key).strip().casefold() == follower.casefold():
+                following.pop(key, None)
+        following[follower] = {
+            "target": target,
+            "since_turn": raw.get("turn"),
+            "reason": str(raw.get("reason") or "").strip(),
+        }
+
+    # A departed/deleted actor cannot remain in the travel ledger. Separation
+    # alone does NOT clear it: a follower left behind by a sprint may still be
+    # trying to catch up and decides that on their next beat.
+    positioned = {
+        str(key).strip().casefold() for key in (scene.get("positions") or {})
+    }
+    for follower, rec in list(following.items()):
+        target = str((rec or {}).get("target") or "").strip().casefold() \
+            if isinstance(rec, dict) else ""
+        if str(follower).strip().casefold() not in positioned \
+                or target not in positioned:
+            following.pop(follower, None)
+    return scene
+
+
 def merge_scene_with_diff(
     scene: dict,
     diff: dict | None,
@@ -4636,6 +4731,11 @@ def merge_scene_with_diff(
     # A bodiless voice is not standing anywhere; a position on one is a
     # category error that no author can currently delete by hand.
     prune_bodiless_positions(merged)
+
+    # Durable travel affiliation. This changes only the relation ledger;
+    # position follow-through already ran at Director resolution so perception
+    # and commit merge the exact same destinations.
+    apply_following_ops(merged, diff.get("following_ops"))
 
     apply_contact_ops(merged, diff.get("contact_ops"),
                       report=contact_report)

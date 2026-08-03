@@ -474,6 +474,7 @@ def interaction_loop(ctx, nonce):
                     )
                     or []
                 ),
+                "follow_op": round_data["result"].get("follow_op"),
             }
             for round_data in rounds
         ],

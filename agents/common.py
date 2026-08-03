@@ -359,6 +359,10 @@ def _merge_character_results(existing, new):
         merged["active_state"] = existing.get("active_state")
     if not new.get("ponder") and existing.get("ponder"):
         merged["ponder"] = existing.get("ponder")
+    # No-op/null means preserve the prior micro-round's explicit decision;
+    # start/stop are both truthy dicts and the later explicit one wins.
+    if not new.get("follow_op") and existing.get("follow_op"):
+        merged["follow_op"] = existing.get("follow_op")
     return merged
 
 def _contextual_rooms(sc, cast, *extra_room_ids, hops=1):

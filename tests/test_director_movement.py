@@ -238,3 +238,355 @@ def test_perception_outcome_reflects_committed_move_not_stale_onset_cache(
 
     assert ctx["_player_room"] == "lamp_room"
 
+
+def _travelling_group_scene():
+    return {
+        "location": "Misty Mountains",
+        "time": "day",
+        "rooms": {
+            "broad_region": {
+                "name": "Misty Mountains",
+                "adjacent": [{"to": "mossy_path", "barrier": "open",
+                              "distance": "near"}],
+            },
+            "mossy_path": {
+                "name": "Mossy Path",
+                "adjacent": [{"to": "broad_region", "barrier": "open",
+                              "distance": "near"}],
+            },
+        },
+        "positions": {"The Stranger": "mossy_path", "Mara": "mossy_path"},
+        "stations": {}, "entities": {}, "attire": {}, "overlays": {},
+    }
+
+
+def _travelling_group_resolve_output(with_near=True):
+    stations = {
+        "The Stranger": {
+            "at": "torii_beam", "near": ["Mara"] if with_near else [],
+        },
+        "Mara": {
+            "at": None, "near": ["The Stranger"] if with_near else [],
+        },
+    }
+    lines = [
+        "Everything? Now that's a plan.",
+        "The universe is stuffed with wonders.",
+        "After the shrine we could start with Saturn at sunset.",
+        "Or tame dragons if you're feeling bold.",
+    ]
+    return {
+        "resolved_event": (
+            "The Stranger and Mara continue together through the torii gate, "
+            "Mara matching the Stranger's pace just behind one shoulder."
+        ),
+        "dialogue_log": [
+            {"speaker": "Mara", "exact_quote": f'"{line}"',
+             "volume": "normal", "intended_target": "The Stranger",
+             "tone": "bright", "visibility": "overt", "conceal_from": []}
+            for line in lines
+        ],
+        # Reproduce chat 38 turn 136: room positions split the pair while the
+        # same structured result places them near one another at a unique
+        # anchor.  The player's coarse interpret target points backwards to a
+        # broad region while the companion is put too far ahead.
+        "state_diff": {
+            "rooms": {
+                "mossy_path": {
+                    "name": "Mossy Path",
+                    "adjacent": [
+                        {"to": "broad_region", "barrier": "open",
+                         "distance": "near"},
+                        {"to": "torii_gate", "barrier": "open",
+                         "distance": "near"},
+                    ],
+                },
+                "torii_gate": {
+                    "name": "Torii Gate",
+                    "adjacent": [
+                        {"to": "mossy_path", "barrier": "open",
+                         "distance": "near"},
+                        {"to": "shrine_approach", "barrier": "open",
+                         "distance": "near"},
+                    ],
+                    "anchors": {"torii_beam": {"desc": "red crossbeam"}},
+                },
+                "shrine_approach": {
+                    "name": "Shrine Approach",
+                    "adjacent": [{"to": "torii_gate", "barrier": "open",
+                                  "distance": "near"}],
+                },
+            },
+            "positions": {
+                "The Stranger": "broad_region",
+                "Mara": "shrine_approach",
+            },
+            "stations": stations,
+        },
+    }
+
+
+def test_anchored_near_group_reconciles_positions_and_delivers_every_line(
+        temp_db, monkeypatch):
+    """Live chat 38 t136: two walkers were explicitly near at the torii beam
+    but committed into separate rooms. Hearing then dropped three of four
+    normal-volume lines. Fresh near + one unique anchor must co-locate the
+    party before perception, without relaxing hear_level itself.
+    """
+    import agents.director as director
+    import agents.perception as perception
+
+    ctx = _make_ctx(temp_db, "broad_region")
+    temp_db.wset(ctx.chat.id, "scene", _travelling_group_scene())
+    temp_db.wset(ctx.chat.id, "known", {"The Stranger": ["Mara"]})
+    ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
+    monkeypatch.setattr(
+        director, "_agent_json",
+        lambda *a, **k: _travelling_group_resolve_output(with_near=True),
+    )
+
+    resolved = director.director_resolve(ctx, nonce=0)
+
+    assert resolved["state_diff"]["positions"]["The Stranger"] == "torii_gate"
+    assert resolved["state_diff"]["positions"]["Mara"] == "torii_gate"
+    assert any("Reconciled near group" in warning for warning in ctx.warnings)
+
+    ctx.director_resolve = resolved
+
+    def bare_views(role, step_key, system, payload, **kwargs):
+        return {"views": {
+            str(p["id"]): f"You are in {p['room_name']}."
+            for p in payload["perceivers"]
+        }}
+
+    monkeypatch.setattr(perception, "_agent_json", bare_views)
+    player_view = perception.perception_outcome(ctx, nonce=0)["views"]["player"]
+
+    for entry in resolved["dialogue_log"]:
+        assert entry["exact_quote"].strip('"') in player_view
+
+
+def test_split_positions_without_fresh_near_evidence_remain_separate(
+        temp_db, monkeypatch):
+    """A shared starting room is not permission to carry every bystander.
+    Without a fresh near edge the resolver's explicit separation stands.
+    """
+    import agents.director as director
+
+    ctx = _make_ctx(temp_db, "broad_region")
+    temp_db.wset(ctx.chat.id, "scene", _travelling_group_scene())
+    ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
+    monkeypatch.setattr(
+        director, "_agent_json",
+        lambda *a, **k: _travelling_group_resolve_output(with_near=False),
+    )
+
+    resolved = director.director_resolve(ctx, nonce=0)
+
+    assert resolved["state_diff"]["positions"]["The Stranger"] == "broad_region"
+    assert resolved["state_diff"]["positions"]["Mara"] == "shrine_approach"
+    assert not any("Reconciled near group" in warning for warning in ctx.warnings)
+
+
+def _following_scene(following=None, player_room="trail_a", mara_room="trail_a"):
+    return {
+        "location": "Open Trail", "time": "day",
+        "rooms": {
+            "trail_a": {"name": "Trail A", "adjacent": [
+                {"to": "trail_b", "barrier": "open", "distance": "near"},
+                {"to": "side_path", "barrier": "open", "distance": "near"},
+            ]},
+            "trail_b": {"name": "Trail B", "adjacent": [
+                {"to": "trail_a", "barrier": "open", "distance": "near"},
+            ]},
+            "side_path": {"name": "Side Path", "adjacent": [
+                {"to": "trail_a", "barrier": "open", "distance": "near"},
+            ]},
+        },
+        "positions": {"The Stranger": player_room, "Mara": mara_room},
+        "following": following or {}, "stations": {}, "entities": {},
+        "attire": {}, "overlays": {},
+    }
+
+
+def _quiet_character_result(follow_op=None, verb="", attempt="waits"):
+    return {
+        "sequence": [{"type": "action", "attempt": attempt,
+                      "observable": attempt, "verb": verb,
+                      "visibility": "overt", "conceal_from": []}],
+        "follow_op": follow_op,
+    }
+
+
+def test_npc_can_choose_to_start_following_and_travels_with_target(
+        temp_db, monkeypatch):
+    """The NPC owns the start decision; ordinary open-route travel then keeps
+    the new group together in the same beat."""
+    import agents.director as director
+    from spatial import merge_scene_with_diff
+
+    ctx = _make_ctx(temp_db, "trail_b")
+    scene = _following_scene()
+    temp_db.wset(ctx.chat.id, "scene", scene)
+    ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
+    mara_id = ctx.cast[0]["id"]
+    ctx.character_results[mara_id] = _quiet_character_result(
+        {"op": "start", "target": "The Stranger", "reason": "go together"})
+    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
+        "state_diff": {"positions": {"The Stranger": "trail_b"}},
+    })
+
+    resolved = director.director_resolve(ctx, nonce=0)
+    diff = resolved["state_diff"]
+    merged = merge_scene_with_diff(scene, diff)
+
+    assert diff["positions"]["Mara"] == "trail_b"
+    assert merged["following"]["Mara"]["target"] == "The Stranger"
+
+
+def test_npc_can_stop_following_before_target_moves(temp_db, monkeypatch):
+    """An NPC's stop decision takes effect before carry; agency wins."""
+    import agents.director as director
+    from spatial import merge_scene_with_diff
+
+    following = {"Mara": {"target": "The Stranger", "since_turn": 1}}
+    scene = _following_scene(following)
+    ctx = _make_ctx(temp_db, "trail_b")
+    temp_db.wset(ctx.chat.id, "scene", scene)
+    ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
+    mara_id = ctx.cast[0]["id"]
+    ctx.character_results[mara_id] = _quiet_character_result(
+        {"op": "stop", "reason": "chooses to stay"})
+    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
+        "state_diff": {"positions": {"The Stranger": "trail_b"}},
+    })
+
+    resolved = director.director_resolve(ctx, nonce=0)
+    merged = merge_scene_with_diff(scene, resolved["state_diff"])
+
+    assert "Mara" not in resolved["state_diff"]["positions"]
+    assert "Mara" not in merged["following"]
+    assert merged["positions"]["Mara"] == "trail_a"
+
+
+def test_following_does_not_grant_speed_when_target_runs(temp_db, monkeypatch):
+    """A sprint breaks automatic group travel. The follower is left behind,
+    but the durable relation remains so they can choose whether to chase."""
+    import agents.director as director
+    from spatial import merge_scene_with_diff
+
+    following = {"Mara": {"target": "The Stranger", "since_turn": 1}}
+    scene = _following_scene(following)
+    ctx = _make_ctx(temp_db, "trail_b")
+    temp_db.wset(ctx.chat.id, "scene", scene)
+    ctx.director_interpret.update({
+        "movement": {"to_room": "trail_b", "mover": "self", "arrives": True},
+        "sequence": [{"type": "action", "attempt": "runs down the trail",
+                      "observable": "runs down the trail", "verb": "run"}],
+    })
+    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
+        "state_diff": {"positions": {"The Stranger": "trail_b"}},
+    })
+
+    resolved = director.director_resolve(ctx, nonce=0)
+    merged = merge_scene_with_diff(scene, resolved["state_diff"])
+
+    assert "Mara" not in resolved["state_diff"]["positions"]
+    assert merged["positions"]["Mara"] == "trail_a"
+    assert merged["following"]["Mara"]["target"] == "The Stranger"
+
+
+def test_player_is_not_auto_carried_when_npc_target_runs_away(
+        temp_db, monkeypatch):
+    """The inverse direction matters too: following an NPC gives the player
+    no automatic pursuit when that NPC chooses to bolt."""
+    import agents.director as director
+    from spatial import merge_scene_with_diff
+
+    following = {"The Stranger": {"target": "Mara", "since_turn": 1}}
+    scene = _following_scene(following)
+    ctx = _make_ctx(temp_db, "trail_a")
+    temp_db.wset(ctx.chat.id, "scene", scene)
+    ctx.director_interpret["movement"] = None
+    mara_id = ctx.cast[0]["id"]
+    ctx.character_results[mara_id] = _quiet_character_result(
+        verb="run", attempt="runs away down the trail")
+    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
+        "state_diff": {"positions": {"Mara": "trail_b"}},
+    })
+
+    resolved = director.director_resolve(ctx, nonce=0)
+    merged = merge_scene_with_diff(scene, resolved["state_diff"])
+
+    assert "The Stranger" not in resolved["state_diff"]["positions"]
+    assert merged["positions"]["The Stranger"] == "trail_a"
+    assert merged["following"]["The Stranger"]["target"] == "Mara"
+
+
+def test_following_does_not_teleport_an_already_separated_follower(
+        temp_db, monkeypatch):
+    import agents.director as director
+
+    following = {"Mara": {"target": "The Stranger", "since_turn": 1}}
+    scene = _following_scene(following, mara_room="side_path")
+    ctx = _make_ctx(temp_db, "trail_b")
+    temp_db.wset(ctx.chat.id, "scene", scene)
+    ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
+    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
+        "state_diff": {"positions": {"The Stranger": "trail_b"}},
+    })
+
+    resolved = director.director_resolve(ctx, nonce=0)
+
+    assert "Mara" not in resolved["state_diff"]["positions"]
+
+
+def test_following_does_not_cross_a_barrier_the_target_got_through(
+        temp_db, monkeypatch):
+    """The target's resolved success is not inherited by a follower: a shut
+    door can admit one actor's contested outcome without granting passage to
+    everyone attached to them."""
+    import agents.director as director
+
+    following = {"Mara": {"target": "The Stranger", "since_turn": 1}}
+    scene = _following_scene(following)
+    scene["rooms"]["trail_a"]["adjacent"][0]["barrier"] = "closed_door"
+    scene["rooms"]["trail_b"]["adjacent"][0]["barrier"] = "closed_door"
+    ctx = _make_ctx(temp_db, "trail_b")
+    temp_db.wset(ctx.chat.id, "scene", scene)
+    ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
+    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
+        # The resolver owns this contested success for the player alone.
+        "state_diff": {"positions": {"The Stranger": "trail_b"}},
+    })
+
+    resolved = director.director_resolve(ctx, nonce=0)
+
+    assert resolved["state_diff"]["positions"]["The Stranger"] == "trail_b"
+    assert "Mara" not in resolved["state_diff"]["positions"]
+
+
+def test_player_incompatible_movement_stops_following(temp_db, monkeypatch):
+    """Even if interpret omits the stop op, resolved contradictory player
+    movement is a deterministic agency floor that ends the relation."""
+    import agents.director as director
+    from spatial import merge_scene_with_diff
+
+    following = {"The Stranger": {"target": "Mara", "since_turn": 1}}
+    scene = _following_scene(following)
+    ctx = _make_ctx(temp_db, "side_path")
+    temp_db.wset(ctx.chat.id, "scene", scene)
+    ctx.director_interpret["movement"].update({"mover": "self", "arrives": True})
+    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
+        "state_diff": {"positions": {
+            "The Stranger": "side_path", "Mara": "trail_b",
+        }},
+    })
+
+    resolved = director.director_resolve(ctx, nonce=0)
+    merged = merge_scene_with_diff(scene, resolved["state_diff"])
+
+    assert any(op.get("op") == "stop" and op.get("follower") == "The Stranger"
+               for op in resolved["state_diff"]["following_ops"])
+    assert "The Stranger" not in merged["following"]
+    assert merged["positions"]["The Stranger"] == "side_path"

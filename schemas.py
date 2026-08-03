@@ -1000,6 +1000,7 @@ class OtherPlayerInterpret(LenientModel):
     speech_volume: SpeechVolume = SpeechVolume.normal
     private_thought: Optional[str] = None
     action: Optional[dict] = None
+    follow_op: Optional[dict] = None
     notes: str = ""
 
     _norm_volume = validator("speech_volume", pre=True, allow_reuse=True)(
@@ -1015,6 +1016,9 @@ class DirectorInterpret(LenientModel):
     action: Optional[dict] = None
     actions: list[dict] = Field(default_factory=list)
     movement: Optional[MovementDecl] = None
+    # Voluntary durable travel relation for the player. {op:start,target} or
+    # {op:stop,reason}; absence means keep the current relation unchanged.
+    follow_op: Optional[dict] = None
     location_query: Optional[str] = None
     flow: FlowPlan = Field(default_factory=FlowPlan)
     notes: str = ""
@@ -1564,6 +1568,10 @@ class StateDiff(LenientModel):
     # whatever positions no longer permit. {op: add|remove|clear, actor,
     # actor_part, target, target_part, manner}.
     contact_ops: list[dict] = Field(default_factory=list)
+    # Actor-owned following changes, projected deterministically from the
+    # player interpretation and character decisions. The resolve model does
+    # not author these. {op:start|stop,follower,target?,reason?,turn?}.
+    following_ops: list[dict] = Field(default_factory=list)
     # Within-room position: {name: {at: anchor_id|None, near: [names]}}. The
     # sibling of `positions` at the grain below the room -- at the bed, at the
     # hearth, beside each other. Undeclared until now, and that omission was
@@ -2192,6 +2200,9 @@ class CharacterOutput(LenientModel):
     # Interior depth (all optional; the deterministic floors in affect.py apply
     # at commit). Kept as permissive dicts/lists -- affect.py validates/normalizes.
     intent_ops: list[dict] = Field(default_factory=list)
+    # A voluntary decision by this character to begin or cease following a
+    # target. Omit to preserve the current relation.
+    follow_op: Optional[dict] = None
     manifest: dict = Field(default_factory=dict)
     # A drive rupture proposal -- only valid inside an engine-opened window;
     # commit (validate_drive_shift) decides whether it counts.

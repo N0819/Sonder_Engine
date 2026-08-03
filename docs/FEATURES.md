@@ -265,6 +265,12 @@ legitimately perceive, learn, remember or infer.
 - **Running** — Cross several rooms in one beat, following a corridor round its
   bends until a junction, a door, darkness or a dead end stops you; the rooms
   crossed are remembered.
+- **Following by choice** — Players and characters can deliberately follow a
+  particular person across ordinary travel. The relation persists until the
+  follower chooses incompatible conduct or stops, and characters know whom
+  they are following. It grants no extra speed or access: a sprint can leave a
+  follower behind, a closed barrier still blocks them, and catching up requires
+  a real later movement decision.
 - **Stepping through a doorway** — A body part-way through stays visible to the
   room it is leaving for a beat rather than vanishing.
 - **Up and down** — Stairs and ladders read as above and below, not as another

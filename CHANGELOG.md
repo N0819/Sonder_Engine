@@ -1,5 +1,17 @@
 # Changelog
 
+## alpha 6.8.1 — A companion is following, not tethered
+
+- Following is now an explicit voluntary follower → target state for players
+  and characters rather than an inference from co-location. Characters know
+  whom they are following and may stop on any decision; the Director starts or
+  stops the player's relation when their declaration warrants it. Ordinary
+  passable travel keeps a willing group together, but following grants no
+  pursuit physics: running/fleeing can leave someone behind, closed routes do
+  not open for them, and an already-separated follower must actually catch up.
+  A structured near-group/anchor contradiction is reconciled before perception,
+  preventing false room splits from making normal group dialogue inaudible.
+
 ## alpha 6.8 — Memory and psychology share an honest boundary
 
 - Action-onset perception now treats the Director's structured sequence as
