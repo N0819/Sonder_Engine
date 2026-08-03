@@ -1,0 +1,125 @@
+"""A line the hearing gate granted must survive everything that runs after it.
+
+`perception_outcome` injects each audible line into a perceiver's view, and
+THEN runs four passes that can remove text: the identity floor, the
+player-speech scrub, the invented-dialogue scrub, and a sentence dedupe. Each
+is correct on its own. None of them knows that a line the gate already granted
+might be inside what it takes, and nothing re-checked afterwards.
+
+Live (chat 38, t137): the Doctor walked beside the player and spoke four times
+— all `normal` volume, same room, open barrier, nothing concealed. Her view
+ends
+
+    "...as we scan the mist-shrouded surroundings together. Yeah, I bet I will.\""
+
+an orphaned tail carrying a closing quote and no opening — the signature of a
+partial quoted span removed from the middle of a delivered line. The other
+three lines are absent entirely. Across the stored corpus, **30 of 1549 lines
+spoken by somebody standing in the player's own room never reached the player's
+view** (1.9%), in seven different chats.
+
+Nothing downstream could catch it. The narrator's dialogue-fidelity check
+compares the PROSE against the VIEW, so a line already lost from the view is
+one the check agrees is not missing — which is why this survived alongside a
+guard built for exactly this failure one stage later.
+"""
+
+from __future__ import annotations
+
+import re
+
+from agents.common import _contains_quote, _inject_dialogue, _quote_body
+
+
+class TestTheFloorItself:
+    """The floor is the last thing in the per-perceiver loop: for each line the
+    gate delivered at FULL clarity, if the body is no longer in the view, put
+    it back."""
+
+    def _floor(self, view, delivered):
+        restored = []
+        for display, quote, volume, can_see, conducted in delivered:
+            body = _quote_body(quote)
+            if not body or _contains_quote(view, body):
+                continue
+            view = _inject_dialogue(view, display, quote, "full", volume,
+                                    can_see, conducted=conducted)
+            restored.append(body)
+        return view, restored
+
+    def test_a_scrubbed_line_comes_back(self):
+        delivered = [("The Doctor", '"Okaa Sama? Yeah, I bet I will."',
+                      "normal", True, False)]
+        scrubbed = "I walk the mossy path. Yeah, I bet I will.\""
+        view, restored = self._floor(scrubbed, delivered)
+        assert restored == ["Okaa Sama? Yeah, I bet I will."]
+        assert "Okaa Sama? Yeah, I bet I will." in view
+
+    def test_a_line_that_survived_is_not_duplicated(self):
+        delivered = [("The Doctor", '"Shrine first, then we pick a direction."',
+                      "normal", True, False)]
+        view = 'The Doctor says: "Shrine first, then we pick a direction."'
+        out, restored = self._floor(view, delivered)
+        assert restored == []
+        assert out.count("Shrine first") == 1
+
+    def test_several_lost_lines_all_return(self):
+        delivered = [
+            ("The Doctor", '"Shrine first, then we pick a direction."',
+             "normal", True, False),
+            ("The Doctor", '"Saturn\'s rings or those dragons?"',
+             "normal", True, False),
+            ("The Doctor", '"Your lead."', "normal", True, False),
+        ]
+        view, restored = self._floor("The forest is unnaturally quiet.", delivered)
+        assert len(restored) == 3
+        for body in restored:
+            assert body in view
+
+    def test_an_unseen_speaker_is_restored_as_a_voice(self):
+        """The floor must not upgrade the channel it restores through: a line
+        heard without sight goes back as something heard."""
+        delivered = [("a voice", '"Who is out there?"', "normal", False, False)]
+        view, restored = self._floor("Darkness.", delivered)
+        assert restored and "You hear a voice" in view
+
+    def test_volume_survives_the_round_trip(self):
+        delivered = [("Tamamo", '"Welcome home."', "mutter", True, False)]
+        view, _ = self._floor("The clearing is quiet.", delivered)
+        assert "says under their breath" in view
+
+
+class TestWhatTheFloorDoesNotDo:
+    def test_a_fragment_is_not_recorded(self):
+        """A muffled line is rendered as a paraphrase, not the body, so it has
+        no verbatim form to check for — recording it would restack a duplicate
+        every pass."""
+        import inspect
+
+        from agents import perception
+
+        src = inspect.getsource(perception.perception_outcome)
+        assert 'if level == "full":' in src
+        assert "delivered_lines.append(" in src
+
+    def test_it_runs_after_every_scrub(self):
+        """Placed before them, it would be the thing being scrubbed."""
+        import inspect
+
+        from agents import perception
+
+        src = inspect.getsource(perception.perception_outcome)
+        floor = src.index("HEARD-LINE FLOOR")
+        for earlier in ("_scrub_view_for(", "_scrub_undeclared_player_speech(",
+                        "_scrub_invented_dialogue(", "_dedupe_view_sentences("):
+            assert src.index(earlier) < floor, earlier
+
+    def test_it_reports_every_restoration(self):
+        """A silent repair here would hide the bug it is compensating for, and
+        the scrub that ate the line is the thing that actually wants fixing."""
+        import inspect
+
+        from agents import perception
+
+        src = inspect.getsource(perception.perception_outcome)
+        assert "restored a heard line dropped by the" in src

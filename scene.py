@@ -893,6 +893,96 @@ def is_player_speaker(speaker, chat):
                 return True
     return False
 
+# What the cast is allowed to do while nobody is looking, as a ceiling for the
+# whole chat.
+#
+# The rungs are `schemas.BehaviorController`'s, unchanged and in its order.
+# That enum and `docs/OFFSCREEN_LIFE_DESIGN.md` have specified this ladder
+# since before anything read either -- the document's step 2 is "wire
+# BehaviorController; nothing ticks yet, the ladder just becomes real and
+# settable" -- so inventing a second, friendlier vocabulary here would have
+# produced two spellings of one idea that diverge and then disagree. The enum
+# is per-CHARACTER; this is the chat-level ceiling over it, which is why the
+# same names are the right names.
+#
+# A CEILING, not an instruction. Nothing is obliged to act at any level; the
+# level says what is permitted, and the engine still spends nothing on a beat
+# that earns nothing. That is the architecture's cost thesis and this setting
+# does not get to break it: cost scales with dramatic density, not story
+# length, so turn 2000 in a quiet room must still cost what turn 2 cost.
+#
+# Ordered, so a level permits everything below it:
+#
+#   inert            Nothing happens off screen. A dormant character is exactly
+#                    where you left them, and any gap is generated at
+#                    re-contact or not at all. Free.
+#   deterministic    Scheduled effects only -- timed arrivals, expiry, dock
+#                    edges, news latency. This is `mechanics.py`: built, always
+#                    running, and free. The rung names the floor.
+#   reactive         The above, plus responding to triggers that fire, with no
+#                    autonomous plan. NOT BUILT -- currently behaves as
+#                    `deterministic`.
+#   stochastic       The above, plus seeded ticks for dormant actors at scene
+#                    boundaries, bounded by `max_offscreen_actors` and written
+#                    to `offscreen_log`. One sentence each, no plan, no world
+#                    writes, no memory.
+#
+#                    This is the DEFAULT because it is what the engine did
+#                    unconditionally before the setting existed: turning a
+#                    setting on must not silently change a running story. It
+#                    also diverges from the design document, which specifies
+#                    this rung as a seeded draw with NO model call, where the
+#                    shipped behaviour is a seeded prose sketch that costs one.
+#                    Recorded in `docs/UNBUILT.md` §2.8 rather than papered
+#                    over by relabelling the rung.
+#   character_agent  The above, plus real agent ticks advancing a plan and
+#                    writing consequences into the world record -- the villain
+#                    with a clock you can fail to beat.
+#
+#                    **Permission, not behaviour.** Nothing ticks a plan today;
+#                    the rung is the gate steps 3-4 of
+#                    `docs/OFFSCREEN_LIFE_DESIGN.md` land behind, so that when
+#                    they do land they are opt-in on a chat that already asked
+#                    rather than a surprise in every running story. It
+#                    currently behaves as `stochastic`. Do not add behaviour to
+#                    it without the knowledge firewall that document's decision
+#                    2 insists on: a ticking character advances on ITS OWN
+#                    knowledge, never the player's location or recent actions,
+#                    or the result is the spookily prescient antagonist this
+#                    architecture exists to avoid.
+OFFSCREEN_LIFE_LADDER = (
+    "inert", "deterministic", "reactive", "stochastic", "character_agent",
+)
+
+# The rung the engine behaved as before the setting existed.
+OFFSCREEN_LIFE_DEFAULT = "stochastic"
+
+OFFSCREEN_LIFE_DESCRIPTIONS = {
+    "inert": "Nothing happens off screen",
+    "deterministic": "Scheduled effects only — arrivals, expiry, news latency",
+    "reactive": "…plus responding to triggers, no plans (not built yet)",
+    "stochastic": "…plus seeded ticks for dormant actors at scene changes",
+    "character_agent": "…plus characters advancing their own plans (not built yet)",
+}
+
+# Which rungs actually do something today, for the UI to mark. Kept beside the
+# ladder rather than in the UI so an unbuilt rung cannot quietly start reading
+# as built when it ships and nobody updates the menu.
+OFFSCREEN_LIFE_BUILT = frozenset({"inert", "deterministic", "stochastic"})
+
+
+def normalize_offscreen_life(value):
+    """Coerce a stored or submitted level to a rung, defaulting to the default.
+
+    Unknown values fall to the DEFAULT rather than to the floor. A typo must
+    not silently turn a story's off-screen life off — that is the failure this
+    codebase keeps meeting from the other direction, where a value an enum
+    could not read fell to the mildest reading and inverted the setting.
+    """
+    level = str(value or "").strip().casefold()
+    return level if level in OFFSCREEN_LIFE_LADDER else OFFSCREEN_LIFE_DEFAULT
+
+
 DEFAULT_INTERACTION_CONFIG = {
     "style": "natural",
     "min_lines": 0,
@@ -915,7 +1005,17 @@ DEFAULT_INTERACTION_CONFIG = {
     # into a full character. 0 means never, and is the default: acquiring cast
     # is not something a story should do without being asked.
     "promote_after_addressed": 0,
+    # How much life the cast is permitted OFF screen. See OFFSCREEN_LIFE_LADDER.
+    "offscreen_life": OFFSCREEN_LIFE_DEFAULT,
+    "max_offscreen_actors": 3,
 }
+
+def offscreen_life_allows(level, rung):
+    """Does `level` permit what `rung` needs. Ordered comparison on the ladder."""
+    level = normalize_offscreen_life(level)
+    if rung not in OFFSCREEN_LIFE_LADDER:
+        return False
+    return OFFSCREEN_LIFE_LADDER.index(level) >= OFFSCREEN_LIFE_LADDER.index(rung)
 
 DEFAULT_REACTION_CONFIG = {
     "enabled": True,
@@ -951,6 +1051,12 @@ def dialogue_config(chat_id):
     for key, value in derived.items():
         if key not in stored:
             config[key] = value
+    config["offscreen_life"] = normalize_offscreen_life(config.get("offscreen_life"))
+    try:
+        config["max_offscreen_actors"] = max(
+            0, min(12, int(config.get("max_offscreen_actors", 3))))
+    except (TypeError, ValueError):
+        config["max_offscreen_actors"] = 3
     return config
 
 def reaction_config(chat_id):

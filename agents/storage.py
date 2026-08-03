@@ -7,6 +7,17 @@ import time
 
 from db import q, qi, transaction
 
+# Reserved key on a step's saved content carrying what the DETERMINISTIC layer
+# did to that step's output: repairs it made, and which steps it ran beside.
+# Written by `agents.runtime._with_engine_notes`, read by the pipeline UI.
+#
+# It lives in the content rather than in a column on purpose. It is
+# per-variant by nature (a reroll repairs differently), it rides every
+# archive, branch, checkpoint and trace for free because those all carry step
+# content as opaque JSON, and it needs no migration.
+ENGINE_NOTES_KEY = "_engine_notes"
+
+
 def save_step(turn_id, key, label, ordn, content):
     # Deactivating the old variant and activating the new one used to be
     # two separate autocommitted statements -- a crash between them could
@@ -40,7 +51,19 @@ def active_content(turn_id, key):
     r = q("SELECT v.content FROM steps s JOIN variants v "
           "ON v.step_id=s.id AND v.active=1 "
           "WHERE s.turn_id=? AND s.key=?", (turn_id, key), one=True)
-    return json.loads(r["content"]) if r else None
+    if not r:
+        return None
+    content = json.loads(r["content"])
+    # The engine notes are ABOUT this content, not part of it. This is the
+    # read path a rerun rehydrates through -- ctx[key] = active_content(...) --
+    # and several stages hand a prior step's dict to a model wholesale, so
+    # leaving them in would put the engine's own repair log into a prompt on
+    # every rerun and nowhere else, which is the worst kind of difference
+    # between a fresh run and a resumed one. The pipeline UI reads the
+    # variants table directly and still sees them.
+    if isinstance(content, dict) and ENGINE_NOTES_KEY in content:
+        content = {k: v for k, v in content.items() if k != ENGINE_NOTES_KEY}
+    return content
 
 def variant_count(turn_id, key):
     r = q("SELECT COUNT(v.id) c FROM steps s JOIN variants v "

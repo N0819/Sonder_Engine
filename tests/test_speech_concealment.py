@@ -76,6 +76,122 @@ def _make_director_ctx(temp_db, character_results=None):
     return ctx, char_id
 
 
+def _save_active_variant(temp_db, turn_id, key, content, ordn):
+    step_id = temp_db.qi(
+        "INSERT INTO steps(turn_id,key,label,ord,stale) VALUES(?,?,?,?,0)",
+        (turn_id, key, key, ordn),
+    )
+    temp_db.qi(
+        "INSERT INTO variants(step_id,content,created,active,reasoning) "
+        "VALUES(?,?,?,1,'')",
+        (step_id, json.dumps(content), time.time()),
+    )
+
+
+def _make_corrupted_open_group_ctx(
+        temp_db, monkeypatch, *, barrier="open", previous_verb="walk",
+        follow_stop=False):
+    """A pre-fix reroll: last beat began together and resolved split+near."""
+    import agents.perception as perception
+    from checkpoints import snapshot_state
+
+    ctx, char_id = _make_director_ctx(temp_db)
+    start_scene = {
+        "location": "Open Trail", "time": "day",
+        "rooms": {
+            "left_path": {"name": "Left Path", "adjacent": [
+                {"to": "crossroads", "barrier": barrier, "distance": "near"},
+            ]},
+            "crossroads": {"name": "Crossroads", "adjacent": [
+                {"to": "left_path", "barrier": barrier, "distance": "near"},
+                {"to": "right_path", "barrier": "open", "distance": "near"},
+            ]},
+            "right_path": {"name": "Right Path", "adjacent": [
+                {"to": "crossroads", "barrier": "open", "distance": "near"},
+            ]},
+        },
+        "positions": {"The Stranger": "crossroads", "Reya": "crossroads"},
+        "stations": {
+            "The Stranger": {"at": None, "near": ["Reya"]},
+            "Reya": {"at": None, "near": ["The Stranger"]},
+        },
+        "following": {}, "entities": {}, "attire": {}, "overlays": {},
+    }
+    temp_db.wset(ctx.chat.id, "scene", start_scene)
+    temp_db.qi(
+        "INSERT INTO checkpoints(chat_id,turn_idx,blob,created) VALUES(?,?,?,?)",
+        (ctx.chat.id, 0, json.dumps(snapshot_state(ctx.chat.id)), time.time()),
+    )
+    previous_turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (ctx.chat.id, 0, "walk onward", time.time()),
+    )
+    _save_active_variant(temp_db, previous_turn_id, "director_interpret", {
+        "sequence": [{
+            "type": "action", "verb": previous_verb,
+            "attempt": f"{previous_verb}s onward",
+            "observable": f"{previous_verb}s onward", "visibility": "overt",
+        }],
+        "movement": {"to_room": "right_path", "mover": "self",
+                     "arrives": True},
+    }, 0)
+    _save_active_variant(temp_db, previous_turn_id, "interaction_loop", {
+        "character_results": {str(char_id): {
+            "sequence": [{
+                "type": "action", "verb": "walk",
+                "attempt": "walks alongside the stranger",
+                "observable": "walks alongside the stranger",
+                "visibility": "overt",
+            }],
+        }},
+    }, 1)
+    _save_active_variant(temp_db, previous_turn_id, "director_resolve", {
+        "state_diff": {
+            "positions": {
+                "The Stranger": "right_path", "Reya": "left_path",
+            },
+            "stations": {
+                "The Stranger": {"at": None, "near": ["Reya"]},
+                "Reya": {"at": None, "near": ["The Stranger"]},
+            },
+            "following_ops": ([{
+                "op": "stop", "follower": "Reya",
+                "reason": "chooses to fall back",
+            }] if follow_stop else []),
+        },
+    }, 2)
+
+    corrupted = dict(start_scene)
+    corrupted["positions"] = {
+        "The Stranger": "right_path", "Reya": "left_path",
+    }
+    corrupted["stations"] = {
+        "The Stranger": {"at": None, "near": []},
+        "Reya": {"at": None, "near": []},
+    }
+    temp_db.wset(ctx.chat.id, "scene", corrupted)
+    ctx["_player_room"] = "right_path"
+    ctx.director_interpret = {
+        "sequence": [{
+            "type": "speech", "text": "We're close.", "volume": "normal",
+            "tone": "reassuring", "visibility": "overt", "conceal_from": [],
+        }],
+        "speech": "We're close.", "speech_volume": "normal", "action": None,
+        "flow": {"reactors": [char_id], "addressed_to": [],
+                 "authority_claims": [], "resolution_flags": {},
+                 "fiction_frame": {}},
+    }
+
+    def fake_agent_json(role, step_key, system, payload, **kwargs):
+        return {"views": {
+            str(payload["perceivers"][0]["id"]):
+            "Dim light filters through the trees, muffling distant sounds."
+        }}
+
+    monkeypatch.setattr(perception, "_agent_json", fake_agent_json)
+    return ctx, char_id
+
+
 def test_director_resolve_stamps_concealment_from_player_sequence(temp_db, monkeypatch):
     """The director model's dialogue_log entry omits visibility/conceal_from
     (as live models reliably do) -- director_resolve must stamp it anyway,
@@ -224,6 +340,81 @@ def test_perception_act_projects_speech_turn_speech_in_declared_order(
     assert "teasing smirk" in view[turn_at:]
     assert "words reach you clearly" not in view.casefold()
     assert "hear both lines in full" not in view.casefold()
+
+
+def test_perception_act_rescues_open_group_speech_from_legacy_split_checkpoint(
+        temp_db, monkeypatch):
+    """Rerolling the live bad turn restores its already-corrupted pre-state.
+
+    The repaired resolver runs later, so perception_act must recover the last
+    beat's stronger structured fact: both ordinary walkers began together and
+    were declared mutually near even though legacy positions split them across
+    two open path nodes.
+    """
+    import agents.perception as perception
+
+    ctx, char_id = _make_corrupted_open_group_ctx(temp_db, monkeypatch)
+
+    view = perception.perception_act(ctx, nonce=0)["views"][str(char_id)]
+
+    assert "We're close." in view
+
+
+def test_perception_act_open_group_rescue_never_crosses_a_barrier(
+        temp_db, monkeypatch):
+    """Historical group evidence cannot turn a wall into a sound channel."""
+    import agents.perception as perception
+
+    ctx, char_id = _make_corrupted_open_group_ctx(
+        temp_db, monkeypatch, barrier="wall")
+
+    view = perception.perception_act(ctx, nonce=0)["views"][str(char_id)]
+
+    assert "We're close." not in view
+
+
+def test_perception_act_open_group_rescue_stops_after_current_run(
+        temp_db, monkeypatch):
+    """A target can run out of the continuity floor before speaking."""
+    import agents.perception as perception
+
+    ctx, char_id = _make_corrupted_open_group_ctx(temp_db, monkeypatch)
+    speech = ctx.director_interpret["sequence"][0]
+    ctx.director_interpret["sequence"] = [{
+        "type": "action", "verb": "run", "attempt": "runs farther up the path",
+        "observable": "runs farther up the path", "visibility": "overt",
+        "conceal_from": [],
+    }, speech]
+
+    view = perception.perception_act(ctx, nonce=0)["views"][str(char_id)]
+
+    assert "We're close." not in view
+
+
+def test_perception_act_open_group_rescue_rejects_previous_running_pursuit(
+        temp_db, monkeypatch):
+    """Mutual-near output cannot erase separation created by a prior run."""
+    import agents.perception as perception
+
+    ctx, char_id = _make_corrupted_open_group_ctx(
+        temp_db, monkeypatch, previous_verb="run")
+
+    view = perception.perception_act(ctx, nonce=0)["views"][str(char_id)]
+
+    assert "We're close." not in view
+
+
+def test_perception_act_open_group_rescue_respects_previous_follow_stop(
+        temp_db, monkeypatch):
+    """An actor-owned follow stop outranks contradictory mutual-near output."""
+    import agents.perception as perception
+
+    ctx, char_id = _make_corrupted_open_group_ctx(
+        temp_db, monkeypatch, follow_stop=True)
+
+    view = perception.perception_act(ctx, nonce=0)["views"][str(char_id)]
+
+    assert "We're close." not in view
 
 
 def test_perception_outcome_does_not_inject_concealed_dialogue(temp_db, monkeypatch):

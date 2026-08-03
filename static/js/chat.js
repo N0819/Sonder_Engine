@@ -418,8 +418,14 @@ function turnStatusStart() {
   }, 1000);
 }
 
-function turnStatusSet(key, label) {
-  $("#turnstatus-phase").textContent = friendlyPhase(key, label);
+function turnStatusSet(key, label, running = 1) {
+  // The suffix is added AFTER friendlyPhase, not folded into the label: the
+  // label is pattern-matched in there (the scene-manager prefix, the
+  // character-name strip), so decorating it first would corrupt the match.
+  const phase = friendlyPhase(key, label);
+  $("#turnstatus-phase").textContent = running > 1
+    ? `${phase}  (+${running - 1} running alongside)`
+    : phase;
 }
 
 function turnStatusStop() {
@@ -481,19 +487,31 @@ function liveAppend(key, delta) {
   requestAnimationFrame(liveFlush);
 }
 
-function liveStep(key, label) {
+// `group` is the set of step keys starting together on this beat. Steps that
+// genuinely overlap were rendering as an ordinary flat list, so a concurrent
+// pair read as two sequential steps that happened to be fast -- which is why
+// the parallelism was reported as missing when it was running.
+function liveStep(key, label, group) {
   const L = $("#live");
   const sid = safeId(key);
-  L.append(el("div", { class: "lk", id: "lk-" + sid },
-    "▸ " + label));
+  const parallel = Array.isArray(group) && group.length > 1;
+  L.append(el("div", { class: "lk" + (parallel ? " lk-parallel" : ""),
+                       id: "lk-" + sid },
+    (parallel ? "⇉ " : "▸ ") + label));
   L.append(el("pre", { id: "lt-" + sid }));
   L.scrollTop = L.scrollHeight;
 }
 
 function handleEvt(ev) {
   if (ev.type === "step_start") {
-    liveStep(ev.key, ev.label);
-    turnStatusSet(ev.key, ev.label);
+    liveStep(ev.key, ev.label, ev.group);
+    // A concurrent group fires several step_starts back to back, and the
+    // one-line status showed whichever landed last -- naming one member of a
+    // pair as though the other were not running. Say how many are up.
+    turnStatusSet(
+      ev.key, ev.label,
+      Array.isArray(ev.group) ? ev.group.length : 1
+    );
   } else if (ev.type === "token") {
     if (_streamOn()) liveAppend(ev.key, ev.delta);
   } else if (ev.type === "generation_reset") {
@@ -691,6 +709,199 @@ function importChatModal() {
   });
 }
 
+// ---- Pipeline drawer: reading a step through a lens ----
+//
+// Every step is stored as one JSON blob, and a blob is the wrong shape for the
+// two questions a stored step is usually opened to answer.
+//
+// "What did THIS mind get?" — the perception stages emit one view per
+// perceiver and the loops one round per character, all keyed by bare cast id.
+// Read as raw JSON that is a wall of escaped prose with the reader doing the
+// id-to-name join in their head, and a view missing an entire sensory channel
+// looks exactly like a view that is merely shorter. Live (chat 38 t140): one
+// character's view of an embrace happening six feet away had no sight in it at
+// all, and nothing about the blob said so.
+//
+// "What did this step say about X?" — `director_resolve` alone carries
+// thirteen top-level keys, several of them long, and finding `resolved_event`
+// means scrolling past `state_diff`.
+//
+// So a step is read through a LENS: one facet on its own, with the whole thing
+// as stored always one click away. Which facets exist is derived from the
+// content rather than declared per step key, so a stage that grows a field
+// gets a button for it without anyone remembering to add one.
+
+function perceiverViews(content) {
+  const views = content && content.views;
+  if (!views || typeof views !== "object" || Array.isArray(views)) return null;
+  return Object.keys(views).length ? views : null;
+}
+
+// The cast ids a loop step ran a round for, in the order it ran them. Both
+// loops carry the same shape under different field names, which is also the
+// pair `_rehydrate_loop_results` has to keep in step.
+function loopMindIds(content) {
+  const rounds = content && content.rounds;
+  if (!Array.isArray(rounds) || !rounds.length) return [];
+  const ids = [];
+  for (const r of rounds) {
+    if (!r || typeof r !== "object") continue;
+    const id = r.speaker_id ?? r.reactor_id ?? r.character_id;
+    if (id === null || id === undefined) continue;
+    if (!ids.includes(String(id))) ids.push(String(id));
+  }
+  return ids;
+}
+
+// What this step can be read one-of-at-a-time. Per mind where the step IS
+// per-mind; otherwise per top-level key, which is the generic fallback and the
+// reason an unfamiliar step still gets a usable bar.
+function stepLenses(content) {
+  if (!content || typeof content !== "object" || Array.isArray(content)) {
+    return null;
+  }
+  if (perceiverViews(content)) {
+    return { kind: "perceiver", label: "Seen by",
+             ids: Object.keys(content.views) };
+  }
+  const minds = loopMindIds(content);
+  if (minds.length) {
+    return { kind: "mind", label: "Decided by", ids: minds };
+  }
+  const keys = Object.keys(content).filter(k => k !== "_engine_notes");
+  if (!keys.length) return null;
+  return { kind: "key", label: "Show", ids: keys };
+}
+
+function perceiverLabel(id, names) {
+  const name = names[id];
+  if (id === "player") return name ? `${name} (player)` : "player";
+  return name ? `${name} (${id})` : `#${id}`;
+}
+
+// How much is in a facet, so the shape of a step is readable from the bar
+// without opening anything. An empty list and a missing key are different
+// answers and are marked differently.
+function facetBadge(value) {
+  if (value === null || value === undefined || value === "") return "∅";
+  if (Array.isArray(value)) return String(value.length);
+  if (typeof value === "object") return String(Object.keys(value).length);
+  return "";
+}
+
+function lensLabel(lenses, id, content, names) {
+  if (lenses.kind === "key") {
+    const badge = facetBadge(content[id]);
+    return badge ? `${id} ·${badge}` : id;
+  }
+  return perceiverLabel(id, names);
+}
+
+function renderLensBar(bar, lenses, lens, content, names, onPick) {
+  bar.innerHTML = "";
+  bar.append(el("span", { class: "dim" }, lenses.label));
+  for (const id of lenses.ids) {
+    bar.append(el(
+      "button",
+      {
+        class: lens === id ? "primary" : "",
+        onclick: () => onPick(id)
+      },
+      lensLabel(lenses, id, content, names)
+    ));
+  }
+  bar.append(
+    el("span", { class: "spacer" }),
+    el(
+      "button",
+      {
+        class: lens === "" ? "primary" : "",
+        title: "The whole step as stored",
+        onclick: () => onPick("")
+      },
+      "{ } JSON"
+    )
+  );
+}
+
+function lensSlice(lenses, content, id, names) {
+  if (lenses.kind === "perceiver") return perceiverSlice(content, id, names);
+  if (lenses.kind === "mind") return mindSlice(content, id, names);
+  return keySlice(content, id);
+}
+
+// One perceiver's slice: the prose they received, then the structured
+// observations derived from it. A null view is shown as the answer it is --
+// this mind registered nothing -- rather than as an absent key.
+function perceiverSlice(content, id, names) {
+  const view = (content.views || {})[id];
+  const out = [perceiverLabel(id, names), ""];
+  out.push(
+    view === null || view === undefined || view === ""
+      ? "(no view — nothing registered, or this mind was not asked)"
+      : String(view)
+  );
+  const observations = (content.observations || {})[id];
+  if (Array.isArray(observations) && observations.length) {
+    out.push("", `— observations (${observations.length}) —`, "");
+    for (const o of observations) {
+      const channel = o.channel || "?";
+      const text = (o.observed && o.observed.text) || "";
+      const flags = o.directed_at_self ? "  ← at them" : "";
+      out.push(`[${channel}] ${text}${flags}`);
+    }
+  }
+  return out.join("\n");
+}
+
+// One mind's slice of a loop: the rounds it actually spoke or reacted in, then
+// the result stored under its id. Both, deliberately, even though the round
+// carries a `result` of its own -- a loop's rounds and its results map are
+// written separately and rehydrated separately on a rerun, so the two
+// disagreeing is a bug class, and it is invisible if the view shows one.
+function mindSlice(content, id, names) {
+  const out = [perceiverLabel(id, names), ""];
+  const rounds = (content.rounds || []).filter(
+    r => String(r && (r.speaker_id ?? r.reactor_id ?? r.character_id)) === id
+  );
+  if (!rounds.length) out.push("(no round — this mind did not act in the loop)");
+  for (const r of rounds) {
+    out.push(`— round ${r.round} —`, JSON.stringify(r, null, 2), "");
+  }
+  const results = content.character_results || content.reaction_results || {};
+  if (results && Object.prototype.hasOwnProperty.call(results, id)) {
+    out.push("— stored result —", JSON.stringify(results[id], null, 2));
+  }
+  return out.join("\n");
+}
+
+// One field on its own. A string field is shown as the prose it is rather than
+// as an escaped JSON scalar -- `resolved_event`, `summary` and the narrator's
+// `text` are the whole reason to open most steps, and they are unreadable with
+// their newlines spelled \n.
+function keySlice(content, key) {
+  const value = content[key];
+  if (typeof value === "string") return value || "(empty)";
+  if (value === null || value === undefined) return "(null)";
+  return JSON.stringify(value, null, 2);
+}
+
+// What the deterministic layer did to this step's output. Written by
+// agents/runtime.py into the saved content under `_engine_notes`; steps that
+// needed no repair carry no key and get no block.
+function renderEngineNotes(box, content) {
+  box.innerHTML = "";
+  const notes = content && content._engine_notes;
+  if (!notes) return;
+  if (Array.isArray(notes.parallel_with) && notes.parallel_with.length) {
+    box.append(el("div", { class: "dim" },
+      "⇉ ran concurrently with " + notes.parallel_with.join(", ")));
+  }
+  for (const w of notes.warnings || []) {
+    box.append(el("div", { class: "engine-warning" }, "⚠ " + w));
+  }
+}
+
 // ---- Pipeline drawer ----
 async function openPipeline(tid) {
   const D = $("#drawer");
@@ -765,6 +976,8 @@ async function openPipeline(tid) {
       : Math.max(0, variants.length - 1);
 
     const pre = el("pre", {}, "");
+    const perspectives = el("div", { class: "row perspectives" });
+    const notes = el("div", { class: "engine-notes" });
     const reasoning = el("pre", { class: "reasoning" }, "");
     const reasoningWrap = el(
       "details",
@@ -780,11 +993,19 @@ async function openPipeline(tid) {
         : "0/0"
     );
 
+    // Which facet this step is being read through, or "" for the raw JSON.
+    // Kept across variant switches so flipping between rerolls compares the
+    // SAME perceiver or the SAME field rather than resetting to the first --
+    // comparing rerolls is most of what this drawer is for.
+    let lens = null;
+
     const show = index => {
       if (!variants.length) {
         cur = 0;
         cnt.textContent = "0/0";
         pre.textContent = "(no active variant)";
+        perspectives.innerHTML = "";
+        notes.innerHTML = "";
         return;
       }
 
@@ -796,15 +1017,38 @@ async function openPipeline(tid) {
         `${cur + 1}/${variants.length}`;
 
       const variant = variants[cur];
-
+      let content = null;
       try {
-        pre.textContent = JSON.stringify(
-          JSON.parse(variant.content),
-          null,
-          2
-        );
+        content = JSON.parse(variant.content);
       } catch (error) {
-        pre.textContent = variant.content;
+        content = null;
+      }
+
+      renderEngineNotes(notes, content);
+
+      const lenses = stepLenses(content);
+      if (!lenses) {
+        perspectives.innerHTML = "";
+        pre.textContent = content === null
+          ? variant.content
+          : JSON.stringify(content, null, 2);
+      } else {
+        // A per-mind step opens on a mind, because "which one" is the whole
+        // question there. Everything else opens on the stored JSON, so the
+        // habit of reading a step whole is unchanged and the facets are an
+        // addition rather than a redirection.
+        if (lens === null) {
+          lens = lenses.kind === "key" ? "" : lenses.ids[0];
+        } else if (lens !== "" && !lenses.ids.includes(lens)) {
+          lens = lenses.kind === "key" ? "" : lenses.ids[0];
+        }
+        renderLensBar(
+          perspectives, lenses, lens, content, p.perceivers || {},
+          picked => { lens = picked; show(cur); }
+        );
+        pre.textContent = lens === ""
+          ? JSON.stringify(content, null, 2)
+          : lensSlice(lenses, content, lens, p.perceivers || {});
       }
 
       // A thinking model's own trace, when it exposed one. Collapsed by
@@ -982,7 +1226,9 @@ async function openPipeline(tid) {
         s.label
           + (s.stale ? "  (stale)" : "")
       ),
+      notes,
       controls,
+      perspectives,
       reasoningWrap,
       pre
     );

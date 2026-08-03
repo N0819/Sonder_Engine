@@ -120,9 +120,11 @@ legitimately perceive, learn, remember or infer.
 - **Own body only** — A character feels their own pain, exhaustion and comfort
   and has no access to anyone else's interior.
 - **They can say nothing** — Silence is a legitimate answer.
-- **They do not repeat themselves** — Recent lines are fed back, repeated
-  sentence shapes are detected, and a line reissued word-for-word forces a
-  rewrite.
+- **They do not restart conversations by accident** — Recent lines catch exact
+  reissues and repeated sentence shapes; a per-turn move ledger catches the
+  same offer, question or handoff hidden behind new wording. Similarity opens a
+  contextual review rather than a ban: invited continuations, deliberate
+  emphasis, lists, callbacks, and in-character riffs or rants stay available.
 - **Per-character variance** — Each has its own creativity and cognitive tier,
   so a lead behaves more consistently than a passer-by.
 - **Their own map** — Characters build a private map of ground they have walked

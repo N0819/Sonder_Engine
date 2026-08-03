@@ -31,6 +31,11 @@ preservation, identity-key rejection, UI wiring, and portable archive fidelity.
 `test_observation_derivation` is the companion to those leak tests on the other
 axis: the projection can be perfectly leak-free and still describe the beat
 wrongly, and the character agent is told to treat it as structure.
+`test_character_self_lines` covers dialogue continuity at both layers: bounded
+verbatim history, repeated sentence shapes, one semantic move per turn,
+destination substitution, the combined contextual review, and the rule that a
+spent intention cannot keep a paraphrased goal steering. Semantic similarity is
+a review trigger rather than a blanket ban on intentional continuation.
 `test_authorial_channel` and `test_authored_outcome_attribution` cover
 attribution — which declarations are the player's to make, and which seams go
 blind when an act that lands on a character carries no bound target.

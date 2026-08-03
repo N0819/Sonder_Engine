@@ -1033,6 +1033,43 @@ def _apply_room_renames(diff, renames):
                 if transit.get(field) in renames:
                     transit[field] = renames[transit[field]]
 
+def normalize_offscreen_events(events):
+    """Coerce a beat's off-screen ticks to one shape: [{actor, tick}].
+
+    `MappingCommitOut.offscreen_events` is typed `list[dict]` with no inner
+    model, so the model invented a shape per call and the stored logs prove it:
+    across eight live chats the same field holds `{actor, tick}`, `{event}`,
+    `{who, event}` and `{description}`. Nothing read the log, so nothing
+    noticed — and the first reader would have had to handle all four, or
+    silently miss three.
+
+    An actor is optional and stays empty when the tick names none: inventing
+    one would be worse than admitting the tick is about the world rather than
+    about a person.
+    """
+    if not isinstance(events, list):
+        return []
+    out = []
+    for entry in events:
+        if isinstance(entry, str):
+            text, actor = entry, ""
+        elif isinstance(entry, dict):
+            text = next(
+                (str(entry[k]) for k in ("tick", "event", "description",
+                                         "text", "summary")
+                 if entry.get(k)), "")
+            actor = next(
+                (str(entry[k]) for k in ("actor", "who", "name", "character")
+                 if entry.get(k)), "")
+        else:
+            continue
+        text = " ".join(text.split())
+        if not text:
+            continue
+        out.append({"actor": actor.strip(), "tick": text[:600]})
+    return out
+
+
 def dedup_minted_rooms(cid, prev_scene, diff, add_warning=None):
     """Structural dup prevention at creation time. For each room key the
     diff mints, check the CURRENT CONTAINMENT SCOPE (rooms sharing the same
@@ -3708,6 +3745,18 @@ def prepare_mapping_commit(ctx):
     ]
     raw_shadow = wget(cid, "shadow_profile", "") or ""
     raw_intents = wget(cid, "standing_intentions", []) or []
+    # How much life this chat permits off screen (scene.OFFSCREEN_LIFE_LADDER).
+    # Below `sketch` the dormant cast is not offered to the model AT ALL rather
+    # than offered with an instruction to leave it alone: objective state
+    # copied into a context with an implicit request to ignore it is the
+    # pattern this engine forbids everywhere else, and it is the one that
+    # actually leaks. The commit-side write is gated too — defense in depth,
+    # since the model can volunteer a field nobody asked for.
+    from scene import dialogue_config, offscreen_life_allows
+    _dlg = dialogue_config(cid) or {}
+    offscreen_level = _dlg.get("offscreen_life")
+    max_offscreen = int(_dlg.get("max_offscreen_actors", 3) or 0)
+    ticks_allowed = offscreen_life_allows(offscreen_level, "stochastic") and max_offscreen > 0
     payload = {
         "proposed_specifics": specifics,
         "narrator_specificity_audit": narrator_specificity_flags,
@@ -3721,8 +3770,14 @@ def prepare_mapping_commit(ctx):
             "visible_action": ((ctx.director_interpret or {}).get("action") or {}).get("attempt"),
         },
         "current_shadow_profile": raw_shadow[:1200],
+        # `scene_changed` stays truthful about the scene; whether off-screen
+        # life is permitted is its own field. Overloading the first to gate the
+        # second would have made a payload lie about the world to enforce a
+        # setting, and the next reader of it would have believed the lie.
         "scene_changed": bool(ctx.director_establish),
-        "dormant_actors": dormant,
+        "dormant_actors": dormant if ticks_allowed else [],
+        "offscreen_life": offscreen_level if ticks_allowed else "off",
+        "max_offscreen_actors": max_offscreen if ticks_allowed else 0,
         "standing_intentions": raw_intents[:12],
         "beat_introductions": diff.get("introductions") or [],
         "beat_dialogue_log": res.get("dialogue_log") or [],
@@ -3881,10 +3936,26 @@ def commit_mapping(ctx, nonce, *, prepared=None):
         if isinstance(si, list) and len(si) > 20:
             si = si[-20:]
         wset(cid, "standing_intentions", si)
-    if mout.get("offscreen_events"):
-        log = wget(cid, "offscreen_log", [])
-        log.append({"turn": turn.idx, "seed": seed, "events": mout["offscreen_events"]})
-        wset(cid, "offscreen_log", log)
+    _ticks = normalize_offscreen_events(mout.get("offscreen_events"))
+    if _ticks:
+        from scene import dialogue_config as _dlg_cfg, offscreen_life_allows as _allows
+        _cfg = _dlg_cfg(cid) or {}
+        _cap = int(_cfg.get("max_offscreen_actors", 3) or 0)
+        # Gated a SECOND time, on the write rather than on the request. The
+        # model can volunteer a field nobody asked for, and a setting that
+        # only ever spoke to a prompt is a setting a model can decline.
+        if _allows(_cfg.get("offscreen_life"), "stochastic") and _cap > 0:
+            log = wget(cid, "offscreen_log", [])
+            log.append({"turn": turn.idx, "seed": seed, "events": _ticks[:_cap]})
+            wset(cid, "offscreen_log", log)
+            if len(_ticks) > _cap:
+                ctx.tell_director(
+                    f"Off-screen: kept {_cap} of {len(_ticks)} ticks "
+                    f"(max_offscreen_actors={_cap}).")
+        else:
+            ctx.add_warning(
+                f"discarded {len(_ticks)} off-screen tick(s): this chat's "
+                f"offscreen_life is '{_cfg.get('offscreen_life')}'")
 
     known = wget(cid, "known", {})
     roster = _known_name_roster(chat, ctx.cast)
@@ -4850,19 +4921,15 @@ def prepare_memory_commit(ctx, *, scene=None):
                     st["routes_that_worked"] = _worked
                 for w in _iwarn:
                     ctx.add_warning(f"{cname}: intention -- {w}")
-                valid_ids = {str(i.get("id")) for i in intentions if isinstance(i, dict)}
-                # Two different questions, two different sets. valid_ids asks
-                # "is this a real id" -- what normalize_wants needs, and it
-                # stays the full list deliberately: the wants for THIS beat were
-                # formed against the intentions the character saw at the START
-                # of it, so demoting one because its goal closed mid-beat would
-                # punish the character for a state change it could not have
-                # seen (and demotion to 'situational' culls all but the highest,
-                # so the side effect is out of proportion to the fix). Steering
-                # stops through the next beat's prompt, where the new status is
-                # visible. _steering asks the narrower question -- does this
-                # goal still weigh as a goal when scoring mood.
                 _steering = affect.steering_intent_ids(intentions, turn.idx)
+                # A known id is not automatically a current purpose. Dormant,
+                # blocked, satisfied and abandoned intentions remain in the
+                # ledger for continuity, but cannot legitimize a fresh want by
+                # appearing in `serves`. `_steering` deliberately includes an
+                # intention closed THIS beat (last_progress_turn == turn.idx),
+                # so a payoff is not demoted because of state the character
+                # could not have seen when deciding. A goal already spent at
+                # the START of the beat is absent and normalizes to situational.
 
                 def _priority(serves, _ids=_steering, _intents=intentions,
                               _projs=projects, _pids=_established_ids,
@@ -4880,7 +4947,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                                                   _probs)
 
                 wants, enacted, suppressed = affect.normalize_wants(
-                    asv.get("wants") or [], valid_ids | _project_ids)
+                    asv.get("wants") or [], _steering | _project_ids)
 
                 appraisal_input = dict(own_result.get("appraisal") or {})
                 # Past experience may change familiarity, expectation and

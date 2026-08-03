@@ -286,30 +286,50 @@ def interaction_loop(ctx, nonce):
     focus_deferred = False
     stop_reason = "budget exhausted"
 
-    while queue_ids and len(rounds) < max_rounds:
-        speaker_id = queue_ids.pop(0)
+    # THE FIRST WAVE IS SIMULTANEOUS.
+    #
+    # Everyone in the initial queue is responding to the SAME thing -- the
+    # player's declaration, already fixed by the time this stage runs -- and
+    # none of them has seen any other reactor's response, because none exists
+    # yet. They are mutually blind by construction, so making them take turns
+    # is not caution, it is a claim about the fiction that is false: they were
+    # all in the room when it happened.
+    #
+    # It is also what stranded them. The loop's early exits end the BEAT, and
+    # the most common one fires on any declared act with a target -- a hug
+    # returned, a hand on a shoulder, a glance answered. So the addressed
+    # character (queued first, above) would touch somebody, the loop would
+    # break, and every other reactor went unsimulated. Measured across the
+    # stored corpus: 153 of 196 beats with two or more reactors left at least
+    # one never called at all, 106 of those on that one exit.
+    #
+    # That is not merely a missing line. A character who never ran has no
+    # appraisal, so no goal_impacts, so no drive strain from a beat aimed at
+    # them; no psychology commit; no memory of having chosen to stay quiet --
+    # and the narrator, seeing nothing, is free to render the absence as a
+    # deliberate silence nobody chose. `_defer_to_focus` already patched this
+    # for `tom_triggers` characters; this is the general case it was a
+    # special case of.
+    #
+    # `initial_parallel_reactors` has been in DEFAULT_INTERACTION_CONFIG since
+    # before this and was read by nothing. Parallel in the FICTION, not in
+    # execution: the wave runs sequentially, because `character_step` writes
+    # through ctx and threading it would race. What is guaranteed is that no
+    # member sees another's output while deciding -- micro-perception for the
+    # whole wave is delivered only once every member has declared.
+    #
+    # After the wave, one speaker at a time, unchanged: a character replying
+    # to another character IS responding to something they just heard, and
+    # ordering is the whole content of that.
+    wave_size = max(1, int(config.get("initial_parallel_reactors", 1) or 1))
 
-        if calls >= max_calls:
-            stop_reason = (
-                "character call budget exhausted"
-            )
-            break
-
-        ctx._extra.setdefault(
-            "interaction_views",
-            {},
-        )
-        ctx._extra["interaction_views"][
-            speaker_id
-        ] = local_views.get(speaker_id, "")
-
-        result = character_step(
-            ctx,
-            speaker_id,
-            nonce + calls,
-        )
-        calls += 1
-        already_spoke.add(speaker_id)
+    def _speak(speaker_id, call_index):
+        """One character's declaration. Does not touch `local_views` -- the
+        caller decides when what they did becomes perceptible to the others."""
+        ctx._extra.setdefault("interaction_views", {})
+        ctx._extra["interaction_views"][speaker_id] = local_views.get(
+            speaker_id, "")
+        result = character_step(ctx, speaker_id, nonce + call_index)
         # Merge rather than overwrite: a character can speak in more than one
         # micro-round, and commit/perception_outcome read
         # ctx.character_results[id] as that character's SINGLE result. A blind
@@ -318,49 +338,64 @@ def interaction_loop(ctx, nonce):
         ctx.character_results[speaker_id] = _merge_character_results(
             ctx.character_results.get(speaker_id), result
         )
-
-        has_content = _sequence_has_content(result)
-        if has_content:
-            no_content_streak = 0
-        else:
-            no_content_streak += 1
-
-        delivered, perceived_by = (
-            deterministic_micro_perception(
-                ctx,
-                speaker_id,
-                result,
-                scene,
-            )
-        )
-
-        for observer_id, additions in delivered.items():
-            local_views[observer_id] = (
-                _append_micro_view(
-                    local_views.get(observer_id, ""),
-                    additions,
-                )
-            )
-
+        delivered, perceived_by = deterministic_micro_perception(
+            ctx, speaker_id, result, scene)
         rounds.append({
             "round": len(rounds),
             "speaker_id": speaker_id,
             "speaker": _character_display_name(
-                _character_by_id(
-                    ctx,
-                    speaker_id,
-                )
-            ),
+                _character_by_id(ctx, speaker_id)),
             "result": result,
             "delivered_views": {
-                str(key): value
-                for key, value in delivered.items()
+                str(key): value for key, value in delivered.items()
             },
         })
+        return result, delivered, perceived_by
+
+    first_wave = True
+
+    while queue_ids and len(rounds) < max_rounds:
+        if calls >= max_calls:
+            stop_reason = "character call budget exhausted"
+            break
+
+        size = min(wave_size, len(queue_ids)) if first_wave else 1
+        size = min(size, max_calls - calls, max_rounds - len(rounds))
+        first_wave = False
+        wave = [queue_ids.pop(0) for _ in range(max(1, size))]
+
+        spoke = []
+        for speaker_id in wave:
+            result, delivered, perceived_by = _speak(speaker_id, calls)
+            calls += 1
+            already_spoke.add(speaker_id)
+            spoke.append((speaker_id, result, delivered, perceived_by))
+
+        # Silence is a property of the WAVE, not of whoever happened to be
+        # asked last. One person saying nothing beside somebody who said
+        # plenty is not a lull, and counting it as one ended beats that were
+        # visibly still going.
+        if any(_sequence_has_content(r) for _, r, _, _ in spoke):
+            no_content_streak = 0
+        else:
+            no_content_streak += 1
+
+        # Only now does the wave become visible to itself and to everyone else.
+        for _, _, delivered, _ in spoke:
+            for observer_id, additions in delivered.items():
+                local_views[observer_id] = _append_micro_view(
+                    local_views.get(observer_id, ""), additions)
+
+        # The exits are evaluated for the wave as a whole, after all of it has
+        # spoken. Evaluating them mid-wave would reinstate exactly the
+        # stranding this exists to fix, one member later.
+        perceived_by = set()
+        for _, _, _, seen in spoke:
+            perceived_by |= set(seen or ())
 
         # Both early exits below end the beat. Neither may end it with the
         # character the beat is ABOUT never simulated -- see _defer_to_focus.
-        if _requires_director_resolution(result):
+        if any(_requires_director_resolution(r) for _, r, _, _ in spoke):
             deferred = _defer_to_focus(
                 queue_ids, tom_focus, already_spoke,
                 focus_deferred, calls, max_calls,
@@ -378,7 +413,8 @@ def interaction_loop(ctx, nonce):
                 "stop_on_question_to_player",
                 True,
             )
-            and _asks_player(result, ctx.chat, ctx.cast)
+            and any(_asks_player(r, ctx.chat, ctx.cast)
+                    for _, r, _, _ in spoke)
         ):
             # A question to the player normally ends the beat. But when the
             # Director flagged a character as this beat's focus
@@ -403,17 +439,15 @@ def interaction_loop(ctx, nonce):
             )
             break
 
-        interaction = _dict(
-            result.get("interaction")
-        )
+        # EVERY member of the wave has to be done, not just the last one to
+        # be asked. One character closing their own exchange says nothing
+        # about whether the person beside them was mid-sentence.
+        def _closed(one):
+            interaction = _dict(one.get("interaction"))
+            return (interaction.get("expects_response") is False
+                    and bool(interaction.get("conversation_complete_for_me")))
 
-        if (
-            interaction.get("expects_response")
-            is False
-            and interaction.get(
-                "conversation_complete_for_me"
-            )
-        ):
+        if all(_closed(r) for _, r, _, _ in spoke):
             stop_reason = (
                 "speaker completed exchange"
             )
@@ -435,12 +469,13 @@ def interaction_loop(ctx, nonce):
             )
             break
 
-        next_ids = _next_speaker_candidates(
-            ctx,
-            speaker_id,
-            perceived_by,
-            already_spoke,
-        )
+        next_ids = []
+        for one_id, _, _, _ in spoke:
+            for cid in _next_speaker_candidates(
+                ctx, one_id, perceived_by, already_spoke,
+            ):
+                if cid not in next_ids:
+                    next_ids.append(cid)
 
         if not next_ids:
             stop_reason = "no eligible respondent"

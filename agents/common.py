@@ -1448,6 +1448,93 @@ def observer_label_fn(chat, observer_name, cast):
     return label
 
 
+def observer_name_scrub(chat, observer_name, cast):
+    """`text -> the same text with unrecognized bodies renamed`, for a payload
+    that hands a character PROSE somebody else wrote.
+
+    `observer_label_fn` above gates a field that holds ONE name. This gates a
+    field that holds a paragraph, and it exists because `world_knowledge` did
+    not have either: lore entries are objective world record, they are written
+    during play by the mapping stage, and that stage writes canonical names
+    into their prose. Any character whose lore filter admitted the entry then
+    read the name, met or not.
+
+    Observed live (chat 38, t140): Tamamo had met the Doctor for the first
+    time one beat earlier. Her `known` ledger was empty, her view called him
+    "the lean energetic man", `ahead_entity` called him "the lean energetic
+    man", her memories and her micro-perception all agreed -- and a lore entry
+    in her payload opened "As The Doctor and Hinami walk deeper into the Deck
+    14 corridor". She addressed him as "Doctor" in the same beat, and wrote
+    "the lean energetic man now identified as Doctor" into her own concerns.
+    Across the stored corpus, 65 lore entries in 22 chats name a cast member;
+    16 of those were written during play.
+
+    Whole-word only, and aliases too, because the entry that leaked used the
+    plain registered name and a substring rule would maul any word containing
+    it. Quoted spans are NOT exempt the way perception exempts them: a lore
+    entry is not a transcript, and prose that quotes somebody naming a person
+    is still telling the reader who they are.
+    """
+    label = observer_label_fn(chat, observer_name, cast)
+    known = set((wget(chat["id"], "known", {}) or {}).get(observer_name) or [])
+    sheets = []
+    for row in (cast or []):
+        try:
+            sheets.append(json.loads(row["sheet"]))
+        except Exception:
+            continue
+    # The player is a body in the room like any other, and lore written during
+    # play names them more often than it names anyone else. Same source as
+    # observer_label_fn's, so the two cannot disagree about who is gated.
+    persona = persona_of(chat)
+    if isinstance(persona, dict):
+        sheets.append(persona)
+    subjects = []
+    for sheet in sheets:
+        name = character_name(sheet)
+        if not name or name == observer_name or name in known:
+            continue
+        forms = {name} | {
+            str(alias) for alias in (character_scene_keys(sheet)[1:] or [])
+            if str(alias or "").strip()
+        }
+        replacement = label(name)
+        if replacement == name:
+            continue
+        for form in forms:
+            subjects.append((form, replacement))
+    # Longest first: "The Doctor" must win over a bare "Doctor" alias, or the
+    # longer form is left half-rewritten.
+    subjects.sort(key=lambda pair: -len(pair[0]))
+
+    def scrub(text):
+        if not isinstance(text, str) or not text or not subjects:
+            return text
+        for form, replacement in subjects:
+            text = re.sub(rf"\b{re.escape(form)}\b", replacement, text)
+        return text
+
+    return scrub
+
+
+def scrub_names_deep(value, scrub):
+    """Apply a text scrub to every string in a nested payload value.
+
+    Lore arrives as a list of dicts whose `content`, `title` and `keys` are all
+    prose a mind will read; walking the structure keeps the caller from having
+    to know which of them the current schema happens to use.
+    """
+    if isinstance(value, str):
+        return scrub(value)
+    if isinstance(value, list):
+        return [scrub_names_deep(item, scrub) for item in value]
+    if isinstance(value, tuple):
+        return tuple(scrub_names_deep(item, scrub) for item in value)
+    if isinstance(value, dict):
+        return {key: scrub_names_deep(item, scrub) for key, item in value.items()}
+    return value
+
+
 def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
     # Every unrecognized actor used to render as the exact same generic
     # "the unfamiliar person" -- two strangers in one scene (or the same
@@ -4471,6 +4558,44 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         if quote.casefold() not in normalized_prose:
             warnings.append(
                 f"Dialogue from view missing or altered in narrator prose: \"{quote[:80]}\""
+            )
+
+    # ONE PAIR OF QUOTES, ONE MOUTH.
+    #
+    # The check above asks whether each line SURVIVED. It cannot ask whether
+    # the line ended up in the right person's mouth, and both questions have
+    # the same answer when two speakers' lines are welded into a single
+    # quoted span: every body is present verbatim, so dialogue fidelity
+    # passes while the reader is told the wrong character said half of it.
+    #
+    # Live (chat 38, t140): Tamamo's "Be at ease, both of you." and the
+    # Doctor's "Tamamo. A pleasure." rendered as the single span
+    # "Be at ease, both of you. Tamamo. A pleasure.", closed by "The Doctor's
+    # voice carries clean across the clearing". The view had them correctly
+    # separated, one attributed clause each. Also chat 38 t39, where the whole
+    # of Guinan's line was absorbed into the Doctor's.
+    #
+    # `event_order` is the right source rather than the raw dialogue log: it
+    # is already gated to lines that reached the player's view, so a line the
+    # player never heard cannot raise a warning about prose that rightly
+    # omits it. Bodies under 15 characters are ignored -- a short line can sit
+    # inside a longer one by coincidence, and being wrong here costs a
+    # rewrite.
+    speech_events = []
+    for event in (event_order or []):
+        if not isinstance(event, dict) or event.get("kind") != "speech":
+            continue
+        actor = str(event.get("actor") or "").strip()
+        spoken = re.sub(r"\s+", " ", _quote_body(event.get("quote"))).casefold()
+        if actor and len(spoken) >= 15:
+            speech_events.append((actor, spoken))
+    for match in _QUOTE_BODY_RE.finditer(prose):
+        span = re.sub(r"\s+", " ", match.group(1)).casefold()
+        actors = {actor for actor, spoken in speech_events if spoken in span}
+        if len(actors) >= 2:
+            warnings.append(
+                "Merged dialogue from different speakers in one quoted span "
+                f"({', '.join(sorted(actors))}): \"{match.group(1)[:80]}\""
             )
 
     warnings.extend(_check_pronoun_fidelity(prose, cast_pronouns))

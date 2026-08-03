@@ -197,9 +197,10 @@ fields, `sequence` emitted as a non-list, occasionally prose instead of JSON.
 Model-side, and the harness skips the beat and continues — but each one is a lost
 turn, and in a story it would be a character who simply did nothing.
 
-The character step already has a bounded retry, but only for *verbatim
-self-repetition* (`agents/character.py`, the `_first_verbatim_repeat` path), not
-for schema failure. Worth deciding whether a bounded retry belongs there too.
+The character step already has a bounded decision-continuity review combining
+verbatim repetition, potential semantic-move repetition, and spent-intention
+use (`agents/character.py`); it is still not the schema-failure repair path.
+Worth deciding whether another bounded retry belongs there too.
 
 Measured again on a three-turn live run, 2026-07-30, and closed for the shape
 that caused it: `preprocess_llm_output` dropped any `sequence` element that
@@ -275,11 +276,201 @@ warning and commits the blob anyway. `tests/test_pipeline_audit_leak_gaps.py`
 pins this deliberately as *a signal, not a fix*. Root cause — free-text state
 blobs with omission-only reconciliation and `_PROTECTED_STATE_KEYS` — untouched.
 
-### 1.11 `ctx.warnings` is write-only in production (X15)
+### 1.11 `ctx.warnings` reaches the pipeline drawer but not the story reader
 
-Warnings are appended across `agents/background.py` and `agents/character.py`;
-the only readers are tests. Every deterministic guard that "warns rather than
-fails" reports into a channel nothing in production consumes.
+**Mostly landed, alpha 6.9.** Every warning is now tagged with the step that
+raised it (`pipeline_context.StepTaggedWarnings`, keyed off a contextvar set in
+`compute_step`) and persisted onto that step's saved content under
+`_engine_notes`, which the pipeline drawer renders above the step. The
+tagging lives in the list rather than at the ~40 call sites so that both
+spellings — `ctx.warnings.append` and `ctx.add_warning` — are caught, including
+ones not written yet.
+
+What made this worth landing is on the record: perception dropped both sight
+sentences out of a character's view of an embrace happening six feet in front
+of him (chat 38, turn idx 140), warned about it twice, and the warnings went
+nowhere. What survived into his memory of that beat was a sound.
+
+What remains: the channel is still developer-facing, visible only to somebody
+who opens the drawer on a specific turn. There is no aggregate view — no way to
+ask "which turns in this story had a view repaired", which is the question that
+would have caught the above six turns earlier than it was caught. A warning
+during a run also still passes silently; only the persisted record shows it.
+
+### 1.11a `flow.reactors` answers two different questions
+
+`perception_act`'s perceiver list **is** `flow.reactors`: pass 1 iterates the
+cast and `continue`s on anyone not in it, with no spatial or sensory reasoning
+of its own. So one field decides both *who legitimately perceived the act* — a
+perception question, answerable from the scene — and *who may respond to it* — a
+pacing question that is the Director's to judge. Every other layer of this
+engine keeps those apart.
+
+The consequence is that a present, awake, watching character omitted from
+`reactors` perceives the onset never. Their entire account of the beat is
+`perception_outcome`, and they take no part in it. Rerolling perception cannot
+change this; only `director_interpret` can.
+
+Measured on the stored corpus, using the engine's own answer for who was
+present (who received an outcome view): **435 of 551 beats with two or more
+character witnesses had at least one witness missing from `reactors`** — 79%.
+Live in chat 38: t121–t127 ran seven consecutive beats with two witnesses and
+neither in `reactors`; at t140 the Doctor stood at the genkan watching an
+embrace the resolved event says he watched with bright interest, was not a
+reactor, and did nothing. Two independent rerolls of `director_interpret`
+produced the same set both times, so it is not sampling noise.
+
+Alpha 6.9 sharpened the prompt clause — it now says reactors is permission
+to respond rather than a requirement, explicitly not "who was addressed", and
+cites the 79%. Confirmed in conduct on the beat that prompted it: chat 38 t140
+re-interpreted to `reactors: [35, 41]` and `perception_act` built views for
+both. Still only one beat; re-measure the query above before believing the
+rate moved.
+
+**Widening `reactors` immediately exposed a second, larger defect downstream**
+— being a reactor did not mean getting a character step. See §1.11b.
+
+The structural fix is to separate the two fields — an onset audience derived
+from the scene, and a reactor set the Director chooses from it — which is not
+done. Cost is the reason to think before doing it: every added reactor is a
+character-step LLM call, and widening it wholesale would make crowded scenes
+both expensive and chattier than anyone asked for.
+
+### 1.11b Reactors stranded by another character's touch — FIXED, alpha 6.9
+
+Kept as a record because the shape recurs. The interaction loop's early exits
+end the BEAT, and the commonest of them (`_requires_director_resolution`) fires
+on any declared act carrying a target — a hug returned, a hand on a shoulder, a
+glance answered. The addressed character is deliberately queued first, so the
+ordinary shape was: the addressed character touches somebody, the loop breaks,
+every other reactor is never called.
+
+Measured before the fix: **153 of 196 beats with two or more reactors left at
+least one reactor never called at all**; 106 of those stopped on that one exit.
+
+A character who never ran has no appraisal, hence no `goal_impacts`, hence no
+drive strain from a beat aimed at them; no psychology commit; and no memory of
+having chosen to stay quiet — while the narrator, seeing nothing, is free to
+render the absence as a deliberate silence nobody chose. `_defer_to_focus`
+already patched exactly this for `tom_triggers` characters; this was the
+general case it had been a special case of.
+
+Fixed by reading `initial_parallel_reactors`, which had been sitting in
+`DEFAULT_INTERACTION_CONFIG` unread: the first wave of reactors is simultaneous
+IN THE FICTION — everyone is answering the player's already-fixed declaration
+and none has seen another's response, because none exists yet — so the wave
+declares blind and micro-perception is delivered only once every member is
+done. Exits are evaluated for the wave as a whole. After the wave, one speaker
+at a time, unchanged, because a character replying to another character really
+is responding to something they just heard. Parallel in the fiction, not in
+execution: `character_step` writes through `ctx`, so threading it would race.
+
+The residual is §1.11a above: the two questions are still one field.
+
+### 1.11c Lore names people it has no business naming — FIXED, alpha 6.9
+
+`knowledge_for_character` gates WHICH lore entries reach a mind, by knowledge
+tag and range. Nothing gated who those entries were allowed to NAME, and the
+mapping stage writes lore during play using canonical names — so an entry
+written from a beat one character stood in arrives, at another character, fully
+identified.
+
+Live (chat 38, t140). Tamamo had met the Doctor one beat earlier and her
+`known` ledger was empty. Every prose surface agreed on what she could call
+him — her view, `ahead_entity`, her micro-perception deliveries all said "the
+lean energetic man" — and `world_knowledge` handed her an entry opening "As The
+Doctor and Hinami walk deeper into the Deck 14 corridor". A starship corridor,
+delivered into a Kyoto shrine. She addressed him as "Doctor" in the same beat
+and wrote "the lean energetic man now identified as Doctor" into her own
+active concerns, where it persisted.
+
+Corpus: 65 lore entries across 22 chats name a cast member; 16 written during
+play.
+
+Fixed with the identity floor that already existed one field away.
+`agents/common.observer_name_scrub` is `observer_label_fn` for a paragraph
+rather than a single name — same `known` map, same `_unknown_actor_label` — and
+`scrub_names_deep` walks the payload so `content`, `title` and `keys` are all
+covered. The player is gated like any other body, since play-written lore names
+them more than anyone. Whole-word and alias-aware, longest form first. Quoted
+spans are deliberately NOT exempt the way perception exempts them: a lore entry
+is not a transcript, and prose quoting somebody naming a person still tells the
+reader who they are.
+
+**The shape, not the instance, is the finding.** Perception scrubs prose per
+observer; every OTHER payload that hands a mind somebody else's words is a
+place this can recur. `ahead_entity` was the first (alpha 6.7), this is the
+second. Nothing systematically enumerates the rest.
+
+### 1.11d A heard line could be delivered and then scrubbed away — FIXED, alpha 6.9
+
+`perception_outcome` injects each audible line into a view, and THEN runs four
+passes that remove text: the identity floor, the player-speech scrub, the
+invented-dialogue scrub, and a sentence dedupe. Each is right on its own; none
+knows a line the hearing gate already granted might be inside what it takes,
+and nothing re-checked afterwards.
+
+Live (chat 38, t137): the Doctor walked beside the player and spoke four times
+— `normal` volume, same room, open barrier, nothing concealed. Her view ends
+`"...as we scan the mist-shrouded surroundings together. Yeah, I bet I will.\""`
+— an orphaned tail with a closing quote and no opening, which is the signature
+of a partial quoted span removed from the middle of a delivered line. The other
+three lines are absent entirely.
+
+Measured against each turn's own checkpoint positions, so earshot is not
+guesswork: **30 of 1549 lines spoken by somebody standing in the player's own
+room never reached the player's view** (1.9%), across seven chats.
+
+Nothing downstream could catch it: the narrator's dialogue-fidelity check
+compares the PROSE against the VIEW, so a line already lost from the view is
+one the check agrees is not missing. A guard built for this exact failure one
+stage later was no help at all.
+
+Fixed with a floor at the end of the per-perceiver loop — every line the gate
+delivered at `full` clarity is re-checked after the scrub chain and re-injected
+if gone, reporting each restoration. Re-injection is safe by construction: the
+bodies come from the Director's `dialogue_log` and passed that perceiver's own
+hearing gate, which is what the scrubs exist to distinguish from.
+
+**Residual: the floor compensates, it does not diagnose.** Which of the four
+passes ate the line is still unidentified — the warning now says a restoration
+happened, not who caused it, and the pre-scrub view is not persisted. The
+orphaned-quote signature suggests a quoted-span scrub taking a partial span,
+but that is inference from the wreckage rather than a traced cause.
+
+A separate, smaller finding from the same sweep: **17 lines that DID reach the
+player's view were never rendered into prose**, all in July turns, none since
+the narrator's dialogue-fidelity check landed (0 in 241 August lines). The drop
+rate scaled with how many people spoke in the beat — 0.5% at one speaker, 3.0%
+at two, 10.3% at three — which is the shape to re-measure if it returns.
+
+### 1.11e Two speakers welded into one quoted span — FIXED, alpha 6.9
+
+DIALOGUE FIDELITY asks whether each line SURVIVED into the prose. It cannot ask
+whether the line ended up in the right person's mouth, and both questions have
+the same answer when two speakers' lines are merged into one quoted span: every
+body is present verbatim, so the check passes while the reader is told the
+wrong character said half of it.
+
+Live (chat 38, t140). The view had them properly separated, one attributed
+clause each — `... says: "Be at ease, both of you."` then `The Doctor says:
+"Tamamo. A pleasure."` — and the prose rendered `"Be at ease, both of you.
+Tamamo. A pleasure." The Doctor's voice carries clean across the clearing`.
+Also t39 of the same chat, where the whole of Guinan's line was absorbed into
+the Doctor's.
+
+Swept across the corpus: 5 stored instances (t39 recurs in four branch
+descendants of one beat), 2 distinct beats, out of 1082 multi-speaker beats.
+Rare — but the exposure is rising, because the interaction loop's first wave
+(§1.11b) makes two-speaker beats far more common than they were.
+
+Fixed by a new fidelity check reading `event_order`, which is already gated to
+lines that reached the player's view, so prose that rightly omits an unheard
+line cannot be accused of merging it. Bodies under 15 characters are ignored:
+a short line can sit inside a longer one by coincidence and a false positive
+costs a rewrite. Added to `_ENFORCEABLE_PREFIXES`, so the existing repair loop
+rewrites rather than merely warning. Zero false positives across the 1082
+beats.
 
 ### 1.12 Watch items
 
@@ -1074,8 +1265,41 @@ generated at re-contact, so cost stays `O(re-contact)`. The exception is the
 character advancing a plan whose consequences the player meets *before* meeting
 them: you cannot lose a race that was never run.
 
-`offscreen_log` exists as a reserved frame-scoped key whose only writer is the
-spatial-split notice in `spatial_frames.py` — nothing advances it.
+**Step 2 of `OFFSCREEN_LIFE_DESIGN.md`'s build order landed in alpha 6.9.**
+`BehaviorController`'s ladder is now the `offscreen_life` setting on
+`dialogue_config` — a chat-level ceiling, settable in the NPC dialogue panel,
+gated twice (the dormant cast is withheld from the mapping payload below
+`stochastic`, and the commit-side write is gated again). `max_offscreen_actors`
+bounds it. Two corrections that fell out of wiring it:
+
+- The engine was **already running an ungated off-screen simulation**. The
+  mapping-commit prompt asked for ticks on every scene change and commit logged
+  whatever came back, with no dial, no bound, and no reader.
+- `MappingCommitOut.offscreen_events` is typed `list[dict]` with no inner
+  model, and the model duly invented a shape per call: `{actor, tick}`,
+  `{event}`, `{who, event}` and `{description}` all appear in the same field
+  across eight live chats. `commit.normalize_offscreen_events` now coerces
+  them to `{actor, tick}` on the way in. The stored history is still mixed —
+  nothing reads it yet, so nothing has had to care.
+
+Still open, in the order the design document wants them:
+
+- **`offscreen_log` has no reader.** Ticks are written and never surfaced —
+  not at re-contact, not to the Director, not in the UI. Writing without
+  reading is the same defect §1.11 just closed one layer up.
+- **The shipped `stochastic` rung is not the specified one.** The document
+  wants a seeded draw against standing intentions with **no model call**; what
+  ships is a seeded prose sketch that costs one. Named honestly rather than
+  relabelled, but it means the cheap rung is not cheap.
+- **`reactive` and `character_agent` are permission only** — selectable, and
+  currently behaving as `deterministic` and `stochastic` respectively. The
+  gate exists so that when steps 3–4 land they are opt-in on a chat that
+  already asked, rather than a surprise in every running story.
+- **The gap generator (step 1) is not built**, so nothing is generated at
+  re-contact either, and `BehaviorController` is still per-chat rather than
+  per-character. The document is emphatic that ticking must be an opt-in
+  **per-character** property with a bounded count; the chat-level ceiling is
+  half of that.
 
 ### 2.9 Predictive staging
 

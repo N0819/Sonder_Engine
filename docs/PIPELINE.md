@@ -102,6 +102,21 @@ Parses the player declaration into structured speech/action sequence, authority 
 
 This stage should preserve player wording and distinguish attempted actions from asserted facts.
 
+**`flow.reactors` is load-bearing well beyond reaction eligibility, and that is
+easy to miss.** It decides who gets a character step, and it is *also*
+`perception_act`'s entire perceiver list — pass 1 iterates the cast and skips
+anyone not in it, with no spatial or sensory reasoning of its own. So a present,
+awake, watching character omitted here perceives the act never; their whole
+account of the beat is `perception_outcome`, and they take no part in it.
+
+Measured across the stored corpus before alpha 6.9, **435 of 551 beats (79%)
+where two or more characters received an outcome view had at least one of those
+witnesses missing from `reactors`** — usually just the ones the beat was not
+addressed to. The prompt clause has been sharpened accordingly (reactors is
+permission to respond, not a requirement, and explicitly not "who was
+addressed"). The underlying conflation — one field answering both "who
+perceived this" and "who may act on it" — is not fixed: `docs/UNBUILT.md`.
+
 ### `mapping_stage` versus `mapping_quick`
 
 - `mapping_stage` performs fuller lore routing and candidate staging when the interpretation says new mapping is needed.
@@ -153,6 +168,28 @@ Used for contested, time-sensitive physical reactions. Reactions are declaration
 
 Runs bounded observable conversational or physical micro-beats when autonomous interaction is enabled. Later participants can receive legitimate consequences of earlier visible or audible beats; they do not receive hidden agent state.
 
+**The first wave is simultaneous.** Everyone in the initial reactor queue is
+answering the same thing — the player's declaration, already fixed before this
+stage runs — and none of them has seen any other reactor's response, because
+none exists yet. So the first `initial_parallel_reactors` speakers declare
+blind: micro-perception for the whole wave is delivered only once every member
+has declared, and the loop's early exits are evaluated for the wave as a whole.
+After the wave, one speaker at a time, unchanged — a character replying to
+another character genuinely is responding to something they just heard, and
+ordering is the whole content of that.
+
+Parallel in the FICTION, not in execution. The wave runs sequentially, because
+`character_step` writes through `ctx`; what is guaranteed is that no member
+sees another's output while deciding.
+
+This exists because the early exits end the **beat**, not the round, and the
+commonest of them fires on any declared act with a target — a hug returned, a
+hand on a shoulder. With the addressed character queued first, that stranded
+everyone else: 153 of 196 beats with two or more reactors left at least one
+never called at all. A character who never ran has no appraisal, so no drive
+strain from a beat aimed at them, and no memory of having chosen to stay quiet.
+See `docs/UNBUILT.md` §1.11b.
+
 ### `character:<id>`
 
 A single character decision using that character’s scrubbed view and structured
@@ -168,6 +205,26 @@ stored for that mind, and adds a labelled four-item deliberate-recall lane on
 its next character turn without replacing normal recall. Pain and pleasure are
 independent and do not require survival mode. Multiple independent character
 steps may run in parallel.
+
+Dialogue continuity is tracked at two levels. `recent_self_lines` retains a
+short verbatim window for exact reissues and repeated sentence shapes;
+`recent_self_moves` projects one selected conversational job per turn from the
+immutable prior character variants, so a chatty speaker cannot hide a repeated
+offer or question behind four fresh lines or a substituted proper noun. The
+ledger compares completed turns, not individual speech entries: emphasis,
+lists, callbacks, and one continuous in-character rant remain legitimate. A
+lexically similar move opens a contextual review rather than proving a defect;
+the review may retain a continuation that the current beat invited, answered,
+challenged, or materially advanced. Its target is an unmotivated reset that
+reissues the old conversational job as though nobody heard it. Verbatim,
+potential semantic-move, and spent-intention findings are combined into at most
+one review call. Only an exact line that survives that review feeds the stuck
+mind signal; a semantic move deliberately retained after review does not.
+
+Intentions remain visible after they stop steering for autobiographical
+continuity, but only
+`steering_intention_ids` may authorize new wants or selected responses; commit
+applies the same boundary when normalizing the settled active state.
 
 The authored card is resolved per story: `chat_chars.sheet` wins when present,
 otherwise the reusable library `characters.sheet` is used. This override never
@@ -266,6 +323,23 @@ A failure in any domain aborts immediately and rolls back all earlier writes fro
 - `aborted`: cancellation was observed.
 
 Consecutive `character:<id>` stages can run in parallel. Primary and extra-player narration may also overlap. Full mapping and action-onset perception overlap only when no newly staged location description is required; otherwise plan order is preserved.
+
+All three pairings go through `_run_parallel_group`, which is also where
+concurrency is made visible — twice, because it is asked twice. Each
+`step_start` in a group carries `group` (the keys starting together) for the
+live log; each saved step carries `_engine_notes.parallel_with` for the
+persisted pipeline view, which reads the `steps` table long after the events
+are gone and has nothing but `ord` to go on. Note how narrow the conditions
+are: parallel `character:<id>` steps require `autonomy == 0` on an uncontested
+beat, `narrator_extra` requires extra players, and the mapping overlap requires
+`flow.needs_mapping` on a spatially familiar turn — so a typical story runs
+strictly sequentially and correctly shows no groups at all.
+
+`_engine_notes` is a reserved key on a step's saved content (`agents/storage.py`),
+carrying what the deterministic layer did to that step's output: the warnings
+raised while it ran, tagged by `pipeline_context.current_step_key`, and which
+steps it ran beside. It is stripped by `active_content`, so a rerun rehydrating
+a prior step into `ctx` never carries it into a prompt.
 
 ## Resume and rerun
 
