@@ -9,10 +9,10 @@
 | `affect.py` | 1868 |  | `theory_of_mind` |
 | `agents/__init__.py` | 86 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 809 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/character.py` | 2838 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
-| `agents/common.py` | 4680 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/character.py` | 3040 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
+| `agents/common.py` | 4705 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/director.py` | 4092 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
-| `agents/loops.py` | 589 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
+| `agents/loops.py` | 677 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 202 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 956 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/perception.py` | 3152 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
@@ -44,7 +44,7 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 3658 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 3677 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1977 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 502 |  | — |
 | `scene.py` | 1347 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
@@ -89,26 +89,26 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 2070 | 769 lines |
-| `_annotate_known_exits()` | 1491 | 445 lines |
-| `_ground_observation_citations()` | 552 | 262 lines |
-| `_destination_from_goals()` | 1069 | 109 lines |
-| `sprint_offers()` | 1971 | 97 lines |
-| `_verdict()` | 913 | 72 lines |
-| `_recent_self_moves()` | 138 | 68 lines |
-| `_annotate_goal_currency()` | 1354 | 67 lines |
+| `character_step()` | 2263 | 778 lines |
+| `_annotate_known_exits()` | 1684 | 445 lines |
+| `_ground_observation_citations()` | 745 | 262 lines |
+| `_unanswered_question_note()` | 248 | 117 lines |
+| `_destination_from_goals()` | 1262 | 109 lines |
+| `sprint_offers()` | 2164 | 97 lines |
+| `_verdict()` | 1106 | 72 lines |
+| `_recent_self_moves()` | 139 | 68 lines |
 
 ### `agents/common.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 1115 | 170 lines |
-| `_scrub_invented_dialogue()` | 3573 | 145 lines |
-| `_check_narrator_fidelity()` | 4494 | 123 lines |
-| `_extract_authority_claims()` | 855 | 106 lines |
+| `norm_sequence()` | 1140 | 170 lines |
+| `_scrub_invented_dialogue()` | 3598 | 145 lines |
+| `_check_narrator_fidelity()` | 4519 | 123 lines |
+| `_extract_authority_claims()` | 880 | 106 lines |
 | `_perceptible_entities()` | 458 | 98 lines |
-| `_check_quote_attribution()` | 4227 | 91 lines |
-| `_check_player_act_authority()` | 2650 | 81 lines |
+| `_check_quote_attribution()` | 4252 | 91 lines |
+| `_check_player_act_authority()` | 2675 | 81 lines |
 | `authored_other_subject()` | 640 | 77 lines |
 
 ### `agents/director.py`
@@ -128,9 +128,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `interaction_loop()` | 183 | 336 lines |
+| `interaction_loop()` | 183 | 424 lines |
 | `deterministic_micro_perception()` | 42 | 96 lines |
-| `reaction_loop()` | 520 | 70 lines |
+| `reaction_loop()` | 608 | 70 lines |
 | `_defer_to_focus()` | 153 | 28 lines |
 | `_drop_non_awake()` | 139 | 12 lines |
 
@@ -490,10 +490,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 3649 | 10 lines |
-| `presets()` | 3640 | 2 lines |
-| `active_preset()` | 3643 | 2 lines |
-| `nsfw_enabled()` | 3646 | 2 lines |
+| `get_prompt()` | 3668 | 10 lines |
+| `presets()` | 3659 | 2 lines |
+| `active_preset()` | 3662 | 2 lines |
+| `nsfw_enabled()` | 3665 | 2 lines |
 
 ### `providers.py`
 

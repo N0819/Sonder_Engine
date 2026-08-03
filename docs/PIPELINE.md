@@ -168,6 +168,16 @@ Used for contested, time-sensitive physical reactions. Reactions are declaration
 
 Runs bounded observable conversational or physical micro-beats when autonomous interaction is enabled. Later participants can receive legitimate consequences of earlier visible or audible beats; they do not receive hidden agent state.
 
+**What ends a beat.** `_requires_director_resolution` is the commonest early
+exit and it ends the BEAT, not the round, so its bar is "nobody can sensibly
+respond until the world says what happened" — `commitment: "contestable"`, a
+concealed act, or a conflict/movement verb. Deliberately NOT "the act has a
+target": in conversation every nod and glance is aimed at somebody, and gating
+on targets meant 70% of all character actions ended the beat, making an
+unprompted exchange between two characters impossible (`docs/UNBUILT.md`
+§1.11f). With that narrowed, `max_micro_rounds` is what actually bounds an
+exchange.
+
 **The first wave is simultaneous.** Everyone in the initial reactor queue is
 answering the same thing — the player's declaration, already fixed before this
 stage runs — and none of them has seen any other reactor's response, because
@@ -177,6 +187,11 @@ has declared, and the loop's early exits are evaluated for the wave as a whole.
 After the wave, one speaker at a time, unchanged — a character replying to
 another character genuinely is responding to something they just heard, and
 ordering is the whole content of that.
+
+The person being ANSWERED is not in the wave. Its justification only holds
+when the members are reacting to the same external thing; when one is answering
+another, the asker is the addressee and steps out to the next round so they
+hear the answer before speaking (`docs/UNBUILT.md` §1.11h).
 
 Parallel in the FICTION, not in execution. The wave runs sequentially, because
 `character_step` writes through `ctx`; what is guaranteed is that no member

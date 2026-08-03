@@ -472,6 +472,133 @@ costs a rewrite. Added to `_ENFORCEABLE_PREFIXES`, so the existing repair loop
 rewrites rather than merely warning. Zero false positives across the 1082
 beats.
 
+### 1.11f A nod ended the beat — FIXED, alpha 6.9.1
+
+`_requires_director_resolution` ends the BEAT in `interaction_loop`, so its bar
+should be "nobody can sensibly respond until the world says what happened". It
+was instead "this act involves another person": any action with a non-empty
+`targets` list.
+
+In a conversation every piece of ordinary body language is aimed at whoever you
+are talking to. Live, chat 38 t144–t147 — the player deliberately stayed silent
+for four consecutive turns to let two characters talk — and all four ended after
+a single exchange, on "offering a small nod of acknowledgment to Tamamo",
+"pivots one golden ear toward the Doctor", "shifts gaze fully to the Doctor",
+"remains motionless with steady gaze on Tamamo". Nobody can contest a nod.
+
+Corpus-wide: **1002 of 1439 character-declared actions were asserted, immediate
+and targeted** — 70% of everything a character does was ending the beat. Every
+character action in the corpus carries `stage: "immediate"` and no effects, so
+those fields cannot discriminate; `commitment` can, and it is the Director's own
+answer to this exact question. Only 82 of the 1439 are `contestable`, and they
+read like it: "Tightens grip on the caught prey's shoulder, wrenching upward",
+"Closes the 1.5-meter gap in two quick steps".
+
+Now gated on `commitment == "contestable"`, with the conflict-verb list kept as
+a backstop under a mislabelled commitment — it also covers movement
+(`leave`/`enter`), which needs resolution however confidently it is declared.
+Re-classified against the stored corpus: 858 declarations no longer end the
+beat, 177 still do, and 8 newly do (six are movement, correctly).
+
+**This is a large pacing change and it is unverified in play.** The measurement
+says which declarations change class; it cannot say whether the resulting
+conversations are better. Watch for the opposite failure — beats that run on
+past their natural end — and note that `max_micro_rounds` (4 at autonomy 50) is
+now the thing actually bounding an exchange rather than the first targeted
+gesture.
+
+### 1.11g Nobody knew they had been asked something — FIXED, alpha 6.9.1
+
+`interaction.expects_response` is written on every character result and was
+consumed in exactly one place: `_recent_self_moves`, as `expected_answer`,
+which tells a character *I* asked something. Nothing told a character that
+somebody had asked *them*.
+
+Live, chat 38 t144–t147 — the player stayed silent for four turns so two
+characters could talk. Tamamo put a direct request to the Doctor on three
+consecutive beats; on the last two he said nothing at all. Nothing about his
+reasoning is broken: he KNEW about the question (it is in his
+`observations_used`, recalled from memory), weighed answering, and rejected it
+at inhibition 0.4 against "shrine etiquette favors waiting rather than filling
+silence", selecting "remain silent and observant to give Tamamo room to
+respond". Both were waiting for the other, and she filled the gap with more
+questions and by turning back to the player who had deliberately stepped out.
+
+Three fixes, all from records the engine already had:
+
+- `decision.awaiting_your_answer` {from, asked, turns_ago} when a character was
+  addressed with `expects_response` and has not spoken since — and when the
+  PLAYER asked them, which is the larger half and the one a character-result
+  path can never see, since the player has no `interaction` block. That case
+  reads `flow.addressed_to` (where "who did the player mean" is already
+  decided) and does use the question mark, because there is no
+  `expects_response` on a player declaration and inventing one would mean
+  guessing at intent the Director never recorded. 809 beats in the corpus carry
+  player speech aimed at a named character; 363 contain a question. Deliberately not
+  keyed on a question mark: every ask in the live case was an imperative
+  ("describe its dimensional nature in your own terms", "Name one way its
+  dimensions interface with established boundaries") and punctuation would have
+  missed all of them. Reaches back three beats only; an ask nobody has picked
+  up in longer has been dropped by the scene. The prompt is explicit that
+  refusing, deflecting or declining are answers — what is not permitted is
+  failing to notice.
+- `decision.player_quiet_for_beats` once the player's silence has lasted more
+  than one beat, because one is not the same event as four. One quiet beat is
+  something they just did mid-exchange; several is somebody who has stepped
+  back to watch, and reading it afresh each beat is what produced "Hinami, you
+  have gone quiet after such proud words" and "Hinami, your presence here is a
+  quiet joy".
+- Whoever owes an answer is queued FIRST in `interaction_loop`, ahead even of
+  direct address. Order had fallen back to cast-registration once the player
+  went quiet, so the Doctor opened every beat — speaking before Tamamo asked,
+  so his line could never be the answer.
+
+The ordering is derived rather than declared. A Director field stating "A asked
+B" was considered and rejected: the Director cannot see this better than the
+record can, since `expects_response` and `addresses` are already written by the
+character who asked, and a second spelling of one fact drifts and then
+disagrees.
+
+**Unverified in play**, like §1.11f which it sits beside. The mechanism is
+measured against the stored turns — the two ignored requests are surfaced
+correctly, and the ordering flips — but whether the resulting conversation
+reads better has not been observed.
+
+### 1.11h The person being answered was inside the blind wave — FIXED, alpha 6.9.1
+
+The first wave (§1.11b) rests on a claim: its members are answering the same
+thing and none has seen another's response, because none exists yet. That holds
+when everyone is reacting to the PLAYER. It is false when one member is
+answering another — the answer is FOR the asker, who is the addressee rather
+than a bystander, and the question they are owed an answer to already exists
+from the previous beat.
+
+Live, chat 59 t146, one beat after §1.11g shipped. The Doctor owed Tamamo an
+answer and was correctly queued first, but she was in the same blind instant.
+Her present evidence was "dim light... gravel... Hinami stands perfectly still"
+— his answer nowhere in it — and she selected "rephrase the dimensional
+question freshly to the Doctor". Given a second round she then heard him and
+acknowledged by restating his own terms back. On the page: an answer, then the
+question it had just answered, then the answer read back to the person who gave
+it.
+
+Neither mind misbehaved. Both acted correctly on the information they had, and
+the information was wrong by construction.
+
+The asker now steps out of the first wave and speaks in the next round, having
+actually heard the answer. They keep their place at the front of the queue, so
+nobody loses a turn — the order changes. Mutual debt (each owing the other)
+would defer everyone and stall the beat, so the queue order breaks that tie.
+
+One thing this exposed: `_next_speaker_candidates` looks for somebody NEW to
+bring in, and "no eligible respondent" ended the beat without checking whether
+the queue still held anyone. That would have dropped the deferred asker
+entirely — the same stranding the wave exists to prevent, one round later.
+
+**Still unverified in play**, like §1.11f and §1.11g. The wave shipped hours
+before this was found, so chat 59 is very nearly the entire corpus for it: this
+is one clear case reasoned from mechanism, not a rate.
+
 ### 1.12 Watch items
 
 Not defects yet. Each is a measured shape that will become one silently.

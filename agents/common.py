@@ -802,6 +802,31 @@ def _requires_reaction_phase(event, valid_actor_ids, actor_names):
     )
 
 def _requires_director_resolution(result):
+    """Does this declaration need the Director before anyone can answer it.
+
+    It ends the BEAT in `interaction_loop`, so the bar is "nobody can
+    sensibly respond until the world says what happened" -- not "this act
+    involves another person".
+
+    HAVING A TARGET IS NOT THAT BAR, and treating it as one is what made
+    conversation impossible. In a conversation every piece of ordinary body
+    language is aimed at whoever you are talking to: a nod, a glance, an ear
+    turning. Live, chat 38 t144-t147 -- the player deliberately stayed silent
+    for four turns to let two characters talk -- and all four ended after a
+    single exchange on acts like "offering a small nod of acknowledgment to
+    Tamamo", "shifts gaze fully to the Doctor" and "remains motionless with
+    steady gaze on Tamamo". Nobody can contest a nod. Corpus-wide, 1002 of
+    1439 character-declared actions were asserted, immediate, and targeted --
+    70% of every act a character takes was ending the beat.
+
+    `commitment` is the Director's OWN answer to this question and it
+    discriminates cleanly: `contestable` reads "Tightens grip on the caught
+    prey's shoulder, wrenching upward", "Closes the 1.5-meter gap in two quick
+    steps"; `asserted` reads "nods once slowly". Only 82 of those 1439 are
+    contestable. The conflict-verb list stays as a backstop under a
+    mislabelled commitment, and covers movement (`leave`/`enter`), which needs
+    resolution however confidently it is declared.
+    """
     actions = [
         e for e in _dict_list(result.get("sequence"))
         if e.get("type") == "action"
@@ -810,7 +835,7 @@ def _requires_director_resolution(result):
         text = str(action.get("attempt") or "").casefold()
         if action.get("visibility") == "concealed":
             return True
-        if action.get("targets"):
+        if action.get("commitment") == "contestable":
             return True
         conflict_terms = (
             "attack", "grab", "restrain", "steal", "break", "force",
