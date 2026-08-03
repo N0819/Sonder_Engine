@@ -1,11 +1,15 @@
 """Everyone who was in the room when it happened gets to answer it.
 
-The interaction loop's early exits end the BEAT, and the commonest of them
-(`_requires_director_resolution`) fires on any declared act with a target — a
-hug returned, a hand on a shoulder, a glance answered. Since the addressed
-character is deliberately queued first, the usual shape was: the addressed
-character touches somebody, the loop breaks, and every other reactor is never
-called.
+The interaction loop's early exits end the BEAT, and the commonest of them is
+`_requires_director_resolution`. At the time this was written it fired on any
+declared act with a target — a hug returned, a hand on a shoulder, a glance
+answered. Since the addressed character is deliberately queued first, the usual
+shape was: the addressed character touches somebody, the loop breaks, and every
+other reactor is never called.
+
+(That trigger has since been narrowed to `commitment: "contestable"` — see
+`test_conversation_continues.py`. The wave is still the fix for THIS failure:
+it is about who gets simulated before an exit, whatever raises the exit.)
 
 Measured across the stored corpus before this changed: **153 of 196 beats with
 two or more reactors left at least one reactor never called at all**, 106 of
@@ -285,3 +289,103 @@ def test_the_knob_was_declared_long_before_it_was_read():
     from scene import DEFAULT_INTERACTION_CONFIG
 
     assert DEFAULT_INTERACTION_CONFIG["initial_parallel_reactors"] >= 2
+
+class TestTheAskerStepsOutOfTheWave:
+    """The wave's justification is that its members are answering the same
+    thing, unseen by each other. That holds when everyone is reacting to the
+    PLAYER. It fails when one member is answering another: the answer is FOR
+    the asker, and the question already exists from last beat.
+
+    Live, chat 59 t146. The Doctor owed Tamamo an answer and was correctly
+    queued first — but she was in the same blind instant, so her round was
+    written deaf. Her present evidence was "dim light... gravel... Hinami
+    stands perfectly still", with his answer nowhere in it, and she selected
+    "rephrase the dimensional question freshly to the Doctor". On the page: an
+    answer, then the question it had just answered, then (given a second round)
+    the answer restated back to the person who gave it.
+    """
+
+    def _install_debt(self, monkeypatch, ower, asker_name, asker_id):
+        import agents.loops as loops_mod
+
+        def fake_note(chat_id, name, idx, frame, *a, **kw):
+            if name == ower:
+                return {"awaiting_your_answer": {
+                    "from": asker_name, "asked": "How does it fold dimensions?",
+                    "turns_ago": 1}}
+            return {}
+
+        monkeypatch.setattr(loops_mod, "_unanswered_question_note", fake_note)
+        monkeypatch.setattr(
+            loops_mod, "normalize_character_refs",
+            lambda refs, cast: [asker_id if r == asker_name else int(r)
+                                for r in refs
+                                if r == asker_name or str(r).isdigit()])
+
+    def test_the_asker_is_not_in_the_same_blind_wave(self, monkeypatch):
+        calls, seen = [], {}
+        _install(monkeypatch, calls, wave=2, seen_views=seen)
+        self._install_debt(monkeypatch, "Char35", "Char41", 41)
+        ctx = _Ctx(reactors=[35, 41])
+
+        loops.interaction_loop(ctx, nonce=0)
+
+        assert calls[0] == 35, "the one who owes an answer still speaks first"
+        assert calls[1] == 41, "the asker still speaks, just after"
+        assert seen[41], "the asker must have heard the answer before replying"
+
+    def test_the_answerer_is_still_blind_to_nothing_in_particular(self, monkeypatch):
+        calls, seen = [], {}
+        _install(monkeypatch, calls, wave=2, seen_views=seen)
+        self._install_debt(monkeypatch, "Char35", "Char41", 41)
+        ctx = _Ctx(reactors=[35, 41])
+
+        loops.interaction_loop(ctx, nonce=0)
+
+        assert seen[35] == "", "nobody spoke before the answerer"
+
+    def test_nobody_loses_a_turn(self, monkeypatch):
+        calls = []
+        _install(monkeypatch, calls, wave=2)
+        self._install_debt(monkeypatch, "Char35", "Char41", 41)
+        ctx = _Ctx(reactors=[35, 41])
+
+        loops.interaction_loop(ctx, nonce=0)
+
+        assert sorted(calls) == [35, 41]
+
+    def test_with_no_debt_the_wave_is_unchanged(self, monkeypatch):
+        """The split is for the answering case only; an ordinary beat where
+        everyone is reacting to the player keeps the simultaneous wave."""
+        calls, seen = [], {}
+        _install(monkeypatch, calls, wave=2, seen_views=seen)
+        ctx = _Ctx(reactors=[35, 41])
+
+        loops.interaction_loop(ctx, nonce=0)
+
+        assert calls == [35, 41]
+        assert seen == {35: "", 41: ""}, "both still declare blind"
+
+    def test_mutual_debt_does_not_stall_the_beat(self, monkeypatch):
+        """If each owes the other, deferring both would empty the wave.
+        Somebody has to go first; the queue order already decided who."""
+        import agents.loops as loops_mod
+
+        calls = []
+        _install(monkeypatch, calls, wave=2)
+        monkeypatch.setattr(
+            loops_mod, "_unanswered_question_note",
+            lambda chat_id, name, idx, frame, *a, **kw: {
+                "awaiting_your_answer": {
+                    "from": "Char41" if name == "Char35" else "Char35",
+                    "asked": "?", "turns_ago": 1}})
+        monkeypatch.setattr(
+            loops_mod, "normalize_character_refs",
+            lambda refs, cast: [{"Char35": 35, "Char41": 41}.get(r, r)
+                                for r in refs
+                                if r in ("Char35", "Char41") or isinstance(r, int)])
+        ctx = _Ctx(reactors=[35, 41])
+
+        loops.interaction_loop(ctx, nonce=0)
+
+        assert calls, "the beat must not stall with nobody speaking"

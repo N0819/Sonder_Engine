@@ -11,6 +11,7 @@ from affect import (CRISIS_STRAIN_MIN, INTENT_DORMANT_AFTER,
                     RUPTURE_FORCE_AFTER, ground_tells)
 from db import q, wget
 from character_schema import (
+    character_name_from_text,
     character_abilities,
     character_curiosity,
     character_interoception,
@@ -217,13 +218,202 @@ def _self_line_tokens(line):
         _REFRAIN_RUN_RE.sub(r"\1\1", str(line or "").lower()))
 
 
-def _player_silence_note(sc, chat, sh, spoke):
+def _addressed_names_include(chat_id, addressed, folded_name):
+    """Does this cast-id/name list from `flow.addressed_to` mean this body.
+
+    The field holds ids on most beats and names on some; both forms are
+    resolved here so a caller never has to know which it got.
+    """
+    if not addressed:
+        return False
+    if folded_name in addressed:
+        return True
+    for ref in addressed:
+        if not str(ref).isdigit():
+            continue
+        row = q("SELECT COALESCE(cc.sheet, ch.sheet) AS sheet FROM chat_chars cc "
+                "JOIN characters ch ON ch.id=cc.char_id "
+                "WHERE cc.chat_id=? AND cc.char_id=?",
+                (chat_id, int(ref)), one=True)
+        if not row:
+            continue
+        try:
+            if character_name_from_text(row["sheet"]).casefold() == folded_name:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _unanswered_question_note(chat_id, char_name, current_turn_idx, frame_id,
+                              n_turns=3):
+    """`{"awaiting_your_answer": {...}}` when somebody asked THIS character
+    something and they have not spoken since.
+
+    The engine already knows this and told nobody. `interaction.expects_response`
+    is declared on every character result and consumed in exactly one place --
+    `_recent_self_moves`, as `expected_answer`, which tells a character *I*
+    asked something. Nothing told a character that somebody asked *them*.
+
+    Live, chat 38 t144-t147: the player stayed silent for four turns so the
+    Doctor and Tamamo could talk. Tamamo asked him a direct question on three
+    consecutive beats ("tell me yourself -- what purpose brings...", "describe
+    its dimensional nature in your own terms", "Name one way its dimensions
+    interface with established boundaries"). On the last two he said nothing
+    at all, and his own reasoning is on the record: he KNEW about the question
+    (it is in his `observations_used`, from memory) and selected "remain
+    silent and observant to honor etiquette and give Tamamo room to respond",
+    rejecting "offer one terse clarifying remark" at inhibition 0.4. Both
+    characters were waiting for the other; Tamamo filled the gap with more
+    questions and by turning back to the silent player.
+
+    Nothing was wrong with either mind. What was missing was the fact that a
+    question was outstanding and it was his. Presence is the signal, like
+    `_player_silence_note` beside it -- the field is absent on any beat where
+    nothing is owed.
+    """
+    if current_turn_idx is None or not char_name:
+        return {}
+    try:
+        lower = max(0, int(current_turn_idx) - max(1, int(n_turns)))
+    except (TypeError, ValueError):
+        return {}
+    rows = q(
+        "SELECT t.idx AS idx,s.key AS step_key,v.content AS content "
+        "FROM turns t JOIN steps s ON s.turn_id=t.id "
+        "JOIN variants v ON v.step_id=s.id AND v.active=1 "
+        "WHERE t.chat_id=? AND t.idx>=? AND t.idx<? AND t.frame_id IS ? "
+        "AND s.key IN ('director_interpret','interaction_loop','reaction_loop') "
+        "ORDER BY t.idx, CASE s.key WHEN 'director_interpret' THEN 0 ELSE 1 END",
+        (chat_id, lower, current_turn_idx, frame_id),
+    )
+    folded = str(char_name).casefold()
+    asked = None
+    for row in rows:
+        try:
+            content = json.loads(row["content"]) or {}
+        except (TypeError, ValueError):
+            continue
+        # THE PLAYER ASKING COUNTS TOO, and it was the larger half: 809 beats
+        # in the stored corpus carry player speech aimed at a named character,
+        # 363 of them containing a question. Read from the Director's own
+        # `flow.addressed_to`, which is where "who did the player mean" is
+        # already decided, rather than re-deciding it here. The player has no
+        # character result, so the loop below could never see them.
+        #
+        # Ordered before the loop steps of the same turn (see the CASE in the
+        # query), because the player declares first and a character answering
+        # in that same beat clears it.
+        if row["step_key"] == "director_interpret":
+            speech = str(content.get("speech") or "").strip()
+            if not speech:
+                continue
+            addressed = [str(a).casefold() for a in
+                         ((content.get("flow") or {}).get("addressed_to_refs")
+                          or (content.get("flow") or {}).get("addressed_to") or [])]
+            # `addressed_to` is a cast-id list; resolve through the name the
+            # caller already holds by asking the roster, not by matching ids.
+            if not _addressed_names_include(chat_id, addressed, folded):
+                continue
+            # A statement aimed at somebody is not a debt. For the player the
+            # question mark IS the available test -- there is no
+            # `expects_response` on a player declaration, and inventing one
+            # would mean guessing at intent the Director never recorded.
+            if "?" not in speech:
+                continue
+            asked = {"from": "the player", "asked": speech[:240],
+                     "turns_ago": int(current_turn_idx) - int(row["idx"])}
+            continue
+        results = (content.get("character_results")
+                   or content.get("reaction_results") or {})
+        if not isinstance(results, dict):
+            continue
+        for result in results.values():
+            if not isinstance(result, dict):
+                continue
+            speaker = str(result.get("name") or "").strip()
+            said = [e.get("text") for e in (result.get("sequence") or [])
+                    if isinstance(e, dict) and e.get("type") == "speech"
+                    and e.get("text")]
+            # THIS character speaking clears the debt, whatever they said. An
+            # answer need not be responsive to count as having spoken; whether
+            # it was a real answer is the asker's business, not a field's.
+            if speaker.casefold() == folded:
+                if said:
+                    asked = None
+                continue
+            interaction = result.get("interaction")
+            if not isinstance(interaction, dict):
+                continue
+            # `expects_response` + `addresses` is the engine's OWN answer to
+            # "was this put to them". Deliberately not a question mark: the
+            # asks in the live case were imperatives -- "describe its
+            # dimensional nature in your own terms", "Name one way its
+            # dimensions interface with established boundaries" -- and
+            # punctuation would have missed every one of them.
+            if not interaction.get("expects_response"):
+                continue
+            addresses = [str(a).casefold()
+                         for a in (interaction.get("addresses") or [])]
+            if folded not in addresses:
+                continue
+            if not said:
+                continue
+            asked = {"from": speaker, "asked": str(said[-1])[:240],
+                     "turns_ago": int(current_turn_idx) - int(row["idx"])}
+    return {"awaiting_your_answer": asked} if asked else {}
+
+
+def _player_quiet_beats(chat_id, current_turn_idx, frame_id, chat, cap=8):
+    """How many consecutive beats up to and including this one the player has
+    not spoken on. 1 means only this beat.
+
+    Read from stored `director_interpret` rather than tracked in state: it is a
+    pure function of what is already recorded, so it is correct on a rerun and
+    on an imported archive without a migration.
+    """
+    if current_turn_idx is None:
+        return 1
+    try:
+        lower = max(0, int(current_turn_idx) - cap)
+    except (TypeError, ValueError):
+        return 1
+    rows = q(
+        "SELECT t.idx AS idx,v.content AS content "
+        "FROM turns t JOIN steps s ON s.turn_id=t.id AND s.key='director_interpret' "
+        "JOIN variants v ON v.step_id=s.id AND v.active=1 "
+        "WHERE t.chat_id=? AND t.idx>=? AND t.idx<? AND t.frame_id IS ? "
+        "ORDER BY t.idx DESC",
+        (chat_id, lower, current_turn_idx, frame_id),
+    )
+    beats = 1
+    for row in rows:
+        try:
+            spoke = str((json.loads(row["content"]) or {}).get("speech") or "").strip()
+        except (TypeError, ValueError):
+            break
+        if spoke:
+            break
+        beats += 1
+    return beats
+
+
+def _player_silence_note(sc, chat, sh, spoke, quiet_beats=0):
     """`{"player_said_nothing": True}` when the player is here and did not speak.
 
     Absent otherwise -- when they spoke, and when they are not in the room,
     since a character elsewhere has no standing to know either way. Omitted
     rather than set False, so its presence IS the signal and a beat that says
     nothing about it reads as an ordinary one.
+
+    `quiet_beats` is how many CONSECUTIVE beats they have now been silent for,
+    because one is not the same event as four. A player who goes quiet mid-
+    exchange is doing something, and the prompt rightly asks the character to
+    read it. A player who has been quiet for four beats has stepped back to
+    watch, and reading it afresh every beat is what produced "Hinami, you have
+    gone quiet after such proud words" followed by "Hinami, your presence here
+    is a quiet joy" -- attention pulled back to somebody who deliberately left
+    the room to the others.
     """
     if spoke:
         return {}
@@ -237,7 +427,10 @@ def _player_silence_note(sc, chat, sh, spoke):
     here = positions.get(character_name(sh))
     if not here or positions.get(player) != here:
         return {}
-    return {"player_said_nothing": True, "player_name": player}
+    note = {"player_said_nothing": True, "player_name": player}
+    if quiet_beats > 1:
+        note["player_quiet_for_beats"] = quiet_beats
+    return note
 
 
 def _self_line_refrain(lines):
@@ -2517,6 +2710,10 @@ def character_step(ctx, cid, nonce):
         memory_context["recalled_places"] = _recalled
     # Absolutely no host-only row ids/counters reach the model.
     memory_context.pop("_internal", None)
+    # Did the player speak this beat. Read once: it gates the silence note
+    # and the consecutive-quiet query behind it.
+    _p_spoke = str((ctx.get("director_interpret") or {}).get("speech") or "").strip()
+
     payload = {
         "self": _self,
         "perception": {
@@ -2609,8 +2806,13 @@ def character_step(ctx, cid, nonce):
             # `positions` is the objective scene, the same source `attire`
             # above reads.
             **_player_silence_note(
-                sc, chat, sh,
-                str((ctx.get("director_interpret") or {}).get("speech") or "").strip()),
+                sc, chat, sh, _p_spoke,
+                quiet_beats=(0 if _p_spoke else _player_quiet_beats(
+                    chat.id, ctx.turn.idx, ctx.turn.frame_id, chat))),
+            # Somebody asked this character something and they have not spoken
+            # since. The engine knew; nothing told them.
+            **_unanswered_question_note(
+                chat.id, character_name(sh), ctx.turn.idx, ctx.turn.frame_id),
         },
         "simulation_clock": _sim_clock,
         "variant_seed": nonce,

@@ -17,7 +17,7 @@ from scene import (
 )
 from spatial import hear_level, proximity_rel, room_of, spatial_rel
 
-from .character import character_step
+from .character import _unanswered_question_note, character_step
 from .common import (
     _append_micro_view,
     _asks_player,
@@ -203,6 +203,51 @@ def interaction_loop(ctx, nonce):
             initial_reactors, key=lambda cid: 0 if cid in addressed else 1
         )
 
+    # WHOEVER OWES AN ANSWER HAS THE FLOOR, ahead even of direct address.
+    #
+    # Order was cast-registration order once the player was silent, so the
+    # same character opened every beat regardless of who the conversation was
+    # waiting on. Live, chat 38 t144-t147: Tamamo asked the Doctor a direct
+    # question on three consecutive beats and he was queued FIRST each time,
+    # so his line could never be the answer -- he spoke before she asked, she
+    # asked again, and the exchange never closed a single loop.
+    #
+    # Derived from the engine's own record of who addressed whom expecting a
+    # response, rather than added as a Director field. The Director cannot see
+    # it any better than this does -- `interaction.expects_response` and
+    # `addresses` are already written by the character who asked -- and a
+    # second spelling of one fact is a thing that drifts and then disagrees.
+    #
+    # A tie is left alone: if two characters both owe an answer, the sort is
+    # stable and the prior ordering (address, then registration) still decides.
+    _owes = []
+    # And who is OWED by somebody here. The asker is not an independent
+    # observer of this beat -- see the wave construction below.
+    _owed_to = set()
+    for char_id in initial_reactors:
+        row = _character_by_id(ctx, char_id)
+        if row is None:
+            continue
+        try:
+            name = character_name(json.loads(row["sheet"]))
+        except Exception:
+            continue
+        debt = (_unanswered_question_note(
+            ctx.chat.id, name, ctx.turn.idx, ctx.turn.frame_id)
+            or {}).get("awaiting_your_answer")
+        if not debt:
+            continue
+        _owes.append(char_id)
+        # `from` is a display name, or "the player" -- who is not in the queue
+        # and resolves to nothing, which is correct.
+        for asker_id in normalize_character_refs([debt.get("from")], ctx.cast):
+            if asker_id != char_id:
+                _owed_to.add(asker_id)
+    if _owes:
+        initial_reactors = sorted(
+            initial_reactors, key=lambda cid: 0 if cid in _owes else 1
+        )
+
     # flow.tom_triggers is the Director's statement of whose mind matters this
     # beat. It is used below as a last-chance guard: a beat must not end with
     # that character unsimulated (see the stop_on_question_to_player branch).
@@ -359,10 +404,48 @@ def interaction_loop(ctx, nonce):
             stop_reason = "character call budget exhausted"
             break
 
-        size = min(wave_size, len(queue_ids)) if first_wave else 1
+        is_first = first_wave
+        size = min(wave_size, len(queue_ids)) if is_first else 1
         size = min(size, max_calls - calls, max_rounds - len(rounds))
         first_wave = False
-        wave = [queue_ids.pop(0) for _ in range(max(1, size))]
+
+        # THE PERSON BEING ANSWERED IS NOT IN THE WAVE.
+        #
+        # The wave's whole justification is that its members are answering the
+        # same thing and none has seen another's response, because none exists
+        # yet. That is true when everyone is reacting to the PLAYER. It is
+        # false when one member is answering another: the answer is FOR the
+        # asker, who is the addressee rather than a bystander, and the question
+        # they are owed an answer to already exists from last beat.
+        #
+        # Live, chat 59 t146. The Doctor owed Tamamo an answer, so he was
+        # queued first -- but she was in the same blind instant, so her round
+        # was written deaf. Her present evidence was "dim light... gravel...
+        # Hinami stands perfectly still", with his answer nowhere in it, and
+        # she selected "rephrase the dimensional question freshly to the
+        # Doctor". Given a second round she then heard him and acknowledged by
+        # restating his own terms back at him. On the page: an answer, then the
+        # question it had just answered, then the answer read back to the
+        # person who gave it.
+        #
+        # So the asker steps out of the wave and speaks in the NEXT round,
+        # having actually heard it. They keep their place at the front of the
+        # queue; nobody loses a turn, the order changes.
+        wave, deferred = [], []
+        while queue_ids and len(wave) < max(1, size):
+            char_id = queue_ids.pop(0)
+            if is_first and char_id in _owed_to:
+                deferred.append(char_id)
+                continue
+            wave.append(char_id)
+        # Mutual debt (each owes the other) would defer everyone and stall the
+        # beat outright. Somebody has to go first; the queue order already
+        # decided who.
+        if not wave and deferred:
+            wave.append(deferred.pop(0))
+        queue_ids[:0] = deferred
+        if not wave:
+            break
 
         spoke = []
         for speaker_id in wave:
@@ -477,7 +560,12 @@ def interaction_loop(ctx, nonce):
                 if cid not in next_ids:
                     next_ids.append(cid)
 
-        if not next_ids:
+        # `_next_speaker_candidates` looks for somebody NEW to bring in. It
+        # does not know the queue already holds someone still owed their turn
+        # -- the asker deferred out of the first wave above -- and breaking
+        # here would drop them, which is the same stranding the wave exists to
+        # prevent, one round later.
+        if not next_ids and not queue_ids:
             stop_reason = "no eligible respondent"
             break
 

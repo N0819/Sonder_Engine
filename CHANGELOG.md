@@ -1,5 +1,66 @@
 # Changelog
 
+## alpha 6.9.1 — Someone is waiting on you
+
+- A nod no longer ends the beat. `_requires_director_resolution` ends the whole
+  BEAT in the interaction loop, and it fired on any declared act with a target
+  — which in conversation means every nod, glance and turn of the head, since
+  ordinary body language is aimed at whoever you are talking to. Live: the
+  player stayed silent for four consecutive turns so two characters could talk,
+  and all four ended after a single exchange on acts like "offering a small nod
+  of acknowledgment to Tamamo" and "shifts gaze fully to the Doctor".
+  Corpus-wide, 1002 of 1439 character-declared actions were asserted, immediate
+  and targeted — 70% of everything a character does was ending the beat. Now
+  gated on the Director's own `commitment: "contestable"`, with the
+  conflict-verb list kept as a backstop and still covering movement. 858
+  declarations no longer end the beat; 177 still do.
+- Somebody asking you something now reaches you. `interaction.expects_response`
+  was written by every character result and read in one place — as
+  `expected_answer`, telling a character *I* asked something. Nothing told a
+  character that somebody asked *them*. In the same four turns, one character
+  put a direct request to another on three consecutive beats and was met with
+  silence twice; the silent one KNEW about the question (it is in his recalled
+  observations) and chose to "give her room to respond" while she was waiting
+  on him. `decision.awaiting_your_answer` carries {from, asked, turns_ago},
+  keyed on the engine's own `expects_response` rather than on punctuation —
+  every ask in that scene was an imperative. The player asking counts too, via
+  `flow.addressed_to`: 809 beats in the corpus aim player speech at a named
+  character, 363 of them a question. Refusing or deflecting are answers; what
+  is not permitted is failing to notice.
+- Whoever owes an answer is queued first, ahead even of direct address. Order
+  had fallen back to cast-registration once the player went quiet, so the same
+  character opened every beat — speaking before the question was asked, so
+  their line could never be the answer. Derived from the record rather than
+  declared by the Director, which cannot see it any better and would be a
+  second spelling of one fact.
+- Sustained player silence reads as stepping back, not as a fresh signal each
+  beat. `player_said_nothing` fired identically on the first quiet beat and the
+  fourth, which is what produced characters remarking on how quiet the player
+  had become and turning to them for a cue. `player_quiet_for_beats` appears
+  once it has lasted more than one beat, and the prompt asks the scene to carry
+  itself.
+- The first wave rests on a claim: its members are answering the same thing and
+  none has seen another's response, because none exists yet. That holds when
+  everyone is reacting to the player. It is false when one member is answering
+  another — the answer is FOR the asker, who is the addressee rather than a
+  bystander, and the question already exists from the previous beat. Live: the
+  Doctor owed Tamamo an answer and was correctly queued first, but she was in
+  the same blind instant. Her evidence was "dim light... gravel... Hinami
+  stands perfectly still", with his answer nowhere in it, and she selected
+  "rephrase the dimensional question freshly to the Doctor"; given a second
+  round she then restated his own terms back at him. On the page: an answer,
+  then the question it had just answered, then the answer read back to the
+  person who gave it. Neither mind misbehaved — both acted correctly on
+  information that was wrong by construction. The asker now steps out of the
+  wave and speaks in the next round, keeping their place at the front of the
+  queue, so nobody loses a turn and only the order changes. Mutual debt breaks
+  on queue order rather than stalling the beat.
+- A deferred speaker can no longer be dropped by the beat ending around them.
+  `_next_speaker_candidates` looks for somebody NEW to bring in, and "no
+  eligible respondent" ended the beat without checking whether the queue still
+  held anyone — which would have stranded the asker deferred out of the wave,
+  the same failure the wave exists to prevent, one round later.
+
 ## alpha 6.9 — What a mind was given, and what it was told
 
 - Character dialogue continuity now records one selected conversational job per
