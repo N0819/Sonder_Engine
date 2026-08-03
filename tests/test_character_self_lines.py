@@ -5,8 +5,11 @@ turns running' loop) and vary/escalate instead."""
 from __future__ import annotations
 
 import json
+import time
 
-from agents.character import _recent_self_lines
+from agents.character import _recent_self_lines, _recent_self_moves
+from character_schema import default_character_data
+from pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _chat(db):
@@ -21,6 +24,16 @@ def _turn_with_dialogue(db, chat_id, idx, dialogue_log):
                 (tid, "director_resolve", "", 0))
     db.qi("INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
           (sid, json.dumps({"dialogue_log": dialogue_log}), 0.0))
+
+
+def _turn_with_move(db, chat_id, idx, char_id, result):
+    tid = db.qi("INSERT INTO turns(chat_id,idx,created) VALUES(?,?,?)",
+                (chat_id, idx, 0.0))
+    sid = db.qi("INSERT INTO steps(turn_id,key,label,ord) VALUES(?,?,?,?)",
+                (tid, "interaction_loop", "", 0))
+    content = {"character_results": {str(char_id): result}}
+    db.qi("INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
+          (sid, json.dumps(content), 0.0))
 
 
 def test_recent_self_lines_returns_own_lines_oldest_first(temp_db):
@@ -56,6 +69,53 @@ def test_recent_self_lines_empty_when_none(temp_db):
     chat_id = _chat(temp_db)
     assert _recent_self_lines(chat_id, "Dr. Moon", current_turn_idx=0) == []
     assert _recent_self_lines(chat_id, "Dr. Moon", current_turn_idx=None) == []
+
+
+def test_recent_self_moves_is_one_semantic_row_per_turn(temp_db):
+    chat_id = _chat(temp_db)
+    _turn_with_move(temp_db, chat_id, 4, 17, {
+        "response_candidates": [{
+            "response": "offer Saturn or dragons and let her choose",
+            "selected": True,
+        }],
+        "active_state": {"goal": "suggest a post-shrine destination"},
+        "sequence": [
+            {"type": "speech", "text": "Saturn, or dragons?"},
+            {"type": "speech", "text": "Your pick."},
+        ],
+        "interaction": {"expects_response": True},
+    })
+
+    moves = _recent_self_moves(chat_id, 17, current_turn_idx=5)
+
+    assert moves == [{
+        "turn": 4,
+        "move": "offer Saturn or dragons and let her choose",
+        "goal": "suggest a post-shrine destination",
+        "said": ["Saturn, or dragons?", "Your pick."],
+        "expected_answer": True,
+    }]
+
+
+def test_recent_self_moves_uses_turns_not_line_count(temp_db):
+    """Four chatty lines in one beat must not evict older move continuity."""
+    chat_id = _chat(temp_db)
+    for idx in range(1, 13):
+        _turn_with_move(temp_db, chat_id, idx, 17, {
+            "response_candidates": [{
+                "response": f"selected conversational move {idx}",
+                "selected": True,
+            }],
+            "sequence": [
+                {"type": "speech", "text": f"line {idx}.{part}"}
+                for part in range(4)
+            ],
+        })
+
+    moves = _recent_self_moves(chat_id, 17, current_turn_idx=13)
+
+    assert [move["turn"] for move in moves] == list(range(1, 13))
+    assert sum(len(move["said"]) for move in moves) == 24
 
 
 class TestSelfLineRefrain:
@@ -204,3 +264,245 @@ class TestVerbatimReissueIsCaughtDeterministically:
         assert _first_verbatim_repeat(["  "], ["  "]) is None
         assert _speech_texts(None) == []
         assert _speech_texts("not a dict") == []
+
+
+class TestSemanticMoveRepetition:
+    """The confirmed chat-38 failure changed nouns while repeating the job."""
+
+    def test_turn_138_destination_substitution_is_caught(self):
+        from agents.character import _first_repeated_move
+
+        previous = [{
+            "turn": 137,
+            "move": (
+                "acknowledge comment lightly, express interest in meeting "
+                "after shrine, propose varied destination, and continue walking"
+            ),
+        }]
+        draft = {"response_candidates": [{
+            "response": (
+                "Affirm interest in meeting her mother and propose entirely "
+                "new post-shrine destination to break repetition"
+            ),
+            "selected": True,
+        }]}
+
+        repeated = _first_repeated_move(draft, previous)
+
+        assert repeated["turn"] == 137
+        assert "propose varied destination" in repeated["move"]
+
+    def test_a_new_conversational_job_passes(self):
+        from agents.character import _first_repeated_move
+
+        previous = [{
+            "turn": 137,
+            "move": "offer a post-shrine destination and let her choose",
+        }]
+        draft = {"response_candidates": [{
+            "response": "ask what the unfamiliar bell beside the shrine means",
+            "selected": True,
+        }]}
+
+        assert _first_repeated_move(draft, previous) is None
+
+    def test_short_register_phrases_do_not_false_positive(self):
+        from agents.character import _first_repeated_move
+
+        previous = [{"turn": 1, "move": "nod warmly"}]
+        draft = {"response_candidates": [{
+            "response": "nod once", "selected": True,
+        }]}
+
+        assert _first_repeated_move(draft, previous) is None
+
+
+class TestSpentIntentionCannotSteer:
+    def _intentions(self):
+        return [
+            {"id": "i1", "intent": "show her the universe",
+             "status": "dormant", "progress": 1.0,
+             "last_progress_turn": 37},
+            {"id": "i2", "intent": "inspect the new shrine bell",
+             "status": "active", "progress": 0.2,
+             "last_progress_turn": 138},
+        ]
+
+    def test_detects_spent_refs_in_wants_and_selected_response(self):
+        from agents.character import _nonsteering_intention_refs
+
+        result = {
+            "active_state": {"wants": [
+                {"want": "offer another destination", "serves": "i1"},
+            ]},
+            "response_candidates": [{
+                "response": "offer Calufrax", "serves": ["i1"],
+                "selected": True,
+            }],
+        }
+
+        assert _nonsteering_intention_refs(
+            result, self._intentions(), turn_idx=138) == ["i1"]
+
+    def test_live_intention_is_allowed(self):
+        from agents.character import _nonsteering_intention_refs
+
+        result = {
+            "active_state": {"wants": [
+                {"want": "inspect the bell", "serves": "i2"},
+            ]},
+            "response_candidates": [{
+                "response": "ask about the bell", "serves": ["i2"],
+                "selected": True,
+            }],
+        }
+
+        assert _nonsteering_intention_refs(
+            result, self._intentions(), turn_idx=138) == []
+
+    def test_surviving_spent_refs_are_sanitized(self):
+        from agents.character import _sanitize_nonsteering_intention_refs
+
+        result = {
+            "active_state": {
+                "goal": "offer another destination after the shrine",
+                "wants": [{
+                    "want": "offer another destination after the shrine",
+                    "serves": "i1",
+                }],
+            },
+            "response_candidates": [{
+                "response": "offer Calufrax", "serves": ["i1", "drive"],
+                "selected": True,
+            }],
+        }
+
+        cleaned = _sanitize_nonsteering_intention_refs(result, ["i1"])
+
+        assert cleaned["active_state"]["wants"][0]["serves"] == "situational"
+        assert cleaned["active_state"]["goal"] == ""
+        assert cleaned["response_candidates"][0]["serves"] == ["drive"]
+
+
+def test_character_step_combines_move_and_spent_intention_rewrite(
+        temp_db, monkeypatch):
+    """The live Doctor shape gets one bounded decision-level rewrite."""
+    import agents.character as character
+
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Semantic repeat", "", time.time()),
+    )
+    sheet = default_character_data("The Doctor")
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        ("The Doctor", json.dumps(sheet), "{}", time.time(), "doctor-repeat"),
+    )
+    cstate = {
+        "interior": {"intentions": [{
+            "id": "i1", "intent": "show Hinami the universe",
+            "status": "dormant", "progress": 1.0,
+            "last_progress_turn": 37,
+        }]},
+        "active_state": {"mood": "bright", "goal": "offer a destination"},
+    }
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+        (chat_id, char_id, "active", json.dumps(cstate)),
+    )
+    temp_db.wset(chat_id, "scene", {
+        "location": "Shrine", "time": "day",
+        "rooms": {"clearing": {"name": "Shrine Clearing", "adjacent": []}},
+        "positions": {"The Doctor": "clearing"},
+        "entities": {}, "attire": {}, "overlays": {},
+    })
+    repeated_move = (
+        "acknowledge comment lightly, express interest in meeting after shrine, "
+        "propose varied destination, and continue walking"
+    )
+    _turn_with_move(temp_db, chat_id, 137, char_id, {
+        "response_candidates": [{
+            "response": repeated_move, "selected": True,
+        }],
+        "active_state": {"goal": "propose a post-shrine destination"},
+        "sequence": [{"type": "speech", "text": "Saturn or dragons?"}],
+    })
+    turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (chat_id, 138, "We're close.", time.time()),
+    )
+    cast = temp_db.q(
+        "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
+        (chat_id,),
+    )
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Semantic repeat", persona_id=None,
+                      lorebook_id=None, scenario="", created=time.time()),
+        turn=TurnData(id=turn_id, chat_id=chat_id, idx=138,
+                      player_input="We're close.", created=time.time()),
+        cast=cast, input="We're close.",
+    )
+    ctx.director_interpret = {
+        "speech": "We're close.",
+        "flow": {"reactors": [char_id], "tom_triggers": []},
+    }
+    ctx.perception_act = {
+        "views": {str(char_id): 'Hinami says, "We\'re close."'},
+        "observations": {str(char_id): []},
+    }
+    calls = []
+
+    def fake_agent_json(role, step_key, system, payload, **kwargs):
+        calls.append(payload)
+        if len(calls) == 1:
+            return {
+                "response_candidates": [{
+                    "response": (
+                        "Affirm interest in meeting her mother and propose "
+                        "entirely new post-shrine destination to break repetition"
+                    ),
+                    "serves": ["i1"], "selected": True,
+                }],
+                "active_state": {
+                    "mood": "bright", "goal": "offer another destination",
+                    "wants": [{
+                        "want": "offer another destination", "urgency": 0.8,
+                        "serves": "i1",
+                    }],
+                },
+                "sequence": [{
+                    "type": "speech",
+                    "text": "After the shrine, the archives of Calufrax?",
+                }],
+            }
+        return {
+            "response_candidates": [{
+                "response": "ask about the unfamiliar bell now visible at the shrine",
+                "serves": ["situational"], "selected": True,
+            }],
+            "active_state": {
+                "mood": "curious", "goal": "understand the unfamiliar bell",
+                "wants": [{
+                    "want": "ask about the unfamiliar bell", "urgency": 0.7,
+                    "serves": "situational",
+                }],
+            },
+            "sequence": [{
+                "type": "speech", "text": "What's that bell for?",
+            }],
+        }
+
+    monkeypatch.setattr(character, "_agent_json", fake_agent_json)
+
+    result = character.character_step(ctx, char_id, nonce=0)
+
+    assert len(calls) == 2
+    assert calls[0]["self"]["recent_self_moves"][0]["move"] == repeated_move
+    assert calls[0]["self"]["steering_intention_ids"] == []
+    assert calls[1]["move_correction"]["turn"] == 137
+    assert "continuous excited riff or rant" in (
+        calls[1]["move_correction"]["instruction"])
+    assert calls[1]["intention_correction"]["nonsteering_ids"] == ["i1"]
+    assert result["speech"] == "What's that bell for?"

@@ -388,6 +388,169 @@ def test_split_positions_without_fresh_near_evidence_remain_separate(
     assert not any("Reconciled near group" in warning for warning in ctx.warnings)
 
 
+def _unanchored_group_scene(*, mara_room="trail_a"):
+    return {
+        "location": "Open Trail", "time": "day",
+        "rooms": {
+            "trail_a": {"name": "Lower Trail", "adjacent": [
+                {"to": "trail_b", "barrier": "open", "distance": "near"},
+            ]},
+            "trail_b": {"name": "Middle Trail", "adjacent": [
+                {"to": "trail_a", "barrier": "open", "distance": "near"},
+                {"to": "trail_c", "barrier": "open", "distance": "near"},
+            ]},
+            "trail_c": {"name": "Upper Trail", "adjacent": [
+                {"to": "trail_b", "barrier": "open", "distance": "near"},
+            ]},
+        },
+        "positions": {"The Stranger": "trail_a", "Mara": mara_room},
+        "stations": {}, "following": {}, "entities": {}, "attire": {},
+        "overlays": {},
+    }
+
+
+def _unanchored_split_output():
+    return {
+        "resolved_event": (
+            "The Stranger and Mara continue up the open trail together, "
+            "Mara matching the Stranger's walking pace."
+        ),
+        "state_diff": {
+            "positions": {
+                "The Stranger": "trail_c",
+                "Mara": "trail_b",
+            },
+            "stations": {
+                "The Stranger": {"at": None, "near": ["Mara"]},
+                "Mara": {"at": None, "near": ["The Stranger"]},
+            },
+        },
+    }
+
+
+def test_mutual_near_group_without_anchor_follows_ordinary_player_move(
+        temp_db, monkeypatch):
+    """Live chat 38 t137: both walkers began at the torii, both fresh station
+    records said they remained near, and both walked onward, but the resolve
+    wrote them into path rooms two nodes apart. The next onset then dropped
+    the player's normal-volume line. Fresh mutual nearness preserves the
+    ordinary group even when a path beat has no named station anchor.
+    """
+    import agents.director as director
+
+    ctx = _make_ctx(temp_db, "trail_c")
+    temp_db.wset(ctx.chat.id, "scene", _unanchored_group_scene())
+    ctx.director_interpret.update({
+        "sequence": [{
+            "type": "action", "attempt": "walks up the trail",
+            "observable": "walks up the trail", "verb": "walk",
+            "visibility": "overt", "conceal_from": [],
+        }],
+        "movement": {"to_room": "trail_c", "mover": "self", "arrives": True},
+    })
+    monkeypatch.setattr(
+        director, "_agent_json", lambda *a, **k: _unanchored_split_output())
+
+    resolved = director.director_resolve(ctx, nonce=0)
+
+    assert resolved["state_diff"]["positions"] == {
+        "The Stranger": "trail_c",
+        "Mara": "trail_c",
+    }
+    assert any("ordinary player-led travel" in w for w in ctx.warnings)
+
+
+def test_unanchored_near_repair_never_teleports_a_separated_companion(
+        temp_db, monkeypatch):
+    """A fresh but contradictory near claim cannot erase prior separation.
+    Catching up remains a real movement decision, as following requires.
+    """
+    import agents.director as director
+
+    ctx = _make_ctx(temp_db, "trail_c")
+    temp_db.wset(
+        ctx.chat.id, "scene", _unanchored_group_scene(mara_room="trail_b"))
+    ctx.director_interpret.update({
+        "sequence": [{
+            "type": "action", "attempt": "walks up the trail",
+            "observable": "walks up the trail", "verb": "walk",
+            "visibility": "overt", "conceal_from": [],
+        }],
+        "movement": {"to_room": "trail_c", "mover": "self", "arrives": True},
+    })
+    monkeypatch.setattr(
+        director, "_agent_json", lambda *a, **k: _unanchored_split_output())
+
+    resolved = director.director_resolve(ctx, nonce=0)
+
+    assert resolved["state_diff"]["positions"]["Mara"] == "trail_b"
+    assert not any("ordinary player-led travel" in w for w in ctx.warnings)
+
+
+def test_unanchored_near_repair_never_grants_running_pursuit(
+        temp_db, monkeypatch):
+    """Mutual-near prose cannot make following all-powerful when the target
+    runs. Rapid movement may create real separation and stays separated.
+    """
+    import agents.director as director
+
+    ctx = _make_ctx(temp_db, "trail_c")
+    temp_db.wset(ctx.chat.id, "scene", _unanchored_group_scene())
+    ctx.director_interpret.update({
+        "sequence": [{
+            "type": "action", "attempt": "runs up the trail",
+            "observable": "runs up the trail", "verb": "run",
+            "visibility": "overt", "conceal_from": [],
+        }],
+        "movement": {"to_room": "trail_c", "mover": "self", "arrives": True},
+    })
+    monkeypatch.setattr(
+        director, "_agent_json", lambda *a, **k: _unanchored_split_output())
+
+    resolved = director.director_resolve(ctx, nonce=0)
+
+    assert resolved["state_diff"]["positions"]["Mara"] == "trail_b"
+    assert not any("ordinary player-led travel" in w for w in ctx.warnings)
+
+
+def test_unanchored_near_repair_respects_explicit_npc_follow_stop(
+        temp_db, monkeypatch):
+    """The resolver's contradictory near output cannot overrule the NPC's
+    actor-owned decision to stop following before the player moves.
+    """
+    import agents.director as director
+
+    ctx = _make_ctx(temp_db, "trail_c")
+    scene = _unanchored_group_scene()
+    scene["following"] = {
+        "Mara": {"target": "The Stranger", "since_turn": 0,
+                 "reason": "walking together"},
+    }
+    temp_db.wset(ctx.chat.id, "scene", scene)
+    ctx.director_interpret.update({
+        "sequence": [{
+            "type": "action", "attempt": "walks up the trail",
+            "observable": "walks up the trail", "verb": "walk",
+            "visibility": "overt", "conceal_from": [],
+        }],
+        "movement": {"to_room": "trail_c", "mover": "self", "arrives": True},
+    })
+    mara_id = int(ctx.cast[0]["id"])
+    ctx.character_results = {mara_id: {
+        "sequence": [],
+        "follow_op": {"op": "stop", "reason": "chooses to hang back"},
+    }}
+    monkeypatch.setattr(
+        director, "_agent_json", lambda *a, **k: _unanchored_split_output())
+
+    resolved = director.director_resolve(ctx, nonce=0)
+
+    assert resolved["state_diff"]["positions"]["Mara"] == "trail_b"
+    assert any(op.get("op") == "stop"
+               for op in resolved["state_diff"]["following_ops"])
+    assert not any("ordinary player-led travel" in w for w in ctx.warnings)
+
+
 def _following_scene(following=None, player_room="trail_a", mara_room="trail_a"):
     return {
         "location": "Open Trail", "time": "day",

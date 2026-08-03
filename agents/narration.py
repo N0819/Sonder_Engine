@@ -128,6 +128,12 @@ def _resolve_narration_person(chat_id, raw_input, player_name, player_pronouns,
 # actually say aloud).
 _ENFORCEABLE_PREFIXES = (
     "Dialogue from view missing or altered",
+    # Two characters' lines welded into one pair of quotes. Enforceable for
+    # the same reason as a dropped line and then some: the reader is not
+    # merely missing something, they are told the wrong person said it. The
+    # check only fires when two DIFFERENT speakers' full logged bodies both
+    # sit inside one span, which does not happen by accident.
+    "Merged dialogue from different speakers",
     # A cast member's pronouns flipping mid-scene is the same tier of failure
     # as a dropped line -- the reader sees a character silently change -- and
     # the check that raises it (agents/common.py's _check_pronoun_fidelity)

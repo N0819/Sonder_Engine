@@ -39,6 +39,7 @@ from character_schema import (
     character_export_document,
     character_initial_outfit,
     character_name,
+    character_name_from_text,
     default_character_data,
     default_persona_data,
     new_uid,
@@ -49,7 +50,10 @@ from character_schema import (
     persona_name,
 )
 from scene import (background_config, dialogue_config, interaction_limits,
-                   style_guide, normalize_style_guide, STYLE_GUIDE_FIELDS)
+                   normalize_offscreen_life, style_guide, normalize_style_guide,
+                   OFFSCREEN_LIFE_BUILT, OFFSCREEN_LIFE_DEFAULT,
+                   OFFSCREEN_LIFE_DESCRIPTIONS, OFFSCREEN_LIFE_LADDER,
+                   STYLE_GUIDE_FIELDS)
 from importers import (
     import_character, import_persona, import_lorebook,
     generate_character, generate_persona, generate_lore_entries,
@@ -2978,7 +2982,20 @@ def style_guide_put(cid: int, body: dict = Body(...)):
 
 @app.get("/api/chats/{cid}/dialogue_config")
 def dlg_get(cid: int):
-    return dialogue_config(cid)
+    config = dialogue_config(cid)
+    # The ladder rides with the config so the UI renders the rungs the engine
+    # actually has, in the engine's order, rather than a copy of them that
+    # drifts the first time one is added.
+    config["offscreen_life_levels"] = [
+        {"value": level,
+         "description": OFFSCREEN_LIFE_DESCRIPTIONS[level],
+         # Marked by the engine, not by the menu: an unbuilt rung must not
+         # quietly start reading as built when it ships and nobody remembers
+         # to edit the UI.
+         "built": level in OFFSCREEN_LIFE_BUILT}
+        for level in OFFSCREEN_LIFE_LADDER
+    ]
+    return config
 
 @app.put("/api/chats/{cid}/dialogue_config")
 def dlg_put(cid: int, body: dict = Body(...)):
@@ -3004,6 +3021,17 @@ def dlg_put(cid: int, body: dict = Body(...)):
             # would be theatre rather than a setting.
             "promote_after_addressed": max(
                 0, min(99, int(body.get("promote_after_addressed", 0)))),
+            # The ceiling on what the cast may do off screen. Normalized
+            # rather than rejected: an unreadable value falls to the default,
+            # never to the floor, so a typo cannot quietly switch a story's
+            # off-screen life off (scene.normalize_offscreen_life).
+            "offscreen_life": normalize_offscreen_life(
+                body.get("offscreen_life", OFFSCREEN_LIFE_DEFAULT)),
+            # 0 means no ticks however high the level is set -- the bound and
+            # the permission are separate answers, and a cap of zero is a
+            # legitimate way to say "not right now" without losing the level.
+            "max_offscreen_actors": max(
+                0, min(12, int(body.get("max_offscreen_actors", 3)))),
         }
 
         for key, default in derived.items():
@@ -3865,7 +3893,38 @@ def pipeline_get(tid: int):
         "blocked_by_other_frame": blocked_by_other_frame,
         "resume_key": resume_key,
         "resumable": bool(resume_key),
+        "perceivers": _perceiver_names(turn["chat_id"]),
     }
+
+
+def _perceiver_names(chat_id: int):
+    """Perceiver id -> display name, for reading a perception step per mind.
+
+    The perception stages key their views by cast id and the literal string
+    "player", which is unreadable in a raw JSON dump: finding out that one
+    character's view of a beat had no sight in it meant holding an id-to-name
+    map in your head while diffing three blobs by eye.
+
+    Every character ever attached to the chat, not just the currently active
+    cast -- a turn is read long after it ran, and a character dormant or
+    detached today still has views on the beats they were present for.
+    """
+    names = {}
+    chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
+    if chat:
+        try:
+            names["player"] = persona_name(persona_of(dict(chat)))
+        except Exception:
+            names["player"] = "Player"
+    for row in q(
+        "SELECT c.id, COALESCE(cc.sheet, c.sheet) sheet FROM chat_chars cc "
+        "JOIN characters c ON c.id=cc.char_id WHERE cc.chat_id=?", (chat_id,)
+    ):
+        try:
+            names[str(row["id"])] = character_name_from_text(row["sheet"])
+        except Exception:
+            continue
+    return names
 
 @app.post("/api/turns/{tid}/reroll")
 def turn_reroll(tid: int):

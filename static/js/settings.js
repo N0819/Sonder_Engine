@@ -189,6 +189,17 @@ $("#b-dlg").onclick = async () => {
   // all and nothing on screen to say it might.
   const promoteAfter = el("input", { type: "number", min: "0", max: "99",
                                      value: c.promote_after_addressed ?? 0 });
+  // Off-screen life (docs/OFFSCREEN_LIFE_DESIGN.md). The rungs come from the
+  // server rather than being listed here, so the menu cannot drift from the
+  // ladder the engine actually implements.
+  const offLife = el("select", {}, (c.offscreen_life_levels || []).map(
+    lvl => el("option",
+      { value: lvl.value, ...(lvl.value === c.offscreen_life ? { selected: "" } : {}) },
+      `${lvl.value} — ${lvl.description}`)));
+  // The rung names are the engine's own (schemas.BehaviorController), so the
+  // menu spells out what each one means rather than relying on the word.
+  const maxOffscreen = el("input", { type: "number", min: "0", max: "12",
+                                     value: c.max_offscreen_actors ?? 3 });
 
   modal("Dialogue config", b => b.append(
     el("div", { class: "small dim", style: "margin-bottom:10px" },
@@ -214,6 +225,43 @@ $("#b-dlg").onclick = async () => {
         el("div", {}, "Stop on player address — a scene running on its own pauses once an NPC speaks directly to you, so you don't miss your cue to respond."),
         el("div", {}, "Stop on question to player — same pause, triggered specifically by an NPC asking you something."),
         el("div", {}, "Silence ends exchange — if nobody has anything to say or do, the scene stops rather than manufacturing more dialogue to fill the turn."))),
+    el("div", { class: "card", style: "margin-top:10px" },
+      el("div", { class: "section-title", style: "margin-top:0" }, "Off-screen life"),
+      el("div", { class: "small dim" },
+        "What the cast is allowed to do while you are not watching. This is a "
+        + "ceiling, not an instruction: nothing is obliged to act at any level, "
+        + "and a quiet turn still costs nothing. Each level adds to the one above it."),
+      el("table", { class: "grid", style: "margin-top:6px" },
+        el("tr", {}, el("td", {}, "off-screen life"), el("td", {}, offLife)),
+        el("tr", {}, el("td", {}, "max off-screen actors"), el("td", {}, maxOffscreen))),
+      el("div", { class: "small dim", style: "margin-top:6px" },
+        el("div", {}, el("b", {}, "inert"), " — nothing happens off screen. A dormant "
+          + "character is exactly where you left them."),
+        el("div", {}, el("b", {}, "deterministic"), " — only things already on a "
+          + "clock: someone arriving when they said they would, food spoiling, news "
+          + "taking days to travel. Costs nothing and is always running anyway; this "
+          + "level just says that is all you want."),
+        el("div", {}, el("b", {}, "reactive"), " — responding to things that happen, "
+          + "without making any plans. ", el("b", {}, "Not built yet"), " — behaves as "
+          + "deterministic."),
+        el("div", {}, el("b", {}, "stochastic"), " — when the scene changes, dormant "
+          + "characters get a sentence of what they have been up to, kept in a log. "
+          + "No plans, no decisions, nothing that moves anyone. This is what the "
+          + "engine has always done, which is why it is the default."),
+        el("div", {}, el("b", {}, "character_agent"), " — permission for characters to "
+          + "actually advance their own plans while you are away, and for the "
+          + "consequences to be waiting when you arrive. ",
+          el("b", {}, "Not built yet"), " — setting it now behaves as stochastic and "
+          + "marks this story as one that wants it. It is a real change when it "
+          + "lands: a villain with a clock can beat you to something."),
+        el("div", { style: "margin-top:4px" },
+          el("b", {}, "Max off-screen actors"), " — how many characters may be ticked "
+          + "in one beat. 0 means none, whatever the level says."),
+        el("div", { style: "margin-top:4px" },
+          "Whatever the level, an off-screen character acts on what ",
+          el("i", {}, "they"),
+          " know — never on where you are or what you just did. Someone who has "
+          + "not been told cannot react to it."))),
     el("div", { class: "card", style: "margin-top:10px" },
       el("div", { class: "section-title", style: "margin-top:0" }, "Background life"),
       el("div", { class: "small dim" },
@@ -264,7 +312,9 @@ $("#b-dlg").onclick = async () => {
           style: st.value, min_lines: mn.value, max_lines: mx.value, variance: va.value,
           autonomy: +auto.value, allow_npc_initiative: npcInit.checked, allow_npc_to_npc_dialogue: npcNpc.checked,
           stop_on_player_address: stopAddr.checked, stop_on_question_to_player: stopQ.checked, silence_ends_exchange: silence.checked,
-          promote_after_addressed: +promoteAfter.value
+          promote_after_addressed: +promoteAfter.value,
+          offscreen_life: offLife.value,
+          max_offscreen_actors: +maxOffscreen.value
         });
         await api("PUT", `/api/chats/${chatId}/background_config`, {
           scene_life: sceneLife.value, max_managed: +maxManaged.value,

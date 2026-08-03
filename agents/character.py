@@ -6,6 +6,7 @@ import json
 import re
 from collections import deque
 
+import affect
 from affect import (CRISIS_STRAIN_MIN, INTENT_DORMANT_AFTER,
                     RUPTURE_FORCE_AFTER, ground_tells)
 from db import q, wget
@@ -58,6 +59,8 @@ from .common import (
     _agent_json,
     _books,
     observer_label_fn,
+    observer_name_scrub,
+    scrub_names_deep,
     _char_known_tags,
     _dict,
     _list,
@@ -130,6 +133,76 @@ def _recent_self_lines(chat_id, char_name, current_turn_idx, n_turns=6, cap=6,
                     lines.append({"turn": r["idx"], "said": quote})
     lines.sort(key=lambda x: x["turn"])
     return lines[-cap:]
+
+
+def _recent_self_moves(chat_id, char_id, current_turn_idx, n_turns=12, cap=12,
+                       frame_id=None):
+    """Recent conversational jobs this character selected, oldest->newest.
+
+    Lines answer *what words did I use?*  They do not answer *what was I
+    trying to do by saying them?*  In live chat 38 the Doctor could see
+    ``Saturn's rings or those dragons?`` in recent_self_lines and still chose
+    "propose an entirely new destination to break repetition" -- substituting
+    Calufrax while repeating the same post-shrine offer.  The selected
+    response and enacted goal already record that semantic move.  Project a
+    bounded ledger from immutable active variants instead of inventing another
+    mutable state table, so rerolls and existing stories get it immediately.
+    """
+    if current_turn_idx is None:
+        return []
+    try:
+        lower = max(0, int(current_turn_idx) - max(1, int(n_turns)))
+    except (TypeError, ValueError):
+        return []
+    rows = q(
+        "SELECT t.idx AS idx,s.key AS step_key,v.content AS content "
+        "FROM turns t JOIN steps s ON s.turn_id=t.id "
+        "JOIN variants v ON v.step_id=s.id AND v.active=1 "
+        "WHERE t.chat_id=? AND t.idx>=? AND t.idx<? AND t.frame_id IS ? "
+        "AND (s.key='interaction_loop' OR s.key=?) "
+        "ORDER BY t.idx,s.key",
+        (chat_id, lower, current_turn_idx, frame_id, f"character:{char_id}"),
+    )
+    by_turn = {}
+    for row in rows:
+        try:
+            content = json.loads(row["content"])
+        except (TypeError, ValueError):
+            continue
+        if row["step_key"] == "interaction_loop":
+            results = content.get("character_results") or {}
+            result = results.get(str(char_id)) or results.get(char_id)
+        else:
+            result = content
+        if not isinstance(result, dict):
+            continue
+
+        candidates = [
+            item for item in (result.get("response_candidates") or [])
+            if isinstance(item, dict) and item.get("selected")
+        ]
+        move = str((candidates[0].get("response") if candidates else "") or "").strip()
+        active = result.get("active_state") or {}
+        goal = str(active.get("goal") or "").strip() if isinstance(active, dict) else ""
+        said = _speech_texts(result)
+        if not (move or goal or said):
+            continue
+        interaction = result.get("interaction") or {}
+        entry = {
+            "turn": row["idx"],
+            **({"move": move[:320]} if move else {}),
+            **({"goal": goal[:240]} if goal else {}),
+            **({"said": [line[:320] for line in said[-2:]]} if said else {}),
+            "expected_answer": bool(
+                isinstance(interaction, dict)
+                and interaction.get("expects_response")
+            ),
+        }
+        # A loop result is the complete merged declaration and therefore wins
+        # over a parallel character step if legacy data happens to hold both.
+        if row["step_key"] == "interaction_loop" or row["idx"] not in by_turn:
+            by_turn[row["idx"]] = entry
+    return [by_turn[idx] for idx in sorted(by_turn)][-cap:]
 
 
 # Repeated letters collapse so "Mmm" and "Mmmm" are one opener, which is
@@ -251,6 +324,111 @@ def _first_verbatim_repeat(new_texts, recent_texts):
             if len(shingles & prev_shingles) >= 2:
                 return original
     return None
+
+
+def _selected_move_text(result):
+    """The semantic response selected in one character result."""
+    if not isinstance(result, dict):
+        return ""
+    for item in result.get("response_candidates") or []:
+        if isinstance(item, dict) and item.get("selected"):
+            text = str(item.get("response") or "").strip()
+            if text:
+                return text
+    return ""
+
+
+def _first_repeated_move(result, recent_moves, threshold=0.4):
+    """A recent selected conversational move closely restated this beat.
+
+    This deliberately compares deliberation summaries, not dialogue strings.
+    ``claim_similarity`` is conservative and only triggers on substantial
+    lexical overlap; the ledger in the prompt handles broader semantic
+    continuity, while this is the deterministic floor for the measured case
+    where the model itself wrote "new destination to break repetition".
+    """
+    current = _selected_move_text(result)
+    if len(_self_line_tokens(current)) < 5:
+        return None
+    for prior in reversed(recent_moves or []):
+        if not isinstance(prior, dict):
+            continue
+        previous = str(prior.get("move") or "").strip()
+        if len(_self_line_tokens(previous)) < 5:
+            continue
+        if affect.claim_similarity(current, previous) >= threshold:
+            return {
+                "turn": prior.get("turn"),
+                "move": previous,
+                "current": current,
+            }
+    return None
+
+
+def _nonsteering_intention_refs(result, intentions, turn_idx):
+    """Known but non-steering intention ids cited by this decision."""
+    known = {
+        str(item.get("id") or "")
+        for item in intentions or [] if isinstance(item, dict) and item.get("id")
+    }
+    steering = affect.steering_intent_ids(intentions, turn_idx)
+    spent = known - steering
+    if not spent or not isinstance(result, dict):
+        return []
+
+    refs = []
+    active = result.get("active_state") or {}
+    if isinstance(active, dict):
+        refs.extend(
+            str(want.get("serves") or "").strip()
+            for want in (active.get("wants") or []) if isinstance(want, dict)
+        )
+    for candidate in result.get("response_candidates") or []:
+        if not isinstance(candidate, dict) or not candidate.get("selected"):
+            continue
+        refs.extend(str(value or "").strip()
+                    for value in (candidate.get("serves") or []))
+
+    normalized = set()
+    for ref in refs:
+        for prefix in ("intention:", "intent:"):
+            if ref.casefold().startswith(prefix):
+                ref = ref[len(prefix):].strip()
+                break
+        if ref in spent:
+            normalized.add(ref)
+    return sorted(normalized)
+
+
+def _sanitize_nonsteering_intention_refs(result, invalid_refs):
+    """Prevent a rejected spent aim from persisting as next beat's steering."""
+    invalid = {str(value) for value in invalid_refs or []}
+    if not invalid or not isinstance(result, dict):
+        return result
+    active = result.get("active_state") or {}
+    bad_wants = []
+    if isinstance(active, dict):
+        for want in active.get("wants") or []:
+            if not isinstance(want, dict):
+                continue
+            ref = str(want.get("serves") or "").strip()
+            if ref in invalid or ref.removeprefix("intention:") in invalid:
+                bad_wants.append(str(want.get("want") or ""))
+                want["serves"] = "situational"
+        goal = str(active.get("goal") or "")
+        if bad_wants and any(
+                affect.claim_similarity(goal, text) >= 0.4
+                for text in bad_wants if text):
+            active["goal"] = ""
+    for candidate in result.get("response_candidates") or []:
+        if not isinstance(candidate, dict):
+            continue
+        candidate["serves"] = [
+            value for value in (candidate.get("serves") or [])
+            if str(value) not in invalid
+            and str(value).removeprefix("intention:") not in invalid
+        ]
+    return result
 
 
 # ---- Unbidden recall: one contrasting memory for a measurably stuck mind ----
@@ -1993,7 +2171,17 @@ def character_step(ctx, cid, nonce):
                      if _ponder_ready else "")
     _self_lines = _recent_self_lines(
         chat.id, character_name(sh), ctx.turn.idx, frame_id=ctx.turn.frame_id)
+    _self_moves = _recent_self_moves(
+        chat.id, cid, ctx.turn.idx, frame_id=ctx.turn.frame_id)
     _refrain = _self_line_refrain(_self_lines)
+    _decision_intentions = _annotate_fading(
+        _merge_standing_intentions(
+            character_standing_intentions(sh),
+            _interior.get("intentions") or []),
+        ctx.turn.idx,
+    )
+    _steering_intention_ids = sorted(
+        affect.steering_intent_ids(_decision_intentions, ctx.turn.idx))
     _here_name = (sc.get("rooms") or {}).get(char_room, {}).get("name") \
         or char_room
     # Unbidden recall, decided BEFORE the memory context is built and entirely
@@ -2054,6 +2242,20 @@ def character_step(ctx, cid, nonce):
                 memory_context, _unbidden_entry(_contrast[0], ctx.turn.idx))
     known_tags, excl_titles = _char_known_tags(sh)
     knowledge = knowledge_for_character(_books(ctx), char_room, known_tags, excl_titles)
+    # Lore is objective world record and its prose names people by name --
+    # including entries the mapping stage writes DURING PLAY, from a beat the
+    # reader was standing in. Which entries reach a mind is already gated by
+    # knowledge_tag/range; who those entries are allowed to NAME was not, so a
+    # character met one beat ago arrived pre-identified in a paragraph about
+    # somewhere else entirely. Same identity floor as `ahead_entity` below and
+    # as perception's own prose, from the same `known` map.
+    _name_scrub = observer_name_scrub(chat, character_name(sh), ctx.cast)
+    _gated_knowledge = scrub_names_deep(knowledge, _name_scrub)
+    if _gated_knowledge != knowledge:
+        ctx.add_warning(
+            f"character {character_name(sh)}: scrubbed unearned identities out "
+            "of world_knowledge lore text")
+    knowledge = _gated_knowledge
 
     _interp = _dict(ctx.director_interpret)
     _flow = _dict(_interp.get("flow"))
@@ -2179,6 +2381,10 @@ def character_step(ctx, cid, nonce):
         # reader's own body rather than someone else's.
         "attire": attire_view(sc.get("attire", {}).get(character_name(sh))),
         "recent_self_lines": _self_lines,
+        # One row per turn rather than one row per utterance. This is the
+        # semantic continuity ledger: a chatty speaker cannot push the last
+        # conversational job out of view merely by saying four short lines.
+        "recent_self_moves": _self_moves,
         # The SHAPE those lines keep reusing, computed rather than left to the
         # character to notice about itself -- see _self_line_refrain. Absent
         # when there is no template, so its presence is the whole signal.
@@ -2188,11 +2394,11 @@ def character_step(ctx, cid, nonce):
         # with EMERGENT intentions formed at runtime via intent_ops. An emergent
         # intention that restates an authored one wins (it carries live
         # progress/status). Read-only context for deriving this beat's wants.
-        "intentions": _annotate_fading(
-            _merge_standing_intentions(
-                character_standing_intentions(sh),
-                _interior.get("intentions") or []),
-            ctx.turn.idx),
+        "intentions": _decision_intentions,
+        # Status is not merely descriptive. Only these ids may steer a newly
+        # formed want/response; dormant, blocked, satisfied and abandoned rows
+        # remain visible for continuity but are not current purposes.
+        "steering_intention_ids": _steering_intention_ids,
         # PROJECTS (Tier 1.5): at most two standing commitments -- what this
         # character is ABOUT right now. The live ledger once commit has
         # seeded it; the authored card list only on beats before the first
@@ -2500,44 +2706,85 @@ def character_step(ctx, cid, nonce):
         sampler=character_sampler(sh) or None,
     )
 
-    # Deterministic self-repetition screen. The prompt rule and
-    # recent_self_lines are advisory, and advice is not a guarantee -- measured
-    # live, a character was handed its own previous line in that very field and
-    # returned it word for word. ONE rewrite, naming the line; if the second
-    # draft still repeats we keep it and warn rather than lose the beat, since
-    # a character who says nothing is worse than one who says it twice.
+    # Deterministic decision-continuity screen. Semantic similarity is a review
+    # trigger, not proof of bad repetition: the retry sees the current beat and
+    # may preserve an invited continuation, deliberate emphasis, or an
+    # in-character riff. One combined review also names any verbatim line or
+    # already-spent intention, keeping the cost bounded and letting the model
+    # solve the decision as a whole instead of whack-a-mole phrasing.
     _repeat_survived = False
     _repeated = _first_verbatim_repeat(
         _speech_texts(out), [str(l.get("said") or "") for l in (_self_lines or [])])
+    _repeated_move = _first_repeated_move(out, _self_moves)
+    _spent_refs = _nonsteering_intention_refs(
+        out, _decision_intentions, ctx.turn.idx)
+    _corrections = {}
     if _repeated:
+        _corrections["repeat_correction"] = {
+            "you_already_said": _repeated,
+            "instruction": (
+                "Your draft reissued this line you have already spoken. "
+                "Say something else, act instead, or stay silent."),
+        }
+    if _repeated_move:
+        _corrections["move_correction"] = {
+            "turn": _repeated_move.get("turn"),
+            "you_already_did": _repeated_move.get("move"),
+            "your_draft_does": _repeated_move.get("current"),
+            "instruction": (
+                "This is mechanically close to a recent conversational job. "
+                "Re-read the current beat. If it invited, answered, challenged, "
+                "or materially advanced that thread -- or deliberate repetition "
+                "is itself meaningful in character -- keep it, acknowledge the "
+                "continuity, and advance it. This includes one continuous excited "
+                "riff or rant; do not flatten the character's voice. Otherwise it "
+                "is an unmotivated reset: changing the example, destination, "
+                "metaphor, or noun is not progress, so drop the move and answer "
+                "what is new, act, or stay silent."),
+        }
+    if _spent_refs:
+        _corrections["intention_correction"] = {
+            "nonsteering_ids": _spent_refs,
+            "steering_ids": _steering_intention_ids,
+            "instruction": (
+                "Your draft lets a dormant/spent intention steer the choice. "
+                "Do not merely relabel that behavior as situational. Choose "
+                "from a live intention, the drive, the present situation, or "
+                "let the spent thread rest."),
+        }
+    if _corrections:
         _retry = _agent_json(
             role,
             "character",
             _cprompt,
-            {**payload,
-             "repeat_correction": {
-                 "you_already_said": _repeated,
-                 "instruction": (
-                     "Your draft reissued this line you have already spoken. "
-                     "Say something else, or act instead of speaking, or stay "
-                     "silent -- but do not send these words again."),
-             }},
+            {**payload, **_corrections},
             temperature=character_temperature(sh),
             sampler=character_sampler(sh) or None,
         )
-        if _first_verbatim_repeat(
-                _speech_texts(_retry),
-                [str(l.get("said") or "") for l in (_self_lines or [])]):
+        _retry_line = _first_verbatim_repeat(
+            _speech_texts(_retry),
+            [str(l.get("said") or "") for l in (_self_lines or [])])
+        _retry_move = _first_repeated_move(_retry, _self_moves)
+        _retry_spent = _nonsteering_intention_refs(
+            _retry, _decision_intentions, ctx.turn.idx)
+        if _retry_line or _retry_move:
             ctx.add_warning(
-                f"character {character_name(sh)}: reissued its own earlier "
-                f"line after a rewrite -- {_repeated[:80]!r}")
+                f"character {character_name(sh)}: repetition retained after "
+                f"contextual review -- "
+                f"{str(_retry_line or (_retry_move or {}).get('move'))[:100]!r}")
+        if _retry_line:
             # Known only HERE, after the model call, so it cannot trigger
             # anything this beat -- commit persists it on the unbidden ledger
             # (cstate.unbidden.repeat_flag) and the NEXT beat's trigger reads
-            # it as a stuck signal.
+            # it as a stuck signal. A semantic move deliberately retained after
+            # contextual review is not enough evidence to call the mind stuck.
             _repeat_survived = True
-        else:
-            out = _retry
+        if _retry_spent:
+            ctx.add_warning(
+                f"character {character_name(sh)}: non-steering intentions "
+                f"survived decision rewrite: {', '.join(_retry_spent)}")
+            _retry = _sanitize_nonsteering_intention_refs(_retry, _retry_spent)
+        out = _retry
 
     # Warning-only re-normalization; strict schema+semantic validation
     # (with repair/fallback/raise) already ran inside _agent_json -- a

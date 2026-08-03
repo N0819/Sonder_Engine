@@ -1,8 +1,15 @@
 # Off-screen life, reactivation, and villain ticks — design
 
-> Status: **design / not yet implemented** — re-verified at alpha 6.1, still
-> entirely unbuilt, including `BehaviorController`, which remains declared in
-> `schemas.py` and consumed nowhere. Registered as
+> Status: **design / step 2 built, alpha 6.9** — `BehaviorController`'s
+> ladder is now consumed, as the chat-level `offscreen_life` ceiling on
+> `dialogue_config` (`scene.OFFSCREEN_LIFE_LADDER`), settable in the NPC
+> dialogue panel and gated in `commit.prepare_mapping_commit` and
+> `commit.commit_mapping`. Nothing ticks a plan yet; `reactive` and
+> `character_agent` are permission the later steps land behind. Two things
+> wiring it turned up: the engine was ALREADY emitting ungated off-screen
+> ticks on every scene change, and the shipped `stochastic` rung costs a model
+> call where step 3 below specifies none. Both recorded in
+> [`UNBUILT.md`](UNBUILT.md) §2.8. Steps 1 and 3-6 remain unbuilt. Registered as
 > [`UNBUILT.md`](UNBUILT.md) §2.7 and §2.8, which those roadmap numbers now
 > point at; this document keeps the argument. Treated here as **one mechanism at
 > three cadences** rather than two features.
@@ -166,7 +173,12 @@ dispute protocol before knowing what characters dispute.
 1. **The gap generator** — one function over "what changed about X since turn N".
    Subject-agnostic: character or room.
 2. **Wire `BehaviorController`** — per-character, defaulting to `inert`. Nothing
-   ticks yet; the ladder just becomes real and settable.
+   ticks yet; the ladder just becomes real and settable. **Half done**: the
+   ladder is real and settable per CHAT, as a ceiling, defaulting to whatever
+   the engine was already doing rather than to `inert` — a setting that
+   changes a running story the moment it appears is not a setting anyone can
+   trust. The per-CHARACTER half, which is the one this document calls the
+   opt-in, is still open.
 3. **`stochastic` at scene boundaries** — seeded draws against standing
    intentions. No LLM, so the cadence and write-back can be proven cheaply.
 4. **`character_agent` ticks** — the villain. Deterministic gate first, then one

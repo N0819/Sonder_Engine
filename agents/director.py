@@ -1760,7 +1760,7 @@ def _ci_mapping_key(mapping, name):
     return None
 
 
-def _reconcile_anchored_near_group(ctx, scene, state_diff):
+def _reconcile_near_group_positions(ctx, scene, state_diff, player_name):
     """Make one fresh, explicit within-room group physically possible.
 
     ``stations.near`` means two bodies are in the same room, and ``at`` names
@@ -1769,17 +1769,28 @@ def _reconcile_anchored_near_group(ctx, scene, state_diff):
     positions.  Hearing then trusted the surviving positions and treated a
     shoulder-to-shoulder travelling party as separated.
 
-    This is deliberately not a general companion-carry heuristic.  A group is
-    moved only when THIS beat supplies all of the following structured proof:
+    This is deliberately not a general companion-carry heuristic.  The
+    strongest case remains an unambiguous fresh anchor.  There is one bounded
+    fallback for the live travelling-group failure where both station records
+    said the pair remained near but neither named a path anchor: an ordinary
+    player-led move may carry a mutually-near group to the player's resolved
+    room when every member began co-located.
+
+    A group is moved only when THIS beat supplies all of the following
+    structured proof:
 
     * at least two positioned bodies joined by a fresh ``near`` link;
-    * exactly one room in the would-be scene owns the group's fresh ``at``
-      anchor(s); and
+    * either exactly one room owns the group's fresh ``at`` anchor(s), OR the
+      unanchored group is mutually near, began co-located, and the player made
+      an ordinary (non-running) move to a resolved room;
     * every already-positioned member had a passable route to that room.
 
-    No near link, no anchor, ambiguous/conflicting anchors, or an impassable
-    route means no relocation.  That keeps bystanders, teleport operators,
-    deliberate departures, and real acoustic barriers outside this repair.
+    An explicit follow stop always wins.  No near link, ambiguous/conflicting
+    anchors, prior separation, rapid movement, or an impassable route means no
+    unanchored relocation.  That keeps bystanders, pursuit, teleport
+    operators, deliberate departures, and real acoustic barriers outside this
+    repair while preventing room granularity from silencing a group that the
+    same resolution says is still together.
     """
     positions = state_diff.get("positions") or {}
     stations = state_diff.get("stations") or {}
@@ -1792,6 +1803,7 @@ def _reconcile_anchored_near_group(ctx, scene, state_diff):
     all_positions = dict(scene.get("positions") or {})
     all_positions.update(positions)
     graph = {}
+    declared_near = {}
     station_by_body = {}
     for raw_name, station in stations.items():
         if not isinstance(station, dict):
@@ -1804,6 +1816,7 @@ def _reconcile_anchored_near_group(ctx, scene, state_diff):
             other = _ci_mapping_key(all_positions, raw_other)
             if other is None or other == body:
                 continue
+            declared_near.setdefault(body, set()).add(other)
             graph.setdefault(body, set()).add(other)
             graph.setdefault(other, set()).add(body)
 
@@ -1846,7 +1859,7 @@ def _reconcile_anchored_near_group(ctx, scene, state_diff):
             anchor_rooms.update(owners)
 
         names = ", ".join(sorted(str(n) for n in component))
-        if ambiguous_anchor or len(anchor_rooms) != 1:
+        if ambiguous_anchor or len(anchor_rooms) > 1:
             if anchor_rooms or ambiguous_anchor:
                 ctx.warnings.append(
                     f"Near-group position conflict for {names}: fresh station "
@@ -1854,7 +1867,71 @@ def _reconcile_anchored_near_group(ctx, scene, state_diff):
                     "left unchanged."
                 )
             continue
-        target_room = next(iter(anchor_rooms))
+
+        target_reason = "fresh anchor"
+        if anchor_rooms:
+            target_room = next(iter(anchor_rooms))
+        else:
+            # No anchor: only repair the narrow ordinary-travel shape.  A
+            # one-sided model-authored near claim is not enough; both bodies
+            # must say they remained together.  Most importantly, they must
+            # have begun together -- following state deliberately does not
+            # teleport an already-separated follower, and neither may this
+            # consistency repair.
+            mutual = all(
+                other in (declared_near.get(body) or set())
+                for body in component
+                for other in (graph.get(body) or set())
+            )
+            start_rooms = {room_of(scene, body) for body in component}
+            player_key = _ci_mapping_key(all_positions, player_name)
+            player_diff_key = _ci_mapping_key(positions, player_key)
+            target_room = positions.get(player_diff_key) if player_diff_key else None
+            player_started = room_of(scene, player_key) if player_key else None
+
+            stopped = {
+                str(op.get("follower") or "").strip().casefold()
+                for op in (state_diff.get("following_ops") or [])
+                if isinstance(op, dict) and op.get("op") == "stop"
+            }
+            component_stopped = any(
+                str(body).strip().casefold() in stopped for body in component)
+
+            # A run/flee may leave a willing follower behind.  Check every
+            # participant's own declaration, not only the player's, so this
+            # fallback cannot become free pursuit in either direction.
+            declarations = []
+            if player_key in component:
+                declarations.append(ctx.get("director_interpret") or {})
+            actor_results = {}
+            actor_results.update(ctx.reaction_results or {})
+            actor_results.update(ctx.character_results or {})
+            for row in ctx.cast:
+                try:
+                    cname = character_name_from_text(row["sheet"])
+                except Exception:
+                    continue
+                body = _ci_mapping_key(all_positions, cname)
+                if body not in component:
+                    continue
+                result = actor_results.get(row["id"]) \
+                    or actor_results.get(str(row["id"]))
+                if isinstance(result, dict):
+                    declarations.append(result)
+            rapid = any(_declares_rapid_movement(d) for d in declarations)
+
+            if not (
+                mutual
+                and player_key in component
+                and len(start_rooms) == 1
+                and None not in start_rooms
+                and target_room
+                and target_room != player_started
+                and not component_stopped
+                and not rapid
+            ):
+                continue
+            target_reason = "ordinary player-led travel"
 
         blocked = []
         for body in component:
@@ -1878,8 +1955,9 @@ def _reconcile_anchored_near_group(ctx, scene, state_diff):
             all_positions[body] = target_room
         changed = True
         ctx.warnings.append(
-            f"Reconciled near group ({names}) to anchor room "
-            f"'{target_room}'; contradictory positions were {before}."
+            f"Reconciled near group ({names}) to room '{target_room}' by "
+            f"{target_reason}; contradictory positions "
+            f"were {before}."
         )
 
     return changed
@@ -3754,7 +3832,7 @@ def director_resolve(ctx, nonce):
     # A fresh station is structured within-room evidence.  Reconcile the
     # narrow provable case before approach semantics gets final authority over
     # whether the player's own movement arrived this beat.
-    _reconcile_anchored_near_group(ctx, sc, sd)
+    _reconcile_near_group_positions(ctx, sc, sd, p_name)
 
     # Runs whether or not a movement was DECLARED, and after the backstop has
     # had its say. The reported case declared one -- interpret turned "wander

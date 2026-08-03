@@ -17,7 +17,7 @@ from character_schema import (
     persona_name,
     persona_senses,
 )
-from db import wget
+from db import q, wget
 from prompts import get_prompt
 from scene import (
     NON_AWAKE_GATED,
@@ -53,6 +53,7 @@ from spatial import (
     visual_level_between,
     hear_level,
     merge_scene_with_diff,
+    normalize_barrier,
     proximity_rel,
     room_layout,
     room_of,
@@ -61,6 +62,208 @@ from spatial import (
     spatial_rel,
     visible_adjacent_rooms,
 )
+
+
+_RAPID_MOVEMENT_VERBS = frozenset({
+    "run", "sprint", "flee", "dash", "bolt", "race", "charge",
+})
+
+
+def _declares_rapid_movement(value):
+    """Whether one structured declaration says the actor moves rapidly."""
+    sequence = value if isinstance(value, list) else (value or {}).get("sequence")
+    for event in sequence or []:
+        if not isinstance(event, dict) or event.get("type") != "action":
+            continue
+        verb = str(event.get("verb") or "").strip().casefold()
+        words = str(
+            event.get("attempt") or event.get("observable") or ""
+        ).strip().casefold().split()
+        if verb in _RAPID_MOVEMENT_VERBS or (
+            words and words[0].rstrip("s") in _RAPID_MOVEMENT_VERBS
+        ):
+            return True
+    return False
+
+
+def _open_route_within(scene, start_room, end_room, max_hops=2):
+    """True only across a short route of fully open air/doorway edges."""
+    if not start_room or not end_room or start_room == end_room:
+        return False
+    neighbors = {}
+    for room_id, room in (scene.get("rooms") or {}).items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict):
+                continue
+            target = edge.get("to")
+            if not target or normalize_barrier(edge.get("barrier")) not in {
+                "open", "open_door",
+            }:
+                continue
+            neighbors.setdefault(room_id, set()).add(target)
+            neighbors.setdefault(target, set()).add(room_id)
+
+    frontier = [(start_room, 0)]
+    seen = {start_room}
+    while frontier:
+        room_id, hops = frontier.pop(0)
+        if hops >= max_hops:
+            continue
+        for target in neighbors.get(room_id, ()):
+            if target == end_room:
+                return True
+            if target not in seen:
+                seen.add(target)
+                frontier.append((target, hops + 1))
+    return False
+
+
+def _ci_value(mapping, name):
+    wanted = str(name or "").strip().casefold()
+    for key, value in (mapping or {}).items():
+        if str(key).strip().casefold() == wanted:
+            return value
+    return None
+
+
+def _mutually_near(stations, first, second):
+    first_station = _ci_value(stations, first)
+    second_station = _ci_value(stations, second)
+    if not isinstance(first_station, dict) or not isinstance(second_station, dict):
+        return False
+    first_near = {
+        str(value).strip().casefold()
+        for value in (first_station.get("near") or [])
+    }
+    second_near = {
+        str(value).strip().casefold()
+        for value in (second_station.get("near") or [])
+    }
+    return (
+        str(second).strip().casefold() in first_near
+        and str(first).strip().casefold() in second_near
+    )
+
+
+def _previous_open_group_continuity(
+        ctx, scene, actor_name, observer_name, observer_id,
+        actor_room, observer_room):
+    """Rescue hearing from one already-corrupted pre-turn checkpoint.
+
+    Older resolver output could put two ordinary walkers in different path
+    rooms while its same state diff explicitly kept them mutually ``near``.
+    Reroll restores that contradiction before the repaired resolver gets a
+    chance to run, so onset hearing otherwise loses the companion's next line.
+
+    This is evidence recovery, not following or pursuit: both bodies must have
+    begun the previous beat co-located, both must have moved, the previous
+    result must explicitly keep them mutually near, neither declaration may be
+    rapid, neither may stop following, the restored rooms must exactly match
+    the contradictory result, and only a two-hop fully-open route qualifies.
+    """
+    if ctx.turn.idx <= 0 or not _open_route_within(
+            scene, actor_room, observer_room, max_hops=2):
+        return False
+
+    cache_key = "_previous_open_group_evidence"
+    if cache_key not in ctx:
+        previous = q(
+            "SELECT id FROM turns WHERE chat_id=? AND idx=?",
+            (ctx.chat.id, ctx.turn.idx - 1), one=True,
+        )
+        evidence = {"outputs": {}, "checkpoint": {}}
+        if previous:
+            rows = q(
+                "SELECT s.key,v.content FROM steps s JOIN variants v "
+                "ON v.step_id=s.id AND v.active=1 "
+                "WHERE s.turn_id=? AND (s.key IN "
+                "('director_interpret','interaction_loop','director_resolve') "
+                "OR s.key LIKE 'character:%')",
+                (previous["id"],),
+            )
+            for row in rows:
+                try:
+                    evidence["outputs"][row["key"]] = json.loads(row["content"])
+                except (TypeError, ValueError):
+                    continue
+            checkpoint = q(
+                "SELECT blob FROM checkpoints WHERE chat_id=? AND turn_idx=?",
+                (ctx.chat.id, ctx.turn.idx - 1), one=True,
+            )
+            if checkpoint:
+                try:
+                    evidence["checkpoint"] = json.loads(checkpoint["blob"])
+                except (TypeError, ValueError):
+                    pass
+        ctx[cache_key] = evidence
+
+    evidence = ctx.get(cache_key) or {}
+    outputs = evidence.get("outputs") or {}
+    previous_resolve = outputs.get("director_resolve") or {}
+    state_diff = previous_resolve.get("state_diff") or {}
+    positions = state_diff.get("positions") or {}
+    stations = state_diff.get("stations") or {}
+    actor_result_room = _ci_value(positions, actor_name)
+    observer_result_room = _ci_value(positions, observer_name)
+    if (
+        actor_result_room != actor_room
+        or observer_result_room != observer_room
+        or not _mutually_near(stations, actor_name, observer_name)
+    ):
+        return False
+
+    prior_scene = (
+        ((evidence.get("checkpoint") or {}).get("world") or {}).get("scene")
+        or {}
+    )
+    prior_positions = prior_scene.get("positions") or {}
+    actor_start = _ci_value(prior_positions, actor_name)
+    observer_start = _ci_value(prior_positions, observer_name)
+    if (
+        not actor_start
+        or actor_start != observer_start
+        or actor_result_room == actor_start
+        or observer_result_room == observer_start
+    ):
+        return False
+
+    previous_interpret = outputs.get("director_interpret") or {}
+    if not isinstance(previous_interpret.get("movement"), dict):
+        return False
+    interaction = outputs.get("interaction_loop") or {}
+    character_results = interaction.get("character_results") or {}
+    observer_result = (
+        character_results.get(str(observer_id))
+        or character_results.get(observer_id)
+        or outputs.get(f"character:{observer_id}")
+        or {}
+    )
+    if not any(
+        isinstance(event, dict) and event.get("type") == "action"
+        for event in (observer_result.get("sequence") or [])
+    ):
+        return False
+    if (
+        _declares_rapid_movement(previous_interpret)
+        or _declares_rapid_movement(observer_result)
+    ):
+        return False
+
+    pair = {
+        str(actor_name).strip().casefold(),
+        str(observer_name).strip().casefold(),
+    }
+    for op in state_diff.get("following_ops") or []:
+        if not isinstance(op, dict) or op.get("op") != "stop":
+            continue
+        if str(op.get("follower") or "").strip().casefold() in pair:
+            return False
+    follow_op = observer_result.get("follow_op") or {}
+    if isinstance(follow_op, dict) and follow_op.get("op") == "stop":
+        return False
+    return True
 
 
 def _addresses(intended_target, observer_name):
@@ -192,6 +395,23 @@ _SELF_DIRECTED = re.compile(
 
 # Closing quotes and brackets ride with the sentence they end.
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?…])[\"'”’)\]]*\s+")
+
+# Does this sentence ASSERT SIGHT -- somebody looking at something, in the
+# verbs a view actually uses for it. Read by `_strip_self_narration`'s floor,
+# which refuses to leave a perceiver with no sight at all.
+#
+# Deliberately its own pattern rather than `_atom_channel`'s "sight" cues:
+# those classify a whole ATOM for the observation projection, they lean on
+# second-person phrasing ("you see") that is by definition absent from the
+# third-person views this floor exists for, and widening them would move
+# every consumer of that classification.
+_SIGHT_ASSERTION = re.compile(
+    r"\b(?:sees?|saw|seen|seeing|watch(?:es|ed|ing)?|look(?:s|ed|ing)?\s+at"
+    r"|notic(?:e|es|ed|ing)|observ(?:e|es|ed|ing)|glimps(?:e|es|ed|ing)"
+    r"|spots?|spotted|makes?\s+out|made\s+out|catch(?:es)?\s+sight\s+of"
+    r"|caught\s+sight\s+of|in\s+view|visible|in\s+sight)\b",
+    re.I,
+)
 
 # Atoms per view. High enough that a busy beat still decomposes, low enough
 # that a character payload stays readable.
@@ -551,6 +771,16 @@ def _inject_onset_speech(view, speech_elems, perceiver, rel, display, can_see):
             rel, event.get("volume", "normal"),
             proximity=perceiver.get("proximity_to_actor"),
         )
+        # Compatibility floor for a rerolled checkpoint that predates the
+        # near-group position repair.  It grants hearing only; the relation's
+        # real spatial fields still govern sight and every other channel.
+        if (
+            level == "none"
+            and rel.get("open_group_continuity")
+            and str(event.get("volume") or "normal").casefold()
+            in {"normal", "loud", "shout"}
+        ):
+            level = "full"
         body = _quote_body(event.get("text"))
         if level == "none" or not body or _contains_quote(view, body):
             continue
@@ -672,6 +902,7 @@ def _inject_onset_sequence(view, sequence, perceiver, rel, display, can_see,
                            scene, actor_name, self_forms):
     """Project authorized speech/actions in their declared order."""
     delivered = set()
+    continuity_available = bool(rel.get("open_group_continuity"))
     sentence_display = str(display or "")
     if sentence_display:
         sentence_display = sentence_display[:1].upper() + sentence_display[1:]
@@ -684,11 +915,18 @@ def _inject_onset_sequence(view, sequence, perceiver, rel, display, can_see,
         ):
             continue
         if event.get("type") == "speech":
+            speech_rel = rel if continuity_available else {
+                **rel, "open_group_continuity": False,
+            }
             view = _inject_onset_speech(
-                view, [event], perceiver, rel, sentence_display, can_see)
+                view, [event], perceiver, speech_rel, sentence_display, can_see)
             continue
         if event.get("type") != "action":
             continue
+        if _declares_rapid_movement([event]):
+            # Speech before the run remains audible; speech after the run gets
+            # no continuity floor.  Following is not all-powerful pursuit.
+            continuity_available = False
         surface = observable_action_text(event)
         if not surface or entity_arc(
                 scene, perceiver.get("name"), actor_name) == "rear":
@@ -925,7 +1163,7 @@ def _pronouns_for_perceiver(all_pronouns, perceiver, known):
 _SENTENCE_SPLIT = re.compile(r'(?<=[.!?])\s+|(?<=[.!?]["\u201d\u2019\'])\s+')
 
 
-def _strip_self_narration(view, perceiver_name, other_names=()):
+def _strip_self_narration(view, perceiver_name, other_names=(), refusals=None):
     """Drop sentences that narrate the PERCEIVER from outside their own view.
 
     A view is what one mind receives. It may say "you" and it may describe
@@ -958,6 +1196,11 @@ def _strip_self_narration(view, perceiver_name, other_names=()):
     catch, and invisible to it because the subject was written as "She". An
     unanchored pronoun still binds to nobody rather than to a guess, so a view
     that never names the perceiver is left alone.
+
+    Both floors below REFUSE to drop rather than dropping less, and a refusal
+    is a view knowingly delivered with self-narration still in it. Pass a list
+    as `refusals` to hear about it; the default of None keeps the two-tuple
+    contract every existing caller and test relies on.
     """
     if not view or not perceiver_name:
         return view, []
@@ -983,8 +1226,48 @@ def _strip_self_narration(view, perceiver_name, other_names=()):
         return view, []
     # Never empty a view entirely: a perceiver who received something must be
     # told something. If every sentence named them, the view is beyond repair
-    # by deletion and is left alone for the warning to carry.
+    # by deletion and is left alone for the refusal to carry.
     if not kept:
+        if refusals is not None:
+            refusals.append(
+                "every sentence named the perceiver, so the view is beyond "
+                "repair by deletion and was delivered as written")
+        return view, []
+    # Never take a perceiver's eyes off the beat either. A view written wholly
+    # from outside its own perceiver puts them in the subject slot of exactly
+    # the sentences carrying what they SAW -- "The Doctor watches her run
+    # across the gravel and throw her arms around the kitsune" -- so a
+    # subject-anchored drop removes the framing error and the observation
+    # together, and the sentences left standing are the ones about the weather.
+    #
+    # Live (chat 38, t140): the Doctor stood at the genkan, six feet from an
+    # embrace the resolved event says he was watching with bright interest, in
+    # a lit-enough room with `shapes` sight to both bodies. Perception wrote
+    # his view in the third person, this guard dropped both sight sentences,
+    # and his view, his structured observations and his committed memory of
+    # that beat all came out sound-only -- a permanent hole in what that mind
+    # knows, from a framing slip.
+    #
+    # The two failures are not equal and the module already says so:
+    # `_strip_unreachable_bodies` refuses over-denial on the ground that
+    # "silence about someone audibly present is its own lie". Being told about
+    # yourself in the third person for one beat is bounded and visible; losing
+    # what you saw is neither. So when the drop would leave a view with no
+    # assertion of sight in it at all, the view stands and the warning carries
+    # it.
+    #
+    # Narrow on purpose: it keys on the verbs a view actually uses to assert
+    # sight, so it is a floor under this specific loss and NOT a general
+    # promise that nothing informative is ever dropped (a view phrasing sight
+    # as "visual sensors pick up" is still dropped whole -- see
+    # test_a_body_named_with_an_article_is_caught_under_another_article).
+    if (any(_SIGHT_ASSERTION.search(s) for s in dropped)
+            and not any(_SIGHT_ASSERTION.search(s) for s in kept)):
+        if refusals is not None:
+            refusals.append(
+                "dropping self-narration would have left this view with no "
+                "sight in it at all, so it was delivered as written: "
+                + "; ".join(s[:120] for s in dropped))
         return view, []
     return " ".join(kept), dropped
 
@@ -1064,8 +1347,13 @@ def _scrub_view_for(ctx, stage, view, perceiver_name, known, roster,
         ctx.warnings.append(
             f"{stage}: scrubbed unearned identity {leaked} "
             f"from the view of {perceiver_name}")
+    refused = []
     view, self_narrated = _strip_self_narration(
-        view, perceiver_name, [s["name"] for s in roster])
+        view, perceiver_name, [s["name"] for s in roster], refusals=refused)
+    for reason in refused:
+        ctx.warnings.append(
+            f"{stage}: kept self-narration in the view of "
+            f"{perceiver_name} — {reason}")
     for sentence in self_narrated:
         ctx.warnings.append(
             f"{stage}: dropped self-narration from the view of "
@@ -1681,6 +1969,9 @@ def perception_act(ctx, nonce):
         sh, act, _ = sheet_state(c)
         r = character_room(sc, sh)
         rel = spatial_rel(sc, p_room, r)
+        if _previous_open_group_continuity(
+                ctx, sc, p_name, character_name(sh), c["id"], p_room, r):
+            rel = {**rel, "open_group_continuity": True}
         # The actor may be part-way through a boundary this observer is
         # standing behind -- going through a doorway is watched from the room
         # behind rather than vanishing the instant the position field changed.
@@ -2637,6 +2928,10 @@ def perception_outcome(ctx, nonce):
         # dialogue line after an action, or vice versa) refers back to them
         # instead of re-pasting the whole appearance paragraph again.
         described_this_pass = set()
+        # What the hearing gate decided this mind actually receives, kept so
+        # the scrub chain below can be checked against it. See the floor at
+        # the end of this loop.
+        delivered_lines = []
         _ubiq = _ubiquitous_names(sc)
         for d in npc_dlog:
             d_speaker = d.get("speaker", "?")
@@ -2725,6 +3020,14 @@ def perception_outcome(ctx, nonce):
             view = _inject_dialogue(view, display, d.get("exact_quote"),
                                     level, d.get("volume", "normal"), can_see,
                                     conducted=bool(rel.get("inside_source")))
+            # Only `full` is recorded for the floor below. A `fragment` is
+            # rendered as a muffled paraphrase rather than the body, so it has
+            # no verbatim form to check for, and re-injecting it every pass
+            # would stack duplicates.
+            if level == "full":
+                delivered_lines.append(
+                    (display, d.get("exact_quote"), d.get("volume", "normal"),
+                     can_see, bool(rel.get("inside_source"))))
         for act in last_overt_by_actor.values():
             if act["actor"] == p["name"]:
                 continue
@@ -2791,7 +3094,40 @@ def perception_outcome(ctx, nonce):
             ctx.warnings.append(
                 "perception_outcome: dropped invented dialogue from view "
                 f"'{pid}': {_invented}")
-        clean_views[pid] = _dedupe_view_sentences(view) or None
+        view = _dedupe_view_sentences(view)
+        # HEARD-LINE FLOOR. Everything above this point can REMOVE text: three
+        # scrubs and a dedupe, each correct on its own and none of them aware
+        # that a line the hearing gate already granted might be inside what
+        # they take. Injection runs BEFORE all of them, and nothing re-checked
+        # afterwards, so a line could be delivered and then quietly deleted.
+        #
+        # Live (chat 38, t137): the Doctor walked beside the player and spoke
+        # four times, all `normal` volume, same room, open barrier. Her view
+        # ends "...as we scan the mist-shrouded surroundings together. Yeah, I
+        # bet I will."" -- an orphaned tail with a closing quote and no
+        # opening, the signature of a partial quoted span being removed from
+        # the middle of a delivered line. The other three lines are absent
+        # entirely. Across the stored corpus, 30 of 1549 lines spoken by
+        # somebody standing in the player's own room never reached their view.
+        #
+        # Nothing downstream could catch it either: the narrator's dialogue
+        # fidelity check compares the PROSE against the VIEW, so a line lost
+        # from the view is a line the check agrees is not missing.
+        #
+        # Re-injection is safe by construction: these bodies come from the
+        # Director's dialogue_log and passed this perceiver's own hearing gate
+        # a few lines above. That is exactly what the scrubs are FOR -- they
+        # exist to remove dialogue with no such provenance.
+        for display, quote, volume, can_see, conducted in delivered_lines:
+            body = _quote_body(quote)
+            if not body or _contains_quote(view, body):
+                continue
+            view = _inject_dialogue(view, display, quote, "full", volume,
+                                    can_see, conducted=conducted)
+            ctx.warnings.append(
+                f"perception_outcome: restored a heard line dropped by the "
+                f"scrub chain from view '{pid}': \"{body[:80]}\"")
+        clean_views[pid] = view or None
 
     loop = ctx.interaction_loop or {}
     for round_data in loop.get("rounds") or []:

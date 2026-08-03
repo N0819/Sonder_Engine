@@ -1,5 +1,96 @@
 # Changelog
 
+## alpha 6.9 — What a mind was given, and what it was told
+
+- Character dialogue continuity now records one selected conversational job per
+  turn, over twelve turns, beside the shorter verbatim-line window. This closes
+  the live chat-38 loop where Saturn, dragons, and finally Calufrax were offered
+  as supposedly different post-shrine choices while “your choice,” “your pick,”
+  and “your lead” repeatedly handed back the same unanswered decision.
+- Semantic similarity is a review trigger, not an automatic rejection. One
+  bounded review combines potential repeated-move, exact-line, and spent-
+  intention findings, but may preserve a continuation the current exchange
+  invited or advanced. The prompt explicitly protects lists, emphasis,
+  callbacks, deliberate repetition, and excited in-character riffs or rants;
+  the defect is an unmotivated reset that behaves as though the previous turn
+  was never heard. A semantically similar move retained after review does not
+  mark the character as stuck.
+- Intention status is now authority rather than decoration. Dormant, blocked,
+  satisfied, and abandoned intentions remain visible for autobiographical
+  continuity but cannot authorize a fresh want or selected response;
+  `steering_intention_ids` states the allowed set before the decision and commit
+  applies the same boundary to settled active state.
+
+- Perception no longer deletes a view's only sight. The guard that drops
+  sentences narrating a view's own perceiver is right, and in a view written
+  wholly in the third person the perceiver is the subject of exactly the
+  sentences carrying what they SAW — so the framing error and the observation
+  went together. Live in chat 38 t140: the Doctor stood six feet from an
+  embrace the resolved event says he watched with bright interest, and his
+  view, his structured observations and his committed memory of the beat all
+  came out sound-only. The perception prompt now requires each view to be
+  written from inside its perceiver (it carried no person discipline at all,
+  while this scrub enforced one), and the guard refuses a drop that would
+  leave a view with no sight in it, reporting the refusal instead.
+- The interaction loop's first wave is simultaneous. Everyone in the initial
+  reactor queue is answering the same thing — the player's already-fixed
+  declaration — and none has seen another reactor's response, because none
+  exists yet. The loop's early exits end the BEAT, and the commonest fires on
+  any declared act with a target, so the addressed character would touch
+  somebody and every other reactor went unsimulated: 153 of 196 beats with two
+  or more reactors left at least one never called at all. A character who
+  never ran has no appraisal, no drive strain from a beat aimed at them, and
+  no memory of having chosen to stay quiet. `initial_parallel_reactors` had
+  been in the config, unread, since before this. Parallel in the fiction, not
+  in execution.
+- The Director's reactor clause now says what it means. `reactors` is
+  permission to respond, not a requirement, and explicitly not "who was
+  addressed" — across the stored corpus 79% of beats with two or more
+  witnesses named fewer reactors than there were witnesses, and the omitted
+  ones were usually just those not spoken to.
+- Off-screen life is a settable ceiling rather than an ungated default.
+  `BehaviorController`'s ladder — specified in the design document and
+  consumed nowhere — is now the `offscreen_life` setting in the NPC dialogue
+  panel, gated both where the dormant cast is offered to the model and again
+  where ticks are written. Wiring it found the engine already emitting ticks
+  on every scene change with no dial, no bound and no reader, into a field
+  typed loosely enough that four different shapes of it are in the live logs.
+  `reactive` and `character_agent` are permission, not behaviour: the gate
+  exists so the villain-with-a-clock work lands opt-in on a story that asked.
+- Lore no longer names people a mind has not met. Which entries reach a
+  character was gated by knowledge tag and range; who those entries could NAME
+  was not, and the mapping stage writes lore during play using canonical
+  names. Tamamo, who had met the Doctor one beat earlier and whose every other
+  surface correctly called him "the lean energetic man", was handed an entry
+  opening "As The Doctor and Hinami walk deeper into the Deck 14 corridor" —
+  and addressed him as "Doctor" in the same beat. 65 entries across 22 chats
+  name a cast member.
+- A heard line now survives the scrub chain. Perception injects each audible
+  line into a view and then runs four passes that remove text, none aware that
+  a line the hearing gate already granted might be inside what it takes.
+  Measured against each turn's own positions, 30 of 1549 lines spoken by
+  somebody standing in the player's own room never reached their view. The
+  narrator's dialogue-fidelity check could not catch it: it compares the prose
+  against the view, so a line lost from the view is one it agrees is not
+  missing.
+- Two speakers can no longer share one pair of quotes. Dialogue fidelity asks
+  whether a line survived, not whose mouth it landed in, and both questions
+  have the same answer when two characters' lines are welded into one span —
+  every body is present verbatim. Live in chat 38 t140, where Tamamo's "Be at
+  ease, both of you." and the Doctor's "Tamamo. A pleasure." rendered as one
+  quoted span attributed to him. The new check reads `event_order`, already
+  gated to lines that reached the player, and is enforceable: zero false
+  positives across 1082 multi-speaker beats.
+- A stored step can be read one mind at a time. The pipeline drawer renders
+  per-perceiver and per-character steps through a lens — named, with that
+  mind's derived observations beside its prose — and every other step through
+  its own top-level fields, with the raw JSON one click away. Steps now carry
+  an `_engine_notes` record of what the deterministic layer repaired in them
+  and which steps they ran beside, and `ctx.warnings` is no longer
+  write-only: warnings are tagged with the step that raised them and shown
+  above it. Concurrent steps are marked as concurrent in both the live log and
+  the persisted view, which `steps.ord` cannot express.
+
 ## alpha 6.8.1 — A companion is following, not tethered
 
 - Following is now an explicit voluntary follower → target state for players

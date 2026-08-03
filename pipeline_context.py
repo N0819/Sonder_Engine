@@ -1,9 +1,57 @@
 # pipeline_context.py
 """Typed context object carrying all pipeline state."""
 
+import contextvars
 from dataclasses import dataclass, field
 from typing import Any, Optional
 from db import wget
+
+# Which pipeline step is running on THIS thread, so a warning raised anywhere
+# under it can be attributed without every producer having to say so.
+# `agents.runtime.compute_step` is the single funnel that sets it, and the
+# parallel groups copy the context per thread, so a fan-out cannot mis-file a
+# sibling's warning onto this step.
+current_step_key: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "current_step_key", default=None)
+
+
+class StepTaggedWarnings(list):
+    """A list of warning strings that also remembers which step raised each.
+
+    A plain `list` because that is what every producer and every test already
+    has: the engine warns from ~40 sites across six modules, spelled both
+    `ctx.warnings.append(...)` and `ctx.add_warning(...)`, and a dozen tests
+    build a stand-in context whose `warnings` is a bare list. Tagging at the
+    call sites would have meant editing all of them and would still have
+    missed the next one. Tagging here catches every spelling, including the
+    ones not written yet, and a fake context with a plain list keeps working
+    untagged.
+
+    `notes` is parallel to the list itself, one entry per append.
+    """
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.notes: list[dict] = [
+            {"step": None, "text": str(item)} for item in self]
+
+    def append(self, item):
+        super().append(item)
+        self.notes.append({"step": current_step_key.get(), "text": str(item)})
+
+    def extend(self, items):
+        for item in items:
+            self.append(item)
+
+    def for_step(self, key) -> list[str]:
+        """Every warning raised while `key` was the running step.
+
+        By contextvar rather than by list position: the parallel groups run
+        siblings on their own threads against a copied context, so slicing by
+        index would file one step's repair under whichever sibling happened to
+        finish first.
+        """
+        return [n["text"] for n in self.notes if n.get("step") == key]
 
 @dataclass
 class ChatData:
@@ -90,16 +138,27 @@ class PipelineContext:
     _fiction_model: Optional[dict] = None
     _simulation_clock: Optional[dict] = None
 
-    warnings: list[str] = field(default_factory=list)
+    # What the deterministic layer had to REPAIR in this beat's model output,
+    # tagged with the step that raised each message (see StepTaggedWarnings)
+    # and shown per step in the pipeline drawer.
+    #
+    # This was a developer channel nothing in production read, and the cost of
+    # that was measured rather than theorised: perception dropped both sight
+    # sentences from a character's view of a beat he was watching from six
+    # feet away, warned about it twice, and the warnings went into a list no
+    # reader existed for. His view, his structured observations and his
+    # committed memory of that beat all came out sound-only, and finding out
+    # why took a database excavation.
+    warnings: StepTaggedWarnings = field(default_factory=StepTaggedWarnings)
     # What the deterministic layer DID with this beat's model output, in the
     # Director's own terms, carried to the NEXT beat through engine_notices.
     #
-    # Distinct from `warnings`, which is a developer channel nothing in
-    # production reads (docs/UNBUILT.md 1.11). This one is for the model: when
-    # commit silently reinterprets or discards something it emitted, saying so
-    # is the difference between a mistake it repeats forever and one it can
-    # correct. A stage that cannot see what happened to its output is
-    # guessing every beat.
+    # Distinct from `warnings`: that one is a developer/UI channel about what
+    # the engine had to repair. This one is for the model — when commit
+    # silently reinterprets or discards something it emitted, saying so is the
+    # difference between a mistake it repeats forever and one it can correct.
+    # A stage that cannot see what happened to its output is guessing every
+    # beat.
     engine_feedback: list[str] = field(default_factory=list)
     _extra: dict[str, Any] = field(default_factory=dict)
 
@@ -176,6 +235,11 @@ class PipelineContext:
 
     def add_warning(self, msg: str):
         self.warnings.append(msg)
+
+    def warnings_for_step(self, key: str) -> list[str]:
+        """Every warning raised while `key` was the running step."""
+        for_step = getattr(self.warnings, "for_step", None)
+        return for_step(key) if for_step else []
 
     def tell_director(self, msg: str):
         """Report what the engine made of the model's output, for next beat."""

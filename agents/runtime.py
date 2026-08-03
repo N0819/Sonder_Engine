@@ -13,7 +13,9 @@ from character_schema import (character_name, character_name_from_text,
 from checkpoints import ensure_checkpoint, restore_checkpoint
 from commit import commit_all
 from db import active_frame_id, q, qi, wset
-from pipeline_context import ChatData, PipelineContext, TurnData
+from pipeline_context import (
+    ChatData, PipelineContext, TurnData, current_step_key,
+)
 from providers import Aborted, cancel_event, generation_event_sink, token_sink
 from scene import (
     NON_AWAKE_GATED,
@@ -33,8 +35,8 @@ from .mapping import mapping_quick, mapping_stage
 from .narration import narrator, narrator_extra
 from .perception import perception_act, perception_establish, perception_outcome
 from .storage import (
-    active_content, clear_steps_stale, delete_step, mark_steps_stale,
-    save_step, step_is_stale, variant_count,
+    ENGINE_NOTES_KEY, active_content, clear_steps_stale, delete_step,
+    mark_steps_stale, save_step, step_is_stale, variant_count,
 )
 
 def _load_extra_players(chat_id, turn_idx, frame_id=None):
@@ -203,13 +205,42 @@ def register_step(key, handler, *, replace=False):
 
 
 def compute_step(key, ctx, nonce):
-    if key.startswith("character:"):
-        return character_step(ctx, int(key.split(":", 1)[1]), nonce)
+    # The single funnel every stage passes through, which is why the step
+    # contextvar is set here rather than at the four call sites: a warning
+    # raised anywhere beneath this call -- perception's scrubs, commit's
+    # dedup, a loop's repair -- is attributed to this step without the
+    # producer knowing it is being attributed. Restored on the way out so a
+    # sequential run does not leave the last step's key standing.
+    token = current_step_key.set(key)
+    try:
+        if key.startswith("character:"):
+            return character_step(ctx, int(key.split(":", 1)[1]), nonce)
 
-    handler = STEP_HANDLERS.get(key)
-    if handler is None:
-        raise RuntimeError("unknown step " + key)
-    return handler(ctx, nonce)
+        handler = STEP_HANDLERS.get(key)
+        if handler is None:
+            raise RuntimeError("unknown step " + key)
+        return handler(ctx, nonce)
+    finally:
+        current_step_key.reset(token)
+
+
+def _with_engine_notes(content, ctx, key, parallel_with=()):
+    """Attach this step's engine notes to the content about to be saved."""
+    if not isinstance(content, dict):
+        # A non-dict step output has nowhere to carry them; the warnings are
+        # still on ctx, and no built-in stage returns one.
+        return content
+    notes = {}
+    warnings = ctx.warnings_for_step(key) if hasattr(ctx, "warnings_for_step") else []
+    if warnings:
+        notes["warnings"] = warnings
+    if parallel_with:
+        notes["parallel_with"] = list(parallel_with)
+    if not notes:
+        # Absent rather than empty: a step with nothing to report should not
+        # grow a key, so an unchanged pipeline produces byte-identical content.
+        return content
+    return {**content, ENGINE_NOTES_KEY: notes}
 
 class Bus:
     def __init__(self):
@@ -314,6 +345,40 @@ def _evt(key, label, sid, vid, n, content):
     return {"type": "step", "key": key, "label": label,
             "step_id": sid, "variant_id": vid, "variants": n, "content": content}
 
+def _run_parallel_group(bus, turn_id, group, keys, ctx):
+    """Run one concurrent group of steps, stream it, and persist the group.
+
+    The three overlapping pairings (character siblings, mapping beside
+    action-onset perception, narrator beside narrator_extra) were three
+    copies of this body; the copies are why concurrency was invisible
+    downstream, since making it visible meant editing it three times.
+
+    Concurrency is stated twice because it is asked twice. The `group` on
+    each `step_start` is for the LIVE log, which otherwise renders a
+    simultaneous pair as two ordinary steps that happened to be quick; the
+    `parallel_with` note is for the persisted pipeline view, which reads the
+    `steps` table long after the events are gone and has nothing but `ord` to
+    go on.
+    """
+    members = [k for k, _ in group]
+    for k, lbl in group:
+        yield {"type": "step_start", "key": k, "label": lbl,
+               "group": members}
+    holders = {}
+    jobs = [(k, (lambda kk=k: compute_step(kk, ctx, variant_count(turn_id, kk))))
+            for k in members]
+    yield from _stream_parallel(bus, jobs, holders)
+    for k, lbl in group:
+        h = holders[k]
+        if "e" in h:
+            raise h["e"]
+        ctx[k] = h["v"]
+        saved = _with_engine_notes(
+            h["v"], ctx, k, parallel_with=[m for m in members if m != k])
+        sid, vid, n = save_step(turn_id, k, lbl, keys.index(k), saved)
+        yield _evt(k, lbl, sid, vid, n, saved)
+
+
 def _step_stream(bus, turn_id, key, label, ordn, ctx, nonce):
     yield {"type": "step_start", "key": key, "label": label}
     holder = {}
@@ -321,8 +386,11 @@ def _step_stream(bus, turn_id, key, label, ordn, ctx, nonce):
     if "e" in holder:
         raise holder["e"]
     ctx[key] = holder["v"]
-    sid, vid, n = save_step(turn_id, key, label, ordn, holder["v"])
-    yield _evt(key, label, sid, vid, n, holder["v"])
+    # ctx keeps the stage's own output; only what is PERSISTED carries the
+    # notes, so no downstream stage reads a key its schema never declared.
+    saved = _with_engine_notes(holder["v"], ctx, key)
+    sid, vid, n = save_step(turn_id, key, label, ordn, saved)
+    yield _evt(key, label, sid, vid, n, saved)
 
 def resume_key_for_turn(turn_id, chat_id):
     """Find the first missing or stale step in a turn's plan."""
@@ -843,19 +911,7 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             while j < len(plan) and plan[j][0].startswith("character:"):
                 group.append(plan[j])
                 j += 1
-            for k, lbl in group:
-                yield {"type": "step_start", "key": k, "label": lbl}
-            holders = {}
-            jobs = [(k, (lambda kk=k: compute_step(kk, ctx, variant_count(turn_id, kk))))
-                    for k, _ in group]
-            yield from _stream_parallel(bus, jobs, holders)
-            for k, lbl in group:
-                h = holders[k]
-                if "e" in h:
-                    raise h["e"]
-                ctx[k] = h["v"]
-                sid, vid, n = save_step(turn_id, k, lbl, keys.index(k), h["v"])
-                yield _evt(k, lbl, sid, vid, n, h["v"])
+            yield from _run_parallel_group(bus, turn_id, group, keys, ctx)
             i = j
             continue
         if (
@@ -869,20 +925,8 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             # turns are excluded by _mapping_must_precede_perception: on those
             # turns perception genuinely consumes the freshly staged room lore
             # and must run second for first-turn sensory fidelity.
-            pair = [(key, label), plan[i + 1]]
-            for k, lbl in pair:
-                yield {"type": "step_start", "key": k, "label": lbl}
-            holders = {}
-            jobs = [(k, (lambda kk=k: compute_step(kk, ctx, variant_count(turn_id, kk))))
-                    for k, _ in pair]
-            yield from _stream_parallel(bus, jobs, holders)
-            for k, lbl in pair:
-                h = holders[k]
-                if "e" in h:
-                    raise h["e"]
-                ctx[k] = h["v"]
-                sid, vid, n = save_step(turn_id, k, lbl, keys.index(k), h["v"])
-                yield _evt(k, lbl, sid, vid, n, h["v"])
+            yield from _run_parallel_group(
+                bus, turn_id, [(key, label), plan[i + 1]], keys, ctx)
             i += 2
             continue
         if (
@@ -898,20 +942,8 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             # grep: narration.py never reads ctx.narrator from within
             # narrator_extra, or vice versa. Same independent-work pattern
             # as the mapping/perception_act pairing above.
-            pair = [(key, label), plan[i + 1]]
-            for k, lbl in pair:
-                yield {"type": "step_start", "key": k, "label": lbl}
-            holders = {}
-            jobs = [(k, (lambda kk=k: compute_step(kk, ctx, variant_count(turn_id, kk))))
-                    for k, _ in pair]
-            yield from _stream_parallel(bus, jobs, holders)
-            for k, lbl in pair:
-                h = holders[k]
-                if "e" in h:
-                    raise h["e"]
-                ctx[k] = h["v"]
-                sid, vid, n = save_step(turn_id, k, lbl, keys.index(k), h["v"])
-                yield _evt(k, lbl, sid, vid, n, h["v"])
+            yield from _run_parallel_group(
+                bus, turn_id, [(key, label), plan[i + 1]], keys, ctx)
             i += 2
             continue
         yield from _step_stream(bus, turn_id, key, label, i, ctx,
