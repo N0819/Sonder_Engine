@@ -2212,6 +2212,27 @@ def character_step(ctx, cid, nonce):
         "learned_beliefs": _interior.get("beliefs") or [],
         "learned_associations": _interior.get("associations") or [],
     }
+    # Following is a voluntary, durable decision this mind owns. Surface its
+    # own relation as self-knowledge even after a fast target has pulled ahead;
+    # separation does not silently decide whether it keeps chasing or stops.
+    _following = sc.get("following") or {}
+    _my_follow = next(
+        (record for follower, record in _following.items()
+         if str(follower).strip().casefold()
+         == character_name(sh).strip().casefold()
+         and isinstance(record, dict)),
+        None,
+    )
+    if _my_follow:
+        _self["following"] = {
+            "target": _my_follow.get("target"),
+            "since_turn": _my_follow.get("since_turn"),
+            "reason": _my_follow.get("reason") or "",
+            "target_room": room_of(sc, _my_follow.get("target")),
+            "same_room": (
+                room_of(sc, _my_follow.get("target")) == char_room
+                if char_room else False),
+        }
     _body_state = vitals_of(sc, character_name(sh))
     if _body_state:
         # Own-body interoception only. Other characters' vitals never enter

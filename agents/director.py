@@ -375,6 +375,7 @@ def director_interpret(ctx, nonce):
             # MAINTAIN the ledger -- it was being asked to write stations it
             # was never allowed to read.
             "stations": sc.get("stations") or {},
+            "following": sc.get("following") or {},
         },
         "simulation_clock": clock,
         "paradox": paradox_visible_to(chat["id"], ctx.turn.frame_id),
@@ -387,6 +388,8 @@ def director_interpret(ctx, nonce):
                 pers.get("name") or persona_name(pers),
                 pers.get("appearance") or persona_appearance(pers), sc),
             "abilities": persona_abilities(pers),
+            "following": (sc.get("following") or {}).get(
+                pers.get("name") or persona_name(pers)),
             "public_shadow_profile": raw_shadow[:1200],
             # Heading, so "forward" and "back" name different doorways.
             "exits": _egocentric_exits(
@@ -411,7 +414,8 @@ def director_interpret(ctx, nonce):
         # the beat via perception_outcome/narrator_extra; they just don't
         # need the director's attention.
         "other_players": [
-            {"persona_id": p["persona_id"], "name": p["name"], "raw_input": p["input"]}
+            {"persona_id": p["persona_id"], "name": p["name"], "raw_input": p["input"],
+             "following": (sc.get("following") or {}).get(p["name"])}
             for p in ctx.extra_players if not p.get("idle")
         ],
         "variant_seed": nonce,
@@ -1728,13 +1732,339 @@ def _normalize_diff_shape(sd):
               "conditions", "scales", "containment", "vitals"):
         if not isinstance(sd.get(k), dict):
             sd[k] = {}
-    for k in ("cast_changes", "world_facts", "introductions",
+    for k in ("cast_changes", "world_facts", "introductions", "following_ops",
               "remove_entities", "remove_rooms", "remove_adjacent",
               "inventory_ops", "contact_ops", "claim_dispositions"):
         if not isinstance(sd.get(k), list):
             sd[k] = []
     sd.setdefault("time", None)
     return sd
+
+
+def _ci_mapping_key(mapping, name):
+    """Return the existing key in ``mapping`` that names ``name``.
+
+    Positions are canonicalized before this seam, while stations are still
+    model-authored and occasionally differ only in case/whitespace.  The
+    reconciliation below must update the key every spatial reader already
+    uses rather than minting a second position for the same body.
+    """
+    if not isinstance(mapping, dict) or not name:
+        return None
+    if name in mapping:
+        return name
+    folded = str(name).strip().casefold()
+    for key in mapping:
+        if str(key).strip().casefold() == folded:
+            return key
+    return None
+
+
+def _reconcile_anchored_near_group(ctx, scene, state_diff):
+    """Make one fresh, explicit within-room group physically possible.
+
+    ``stations.near`` means two bodies are in the same room, and ``at`` names
+    an anchor in that room.  Until now station hygiene silently discarded
+    those facts when the resolve model also wrote contradictory room
+    positions.  Hearing then trusted the surviving positions and treated a
+    shoulder-to-shoulder travelling party as separated.
+
+    This is deliberately not a general companion-carry heuristic.  A group is
+    moved only when THIS beat supplies all of the following structured proof:
+
+    * at least two positioned bodies joined by a fresh ``near`` link;
+    * exactly one room in the would-be scene owns the group's fresh ``at``
+      anchor(s); and
+    * every already-positioned member had a passable route to that room.
+
+    No near link, no anchor, ambiguous/conflicting anchors, or an impassable
+    route means no relocation.  That keeps bystanders, teleport operators,
+    deliberate departures, and real acoustic barriers outside this repair.
+    """
+    positions = state_diff.get("positions") or {}
+    stations = state_diff.get("stations") or {}
+    if not isinstance(positions, dict) or not isinstance(stations, dict):
+        return False
+
+    # Resolve station labels onto the canonical position keys already in use.
+    # A body absent from the diff can still be part of the fresh near group, so
+    # include its committed position key as well.
+    all_positions = dict(scene.get("positions") or {})
+    all_positions.update(positions)
+    graph = {}
+    station_by_body = {}
+    for raw_name, station in stations.items():
+        if not isinstance(station, dict):
+            continue
+        body = _ci_mapping_key(all_positions, raw_name)
+        if body is None:
+            continue
+        station_by_body[body] = station
+        for raw_other in station.get("near") or []:
+            other = _ci_mapping_key(all_positions, raw_other)
+            if other is None or other == body:
+                continue
+            graph.setdefault(body, set()).add(other)
+            graph.setdefault(other, set()).add(body)
+
+    if not graph:
+        return False
+
+    route_scene = merge_scene_with_diff(scene, state_diff)
+    rooms = route_scene.get("rooms") or {}
+    changed = False
+    seen = set()
+    for start in list(graph):
+        if start in seen:
+            continue
+        component = set()
+        frontier = [start]
+        while frontier:
+            body = frontier.pop()
+            if body in component:
+                continue
+            component.add(body)
+            frontier.extend(graph.get(body) or ())
+        seen.update(component)
+        if len(component) < 2:
+            continue
+
+        anchor_rooms = set()
+        ambiguous_anchor = False
+        for body in component:
+            anchor = (station_by_body.get(body) or {}).get("at")
+            if not anchor:
+                continue
+            owners = {
+                room_id for room_id, room in rooms.items()
+                if isinstance(room, dict)
+                and anchor in (room.get("anchors") or {})
+            }
+            if len(owners) != 1:
+                ambiguous_anchor = True
+                break
+            anchor_rooms.update(owners)
+
+        names = ", ".join(sorted(str(n) for n in component))
+        if ambiguous_anchor or len(anchor_rooms) != 1:
+            if anchor_rooms or ambiguous_anchor:
+                ctx.warnings.append(
+                    f"Near-group position conflict for {names}: fresh station "
+                    "anchors do not identify one unambiguous room; positions "
+                    "left unchanged."
+                )
+            continue
+        target_room = next(iter(anchor_rooms))
+
+        blocked = []
+        for body in component:
+            origin = room_of(scene, body)
+            if origin and origin != target_room and not passable_route_exists(
+                    route_scene, origin, target_room):
+                blocked.append(f"{body} from {origin}")
+        if blocked:
+            ctx.warnings.append(
+                f"Near-group position conflict for {names}: anchor room "
+                f"'{target_room}' is not passably reachable by "
+                f"{', '.join(blocked)}; positions left unchanged."
+            )
+            continue
+
+        before = {body: all_positions.get(body) for body in component}
+        if all(room == target_room for room in before.values()):
+            continue
+        for body in component:
+            positions[body] = target_room
+            all_positions[body] = target_room
+        changed = True
+        ctx.warnings.append(
+            f"Reconciled near group ({names}) to anchor room "
+            f"'{target_room}'; contradictory positions were {before}."
+        )
+
+    return changed
+
+
+_RAPID_FOLLOW_VERBS = frozenset({
+    "run", "sprint", "flee", "dash", "bolt", "race", "charge",
+})
+
+
+def _declares_rapid_movement(result):
+    """Whether an actor declared pace an ordinary follower cannot inherit."""
+    if not isinstance(result, dict):
+        return False
+    for event in result.get("sequence") or []:
+        if not isinstance(event, dict) or event.get("type") != "action":
+            continue
+        verb = str(event.get("verb") or "").strip().casefold()
+        if verb in _RAPID_FOLLOW_VERBS:
+            return True
+        attempt = str(event.get("attempt") or "").strip().casefold()
+        # Start-boundary matching avoids treating "runs a hand through hair"
+        # as escape pace while still accepting weaker-model empty verb fields.
+        if re.match(r"^(?:tries to |attempts to )?(?:run|sprint|flee|dash|bolt|race)\b",
+                    attempt):
+            return True
+    return False
+
+
+def _follow_op_for_actor(ctx, scene, follower, raw):
+    """Validate one actor-owned following decision against positioned actors."""
+    if not isinstance(raw, dict):
+        return None
+    op = str(raw.get("op") or "").strip().casefold()
+    follower_key = _ci_mapping_key(scene.get("positions") or {}, follower)
+    if op not in ("start", "stop") or follower_key is None:
+        return None
+    reason = str(raw.get("reason") or "").strip()
+    if op == "stop":
+        return {"op": "stop", "follower": follower_key,
+                "reason": reason, "turn": ctx.turn.idx}
+    target = _ci_mapping_key(scene.get("positions") or {}, raw.get("target"))
+    if target is None or target.casefold() == follower_key.casefold():
+        ctx.warnings.append(
+            f"Ignored invalid follow start by {follower_key!r}: target "
+            f"{raw.get('target')!r} is not another positioned actor."
+        )
+        return None
+    return {"op": "start", "follower": follower_key, "target": target,
+            "reason": reason, "turn": ctx.turn.idx}
+
+
+def _collect_following_ops(ctx, scene, interp, player_name):
+    """Project player interpretation and NPC decisions into one actor-owned ledger."""
+    ops = []
+    player_op = _follow_op_for_actor(
+        ctx, scene, player_name, interp.get("follow_op"))
+    if player_op:
+        ops.append(player_op)
+
+    for extra in ctx.extra_players:
+        raw = (interp.get("other_players") or {}).get(
+            str(extra["persona_id"]), {}).get("follow_op")
+        op = _follow_op_for_actor(ctx, scene, extra["name"], raw)
+        if op:
+            ops.append(op)
+
+    actor_results = {}
+    actor_results.update(ctx.reaction_results or {})
+    actor_results.update(ctx.character_results or {})
+    for cast_row in ctx.cast:
+        cid = cast_row["id"]
+        result = actor_results.get(cid) or actor_results.get(str(cid))
+        if not isinstance(result, dict):
+            continue
+        name = character_name_from_text(cast_row["sheet"])
+        op = _follow_op_for_actor(ctx, scene, name, result.get("follow_op"))
+        if op:
+            ops.append(op)
+
+    # Last declaration by one actor wins inside this beat. This is mainly for
+    # a reaction followed by an interaction call, both valid decisions by the
+    # same mind at different micro-rounds.
+    by_follower = {}
+    for op in ops:
+        by_follower[op["follower"].casefold()] = op
+    return list(by_follower.values())
+
+
+def _following_record(following, name):
+    folded = str(name or "").strip().casefold()
+    for follower, record in (following or {}).items():
+        if str(follower).strip().casefold() == folded and isinstance(record, dict):
+            return follower, record
+    return None, None
+
+
+def _apply_following_movement(ctx, scene, state_diff, interp, player_name):
+    """Carry willing followers through ordinary travel, never pursuit.
+
+    The relation is durable intent, not a tether. A follower is moved only
+    when they and the target began co-located, the target changed rooms at an
+    ordinary pace, and a passable route reaches the destination. Running or
+    fleeing leaves the follower behind with the relation still active, so they
+    may choose to chase or stop on their next decision. Actor-owned stop ops
+    take effect before any carry.
+    """
+    from spatial import apply_following_ops
+
+    ops = list(state_diff.get("following_ops") or [])
+    relation_scene = merge_scene_with_diff(scene, {"following_ops": ops})
+    following = relation_scene.get("following") or {}
+    if not following:
+        return False
+
+    rapid = set()
+    if _declares_rapid_movement(interp):
+        rapid.add(player_name.casefold())
+    for extra in ctx.extra_players:
+        raw = (interp.get("other_players") or {}).get(str(extra["persona_id"])) or {}
+        if _declares_rapid_movement(raw):
+            rapid.add(extra["name"].casefold())
+    actor_results = {}
+    actor_results.update(ctx.reaction_results or {})
+    actor_results.update(ctx.character_results or {})
+    for row in ctx.cast:
+        result = actor_results.get(row["id"]) or actor_results.get(str(row["id"]))
+        if _declares_rapid_movement(result):
+            rapid.add(character_name_from_text(row["sheet"]).casefold())
+
+    positions = state_diff.get("positions") or {}
+    route_scene = merge_scene_with_diff(scene, state_diff)
+
+    # Player agency floor: if the Director omitted follow_op:stop but resolved
+    # the player's declared movement somewhere other than the followed target,
+    # the physical contradiction itself ends following. NPC autonomy is NOT
+    # inferred from resolver positions; NPCs own it through their follow_op.
+    p_follow_key, p_follow = _following_record(following, player_name)
+    player_move = interp.get("movement")
+    if p_follow and isinstance(player_move, dict) \
+            and (player_move.get("mover") or "self") == "self":
+        target = _ci_mapping_key(
+            {**(scene.get("positions") or {}), **positions},
+            p_follow.get("target"))
+        player_dest = positions.get(player_name)
+        target_dest = positions.get(target) if target else None
+        if player_dest and target_dest and player_dest != target_dest:
+            stop = {"op": "stop", "follower": p_follow_key,
+                    "reason": "player declared movement incompatible with following",
+                    "turn": ctx.turn.idx}
+            ops.append(stop)
+            apply_following_ops(relation_scene, [stop])
+            following = relation_scene.get("following") or {}
+            state_diff["following_ops"] = ops
+
+    changed = False
+    # A short fixed-point handles A follows B follows C without making cycles
+    # possible (the ledger rejects those at application).
+    for _ in range(max(1, len(following))):
+        progressed = False
+        all_positions = dict(scene.get("positions") or {})
+        all_positions.update(positions)
+        for raw_follower, record in list(following.items()):
+            follower = _ci_mapping_key(all_positions, raw_follower)
+            target = _ci_mapping_key(all_positions, record.get("target"))
+            if follower is None or target is None:
+                continue
+            origin = room_of(scene, follower)
+            target_origin = room_of(scene, target)
+            target_dest = positions.get(target)
+            if not origin or origin != target_origin or not target_dest \
+                    or target_dest == target_origin:
+                continue
+            if target.casefold() in rapid:
+                continue
+            if origin != target_dest and not passable_route_exists(
+                    route_scene, origin, target_dest):
+                continue
+            if positions.get(follower) == target_dest:
+                continue
+            positions[follower] = target_dest
+            progressed = changed = True
+        if not progressed:
+            break
+    return changed
 
 def _is_blank_placeholder(entry):
     """True when a diff entry encodes nothing at all -- every field an empty
@@ -2753,6 +3083,7 @@ def director_resolve(ctx, nonce):
         reaction_declarations.append({
             "char_id": rid, "name": rname, "sequence": rseq,
             "is_reaction": True,
+            "follow_op": (r_round.get("result") or {}).get("follow_op"),
             "speech": next((e.get("text") for e in rseq if e.get("type") == "speech"), None),
             "action": next((e for e in rseq if e.get("type") == "action"), None),
         })
@@ -2781,6 +3112,7 @@ def director_resolve(ctx, nonce):
         decls.append({
             "char_id": char_id, "name": name, "sequence": sequence,
             "is_reaction": declaration.get("is_reaction", False),
+            "follow_op": declaration.get("follow_op"),
             "speech": next((e.get("text") for e in sequence
                             if e.get("type") == "speech"), None),
             "action": next((e for e in sequence
@@ -2809,6 +3141,7 @@ def director_resolve(ctx, nonce):
                 "name": dk.get("name") or cname,
                 "sequence": dk.get("sequence") or [],
                 "speech": dk.get("speech"), "action": dk.get("action"),
+                "follow_op": dk.get("follow_op"),
             })
             speeches = []
             for e in (dk.get("sequence") or []):
@@ -2903,6 +3236,7 @@ def director_resolve(ctx, nonce):
             "entities": sc.get("entities"),
             "positions": sc.get("positions"),
             "stations": sc.get("stations") or {},
+            "following": sc.get("following") or {},
             # The contact ledger it is asked to MAINTAIN. Withheld until now,
             # which is the cause of the drift the displacement rule repairs
             # downstream: a Director that cannot see it wrote `hand -> waist`
@@ -2931,6 +3265,7 @@ def director_resolve(ctx, nonce):
             "speech_volume": interp.get("speech_volume", "normal"),
             "action": interp.get("action"),
             "movement": interp.get("movement"),
+            "follow_op": interp.get("follow_op"),
             "abilities": persona_abilities(pers),
             "authority_claims": (interp.get("flow") or {}).get("authority_claims") or [],
         },
@@ -3258,6 +3593,10 @@ def director_resolve(ctx, nonce):
     # position key for a cast member onto the registered name before it reaches
     # perception's mid-turn merge or the commit boundary.
     sd["positions"] = canonicalize_positions(sd["positions"], ctx.cast, player_name=p_name)
+    # Following is actor-owned. Never trust director_resolve to invent or end
+    # it: project only the player's interpreted decision and each NPC's own
+    # character result into the objective diff.
+    sd["following_ops"] = _collect_following_ops(ctx, sc, interp, p_name)
     out["state_diff"] = sd
     out["dice"] = dice if isinstance(dice, list) else []
 
@@ -3406,6 +3745,16 @@ def director_resolve(ctx, nonce):
                     f"'{mv['to_room']}' -- the player rides inside the "
                     "vehicle's interior; only the vehicle's position moves."
                 )
+
+    # Durable following supplies ordinary group travel, bounded by pace and
+    # route. It runs after the movement backstop has finalized the player's
+    # destination, so it follows physical truth rather than interpret intent.
+    _apply_following_movement(ctx, sc, sd, interp, p_name)
+
+    # A fresh station is structured within-room evidence.  Reconcile the
+    # narrow provable case before approach semantics gets final authority over
+    # whether the player's own movement arrived this beat.
+    _reconcile_anchored_near_group(ctx, sc, sd)
 
     # Runs whether or not a movement was DECLARED, and after the backstop has
     # had its say. The reported case declared one -- interpret turned "wander
