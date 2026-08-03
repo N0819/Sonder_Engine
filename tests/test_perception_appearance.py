@@ -105,6 +105,19 @@ class TestAppearanceIsNotHandedOverUnseen:
         )
         assert "You see" in view
 
+    def test_a_natural_paraphrase_is_not_followed_by_a_duplicate_tail(self):
+        view = _inject_visible_actor(
+            "A beautiful young woman with golden fox ears and six golden "
+            "tails stands beside the console in modern casual attire.",
+            display="the young woman",
+            appearance=("A beautiful young woman with golden fox ears and "
+                        "six golden tails; wearing: modern casual attire."),
+            relation={"same_room": True},
+        )
+
+        assert "You see" not in view
+        assert view.casefold().count("six golden tails") == 1
+
     def test_a_sealed_interior_has_no_visual_to_the_room_outside(self):
         """The live geometry: an interior room with no adjacency to the room
         its owner stands in. Nothing should see through that."""

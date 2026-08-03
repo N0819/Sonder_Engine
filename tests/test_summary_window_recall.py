@@ -111,8 +111,35 @@ def test_a_window_that_closed_after_the_deciding_turn_is_withheld(bank):
     _window(bank, "The fire that has not happened yet.", 21, 30)
     _window(bank, NOW, 31, 40)
     ctx = _context(bank, "fire and smoke", turn=25)
+    assert ctx["autobiographical_summary"] == FERRY
     assert all("fire" not in w["what_i_lived_through_then"]
                for w in ctx.get("earlier_in_my_life", []))
+
+
+def test_every_summary_surface_obeys_the_same_exclusive_cutoff(bank):
+    _window(bank, FERRY, 0, 10)
+    _window(bank, "Future firsthand.", 25, 30)
+    _window(bank, "Future hearsay.", 25, 30,
+            scope=memory.SUMMARY_SCOPE_HEARSAY)
+    _window(bank, "Future surmise.", 25, 30,
+            scope=memory.SUMMARY_SCOPE_SURMISE)
+    ctx = memory.build_character_memory_context(
+        bank["chat"], bank["chars"][0], current_turn_idx=25,
+        current_view="The river is quiet.",
+        active_state={"goal_held": 12, "mood": "neutral"})
+    rendered = json.dumps(ctx)
+    assert "Future firsthand" not in rendered
+    assert "Future hearsay" not in rendered
+    assert "Future surmise" not in rendered
+    assert ctx["autobiographical_summary"] == FERRY
+    assert ctx["where_i_came_from"]["what_i_lived_through_then"] == FERRY
+
+
+def test_origin_never_reaches_forward_from_an_early_rerun(bank):
+    _window(bank, "A future origin that has not happened.", 100, 109)
+    assert memory._origin_on_drift(
+        bank["chat"], bank["chars"][0], 5,
+        {"goal_held": 12, "mood": "neutral"}) == {}
 
 
 def test_another_characters_chapters_never_arrive(bank):
@@ -182,10 +209,38 @@ def test_the_span_helper_reads_plainly_at_the_edges():
     assert memory._beats_ago_span(60, 10, 20) == "between about 40 and 50 beats ago"
     # A window one turn wide is a moment, not a stretch.
     assert memory._beats_ago_span(60, 30, 30) == "about 30 beats ago"
-    # A window still open at the present beat.
-    assert memory._beats_ago_span(30, 20, 30) == "about 10 beats ago"
-    assert memory._beats_ago_span(30, 30, 30) == "just now"
+    # A window still open at the present beat is not yet memory.
+    assert memory._beats_ago_span(30, 20, 30) == ""
+    assert memory._beats_ago_span(30, 30, 30) == ""
     assert memory._beats_ago_span(None, 0, 10) == ""
+
+
+# ---- origin on drift ----
+
+def test_origin_surfaces_when_a_goal_has_been_held_too_long(bank):
+    _window(bank, FERRY, 0, 10)
+    _window(bank, NOW, 41, 50)
+    payload = memory._origin_on_drift(
+        bank["chat"], bank["chars"][0], 60,
+        {"goal_held": 12, "mood": "neutral"})
+    assert payload["where_i_came_from"]["what_i_lived_through_then"] == FERRY
+    assert payload["where_i_came_from"]["when"] == \
+        "between about 50 and 60 beats ago"
+
+
+def test_origin_is_absent_without_a_drift_signal(bank):
+    _window(bank, FERRY, 0, 10)
+    assert memory._origin_on_drift(
+        bank["chat"], bank["chars"][0], 60,
+        {"goal": "cross the river", "mood": "neutral"}) == {}
+
+
+def test_origin_is_not_sent_twice(bank):
+    _window(bank, FERRY, 0, 10)
+    assert memory._origin_on_drift(
+        bank["chat"], bank["chars"][0], 60,
+        {"projects": [{"id": "p1", "adrift": 8}]},
+        earlier_ids={10}) == {}
 
 
 # ---- cost ----

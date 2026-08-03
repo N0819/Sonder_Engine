@@ -64,7 +64,7 @@ def parse_scoped_world_key(key):
     return key, None
 
 DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 23
+SCHEMA_VERSION = 24
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -434,6 +434,11 @@ CREATE TABLE IF NOT EXISTS memories(
     emotional_context TEXT NOT NULL DEFAULT '',
     valence REAL NOT NULL DEFAULT 0.0,
     arousal REAL NOT NULL DEFAULT 0.0,
+    -- Resolved affect after this event was appraised. valence/arousal above
+    -- remain the affect carried INTO the event; together they preserve the
+    -- direction of emotional encoding instead of conflating before and after.
+    encoding_valence REAL NOT NULL DEFAULT 0.0,
+    encoding_arousal REAL NOT NULL DEFAULT 0.0,
     confidence REAL NOT NULL DEFAULT 1.0,
     access_count INTEGER NOT NULL DEFAULT 0,
     last_accessed REAL,
@@ -1202,6 +1207,11 @@ MIGRATIONS = [
         "ALTER TABLE memory_summaries_v23 RENAME TO memory_summaries",
         "CREATE INDEX IF NOT EXISTS idx_memory_summaries_window"
         " ON memory_summaries(chat_id, char_id, scope, end_turn_idx)",
+    ],
+    # v23 -> v24
+    [
+        "ALTER TABLE memories ADD COLUMN encoding_valence REAL NOT NULL DEFAULT 0.0",
+        "ALTER TABLE memories ADD COLUMN encoding_arousal REAL NOT NULL DEFAULT 0.0",
     ],
 ]
 

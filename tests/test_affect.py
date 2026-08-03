@@ -177,6 +177,21 @@ def test_happy_label_under_negative_appraisal_synthesizes_undercurrent():
     assert out["undercurrent"]["valence"] < 0
     assert "letter" in out["undercurrent"]["source"]
 
+
+def test_remembered_body_echo_nudges_affect_without_becoming_somatic_fact():
+    out = appraise([], _priority_of, dimensions={
+        "memory_echo": {
+            "somatic": -0.2, "threat_bias": 0.2,
+            "why": "the old alarm comes back",
+            "temporal_source": "remembered_past",
+        }})
+    assert out["dV"] == pytest.approx(-0.04)
+    assert out["dA"] == pytest.approx(0.02)
+    assert out["somatic_impact"]["pain"] == 0.0
+    assert out["somatic_impact"]["pleasure"] == 0.0
+    assert out["memory_echo"]["temporal_source"] == "remembered_past"
+
+
 def test_matching_label_produces_no_undercurrent():
     appraisal = appraise([{"serves": "drive", "impact": -0.9, "certainty": 0.9,
                            "agency": "other", "why": "the betrayal"}], _priority_of)

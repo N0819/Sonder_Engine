@@ -340,6 +340,10 @@ def _unbidden_entry(mem, turn_idx):
     summary scopes already teach, no id, no score, no instruction."""
     entry = {
         "it_comes_back_to_me": mem.get("gist") or "",
+        "memory_ref": mem.get("event_key") or "",
+        "temporal_status": "remembered_past",
+        "memory_form": "unbidden_episode",
+        "non_authoritative": True,
         "from": provenance_context_label(mem.get("provenance")),
     }
     ti = mem.get("turn_idx")
@@ -359,10 +363,276 @@ def _attach_unbidden(memory_context, entry, recall_limit=8):
         return
     recalled = list(memory_context.get("recalled_old_memories") or [])
     if len(recalled) >= recall_limit:
-        drop = min(recalled, key=lambda m: float(m.get("score") or 0.0))
+        scores = ((memory_context.get("_internal") or {}).get("scores") or {})
+        drop = min(recalled, key=lambda m: float(
+            scores.get(str(m.get("memory_ref") or ""), 0.0)))
         recalled = [m for m in recalled if m is not drop]
         memory_context["recalled_old_memories"] = recalled
     memory_context["surfaces_unbidden"] = entry
+
+
+def _ground_observation_citations(out, observations, memory_context,
+                                  memory_internal=None):
+    """Make present and remembered evidence mechanically distinguishable.
+
+    The model is given two disjoint namespaces: current observations are
+    ``current:<perceiver>:<n>`` and retrieved rows use their stable
+    ``event_key`` (``event:<hash>``).
+    Legacy outputs used bare numeric ids or labels such as
+    ``recent_episode_4479``; those are normalized only when that exact memory
+    was actually delivered. Invented/stale ids are dropped. A present citation
+    the model supplied is moved first; one the model omitted is never invented
+    by the guard, because audit metadata must describe the model's reasoning,
+    not repair it after the fact.
+
+    Returns warning strings for observability; it never changes conduct, only
+    the evidence metadata attached to the decision.
+    """
+    if not isinstance(out, dict):
+        return []
+    current = {}
+    for obs in observations or []:
+        if not isinstance(obs, dict):
+            continue
+        oid = str(obs.get("observation_id") or "").strip()
+        if not oid:
+            continue
+        observed = obs.get("observed") if isinstance(obs.get("observed"), dict) else {}
+        current[oid] = str(observed.get("text") or "").strip()
+    memories = {}
+    row_ids = dict((memory_internal or {}).get("row_ids") or {})
+    summaries = set()
+    if isinstance(memory_context, dict):
+        for field in ("recent_episodes", "recalled_old_memories"):
+            for mem in memory_context.get(field) or []:
+                if not isinstance(mem, dict):
+                    continue
+                ref = str(mem.get("memory_ref") or
+                          mem.get("event_key") or "").strip()
+                if not ref:
+                    continue
+                memories[ref] = str(
+                    mem.get("gist") or mem.get("details") or "").strip()
+                # Unit/legacy callers may still hand this guard an author
+                # projection. Production model context contains no row id.
+                if mem.get("id") is not None:
+                    row_ids[str(mem["id"])] = ref
+        deliberate = memory_context.get("deliberate_recall") or {}
+        if isinstance(deliberate, dict):
+            for mem in deliberate.get("additional_episodes") or []:
+                if not isinstance(mem, dict):
+                    continue
+                ref = str(mem.get("memory_ref") or "").strip()
+                if ref:
+                    memories[ref] = str(
+                        mem.get("gist") or mem.get("details") or "").strip()
+        unbidden = memory_context.get("surfaces_unbidden") or {}
+        if isinstance(unbidden, dict):
+            ref = str(unbidden.get("memory_ref") or "").strip()
+            if ref:
+                memories[ref] = str(
+                    unbidden.get("it_comes_back_to_me") or "").strip()
+        for meta in (memory_context.get("summary_citations") or {}).values():
+            if isinstance(meta, dict) and meta.get("summary_id"):
+                summaries.add(str(meta["summary_id"]))
+        for field in ("earlier_in_my_life",):
+            for item in memory_context.get(field) or []:
+                if isinstance(item, dict) and item.get("summary_id"):
+                    summaries.add(str(item["summary_id"]))
+        origin = memory_context.get("where_i_came_from") or {}
+        if isinstance(origin, dict) and origin.get("summary_id"):
+            summaries.add(str(origin["summary_id"]))
+
+    warnings = []
+
+    def ground_refs(refs, path, *, namespace="either",
+                    allow_summaries=True):
+        grounded = []
+        for ref in refs or []:
+            if not isinstance(ref, dict):
+                continue
+            item = dict(ref)
+            eid = str(item.get("event_id") or "").strip()
+            if eid == "current" and current and namespace != "past":
+                item["event_id"] = next(iter(current))
+                grounded.append(item)
+                continue
+            allowed = ((eid in current and namespace != "past") or
+                       (eid in memories and namespace != "present") or
+                       (eid in summaries and namespace != "present" and
+                        allow_summaries))
+            if allowed:
+                grounded.append(item)
+                continue
+            mid = None
+            if eid.startswith("memory:"):
+                mid = eid.split(":", 1)[1]
+            elif eid.isdigit():
+                mid = eid
+            else:
+                match = re.fullmatch(
+                    r"(?:recent_episode|memory|event)_(\d+)", eid)
+                if match:
+                    mid = match.group(1)
+            if mid in row_ids and namespace != "present":
+                item["event_id"] = row_ids[mid]
+                grounded.append(item)
+            else:
+                warnings.append(
+                    f"dropped ungrounded {path} citation {eid!r}")
+        return grounded
+
+    # New output has physically separate lanes.  Split legacy mixed output on
+    # input so old providers remain usable without letting the two namespaces
+    # collapse again downstream.
+    legacy = ground_refs(out.get("observations_used") or [], "observation")
+    present = ground_refs(out.get("present_evidence_used") or [],
+                          "present_evidence", namespace="present")
+    past = ground_refs(out.get("memory_evidence_used") or [],
+                       "memory_evidence", namespace="past")
+    for ref in legacy:
+        eid = str(ref.get("event_id") or "")
+        target = present if eid in current else past
+        if ref not in target:
+            target.append(ref)
+    if current:
+        if not present:
+            warnings.append("no delivered present observation was cited")
+    out["present_evidence_used"] = present
+    out["memory_evidence_used"] = past
+    # Compatibility projection for commit/archive readers written before the
+    # split.  The model never needs to emit this field again.
+    out["observations_used"] = present + past
+
+    # These fields all use the same EvidenceRef contract. Ground them against
+    # the same delivered registry so a belief cannot cite a stale or invented
+    # memory merely because it lives below a different top-level key.
+    for field in ("belief_updates", "association_updates",
+                  "mind_model_updates"):
+        kept = []
+        for index, update in enumerate(out.get(field) or []):
+            if isinstance(update, dict):
+                # Derived summary prose can support an answer, but may not be
+                # laundered into a durable belief as if it were a fresh source.
+                update["evidence"] = ground_refs(
+                    update.get("evidence") or [], f"{field}.{index}.evidence",
+                    allow_summaries=False)
+                if update["evidence"]:
+                    kept.append(update)
+                else:
+                    warnings.append(
+                        f"dropped unsupported {field}.{index}")
+        out[field] = kept
+
+    appraisal = out.get("appraisal")
+    if isinstance(appraisal, dict):
+        appraisal["present_evidence"] = ground_refs(
+            appraisal.get("present_evidence") or [],
+            "appraisal.present_evidence", namespace="present")
+        modulation = appraisal.get("memory_modulation")
+        if isinstance(modulation, dict):
+            modulation["evidence"] = ground_refs(
+                modulation.get("evidence") or [],
+                "appraisal.memory_modulation.evidence", namespace="past")
+            if not modulation["evidence"]:
+                modulation.update({"familiarity": 0.0, "expectation": "",
+                                   "anticipatory_emotion": "",
+                                   "coping_effect": 0.0,
+                                   "somatic_echo": 0.0,
+                                   "threat_bias": 0.0,
+                                   "why": ""})
+        somatic = appraisal.get("somatic_impact")
+        if isinstance(somatic, dict):
+            somatic["evidence"] = ground_refs(
+                somatic.get("evidence") or [],
+                "appraisal.somatic_impact.evidence", namespace="present")
+            if not somatic["evidence"] and (
+                    float(somatic.get("pain") or 0.0) > 0.0 or
+                    float(somatic.get("pleasure") or 0.0) > 0.0):
+                somatic["pain"] = somatic["pleasure"] = 0.0
+                warnings.append("zeroed unsupported somatic appraisal")
+        for index, impact in enumerate(appraisal.get("goal_impacts") or []):
+            if not isinstance(impact, dict):
+                continue
+            impact["evidence"] = ground_refs(
+                impact.get("evidence") or [],
+                f"appraisal.goal_impacts.{index}.evidence",
+                namespace="present")
+            if not impact["evidence"]:
+                impact["impact"] = 0.0
+                warnings.append(
+                    f"zeroed unsupported appraisal.goal_impacts.{index}")
+
+    kept_lines = []
+    for index, mark in enumerate(out.get("remember_lines") or []):
+        if not isinstance(mark, dict):
+            continue
+        mark["evidence"] = ground_refs(
+            mark.get("evidence") or [],
+            f"remember_lines.{index}.evidence", namespace="present")
+        if not mark["evidence"]:
+            quote = re.sub(r"\s+", " ", str(mark.get("quote") or "")) \
+                .strip().strip('"\'“”‘’').casefold()
+            observed_id = next((oid for oid, text in current.items()
+                                if quote and quote in re.sub(
+                                    r"\s+", " ", text).casefold()), None)
+            if observed_id:
+                mark["evidence"] = [{"event_id": observed_id,
+                                     "fact": "heard this line now"}]
+        if mark["evidence"]:
+            kept_lines.append(mark)
+        else:
+            warnings.append(f"dropped unsupported remember_lines.{index}")
+    out["remember_lines"] = kept_lines
+
+    kept_disputes = []
+    for index, dispute in enumerate(out.get("memory_disputes") or []):
+        if not isinstance(dispute, dict):
+            continue
+        ref = str(dispute.get("memory_ref") or "").strip()
+        if ref not in memories:
+            needle = " ".join(str(dispute.get("gist") or "").split()).casefold()
+            hits = [key for key, text in memories.items()
+                    if needle and (needle == " ".join(text.split()).casefold()
+                                   or needle in " ".join(text.split()).casefold())]
+            ref = hits[0] if len(hits) == 1 else ""
+        dispute["evidence"] = ground_refs(
+            dispute.get("evidence") or [],
+            f"memory_disputes.{index}.evidence", namespace="present")
+        if ref and dispute["evidence"]:
+            dispute["memory_ref"] = ref
+            kept_disputes.append(dispute)
+        else:
+            warnings.append(f"dropped ungrounded memory_disputes.{index}")
+    out["memory_disputes"] = kept_disputes
+
+    kept_effects = []
+    for index, effect in enumerate(out.get("memory_effects") or []):
+        if not isinstance(effect, dict):
+            continue
+        ref = str(effect.get("memory_ref") or "").strip()
+        if ref in memories:
+            kept_effects.append(effect)
+        else:
+            warnings.append(f"dropped ungrounded memory_effects.{index}")
+    out["memory_effects"] = kept_effects
+    for index, update in enumerate(out.get("relationship_updates") or []):
+        if not isinstance(update, dict):
+            continue
+        refs = [{"event_id": eid} for eid in
+                (update.get("trigger_event_ids") or [])]
+        update["trigger_event_ids"] = [
+            ref["event_id"] for ref in ground_refs(
+                refs, f"relationship_updates.{index}.trigger_event_ids",
+                allow_summaries=False)]
+        if not update["trigger_event_ids"] and any(
+                abs(float(update.get(axis) or 0.0)) > 0.0
+                for axis in ("trust_delta", "warmth_delta", "fear_delta")):
+            update["trust_delta"] = update["warmth_delta"] = 0.0
+            update["fear_delta"] = 0.0
+            warnings.append(
+                f"zeroed unsupported relationship_updates.{index}")
+    return warnings
 
 
 def _known_pronouns(cast, persona, recognized, exclude=None):
@@ -1655,7 +1925,11 @@ def character_step(ctx, cid, nonce):
     # metadata for a changed view; project only the permitted text itself.
     if view and view != base_view:
         observations = [{
-            "observation_id": f"current:{cid}:micro",
+            # A character may receive several micro-views in one turn.  The
+            # old constant id collapsed them into one apparent observation,
+            # making later evidence impossible to audit against the round it
+            # actually came from.
+            "observation_id": f"current:{cid}:micro:{nonce}",
             "perceiver_id": str(cid),
             "source_atom_id": "current",
             "channel": "mixed",
@@ -1699,6 +1973,24 @@ def character_step(ctx, cid, nonce):
            if isinstance(i, dict)}) - {""}
     _active_annotated = _annotate_goal_currency(
         active, ctx.turn.idx, _node_names, _governed_ids)
+    # Memory's origin-on-drift rule needs the same deterministic annotations
+    # the character payload reads. Legacy active_state rows do not store
+    # `goal_held` or project `adrift` -- both are read-side facts derived from
+    # the current turn and the existing project ledger -- so hand the memory
+    # seam a contextual projection rather than inventing or persisting fields.
+    _memory_active = dict(_active_annotated or {})
+    _memory_active["projects"] = _annotate_project_drift(
+        (_interior.get("projects") if isinstance(_interior, dict) else []) or [],
+        ctx.turn.idx)
+    _ponder_state = (stored_state.get("memory_ponder")
+                     if isinstance(stored_state.get("memory_ponder"), dict)
+                     else {})
+    try:
+        _ponder_ready = int(_ponder_state.get("set_turn")) < ctx.turn.idx
+    except (TypeError, ValueError):
+        _ponder_ready = False
+    _ponder_query = (str(_ponder_state.get("query") or "")
+                     if _ponder_ready else "")
     _self_lines = _recent_self_lines(
         chat.id, character_name(sh), ctx.turn.idx, frame_id=ctx.turn.frame_id)
     _refrain = _self_line_refrain(_self_lines)
@@ -1722,7 +2014,7 @@ def character_step(ctx, cid, nonce):
         chat_id=chat.id, char_id=cid,
         current_turn_idx=ctx.turn.idx,
         current_view=view or "",
-        active_state=active,
+        active_state=_memory_active,
         here=_here_name,
         # Rooms currently in sight are cues too. Recalling what happened where
         # you STAND tells you where you are; recalling it about a room you can
@@ -1733,17 +2025,18 @@ def character_step(ctx, cid, nonce):
             for item in (visible_adjacent_rooms(sc, char_room) or [])
             if isinstance(item, dict)
         ] if char_room else None,
+        absorption=absorption,
+        ponder_query=_ponder_query,
     )
+    memory_internal = memory_context.get("_internal") or {}
     _unbidden_mem_id = None
+    _unbidden_mem_ref = None
     if _unbidden_fire:
         # Everything already in mind is excluded -- the recent buffer, this
         # beat's ordinary recall, and the ledger of recently intruded rows
         # (a memory that returns every few beats is a haunting, which is an
         # authored effect, not a fallback behavior).
-        _in_mind = {m.get("id") for m in
-                    (memory_context.get("recent_episodes") or [])}
-        _in_mind |= {m.get("id") for m in
-                     (memory_context.get("recalled_old_memories") or [])}
+        _in_mind = set(memory_internal.get("retrieved_ids") or [])
         _in_mind |= {i for i in
                      ((stored_state.get("unbidden") or {}).get("recent_ids")
                       or [])}
@@ -1756,6 +2049,7 @@ def character_step(ctx, cid, nonce):
             exclude_ids=[i for i in _in_mind if i is not None])
         if _contrast:
             _unbidden_mem_id = _contrast[0]["id"]
+            _unbidden_mem_ref = _contrast[0].get("event_key") or ""
             _attach_unbidden(
                 memory_context, _unbidden_entry(_contrast[0], ctx.turn.idx))
     known_tags, excl_titles = _char_known_tags(sh)
@@ -1994,6 +2288,8 @@ def character_step(ctx, cid, nonce):
                 _recalled.append(_place)
     if _recalled and isinstance(memory_context, dict):
         memory_context["recalled_places"] = _recalled
+    # Absolutely no host-only row ids/counters reach the model.
+    memory_context.pop("_internal", None)
     payload = {
         "self": _self,
         "perception": {
@@ -2230,6 +2526,9 @@ def character_step(ctx, cid, nonce):
     ctx.warnings.extend(warnings)
 
     out = _normalize_character_output(out)
+    for _warning in _ground_observation_citations(
+            out, observations, memory_context, memory_internal):
+        ctx.add_warning(f"character {character_name(sh)}: {_warning}")
     # F6: every manifest tell gets a stored ground (`because`) -- supplied by
     # the model or derived deterministically from the tell's own `betrays`
     # pointer -- so a planted anomaly always has a referent a later beat can
@@ -2262,6 +2561,9 @@ def character_step(ctx, cid, nonce):
         "memory_id": (_unbidden_mem_id
                       if _unbidden_mem_id is not None
                       else _prior_probe.get("memory_id")),
+        "memory_ref": (_unbidden_mem_ref
+                        if _unbidden_mem_ref is not None
+                        else _prior_probe.get("memory_ref")),
         "repeat_survived": (_repeat_survived
                             or bool(_prior_probe.get("repeat_survived"))),
     }

@@ -741,8 +741,17 @@ def _interpret_coverage_corpus(out):
     for e in out.get("sequence") or []:
         if not isinstance(e, dict):
             continue
+        # `tone` and `observable` are not decorative side channels: they are
+        # where interpret carries the player's authored delivery and visible
+        # gesture forward.  Omitting them from coverage made reconciliation
+        # "repair" a declaration that was already fully represented.  Live
+        # (chat 38, turn 125), genuine awe and a teasing smirk were present in
+        # the two speech tones and the turn between them was present in the
+        # action observable, yet the uncovered-clause check appended a fourth
+        # action containing the entire narrative bridge.  Perception then had
+        # two competing versions of the same chronology.
         for field in ("text", "attempt", "raw_text", "description",
-                      "subject", "verb"):
+                      "observable", "tone", "subject", "verb"):
             pieces.append(e.get(field))
         pieces.extend(str(t) for t in (e.get("targets") or []))
         effects = _list(e.get("intended_effects")) + \

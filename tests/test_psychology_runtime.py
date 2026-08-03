@@ -134,6 +134,26 @@ def test_threat_still_drives_strain_and_overload():
     assert stress["overloaded"] is True
 
 
+def test_remembered_threat_is_mild_and_labelled_beside_current_stress():
+    plain = psych.resolve_stress(
+        previous={}, appraisal={}, profile={"baseline_reactivity": 1.0},
+        hedonic={}, elapsed_units=1)
+    remembered = psych.resolve_stress(
+        previous={}, appraisal={"memory_echo": {"threat_bias": 0.2}},
+        profile={"baseline_reactivity": 1.0},
+        hedonic={}, elapsed_units=1)
+    present = psych.resolve_stress(
+        previous={}, appraisal={
+            "goal_impacts": [{"impact": -0.5, "certainty": 1.0}]},
+        profile={"baseline_reactivity": 1.0},
+        hedonic={}, elapsed_units=1)
+
+    assert remembered["strain"] > plain["strain"]
+    assert remembered["strain"] < present["strain"]
+    assert remembered["memory_threat_bias"] == 0.2
+    assert remembered["overloaded"] is False
+
+
 def test_explicit_time_jump_relaxes_more_than_short_beat():
     short = psych.elapsed_psych_units(100.0, 103.0, fallback_turns=1)
     jump = psych.elapsed_psych_units(100.0, 3700.0, fallback_turns=1)

@@ -268,6 +268,11 @@ def resolve_stress(previous, appraisal, profile, hedonic, elapsed_units,
     )
     pain = _clamp(hedonic.get("pain"))
     pleasure = _clamp(hedonic.get("pleasure"))
+    memory_echo = appraisal.get("memory_echo")
+    memory_echo = memory_echo if isinstance(memory_echo, dict) else {}
+    # Already engine-capped at commit. Clamp again because this runtime is a
+    # public seam and tests/imports may call it directly.
+    memory_threat = _clamp(memory_echo.get("threat_bias"), 0.0, 0.2, 0.0)
 
     impacts = appraisal.get("goal_impacts") or []
     threat = 0.0
@@ -287,6 +292,7 @@ def resolve_stress(previous, appraisal, profile, hedonic, elapsed_units,
             + (1.0 - controllability) * 0.15
             + (1.0 - coping) * 0.15
             + norm * 0.1
+            + memory_threat * 0.15
         )
         + pain * 0.45
     )
@@ -312,6 +318,9 @@ def resolve_stress(previous, appraisal, profile, hedonic, elapsed_units,
         "load": round(load, 4),
         "coping_mode": mode[:120],
         "overloaded": max(strain, load) >= threshold,
+        # Explicit so the next character call can distinguish recalled danger
+        # priming from a threat currently present in perception.
+        "memory_threat_bias": round(memory_threat, 4),
     }
 
 

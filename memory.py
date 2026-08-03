@@ -104,6 +104,10 @@ def summary_scope_for(provenance):
     return _PROVENANCE_SCOPE.get(
         str(provenance or "").strip().casefold(), SUMMARY_SCOPE_FIRSTHAND)
 
+def summary_context_label(scope):
+    return next((label for value, _field, label in _SUMMARY_SCOPES
+                 if value == scope), "what_i_experienced")
+
 def _blob(v): return np.asarray(v, dtype=np.float32).tobytes()
 def _vec(b):  return np.frombuffer(b, dtype=np.float32) if b else None
 
@@ -859,6 +863,8 @@ def _row_memory(row) -> dict:
         "location": row["location"] or "",
         "emotional_context": row["emotional_context"] or "",
         "valence": row["valence"] or 0.0, "arousal": row["arousal"] or 0.0,
+        "encoding_valence": row["encoding_valence"] or 0.0,
+        "encoding_arousal": row["encoding_arousal"] or 0.0,
         "confidence": row["confidence"] or 0.0,
         "access_count": row["access_count"] or 0,
         "last_accessed": row["last_accessed"],
@@ -882,6 +888,7 @@ def prepare_memory(chat_id, char_id, turn_id, kind, provenance, salience, conten
                    turn_idx=None, category=None, gist=None, key_phrases=None,
                    entities=None, location="", emotional_context="",
                    valence=0.0, arousal=0.0, confidence=1.0, event_key="",
+                   encoding_valence=0.0, encoding_arousal=0.0,
                    frame_id=_UNSET, importance=None, disputed="") -> dict:
     content = re.sub(r"\s+", " ", str(content or "")).strip()
     entities = list(dict.fromkeys(entities if entities is not None else _extract_entities(content)))
@@ -905,6 +912,8 @@ def prepare_memory(chat_id, char_id, turn_id, kind, provenance, salience, conten
         "location": str(location or "").strip(),
         "emotional_context": str(emotional_context or "").strip(),
         "valence": _clamp(valence, -1.0, 1.0), "arousal": _clamp(arousal),
+        "encoding_valence": _clamp(encoding_valence, -1.0, 1.0),
+        "encoding_arousal": _clamp(encoding_arousal),
         "confidence": _clamp(confidence),
         "event_key": str(event_key or "").strip(),
         # None, not 0.0: NULL is "never revised" and reads as the salience.
@@ -931,7 +940,9 @@ def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
         json.dumps(data["key_phrases"], ensure_ascii=False),
         json.dumps(data["entities"], ensure_ascii=False),
         data["location"], data["emotional_context"], data["valence"],
-        data["arousal"], data["confidence"], _blob(full_vec), _blob(cue_vec),
+        data["arousal"], data["encoding_valence"],
+        data["encoding_arousal"], data["confidence"],
+        _blob(full_vec), _blob(cue_vec),
         embedded.model_key, embedded.dimensions, data.get("frame_id"),
         data.get("importance"), data.get("disputed") or "",
     )
@@ -939,16 +950,18 @@ def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
         mid = existing["id"]
         qi("""UPDATE memories SET turn_id=?,turn_idx=?,kind=?,category=?,provenance=?,
             salience=?,content=?,gist=?,key_phrases=?,entities=?,location=?,
-            emotional_context=?,valence=?,arousal=?,confidence=?,embedding=?,
-            cue_embedding=?,embedding_model=?,embedding_dim=?,frame_id=?,
+            emotional_context=?,valence=?,arousal=?,encoding_valence=?,
+            encoding_arousal=?,confidence=?,embedding=?,cue_embedding=?,
+            embedding_model=?,embedding_dim=?,frame_id=?,
             importance=?,disputed=?,archived=0 WHERE id=?""",
            values + (mid,))
     else:
         mid = qi("""INSERT INTO memories(chat_id,char_id,turn_id,turn_idx,kind,category,
             provenance,salience,content,gist,key_phrases,entities,location,
-            emotional_context,valence,arousal,confidence,embedding,cue_embedding,
+            emotional_context,valence,arousal,encoding_valence,encoding_arousal,
+            confidence,embedding,cue_embedding,
             embedding_model,embedding_dim,frame_id,importance,disputed,event_key)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
            (data["chat_id"], data["char_id"]) + values + (data["event_key"],))
     _replace_memory_fts(mid, data)
     return mid
@@ -957,12 +970,15 @@ def add_memory(chat_id, char_id, turn_id, kind, provenance, salience, content, *
                turn_idx=None, category=None, gist=None, key_phrases=None,
                entities=None, location="", emotional_context="",
                valence=0.0, arousal=0.0, confidence=1.0, event_key="",
+               encoding_valence=0.0, encoding_arousal=0.0,
                frame_id=_UNSET):
     data = prepare_memory(chat_id, char_id, turn_id, kind, provenance, salience, content,
                           turn_idx=turn_idx, category=category, gist=gist,
                           key_phrases=key_phrases, entities=entities, location=location,
                           emotional_context=emotional_context, valence=valence,
-                          arousal=arousal, confidence=confidence, event_key=event_key,
+                          arousal=arousal, encoding_valence=encoding_valence,
+                          encoding_arousal=encoding_arousal,
+                          confidence=confidence, event_key=event_key,
                           frame_id=frame_id)
     full_vec, cue_vec, embedded = _embed_memory(data)
     return _upsert_memory(data, full_vec, cue_vec, embedded)
@@ -1179,7 +1195,8 @@ def list_memories(chat_id, char_id, *, include_archived=False, category=None,
 def update_memory(mid, content=None, salience=None, kind=None, provenance=None, *,
                   category=None, gist=None, key_phrases=None, entities=None,
                   location=None, emotional_context=None, valence=None,
-                  arousal=None, confidence=None, archived=None):
+                  arousal=None, encoding_valence=None,
+                  encoding_arousal=None, confidence=None, archived=None):
     row = q("SELECT * FROM memories WHERE id=?", (mid,), one=True)
     if not row:
         return False
@@ -1199,6 +1216,10 @@ def update_memory(mid, content=None, salience=None, kind=None, provenance=None, 
         emotional_context=emotional_context if emotional_context is not None else current["emotional_context"],
         valence=valence if valence is not None else current["valence"],
         arousal=arousal if arousal is not None else current["arousal"],
+        encoding_valence=(encoding_valence if encoding_valence is not None
+                          else current["encoding_valence"]),
+        encoding_arousal=(encoding_arousal if encoding_arousal is not None
+                          else current["encoding_arousal"]),
         confidence=confidence if confidence is not None else current["confidence"],
         event_key=current["event_key"],
         frame_id=current["frame_id"],
@@ -1206,21 +1227,25 @@ def update_memory(mid, content=None, salience=None, kind=None, provenance=None, 
     full_vec, cue_vec, embedded = _embed_memory(data)
     qi("""UPDATE memories SET kind=?,category=?,provenance=?,salience=?,content=?,gist=?,
         key_phrases=?,entities=?,location=?,emotional_context=?,valence=?,arousal=?,
-        confidence=?,embedding=?,cue_embedding=?,embedding_model=?,embedding_dim=?,archived=?
+        encoding_valence=?,encoding_arousal=?,confidence=?,embedding=?,
+        cue_embedding=?,embedding_model=?,embedding_dim=?,archived=?
         WHERE id=?""",
        (data["kind"], data["category"], data["provenance"], data["salience"],
         data["content"], data["gist"],
         json.dumps(data["key_phrases"], ensure_ascii=False),
         json.dumps(data["entities"], ensure_ascii=False),
         data["location"], data["emotional_context"], data["valence"],
-        data["arousal"], data["confidence"], _blob(full_vec), _blob(cue_vec),
+        data["arousal"], data["encoding_valence"],
+        data["encoding_arousal"], data["confidence"],
+        _blob(full_vec), _blob(cue_vec),
         embedded.model_key, embedded.dimensions,
         int(bool(archived)) if archived is not None else int(current["archived"]),
         mid))
     _replace_memory_fts(mid, data)
     return True
 
-def record_dispute(chat_id, char_id, gist, reading, turn_idx):
+def record_dispute(chat_id, char_id, gist, reading, turn_idx, *,
+                   memory_ref=""):
     """The character has re-read one of their own memories.
 
     The event stays exactly as it was -- "I saw this" is still true, and the
@@ -1235,19 +1260,23 @@ def record_dispute(chat_id, char_id, gist, reading, turn_idx):
     edge would be shredded by the first rollback; stored on the row it rides
     the existing round-trip verbatim.
 
-    Matched on the character's OWN rows only, by gist, exactly-then-loosely --
-    a character may only re-read something they remember. Returns the ids
-    updated.
+    A delivered stable ``memory_ref`` is the primary locator. Legacy callers
+    may still supply a gist, resolved exactly-then-loosely inside this mind's
+    own bank. Returns the ids updated.
     """
     needle = " ".join(str(gist or "").split()).casefold()
     reading = " ".join(str(reading or "").split())[:_MAX_DISPUTE_READING]
-    if not needle or not reading:
+    memory_ref = str(memory_ref or "").strip()
+    if not (needle or memory_ref) or not reading:
         return []
-    rows = q("SELECT id, gist, content, disputed, salience, importance "
+    rows = q("SELECT id, event_key, gist, content, disputed, salience, importance "
              "FROM memories WHERE chat_id=? AND char_id=?", (chat_id, char_id))
-    hits = [r for r in rows
-            if " ".join((r["gist"] or "").split()).casefold() == needle]
-    if not hits:
+    hits = ([r for r in rows if str(r["event_key"] or "") == memory_ref]
+            if memory_ref else [])
+    if not hits and needle:
+        hits = [r for r in rows
+                if " ".join((r["gist"] or "").split()).casefold() == needle]
+    if not hits and needle:
         hits = [r for r in rows
                 if needle in " ".join((r["gist"] or "").split()).casefold()
                 or needle in " ".join((r["content"] or "").split()).casefold()]
@@ -1984,7 +2013,8 @@ def recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=4, limit=12, 
 
 # ---- Memory Summaries ----
 
-def get_memory_summary(chat_id, char_id, scope="autobiographical"):
+def get_memory_summary(chat_id, char_id, scope="autobiographical", *,
+                       before_turn_idx=None):
     """The character's CURRENT summary for this scope: the latest window.
 
     Since v23 a scope holds one row per window rather than one row overall, so
@@ -2006,9 +2036,15 @@ def get_memory_summary(chat_id, char_id, scope="autobiographical"):
     that lands on the same boundary updates in place, and a restore renumbers
     ids), so the later row wins.
     """
+    cutoff_sql = ""
+    args = [chat_id, char_id, scope]
+    if before_turn_idx is not None:
+        cutoff_sql = " AND end_turn_idx < ?"
+        args.append(int(before_turn_idx))
     row = q("SELECT * FROM memory_summaries WHERE chat_id=? AND char_id=? "
-            "AND scope=? ORDER BY end_turn_idx DESC, id DESC LIMIT 1",
-            (chat_id, char_id, scope), one=True)
+            "AND scope=?" + cutoff_sql +
+            " ORDER BY end_turn_idx DESC, id DESC LIMIT 1",
+            tuple(args), one=True)
     if not row:
         return {"scope": scope, "start_turn_idx": 0, "end_turn_idx": 0, "summary": "",
                 "key_phrases": [], "unresolved_threads": [], "updated": None}
@@ -2057,11 +2093,14 @@ def search_memory_summaries(chat_id, char_id, query, k=3, *,
              (chat_id, char_id, scope))
     if not rows:
         return []
-    if exclude_latest:
-        rows = rows[1:]
     if before_turn_idx is not None:
         cutoff = int(before_turn_idx)
         rows = [r for r in rows if (r["end_turn_idx"] or 0) < cutoff]
+    # "Latest" means latest VISIBLE window. Applying this before the temporal
+    # cutoff drops the wrong row on a rerun: the future global latest vanishes
+    # at the cutoff and the visible latest is then returned twice.
+    if exclude_latest:
+        rows = rows[1:]
     rows = [r for r in rows if (r["summary"] or "").strip()]
     if not rows:
         return []
@@ -2123,25 +2162,124 @@ def save_memory_summary(chat_id, char_id, summary, *, scope="autobiographical", 
         json.dumps(key_phrases, ensure_ascii=False), json.dumps(unresolved_threads, ensure_ascii=False),
         embedding, embedding_model, embedding_dim, time.time()))
 
-def _with_reading(mem):
-    """Attach the character's own later re-reading, where they have made one.
 
-    The memory itself is handed over UNCHANGED -- content, gist, provenance,
-    salience all as recorded -- and the revision travels beside it under its
-    own key. That separation is the feature: the character still remembers
-    seeing what they saw, and also remembers having since decided it meant
-    something else. Collapsing the two would either erase the experience or
-    hide the correction, and a mind that has been deceived holds both.
+def _portable_memory_event_key(mem):
+    """A deterministic event handle for a legacy row that has none.
+
+    Row ids are database-local and change on archive/checkpoint restore.  The
+    fields below are the portable identity of the remembered event; once
+    written, the resulting key travels in every existing dump format.
+    """
+    document = {
+        "turn_idx": mem.get("turn_idx"),
+        "kind": mem.get("kind") or "episodic",
+        "category": mem.get("category") or "episode",
+        "provenance": mem.get("provenance") or "witnessed",
+        "content": " ".join(str(mem.get("content") or "").split()),
+        "gist": " ".join(str(mem.get("gist") or "").split()),
+        "key_phrases": list(mem.get("key_phrases") or []),
+        "entities": list(mem.get("entities") or []),
+        "location": str(mem.get("location") or ""),
+        "emotional_context": str(mem.get("emotional_context") or ""),
+    }
+    raw = json.dumps(document, ensure_ascii=False, sort_keys=True,
+                     separators=(",", ":"))
+    return "event:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
+def backfill_missing_memory_event_keys(chat_id, char_id=None):
+    """Give legacy memories stable, portable citation handles.
+
+    Exact duplicate legacy rows receive deterministic occurrence suffixes in
+    row order.  Once assigned, dumps/restores carry the key verbatim, so the
+    suffix is never recomputed from a new database's row ids.
+    """
+    args = [chat_id]
+    scope = "chat_id=? AND event_key=''"
+    if char_id is not None:
+        scope += " AND char_id=?"
+        args.append(char_id)
+    rows = q("SELECT * FROM memories WHERE " + scope +
+             " ORDER BY char_id, id", tuple(args))
+    if not rows:
+        return 0
+    used = defaultdict(int)
+    repaired = 0
+    with transaction():
+        for row in rows:
+            mem = _row_memory(row)
+            base = _portable_memory_event_key(mem)
+            used[(row["char_id"], base)] += 1
+            ordinal = used[(row["char_id"], base)]
+            key = base if ordinal == 1 else f"{base}:{ordinal}"
+            # A generated key can collide with an already-keyed identical
+            # import. Keep the handle stable and advance only the suffix.
+            while q("SELECT 1 FROM memories WHERE chat_id=? AND char_id=? "
+                    "AND event_key=?", (chat_id, row["char_id"], key), one=True):
+                ordinal += 1
+                key = f"{base}:{ordinal}"
+            qi("UPDATE memories SET event_key=? WHERE id=? AND event_key=''",
+               (key, row["id"]))
+            repaired += 1
+    return repaired
+
+def _with_reading(mem, current_turn_idx=None):
+    """Project one stored row as an explicitly PAST character memory.
+
+    Present observations use ``current:<perceiver>:<n>`` ids. Memories cite
+    their durable ``event_key`` and say ``remembered_past`` in the data itself,
+    so a model does not have to infer temporal status from which parent list
+    happened to contain the row. The numeric ``id`` stays host-only.
+
+    The memory itself remains unchanged -- content, gist, provenance and
+    salience all stay as recorded -- and a later re-reading travels beside it
+    under its own key. A mind that was deceived holds both the experience and
+    the correction.
 
     The key is phrased as the character's own voice, matching the
     `it_comes_back_to_me` / `i_suspect` precedent -- epistemic status carried
     by the key rather than by prose a model can drop.
     """
-    dispute = mem.get("disputed") if isinstance(mem, dict) else None
+    # Model projection only.  ``dict(mem)`` used to leak database ids,
+    # access counters, archive state, embedding metadata and retrieval scores
+    # into the character's mind.  Those are host diagnostics, not memories.
+    out = {
+        "memory_ref": str(mem.get("event_key") or ""),
+        "temporal_status": "remembered_past",
+        "memory_form": "episode",
+        "epistemic_origin": provenance_context_label(mem.get("provenance")),
+        "category": mem.get("category") or "episode",
+        "gist": mem.get("gist") or "",
+        "details": mem.get("content") or "",
+        "key_phrases": list(mem.get("key_phrases") or []),
+        "entities": list(mem.get("entities") or []),
+        "location": mem.get("location") or "",
+        "confidence": float(mem.get("confidence") or 0.0),
+        "felt_importance": float(mem.get("importance") or
+                                 mem.get("salience") or 0.0),
+        "affect_before": {
+            "label": mem.get("emotional_context") or "",
+            "valence": float(mem.get("valence") or 0.0),
+            "arousal": float(mem.get("arousal") or 0.0),
+        },
+        "affect_after_encoding": {
+            "valence": float(mem.get("encoding_valence") or 0.0),
+            "arousal": float(mem.get("encoding_arousal") or 0.0),
+        },
+    }
+    out = {k: v for k, v in out.items()
+           if v not in ("", [], {}) or k in {
+               "memory_ref", "temporal_status", "memory_form",
+               "epistemic_origin", "confidence", "felt_importance"}}
+    ti = mem.get("turn_idx")
+    if ti is None:
+        out["when"] = "before this story's recorded turns"
+    elif current_turn_idx is not None:
+        age = max(1, int(current_turn_idx) - int(ti))
+        out["when"] = "about 1 beat ago" if age == 1 else f"about {age} beats ago"
+    dispute = mem.get("disputed")
     if not dispute:
-        return mem
-    out = dict(mem)
-    out.pop("disputed", None)
+        return out
     out["i_now_read_this_differently"] = dispute.get("reading") or ""
     if dispute.get("count", 0) > 1:
         out["times_i_have_reconsidered_it"] = int(dispute["count"])
@@ -2162,32 +2300,170 @@ def _beats_ago_span(current_turn_idx, start_turn_idx, end_turn_idx):
         return ""
     oldest = int(current_turn_idx) - int(start_turn_idx or 0)
     newest = int(current_turn_idx) - int(end_turn_idx or 0)
-    if oldest <= 0:
-        return "just now"
-    if newest <= 0 or oldest == newest:
+    if newest <= 0:
+        # Defensive only: every read seam must withhold a window that closed at
+        # or after the deciding turn. Never relabel future knowledge "just now".
+        return ""
+    if oldest == newest:
         return f"about {oldest} beats ago"
     return f"between about {newest} and {oldest} beats ago"
 
 
+def _summary_id(scope, end_turn_idx):
+    """A citable, explicitly-past id for one delivered summary window."""
+    return f"summary:{scope}:{int(end_turn_idx or 0)}"
+
+
+def _origin_on_drift(chat_id, char_id, current_turn_idx, active_state, *,
+                     earlier_ids=()):
+    """Surface the character's ORIGIN summary window when a drift signal fires.
+
+    An origin is not a similarity match: a character's foundational era is
+    frequently dissimilar to whatever is happening now, which is exactly when
+    it should still be present. Top-k similarity ranking drops it in the beats
+    where it matters most (UNBUILT §1.21).
+
+    Three drift signals, all already tracked in the active state:
+
+    - **goal_held**: the same ungoverned goal for 12+ beats (the character is
+      stuck in a rut, not pursuing something).
+    - **project adrift**: a held project has gone 8+ beats without anything
+      serving it (the character has lost the thread of what they set out to do).
+    - **mood sign-flip**: the current mood's valence has flipped sign from the
+      character's baseline (a despairing character who was once hopeful, or
+      vice versa) -- the moment a person reaches for who they were before the
+      current stretch swallowed them.
+
+    When any signal fires, the earliest first-hand summary window is fetched
+    and included under ``where_i_came_from``. It is NOT added to
+    ``earlier_in_my_life`` because those are similarity-ranked; the origin is
+    surfaced for a different reason and should not compete for a similarity
+    slot. Absent (not empty) when no signal fires or when there is no origin
+    window to reach.
+
+    ``earlier_ids`` is the set of ``end_turn_idx`` values already in the
+    ``earlier_in_my_life`` payload, so the origin is not sent twice when
+    similarity ranking happened to reach it.
+    """
+    if not isinstance(active_state, dict):
+        return {}
+    drift = False
+    # Signal 1: same goal held too long.
+    if active_state.get("goal_held"):
+        drift = True
+    # Signal 2: a project has gone adrift.
+    for p in (active_state.get("projects") or []):
+        if isinstance(p, dict) and p.get("adrift"):
+            drift = True
+            break
+    # Signal 3: mood sign-flip from baseline.
+    mood = str(active_state.get("mood") or "").strip().casefold()
+    if mood and not drift:
+        # The baseline is "neutral" unless the character's stored affect
+        # says otherwise. A sign-flip is when a clearly positive mood gives
+        # way to a clearly negative one or vice versa, compared to what the
+        # character's affect surface has been tracking. We use the mood label
+        # vocabulary the engine already maintains.
+        _negative = any(w in mood for w in (
+            "afraid", "anxious", "angry", "ashamed", "despair", "disgust",
+            "fear", "grief", "guilt", "horror", "rage", "sad", "shame",
+            "terror", "worried", "dread", "misery", "anguish", "desolate",
+        ))
+        _positive = any(w in mood for w in (
+            "calm", "content", "delighted", "ecstatic", "elated", "excited",
+            "glad", "happy", "joy", "love", "peaceful", "pleased", "proud",
+            "relieved", "satisfied", "serene", "triumphant", "warm",
+        ))
+        # Only a clear signal counts: a mood that is clearly one or the other,
+        # and the character's active_state also carries valence from resolved
+        # affect. We check the valence sign flip against the stored baseline.
+        if _negative or _positive:
+            surface = (active_state.get("affect") or {}).get("surface") or {}
+            valence = float(surface.get("valence") or 0.0)
+            baseline = (active_state.get("affect") or {}).get("baseline") or {}
+            base_v = float(baseline.get("valence") or 0.0)
+            # A sign flip: current and baseline are on opposite sides of zero,
+            # and the current is not near zero (which is neutral, not a flip).
+            if abs(valence) > 0.15 and (valence * base_v) < 0:
+                drift = True
+    if not drift:
+        return {}
+    # Fetch the earliest first-hand summary window.
+    rows = q("SELECT * FROM memory_summaries WHERE chat_id=? AND char_id=? "
+             "AND scope=? AND end_turn_idx < ? "
+             "ORDER BY end_turn_idx ASC, id ASC LIMIT 1",
+             (chat_id, char_id, SUMMARY_SCOPE_FIRSTHAND,
+              int(current_turn_idx)))
+    if not rows:
+        return {}
+    r = rows[0]
+    if not (r["summary"] or "").strip():
+        return {}
+    # Do not duplicate what earlier_in_my_life already carries.
+    if (r["end_turn_idx"] or 0) in earlier_ids:
+        return {}
+    return {"where_i_came_from": {
+        "what_i_lived_through_then": r["summary"] or "",
+        "summary_id": _summary_id(r["scope"], r["end_turn_idx"]),
+        "temporal_status": "remembered_past",
+        "memory_form": "summary",
+        "epistemic_origin": summary_context_label(r["scope"]),
+        "when": _beats_ago_span(current_turn_idx, r["start_turn_idx"],
+                                r["end_turn_idx"]),
+    }}
+
+
 def build_character_memory_context(chat_id, char_id, current_turn_idx, current_view, active_state, *,
                                    recent_turns=4, recall_limit=_RECALL_LIMIT, here=None,
-                                   in_sight=None):
+                                   in_sight=None, absorption=0.0,
+                                   ponder_query=""):
     active_state = active_state or {}
-    recent = recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=recent_turns, limit=12)
+    # Legacy banks predate event_key. Repair only the active mind's missing
+    # handles before any row is projected, so every delivered citation is
+    # stable across checkpoint restore and portable archive import.
+    backfill_missing_memory_event_keys(chat_id, char_id)
+    # Sensory absorption narrows deliberative recall while preserving a small
+    # automatic-recognition lane.  A body monopolising attention should reduce
+    # how many old chapters can be worked through, not erase a salient face,
+    # warning, or promise already associated with the present cue.
+    absorption = _clamp(absorption)
+    if absorption >= 0.7:
+        recent_limit, recall_limit, summary_limit = 4, min(recall_limit, 4), 0
+    elif absorption >= 0.35:
+        recent_limit, recall_limit, summary_limit = 8, min(recall_limit, 8), 1
+    else:
+        recent_limit, summary_limit = 12, _SUMMARY_RECALL_LIMIT
+    recent = recent_memory_buffer(
+        chat_id, char_id, current_turn_idx, turns=recent_turns,
+        limit=recent_limit)
     recent_ids = {m["id"] for m in recent}
-    summary = get_memory_summary(chat_id, char_id)
+    summary = get_memory_summary(
+        chat_id, char_id, before_turn_idx=current_turn_idx)
     # P8: the other two epistemic classes travel as their own labelled fields
     # rather than being melted into the first-hand paragraph. A character must
     # be able to tell what they saw from what they were told from what they
     # worked out -- collapsing them is the same layer-collapse the engine
     # polices between minds, happening inside one.
     provenance_summaries = {}
+    summary_citations = {}
     for scope, _field, label in _SUMMARY_SCOPES:
         if scope == SUMMARY_SCOPE_FIRSTHAND:
             continue
-        text = str(get_memory_summary(chat_id, char_id, scope).get("summary") or "").strip()
+        scoped_summary = get_memory_summary(
+            chat_id, char_id, scope, before_turn_idx=current_turn_idx)
+        text = str(scoped_summary.get("summary") or "").strip()
         if text:
             provenance_summaries[label] = text
+            summary_citations[label] = {
+                "summary_id": _summary_id(
+                    scope, scoped_summary.get("end_turn_idx")),
+                "temporal_status": "remembered_past",
+                "when": _beats_ago_span(
+                    current_turn_idx, scoped_summary.get("start_turn_idx"),
+                    scoped_summary.get("end_turn_idx")),
+                "epistemic_origin": label,
+                "memory_form": "summary",
+            }
     # The beat is the query; what the character BRINGS to it travels beside it
     # as aspects, each with its own ranking. Concatenated, they did nothing:
     # the view runs a median ~1,015 characters and a mood fragment 10-60, so
@@ -2221,6 +2497,34 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                                chronological=True, here=here, in_sight=in_sight,
                                aspects=aspects, embedded=embedded)
     recalled = [m for m in recalled if m["id"] not in recent_ids]
+    if len(recalled) > recall_limit:
+        recalled = sorted(
+            sorted(recalled, key=lambda m: float(m.get("score") or 0.0),
+                   reverse=True)[:recall_limit],
+            key=lambda m: (m.get("turn_idx") is None,
+                           m.get("turn_idx") if m.get("turn_idx") is not None
+                           else 10**12, m.get("id") or 0))
+    # A character may deliberately set ONE query on the previous character
+    # turn. This is an additive, explicitly-labelled retrieval lane: normal
+    # cue/mood/goal recall above remains untouched. It costs an embedding call
+    # only when a ponder is actually pending, which should be exceptional.
+    ponder_query = " ".join(str(ponder_query or "").split())[:240]
+    pondered = []
+    if ponder_query:
+        pondered = search_memories(
+            chat_id, char_id, ponder_query, k=4, include_archived=True,
+            current_turn_idx=current_turn_idx, chronological=True,
+            here=here, in_sight=in_sight)
+        # Chronological-neighbour expansion may return k+2. Deliberate recall
+        # is a small supplement, not a second full memory payload.
+        if len(pondered) > 4:
+            pondered = sorted(
+                sorted(pondered, key=lambda m: float(m.get("score") or 0.0),
+                       reverse=True)[:4],
+                key=lambda m: (m.get("turn_idx") is None,
+                               m.get("turn_idx")
+                               if m.get("turn_idx") is not None else 10**12,
+                               m.get("id") or 0))
     # The layer between the summary and the raw rows: which EARLIER stretch of
     # this life the present beat is about.
     #
@@ -2240,50 +2544,129 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # First-hand scope only. Hearsay and surmise have windows too, and folding
     # them in here would put three provenances in one field -- the same collapse
     # `provenance_summaries` exists to prevent.
-    earlier = search_memory_summaries(
-        chat_id, char_id, query_text, k=_SUMMARY_RECALL_LIMIT,
+    earlier = (search_memory_summaries(
+        chat_id, char_id, query_text, k=summary_limit,
         scope=SUMMARY_SCOPE_FIRSTHAND, before_turn_idx=current_turn_idx,
-        exclude_latest=True, embedded=embedded)
+        exclude_latest=True, embedded=embedded) if summary_limit else [])
     # Chronological, oldest first: these are stretches of a life, and rank order
     # would present it out of sequence. Ranking has already done its work by
     # choosing WHICH ones. Absent rather than empty when there are none, like
     # the provenance summaries below -- an empty key still spends attention.
     earlier_payload = {"earlier_in_my_life": [
         {"what_i_lived_through_then": w.get("summary") or "",
+         "summary_id": _summary_id(
+             w.get("scope") or SUMMARY_SCOPE_FIRSTHAND,
+             w.get("end_turn_idx")),
+         "temporal_status": "remembered_past",
+         "memory_form": "summary",
+         "epistemic_origin": summary_context_label(
+             w.get("scope") or SUMMARY_SCOPE_FIRSTHAND),
          "when": _beats_ago_span(current_turn_idx, w.get("start_turn_idx"),
                                  w.get("end_turn_idx"))}
         for w in sorted(earlier, key=lambda w: (w.get("end_turn_idx") or 0))
     ]} if earlier else {}
+    # Origin-era retrieval on drift (UNBUILT §1.21).
+    #
+    # A character's foundational era is frequently DISSIMILAR to whatever is
+    # happening now, which is exactly when it should still be present -- a
+    # character who has lost the thread of why they set out needs to remember
+    # the beginning, and similarity-based top-k drops it in the beats where it
+    # matters most. An origin is not a similarity match.
+    #
+    # Rather than always including the origin (which costs a slot every beat
+    # for something usually irrelevant) or waiting for an absolute floor the
+    # compressed cosine band cannot provide, surface the origin window when a
+    # drift signal fires: the same goal held for 12+ beats, a project gone
+    # adrift for 8+ beats, or a mood sign-flip from the character's baseline.
+    # These are exactly the moments a person reaches for who they were before
+    # the current stretch swallowed them.
+    origin_payload = _origin_on_drift(
+        chat_id, char_id, current_turn_idx, active_state,
+        earlier_ids={w.get("end_turn_idx") for w in earlier})
+    if str(summary.get("summary") or "").strip():
+        summary_citations["autobiographical_summary"] = {
+            "summary_id": _summary_id(
+                SUMMARY_SCOPE_FIRSTHAND, summary.get("end_turn_idx")),
+            "temporal_status": "remembered_past",
+            "when": _beats_ago_span(
+                current_turn_idx, summary.get("start_turn_idx"),
+                summary.get("end_turn_idx")),
+            "epistemic_origin": summary_context_label(
+                SUMMARY_SCOPE_FIRSTHAND),
+            "memory_form": "summary",
+        }
+    row_ids = {
+        str(m.get("id")): str(m.get("event_key") or "")
+        for m in (*recent, *recalled, *pondered)
+        if m.get("id") is not None and str(m.get("event_key") or "")
+    }
+    normal_refs = {str(m.get("event_key") or "")
+                   for m in (*recent, *recalled)}
+    ponder_refs = [str(m.get("event_key") or "") for m in pondered
+                   if str(m.get("event_key") or "")]
+    recent_projected = [_with_reading(m, current_turn_idx) for m in recent]
+    recalled_projected = [
+        _with_reading(m, current_turn_idx) for m in recalled]
+    for item in (*recent_projected, *recalled_projected):
+        if str(item.get("memory_ref") or "") in ponder_refs:
+            item["retrieval_origin"] = [
+                "normal_recall", "deliberate_ponder"]
+    ponder_additional = []
+    for mem in pondered:
+        ref = str(mem.get("event_key") or "")
+        if ref in normal_refs:
+            continue
+        item = _with_reading(mem, current_turn_idx)
+        item["retrieval_origin"] = ["deliberate_ponder"]
+        ponder_additional.append(item)
+    ponder_payload = ({"deliberate_recall": {
+        "query_i_chose_last_turn": ponder_query,
+        "temporal_status": "remembered_past",
+        "retrieval_origin": "deliberate_ponder",
+        "result_refs": ponder_refs,
+        "additional_episodes": ponder_additional,
+        # Results do not force another query, but a genuinely new uncertainty
+        # may be pondered immediately; optionality lives in the explicit act.
+        "may_set_another_ponder_this_turn": True,
+    }} if ponder_query else {})
+    score_rows = {}
+    for mem in (*recalled, *pondered):
+        ref = str(mem.get("event_key") or "")
+        if ref:
+            score_rows[ref] = max(
+                score_rows.get(ref, float("-inf")),
+                float(mem.get("score") or 0.0))
     return {
-        "working_memory": {
-            # A citable id for the PRESENT beat. Without one, the only ids in
-            # this payload belong to memory rows -- and recent_memory_buffer
-            # deliberately excludes the current turn (audit #10), so every
-            # real event_id here is from an EARLIER turn. A character asked to
-            # cite evidence could therefore only ever cite the past, and did:
-            # across one 61-turn chat, observations_used cited a previous
-            # turn 15 times and the current beat zero times, which is why the
-            # character kept answering the line before the one just spoken.
-            "event_id": "current",
-            "current_perception": current_view or "",
-            "current_mood": active_state.get("mood") or "neutral",
-            "current_goal": active_state.get("goal") or "",
-            "active_concerns": list(dict.fromkeys([
+        # Host-only registry. character.py removes it before serialization.
+        "_internal": {
+            "row_ids": row_ids,
+            "retrieved_ids": [
+                m.get("id") for m in (*recent, *recalled, *pondered)
+                              if m.get("id") is not None],
+            "scores": score_rows,
+        },
+        "unresolved_from_past": {
+            "temporal_status": "remembered_past",
+            "items": list(dict.fromkeys([
                 *[str(item) for item in (active_state.get("active_concerns") or [])
                   if str(item).strip()],
                 *[str(item) for item in (summary.get("unresolved_threads") or [])
                   if str(item).strip()],
             ]))[:6],
         },
-        "recent_episodes": [_with_reading(m) for m in recent],
-        "recalled_old_memories": [_with_reading(m) for m in recalled],
+        "recent_episodes": recent_projected,
+        "recalled_old_memories": recalled_projected,
         # First-hand only. What reached this character through someone else's
         # account, and what they worked out for themselves, are carried
         # separately below and must not be folded in here.
         "autobiographical_summary": summary.get("summary") or "",
         "summary_key_phrases": summary.get("key_phrases") or [],
         "unresolved_threads": summary.get("unresolved_threads") or [],
+        **({"summary_citations": summary_citations}
+           if summary_citations else {}),
         **earlier_payload,
+        **origin_payload,
+        **ponder_payload,
         **provenance_summaries,
     }
 
@@ -2749,6 +3132,8 @@ def dump_chat_memories(chat_id, *, inline_vectors=True):
          "key_phrases": _json_list(r["key_phrases"]), "entities": _json_list(r["entities"]),
          "location": r["location"], "emotional_context": r["emotional_context"],
          "valence": r["valence"], "arousal": r["arousal"], "confidence": r["confidence"],
+         "encoding_valence": r["encoding_valence"],
+         "encoding_arousal": r["encoding_arousal"],
          "archived": bool(r["archived"]), "event_key": r["event_key"],
          "importance": r["importance"], "disputed": r["disputed"] or "",
          # Stored vectors travel with the dump so restore can put them
@@ -2806,6 +3191,8 @@ def prepare_chat_memory_restore(chat_id, mems):
             "entities": m.get("entities"), "location": m.get("location", ""),
             "emotional_context": m.get("emotional_context", ""),
             "valence": m.get("valence", 0.0), "arousal": m.get("arousal", 0.0),
+            "encoding_valence": m.get("encoding_valence", 0.0),
+            "encoding_arousal": m.get("encoding_arousal", 0.0),
             "confidence": m.get("confidence", 1.0), "event_key": m.get("event_key", ""),
             # Carried verbatim. A revised importance and a recorded re-reading
             # are things the character earned; a rollback restores the bank as
@@ -2893,6 +3280,8 @@ def dump_character_memories(chat_id, char_id):
          "key_phrases": _json_list(r["key_phrases"]), "entities": _json_list(r["entities"]),
          "location": r["location"], "emotional_context": r["emotional_context"],
          "valence": r["valence"], "arousal": r["arousal"], "confidence": r["confidence"],
+         "encoding_valence": r["encoding_valence"],
+         "encoding_arousal": r["encoding_arousal"],
          "archived": bool(r["archived"]), "event_key": r["event_key"],
          "importance": r["importance"], "disputed": r["disputed"] or ""}
         for r in rows
@@ -2922,6 +3311,8 @@ def import_character_memories(chat_id, char_id, memories):
             "entities": m.get("entities"), "location": m.get("location", ""),
             "emotional_context": m.get("emotional_context", ""),
             "valence": m.get("valence", 0.0), "arousal": m.get("arousal", 0.0),
+            "encoding_valence": m.get("encoding_valence", 0.0),
+            "encoding_arousal": m.get("encoding_arousal", 0.0),
             "confidence": m.get("confidence", 1.0), "event_key": "",
             # Both travel with a portable character bank: they are the
             # character's own history with these memories, not facts about the

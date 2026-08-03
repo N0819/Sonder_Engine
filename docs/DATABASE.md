@@ -47,7 +47,10 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
 - `steps`, `variants`: inspectable intermediate pipeline outputs and rerolls.
 - `events`: one summarized committed event per turn.
 - `memories`, `memory_summaries`: character-owned experience records and
-  consolidation. `memory_summaries` is keyed
+  consolidation. Since **v24**, `memories.valence/arousal` are the resolved
+  affect carried into an event and `encoding_valence/encoding_arousal` are the
+  resolved post-appraisal affect in which it was encoded; all four follow the
+  existing snapshot/archive/portable-bank paths. `memory_summaries` is keyed
   `(chat_id, char_id, scope, end_turn_idx)` since **v23** — one row per
   WINDOW, not one per character. It was `(chat_id, char_id, scope)`, so every
   consolidation overwrote the one row a scope had, which is why the summary

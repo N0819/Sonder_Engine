@@ -848,37 +848,18 @@ prose writes "The Dalek's"). See `Design.md`.
 ### 1.21 A character's origin cannot be reached by similarity, and 53 banks have none to reach
 
 **Found 2026-08-02**, implementing summary windows. **Mostly landed 2026-08-02**
-— the payload half is built (`earlier_in_my_life`, see `Design.md`). What
-remains is the one hazard the original entry named that measurement did NOT
-dissolve, plus a consequence of the old design that cannot be repaired by
-reading.
+— the payload half is built (`earlier_in_my_life`, see `Design.md`). **The
+origin-era ranking question is now landed** — `build_character_memory_context`
+surfaces the earliest first-hand summary window under `where_i_came_from` when
+a drift signal fires (goal held 12+ beats, a project adrift 8+ beats, or a
+mood sign-flip from baseline). See `Design.md`, "Origin-era retrieval on drift".
 
-The original entry deferred the payload on three hazards. Two are answered:
-
-- *"Today's summary is CUMULATIVE, so bounded windows would cost early
-  history."* **False in practice.** The consolidator is told to merge forward
-  and told just as firmly to shed low-salience detail; shedding wins.
-  Successive live windows share 3-16% of their text. The singleton was not
-  holding a life, it was holding the last chapter of one.
-- *"The payload has a budget and nobody has measured what it displaces."*
-  Measured: two windows, and across 48 probes on the live bank a mean 14% of the
-  sixteen recalled raw memories fall inside the sent window's turn span, so the
-  window is mostly reaching turns raw recall did not.
-
-**The third stands, and is now sharper.** Retrieval ranks by similarity to the
-current beat, and a character's FOUNDATIONAL era -- who they are, why they set
-out -- is frequently dissimilar to whatever is happening now, which is exactly
-when it should still be present. Top-k drops it in the beats where it matters
-most. An origin is not a similarity match. What that rule should be is open:
-always-include costs a slot every beat for something usually irrelevant;
-include-on-drift needs a drift signal; include-when-nothing-else-scores needs
-the absolute floor the compressed 0.45-0.55 cosine band cannot provide.
-
-**The missing windows themselves are now rebuildable** --
-`backfill_memory_summary_windows`, run against chat 38 (see `Design.md`) -- so
-what is left here is only the ranking question above, plus the fact that no
-caller runs the backfill automatically: it is a library function, and 53 banks
-still have the hole.
+The old hole is repairable and the host exposes it: the memory UI calls
+`backfill_memory_summary_windows`. Reconstructed windows are also propagated
+into every eligible pre-turn checkpoint (`end_turn_idx < checkpoint.turn_idx`),
+so a later reroll cannot silently restore the legacy singleton and erase the
+repair. Chat 38 was repaired from its pre-change backup on 2026-08-02: 41
+summary windows are live again and 109 eligible checkpoints carry them.
 
 **Still unmeasured:** conduct. Everything above measures payload composition.
 Whether a character behaves differently for having their earlier chapters is a
@@ -887,8 +868,12 @@ maze-arm question, not a one-turn read.
 ### 1.22 One window answers most beats, because every view describes the same person
 
 **Found 2026-08-02**, measuring the window layer against chat 38's real
-perception views rather than hand-written probes. The distinction turned out to
-be the whole finding.
+perception views rather than hand-written probes. **Re-tested and rejected
+2026-08-02.** Against 27 historical beats, using the era most represented in
+the raw semantic retriever's top 16 as the reference, the unchanged window
+ranker reached 70.4% top-1 / 81.5% top-2 agreement. Stripping the appearance
+tail reduced that to 63.0% / 77.8%; adding goal, mood and concern aspect RRF
+reduced it further to 48.1% / 74.1%. Neither change shipped.
 
 Asked a query that NAMES an era, the layer is accurate: "the replicator logs,
 the miso soup and the mochi" returns windows (50,59) and (60,69) at 0.486/0.409;
@@ -919,14 +904,12 @@ QUERY ONLY (not from the view the character reads) drops the hub from 24/30 to
 19/30 and lifts two starved windows from 1 pick to 4 each. Cheap and worth
 doing, but it is not the whole cause.
 
-**The fix that fits the engine's own precedent** is the one that already solved
-this exact shape for raw memories: rank the windows against the ASPECTS as well
-as the view -- goal, mood, unresolved threads -- fused, rather than against one
-long string whose bulk is constant. `search_memories` learned this when a mood
-fragment concatenated onto a 1,015-character view moved the query vector by
-nothing (cosine 0.994); `search_memory_summaries` is still doing the
-concatenated thing, with one ranking and no aspects. The aspect vectors are
-already in the shared `EmbeddingBatch` it receives, so the cost is a loop.
+**The initially proposed fix did not fit this layer.** Raw memories are short
+enough for aspect fusion to help; chapter summaries are already compressed and
+the added rank lists pulled them away from the era selected by raw recall.
+Boilerplate stripping also removed useful identity/context signal along with
+the constant tail. The remaining problem needs a different candidate and the
+same historical replay before it lands.
 
 
 ---
@@ -939,21 +922,31 @@ of risk; items 2.1–2.3 repay the structural debt in
 
 ### 2.1 Let a character cite the present beat by its real id
 
-**Closes debt #1.** Re-verified against source and the whole database
-2026-07-31; the original entry's premise was stale and its remaining work is
-much smaller than it claimed.
+**Closes debt #1.** **Landed 2026-08-02.** Re-verified against source and the
+whole database 2026-07-31; the original entry's premise was stale and its
+remaining work is much smaller than it claimed.
 
-**What is already built.** `agents/perception.py` mints a real id for every
-observation of the present beat — `current:<perceiver>:<n>` — and those ids
-reach the character payload intact at `perception.observations[].observation_id`
-(`agents/character.py`, the `base_observations` path; a micro-view gets
-`current:<cid>:micro`). The current beat is no longer an uncitable prose string.
+**What is built.**
 
-**What is not.** The prompt has never been told. `prompts.py`'s OBSERVATIONS
-block still asserts *"The present beat has not been committed and has no event
-id of its own"* and asks for the magic string `"current"` — an
-instruction-shaped patch standing on top of a payload that now carries the
-structure it is substituting for.
+- `agents/perception.py` mints a real id for every observation of the present
+  beat — `current:<perceiver>:<n>` — and those ids reach the character payload
+  intact at `perception.observations[].observation_id`.
+- `prompts.py`'s OBSERVATIONS block now points at the real observation_id
+  rather than asking for the magic string `"current"`.
+- `schemas.py`'s `EvidenceRef` normalizes legacy event_id spellings
+  (`current_perception`, `perception`, `perception:view`, etc.) back to
+  `"current"` via `_normalize_event_id`, so no existing citation is lost.
+  A real `current:<perceiver>:<n>` id is left untouched.
+
+`agents.character._ground_observation_citations` completes the boundary:
+present ids and only stable `event_key`/summary ids actually delivered to this
+mind survive across every `EvidenceRef` field; invented or stale ids are
+dropped. A current citation the model supplied is moved first. If it omitted
+one, the engine warns rather than forging audit evidence. Retrieved rows carry
+`temporal_status: remembered_past`, relative `when`, and provenance, so the
+distinction is data rather than list position or prompt discipline.
+
+The original measurement is preserved for context:
 
 Measured across all 1,254 stored character variants, 6,404 citations:
 
@@ -967,23 +960,14 @@ Measured across all 1,254 stored character variants, 6,404 citations:
 So the original diagnosis — "a character reliably answering the previous line" —
 is **superseded**: characters overwhelmingly do cite the present beat now. They
 just cite it under about fifteen spellings of a thing that has a real name,
-which is unusable as evidence and unverifiable as a claim.
-
-Remaining work, small: point the OBSERVATIONS block at
-`perception.observations[].observation_id`, and normalize the legacy spellings
-deterministically on the way in (they are a closed set in practice, and the
-table above enumerates it) so no existing citation is lost. Then
-`observations_used` can be validated against the observations actually
-delivered — which is what makes it evidence rather than a sentence.
+which is unusable as evidence and unverifiable as a claim. The prompt update
+and normalization close that gap.
 
 **Rule this generalises:** whenever a prompt asks a model to prefer X over Y,
 check whether the payload makes X *harder to reach* than Y. If it does, the
 prompt will lose. The corollary this entry adds: when the payload is later
 fixed, **the prompt does not update itself** — a patch written for the old
 payload goes on suppressing the new one.
-
-This is also the same primitive §4.2 and §3's headline want, from the other
-direction.
 
 ### 2.2 Make stance auditable
 
@@ -1307,6 +1291,131 @@ memories normally, and only reach for a window when the first pass returns
 nothing convincing -- but "nothing convincing" needs an absolute confidence
 signal, and the cosine band is 0.45-0.55 wide for everything, which is exactly
 the floor that does not exist.
+
+### 2.17 Memory reliability after temporal separation
+
+**Shelved 2026-08-02**, updated after the controlled chat-38 embedding and
+character-question benchmark. Seven isolated questions per arm used the same
+prompt and payload schema. After correcting one deterministic phrase scorer
+miss (“never stated” vs “never said”), semantic answers passed **7/7** versus
+lexical-only **5/7**, and both grounded 100% of citations. Relevant evidence
+reached the payload in **5/5** historical cases vs **2/5**, and relevant
+earlier windows in **5/5 vs 0/5**. Raw-memory MRR was lower for semantic
+(0.207 vs 0.400) because lexical put its two exact-word successes at rank 1
+and missed the other three entirely, while semantic reached all five, often
+through the summary-window layer. These are the next measurements and
+mechanisms that would make reliable retrieval become reliable conduct.
+
+**Integration pass landed 2026-08-02.** The character contract now has
+separate present and past evidence lanes; current state is absent from the
+memory branch; micro-round observations have unique ids; raw memory projection
+contains no database/retrieval internals; summary prose cannot independently
+reinforce durable state. Psychology now receives bounded, grounded
+`memory_modulation`, absorption narrows deliberative recall without deleting
+the automatic-recognition lane, dialogue keep-reasons survive minting, disputes
+use exact stable refs plus present cause, and `memory_effects` distinguishes
+retrieval from influence. Schema v24 records before-event and post-appraisal
+affect. These close the implementation half of items 5 and 10 and most of 9;
+item 4 has bounded effect telemetry but not the author-facing retrieval-event
+ledger described below.
+
+The modulation lane now also admits a mild memory-evoked body/threat response
+without collapsing time: `somatic_echo` and `threat_bias` require exact past
+evidence, are capped to 0.2, and are carried for one beat under
+`active_state.memory_echo` with `temporal_source: remembered_past`. They
+cannot write current somatic pain/pleasure, injury, goal impact, or a claim that
+the remembered danger is present.
+
+Deliberate query-setting is built as the private `ponder` sequence action. One
+bounded query with a concrete reason is committed to the character's own state,
+retrieved in an explicitly labelled `deliberate_recall` lane on top of normal
+recall next character turn, then consumed. Ponder is absent from the default
+output shape and requires a concrete reason. A useful result may raise a new
+query immediately; receiving results alone is explicitly not a reason to do
+so. What remains unbuilt is behavioural measurement of when characters choose
+it well, not the mechanism.
+
+**Remaining priority order:**
+
+1. **Evaluate behaviour, not only answers.** Build a repeatable memory maze in
+   which a character must recognise someone, honour a remembered promise,
+   navigate from walked ground, reject a contradicted belief, and distinguish
+   witnessed evidence from inference. Score the chosen acts. The existing
+   benchmark proves reachability and temporal typing; it does not yet prove a
+   memory changes conduct at the right moment.
+2. **Separate recall confidence from claim credence completely.** The new
+   `epistemic_origin` / `memory_form` names the axes and prevents provenance
+   ambiguity, but a numeric recall-strength axis is still absent. A mind may confidently
+   remember that it once inferred something while still assigning that
+   inference low truth-confidence. Carry `memory_recall_confidence` beside
+   `claim_credence`; never let retrieval itself promote the latter. Chat 38's
+   kitsune probe exposed the ambiguity: the stored inference was 0.287 while
+   the answer about having made that inference reported 0.75 confidence.
+3. **Finish interior summary holes for legacy characters.** Chat 38's repaired
+   live state has 41 windows and leading coverage is restored, but bounded
+   absences remain between surviving windows (substantive coverage: Doctor
+   419/452, Picard 8/17, Guinan 25/29). The current backfiller deliberately
+   repairs only the destroyed leading era. An interior-hole repair needs the
+   same inspect-on-copy discipline and checkpoint propagation.
+4. **Log retrieval as an author-facing auditable event.** `memory_effects` now
+   records model-declared influence and unbidden recall consumes it, but
+   `access_count` still says only that a row was
+   returned, but not the query, ranking reasons, score, whether it was cited,
+   or whether it influenced conduct. A bounded `memory_retrieval_events`
+   ledger should record those separately so false recall, unused payload and
+   hub memories become measurable.
+5. **Finish retrieval/rehearsal telemetry.** Merely being placed in context
+   still does not strengthen a memory; `memory_evidence_used`,
+   `memory_effects`, belief citation, and disputes now distinguish four later
+   stages. Persist those distinctions in the proposed bounded ledger before
+   adopting any accessibility/rehearsal policy.
+6. **Retrieve counterevidence with uncertain beliefs.** When a low-confidence
+   inference is decision-relevant, surface its strongest supporting and
+   disputing rows together. This is the authoritative counterpart to
+   non-authoritative contrast recall and prevents repeated one-sided retrieval
+   from laundering a guess into certainty.
+7. **Tune by query class, never with one global semantic weight.** Label real
+   questions as exact quotation/name, place/navigation, thematic paraphrase,
+   promise/obligation, or provenance. Tune and evaluate each separately. On
+   chat 38 semantic retrieval greatly improved total relevance while the
+   lexical fallback sometimes found the first exact hit sooner; both signals
+   are useful in different proportions.
+8. **Audit summaries against their source rows.** Consolidation can silently
+   promote inference or hearsay into unqualified prose. Every summary claim
+   should be traceable to source memory ids and retain the strongest applicable
+   provenance/credence constraint. This naturally converges with §2.16's
+   stronger design: summaries as indexes over evidence rather than substitute
+   evidence.
+9. **Retry semantically unsupported present-evidence use before accepting conduct.** In
+   one final semantic trial the Doctor correctly denied that the anomaly was
+   active, but supported the denial only with the memory of closing it and did
+   not cite the quiet present. The output guard now warns and never fabricates
+   a citation. The stronger next step is one bounded retry when a present
+   observation exists but `present_evidence_used` supplies none, then accept the
+   omission with an audit warning if the retry does not improve it.
+10. **Measure the clarified provenance contract.** `epistemic_origin` and
+    `memory_form` now name how the claim was acquired versus what representation
+    is being recalled. In one prior
+    trial the Doctor correctly said Hinami told him her name, cited the exact
+    witnessed line, then labeled the answer `remembered` rather than `heard`.
+    The prose was right and the typed provenance was wrong because the field
+    can be read as "how I know" or "what kind of memory this is." A future
+    contract should name those two axes separately rather than prompt harder.
+
+**Measured non-solutions — do not retry without new evidence:**
+
+- Globally stripping appearance boilerplate from summary queries made
+  historical-window targeting worse.
+- Adding goal/mood/unresolved-thread aspects to summary-window ranking made it
+  worse again; the raw-memory result does not transfer to summary prose.
+- Always including the origin window spends attention every beat for something
+  usually irrelevant. The landed drift-triggered origin rule is the bounded
+  form.
+- Replacing lexical ranking with embeddings alone throws away the fallback's
+  exact-match strength. The measured answer is fusion, then query-class tuning.
+
+The reusable instrument is `tools/benchmark_memory_temporal.py`; extend it
+rather than creating another one-off question script.
 
 ---
 

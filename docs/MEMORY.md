@@ -1,9 +1,9 @@
 # Memory
 
 How a character remembers: what gets written, what comes back, and what
-decides. Every claim here is against source — `memory.py` (3,133 lines),
-`commit.py`'s memory domain, `agents/character.py`'s retrieval seam, and
-`providers.py`'s embedding role.
+decides. Every claim here is against source — `memory.py`, `commit.py`'s
+memory domain, `agents/character.py`'s retrieval seam, and `providers.py`'s
+embedding role.
 
 Memory is **per character**, never per chat. There is no shared pool a mind can
 read from. `memories.char_id` is on every row and every read path filters on it
@@ -27,7 +27,7 @@ One row in `memories` (`db.py`). The fields that do work:
 | `turn_idx` | Global play order. `NULL` for imported/authored memories with no place in play. |
 | `frame_id` | Which temporal era it was formed in. `NULL` is the present. |
 | `kind` | `episodic` / `dialogue` / `inference` / `semantic` / `relationship` / `promise` / `intention` |
-| `category` | Derived from `kind` via `_default_category`; one of `MEMORY_CATEGORIES`. `episode`, `self` and `inference` are essentially all of it in practice — 4,920 of 4,939 live rows. |
+| `category` | Derived from `kind` via `_default_category`; one of `MEMORY_CATEGORIES`. `episode`, `self` and `inference` are essentially all of it in practice — 5,301 of 5,380 live rows. |
 | `provenance` | `witnessed` / `heard` / `told` / `read` / `inferred` / `remembered` |
 | `salience` | How much it mattered **when formed**. Set at mint, never revised. |
 | `importance` | How central it **became**, through consequences. `NULL` = never revised, and reads as `salience` (`effective_importance`). |
@@ -38,6 +38,7 @@ One row in `memories` (`db.py`). The fields that do work:
 | `key_phrases`, `entities` | Extracted at mint (`_extract_key_phrases`, `_extract_entities`) unless supplied. JSON arrays. |
 | `location` | Room name. A retrieval cue (§5). |
 | `valence`, `arousal` | The affect the character carried *into* the event. |
+| `encoding_valence`, `encoding_arousal` | Resolved affect *after* appraisal — how the event left the character. |
 | `embedding`, `cue_embedding` | Two float32 blobs (§4). |
 | `embedding_model`, `embedding_dim` | Which model made them. A mismatch scores 0.0 forever (§9). |
 | `archived` | Folded into a summary and retired from the default read. |
@@ -136,6 +137,14 @@ valence of +0.85 with 4 negatives in 3,162 rows. That is not an emotional axis,
 it is a constant, and it silently disabled everything downstream that reads
 affect (§5's mood congruence was unbuildable until this was fixed).
 
+Schema v24 adds `encoding_valence` and `encoding_arousal`, stamped after
+`resolve_affect` appraises this event. The original pair remains the affect
+carried into it. Together they preserve two different facts: the state in
+which an event was encountered and the state in which it was encoded. Legacy
+rows migrate to neutral zeros rather than having an emotional arc invented;
+new non-psychology rows default the after-pair to the before-pair. Both pairs
+survive checkpoints, archives, portable character banks, and editor updates.
+
 ### Ordering, and why
 
 `prepare_memories_batch` normalizes and **embeds** outside the write lock —
@@ -158,25 +167,114 @@ roll back a valid turn.
 called once per character per beat from `agents/character.py`. It returns:
 
 ```
-working_memory:            event_id "current", current_perception, mood, goal,
-                           active_concerns (≤6)
+unresolved_from_past:      remembered concerns/threads only (≤6)
 recent_episodes:           recent_memory_buffer — last 4 turns, ≤12 rows
 recalled_old_memories:     search_memories, k=16, minus anything already recent
 autobiographical_summary:  first-hand only — the LATEST window (§8)
 summary_key_phrases, unresolved_threads
+summary_citations:         typed past ids/when/epistemic origin for summaries
 earlier_in_my_life:        ≤2 earlier first-hand windows the beat ranks up,
                            oldest first, dated relatively; absent when none
+where_i_came_from:         origin-era window, surfaced on drift signal (§8);
+                           absent when no drift or no origin window
 what_i_was_told:           hearsay summary, if any
 what_i_concluded:          surmise summary, if any
 surfaces_unbidden:         one contrast memory, when triggered (§6)
 ```
 
-`working_memory.event_id` is the literal string `"current"`. It exists because
-`recent_memory_buffer` excludes the current turn, so every real id in the
-payload belongs to an earlier turn — a character asked to cite evidence could
-only ever cite the past, and did: across one 61-turn chat, `observations_used`
-cited a previous turn 15 times and the current beat zero times. That is why the
-character kept answering the line before the one just spoken.
+Nothing current is repeated under `memory`. The current view and observations
+live under `perception`; current affect and goals live under
+`self.active_state`. Micro-round observations use
+`current:<perceiver>:micro:<nonce>`, so separate dialogue rounds cannot
+collapse onto one evidence id. Legacy present spellings are normalized only at
+the schema boundary.
+
+Every row in `recent_episodes` and `recalled_old_memories` is projected with
+its durable `event_key` as `memory_ref`, `temporal_status: remembered_past`, a
+relative `when`, `memory_form`, and `epistemic_origin`. The model projection is
+an allow-list: numeric/database ids, access counters, archive state, embedding
+metadata and retrieval scores remain host-only. Legacy rows without an event key are assigned a deterministic
+portable key before retrieval. This duplication is deliberate: temporal status must be
+visible in the row itself, not inferred from a parent list whose meaning a
+model can flatten. At the output boundary,
+`agents.character._ground_observation_citations` permits only present, memory
+and summary ids actually delivered to that mind across evidence, belief
+updates, association updates and mind-model updates. It drops invented/stale
+citations and warns rather than fabricating one if the model omitted it.
+`present_evidence_used` accepts only current observation ids;
+`memory_evidence_used` accepts only delivered memory/summary refs. Summary
+windows use the third disjoint namespace `summary:<scope>:<end-turn>`; their
+metadata lives in `summary_citations` (or directly on earlier/origin windows),
+so summary-supported answers are citable without pretending a field name is an
+event id. Derived summaries are rejected as evidence for durable belief,
+association, relationship, or mind-model changes: compression may remind a
+mind of a claim, but cannot independently reinforce it.
+
+Epistemic origin describes the claim, not merely the shape of the memory that
+contains it. A vivid first-hand episode of hearing another person make an
+assertion still carries received information; it does not make their assertion
+directly experienced truth. A conclusion formed during a witnessed episode is
+still inferred. The character prompt states this explicitly so episodic
+vividness cannot launder testimony or interpretation into knowledge.
+
+### Psychology bandwidth and memory modulation
+
+`cognitive_absorption` reaches the memory seam. Below 0.35 the normal budget is
+12 recent / 16 recalled / 2 earlier windows. From 0.35–0.70 it narrows to
+8 / 8 / 1; at ≥0.70 it narrows to 4 / 4 / 0. Those last raw memories are the
+automatic-recognition lane: bodily absorption reduces deliberative historical
+search without erasing a familiar face, warning, or promise associated with
+the present cue.
+
+Character appraisal has the same structural split. Present novelty, goal
+impact and somatic impact require current evidence. Remembered past may change
+familiarity, expectation, anticipatory emotion, and perceived coping only
+through `appraisal.memory_modulation`, grounded to past refs. At commit,
+familiarity can reduce novelty by at most 35%, and remembered coping can move
+coping potential by at most ±0.25.
+
+A recollection may also produce a mild, explicitly labelled body echo.
+`somatic_echo` is signed (aversive tension to pleasant warmth) and
+`threat_bias` primes danger detection; both require a delivered past ref and
+are engine-capped to 0.2. They reach mood/arousal and acute stress only through
+`active_state.memory_echo {temporal_source: remembered_past, source_refs}`.
+They never enter `somatic_impact`, hedonic pain/pleasure, injury, or a current
+goal impact, and threat bias is not evidence that danger is present. The echo
+is one-beat state: it may leave ordinary affect/stress inertia behind, but its
+source label itself is not carried forward after the recollection stops.
+
+### Deliberate recall: `ponder`
+
+A character may exceptionally place
+`{type: "ponder", query, why}` in its sequence. Normalization removes that
+private cognitive action from the public sequence before Director resolution,
+perception, and narration. Commit stores one query on the character's own
+state; the next turn in which that character runs consumes it.
+
+The next memory payload keeps normal cue/mood/goal recall unchanged and adds:
+
+```text
+deliberate_recall:
+  query_i_chose_last_turn
+  temporal_status: remembered_past
+  retrieval_origin: deliberate_ponder
+  result_refs
+  additional_episodes
+  may_set_another_ponder_this_turn: true
+```
+
+Any ponder result already present in normal recall is marked with both
+`normal_recall` and `deliberate_ponder` rather than duplicated. Up to four
+additional episodes may be supplied. Their refs are grounded exactly like any
+other raw memory. The result therefore says both *this is remembered past* and
+*this came back because I deliberately asked myself about it*.
+
+Ponder is intentionally not a default retrieval tax. A non-empty query and a
+concrete `why` are required, only one pending query exists, and ponder is
+absent from the default output example. A result may legitimately raise a new
+question immediately, so there is no cooldown; receiving results by itself is
+explicitly not a reason to ponder again. It costs an extra embedding call only
+when used.
 
 ### One seam, two hard filters, applied before any ranking
 
@@ -618,15 +716,17 @@ marginal.
 
 So the latest window is the latest **chapter**. Which means the pre-v23
 singleton was not holding a life and overwriting nothing; it was overwriting
-every chapter before the last one. **53 of the 67 live banks have no summary
-covering their opening turns** — the earliest surviving window starts after turn
-1. For the Doctor that is 91 raw memories across turns 0–18 with nothing above
-them in the summary layer. Windows did not create that risk; they are the first
-thing that stops it.
+every chapter before the last one. The pre-repair survey found **53 of 67
+banks with no summary covering their opening turns**. Windows did not create
+that risk; they are the first thing that stops it.
 
 The raw rows survive — nothing was deleted and `search_memories` reaches
-archived rows — so the loss is in the summary layer only, and is recoverable by
-re-consolidating those ranges. Nothing does that yet (`docs/UNBUILT.md` §1.21).
+archived rows — so the loss is in the summary layer only.
+`backfill_memory_summary_windows` reconstructs destroyed leading windows from
+those rows without archiving anything or moving the forward consolidation
+cursor. The host exposes that repair, and the checkpoint propagation described
+below keeps a later rollback from undoing it. Bounded gaps *between* surviving
+windows remain a separate repair problem (`docs/UNBUILT.md` §2.17).
 
 ### Reading the earlier chapters
 
@@ -652,6 +752,12 @@ earlier_in_my_life: [{what_i_lived_through_then, when}, ...]
   cutoff, a cross-model vector skipped rather than compared, and
   `exclude_latest` so `autobiographical_summary` is never sent twice.
 
+The cutoff applies to **every** summary surface, not only ranked earlier
+windows: latest autobiographical, hearsay, surmise and drift-triggered origin
+reads all require `end_turn_idx < current_turn_idx`. This matters on a rerun,
+where later windows still exist in storage but do not yet exist for the mind
+deciding the earlier beat.
+
 **No minimum score, deliberately.** Every prose vector scores every window
 somewhere in a compressed 0.45–0.55 band, so an absolute floor drops everything
 or nothing depending on the embedding model — and would silently become
@@ -662,13 +768,86 @@ ordering is trustworthy where the magnitude is not.
 
 **It costs no extra round trip.** `search_memories` has always batched the query
 with its aspects; the windows rank against the same query vector, so both take
-one shared `EmbeddingBatch`. Both re-embed if what they are handed does not line
-up with the aspects they derive — ranking against the wrong facet silently would
-be worse than the round trip it saves.
+one shared `EmbeddingBatch`. Raw recall validates the batch shape against its
+aspects; the summary layer deliberately reads only vector zero, the beat query.
 
 **And it duplicates little.** Across 48 probes on the live bank, a mean **14%**
 (median 12%) of the sixteen recalled raw memories fall inside the sent window's
 own turn span. The window is mostly reaching turns raw recall did not.
+
+### Origin-era retrieval on drift
+
+```
+where_i_came_from: {what_i_lived_through_then, when}
+```
+
+An origin is not a similarity match: a character's foundational era is
+frequently dissimilar to whatever is happening now, which is exactly when it
+should still be present. Top-k drops it in the beats where it matters most.
+Rather than always including the origin (which costs a slot every beat for
+something usually irrelevant), `_origin_on_drift` surfaces the earliest
+first-hand summary window when a drift signal fires:
+
+- **goal_held**: the same ungoverned goal for 12+ beats.
+- **project adrift**: a held project has gone 8+ beats without anything
+  serving it.
+- **mood sign-flip**: the current affect valence has flipped sign from the
+  character's baseline (abs > 0.15, product < 0).
+
+Absent (not empty) when no signal fires or when there is no origin window. Not
+added to `earlier_in_my_life` because those are similarity-ranked; the origin
+is surfaced for a different reason and should not compete for a similarity
+slot. Deliberately does not duplicate a window already in `earlier_in_my_life`.
+Like every other summary read it requires the window to have closed strictly
+before the deciding turn.
+
+### Backfilled windows survive rollback
+
+Backfill is a repair performed after old checkpoints were written. Without a
+second step, restoring one of those checkpoints restores the pre-v23 singleton
+and silently deletes every reconstructed era. After a host-triggered backfill,
+`propagate_memory_summaries_to_checkpoints` adds each derived window to every
+eligible checkpoint (`end_turn_idx < checkpoint.turn_idx`). Existing snapshot
+rows win and every other checkpoint field remains byte-for-byte untouched.
+
+The longest live story, chat 38, was repaired through this path on 2026-08-02:
+**41 summary rows** are live (19 first-hand, 9 hearsay, 13 surmise), all five
+legacy memories missing an `event_key` were assigned stable keys, and the
+windows were propagated into **109 eligible checkpoints**. No live memory in
+that story now lacks an event key. Substantive first-hand coverage is Doctor
+419/452, Picard 8/17, and Guinan 25/29; the remaining bounded interior gaps are
+recorded rather than silently described as complete.
+
+### Controlled semantic-versus-lexical result
+
+`tools/benchmark_memory_temporal.py` asks the Doctor seven independent
+memory questions against chat 38. Each arm uses the same character prompt,
+current observation and payload schema; only production retrieval's embedding
+function changes. The character model was `x-ai/grok-4.20` and every question
+ran in an isolated call.
+
+| Measure | Semantic embeddings | Lexical-only fallback |
+|---|---:|---:|
+| character answers passing | 7/7 | 5/7 |
+| citations grounded in delivered evidence | 100% | 100% |
+| historical cases with relevant evidence delivered | 5/5 | 2/5 |
+| historical cases with a relevant earlier window | 5/5 | 0/5 |
+| raw-memory mean reciprocal rank | 0.207 | 0.400 |
+
+The answer totals include one deterministic scorer correction on the stored
+outputs: “never stated” was the same correct kitsune-provenance answer as
+“never said,” but the original term list recognized only the latter. The raw
+artifact therefore says 6/7 vs 4/7; the benchmark source now recognizes both.
+
+The empirical claim is narrow and useful: embeddings materially improve
+coverage (all five historical questions versus two), especially the correct
+earlier chapter, and the tested answer score improved with it. Lexical MRR is
+higher because its two successful exact-word queries landed at rank 1 while
+its other three queries missed entirely; semantic retrieval reached all five,
+at ranks 2, 8, 3, summary-only, and 13. Temporal typing and citation grounding
+worked in both arms. This benchmark proves reachability and present/past
+separation, not yet reliable conduct; the next behavioural measurements are
+shelved in `docs/UNBUILT.md` §2.17.
 
 ---
 
@@ -838,10 +1017,10 @@ and follow different rules:
 
 ## 12. Current state and known gaps
 
-The live corpus, as of 2026-08-02: **5,283 memories across 36 chats**, all on
-`openrouter:3:perplexity/pplx-embed-v1-4b` — 2,126 episodes, 1,998 inferences,
-1,091 self, 63 dialogue, 5 promises; 115 archived; 52 autobiographical
-summaries, 9 surmise, 6 hearsay.
+The live corpus, as of 2026-08-02: **5,380 memories across 36 chats**, all on
+`openrouter:3:perplexity/pplx-embed-v1-4b` — 2,162 episodes, 2,030 inferences,
+1,109 self, 74 dialogue, 5 promises; 115 archived; 70 autobiographical
+summaries, 24 surmise, 17 hearsay.
 
 Open, and tracked in [`docs/UNBUILT.md`](UNBUILT.md):
 
@@ -873,12 +1052,11 @@ Raised in review and still open:
   mechanism; it wants siblings — echo (structurally or affectively similar),
   unfinished (tied to an open concern), identity (challenges the self-concept),
   intrusion (highly charged despite low relevance).
-- **Hierarchical summary retrieval** — storage, retrieval and the payload all
-  landed (v23, then `earlier_in_my_life`; §8). What remains is that an ORIGIN
-  cannot be reached by similarity: a character's foundational era is usually
-  dissimilar to whatever is happening now, which is exactly when it should be
-  present, and top-k drops it there. Plus the 53 banks with no opening window
-  to reach. See `docs/UNBUILT.md` §1.21.
+- **Hierarchical summary retrieval** — storage, retrieval, earlier chapters,
+  drift-triggered origin retrieval, leading-era repair and checkpoint
+  propagation have landed (§8). What remains is bounded interior-hole repair
+  for legacy banks and evidence-traceable summaries; see `docs/UNBUILT.md`
+  §2.17.
 
 ### Sense as a retrieval channel — built, measured, reverted
 
@@ -994,7 +1172,7 @@ written-and-unread is correct rather than an oversight.
 - **It was load-bearing for a belief.** A memory cited as `evidence` on a
   mind-model update (`_cited_memory_ids`), which is downstream of retrieval, so
   the loop is closed structurally: `only_unrevised=True` lifts a given row
-  exactly once, ever. Bare `observations_used` deliberately does not count —
+  exactly once, ever. Bare `memory_evidence_used` deliberately does not count —
   citing a memory while describing the beat is not building a belief on it.
 - **The character re-read it** (below), which moves it further, because being
   wrong about something is a bigger fact about it than using it once.
@@ -1029,8 +1207,10 @@ delete-and-reinsert, so every row id changes; an id-keyed edge would be
 shredded by the first rollback. Stored on the row it rides the existing
 dump/restore round-trip verbatim.
 
-Disputes are matched against the character's **own** rows by gist, exactly then
-loosely — a mind may only re-read something it remembers.
+Disputes address an exact delivered stable `memory_ref` and require current
+evidence for the new reading. Gist matching remains only as a compatibility
+path for legacy output and is accepted only when it resolves unambiguously
+inside the character's **own** bank.
 
 ### The character decides what was worth hearing
 
@@ -1043,16 +1223,29 @@ facts all fail it.
 from it — the floor exists for the model that declares nothing). Commit has
 already proved the quote was said this beat and reached *this observer's view*
 before the mark is consulted, so a mark can only ever preserve something the
-character genuinely heard, never invent one.
+character genuinely heard, never invent one. The mark now carries current
+evidence, and its `why` is retained in `emotional_context` rather than being
+discarded after it opened the gate.
 
 That makes memory formation psychology-dependent, which is the point: one mind
 keeps an insult another shrugs off.
+
+### Retrieval is not influence
+
+`memory_effects [{memory_ref,use,disposition,changed}]` records when delivered
+past actually changed recognition, appraisal, choice, or speech. Merely being
+retrieved is not an effect. The field accumulates across micro-rounds and is
+grounded to delivered raw memories. Unbidden recall uses it as the preferred
+"helped" signal, falling back to goal/stuck-state movement for older model
+outputs. This is telemetry in the character step and its existing bounded
+unbidden ledger; it does not strengthen the memory.
 
 ### Schema-change checklist
 
 Both columns are carried by `dump_chat_memories` / `prepare_chat_memory_restore`
 (checkpoints and branches), `dump_character_memories` /
 `import_character_memories` (portable character banks), and
-`chat_archive.py`'s import. Migration is `db.py` v20→v21, additive with no
-backfill: `NULL` importance reads as salience and an empty dispute reads as
-undisputed, so 4,969 existing rows needed no rewriting.
+`chat_archive.py`'s import. Importance/dispute migration is v20→v21;
+before/after affect is v23→v24. Both are additive. `NULL` importance reads as
+salience, empty dispute is undisputed, and old encoding axes remain neutral
+instead of fabricating a retrospective emotional change.

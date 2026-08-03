@@ -214,8 +214,11 @@ def test_entry_keys_carry_the_epistemic_status():
     assert entry["from"] == "what_i_concluded"
     assert entry["when"] == "about 37 beats ago"
     assert entry["where"] == "Orchard"
-    # No id, no score, no instruction -- context, not directive.
-    assert set(entry) <= {"it_comes_back_to_me", "from", "when", "where"}
+    # A stable ref permits consequence telemetry; non_authoritative keeps the
+    # intrusion from masquerading as an instruction or fresh perception.
+    assert entry["temporal_status"] == "remembered_past"
+    assert entry["non_authoritative"] is True
+    assert "score" not in entry
 
 
 def test_provenance_labels_match_the_summary_vocabulary():

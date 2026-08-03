@@ -242,9 +242,16 @@ def test_the_character_sees_the_reading_beside_the_memory(temp_db):
     assert "disputed" not in entry
 
 
-def test_an_undisputed_memory_is_passed_through_untouched():
-    mem = {"id": 1, "gist": "g", "disputed": None}
-    assert memory._with_reading(mem) is mem
+def test_an_undisputed_memory_is_projected_without_mutating_storage():
+    mem = {"id": 1, "event_key": "event:stable", "gist": "g",
+           "disputed": None}
+    projected = memory._with_reading(mem, current_turn_idx=4)
+    assert projected is not mem
+    assert mem == {"id": 1, "event_key": "event:stable", "gist": "g",
+                   "disputed": None}
+    assert projected["memory_ref"] == "event:stable"
+    assert projected["temporal_status"] == "remembered_past"
+    assert projected["when"] == "before this story's recorded turns"
 
 
 # --- both survive the round-trips -----------------------------------------
@@ -266,6 +273,20 @@ def test_importance_and_dispute_survive_dump_and_restore(temp_db):
     after = list_memories(chat_id, mine, viewer_frame_id=None)[0]
     assert after["importance"] == pytest.approx(before["importance"])
     assert after["disputed"] == before["disputed"]
+
+
+def test_legacy_memory_citation_ref_survives_dump_and_restore(temp_db):
+    chat_id, mine, _ = _fixture(temp_db)
+    add_memory(chat_id, mine, None, "episodic", "witnessed", 0.5,
+               "The brass door opened.", gist="the brass door opened",
+               turn_idx=3)
+    assert memory.backfill_missing_memory_event_keys(chat_id, mine) == 1
+    before = list_memories(chat_id, mine, viewer_frame_id=None)[0]["event_key"]
+    assert before.startswith("event:")
+    dump = memory.dump_chat_memories(chat_id)
+    memory.restore_chat_memories(chat_id, dump)
+    after = list_memories(chat_id, mine, viewer_frame_id=None)[0]["event_key"]
+    assert after == before
 
 
 def test_they_survive_a_character_bank_export(temp_db):
@@ -319,9 +340,11 @@ def test_the_schema_keeps_marks_and_disputes_and_drops_the_useless():
         ],
     })
     assert out["remember_lines"] == [
-        {"quote": "the seal drops at midnight", "why": "I must go"}]
+        {"quote": "the seal drops at midnight", "why": "I must go",
+         "evidence": []}]
     assert out["memory_disputes"] == [
-        {"gist": "Dr Moon handed me the vial", "now_reads": "a mask"}]
+        {"memory_ref": "", "gist": "Dr Moon handed me the vial",
+         "now_reads": "a mask", "evidence": []}]
 
 
 def test_both_fields_default_empty():
