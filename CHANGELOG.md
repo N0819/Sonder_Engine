@@ -1,5 +1,138 @@
 # Changelog
 
+## alpha 7.2 — Order is causality
+
+### A beat opens with one character, and causality builds as it runs
+
+The interaction loop opened with a simultaneous wave of two, on the argument
+that everyone in the initial queue answers the same already-fixed thing and so
+could not have seen each other. That is right about a beat aimed at the **room**
+and wrong about one aimed at a **person**, which is most of them: the others are
+not co-respondents, they are bystanders to an exchange that has not finished,
+and deciding blind they answer a question that is already answered.
+
+Live, chat 59 t161 — the player asked the Doctor a direct question. He was
+correctly ranked first and answered. Tamamo, in the same blind instant, said
+*"He savors in silence, daughter"* and then **"Doctor?"**, prompting a man who
+had just spoken. The narrator's own fidelity check caught it: `Dialogue
+rendered out of order`.
+
+The stranding the wave was introduced for is now fixed where it was caused —
+the beat-ending exit is gated on `commitment: "contestable"` (alpha 6.9.1) and
+the deferral guards cover the rest — so it does not also need everyone to move
+at once. `initial_parallel_reactors` defaults to **1** and survives as a knob.
+
+- **Order is the beat's own causality**: spoken to, then acted upon, then
+  merely present. Speech outranks action deliberately — an action's `targets`
+  is a looser field that the deterministic binder fills from whoever the act
+  plausibly lands on, and a live beat had "sits back down at the chabudai
+  table" targeting both people in the room. Treating that as an address would
+  make the ranking say nothing.
+- **Inside the untargeted band, standing motivation and a seeded jitter
+  decide.** Cast-registration order was deciding, which is not a fact about the
+  fiction: the same character opened every untargeted beat for the life of a
+  story. Now the top urgency across a character's standing wants, plus a
+  bounded jitter — because it is a lull, nobody was addressed, and a pure
+  ranking would be as fixed as registration order was, only differently. Seeded
+  on turn and nonce, so a rerun from a stage replays and a reroll may land
+  differently: the rule the dice already follow.
+- **Shelved, and switched off**: reactors who could not possibly perceive each
+  other — separate room, no sight, nothing audible — may share the opening
+  instant. The rule is right and it is what offscreen simulation needs, but
+  every reactor in a beat today is somebody the player can hear, so the branch
+  would never fire on a real story and its first live run would be its first
+  exercise. Written and tested behind `parallel_isolated_reactors: False`. The
+  loose end, and where it is going, are in `docs/UNBUILT.md` § 1.29 — along
+  with **interruption**, which a sequential chain does not solve and which
+  wants a declarative answer rather than a scheduling one.
+
+### An early exit no longer strands the people the beat summoned
+
+Caught live, on this release's own change. Opening the beat with one character
+brought back the failure the simultaneous wave existed to paper over: chat 59
+t161 and t162 — the Doctor answered, turned a question to the player,
+`stop_on_question_to_player` fired, and Tamamo, an initial reactor standing
+right there, was never called at all. Two beats running.
+
+`_defer_to_focus` only ever rescued the Director's flagged focus character.
+The general rule is that **being summoned to the beat is what earns a character
+their turn**, not being flagged: both early exits now drain every initial
+reactor first, in order, each seeing what the previous did, and the beat closes
+when the queue is empty. The exit was right about what comes after — no new
+speaker is drawn in — and wrong about ending before the cast it had already
+called got their one turn. The wave got these characters simulated by making
+them blind; that was the wrong price. The deferred reason is carried through,
+so the beat still reports *why* it ended rather than whatever it ran out of.
+
+### Interrupting, declared rather than scheduled
+
+Opening the beat with one character buys causality and costs interruption:
+every reaction becomes a response to a **completed** act, so nobody can cut
+anybody off. The scheduling answer — let them overlap again — is exactly the
+blindness the ordering change removed.
+
+The declarative answer costs nothing, because a character later in the chain
+has already **heard** the line they want to cut off. That is how interruption
+works in life: you cut in because you heard where the sentence was going. So
+the only thing missing was a way to say the beat landed *during* that line
+rather than after it.
+
+- `interrupts:"<name>"` on a speech **or action** element. Conduct interrupts
+  as readily as a raised voice — a hand over a mouth, a grabbed wrist, a blow —
+  and the engine does not need telling twice which channel did it.
+- It is a **claim**, resolved deterministically: the named party must have
+  actually spoken this beat, and the interrupter must have been able to hear
+  them. Neither holds, the claim is dropped with a warning.
+- **Where the line breaks was chosen by reading it.** A flat halfway cut lands
+  mid-phrase ("the shipment left—"); stopping at a breath point lands where a
+  person actually gets cut off ("the shipment left on Tuesday—"). So whole
+  sentences survive, the last one breaks near 60%, and that cut slides to the
+  nearest comma or conjunction. The em dash replaces whatever punctuation it
+  lands on, because "to do,—" and "hearth.—" are both wrong.
+- **A short line is left whole.** "Wait." interrupted is still "Wait." —
+  truncating it gives "Wait.—", which reads as a typo, and there is no room to
+  get inside a one-word line anyway. Same for a line that already trailed off.
+- An interrupted **action** is marked and not rewritten: what happens to a
+  reach that got grabbed is causality, and causality belongs to the Director.
+
+### A name is learned by hearing it said
+
+`known` gates every identity the engine will let a mind use: perception scrubs
+an unearned name out of a view, memory stores "a voice" instead of a speaker,
+and the narrator will not name a person to somebody who has not met them. It
+was written in exactly two places — `greetings.py` seeds the one greeting
+character against the player, and commit seeds everyone when a background
+presence is **promoted**. A third path needs the mapping model to declare an
+explicit introduction event, and had not fired once in the story below.
+
+So nothing recorded a name learned in play. A character attached the ordinary
+way never entered the map, and nobody ever learned anybody by being told.
+
+**Measured: 19 of 42 played stories held fewer recognitions than a
+fully-acquainted cast.** Chat 59 — 162 turns, two cast, a mother and her
+daughter — held ONE directed pair, so every beat scrubbed both names out of
+both views.
+
+The failure that surfaces is not a missing name but a wrong one. A view holding
+one surviving name and one anonymous body invites the model to join them: the
+player asked *"Doctor is something the matter?"*, the Doctor's view rendered it
+as `Tamamo asks with concern in her voice, "Doctor is something the matter?"`,
+and he answered the woman who had not spoken.
+
+- A name is learned when it is **spoken in your hearing** and the person it
+  names is **in the room with you**. No model call; it rides a channel the
+  firewall already governs, since only lines the hearer's own view received are
+  considered.
+- Two refusals keep it from becoming a leak: a name for somebody absent or in
+  another room teaches nothing — hearing about someone elsewhere teaches you a
+  name, not a face, and letting it through would license recognising a stranger
+  who walks in later — and your own name teaches you nothing.
+- Accumulated in `prepare_memory_commit`, which runs before the write lock, and
+  applied by `commit_memories` inside the transaction; merged rather than
+  assigned, so an explicit introduction earlier in the same turn is not lost to
+  an overwrite.
+
+
 ## alpha 7.1 — Still true, and still felt
 
 ### Two signals around a finished turn
