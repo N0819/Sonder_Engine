@@ -1,0 +1,12 @@
+step perception  5 bodies  system 23543 chars
+
+  ibm-granite/granite-4.1-8b
+      CLEAN  2/2 clean  11.59s
+  mistralai/ministral-14b-instruct-2512
+      CLEAN  2/2 clean  7.61s
+  qwen3-coder-30b-a3b-instruct
+      CLEAN  2/2 clean  5.51s
+  nex-agi/nex-n2-pro
+      CLEAN  2/2 clean  4.65s
+  Qwen/Qwen3.6-35B-A3B
+      CLEAN  2/2 clean  8.61s

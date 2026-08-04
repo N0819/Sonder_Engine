@@ -181,9 +181,9 @@ class TestMuffledFragmentRendering:
 
     def test_it_delivers_words_not_a_summary(self):
         from agents.common import _muffled_fragment
-        got = _muffled_fragment("your climax is going to squeeze you")
+        got = _muffled_fragment("the ledger is going to sink you")
         assert "something about" not in got
-        assert "climax" in got and "squeeze" in got
+        assert "ledger" in got and "sink" in got
 
     def test_every_chunk_is_verbatim(self):
         """_scrub_invented_dialogue validates a muffled line chunk by chunk

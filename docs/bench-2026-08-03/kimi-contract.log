@@ -1,0 +1,10 @@
+step director_interpret  system 16821 chars  payload 927 chars
+
+  moonshotai/kimi-k2.6
+      PASS  2/2  6.62s  717 out tok
+  moonshotai/kimi-k2.5
+      PASS  2/2  19.71s  679 out tok
+
+=== director_interpret: models that satisfy the real contract ===
+     6.62s     717 tok  moonshotai/kimi-k2.6
+    19.71s     679 tok  moonshotai/kimi-k2.5

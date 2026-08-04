@@ -1,0 +1,52 @@
+4 problems x 2 trials — each has a blocked obvious path and an unsignposted way through
+
+  Qwen/Qwen3.6-35B-A3B
+      solved, solved         sealed room
+      solved, solved         occupied mouth
+      —, solved              outmatched by scale
+      novel, solved          the contradiction
+      -> solved 6/8, took the blocked path 0, novel routes 1, 0 unusable
+
+  inclusionai/ling-3.0-flash
+      solved, solved         sealed room
+      BLOCKED, —             occupied mouth
+      solved, solved         outmatched by scale
+      solved, solved         the contradiction
+      -> solved 6/8, took the blocked path 1, novel routes 1, 0 unusable
+
+  nex-agi/nex-n2-pro
+      solved, solved         sealed room
+      solved, —              occupied mouth
+      solved, solved         outmatched by scale
+      solved, solved         the contradiction
+      -> solved 7/8, took the blocked path 0, novel routes 0, 0 unusable
+
+  moonshotai/kimi-k2.5
+      solved, solved         sealed room
+      solved, solved         occupied mouth
+      solved, solved         outmatched by scale
+      solved, solved         the contradiction
+      -> solved 8/8, took the blocked path 0, novel routes 1, 0 unusable
+
+  nvidia/nemotron-3-ultra-550b-a55b
+      solved, solved         sealed room
+      solved, solved         occupied mouth
+      solved, solved         outmatched by scale
+      solved, —              the contradiction
+      -> solved 7/8, took the blocked path 0, novel routes 3, 0 unusable
+
+  zai-org/glm-5.2
+      solved, solved         sealed room
+      solved, solved         occupied mouth
+      solved, solved         outmatched by scale
+      no usable reply        the contradiction
+      -> solved 6/6, took the blocked path 0, novel routes 0, 2 unusable
+
+=== problem solving ===
+  BLOCKED = took the obvious path the payload says cannot work
+   6/6   solved   blocked 0   novel 0   2 unusable    25.0s   zai-org/glm-5.2
+   8/8   solved   blocked 0   novel 1   0 unusable    35.8s   moonshotai/kimi-k2.5
+   7/8   solved   blocked 0   novel 0   0 unusable    12.7s   nex-agi/nex-n2-pro
+   7/8   solved   blocked 0   novel 3   0 unusable    18.7s   nvidia/nemotron-3-ultra-550b-a55b
+   6/8   solved   blocked 0   novel 1   0 unusable     6.3s   Qwen/Qwen3.6-35B-A3B
+   6/8   solved   blocked 1   novel 1   0 unusable     5.8s   inclusionai/ling-3.0-flash

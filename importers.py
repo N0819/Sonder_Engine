@@ -650,6 +650,18 @@ def character_import_warnings(sheet):
             "No standing goals were authored, so this character has nothing "
             "they are trying to achieve between beats."
         )
+    # Not a defect -- the default is exactly the pair every story ran on before
+    # this dial existed, so an unset one cannot misbehave. It is named because
+    # nobody looks for a field they do not know is there, and a character who
+    # should be single-minded or should juggle will otherwise be authored at
+    # the middle rung forever by omission.
+    if not str(psychology.get("capacity") or "").strip():
+        warnings.append(
+            "No attentional capacity was authored, so this character holds the "
+            "ordinary three wants and four intentions. Set psychology.capacity "
+            "(narrow / focused / ordinary / broad / wide) to make them "
+            "single-minded or to let them keep more in the air at once."
+        )
     return warnings
 
 def recover_greetings_from_source(char_id):

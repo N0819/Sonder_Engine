@@ -1,0 +1,45 @@
+[1/15] nvidia/nemotron-3-ultra-550b-a55b
+      short 2.211s  long 3.667s  167.6 tok/s  schema 2/2
+[2/15] nvidia/nemotron-3-super-120b-a12b
+      short 3.076s  long 6.63s  133.2 tok/s  schema 2/2
+[3/15] qwen/qwen3.5-397b-a17b
+      FAILED  ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+[4/15] moonshotai/kimi-k2.5
+      short 1.607s  long 5.012s  198.8 tok/s  schema 2/2
+[5/15] minimax/minimax-m3
+      short 3.086s  long 12.943s  44.3 tok/s  schema 2/2
+[6/15] zai-org/glm-5.2
+      short 5.494s  long 8.317s  166.5 tok/s  schema 2/2
+[7/15] zai-org/glm-5.1
+      short 6.511s  long 10.523s  64.1 tok/s  schema 0/2
+[8/15] deepseek/deepseek-v4-pro
+      short 4.574s  long 14.183s  46.7 tok/s  schema 2/2
+[9/15] mistralai/mistral-large-3-675b-instruct-2512
+      short 2.277s  long 10.574s  48.1 tok/s  schema 2/2
+[10/15] inclusionai/ring-2.6-1t
+      short 4.621s  long 7.974s  109.1 tok/s  schema 2/2
+[11/15] meta-llama/llama-4-maverick
+      FAILED  ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+[12/15] Qwen/Qwen3-235B-A22B-Instruct-2507
+      short 4.179s  long 37.456s  12.6 tok/s  schema 2/2
+[13/15] xiaomi/mimo-v2.5-pro
+      short 3.152s  long 43.934s  48.2 tok/s  schema 2/2
+[14/15] zai-org/glm-4.7
+      short 4.023s  long 10.088s  52.9 tok/s  schema 2/2
+[15/15] Salesforce/Llama-xLAM-2-70b-fc-r
+      FAILED  400 {"error":{"message":"Model Salesforce/Llama-xLAM-2-70b-fc-r is temporarily unavailable. Please try again later.","type":"invalid_request_error","param":"model",
+
+=== ranked by short-call wall clock ===
+  short    long   tok/s   ovhd  schema  model
+   1.61    5.01   198.8   1.27 2/2      moonshotai/kimi-k2.5
+   2.21    3.67   167.6   1.82 2/2      nvidia/nemotron-3-ultra-550b-a55b
+   2.28   10.57    48.1   0.74 2/2      mistralai/mistral-large-3-675b-instruct-2512
+   3.08    6.63   133.2   2.64 2/2      nvidia/nemotron-3-super-120b-a12b
+   3.09   12.94    44.3   1.72 2/2      minimax/minimax-m3
+   3.15   43.93    48.2   2.17 2/2      xiaomi/mimo-v2.5-pro
+   4.02   10.09    52.9   2.87 2/2      zai-org/glm-4.7
+   4.18   37.46    12.6   0.00 2/2      Qwen/Qwen3-235B-A22B-Instruct-2507
+   4.57   14.18    46.7   3.38 2/2      deepseek/deepseek-v4-pro
+   4.62    7.97   109.1   1.56 2/2      inclusionai/ring-2.6-1t
+   5.49    8.32   166.5   5.12 2/2      zai-org/glm-5.2
+   6.51   10.52    64.1   0.27 0/2      zai-org/glm-5.1

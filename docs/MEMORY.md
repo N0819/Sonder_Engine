@@ -41,7 +41,7 @@ One row in `memories` (`db.py`). The fields that do work:
 | `encoding_valence`, `encoding_arousal` | Resolved affect *after* appraisal — how the event left the character. |
 | `embedding`, `cue_embedding` | Two float32 blobs (§4). |
 | `embedding_model`, `embedding_dim` | Which model made them. A mismatch scores 0.0 forever (§9). |
-| `archived` | Folded into a summary and retired from the default read. |
+| `archived` | Folded into a summary and retired from RECENT-buffer and consolidation reads. Still retrievable: `search_memories` passes `include_archived=True`, so archiving removes a row from the rolling window, never from recall. |
 | `event_key` | Idempotency key. Re-minting the same key UPDATEs instead of inserting. |
 
 `access_count` / `last_accessed` are written by `search_memories` and read by
@@ -100,7 +100,7 @@ hard by `_durable_dialogue_category`: only quotes containing a promise marker
 (`"i swear"`, `"i vow"`, `"you have my word"`) or an identity/confession marker
 (`"my name is"`, `"i confess"`, `"i killed"`, `"i love you"`). Everything else
 spoken lives in the episode memory and nowhere else. This is why the live
-corpus has 15 dialogue rows against 2,028 episodes — by design, not by defect.
+corpus has 145 dialogue rows against 2,601 episodes — by design, not by defect.
 
 The speaker's name passes through a **recognition gate**. If the hearer's
 `known` map does not contain the speaker, the memory stores
@@ -438,7 +438,7 @@ embedding call covers the query and every aspect, so separating them is free.
 ### Scalar bonuses
 
 ```
-+0.08 * salience
++0.08 * rank_normalized_importance
 +0.04 * confidence
 +0.10 * (confidence - 0.5)     inference rows only, signed around 0.5
 +0.08 * exact_cue_score
@@ -448,6 +448,35 @@ embedding call covers the query and every aspect, so separating them is free.
 +0.05                          memory's location is visible from here
 +0.10                          promise category, when the query says "promise"
 ```
+
+**Salience is respaced before it is weighed**
+(`_rank_normalized_importance`). The term reads `effective_importance` —
+revised importance where there is one, minted salience otherwise — but
+rank-normalised across the rows THIS search can see, inside their own p10-p90.
+Ordering is preserved exactly and the influence budget is unchanged; only the
+gaps move.
+
+That is a smaller change than it sounds and a larger one than it looks,
+because the obvious versions of it are neither. Replaying 270 real recalls
+(`tools/salience_replay.py`):
+
+| arm | top-16 membership moved |
+|---|---|
+| the term deleted entirely | 35.2% |
+| percentile-normalised to [0,1] | 59.6% |
+| stretched 3x about the mean | 47.0% |
+| respaced inside the bank's own range | **15.2%** |
+
+So the term was never decoration — deleting it moves a third of all results —
+and both ways of "fixing" the measured compression (p10-p90 spread 0.27, 70%
+of the corpus between 0.6 and 0.8) move retrieval MORE than deleting it,
+because values in a 0.27-wide band mapped onto [0,1] gain about 3.7x the
+influence while reordering nothing. The defect actually fixed is that this
+term's discrimination depended on how the minting model happened to spread its
+numbers: a bank minted at 0.70 ± 0.03 had a silent salience term and one
+spanning 0.4-0.9 had a loud one, for a reason with nothing to do with the
+story. Callers asking an ABSOLUTE question — archiving, contrast selection —
+still read `effective_importance` directly.
 
 **Belief weighting** is signed around 0.5 so a held belief is promoted and an
 abandoned one demoted, and it is in the same band as salience rather than
@@ -913,8 +942,12 @@ entry keeps a `vkey` reference in place of its blobs. Note the two addressing
 schemes answer different questions and must not be confused: `_vector_key`
 above joins a *saved memory to a live rebuilt row* and so keys on the embedded
 text; `vector_address` deduplicates *identical stored vectors* and so keys on
-the bytes, which makes a collision impossible by construction rather than by
-assumption. Byte-addressing was the fix for a real production collision — chat
+the bytes, so two rows collide only if their vector payloads are byte-identical,
+in which case sharing storage is correct rather than a fault. The hash itself
+is not a proof: SHA-1's collision resistance is broken, and an address space is
+never collision-FREE, only collision-unlikely. What removes the production
+failure is that the address is over the exact bytes rather than over a
+reconstructed text. Byte-addressing was the fix for a real production collision — chat
 36 held "You are in Ten Forward." at turn 42 and again at turn 44, same
 character, same content, two different embedding payloads.
 
@@ -1017,10 +1050,16 @@ and follow different rules:
 
 ## 12. Current state and known gaps
 
-The live corpus, as of 2026-08-02: **5,380 memories across 36 chats**, all on
-`openrouter:3:perplexity/pplx-embed-v1-4b` — 2,162 episodes, 2,030 inferences,
-1,109 self, 74 dialogue, 5 promises; 115 archived; 70 autobiographical
-summaries, 24 surmise, 17 hearsay.
+The live corpus, as of 2026-08-03: **6,463 memories across 37 chats**, all on
+`openrouter:3:perplexity/pplx-embed-v1-4b` — 2,601 episodes, 2,400 inferences,
+1,312 self, 145 dialogue, 5 promises; 115 archived; 105 autobiographical
+summaries, 51 surmise, 38 hearsay.
+
+Every corpus figure in this document is a snapshot and goes stale the moment
+anyone plays a turn. Three separate ratios in here disagreed with each other
+before this pass, each correct on the day it was written. Treat a number as
+evidence for the SHAPE of a claim (dialogue is rare relative to episodes) and
+re-count before quoting it as a fact.
 
 Open, and tracked in [`docs/UNBUILT.md`](UNBUILT.md):
 
@@ -1102,10 +1141,36 @@ contributes `weight * 12 / (60 + rank)`. At the aspect weight of 0.55 that is
 rank 6 of an aspect ranking is 0.008**, against a flat 0.09 for the
 `location` bonus and up to 0.08 for salience. An aspect ranking adds an almost
 uniform ~0.10 to every candidate and separates them by less than a hundredth.
-That applies to the **existing** mood, goal and unresolved-thread aspects too:
-they were justified against concatenation giving them literally zero influence,
-and a rank list does give them more than zero — but among top candidates it is
-under 0.01, and no measurement has ever shown them reordering anything.
+**This does NOT generalise to the existing mood, goal and unresolved-thread
+aspects, and an earlier revision of this section wrongly said it did.** The
+sentence removed here read "no measurement has ever shown them reordering
+anything"; that was true only in the sense that nobody had looked. Measured
+since, replaying the real fusion over five real banks with real vectors, 40
+trials, three aspects each, comparing the top-16 with the aspect rankings on
+and off:
+
+| | |
+|---|---|
+| trials where the top-16 ORDER changed | 39 / 40 |
+| trials where top-16 MEMBERSHIP changed | 39 / 40 |
+| memories swapped into the top-16 by aspects | mean 4.50, max 8 |
+
+Aspects reorder nearly every retrieval and replace about a quarter of what the
+character is handed.
+
+The arithmetic above is not wrong; the inference from it was. **The
+discriminating quantity is presence versus absence in an aspect's list, not
+rank within it.** Appearing anywhere in the top-60 of an aspect is worth
+0.09–0.11; not appearing is worth zero. Three aspects therefore contribute up
+to ~0.33 of separation against a ~0.4 bonus band — while the intra-list
+separation that ~0.008 measures is, correctly, almost nothing. A near-uniform
+bonus applied to a SELECTED SUBSET is a set-membership signal, and reading it
+as a ranking signal is what made it look decorative.
+
+Why the scent experiment still came out flat is then a different fact about
+that experiment: its decoys were engineered to share the query's wording, so
+they were in the aspect's list too. When every candidate is a member, a
+membership signal has nothing to separate.
 
 **The reframe that settles it.** The right question was never "does a scent
 memory beat decoys engineered to share the query's wording" but "does it
@@ -1169,11 +1234,26 @@ got recalled would rank higher and get recalled more, which is a popularity
 loop wearing the word "importance" — and it is why `access_count` staying
 written-and-unread is correct rather than an oversight.
 
-- **It was load-bearing for a belief.** A memory cited as `evidence` on a
-  mind-model update (`_cited_memory_ids`), which is downstream of retrieval, so
-  the loop is closed structurally: `only_unrevised=True` lifts a given row
-  exactly once, ever. Bare `memory_evidence_used` deliberately does not count —
-  citing a memory while describing the beat is not building a belief on it.
+- **It was load-bearing.** `_cited_memory_ids` reads three signals: evidence
+  on a mind-model update, evidence on a belief update, and a `memory_effects`
+  entry with disposition `integrated` — the character stating that a recalled
+  memory changed their recognition, appraisal, choice or speech. All are
+  downstream of retrieval, so the loop is closed structurally instead:
+  `only_unrevised=True` lifts a given row exactly once, ever. Bare
+  `memory_evidence_used` deliberately does not count — citing a memory while
+  describing the beat is not building anything on it — and `resisted` /
+  `dismissed` effects do not either, because a memory the character pushed away
+  influenced the beat without turning out to matter.
+
+  It read only the first of those three until 2026-08-03, and that is why
+  importance had been revised on 9 memories out of 6,480. Measured over the 83
+  results that could supply any candidate: mind-model evidence citing a stored
+  memory 6, belief evidence 1, `memory_effects` **74**. The one field being
+  read was the rarest thing a character emits, and the field that says exactly
+  what the function is looking for fires on 89% of eligible beats. Second time
+  this function has been wrong the same way — its first version required a
+  numeric row id and matched nothing at all, because characters cite
+  `event:<hash>`.
 - **The character re-read it** (below), which moves it further, because being
   wrong about something is a bigger fact about it than using it once.
 
@@ -1212,12 +1292,40 @@ evidence for the new reading. Gist matching remains only as a compatibility
 path for legacy output and is accepted only when it resolves unambiguously
 inside the character's **own** bank.
 
+**It had fired zero times in production** — 0 of the 181 beats whose stored
+result carried the field, beside `remember_lines`, introduced in the same
+commit, on the same 181 results, firing 78%. `tests/test_dispute_reachability.py`
+settles which of the two explanations that is by building the occasion the
+corpus never produced (a stranger remembered as kind, seen this beat picking a
+pocket) and walking a model-shaped dispute through every stage: schema
+coercion, citation grounding, the commit collector, `record_dispute`, and the
+projection back to the mind. Every stage holds. So the wire is intact and
+nobody in these stories has been deceived — a doctor and a fox spirit having
+dinner give a mind nothing to re-read.
+
+The prompt was the other half of it. The instruction was two prohibitions and
+one abstract permission, next to `memory_effects` — which fires 89% and names
+four concrete occasions. CLAUDE.md records the same shape twice from the maze
+arms: bare prohibitions invert. It now names five occasions (a disguise, a
+staged kindness, a lie, the wrong person, an arranged scene) and keeps both
+constraints. Whether that changes the rate is a question for
+`tools/fire_rates.py` after the next few stories, not for an argument.
+
 ### The character decides what was worth hearing
 
 `_durable_dialogue_category` is a fixed phrase list — promises, "my name is", a
-few confessions — which is why the corpus holds 15 dialogue rows against 2,028
+few confessions — which is why the corpus holds 145 dialogue rows against 2,601
 episodes. Warnings, instructions, codes, indirect threats and newly established
 facts all fail it.
+
+Measured (`tools/remember_lines.py`, 1,633 turns, 146 marks): **0 of the 125
+marks that became rows would have been caught by the phrase list**, and marked
+lines are retrieved later at 30.4% against 9.3% for every non-dialogue row. The
+two mechanisms have no overlap at all, and what the character keeps is what
+comes back. A budget or novelty gate was considered and refused on those
+numbers — it would throttle the highest-yield rows in the bank. `why` is
+present on 146 of 146 marks, so it cannot predict anything; a constant is not a
+signal.
 
 `CharacterOutput.remember_lines` lets the mind add to that floor (never remove
 from it — the floor exists for the model that declares nothing). Commit has
@@ -1240,6 +1348,48 @@ grounded to delivered raw memories. Unbidden recall uses it as the preferred
 outputs. This is telemetry in the character step and its existing bounded
 unbidden ledger; it does not strengthen the memory.
 
+### Summary support sets — per-clause provenance
+
+A summary is the one thing that reaches a character with no provenance at all.
+`memory_effects` is grounded to raw rows, beliefs cite evidence, disputes need
+a delivered ref — a consolidator sentence arrives as prose and is read as true.
+Summaries are barred from reinforcing durable belief, which contains most of
+the danger, and they still move appraisal and speech, and they used to leave no
+trace when they did.
+
+`memory_summaries.support` (schema v25) records one entry per clause:
+
+```json
+{"claim": "...", "support_refs": ["event:aa"], "epistemic_origin": "what_i_experienced"}
+```
+
+`derive_summary_support` builds it host-side at consolidation from the window's
+own memories, by content-word overlap at a floor of three shared words —
+calibrated, not guessed: at two, every clause matched every memory in its own
+window. Deliberately **not** a model call and not embeddings: the question is
+"which stored rows does this sentence actually talk about", which has a
+checkable answer, and an audit trail produced by the same kind of process it
+audits is not one.
+
+Three properties:
+
+- **Scoped to the summary's own epistemic class.** A first-hand clause
+  supported by something the character was only told would be an audit trail
+  that launders hearsay into experience. `epistemic_origin` names the class of
+  the strongest supporter, and is left blank rather than defaulted when there
+  is none — the safest wrong answer is the one that claims the least.
+- **An empty `support_refs` is the finding, not a failure.** It means the
+  clause generalises, compresses several rows, or was invented. This does not
+  try to tell those apart, because that is a judgement and this is a
+  measurement. What changed is that the clause is countable.
+- **Refs are `event_key`s, never row ids** — restore is delete-and-reinsert, so
+  an id-keyed trail would be shredded by the first rollback. Same reasoning as
+  disputes.
+
+Existing rows keep `'[]'`, which means "never derived" rather than "nothing
+supports it"; the two are unknowable after the fact, because consolidation has
+already archived the window.
+
 ### Schema-change checklist
 
 Both columns are carried by `dump_chat_memories` / `prepare_chat_memory_restore`
@@ -1249,3 +1399,9 @@ Both columns are carried by `dump_chat_memories` / `prepare_chat_memory_restore`
 before/after affect is v23→v24. Both are additive. `NULL` importance reads as
 salience, empty dispute is undisputed, and old encoding axes remain neutral
 instead of fabricating a retrospective emotional change.
+
+`memory_summaries.support` is v24→v25, additive, and carried by
+`dump_memory_summaries` / `apply_memory_summary_restore` — which is every path
+summaries travel, since checkpoints and `chat_archive.py` both go through
+them. Because its refs are `event_key`s rather than row ids, branch and clone
+need no remapping.

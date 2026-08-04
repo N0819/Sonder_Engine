@@ -57,6 +57,7 @@ from spatial import (
     proximity_rel,
     room_layout,
     room_of,
+    same_subject,
     scent_level,
     spatial_facts,
     spatial_rel,
@@ -898,6 +899,38 @@ def _strip_onset_rendering(view, sequence, display):
     return " ".join(kept).strip()
 
 
+def _self_cannot_see_own_surface(scene, perceiver, actor_name) -> bool:
+    """Is this perceiver the actor, AND sealed inside something?
+
+    `observable` is the intent-free surface of an act as seen FROM OUTSIDE,
+    and the actor normally receives it in their own view (rewritten to second
+    person by `_self_second_person`) because people can see themselves doing
+    things. Sealed inside another body that stops being true: the surface then
+    describes the OUTSIDE of the enclosure -- how the wall of it moves with
+    them -- and there is no channel from inside to that.
+
+    Live, chat 60 t18. The declared observable was "A tiny lump writhes and
+    squirms beneath the fabric ... the shirt shifting and bulging", and the
+    actor's own view came back "The lump you make writhes and bulges under the
+    fabric" -- in darkness, under cloth, with the narrator's own prose two
+    clauses earlier saying she could see nothing. The engine handed her an
+    outside observer's shot of herself.
+
+    Deliberately keyed on being ENCLOSED rather than on darkness or a failed
+    sight check. Being unable to see in the dark does not stop you knowing what
+    your own body is doing -- proprioception is not sight, and suppressing an
+    actor's own conduct every time the lights went out would be a worse error
+    than the one this fixes. What an enclosure removes is specifically the
+    outside view of yourself.
+    """
+    if not scene or not perceiver:
+        return False
+    name = str(perceiver.get("name") or "").strip()
+    if not name or not same_subject(scene, name, actor_name):
+        return False
+    return bool(hiding_holders_of(scene, name))
+
+
 def _inject_onset_sequence(view, sequence, perceiver, rel, display, can_see,
                            scene, actor_name, self_forms):
     """Project authorized speech/actions in their declared order."""
@@ -930,6 +963,8 @@ def _inject_onset_sequence(view, sequence, perceiver, rel, display, can_see,
         surface = observable_action_text(event)
         if not surface or entity_arc(
                 scene, perceiver.get("name"), actor_name) == "rear":
+            continue
+        if _self_cannot_see_own_surface(scene, perceiver, actor_name):
             continue
         view = _inject_action(
             view, sentence_display, surface, can_see,
@@ -2266,10 +2301,23 @@ def _touch_only_sources(scene, perceiver_name, spatial_to_sources,
     # and reading the ledger directly made that form deliver NO touch at all --
     # the body around them felt nothing, which is the wrong half of "concealed
     # but felt" to lose. hiding_holders_of understands both forms.
+    # Every comparison here goes through `same_subject`, not casefold. The same
+    # character routinely appears under two spellings at once -- a cast display
+    # name and a scene entity id -- and the containment ledger names one while
+    # the perceiver arrives as the other. Measured live: an enclosing character
+    # was matched as "Elyndra" against a holder recorded as "elyndra_succubus",
+    # so the occupant was not a touch candidate, `_surface_translate_event`
+    # never fired, and the omniscient resolved_event -- naming the occupant's
+    # interoceptive state in as many words -- went into the enclosing
+    # character's payload intact. That is the own-body isolation rule breaking
+    # on a string comparison: a mind may have its own body state and its own
+    # scrubbed observations, never another mind's vitals.
     containment_names = set(hiding_holders_of(scene, perceiver_name))
     for other in (scene.get("positions") or {}):
-        if str(other).casefold() != p_cf and perceiver_name in hiding_holders_of(
-                scene, other):
+        if same_subject(scene, str(other), perceiver_name):
+            continue
+        if any(same_subject(scene, holder, perceiver_name)
+               for holder in hiding_holders_of(scene, other)):
             containment_names.add(str(other))
     contained = scene.get("contained") or {}
     if isinstance(contained, dict):
@@ -2279,17 +2327,24 @@ def _touch_only_sources(scene, perceiver_name, spatial_to_sources,
                 or ""
             ).strip()
             s_name = str(subject).strip()
-            if s_name.casefold() == p_cf and holder:
+            if holder and same_subject(scene, s_name, perceiver_name):
                 containment_names.add(holder)
-            elif holder.casefold() == p_cf and s_name:
+            elif s_name and same_subject(scene, holder, perceiver_name):
                 containment_names.add(s_name)
     touch_candidates = {n for n in (contact_names | containment_names)
-                        if n and n.casefold() != p_cf}
-    # A touch-only source: in spatial range, no visual channel, in physical contact.
+                        if n and not same_subject(scene, n, perceiver_name)}
+    # A touch-only source: in spatial range, no visual channel, in physical
+    # contact. The candidate may be spelled as an entity id while the source
+    # tables are keyed by display name, so resolve rather than index -- the
+    # returned name must be the SOURCE table's spelling, because that is what
+    # every caller matches against.
     out = set()
     for name in touch_candidates:
-        if name in spatial_to_sources and not visual_channel_to_sources.get(name, False):
-            out.add(name)
+        key = name if name in spatial_to_sources else next(
+            (s for s in spatial_to_sources if same_subject(scene, s, name)),
+            None)
+        if key and not visual_channel_to_sources.get(key, False):
+            out.add(key)
     return out
 
 
@@ -2297,7 +2352,7 @@ def _surface_translate_event(event_text, touch_only_sources):
     """Replace act-naming sentences for touch-only sources with surface-sensation prose.
 
     The resolved_event text is omniscient: it names what every actor is
-    doing ("she curls her fingers to rub her clit").  A perceiver who can
+    doing ("she curls her fingers around the knife at her belt").  A perceiver who can
     FEEL a source but not SEE it receives this text through the touch
     channel and the perception LLM translates the named act into felt
     sensation -- effectively learning the hidden body's exact actions from

@@ -189,11 +189,29 @@ def _recent_self_moves(chat_id, char_id, current_turn_idx, n_turns=12, cap=12,
         if not (move or goal or said):
             continue
         interaction = result.get("interaction") or {}
+        # THE ASK IS ITS OWN JOB, recorded apart from what the beat was busy
+        # doing. `move` holds the SELECTED RESPONSE, and a character who asks
+        # something while cooking writes the cooking there -- so a repeated
+        # question hides inside three different-sounding moves and neither
+        # guard can see it.
+        #
+        # Live, chat 59 t152-t154. Tamamo asked the Doctor for his impression
+        # of the hall on three consecutive beats -- "Tell us, Doctor. What does
+        # it seem to you?", "What stands out most to you, Doctor?", "Doctor, a
+        # traveler sees many halls. What does this one reveal to you?" -- after
+        # Hinami had already asked it and he had already answered. Her ledger
+        # held all of it. `_first_repeated_move` returned None, because the
+        # moves it compared were "continue preparing the meal at the hearth"
+        # and "lightly reassure Hinami and acknowledge the home compliment";
+        # the exact-line guard found nothing, because the three are lexical
+        # paraphrases sharing almost no wording.
+        asked = [line[:200] for line in said if "?" in line]
         entry = {
             "turn": row["idx"],
             **({"move": move[:320]} if move else {}),
             **({"goal": goal[:240]} if goal else {}),
             **({"said": [line[:320] for line in said[-2:]]} if said else {}),
+            **({"asked": asked[-2:]} if asked else {}),
             "expected_answer": bool(
                 isinstance(interaction, dict)
                 and interaction.get("expects_response")
@@ -531,6 +549,30 @@ def _selected_move_text(result):
     return ""
 
 
+# Where a re-ask separates from a genuinely new question. Calibrated on the
+# chat 59 t152-t154 case and its neighbours: the three paraphrases of "what do
+# you make of this hall" score 0.600-0.667 against each other, while distinct
+# questions from the same character in the same window score 0.200-0.400.
+#
+# Swept over the whole stored corpus: 594 beats where a character asked
+# something, 47 flagged at this threshold (7.9%), and inspecting them by hand
+# roughly half are genuine re-asks -- including the documented Saturn/dragons
+# loop, which scores 1.00. The rest share a question SKELETON without sharing
+# a subject ("Those shifting bands - what do they look like to you" against
+# "What does it taste like?").
+#
+# Left at 0.5 rather than tightened, deliberately. This opens a bounded
+# contextual review, it does not veto a line (AGENTS.md: "semantic similarity
+# opens one contextual review; it is not proof of bad repetition"), so the
+# cost of a false positive is one paragraph of prompt and the cost of a miss
+# is the failure this exists for. Raising to 0.6 would halve the flags
+# (83 -> 34 near-miss pairs) and still catch the live case -- but only just:
+# it scores 0.600 exactly, so a slightly looser paraphrase would fall under.
+# If the reviews start reading as churn, 0.6 is the next stop and the reason
+# to move is measured, not guessed.
+_REPEATED_ASK_THRESHOLD = 0.5
+
+
 def _first_repeated_move(result, recent_moves, threshold=0.4):
     """A recent selected conversational move closely restated this beat.
 
@@ -541,20 +583,45 @@ def _first_repeated_move(result, recent_moves, threshold=0.4):
     where the model itself wrote "new destination to break repetition".
     """
     current = _selected_move_text(result)
-    if len(_self_line_tokens(current)) < 5:
-        return None
-    for prior in reversed(recent_moves or []):
-        if not isinstance(prior, dict):
+    if len(_self_line_tokens(current)) >= 5:
+        for prior in reversed(recent_moves or []):
+            if not isinstance(prior, dict):
+                continue
+            previous = str(prior.get("move") or "").strip()
+            if len(_self_line_tokens(previous)) < 5:
+                continue
+            if affect.claim_similarity(current, previous) >= threshold:
+                return {
+                    "turn": prior.get("turn"),
+                    "move": previous,
+                    "current": current,
+                }
+    # ASKING THE SAME THING AGAIN IS A REPEATED MOVE, even when the beat around
+    # it is different. Compared question-to-question rather than against
+    # `move`, because the move records what the character was DOING and the
+    # repetition lives in what they were asking (see `_recent_self_moves`).
+    #
+    # A lower threshold than the move comparison: two moves are prose
+    # summaries with plenty of incidental shared vocabulary, while two
+    # questions restating one request often share almost none -- "Tell us,
+    # Doctor. What does it seem to you?" against "What stands out most to you,
+    # Doctor?" -- so the same bar would never fire on the case this exists for.
+    current_asks = [line for line in _speech_texts(result) if "?" in line]
+    for ask in current_asks:
+        if len(_self_line_tokens(ask)) < 4:
             continue
-        previous = str(prior.get("move") or "").strip()
-        if len(_self_line_tokens(previous)) < 5:
-            continue
-        if affect.claim_similarity(current, previous) >= threshold:
-            return {
-                "turn": prior.get("turn"),
-                "move": previous,
-                "current": current,
-            }
+        for prior in reversed(recent_moves or []):
+            if not isinstance(prior, dict):
+                continue
+            for earlier in (prior.get("asked") or []):
+                if len(_self_line_tokens(earlier)) < 4:
+                    continue
+                if affect.claim_similarity(ask, earlier) >= _REPEATED_ASK_THRESHOLD:
+                    return {
+                        "turn": prior.get("turn"),
+                        "move": f"asked the same thing: {earlier}",
+                        "current": ask,
+                    }
     return None
 
 
@@ -2326,6 +2393,11 @@ def character_step(ctx, cid, nonce):
     absorption = cognitive_absorption(
         (active or {}).get("hedonic"), (active or {}).get("stress"))
     _interior = stored_state.get("interior") or {}
+    # The same pair commit will enforce, from the same inputs, so the payload
+    # never asks for more wants than the beat will keep.
+    _capacity_band = affect.normalize_capacity(
+        character_psychology(sh).get("capacity"))
+    _want_cap, _intent_cap = affect.capacity_caps(_capacity_band, absorption)
     # The goal slot's currency, resolved once and reused: the trigger below
     # and the `_self` payload must judge the SAME annotated goal, or the
     # payload argues with itself. His own node names for display (the closed
@@ -2582,6 +2654,19 @@ def character_step(ctx, cid, nonce):
         # character to notice about itself -- see _self_line_refrain. Absent
         # when there is no template, so its presence is the whole signal.
         "recent_self_refrain": _refrain,
+        # How much this mind holds at once (affect.CAPACITY_LADDER), as the
+        # concrete numbers rather than the rung name. Told rather than enforced
+        # silently: commit caps wants and intentions deterministically either
+        # way, and a character asked for three wants whose third is then culled
+        # has had a decision taken from it without being told the decision
+        # existed. The narrowing under absorption is included, so a mind whose
+        # body is screaming sees the smaller number and chooses within it.
+        "attention": {
+            "wants": _want_cap,
+            "intentions": _intent_cap,
+            "band": _capacity_band,
+            "means": affect.CAPACITY_DESCRIPTIONS[_capacity_band],
+        },
         # Tier-2 goal hierarchy: the character's AUTHORED standing intentions
         # (its defining goals, always present so it acts proactively) merged
         # with EMERGENT intentions formed at runtime via intent_ops. An emergent
@@ -2659,8 +2744,14 @@ def character_step(ctx, cid, nonce):
     # Shown for the one beat after it fired: the moment to re-ask what each
     # held project means for what happens next. An invitation, never a
     # mechanism -- no op is ever applied by the engine.
+    # Deliberately NOT gated on already holding one. Paired with the identical
+    # guard that used to open affect.project_boundary, this made the tier
+    # unreachable: the prompt names this beat as the occasion to emit
+    # project_ops, and the occasion required the thing it would create. 0 of 14
+    # live banks have ever held a project. For a character with none, this flag
+    # is the invitation; for one with projects it is the review it always was.
     _preview = _interior.get("project_review")
-    if isinstance(_preview, dict) and _self.get("projects"):
+    if isinstance(_preview, dict):
         try:
             _fresh = ctx.turn.idx <= int(_preview.get("turn")) + 1
         except (TypeError, ValueError):
@@ -3010,7 +3101,8 @@ def character_step(ctx, cid, nonce):
             ctx.add_warning(f"character {character_name(sh)}: {_w}")
     out["mind_model_updates"] = cap_mind_model_updates(
         out.get("mind_model_updates") or [], absorption=absorption)
-    norm_sequence(out)
+    norm_sequence(out, warn=lambda _w: ctx.add_warning(
+        "character %s: %s" % (character_name(sh), _w)))
     out["sequence"] = assign_event_ids(
         out.get("sequence"), f"turn:{ctx.turn.id}:character:{cid}")
     out["name"] = character_name(sh)

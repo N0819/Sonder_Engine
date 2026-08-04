@@ -64,7 +64,7 @@ def parse_scoped_world_key(key):
     return key, None
 
 DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -531,6 +531,16 @@ CREATE TABLE IF NOT EXISTS memory_summaries(
     summary TEXT NOT NULL DEFAULT '',
     key_phrases TEXT NOT NULL DEFAULT '[]',
     unresolved_threads TEXT NOT NULL DEFAULT '[]',
+    -- JSON: one entry per clause of `summary`, as
+    -- [{"claim": str, "support_refs": [event_key, ...],
+    --   "epistemic_origin": "what_i_experienced"|"what_i_was_told"|
+    --                       "what_i_concluded"|""}].
+    -- Derived host-side from the window's own memories at consolidation, so
+    -- it costs no model call and cannot be argued with. A clause with an
+    -- EMPTY support_refs is the point: summaries cannot reinforce durable
+    -- belief, but they do move appraisal and speech, and until now a
+    -- consolidator sentence with nothing behind it left no trace when it did.
+    support TEXT NOT NULL DEFAULT '[]',
     embedding BLOB,
     embedding_model TEXT NOT NULL DEFAULT '',
     embedding_dim INTEGER,
@@ -1212,6 +1222,16 @@ MIGRATIONS = [
     [
         "ALTER TABLE memories ADD COLUMN encoding_valence REAL NOT NULL DEFAULT 0.0",
         "ALTER TABLE memories ADD COLUMN encoding_arousal REAL NOT NULL DEFAULT 0.0",
+    ],
+    # v24 -> v25
+    [
+        # Per-clause provenance for consolidated summaries. Existing rows keep
+        # '[]' -- an empty support set on an old summary means "never
+        # derived", not "nothing supports it", and `memory.summary_support`
+        # returns [] for both because the difference is unknowable after the
+        # fact. Backfilling it would require the window's memories, which
+        # consolidation has already archived.
+        "ALTER TABLE memory_summaries ADD COLUMN support TEXT NOT NULL DEFAULT '[]'",
     ],
 ]
 

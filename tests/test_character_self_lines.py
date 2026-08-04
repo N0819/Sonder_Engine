@@ -93,6 +93,10 @@ def test_recent_self_moves_is_one_semantic_row_per_turn(temp_db):
         "move": "offer Saturn or dragons and let her choose",
         "goal": "suggest a post-shrine destination",
         "said": ["Saturn, or dragons?", "Your pick."],
+        # Questions are projected apart from `said`, because `move` records
+        # what the beat was BUSY WITH and a repeated ask hides inside it --
+        # see test_repeated_ask.py.
+        "asked": ["Saturn, or dragons?"],
         "expected_answer": True,
     }]
 

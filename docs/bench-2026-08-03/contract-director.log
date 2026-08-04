@@ -1,0 +1,34 @@
+step director_interpret  system 16821 chars  payload 927 chars
+
+  Qwen/Qwen3.6-35B-A3B
+      PASS  2/2  3.77s  765 out tok
+  inclusionai/ling-3.0-flash
+      PASS  2/2  4.34s  849 out tok
+  Qwen/Qwen3-Next-80B-A3B-Instruct
+      PASS  2/2  4.49s  660 out tok
+  inclusionai/ling-2.6-flash
+      part  1/2  9.89s  869 out tok
+        ! 429 {"error":{"message":"Model is temporarily overloaded. Please try again after 60 seconds or choose another model.","status":429,"type":"rate_
+  google/gemma-4-26b-a4b-it
+      PASS  2/2  7.89s  696 out tok
+  deepseek/deepseek-v4-flash-0731
+      PASS  2/2  19.87s  651 out tok
+  zai-org/glm-latest
+      PASS  2/2  29.76s  2573 out tok
+  nex-agi/nex-n2-pro
+      PASS  2/2  8.84s  938 out tok
+  moonshotai/kimi-k2.6
+      PASS  2/2  43.34s  790 out tok
+  zai-org/glm-4.7
+      PASS  2/2  13.1s  590 out tok
+
+=== director_interpret: models that satisfy the real contract ===
+     3.77s     765 tok  Qwen/Qwen3.6-35B-A3B
+     4.34s     849 tok  inclusionai/ling-3.0-flash
+     4.49s     660 tok  Qwen/Qwen3-Next-80B-A3B-Instruct
+     7.89s     696 tok  google/gemma-4-26b-a4b-it
+     8.84s     938 tok  nex-agi/nex-n2-pro
+    13.10s     590 tok  zai-org/glm-4.7
+    19.87s     651 tok  deepseek/deepseek-v4-flash-0731
+    29.76s    2573 tok  zai-org/glm-latest
+    43.34s     790 tok  moonshotai/kimi-k2.6

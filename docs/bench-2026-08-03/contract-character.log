@@ -1,0 +1,26 @@
+step character  system 55558 chars  payload 1269 chars
+
+  Qwen/Qwen3.6-35B-A3B
+      PASS  2/2  7.13s  1472 out tok
+  inclusionai/ling-3.0-flash
+      PASS  2/2  5.12s  937 out tok
+  Qwen/Qwen3-Next-80B-A3B-Instruct
+      FAIL  0/2  0.78s  0 out tok
+        ! 429 {"error":{"message":"Too many requests. Please slow down and try again shortly.","type":"rate_limit_error","code":"rate_limit_exceeded","sta
+        ! 429 {"error":{"message":"Too many requests. Please slow down and try again shortly.","type":"rate_limit_error","code":"rate_limit_exceeded","sta
+  google/gemma-4-26b-a4b-it
+      FAIL  0/2  0.77s  0 out tok
+        ! 429 {"error":{"message":"Too many requests. Please slow down and try again shortly.","type":"rate_limit_error","code":"rate_limit_exceeded","sta
+        ! 429 {"error":{"message":"Too many requests. Please slow down and try again shortly.","type":"rate_limit_error","code":"rate_limit_exceeded","sta
+  deepseek/deepseek-v4-flash-0731
+      FAIL  0/2  0.7s  0 out tok
+        ! 429 {"error":{"message":"Too many requests. Please slow down and try again shortly.","type":"rate_limit_error","code":"rate_limit_exceeded","sta
+        ! 429 {"error":{"message":"Too many requests. Please slow down and try again shortly.","type":"rate_limit_error","code":"rate_limit_exceeded","sta
+  nex-agi/nex-n2-pro
+      FAIL  0/2  0.66s  0 out tok
+        ! 429 {"error":{"message":"Too many requests. Please slow down and try again shortly.","type":"rate_limit_error","code":"rate_limit_exceeded","sta
+        ! 429 {"error":{"message":"Too many requests. Please slow down and try again shortly.","type":"rate_limit_error","code":"rate_limit_exceeded","sta
+
+=== character: models that satisfy the real contract ===
+     5.12s     937 tok  inclusionai/ling-3.0-flash
+     7.13s    1472 tok  Qwen/Qwen3.6-35B-A3B
