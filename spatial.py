@@ -3,6 +3,7 @@
 
 import copy
 import re
+from collections import defaultdict
 from typing import Optional
 
 from schemas import is_derived_entity_name
@@ -166,7 +167,34 @@ def scent_level(rel: dict) -> str:
     inside another's body had their scent arriving at the enclosing character
     at full strength, as though the barrier that hid them from sight did
     nothing to what they smelled like.
+
+    THAT RULE HAD ONE FLAG FOR TWO OPPOSITE SITUATIONS. `concealed` is
+    symmetric -- it is true when either body is enclosed and the other is not
+    -- so it was answering both "the source is shut inside something" (muffled,
+    correct) and "the PERCEIVER is shut inside something" with the same word.
+    The second is not a muffling at all. A body sealed inside another is not
+    downwind of the thing around them; they are inside it, breathing nothing
+    else, and the room beyond that wall does not reach them at all.
+
+    Measured live: a character fully enclosed in another read `muffled` for the
+    body around her AND `muffled` for a window across the room -- the enclosure
+    and a draught from outside scoring identically. The reported symptom was
+    that the scent went faint exactly when it should have drowned out
+    everything else, which is precisely what one symmetric flag produces.
+
+    So the direction is now carried explicitly:
+
+      * `inside_source` -- the perceiver is inside this source. Maximal. There
+        is no barrier between you and a thing you are within.
+      * `enclosed_from_source` -- the perceiver is inside something else, and
+        this source is beyond that wall. Nothing arrives.
+
+    Ordered before `concealed`, because both are the more specific claim.
     """
+    if rel.get("inside_source"):
+        return "full"
+    if rel.get("enclosed_from_source"):
+        return "none"
     if rel.get("concealed"):
         return "muffled"
     if rel.get("same_room"):
@@ -545,13 +573,46 @@ def spatial_rel_between(scene: dict, observer: str, target: str) -> dict:
     if crossing_visible_from(scene, room_of(scene, observer), target):
         rel["crossing"] = True
     holder = _body_interior_holder(scene, observer)
-    if holder and holder.casefold() == str(target or "").strip().casefold():
+    if holder and same_subject(scene, holder, target):
         rel["inside_source"] = True
+    elif holder and not same_subject(scene, observer, target) \
+            and not _shares_enclosure(scene, holder, target):
+        # Enclosed, and this source is NEITHER the enclosure NOR in it. The
+        # mass of a body is between them, so this is the opposite relation to
+        # `inside_source` and needs its own name: everything outside is shut
+        # out by the same wall that makes the enclosure itself overwhelming.
+        #
+        # Two exclusions, and both are the kind that would have been found
+        # fifty beats later as "the character has gone strange". A perceiver is
+        # never sealed away from THEMSELVES -- their own body is the one thing
+        # no enclosure can put a wall in front of. And two bodies inside the
+        # same enclosure are in the same place: they see, hear and smell each
+        # other normally, which is the rule `containment_conceals` already
+        # states by comparing innermost holders.
+        rel["enclosed_from_source"] = True
     # A carried body's position derives to its carrier's, so a body enclosed in
     # something standing right here reads as `same_room` -- which answers sight
     # before barriers or light are consulted at all.
     if containment_conceals(scene, observer, target):
         rel["concealed"] = True
+    # The third direction, and the one the other two hid. `inside_source` is
+    # the perceiver inside the source; `enclosed_from_source` is the perceiver
+    # inside something else. This is the SOURCE sealed inside something the
+    # perceiver is outside of -- a voice trying to get out through a body's
+    # mass. `hear_level` used to be told this was handled by the barrier rules,
+    # and for an interior ROOM it was, because the two sides sat in different
+    # rooms with a wall between them. Expressed as a containment ledger the
+    # position derives to the carrier's own room, so there is no barrier left
+    # to muffle anything and an enclosed body's cries reached the body around
+    # them at full, unattenuated clarity.
+    if not rel.get("inside_source") \
+            and not same_subject(scene, observer, target):
+        # A BODY's mass specifically, not any enclosure: opaque is not
+        # soundproof, and a crate must stay a thing you can be heard through.
+        target_holder = _body_interior_holder(scene, target)
+        if target_holder and not _shares_enclosure(
+                scene, _body_interior_holder(scene, observer), target):
+            rel["source_enclosed"] = True
     return rel
 
 
@@ -772,6 +833,26 @@ def hear_level(
         if volume in ("mutter", "whisper"):
             return "fragment"
         return "full"
+
+    # The other side of that same mass. `enclosed_from_source` says the
+    # LISTENER is sealed inside something and this source is beyond it, which
+    # is the muffling `inside_source` deliberately does not apply -- and which
+    # the barrier rules below cannot reach, because a contained body's position
+    # derives to its carrier's and so reads `same_room` with the whole room it
+    # can no longer hear. Measured live: a body fully enclosed in another was
+    # delivered a window latch rattling across the room at full clarity while
+    # the enclosure around her was scored as a distant wall. Only a raised
+    # voice gets through, and only in pieces.
+    if rel.get("enclosed_from_source"):
+        return "fragment" if volume in ("loud", "shout") else "none"
+
+    # A voice coming OUT through a body's mass. The comment above once claimed
+    # the barrier rules already modelled this, which held only while the two
+    # sides sat in different rooms; a containment ledger derives the enclosed
+    # body's position to its carrier's, so `same_room` below would hand the
+    # room a sealed-away voice at full clarity.
+    if rel.get("source_enclosed"):
+        return "none" if volume in ("mutter", "whisper") else "fragment"
 
     if rel.get("same_room"):
         # A whisper (mutter) only fully reaches someone WITHIN REACH; it carries
@@ -1131,6 +1212,69 @@ def _ci_get(mapping, name):
     for k, v in mapping.items():
         if str(k).lower().strip() == ln:
             return v
+    return None
+
+
+def same_subject(scene: dict, a: str, b: str) -> bool:
+    """Do these two strings name the same being in this scene?
+
+    The same character routinely appears under two spellings at once -- a cast
+    display name and a scene entity id -- and a bare casefold comparison
+    between them is False, which is how an enclosure came to be compared
+    against its own occupant's holder and lose. Falls back to plain equality
+    when neither string is a known entity, so this never invents a match.
+    """
+    left = str(a or "").strip().casefold()
+    right = str(b or "").strip().casefold()
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+    for name, other in ((a, right), (b, left)):
+        entity = _entity_named(scene, name)
+        if not entity:
+            continue
+        labels = {str(label).strip().casefold()
+                  for label in (entity.get("name"),
+                                *(entity.get("aliases") or [])) if label}
+        for eid, record in (scene.get("entities") or {}).items():
+            if record is entity:
+                labels.add(str(eid).strip().casefold())
+        if other in labels:
+            return True
+    return False
+
+
+def _position_of(scene: dict, name: str):
+    """Where `name` is, resolved through entity identity rather than spelling.
+
+    `positions` is keyed by whatever the writer used -- a cast member's display
+    name, an entity id, an alias -- and the same being routinely appears under
+    two of them at once: a character present as cast AND as a scene entity with
+    its own id. `room_of` tolerates case and punctuation but not a different
+    NAME for the same thing, so a containment record naming the entity id found
+    nothing in a positions map keyed by the display name.
+
+    Measured live: a body enclosed inside another was left at the literal
+    string `"elyndra_succubus"` as its room -- an entity id sitting where a room
+    id belongs, matching no room in the scene. `derive_contained_positions`
+    could not resolve the carrier, so it did what it does when it cannot: it
+    skipped, silently, and the body stayed nowhere for the rest of the story.
+    Every spatial query then answered "unknown", which is the safe-closed
+    default, so the failure looked exactly like distance.
+    """
+    direct = room_of(scene, name)
+    if direct is not None:
+        return direct
+    entity = _entity_named(scene, name)
+    if not entity:
+        return None
+    for label in (entity.get("name"), *(entity.get("aliases") or [])):
+        if not label:
+            continue
+        found = room_of(scene, str(label))
+        if found is not None:
+            return found
     return None
 
 
@@ -1736,21 +1880,62 @@ def _body_interior_holder(scene: dict, name: str):
     A parent that holds a POSITION is a body; a parent that does not is a bag,
     a ship, a jar -- already handled by `_is_carried_interior` for a different
     question (whether you take its inside in as ambience).
+
+    BOTH FORMS ARE READ HERE, and for a long time only the room one was, which
+    made `inside_source` dead for every enclosure the Director expressed as a
+    ledger record -- which is how it expresses nearly all of them. The symptom
+    was not subtle once measured: a body sealed inside another read
+
+        {"same_room": false, "barrier": "separated", "distance": "far"}
+
+    against the very body around it -- the same relation the engine returned
+    for a window across the room. So the one voice they were physically
+    closest to in the world arrived through a wall, and the enclosure they
+    were inside smelled exactly as much as the window did.
+
+    Concealment did work, because `_hiding_holders` reads the ledger. That is
+    the shape of the defect: an enclosed body got every consequence of being
+    sealed away and none of the compensations, because the two halves of one
+    fact were answered by two functions and only one of them had been taught
+    the common case.
     """
     rooms = (scene or {}).get("rooms") or {}
     positions = (scene or {}).get("positions") or {}
     room_id = _ci_get(positions, name)
     room = rooms.get(room_id) if room_id else None
-    if not isinstance(room, dict):
+    if isinstance(room, dict):
+        parent = str(room.get("parent_entity") or "").strip()
+        if (parent and _position_of(scene, parent) is not None
+                and parent.casefold() != str(name or "").strip().casefold()):
+            return parent
+    # The ledger form. `mode` decides: being carried in an open palm is not
+    # being inside anything, and `containment_hides` is already the engine's
+    # answer to which modes enclose.
+    contained = (scene or {}).get("contained") or {}
+    record = _ci_get(contained, name) if isinstance(contained, dict) else None
+    if not isinstance(record, dict):
         return None
-    parent = str(room.get("parent_entity") or "").strip()
-    if not parent:
+    holder = str(record.get("in") or "").strip()
+    if not holder or not containment_hides(record.get("mode")):
         return None
-    if _ci_get(positions, parent) is None:
+    if holder.casefold() == str(name or "").strip().casefold():
         return None
-    if parent.casefold() == str(name or "").strip().casefold():
+    # A BODY, not a bag. `inside_source` means the enclosure is a MASS -- it
+    # conducts sound and floods every other scent -- and a crate is neither.
+    # Positive evidence required, via the discriminator the enclosure default
+    # already uses (`_is_body_entity`: bodies wear things and have a size), so
+    # an undeclared holder stays a container. Opaque is not soundproof, and a
+    # box you can be heard through must not become one. An unplaced holder
+    # names nothing the scene can reason about at all.
+    entity = _entity_named(scene, holder)
+    if str((entity or {}).get("kind") or "").strip().casefold() \
+            in _NEVER_STATIONED_KINDS:
         return None
-    return parent
+    if not _is_body_entity(scene, holder, entity):
+        return None
+    if _position_of(scene, holder) is None:
+        return None
+    return holder
 
 
 def _hiding_holders(scene: dict, name: str) -> list:
@@ -1801,6 +1986,18 @@ def _innermost_hiding_holder(scene: dict, name: str):
     """The nearest enclosure `name` is shut inside, or None if in the open."""
     holders = _hiding_holders(scene, name)
     return str(holders[0]).strip().casefold() if holders else None
+
+
+def _shares_enclosure(scene: dict, holder, target: str) -> bool:
+    """Is `target` inside the same enclosure the perceiver is inside?
+
+    Two bodies in one enclosure are simply in the same place -- nothing is
+    between them and the wall around them is around them both.
+    """
+    if not holder:
+        return False
+    return same_subject(scene, _innermost_hiding_holder(scene, target) or "",
+                        holder)
 
 
 def containment_conceals(scene: dict, observer: str, target: str) -> bool:
@@ -1892,7 +2089,13 @@ def derive_contained_positions(scene: dict) -> dict:
         # have been updated yet this pass -- reading it would hand the innermost
         # body a stale room while the satchel it is in has already moved.
         for holder in reversed(carrier_chain(scene, subject)):
-            room = _ci_get(positions, holder)
+            # Through entity identity, not spelling: a record naming the
+            # carrier by entity id must still find a positions map keyed by
+            # that entity's display name, or this silently skips and leaves
+            # the contained body wherever it happened to be -- which, when the
+            # Director wrote the carrier's id into `positions` as though it
+            # were a room, is a room that does not exist.
+            room = _position_of(scene, holder)
             if room is not None:
                 break
         if room is None:
@@ -2606,6 +2809,255 @@ def contacts_broken_by_scale_change(scene: dict, previous_scales) -> list:
 
     scene["contacts"] = kept
     return sorted(changed)
+
+
+# Every scene ledger keyed by WHO rather than by what. `stations[x]["at"]` is
+# deliberately absent: it names an anchor, which is a place in a room, not a
+# subject. `positions` VALUES are rooms for the same reason.
+_SUBJECT_KEYED = ("positions", "scales", "attire", "stations", "contained",
+                  "following")
+
+
+def _live_subject_spellings(scene: dict) -> set:
+    """Every string this scene currently uses to name a SUBJECT, casefolded.
+
+    Keys of the subject-keyed ledgers, plus the subject-valued fields inside
+    them. Not `stations[x]["at"]` (an anchor) and not `positions` values
+    (rooms) -- naming a place is not naming somebody.
+    """
+    out = set()
+
+    def add(value):
+        text = str(value or "").strip()
+        if text:
+            out.add(text.casefold())
+
+    for ledger in _SUBJECT_KEYED:
+        table = (scene or {}).get(ledger)
+        if isinstance(table, dict):
+            for key in table:
+                add(key)
+    contained = (scene or {}).get("contained")
+    if isinstance(contained, dict):
+        for record in contained.values():
+            if isinstance(record, dict):
+                add(record.get("in"))
+    following = (scene or {}).get("following")
+    if isinstance(following, dict):
+        for record in following.values():
+            if isinstance(record, dict):
+                add(record.get("target"))
+    contacts = (scene or {}).get("contacts")
+    if isinstance(contacts, list):
+        for contact in contacts:
+            if isinstance(contact, dict):
+                add(contact.get("actor"))
+                add(contact.get("target"))
+    return out
+
+
+def canonical_subject_map(scene: dict) -> dict:
+    """Every spelling of every being in this scene, folded onto one name.
+
+    A being routinely carries two names at once -- a cast display name and a
+    scene entity id -- because a character can be registered cast AND present
+    as a scene entity, with nothing joining the two records. The Director then
+    writes whichever it reaches for, and both are correct.
+
+    Canonical is the entity's own `name`, which for a mirrored cast member IS
+    the display name every reader already expects, so this folds toward the
+    convention rather than inventing one.
+
+    AMBIGUITY RESOLVES TO NOTHING, exactly as `entity_room_by_name` decided
+    before it: two entities named "A Dalek" are two Daleks, and folding both
+    onto one key would merge two beings into one position. A name shared by
+    more than one entity is left alone in every direction, and so is an alias
+    that more than one entity claims. Names beat aliases, so a nickname can
+    never outrank somebody's real name.
+    """
+    entities = (scene or {}).get("entities")
+    if not isinstance(entities, dict):
+        return {}
+    by_name = defaultdict(list)
+    by_alias = defaultdict(list)
+    for eid, ent in entities.items():
+        if not isinstance(ent, dict):
+            continue
+        name = str(ent.get("name") or "").strip()
+        if not name:
+            continue
+        by_name[name.casefold()].append((eid, name))
+        for alias in ent.get("aliases") or []:
+            text = str(alias or "").strip()
+            if text:
+                by_alias[text.casefold()].append((eid, name))
+    # ONLY where two spellings are genuinely in use at once. A lone entity-id
+    # key is not ambiguous and must not be renamed: `positions` legitimately
+    # keys objects, fixtures and unregistered presences by id, readers resolve
+    # them that way, and rewriting those to display names breaks carried
+    # lights, derived stations and destruction cascades -- measured, as eleven
+    # failing tests, the first time this folded on identity alone. The defect
+    # is TWO RECORDS FOR ONE BEING, so the fold only fires when the canonical
+    # name is already live as a subject spelling somewhere in this scene.
+    live = _live_subject_spellings(scene)
+    out = {}
+    for folded, hits in by_name.items():
+        if len(hits) != 1:
+            continue
+        eid, name = hits[0]
+        # The name must be live under a spelling that is NOT this entity's own
+        # id, or an id differing from its name only by case ("tardis" for
+        # "TARDIS", "torch" for "Torch") counts as its own evidence and folds
+        # itself away -- which is how an object with a single id-keyed position
+        # lost that position entirely.
+        if name.casefold() == str(eid).strip().casefold():
+            continue
+        if name.casefold() not in live:
+            continue
+        out[str(eid).strip().casefold()] = name
+        for alias_folded, alias_hits in by_alias.items():
+            if len(alias_hits) == 1 and alias_hits[0][0] == eid \
+                    and alias_folded not in by_name:
+                out[alias_folded] = name
+    # Never rewrite one being's name into another's.
+    return {k: v for k, v in out.items()
+            if k not in by_name or by_name[k][0][1] == v}
+
+
+def canonical_subject(scene: dict, name: str) -> str:
+    """One spelling for one being. Returns `name` unchanged when the scene has
+    nothing better -- an unregistered presence keeps whatever it was called."""
+    text = str(name or "").strip()
+    if not text:
+        return text
+    return canonical_subject_map(scene).get(text.casefold(), text)
+
+
+def normalize_scene_subjects(scene: dict) -> list:
+    """Fold every subject-keyed ledger onto one spelling per being.
+
+    `same_subject` closed five defects that were all the same `==`, and it is a
+    FLOOR, not a fix: it only helps at comparison sites somebody remembered to
+    route through it, and every new site is a fresh chance to write `==` again.
+    A guard that has to be remembered is a guard that will be forgotten.
+
+    So the data is made single-spelled instead. Run at merge, before position
+    derivation, this leaves exactly one key per being in `positions`, `scales`,
+    `attire`, `stations`, `contained` (keys and `in`), `contacts`
+    (actor/target) and `following` -- after which `==` is correct again because
+    there is nothing left for it to be wrong about.
+
+    Two entries that fold together are a genuine conflict: the same being
+    recorded twice, in two spellings, possibly in two rooms. The one already
+    under the canonical spelling wins, because that is the key every reader
+    has been resolving against and therefore the one the story has been
+    running on. Returns what it folded, for warnings.
+    """
+    folded = []
+    mapping = canonical_subject_map(scene)
+    if not mapping:
+        return folded
+
+    def canon(value):
+        text = str(value or "").strip()
+        return mapping.get(text.casefold(), text)
+
+    for ledger in _SUBJECT_KEYED:
+        table = scene.get(ledger)
+        if not isinstance(table, dict):
+            continue
+        rebuilt = {}
+        for key, value in table.items():
+            target = canon(key)
+            if target != key:
+                folded.append((ledger, str(key), target))
+            # First writer of the canonical spelling keeps it. A later entry
+            # arriving under an alias does not overwrite the record every
+            # reader has been using.
+            if target in rebuilt and target in table and target != key:
+                continue
+            rebuilt[target] = value
+        scene[ledger] = rebuilt
+
+    def fold_field(record, field, where):
+        """Rewrite a subject-VALUED field, reporting it like a key fold --
+        `contained.in` naming one spelling while `positions` uses another is
+        the exact shape that started this, and it leaves no key to report."""
+        if not isinstance(record, dict) or not record.get(field):
+            return
+        target = canon(record[field])
+        if target != record[field]:
+            folded.append((where, str(record[field]), target))
+            record[field] = target
+
+    contained = scene.get("contained")
+    if isinstance(contained, dict):
+        for record in contained.values():
+            fold_field(record, "in", "contained.in")
+    following = scene.get("following")
+    if isinstance(following, dict):
+        for record in following.values():
+            fold_field(record, "target", "following.target")
+    contacts = scene.get("contacts")
+    if isinstance(contacts, list):
+        for contact in contacts:
+            for field in ("actor", "target"):
+                fold_field(contact, field, f"contacts.{field}")
+    return folded
+
+
+def repair_entity_positions(scene: dict) -> list:
+    """A position naming an ENTITY rather than a room is a category error.
+
+    `positions` maps a body to a ROOM. The Director periodically writes an
+    entity id there instead -- "she is in Elyndra" is a true sentence and an
+    invalid position -- and nothing rejected it, because every spatial query
+    resolves an unknown room to the safe-closed default rather than raising.
+
+    Measured live (chat 60): a body enclosed inside another sat at the literal
+    string `"elyndra_succubus"` for the rest of the story, a room that does not
+    exist. The relation to the body around her came back
+
+        {"same_room": false, "barrier": "separated", "distance": "far"}
+
+    -- the same answer the engine gave for a window across the room. Nothing
+    was broken loudly. She was simply nowhere, and every channel read as
+    distance, which is exactly what being nowhere looks like from inside a
+    ranking function.
+
+    The repair is the reading the Director meant: put the body in the entity's
+    own room and record a station AT that entity, which is the engine's
+    existing vocabulary for being at a thing rather than in it. Containment is
+    NOT inferred here -- `derive_contained_positions` has already run and owns
+    that case, and inventing an enclosure from a mistyped position would turn a
+    typo into a firewall change. Returns what it repaired, for warnings.
+    """
+    positions = scene.get("positions")
+    rooms = scene.get("rooms") or {}
+    if not isinstance(positions, dict) or not isinstance(rooms, dict):
+        return []
+    repaired = []
+    for name, where in list(positions.items()):
+        key = str(where or "").strip()
+        if not key or key in rooms or _ci_get(rooms, key) is not None:
+            continue
+        entity = _entity_named(scene, key)
+        if not entity:
+            continue
+        room = _position_of(scene, key)
+        if room is None or room == key:
+            continue
+        positions[name] = room
+        stations = scene.setdefault("stations", {})
+        if isinstance(stations, dict):
+            slot = stations.get(name)
+            if not isinstance(slot, dict):
+                slot = {"at": None, "near": []}
+                stations[name] = slot
+            if not slot.get("at"):
+                slot["at"] = key
+        repaired.append((name, key, room))
+    return repaired
 
 
 def prune_bodiless_positions(scene: dict) -> list:
@@ -4724,10 +5176,18 @@ def merge_scene_with_diff(
                     merged["contained"].pop(key, None)
             else:
                 merged["contained"][label] = record
+    # One spelling per being, BEFORE anything resolves a subject against
+    # another ledger. A containment record naming an entity id and a positions
+    # map keyed by the display name are the same fact written twice, and every
+    # lookup between them fails silently until they agree.
+    normalize_scene_subjects(merged)
     normalize_scene_containment(merged)
     # Derived LAST among position writes: whatever else this beat did to
     # positions, a carried body ends up where its carrier is.
     derive_contained_positions(merged)
+    # ...and a position that names an ENTITY rather than a room is repaired
+    # after that, so a real containment record always wins over the guess.
+    repair_entity_positions(merged)
     # A bodiless voice is not standing anywhere; a position on one is a
     # category error that no author can currently delete by hand.
     prune_bodiless_positions(merged)

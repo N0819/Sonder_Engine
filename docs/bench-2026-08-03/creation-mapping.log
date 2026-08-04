@@ -1,0 +1,13 @@
+step mapping_stage   one door opened, everything past it invented
+
+  Qwen/Qwen3.6-35B-A3B
+        rooms 2 (desc 296ch, anchors 2, exits 3 [3 barriered, 3 directed], exposure 0)  entities 0 (0 described, 0 stateful)  grounded 3/10
+        rooms 1 (desc 243ch, anchors 1, exits 1 [1 barriered, 1 directed], exposure 0)  entities 1 (1 described, 1 stateful)  grounded 4/10
+
+  inclusionai/ling-3.0-flash
+        rooms 1 (desc 265ch, anchors 2, exits 1 [1 barriered, 1 directed], exposure 1)  entities 0 (0 described, 0 stateful)  grounded 3/10
+        rooms 1 (desc 188ch, anchors 3, exits 1 [1 barriered, 1 directed], exposure 1)  entities 0 (0 described, 0 stateful)  grounded 6/10
+
+=== world-building depth (usable structure per reply) ===
+    14.2   rooms 1.5  anchors 1.5  barriered exits 2.0  entities 0.5  grounded 3.5/10    3.9s   Qwen/Qwen3.6-35B-A3B
+    12.8   rooms 1.0  anchors 2.5  barriered exits 1.0  entities 0.0  grounded 4.5/10   11.5s   inclusionai/ling-3.0-flash

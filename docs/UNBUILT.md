@@ -599,6 +599,56 @@ entirely — the same stranding the wave exists to prevent, one round later.
 before this was found, so chat 59 is very nearly the entire corpus for it: this
 is one clear case reasoned from mechanism, not a rate.
 
+### 1.11i The engine spoke for a silent player — FIXED, alpha 6.9.2
+
+Every player-authority check compares the Director's output against what the
+player declared. With an EMPTY input there is nothing to compare against, and
+nothing guarded that direction.
+
+Live, chat 59 t154. Input empty; `director_interpret` emitted speech "Kaa Sama
+Kaa Sama! You're cooking is simply to good to not indulge in." and action
+"steps inside the shrine and looks around at the familiar sight of home" —
+both the player's turn-150 declaration, verbatim, four beats stale. Tamamo
+thanked her for praise she had not given.
+
+Corpus: 10 turns carry an empty player input, 2 invented player speech (the
+other newly, "something reassuring"). Small sample, but the failure mode is the
+one the architecture exists to prevent.
+
+Now deterministic: an empty input clears `sequence`, `speech`, `action` and
+`actions` before anything reads them, warns, and tells the Director on the next
+beat that silence is the whole declaration. Silence still reaches characters
+through `_player_silence_note`; what no longer reaches them is words.
+
+### 1.11j A repeated question hid inside a different beat — FIXED, alpha 6.9.2
+
+`_recent_self_moves` records the SELECTED MOVE, which is what the beat was busy
+with. A character who asks something while cooking writes the cooking there, so
+a repeated question hides inside three different-sounding moves and neither
+guard sees it.
+
+Live, chat 59 t152–t154. Tamamo asked the Doctor for his impression of the hall
+on three consecutive beats, after Hinami had already asked and he had already
+answered. Her ledger held all three lines with `expected_answer: True` on each.
+`_first_repeated_move` returned None — it compared "continue preparing the meal
+at the hearth" against "lightly reassure Hinami and acknowledge the home
+compliment" — and the exact-line guard found nothing, because the three are
+lexical paraphrases sharing almost no wording.
+
+The ledger now projects `asked` apart from `said`, and the repeat check
+compares question against question at a lower threshold than the move
+comparison (two prose summaries share incidental vocabulary; two restatements
+of one request often share none).
+
+**Measured, and honestly imperfect.** Swept over the corpus: 594 beats where a
+character asked something, 47 flagged (7.9%), roughly half of them genuine
+re-asks by inspection — including the documented Saturn/dragons loop at 1.00.
+The rest share a question skeleton without sharing a subject. Left at 0.5
+because this opens a bounded contextual review rather than vetoing a line, so a
+false positive costs a paragraph and a miss costs the failure. 0.6 would halve
+the flags and still catch the live case, but only just — it scores 0.600
+exactly. That is the next stop if the reviews read as churn.
+
 ### 1.12 Watch items
 
 Not defects yet. Each is a measured shape that will become one silently.
@@ -1231,6 +1281,406 @@ same historical replay before it lands.
 
 
 ---
+
+### 1.23 Memory, psychology and capacity — landed 2026-08-03
+
+Raised in review, planned, measured, then built. **The measurements changed
+the plan more than any argument did**: two shelf items were cancelled, one was
+inverted outright, and the harness written to make the plan honest found three
+dead mechanisms nobody had gone looking for. What follows is the record; the
+work itself is in `Design.md` and the tests named below.
+
+#### The through-line: fire rate before enrichment
+
+Every mechanism examined fell into one of three states, and the state was
+never obvious from reading the code.
+
+| mechanism | fires | note |
+|---|---|---|
+| aspect rankings | **constantly** — top-16 membership in 39/40 | argued dead, is the most active thing in retrieval |
+| `unbidden_probe` / `manifest` / `mind_model_updates` | 98-100% | |
+| `relationship_updates` / `memory_effects` | 88-89% | |
+| `remember_lines` | 78% of eligible beats | |
+| `intent_ops` | 79% | |
+| salience | always, **compressed** — p10-p90 spread 0.27, 70% of rows in 0.6-0.8 | |
+| `encoding_valence` | 20.7% overall; 2 of 37 banks ever record a non-zero one | `NOT NULL DEFAULT 0.0` hides the rest |
+| importance revision | **0.14%** (9 of 6,480) | read one field; the field that answers it fires 89% |
+| disputes | **0.00%** (0 of 181 eligible beats) | reachable, never occasioned |
+| **projects** | **0 of 14 banks have ever held one** | the tier was unreachable from empty |
+| `initial_parallel_reactors` | never, until 6.9.1 | |
+| `BehaviorController` | never, until 6.9 | |
+| `ActionStage` (§1.13) | never | |
+
+**No mechanism should be enriched before its fire rate is known.** Three of
+these were assumed live and were not; one was argued dead and is load-bearing;
+one was an entire tier of psychology, with the longest single block in the
+character prompt behind it, that had never once run.
+
+#### What was built
+
+**Phase 0 — `tools/fire_rates.py`.** Per-mechanism fire rates over the corpus,
+`--last N` per chat, `--chat`, `--json`. Read-only; opens the database
+`mode=ro` so it is safe against a live `engine.db`.
+
+Its whole discipline is the DENOMINATOR. `memory_disputes` measured against
+every memory row reads 0 of 6,480 — a number that sounds catastrophic and
+means nothing, because the field did not exist for most of that corpus.
+Measured against the beats that could have carried one it reads 0 of 181,
+beside a sibling introduced in the same commit, on the same 181 results,
+firing 78%. That second pair is a diagnosis. A mechanism with no opportunities
+reports `no chances`, never 0%. Tests: `tests/test_fire_rates.py`.
+
+It found the dead project tier on its first run.
+
+**Phase 1 — salience respacing, and the fix that was nearly a weight
+increase.** `tools/salience_replay.py` replays real recall against the real
+bank with the term live, deleted, and spread. It needs no embedding provider:
+a probe's own stored vector is the query and the turn cutoff is the beat it
+formed on, so each probe is an honest "what did this mind have to hand", and
+it copies the database first because `search_memories` bumps `access_count`.
+
+270 probes, top-16 membership moved:
+
+| arm | moved |
+|---|---|
+| the term deleted entirely | 35.2% |
+| percentile-normalised to [0,1] | 59.6% |
+| stretched 3x about the mean | 47.0% |
+| respaced inside the bank's own range | **15.2%** |
+
+The term was never silent, and **both planned fixes moved retrieval more than
+deleting the term did** — values occupy a 0.27-wide band, so mapping them onto
+[0,1] multiplies this term's influence by ~3.7 while reordering nothing. A
+weight change wearing the word "normalisation". What shipped is
+`memory._rank_normalized_importance`: rank-normalise inside the visible rows'
+own p10-p90, so ordering and influence budget both hold and only spacing
+moves. The defect it fixes is that discrimination currently depends on how the
+minting model happened to spread its numbers that day. Tests:
+`tests/test_salience_respacing.py`.
+
+**Phase 2a — disputes are reachable; they were never asked for properly.**
+`tests/test_dispute_reachability.py` builds the occasion the corpus never
+produced — a stranger remembered as kind, seen this beat picking a pocket —
+and walks a model-shaped dispute through schema coercion, citation grounding,
+the commit collector, `record_dispute`, and the projection that hands the
+re-reading back next beat. Every stage holds, including the three refusals: it
+cannot reach another mind's memory, cannot locate one never delivered, and
+never edits what it re-reads.
+
+So 0/181 is an absence of occasions, and the prompt was the other half. The
+instruction was two prohibitions and one abstract permission, next to
+`memory_effects` — which fires 89% and names four concrete occasions. CLAUDE.md
+records the same shape twice from the maze arms: bare prohibitions invert. It
+now names five occasions (a disguise, a staged kindness, a lie, the wrong
+person, an arranged scene) and keeps both constraints.
+
+**Phase 2b — importance was reading the rarest field a character emits.**
+Measured over the 83 results that could supply any candidate signal:
+
+| signal | fires |
+|---|---|
+| `mind_model_updates` evidence citing a stored memory | 6 of 83 |
+| `belief_updates` evidence citing a stored memory | 1 of 83 |
+| `memory_effects`, disposition `integrated` | **74 of 83** |
+
+`_cited_memory_ids` read only the first. It now reads all three;
+`resisted`/`dismissed` still do not count, and `only_unrevised=True` still
+holds each memory to one lift for its whole life, so this widens the
+population that can be lifted once, never the amount. Tests:
+`tests/test_importance_signal.py`.
+
+**Phase 2c — the project tier could not be entered from empty.** One condition
+written twice: `affect.project_boundary` opened `if not projects: return None`,
+and the payload guarded `if isinstance(_preview, dict) and
+_self.get("projects")`. The prompt names the review beat as the occasion to
+emit `project_ops` — and the review beat required a project. §2.1's rule from a
+new direction: there the payload made the asked-for thing harder to reach, here
+it withholds the occasion entirely, and no prompt argues with a key that is
+never present. Arrival still needs a project to arrive at; a task closing and
+the scene or frame changing no longer do. Tests:
+`tests/test_project_tier_reachable.py`.
+
+**Phase 3 — capacity as an authored spectrum.** `psychology.capacity`, one of
+`narrow / focused / ordinary / broad / wide`, scaling the want and intention
+caps (1/2 through 5/6) and narrowed one further by cognitive absorption. The
+want cap binds 79.6% of live banks at mean 2.65 — not a safety valve, the shape
+of every character's attention, authored once by whoever picked 3. Precedent:
+`theory_of_mind.sheet_capacity`.
+
+Projects stay off the ladder deliberately: `PROJECT_CAP` is a DRAMATIC limit,
+and a character allowed six projects has lost the displacement rule that makes
+one mean anything.
+
+`ordinary` is exactly the pair that shipped, and unset is stored as `""` rather
+than backfilled — the first version backfilled `ordinary`, which made "the
+author chose the middle" and "nobody has seen this field" the same value and
+silently killed the import warning written to prevent exactly that. The
+character is told its own ceiling (`self.attention`) rather than having wants
+culled without being told the decision existed. Editor control included. Tests:
+`tests/test_attentional_capacity.py`.
+
+**Phase 4a — `remember_lines` measured, and NOT gated.**
+`tools/remember_lines.py`, over 1,633 turns and 146 marks:
+
+| | |
+|---|---|
+| landed as a memory row | 125/146 (85.6%) |
+| the fixed phrase list had it too | **0/125 (0.0%)** |
+| only this character's judgement kept it | 125/125 |
+| retrieved later, kept by judgement | 38/125 (30.4%) |
+| retrieved later, every non-dialogue row | 587/6,326 (9.3%) |
+
+Zero overlap with the phrase list and 3.3x the baseline retrieval rate. A
+budget or novelty gate would throttle the highest-yield rows in the bank, so
+neither was built. Two things the measurement could not answer are recorded
+rather than guessed: `why` is present on 146 of 146 marks and so predicts
+nothing, and 21 marks matched no row. The discriminator needs no schema change
+— the phrase list is a pure function of the quote, so a kept line the list
+would have rejected is one only this character preserved. Tests:
+`tests/test_remember_lines_telemetry.py`.
+
+**Phase 4b — summary support sets.** `memory_summaries.support` (schema v25),
+one entry per clause: `{claim, support_refs, epistemic_origin}`. Derived
+host-side by content-word overlap against the window's own memories at
+consolidation — no model call, because an audit trail produced by the same kind
+of process it audits is not one — and scoped to the summary's own epistemic
+class, so a first-hand clause cannot be supported by hearsay. Refs are
+`event_key`s, so checkpoint rollback and branching need no remapping. An empty
+support set is the finding: the clause generalises, compresses, or was
+invented, and it is now countable. Tests: `tests/test_summary_support.py`.
+
+**Phase 5 — time travel, and the traveller who came back.**
+`tests/test_time_travel_memory.py` covers the five flagged shapes. One was
+broken: `is_memory_visible` granted a traveller continuity by checking the
+travellers list of the frame they are STANDING IN, and the present is the
+implicit frame with no row, synthesised by `get_frame(None)` with an empty
+travellers list. So the clause could never fire in the present — a character
+who visited the year 5000 and walked home could not recall one moment of it.
+Everything while standing there, nothing once back where they live.
+
+Fixed by also honouring the travellers list of the frame the memory was FORMED
+in. Safe because every caller arrives through `visible_memory_rows`, which has
+already filtered `char_id=?`: the only question this rule ever answers is
+whether a mind may reach its OWN experience. A native of the present is not a
+traveller of the future frame and still sees nothing.
+
+#### Cancelled by measurement
+
+**Importance saturation.** The predicted failure was a permanently-elevated
+tier accumulating over a long life. Importance is revised on 9 of 6,480
+memories; the monotonic ramp is not a risk because it does not run. The
+three-way split is not needed. What the measurement found instead became
+Phases 1 and 2b.
+
+**Spreading salience.** See Phase 1 — the planned fix moved retrieval more than
+deleting the term.
+
+**A budget or novelty gate on `remember_lines`.** See Phase 4a.
+
+**Dispute histories** stay deferred. The prompt fix is landed and unmeasured;
+the fire-rate harness is what will say whether disputes now happen at all, and
+a history is worth building when there is something to have a history of.
+
+#### Still open
+
+- `encoding_valence` is `NOT NULL DEFAULT 0.0`, so "recorded neutral" and
+  "never recorded" are the same stored value. A fire rate given up at schema
+  time. Only 2 of 37 banks have ever written a non-zero one.
+- Mood congruence blends encoded tone with incoming mood 75/25
+  (`memory._congruence_valence`). **Principled but unmeasurable**: 738 memories
+  carry both values, exactly 2 disagree in sign, and neither field has ever
+  gone below -0.05 in the banks that have the column. These stories are warm;
+  the "opposite feeling pushes down" half has never fired. Revisit with a story
+  that goes dark.
+- `character:<id>` parallel steps fire on 3 of 1,633 turns. Either the gate is
+  wrong or the branch is vestigial; nobody has asked which.
+- Whether the project tier now fires. Re-run `tools/fire_rates.py` after a
+  story or two and read `has ever held a project`.
+
+### 1.24 What the enclosure investigation found and did not fix
+
+From the same live story as the enclosure fixes (`Design.md`, "A body sealed
+inside another body"). These were observed in the same sweep, are real, and
+were left alone deliberately — each needs a decision rather than a repair.
+
+**One being, two names — now folded at merge.** *(landed)* The enabling
+condition behind five of the six defects fixed in that pass: a character can be
+registered cast AND present as a scene entity with its own id, with nothing
+joining the two records. `normalize_scene_subjects` now folds every
+subject-keyed ledger onto one spelling per being before anything resolves one
+ledger against another, so `==` is correct again because there is nothing left
+for it to be wrong about. `same_subject` stays as the floor for raw model
+output that never went through a merge.
+
+The scope was the hard part and getting it wrong was worse than the defect:
+the first version folded on identity alone and broke eleven tests, because
+`positions` legitimately keys objects, fixtures and unregistered presences by
+entity id and readers resolve them that way. Two rules keep it narrow — fold
+only when the canonical name is ALREADY live as a subject spelling elsewhere in
+the scene (the defect is two records for one being, not "ids ought to be
+names"), and an id differing from its name only by case is its own evidence and
+does not count. Ambiguity still folds nothing: two entities named "A Dalek" are
+two Daleks.
+
+**Body scale is not a perception input.** `hear_level` takes a volume, a
+barrier, a proximity and a vouched flag; it does not take a size. A body at
+0.05 scale shouting and a body at 1.0 shouting are the same event to the
+engine, and the same is true of what a tiny body can smell or be smelled at.
+`scales` is already in the scene and already gates contacts and containment, so
+the input exists; what does not exist is a defensible curve. Measure before
+picking one.
+
+**World pressure does not ask whether anyone can reach it.** Live, an
+"Unlatched window" pressure kept demanding a tick — `must_tick_this_beat` —
+while the only character who could have acted on it was sealed inside another
+body and had no sensory channel to the room at all. A pressure nobody can
+perceive or reach is not stalled, it is suspended, and forcing it to advance
+puts a beat's weight on something the scene cannot honour. The reachability
+test now exists (`enclosed_from_source`); nothing consumes it here yet.
+
+**An entity's state can go byte-identical while the prose names it.** Warned
+three times in this story: "this beat's prose names it, but its
+posture/description came through byte-identical". The warning is right and
+nothing acts on it. Whether that should be a repair, a re-ask, or left as
+telemetry is undecided.
+
+**A derived observation carries one channel for a compound sentence.** The
+re-derivation assigns a single `channel` per atom, so a sentence carrying both
+a sound and a scent ("breath comes in short gasps, the air thick with...") is
+filed under one of them and the other becomes unattributed. Minor, and the fix
+is either sentence splitting before classification or a multi-channel atom;
+both are more invasive than the defect.
+
+
+### 1.25 Every character call re-ingests 12,400 cacheable tokens, because a name sits at byte 32
+
+Measured 2026-08-03 while benchmarking nano-gpt subscription models. Not fixed:
+the fix is one line, and the evidence that it is WORTH making is incomplete in
+a specific way described below.
+
+**The defect.** `prompts.DEFAULT_PROMPTS["character"]` opens
+
+    "You are the decision process of {name}, not a narrator..."
+
+with `{name}` at **byte 32 of a 55,558-character prompt**. A provider caches a
+PREFIX — the hit runs from the start of the message to the first byte that
+differs — so two characters in the same beat share only the ~8 tokens before
+the name, and the other ~13,880 tokens of byte-identical contract are
+re-ingested cold, per character, per turn. Every other system prompt in the
+engine has zero template variables and is already maximally cacheable
+(`director_resolve` 13,794 tok, `perception` 5,885, `narrator` 5,488,
+`director_interpret` 4,205, `mapping_stage` 3,122). `variant_seed` is already
+last in every payload, so the nonce is not implicated.
+
+**Measured across 14 subscription models** (`tools/cache_probe.py`, two calls
+per arm: the same prompt as `Elyndra` then as `Hinami`, which is what a real
+multi-cast beat does). `relocated` moves the name clause to the end of the
+prompt; `split` leaves the wording untouched and sends the contract as its own
+message:
+
+| model | as-is | relocated | split |
+|---|---|---|---|
+| `zai-org/glm-4.7` | 1% | **99%** | **99%** |
+| `mistralai/mistral-large-3-675b` | 0% | **99%** | **99%** |
+| `google/gemma-4-26b-a4b-it` | 43% | **98%** | 0% |
+| `moonshotai/kimi-k2.5` | 0% | **98%** | 1% |
+| `moonshotai/kimi-k2.6` | 0% | 0% | **98%** |
+| `inclusionai/ling-3.0-flash` | 0% | 64% | 64% |
+| nemotron 550b / super-120b, `Qwen3-Next-80B`, `glm-5.2`, `qwen3.5-397b`, `deepseek-v4-flash` | 0% | 0% | 0% |
+
+**`as-is` is 0% on every model that caches at all.** Four recover 98–99% when
+the name moves. Live confirmation from a 10-turn run: overall cache hit rate
+**18.9%** (46,784 of 247,374 prompt tokens), with `character`, `director` and
+`narrator` calls all at **0** while `perception` — which fires 7x in seconds
+and stays warm — hit 5,440–5,696 per call.
+
+**Why it is not fixed.**
+
+1. **A cache hit is not a speed win, and may be a loss.** On
+   `gemma-4-26b-a4b-it` relocation took a call from **33.1s to 4.0s**. On
+   `kimi-k2.6` the 98%-cached arm ran **5.3s → 34.6s**, 6.5x SLOWER. `glm-4.7`
+   improved modestly (10.6s → 7.3s); `ling-3.0` got slower. Cache support,
+   cache benefit and raw latency are three independent properties, and only
+   the first has been measured properly. `tools/cache_latency.py` (cold call 1
+   vs warm calls 2-5, fixed output length) exists to settle it and has not been
+   run to completion.
+2. **There is no universal layout.** `kimi-k2.5` wants `relocated` and gets 1%
+   from `split`; `kimi-k2.6` is the exact inverse; `gemma` wants `relocated`
+   and gets 0% from `split`. Any fix has to be verified per model rather than
+   adopted as a general improvement.
+3. **Byte 32 of a system prompt is high-salience real estate.** "You are
+   {name}" opening the contract may be doing real work for character
+   adherence, and moving it is exactly the class of change CLAUDE.md warns
+   about: nothing errors, and a character reads subtly wrong fifty beats later.
+   `split` avoids this — same tokens, same order, only the message boundary
+   moves — which is why it is the preferred shape where it works.
+
+**What to do when this is picked up.** Run `tools/cache_latency.py` first. If
+warm calls are not reliably faster on the models actually in use, this entry
+closes as "measured, not worth it" and the prompt is left alone. If they are,
+prefer `split` over `relocated` (no wording change), verify per model, and
+A/B on a long story with `tools/stability_run.py` — a character-adherence
+regression will not show up in a test suite.
+
+**Related, unfixed:** caching is a property of the MODEL and the layout jointly,
+and nothing in the model-selection process accounts for it. `Qwen/Qwen3.6-35B-A3B`
+cached 0 of 188 live calls; `nex-agi/nex-n2-pro` cached 63 of 79. On a pipeline
+this prefill-dominated (27k-token director payloads), that may outweigh every
+latency difference measured in `docs/bench-2026-08-03/RESULTS.md`.
+
+### 1.26 Speech-channel smuggling — landed 2026-08-04
+
+Found in chat 62 (12 turns, character roles on `moonshotai/kimi-k2.6`
+non-thinking, Director on `x-ai/grok-4.20`). A character wrote stage directions
+into the `text` of its speech elements, so body movements were delivered as
+SOUND: lost to a listener who could not hear, ground into fragments by
+muffling, and — the one that matters — narrated by ear to a listener who could
+hear but not see. Flow, not knowledge; the person touched would have felt it.
+
+`agents.common.split_stage_directions` excises the span in `norm_sequence` and
+re-files it as the action element it should have been, before the speech it was
+buried in, inheriting that line's concealment. Full record in `CHANGELOG.md`
+§ alpha 7.0; tests in `tests/test_speech_channel_smuggling.py`. It also closed
+a second symptom that looked unrelated: the Director re-rendering the stage
+direction as prose, which no longer matched the declaration, so the
+verbatim-speech guard dropped the line as invented on 7 of 12 turns against 7
+of 1,715 corpus-wide.
+
+**Not measured yet:** whether the promoted actions change how often the
+Director ends a beat. Every one arrives with `commitment` classified from its
+own text, and `_requires_director_resolution` reads that field (see alpha
+6.9.1). A stage direction reading as contestable would end beats that used to
+continue. Re-run `tools/fire_rates.py` after a story or two.
+
+### 1.27 Residuals from the speech-channel investigation
+
+Found in the same pass, none of them fixed.
+
+- The stored `world.scene` attire blob accumulates superseded derived notes
+  (`['bare at the head, groin, legs', 'bare at the head', 'bare at the groin',
+  'bare at the legs']` on one body). Inert at runtime — every reader passes
+  through `attire.rederive_entry`, which returns the first note alone — but the
+  blob is what archives, branches and checkpoints carry, so a consumer that
+  reads it directly gets four mutually contradictory statements about one body.
+  Fix is to rederive on the WRITE path as well as the read path.
+- `manner` on a `contacts` row is free text with no engine semantics, so a
+  contact describing one body partly inside another does not populate
+  `contained` and none of the §1.24 enclosure-direction work fires on it.
+  Whether it should is a design question — partial containment is not the same
+  as being sealed inside something — but the two are currently unrelated code
+  paths that describe overlapping physical situations.
+- Two `remember_lines` were dropped whole across 12 turns because the character
+  cited event ids that do not exist. The guard is right to drop an ungrounded
+  citation; the cost is that the line the character chose to keep is discarded
+  rather than salvaged with its citation stripped. Given Phase 4a measured
+  these as the highest-yield rows in the bank (3.3x baseline retrieval), losing
+  one to a malformed reference is expensive.
+- `intent 'ia2'/'ia3': already at full progress, nothing gained` repeated on
+  three consecutive turns, escalating to `stalled ... satisfy, abandon or
+  re-route it`. The intention ledger has no way to retire an intent the
+  character keeps re-serving at ceiling, so the warning fires forever and the
+  character keeps spending declarations on it.
+
 
 ## 2. Roadmap
 

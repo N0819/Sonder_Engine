@@ -1,0 +1,28 @@
+step mapping_stage   one door opened, everything past it invented
+
+  ibm-granite/granite-4.1-8b
+        ! parse: LLM returned invalid JSON: Expecting value at position 0
+        rooms 0 (desc 0ch, anchors 0, exits 0 [0 barriered, 0 directed], exposure 0)  entities 0 (0 described, 0 stateful)  grounded 0/10
+
+  mistralai/ministral-14b-instruct-2512
+        rooms 0 (desc 0ch, anchors 0, exits 0 [0 barriered, 0 directed], exposure 0)  entities 0 (0 described, 0 stateful)  grounded 0/10
+        rooms 5 (desc 304ch, anchors 14, exits 9 [6 barriered, 7 directed], exposure 0)  entities 0 (0 described, 0 stateful)  grounded 6/10  OVERBUILT +3
+
+  qwen3-coder-30b-a3b-instruct
+        rooms 1 (desc 150ch, anchors 0, exits 1 [1 barriered, 1 directed], exposure 0)  entities 0 (0 described, 0 stateful)  grounded 3/10
+        rooms 2 (desc 129ch, anchors 2, exits 3 [3 barriered, 3 directed], exposure 0)  entities 0 (0 described, 0 stateful)  grounded 3/10
+
+  nex-agi/nex-n2-pro
+        rooms 1 (desc 274ch, anchors 3, exits 1 [1 barriered, 1 directed], exposure 0)  entities 3 (3 described, 0 stateful)  grounded 7/10
+        rooms 1 (desc 165ch, anchors 2, exits 1 [1 barriered, 1 directed], exposure 0)  entities 0 (0 described, 0 stateful)  grounded 3/10
+
+  Qwen/Qwen3.6-35B-A3B
+        rooms 1 (desc 177ch, anchors 2, exits 1 [1 barriered, 1 directed], exposure 0)  entities 0 (0 described, 0 stateful)  grounded 4/10
+        rooms 1 (desc 268ch, anchors 2, exits 1 [1 barriered, 1 directed], exposure 0)  entities 0 (0 described, 0 stateful)  grounded 4/10
+
+=== world-building depth (usable structure per reply) ===
+    18.8   rooms 2.5  anchors 7.0  barriered exits 3.0  entities 0.0  grounded 3.0/10   26.2s   mistralai/ministral-14b-instruct-2512
+    14.9   rooms 1.0  anchors 2.5  barriered exits 1.0  entities 1.5  grounded 5.0/10    7.4s   nex-agi/nex-n2-pro
+    10.7   rooms 1.0  anchors 2.0  barriered exits 1.0  entities 0.0  grounded 4.0/10    3.5s   Qwen/Qwen3.6-35B-A3B
+    10.4   rooms 1.5  anchors 1.0  barriered exits 2.0  entities 0.0  grounded 3.0/10    8.8s   qwen3-coder-30b-a3b-instruct
+     0.0   rooms 0.0  anchors 0.0  barriered exits 0.0  entities 0.0  grounded 0.0/10   14.4s   ibm-granite/granite-4.1-8b

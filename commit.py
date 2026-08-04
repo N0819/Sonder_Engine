@@ -4312,21 +4312,58 @@ def _cited_memory_ids(own_result):
     memory's `event_key` (`_stable_event_key`), and all five distinct ones
     emitted in that run resolved to a real row. The format was there the whole
     time; the reader was looking for one nothing produces.
+
+    THE SAME MISTAKE, ONE LAYER UP. Having fixed the id format, this still read
+    a single field, and measured over the beats that could have supplied any of
+    them (`tools/fire_rates.py`):
+
+        mind_model_updates evidence citing a stored memory     6 of 83
+        belief_updates evidence citing a stored memory         1 of 83
+        memory_effects, disposition `integrated`              74 of 83
+
+    Importance has been revised on 9 of 6,460 memories, and that is why: the
+    one signal being read is the rarest thing a character emits, while the
+    field that says exactly what this function is looking for -- the character
+    stating that a recalled memory changed their recognition, appraisal, choice
+    or speech -- fires on 89% of eligible beats and was never consulted.
+
+    `memory_effects` is a STRONGER consequence signal than citation, not a
+    weaker one. Its prompt says in as many words: do not emit one merely
+    because a row was present. `resisted` and `dismissed` do not count -- a
+    memory the character pushed away did influence the beat, but recording that
+    as "turned out to matter" would make importance a measure of salience-at-
+    recall rather than of consequence. `only_unrevised=True` still holds the
+    ceiling at one lift per memory for its whole life, so widening the inputs
+    widens the population that can be lifted once, never the amount.
+
+    `belief_updates` is included because the docstring's first line has always
+    claimed it: a belief formed on a memory is the paradigm case. It contributes
+    almost nothing at present, which is a fact about how models cite, not a
+    reason to keep reading the wrong field.
     """
     if not isinstance(own_result, dict):
         return []
     out = set()
-    for update in own_result.get("mind_model_updates") or []:
-        if not isinstance(update, dict):
-            continue
-        for ref in update.get("evidence") or []:
-            if not isinstance(ref, dict):
+    for field in ("mind_model_updates", "belief_updates"):
+        for update in own_result.get(field) or []:
+            if not isinstance(update, dict):
                 continue
-            raw = str(ref.get("event_id") or "").strip()
-            # "current" and the turn:/character: handles name this beat or an
-            # act within it, not a stored memory.
-            if raw.startswith("event:"):
-                out.add(raw)
+            for ref in update.get("evidence") or []:
+                if not isinstance(ref, dict):
+                    continue
+                raw = str(ref.get("event_id") or "").strip()
+                # "current" and the turn:/character: handles name this beat or
+                # an act within it, not a stored memory.
+                if raw.startswith("event:"):
+                    out.add(raw)
+    for effect in own_result.get("memory_effects") or []:
+        if not isinstance(effect, dict):
+            continue
+        if str(effect.get("disposition") or "").strip() != "integrated":
+            continue
+        raw = str(effect.get("memory_ref") or "").strip()
+        if raw.startswith("event:"):
+            out.add(raw)
     return sorted(out)
 
 
@@ -4805,6 +4842,16 @@ def prepare_memory_commit(ctx, *, scene=None):
                 prev_as = st.get("active_state") if isinstance(st.get("active_state"), dict) else {}
                 interior = st.get("interior") if isinstance(st.get("interior"), dict) else {}
                 intentions = interior.get("intentions") or []
+                # How much this mind holds at once: the authored rung, narrowed
+                # by one at the top of the absorption range. Read off the body
+                # the character came INTO this beat with, because that is the
+                # state they decided it in -- the settled figure below governs
+                # the next beat, and using it here would apply a consequence of
+                # the beat to the deliberation that produced it.
+                _want_cap, _intent_cap = affect.capacity_caps(
+                    character_psychology(sh).get("capacity"),
+                    psychology_runtime.cognitive_absorption(
+                        prev_as.get("hedonic"), prev_as.get("stress")))
                 # Seed the character's AUTHORED standing intentions (from the
                 # card's initial_state.goals) into the live list, so the model
                 # can progress/close them via intent_ops and they persist and
@@ -4887,7 +4934,8 @@ def prepare_memory_commit(ctx, *, scene=None):
                     for i in intentions if isinstance(i, dict)
                 }
                 intentions, _iwarn = affect.apply_intent_ops(
-                    intentions, own_result.get("intent_ops") or [], turn.idx, _evidence_ok)
+                    intentions, own_result.get("intent_ops") or [], turn.idx,
+                    _evidence_ok, intent_cap=_intent_cap)
                 # OUTCOME FEEDBACK. Everything else in this engine revises a
                 # belief by CONTRADICTION -- another claim -- never by whether
                 # acting on it worked. So a character who concludes something,
@@ -4947,7 +4995,8 @@ def prepare_memory_commit(ctx, *, scene=None):
                                                   _probs)
 
                 wants, enacted, suppressed = affect.normalize_wants(
-                    asv.get("wants") or [], _steering | _project_ids)
+                    asv.get("wants") or [], _steering | _project_ids,
+                    want_cap=_want_cap)
 
                 appraisal_input = dict(own_result.get("appraisal") or {})
                 # Past experience may change familiarity, expectation and

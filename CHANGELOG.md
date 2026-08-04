@@ -1,5 +1,291 @@
 # Changelog
 
+## alpha 7.0 — What fires, what carries, and who anyone is
+
+Three investigations that turned out to share a shape. Each began by measuring
+something the code was assumed to do, and each found the assumption wrong in a
+way no test could have caught, because the mechanism was not failing — it was
+not running, or it was running down the wrong channel.
+
+### Fire rate before enrichment
+
+`tools/fire_rates.py` reports how often each mechanism actually fires, and its
+whole discipline is the DENOMINATOR: a rate measured against every row in the
+bank reads 0% for a field that did not exist for most of that corpus, which
+sounds catastrophic and means nothing. Measured against the beats that could
+have carried one, the same number is a diagnosis. A mechanism with no
+opportunities reports `no chances`, never 0%.
+
+It found that three mechanisms assumed live were not, one argued dead is the
+most active thing in retrieval, and one entire tier of psychology — with the
+longest single block in the character prompt behind it — had never once run in
+14 story banks. **No mechanism should be enriched before its fire rate is
+known.** The measurements cancelled two planned changes outright and inverted a
+third.
+
+- **Salience respacing, which was nearly a weight increase in disguise.**
+  Importance values occupy a 0.27-wide band, so both planned fixes —
+  normalising to [0,1], stretching about the mean — moved retrieval MORE than
+  deleting the term did (59.6% and 47.0% of top-16 membership, against 35.2%
+  for deletion). They multiply the term's influence roughly fourfold while
+  reordering nothing. What shipped instead rank-normalises inside the visible
+  rows' own p10–p90: ordering and influence budget both hold, only spacing
+  moves. The defect it actually fixes is that discrimination depended on how
+  the minting model happened to spread its numbers that day.
+- **Importance revision was reading the rarest field a character emits.** It
+  revised 9 memories in 6,480 because it looked only at mind-model evidence,
+  which cites a stored memory on 6 of 83 results — beside `memory_effects`
+  with disposition `integrated`, which fires on 74 of 83. It now reads all
+  three sources. `resisted`/`dismissed` still do not count, and each memory
+  still gets one lift for its whole life, so this widens what can be lifted
+  once, never the amount.
+- **Disputes were reachable and had never been occasioned.** 0 of 181 eligible
+  beats. Every stage of the machinery holds under test — including its three
+  refusals — so the absence was in the asking: two prohibitions and one
+  abstract permission, next to a sibling that names four concrete occasions and
+  fires 89%. Bare prohibitions invert; the clause now names five occasions and
+  keeps both constraints.
+- **The project tier could not be entered from empty.** One condition written
+  twice, in the boundary check and in the payload guard, each requiring a
+  project before the beat that creates one. No prompt argues with a key that is
+  never present.
+- **`remember_lines` was measured and deliberately NOT gated.** 85.6% of marks
+  land as memory rows, the fixed phrase list would have caught 0 of them, and
+  they are retrieved later at 3.3× the rate of an ordinary row. A budget or
+  novelty gate would have throttled the highest-yield rows in the bank.
+
+### Attention has a size, and summaries have receipts
+
+- **`psychology.capacity`** — `narrow / focused / ordinary / broad / wide`,
+  scaling the want and intention caps and narrowed one further by cognitive
+  absorption. The want cap binds 79.6% of live banks: not a safety valve, the
+  shape of every character's attention, previously authored once by whoever
+  picked the constant. Unset stores as `""` rather than backfilling `ordinary`,
+  because backfilling makes "the author chose the middle" and "nobody has seen
+  this field" the same value and silently kills the import warning. The
+  character is told its own ceiling rather than having wants culled without
+  knowing the decision existed. Projects stay off the ladder: that cap is a
+  DRAMATIC limit, and a character allowed six projects has lost the
+  displacement rule that makes one mean anything.
+- **Summary support sets** (`memory_summaries.support`, schema v25) — one entry
+  per clause, derived host-side by content-word overlap against the window's
+  own memories, scoped to the summary's epistemic class so a first-hand clause
+  cannot be supported by hearsay. No model call: an audit trail produced by the
+  same kind of process it audits is not one. An empty support set is the
+  finding — the clause generalises, compresses, or was invented — and it is now
+  countable.
+- **A traveller who came home could not remember the trip.** Memory visibility
+  checked the travellers list of the frame a character is STANDING IN, and the
+  present is the implicit frame, synthesised with an empty list. Everything
+  while standing in the future, nothing once back. Now the frame a memory was
+  FORMED in counts too. Safe because the caller has already filtered to the
+  character's own rows: the only question this rule answers is whether a mind
+  may reach its own experience.
+
+### Bodies inside bodies, and the identity a string comparison could not see
+
+Investigated from a live story in which one character is fully enclosed inside
+another. Six defects, and five of them are the same mistake: the engine lets a
+single being carry two names — a cast display name and a scene entity id — and
+then compares them with `==`.
+
+- **A position naming an entity is now repaired instead of accepted.**
+  `positions` maps a body to a ROOM. The Director periodically writes an entity
+  id there instead — "she is inside her" is a true sentence and an invalid
+  position — and nothing rejected it, because every spatial query resolves an
+  unknown room to its safe-closed default rather than raising. Measured: an
+  enclosed character sat at a room that does not exist for the rest of the
+  story, and the relation to the body around her came back
+  `{"same_room": false, "barrier": "separated", "distance": "far"}` — byte
+  identical to the relation for a window across the room. Nothing was broken
+  loudly. She was nowhere, and every channel read as distance.
+  `repair_entity_positions` places the body in that entity's room and records a
+  station AT it, which is the engine's existing vocabulary for being at a thing
+  rather than in it. Containment is never inferred from a mistyped position.
+- **Containment resolves its carrier through entity identity.**
+  `derive_contained_positions` looked the carrier up in `positions` by
+  spelling, so a record naming the entity id found nothing in a map keyed by
+  the display name — and did what it does when it cannot resolve: skipped,
+  silently, leaving the body wherever it happened to be.
+- **An enclosure expressed as a containment record is now an enclosure.**
+  A scene can say one body is inside another two ways — an interior room
+  parented to the body, or a `contained` record. `_body_interior_holder` read
+  only the first while `_hiding_holders` read both, so an occupant got every
+  consequence of being sealed away (concealment) and none of the compensations
+  (conducted sound, flooding scent). Scoped to bodies: a crate is not a mass,
+  and opaque is still not soundproof.
+- **Three directions where there had been one symmetric flag.** `concealed` is
+  true whenever either party is enclosed, so "the source is shut inside
+  something" and "the PERCEIVER is shut inside something" got the same answer.
+  The second is not a muffling at all. Now `inside_source` (perceiver within
+  this source — maximal, no barrier between you and a thing you are within),
+  `enclosed_from_source` (perceiver within something else — the room beyond is
+  gone, not faint), and `source_enclosed` (source within something the
+  perceiver is outside of — muffled outward). Reported from play as the scent
+  going faint exactly when it should have drowned out everything else, which is
+  precisely what one symmetric flag produces. A perceiver is never sealed away
+  from themselves, and two occupants of one enclosure perceive each other
+  normally.
+- **An enclosed actor no longer receives an outside shot of themselves.**
+  `observable` is the surface of an act as seen from outside, and the actor
+  normally gets it in their own view because people can see themselves doing
+  things. Sealed inside something, that surface describes the outside of the
+  enclosure and there is no channel from inside to it. Keyed on being enclosed,
+  never on darkness: proprioception is not sight, and suppressing an actor's
+  own conduct whenever the lights went out would be the worse error.
+- **A firewall that was failing open.** `_touch_only_sources` decides who a
+  perceiver can feel but not see, and its answer is what triggers
+  `_surface_translate_event` — which replaces the omniscient event wholesale,
+  because free prose cannot be security-matched. It compared names with
+  casefolded equality, so an enclosing character matched as `Elyndra` against a
+  holder recorded as `elyndra_succubus` was handed the unfiltered event, which
+  names the occupant's own interoceptive state in as many words. That is
+  AGENTS.md's own-body isolation rule breaking on a string comparison: a mind
+  may have its own body state and its own scrubbed observations, never another
+  mind's vitals. Every comparison in that function now goes through
+  `spatial.same_subject`.
+
+The generalisable rule, and the reason five of six share a cause: **an engine
+in which one being can carry two names cannot use `==` to decide who anybody
+is.** A firewall that fails this way fails open, and quietly — every symptom
+above reads as ordinary distance.
+
+### One being, one name
+
+`same_subject` closed those five and is a floor, not a fix: it only helps where
+somebody remembered to route through it, and every new comparison site is a
+fresh chance to write `==` again. A guard that must be remembered is a guard
+that will be forgotten.
+
+- **`spatial.normalize_scene_subjects` folds the data instead.** Run at merge,
+  before anything resolves one ledger against another, it leaves exactly one
+  key per being in `positions`, `scales`, `attire`, `stations`, `contained`
+  (keys and `in`), `contacts` (actor/target) and `following` — after which
+  plain equality is correct on stored data because there is nothing left for it
+  to be wrong about. `same_subject` stays for raw model output, which arrives
+  spelled however the model felt like spelling it.
+- **The scope was the hard part, and getting it wrong was worse than the
+  defect.** The first version folded on identity alone and broke eleven tests:
+  `positions` legitimately keys objects, fixtures and unregistered presences by
+  entity id, and readers resolve them that way, so renaming those stranded
+  carried lights, derived stations and destruction cascades. Two rules keep it
+  narrow — fold only where the canonical name is ALREADY live as a subject
+  spelling elsewhere in the scene, and an id differing from its name only by
+  case (`tardis` for `TARDIS`) is its own evidence and does not count.
+  Ambiguity folds nothing: two entities named "A Dalek" are two Daleks.
+
+### Conduct written into a spoken line no longer travels on the ear
+
+A character model began writing stage directions into the text of its speech
+elements — `"*leans in and sets a hand flat on her shoulder* You will want to
+sit down"` — instead of the separate action element the sequence contract
+already provides. Nothing forced it: one live beat declared a proper action
+element AND buried a second act in the speech in the same breath. The model
+reached for the convention it was trained on, and the prompt specified
+`observable` in detail while saying nothing about what may appear in `text`.
+
+The engine had no opinion about the contents of `text`, so everything in it was
+delivered as SOUND. **This is a flow defect, not a knowledge one** — the person
+being touched would feel it — but a body movement went through the whole
+audibility apparatus as though it were a spoken word, with four measured
+consequences:
+
+| listener | what happened to the movement |
+|---|---|
+| cannot hear | lost entirely — a hand on the shoulder is not audible |
+| muffled | ground into word fragments, asterisks and all |
+| hears, cannot see | **delivered by ear**: `You hear Reya say: "*leans in…*"` |
+| hears and sees | raw asterisks inside the quoted line the reader gets |
+
+The third row is the one that matters: `can_see=False` is the case this engine
+takes most care over — a voice through a door, in the dark, from inside an
+enclosure — and it was handing the listener a description of a movement they
+had no channel to, framed as something they heard.
+
+- **It escalated, because the speaker read it back.** 52% of the affected
+  chat's speech elements carried one against 0.9% across the rest of the
+  corpus, climbing turn over turn: each span was stored in the speaker's own
+  episodic memory as words she SAID and recalled on the next beat.
+- **It was also the cause of a second symptom.** `Dropped director-invented
+  dialogue line` fired on 7 of 12 turns there — against 7 of 1,715 turns
+  corpus-wide, all seven in that one chat. The Director, a different model,
+  re-rendered the stage direction as ordinary prose, which no longer matched
+  the declaration, so the verbatim-speech guard dropped the line as invented.
+  The narrator fidelity guard fired from the other side when the Narrator made
+  the same correction. Two guards were fighting the model over one string, and
+  on the turns they lost, the asterisks reached the reader.
+- **`norm_sequence` now excises the span and re-files it as the action element
+  it should have been**, placed immediately before the line it was buried in,
+  inheriting that line's concealment, and routed through the same mental-verb
+  check as any other action so `*thinks better of it*` stays imperceptible. A
+  one-word span is markdown emphasis, not a stage direction — the asterisks
+  come off and the word stays spoken. A promoted act the character also
+  declared properly is merged, because the live failure narrated one movement
+  twice in a single paragraph.
+- **`tone` was considered as the home for the vocal-manner spans and
+  rejected.** The delivery layer renders tone only when the listener can SEE
+  the speaker, so an audible laugh parked there is lost in the dark — the same
+  bug one layer down. Everything becomes conduct, and perception delivers it by
+  whatever channel the act actually engages, which is perception's job.
+- The prompt says so too, as the cheap half. The deterministic floor does not
+  depend on a model cooperating.
+
+Replayed against the 18 spans in the live chat: every one moved onto the action
+channel, ordering preserved, no speech element left carrying an asterisk.
+
+### The person being answered is not in the wave
+
+- The first wave rests on a claim: its members are answering the same thing and
+  none has seen another's response, because none exists yet. That holds when
+  everyone is reacting to the player. It is false when one member is answering
+  another — the answer is FOR the asker, who is the addressee rather than a
+  bystander, and the question already exists from the previous beat. Live: the
+  Doctor owed Tamamo an answer and was correctly queued first, but she was in
+  the same blind instant. Her evidence was "dim light... gravel... Hinami
+  stands perfectly still", with his answer nowhere in it, and she selected
+  "rephrase the dimensional question freshly to the Doctor"; given a second
+  round she then restated his own terms back at him. On the page: an answer,
+  then the question it had just answered, then the answer read back to the
+  person who gave it. Neither mind misbehaved — both acted correctly on
+  information that was wrong by construction. The asker now steps out of the
+  wave and speaks in the next round, keeping their place at the front of the
+  queue, so nobody loses a turn and only the order changes. Mutual debt breaks
+  on queue order rather than stalling the beat.
+- A deferred speaker can no longer be dropped by the beat ending around them.
+  `_next_speaker_candidates` looks for somebody NEW to bring in, and "no
+  eligible respondent" ended the beat without checking whether the queue still
+  held anyone — which would have stranded the asker deferred out of the wave,
+  the same failure the wave exists to prevent, one round later.
+
+### Also
+
+- **The firewall's purpose is now written down where agents will read it.**
+  `AGENTS.md` § Information boundaries and `Design.md` § What the firewall is
+  lead with the doctrine rather than the rules: it restricts the FLOW of
+  knowledge, not knowledge itself. A mind may know anything it has a channel
+  to; what it may not do is acquire a fact that reached it through no channel.
+  Three consequences, each previously got wrong somewhere in this repo —
+  inference is the product, not the risk; a leak is an engine failure, never a
+  model's; firewall integrity is an invariant, not a model-selection criterion.
+- **Model benchmarking, recorded rather than assumed** (`docs/bench-2026-08-03/`,
+  eleven findings and seventeen raw logs). The load-bearing one is
+  methodological: a small-payload benchmark does not predict real-contract
+  behaviour, and every pair re-tested against the engine's own prompt and
+  validator inverted — one by 12×. Also measured: narrator 42% and director 30%
+  of turn time against perception's 8% despite perception being the most
+  frequent call; a 26k-token character call, which disqualifies every
+  interactive-fiction finetune in the catalogue on context length alone; and
+  reasoning variants losing at every role except `character`, because the
+  engine computes the world-reasoning deterministically and asks the model for
+  a declaration.
+- **"You hear Elyndra says:"** — the delivery layer wrote the inflected verb
+  into a bare-infinitive frame, so every view of a speaker the perceiver could
+  not see carried broken English. 226 occurrences across 71 turns of the live
+  corpus, all of them in exactly the situations this engine cares most about: a
+  voice through a door, in the dark, from inside an enclosure. Now "You hear
+  Elyndra say:".
+
+
 ## alpha 6.9.1 — Someone is waiting on you
 
 - A nod no longer ends the beat. `_requires_director_resolution` ends the whole
@@ -1921,7 +2207,7 @@ pattern that produced almost every fix: state the fact, leave the choice.
   which narrated the act of half-hearing instead of delivering the percept, read
   badly in prose, and gave the narrator a stock phrase to echo. It now drops
   function words and keeps the stressed ones that actually carry
-  (`...climax... going... squeeze...`). Each surviving word is emitted as its own
+  (`...ledger... going... sink...`). Each surviving word is emitted as its own
   verbatim chunk, because `_scrub_invented_dialogue` validates a muffled line
   chunk-by-chunk against what was really said — a chunk stitched across
   punctuation would get the whole line dropped as invented.

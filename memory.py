@@ -1499,6 +1499,51 @@ _SUMMARY_RECALL_LIMIT = 2
 # rather than an emergent one.
 _MOOD_CONGRUENCE = 0.05
 
+# How much of a memory's emotional charge is the mood it was CARRIED INTO
+# versus the mood it was LEFT WITH. Two different real phenomena: the first is
+# state-dependent context (what you were feeling when you walked in), the
+# second is the memory's emotional tone (what it came to mean once appraised).
+#
+# Congruence read `valence` alone -- the incoming mood -- which inverts on the
+# case that matters most: walk into a celebration happy, discover a betrayal,
+# leave devastated, and the memory carries POSITIVE incoming charge. A
+# despairing character was then pushed away from recalling the betrayal.
+#
+# Weighted toward the encoded tone because that is what the memory is ABOUT,
+# with the incoming mood kept as real context rather than discarded.
+_ENCODED_SHARE = 0.75
+
+
+def _congruence_valence(mem) -> float:
+    """The emotional charge mood-congruence should match against.
+
+    Falls back to incoming valence when there is no encoded value, which is
+    not a rare path: `encoding_valence` is younger than most of the corpus and
+    is populated in only the two newest banks, so every older memory has 0.0
+    there and blending it in blind would silently halve their charge.
+
+    HONEST LIMIT: this is principled, not measured. Across the corpus only 738
+    memories carry both values and exactly 2 disagree in sign, and in the banks
+    where the column exists NEITHER field has ever gone below -0.05 -- these
+    stories are warm, so the "opposite feeling pushes down" half of congruence
+    has not once fired. The change cannot be wrong in a way the data would show,
+    and it cannot be shown to help either. Revisit with a story that goes dark.
+    """
+    incoming = float(mem.get("valence") if isinstance(mem, dict) else mem["valence"] or 0.0) \
+        if isinstance(mem, dict) else float(mem["valence"] or 0.0)
+    encoded = mem.get("encoding_valence") if isinstance(mem, dict) else mem["encoding_valence"]
+    try:
+        encoded = float(encoded or 0.0)
+    except (TypeError, ValueError):
+        encoded = 0.0
+    try:
+        incoming = float(incoming or 0.0)
+    except (TypeError, ValueError):
+        incoming = 0.0
+    if not encoded:
+        return incoming
+    return (_ENCODED_SHARE * encoded) + ((1.0 - _ENCODED_SHARE) * incoming)
+
 _MOOD_VALENCE = (
     (("afraid", "fear", "fearful", "terrified", "scared", "anxious", "dread",
       "panic", "angry", "furious", "rage", "resentful", "bitter", "grief",
@@ -1574,6 +1619,69 @@ def _warn_stranded_embeddings(chat_id, char_id, stranded, total, model_key):
 # between two comparably relevant memories without outranking what the beat is
 # actually about.
 _ASPECT_WEIGHT = 0.55
+
+
+def _rank_normalized_importance(memories):
+    """`effective_importance`, respaced across the rows this search can see.
+
+    Ordering is preserved exactly and the influence budget is unchanged; only
+    the GAPS move. What that fixes is measured (tools/salience_replay.py, 270
+    probes over the live corpus):
+
+    | arm                                   | top-16 membership moved |
+    |---------------------------------------|-------------------------|
+    | the term deleted entirely             | 35.2%                   |
+    | percentile-normalised to [0,1]        | 59.6%                   |
+    | stretched 3x about the mean           | 47.0%                   |
+    | respaced inside the bank's own range  | **15.2%**               |
+
+    Two things follow, and the second one killed the original plan. First the
+    term is NOT decoration -- deleting it moves a third of all top-16s, so the
+    compression was never making it silent. Second, both obvious fixes for the
+    compression (normalise to [0,1], rescale) move retrieval MORE than deleting
+    the term does: values live in a 0.27-wide band, so mapping them onto [0,1]
+    multiplies this term's influence by about 3.7 while changing not one
+    memory's rank order. That is a weight increase wearing the word
+    "normalisation", and it would let salience out-argue semantic match.
+
+    What is left once weight is held fixed is the real defect: how much
+    discrimination this term has depends on how the minting model happened to
+    spread its numbers that day. A bank minted at 0.70 +/- 0.03 gets a silent
+    salience term and a bank spanning 0.4-0.9 gets a loud one, for a reason
+    with nothing to do with the fiction. Rank-normalising inside the bank's own
+    p10-p90 makes the two behave alike.
+
+    Scoped to `memories` -- the rows already filtered for this character, this
+    frame and this turn cutoff -- so the comparison is against what this mind
+    can actually reach, never the whole table. Ties share a rank, so a bank
+    with no spread stays flat instead of being handed an ordering by row id;
+    a degenerate range collapses to the constant it already was. Callers
+    asking an ABSOLUTE question -- archiving ("did this ever matter"),
+    contrast selection -- keep reading `effective_importance` directly, which
+    is why this respacing lives here and not in that function.
+    """
+    values = [(effective_importance(mem), mid)
+              for mid, mem in memories.items()]
+    if len(values) < 2:
+        return {mid: v for v, mid in values}
+    values.sort()
+    ordered = [v for v, _mid in values]
+    lo = ordered[int(len(ordered) * 0.10)]
+    hi = ordered[int(len(ordered) * 0.90)]
+    if hi - lo <= 1e-9:
+        return {mid: v for v, mid in values}
+    out = {}
+    n = len(values)
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and values[j + 1][0] == values[i][0]:
+            j += 1
+        pct = ((i + j) / 2.0) / (n - 1)
+        for k in range(i, j + 1):
+            out[values[k][1]] = lo + pct * (hi - lo)
+        i = j + 1
+    return out
 
 
 def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
@@ -1685,12 +1793,13 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
         mood_axis = _mood_axis(query_text)
     known_turns = [m["turn_idx"] for m in memories.values() if m["turn_idx"] is not None]
     max_turn = current_turn_idx if current_turn_idx is not None else max(known_turns, default=0)
+    ranked_importance = _rank_normalized_importance(memories)
     for mid, mem in memories.items():
         # `importance`, not `salience`: how much it matters NOW, which is the
         # question ranking is asking. They are the same number until some
         # consequence revises one, so a bank that has never been touched ranks
         # exactly as it did.
-        fused[mid] += 0.08 * effective_importance(mem)
+        fused[mid] += 0.08 * ranked_importance[mid]
         fused[mid] += 0.04 * mem["confidence"]
         if mem["kind"] == "inference":
             # Belief-weighted recall. Confidence on an inference row is no
@@ -1712,7 +1821,7 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
             # Same-signed feeling pulls up, opposite pushes down, scaled by how
             # strongly the memory itself is charged. A neutral memory (valence
             # 0) is untouched either way.
-            congruent = mood_axis * float(mem["valence"] or 0.0)
+            congruent = mood_axis * _congruence_valence(mem)
             if congruent:
                 fused[mid] += _MOOD_CONGRUENCE * congruent
                 if congruent > 0 and "matches how you feel" not in reasons[mid]:
@@ -2135,11 +2244,111 @@ def search_memory_summaries(chat_id, char_id, query, k=3, *,
     return out
 
 
+_CLAUSE_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"'“‘])")
+_SUPPORT_STOPWORDS = frozenset(
+    "a an and are as at be been but by for from had has have he her him his i "
+    "in into is it its me my not of on or she that the their them then there "
+    "they this to was were what when where which who will with you your".split())
+# Two shared content words is coincidence in prose this dense; three is a
+# claim about the same thing. Calibrated against the live corpus rather than
+# guessed -- at two, every clause matched every memory in its own window.
+_SUPPORT_MIN_OVERLAP = 3
+_SUPPORT_MAX_REFS = 3
+
+
+def _content_words(text):
+    return {w for w in re.findall(r"[a-z0-9']{3,}", str(text or "").casefold())
+            if w not in _SUPPORT_STOPWORDS}
+
+
+def derive_summary_support(summary, memories):
+    """Which of this window's memories stand behind each clause of a summary.
+
+    Summaries move appraisal and speech. They are deliberately barred from
+    reinforcing durable belief -- which contains most of the danger -- but a
+    consolidator sentence that no memory supports still reaches the character
+    and currently leaves no trace when it does. This is the trace.
+
+    Derived HOST-SIDE, from the same window the consolidator was given, by
+    content-word overlap. Deliberately not a model call and deliberately not
+    embeddings: the question is "which stored rows does this sentence actually
+    talk about", a lexical question with a checkable answer, and an
+    audit trail produced by the same kind of process it audits is not one.
+
+    An empty `support_refs` is a RESULT, not a failure -- it says this clause
+    generalises, compresses across several rows, or was invented. The three
+    are not distinguished here, because distinguishing them is a judgement and
+    this is a measurement. What matters is that the clause is now countable.
+
+    Refs are `event_key`s rather than row ids, so they survive checkpoint
+    restore (delete-and-reinsert changes every id) and chat branching without
+    remapping -- the same reasoning that keeps disputes off id-keyed edges.
+    """
+    text = " ".join(str(summary or "").split())
+    if not text:
+        return []
+    rows = []
+    for mem in memories or []:
+        if not isinstance(mem, dict):
+            continue
+        ref = str(mem.get("event_key") or "").strip()
+        if not ref:
+            continue
+        words = _content_words(mem.get("gist")) | _content_words(mem.get("content"))
+        for phrase in (mem.get("key_phrases") or []):
+            words |= _content_words(phrase)
+        for entity in (mem.get("entities") or []):
+            words |= _content_words(entity)
+        rows.append((ref, words, mem.get("provenance")))
+    out = []
+    for clause in [c.strip() for c in _CLAUSE_SPLIT.split(text) if c.strip()]:
+        cw = _content_words(clause)
+        scored = sorted(
+            ((len(cw & words), ref, prov) for ref, words, prov in rows
+             if len(cw & words) >= _SUPPORT_MIN_OVERLAP),
+            key=lambda item: (-item[0], item[1]))[:_SUPPORT_MAX_REFS]
+        out.append({
+            "claim": clause,
+            "support_refs": [ref for _n, ref, _p in scored],
+            # The epistemic class of the STRONGEST supporter. A clause built
+            # on what the character was told must not read as something they
+            # saw, and with no supporter at all it is left blank rather than
+            # defaulted to first-hand -- the safest wrong answer here is the
+            # one that claims the least.
+            "epistemic_origin": (provenance_context_label(scored[0][2])
+                                 if scored else ""),
+        })
+    return out
+
+
+def summary_support(chat_id, char_id, scope="autobiographical", *,
+                    end_turn_idx=None):
+    """The stored per-clause support for a summary, or []. Never raises on a
+    malformed blob -- an unreadable audit trail must not make the summary it
+    describes unreadable."""
+    sql = ("SELECT support FROM memory_summaries WHERE chat_id=? AND char_id=? "
+           "AND scope=?")
+    params = [chat_id, char_id, scope]
+    if end_turn_idx is not None:
+        sql += " AND end_turn_idx=?"
+        params.append(int(end_turn_idx))
+    row = q(sql + " ORDER BY end_turn_idx DESC, id DESC", tuple(params), one=True)
+    if not row:
+        return []
+    try:
+        parsed = json.loads(row["support"] or "[]")
+    except (TypeError, ValueError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
 def save_memory_summary(chat_id, char_id, summary, *, scope="autobiographical", start_turn_idx=0,
                         end_turn_idx=0, key_phrases=None, unresolved_threads=None,
-                        embedding=None, embedding_model=None, embedding_dim=None):
+                        embedding=None, embedding_model=None, embedding_dim=None,
+                        support=None):
     key_phrases = key_phrases or []
     unresolved_threads = unresolved_threads or []
+    support = support or []
     # Checkpoint/export restore passes the previously stored vector back
     # in verbatim (raw bytes) so a restore never re-embeds -- every
     # normal caller omits it and embeds exactly as before.
@@ -2150,16 +2359,18 @@ def save_memory_summary(chat_id, char_id, summary, *, scope="autobiographical", 
         embedding_model = embedded.model_key
         embedding_dim = embedded.dimensions
     qi("""INSERT INTO memory_summaries(chat_id,char_id,scope,start_turn_idx,end_turn_idx,summary,
-        key_phrases,unresolved_threads,embedding,embedding_model,embedding_dim,updated)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+        key_phrases,unresolved_threads,support,embedding,embedding_model,embedding_dim,updated)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(chat_id,char_id,scope,end_turn_idx) DO UPDATE SET
         start_turn_idx=excluded.start_turn_idx, end_turn_idx=excluded.end_turn_idx,
         summary=excluded.summary, key_phrases=excluded.key_phrases,
-        unresolved_threads=excluded.unresolved_threads, embedding=excluded.embedding,
+        unresolved_threads=excluded.unresolved_threads, support=excluded.support,
+        embedding=excluded.embedding,
         embedding_model=excluded.embedding_model, embedding_dim=excluded.embedding_dim,
         updated=excluded.updated""",
        (chat_id, char_id, scope, start_turn_idx, end_turn_idx, summary or "",
         json.dumps(key_phrases, ensure_ascii=False), json.dumps(unresolved_threads, ensure_ascii=False),
+        json.dumps(support, ensure_ascii=False),
         embedding, embedding_model, embedding_dim, time.time()))
 
 
@@ -2751,7 +2962,13 @@ def _write_consolidated_window(chat_id, char_id, char_name, memories, previous_s
             key_phrases=(result.get("key_phrases") or []
                          if scope == SUMMARY_SCOPE_FIRSTHAND else []),
             unresolved_threads=(result.get("unresolved_threads") or []
-                                if scope == SUMMARY_SCOPE_FIRSTHAND else []))
+                                if scope == SUMMARY_SCOPE_FIRSTHAND else []),
+            # Scoped to the memories of THIS epistemic class: a first-hand
+            # clause supported by something the character was only told would
+            # be an audit trail that launders hearsay into experience.
+            support=derive_summary_support(
+                text, [m for m in memories
+                       if summary_scope_for(m.get("provenance")) == scope]))
     return result
 
 
@@ -3327,6 +3544,11 @@ def dump_memory_summaries(chat_id):
         {"char_id": r["char_id"], "scope": r["scope"], "start_turn_idx": r["start_turn_idx"],
          "end_turn_idx": r["end_turn_idx"], "summary": r["summary"],
          "key_phrases": _json_list(r["key_phrases"]), "unresolved_threads": _json_list(r["unresolved_threads"]),
+         # Per-clause support travels with the summary. Refs are event_keys,
+         # which restore preserves verbatim, so this needs no id remapping on
+         # branch, clone or checkpoint rollback -- the reason it was built out
+         # of event_keys rather than row ids.
+         "support": _json_list(r["support"]),
          "updated": r["updated"],
          # Same rationale as dump_chat_memories: carry the stored vector
          # so restore is verbatim instead of a provider round trip.
@@ -3370,6 +3592,7 @@ def apply_memory_summary_restore(chat_id, prepared):
                                 end_turn_idx=item.get("end_turn_idx", 0),
                                 key_phrases=item.get("key_phrases") or [],
                                 unresolved_threads=item.get("unresolved_threads") or [],
+                                support=item.get("support") or [],
                                 embedding=emb, embedding_model=model, embedding_dim=dim)
 
 def restore_memory_summaries(chat_id, summaries):

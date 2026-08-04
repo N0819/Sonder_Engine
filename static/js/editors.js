@@ -50,7 +50,7 @@ function defaultCharacterSheet() {
     initial_outfit: { regions: {} },
     simulation: { tier: "mid", temperature: 0.8, sampler: {} },
     embodiment: { senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", notes: "ordinary human senses" }], visible: { summary: "A person of unremarkable appearance.", build: "", face: "", hair: "", eyes: "", distinctive_features: [] }, latent: [], interoception: { acuity: 0.5, pain_sensitivity: 0.5, fatigue_sensitivity: 0.5, pleasure_sensitivity: 0.5 } },
-    psychology: { drive: { essence: "", expression: "", taboo: "" }, traits: [], values: [], self_model: { summary: "", protected_beliefs: [], pride_triggers: [], shame_triggers: [], beliefs: [] }, coping: { under_stress: [], default_conflict_style: "", strategies: [], recovery_supports: [] }, stress_profile: { baseline_reactivity: 0.5, recovery_rate: 0.5, overload_threshold: 0.8, attentional_style: "", somatic_signs: [] }, learning: { associations: [] } },
+    psychology: { drive: { essence: "", expression: "", taboo: "" }, capacity: "", traits: [], values: [], self_model: { summary: "", protected_beliefs: [], pride_triggers: [], shame_triggers: [], beliefs: [] }, coping: { under_stress: [], default_conflict_style: "", strategies: [], recovery_supports: [] }, stress_profile: { baseline_reactivity: 0.5, recovery_rate: 0.5, overload_threshold: 0.8, attentional_style: "", somatic_signs: [] }, learning: { associations: [] } },
     social: { voice: { register: "", cadence: "", verbosity: "natural", markers: [], notes: "" }, baseline_stances: { unknown_person: { trust: 0, warmth: 0, threat_sensitivity: 0 } } },
     competence: { abilities: [] },
     knowledge: { access_tags: ["common"], excluded_titles: [], public_history: "", private_history: [] },
@@ -266,6 +266,18 @@ function charEditor(c, options = {}) {
   f.drive_essence = fText("Drive — essence (the deepest thing they pursue/protect)", sheet.psychology?.drive?.essence);
   f.drive_expression = fText("Drive — expression (how it shows in ACTION, incl. their initiative)", sheet.psychology?.drive?.expression);
   f.drive_taboo = fText("Drive — taboo (the line they will not cross)", sheet.psychology?.drive?.taboo);
+  // How much this mind holds at once (affect.CAPACITY_LADDER). The blank
+  // option is stored blank on purpose: it behaves as "ordinary" everywhere,
+  // and keeping it distinguishable is what lets the import warning say the
+  // field was never authored rather than silently claiming the middle.
+  f.capacity = fSelect("Attentional capacity (wants / commitments held at once)", [
+    ["", "not set — ordinary (3 wants, 4 commitments)"],
+    ["narrow", "narrow — one thing at a time (1 / 2)"],
+    ["focused", "focused — a purpose and one pull against it (2 / 3)"],
+    ["ordinary", "ordinary — the human middle (3 / 4)"],
+    ["broad", "broad — keeps more in the air than most (4 / 5)"],
+    ["wide", "wide — several commitments live at once (5 / 6)"],
+  ], sheet.psychology?.capacity || "");
   f.traits = fTraits("Core traits", sheet.psychology?.traits);
   f.values = fValues("Core values", sheet.psychology?.values);
   f.self_summary = fArea("Self-model summary", sheet.psychology?.self_model?.summary, 3);
@@ -415,6 +427,7 @@ function charEditor(c, options = {}) {
           + "wants from it every beat. A blank drive makes the character passive."),
         fillPsychology,
         f.drive_essence.node, f.drive_expression.node, f.drive_taboo.node,
+        f.capacity.node,
         f.traits.node, f.values.node, f.self_summary.node, f.protected.node,
         f.pride.node, f.shame.node, f.beliefs.node, f.coping.node, f.conflict.node,
         f.coping_strategies.node, f.recovery_supports.node,
@@ -471,6 +484,7 @@ function charEditor(c, options = {}) {
             },
             psychology: {
               drive: { essence: f.drive_essence.read(), expression: f.drive_expression.read(), taboo: f.drive_taboo.read() },
+              capacity: f.capacity.read(),
               traits: f.traits.read(),
               values: f.values.read(),
               self_model: {

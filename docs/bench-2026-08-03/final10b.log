@@ -1,0 +1,268 @@
+applied fastest-reliable config (Qwen lead, ling fallback)
+{"ts": "2026-08-03 17:48:00,573", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=9708 user_tokens=0 response_tokens=3028 cached_tokens=0 cache_write_tokens=0 duration=29.12s success=True"}
+{"ts": "2026-08-03 17:48:05,653", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8449 user_tokens=0 response_tokens=120 cached_tokens=0 cache_write_tokens=0 duration=4.37s success=True"}
+{"ts": "2026-08-03 17:49:36,822", "level": "INFO", "msg": "llm_call role=character_bg model=Qwen/Qwen3.6-35B-A3B system_tokens=17561 user_tokens=0 response_tokens=8817 cached_tokens=0 cache_write_tokens=0 duration=90.36s success=True"}
+{"ts": "2026-08-03 17:50:28,748", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=26064 user_tokens=0 response_tokens=4644 cached_tokens=0 cache_write_tokens=0 duration=51.82s success=True"}
+{"ts": "2026-08-03 17:50:31,543", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8963 user_tokens=0 response_tokens=11 cached_tokens=0 cache_write_tokens=0 duration=2.48s success=True"}
+{"ts": "2026-08-03 17:50:31,766", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8997 user_tokens=0 response_tokens=21 cached_tokens=0 cache_write_tokens=0 duration=2.71s success=True"}
+{"ts": "2026-08-03 17:50:32,977", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9145 user_tokens=0 response_tokens=171 cached_tokens=0 cache_write_tokens=0 duration=3.91s success=True"}
+{"ts": "2026-08-03 17:50:34,154", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8977 user_tokens=0 response_tokens=263 cached_tokens=0 cache_write_tokens=0 duration=5.09s success=True"}
+{"ts": "2026-08-03 17:50:36,153", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8078 user_tokens=0 response_tokens=190 cached_tokens=0 cache_write_tokens=0 duration=4.61s success=True"}
+{"ts": "2026-08-03 17:50:36,315", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9047 user_tokens=0 response_tokens=221 cached_tokens=0 cache_write_tokens=0 duration=4.55s success=True"}
+{"ts": "2026-08-03 17:51:15,520", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6921 user_tokens=0 response_tokens=3131 cached_tokens=0 cache_write_tokens=0 duration=39.07s success=True"}
+{"ts": "2026-08-03 17:51:18,567", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6337 user_tokens=0 response_tokens=3470 cached_tokens=0 cache_write_tokens=0 duration=42.12s success=True"}
+{"ts": "2026-08-03 17:51:24,346", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6490 user_tokens=0 response_tokens=3902 cached_tokens=0 cache_write_tokens=0 duration=47.90s success=True"}
+{"ts": "2026-08-03 17:51:57,048", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6969 user_tokens=0 response_tokens=2962 cached_tokens=0 cache_write_tokens=0 duration=41.51s success=True"}
+{"ts": "2026-08-03 17:52:47,028", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6972 user_tokens=0 response_tokens=3595 cached_tokens=0 cache_write_tokens=0 duration=49.97s success=True"}
+{"ts": "2026-08-03 17:53:28,420", "level": "INFO", "msg": "llm_call role=utility model=Qwen/Qwen3.6-35B-A3B system_tokens=1385 user_tokens=0 response_tokens=3205 cached_tokens=0 cache_write_tokens=0 duration=40.39s success=True"}
+  turn  38   357.80s  warnings  12
+{"ts": "2026-08-03 17:54:06,300", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=10091 user_tokens=0 response_tokens=2785 cached_tokens=0 cache_write_tokens=0 duration=37.14s success=True"}
+{"ts": "2026-08-03 17:54:11,853", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8487 user_tokens=0 response_tokens=187 cached_tokens=0 cache_write_tokens=0 duration=4.86s success=True"}
+{"ts": "2026-08-03 17:55:14,715", "level": "INFO", "msg": "llm_call role=character_bg model=Qwen/Qwen3.6-35B-A3B system_tokens=19703 user_tokens=0 response_tokens=4605 cached_tokens=0 cache_write_tokens=0 duration=62.25s success=True"}
+{"ts": "2026-08-03 17:56:32,078", "level": "INFO", "msg": "llm_call role=character_bg model=Qwen/Qwen3.6-35B-A3B system_tokens=19869 user_tokens=0 response_tokens=5561 cached_tokens=0 cache_write_tokens=0 duration=77.35s success=True"}
+{"ts": "2026-08-03 17:57:20,830", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=26222 user_tokens=0 response_tokens=4306 cached_tokens=0 cache_write_tokens=0 duration=48.67s success=True"}
+{"ts": "2026-08-03 17:57:24,806", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8806 user_tokens=0 response_tokens=76 cached_tokens=0 cache_write_tokens=0 duration=3.77s success=True"}
+{"ts": "2026-08-03 17:57:24,809", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8790 user_tokens=0 response_tokens=114 cached_tokens=0 cache_write_tokens=0 duration=3.78s success=True"}
+{"ts": "2026-08-03 17:57:24,904", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8772 user_tokens=0 response_tokens=159 cached_tokens=0 cache_write_tokens=0 duration=3.87s success=True"}
+{"ts": "2026-08-03 17:57:25,684", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8954 user_tokens=0 response_tokens=123 cached_tokens=0 cache_write_tokens=0 duration=4.65s success=True"}
+{"ts": "2026-08-03 17:57:28,584", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=7893 user_tokens=0 response_tokens=103 cached_tokens=0 cache_write_tokens=0 duration=3.77s success=True"}
+{"ts": "2026-08-03 17:57:30,595", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8855 user_tokens=0 response_tokens=157 cached_tokens=0 cache_write_tokens=0 duration=5.78s success=True"}
+{"ts": "2026-08-03 17:57:56,026", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6648 user_tokens=0 response_tokens=2282 cached_tokens=0 cache_write_tokens=0 duration=25.34s success=True"}
+{"ts": "2026-08-03 17:58:01,445", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6450 user_tokens=0 response_tokens=2894 cached_tokens=0 cache_write_tokens=0 duration=30.75s success=True"}
+{"ts": "2026-08-03 17:58:06,759", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6475 user_tokens=0 response_tokens=2911 cached_tokens=0 cache_write_tokens=0 duration=36.06s success=True"}
+{"ts": "2026-08-03 17:58:14,529", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6696 user_tokens=0 response_tokens=1706 cached_tokens=0 cache_write_tokens=0 duration=18.50s success=True"}
+  turn  39   286.27s  warnings  18
+{"ts": "2026-08-03 17:58:45,182", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=10076 user_tokens=0 response_tokens=3265 cached_tokens=0 cache_write_tokens=0 duration=29.75s success=True"}
+{"ts": "2026-08-03 17:58:49,325", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8444 user_tokens=0 response_tokens=185 cached_tokens=0 cache_write_tokens=0 duration=3.60s success=True"}
+{"ts": "2026-08-03 17:59:18,733", "level": "INFO", "msg": "llm_call role=character_bg model=Qwen/Qwen3.6-35B-A3B system_tokens=20624 user_tokens=0 response_tokens=3431 cached_tokens=0 cache_write_tokens=0 duration=28.67s success=True"}
+{"ts": "2026-08-03 18:00:17,752", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=27215 user_tokens=0 response_tokens=5538 cached_tokens=0 cache_write_tokens=0 duration=58.93s success=True"}
+{"ts": "2026-08-03 18:01:00,416", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=5443 user_tokens=0 response_tokens=3437 cached_tokens=0 cache_write_tokens=0 duration=42.61s success=True"}
+{"ts": "2026-08-03 18:01:04,460", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8917 user_tokens=0 response_tokens=144 cached_tokens=0 cache_write_tokens=0 duration=3.86s success=True"}
+{"ts": "2026-08-03 18:01:04,845", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8974 user_tokens=0 response_tokens=182 cached_tokens=0 cache_write_tokens=0 duration=4.25s success=True"}
+{"ts": "2026-08-03 18:01:04,990", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9099 user_tokens=0 response_tokens=190 cached_tokens=0 cache_write_tokens=0 duration=4.38s success=True"}
+{"ts": "2026-08-03 18:01:05,362", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8951 user_tokens=0 response_tokens=214 cached_tokens=0 cache_write_tokens=0 duration=4.75s success=True"}
+{"ts": "2026-08-03 18:01:07,917", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8016 user_tokens=0 response_tokens=84 cached_tokens=0 cache_write_tokens=0 duration=3.45s success=True"}
+{"ts": "2026-08-03 18:01:08,404", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9016 user_tokens=0 response_tokens=154 cached_tokens=0 cache_write_tokens=0 duration=3.56s success=True"}
+{"ts": "2026-08-03 18:01:36,904", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6509 user_tokens=0 response_tokens=2467 cached_tokens=0 cache_write_tokens=0 duration=28.39s success=True"}
+{"ts": "2026-08-03 18:01:45,519", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6409 user_tokens=0 response_tokens=3368 cached_tokens=0 cache_write_tokens=0 duration=37.01s success=True"}
+{"ts": "2026-08-03 18:01:52,143", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6704 user_tokens=0 response_tokens=3977 cached_tokens=0 cache_write_tokens=0 duration=43.64s success=True"}
+{"ts": "2026-08-03 18:02:15,482", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6751 user_tokens=0 response_tokens=2802 cached_tokens=0 cache_write_tokens=0 duration=23.33s success=True"}
+  turn  40   241.21s  warnings  10
+{"ts": "2026-08-03 18:02:57,349", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=10171 user_tokens=0 response_tokens=4269 cached_tokens=0 cache_write_tokens=0 duration=40.65s success=True"}
+{"ts": "2026-08-03 18:03:03,505", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8479 user_tokens=0 response_tokens=142 cached_tokens=0 cache_write_tokens=0 duration=5.65s success=True"}
+{"ts": "2026-08-03 18:03:54,089", "level": "INFO", "msg": "llm_call role=character_bg model=Qwen/Qwen3.6-35B-A3B system_tokens=21313 user_tokens=0 response_tokens=5914 cached_tokens=0 cache_write_tokens=0 duration=49.97s success=True"}
+{"ts": "2026-08-03 18:04:47,066", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=26183 user_tokens=0 response_tokens=5523 cached_tokens=0 cache_write_tokens=0 duration=52.90s success=True"}
+{"ts": "2026-08-03 18:05:37,619", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=26366 user_tokens=0 response_tokens=4944 cached_tokens=0 cache_write_tokens=0 duration=50.55s success=True"}
+{"ts": "2026-08-03 18:05:41,468", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9158 user_tokens=0 response_tokens=109 cached_tokens=0 cache_write_tokens=0 duration=3.66s success=True"}
+{"ts": "2026-08-03 18:05:41,590", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9297 user_tokens=0 response_tokens=166 cached_tokens=0 cache_write_tokens=0 duration=3.77s success=True"}
+{"ts": "2026-08-03 18:05:43,265", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9115 user_tokens=0 response_tokens=253 cached_tokens=0 cache_write_tokens=0 duration=5.45s success=True"}
+{"ts": "2026-08-03 18:05:44,668", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9214 user_tokens=0 response_tokens=148 cached_tokens=0 cache_write_tokens=0 duration=3.07s success=True"}
+{"ts": "2026-08-03 18:05:45,192", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8214 user_tokens=0 response_tokens=221 cached_tokens=0 cache_write_tokens=0 duration=3.72s success=True"}
+{"ts": "2026-08-03 18:05:55,002", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9149 user_tokens=0 response_tokens=152 cached_tokens=0 cache_write_tokens=0 duration=17.19s success=True"}
+{"ts": "2026-08-03 18:06:24,884", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6347 user_tokens=0 response_tokens=2466 cached_tokens=0 cache_write_tokens=0 duration=29.77s success=True"}
+{"ts": "2026-08-03 18:06:51,570", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6499 user_tokens=0 response_tokens=5138 cached_tokens=0 cache_write_tokens=0 duration=56.44s success=True"}
+{"ts": "2026-08-03 18:06:55,176", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6389 user_tokens=0 response_tokens=5511 cached_tokens=0 cache_write_tokens=0 duration=60.06s success=True"}
+{"ts": "2026-08-03 18:07:01,326", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6396 user_tokens=0 response_tokens=3418 cached_tokens=0 cache_write_tokens=0 duration=36.44s success=True"}
+  turn  41   285.75s  warnings  16
+{"ts": "2026-08-03 18:07:35,236", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=10224 user_tokens=0 response_tokens=2719 cached_tokens=0 cache_write_tokens=0 duration=32.82s success=True"}
+{"ts": "2026-08-03 18:07:39,579", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8618 user_tokens=0 response_tokens=157 cached_tokens=0 cache_write_tokens=0 duration=3.87s success=True"}
+{"ts": "2026-08-03 18:08:32,348", "level": "INFO", "msg": "llm_call role=character_bg model=Qwen/Qwen3.6-35B-A3B system_tokens=22600 user_tokens=0 response_tokens=4261 cached_tokens=0 cache_write_tokens=0 duration=52.02s success=True"}
+{"ts": "2026-08-03 18:09:03,434", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=25858 user_tokens=0 response_tokens=2377 cached_tokens=0 cache_write_tokens=0 duration=31.00s success=True"}
+{"ts": "2026-08-03 18:09:07,766", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9203 user_tokens=0 response_tokens=144 cached_tokens=0 cache_write_tokens=0 duration=4.13s success=True"}
+{"ts": "2026-08-03 18:09:07,860", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9021 user_tokens=0 response_tokens=150 cached_tokens=0 cache_write_tokens=0 duration=4.22s success=True"}
+{"ts": "2026-08-03 18:09:08,073", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9060 user_tokens=0 response_tokens=161 cached_tokens=0 cache_write_tokens=0 duration=4.44s success=True"}
+{"ts": "2026-08-03 18:09:08,818", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9055 user_tokens=0 response_tokens=220 cached_tokens=0 cache_write_tokens=0 duration=5.18s success=True"}
+{"ts": "2026-08-03 18:09:11,644", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8120 user_tokens=0 response_tokens=132 cached_tokens=0 cache_write_tokens=0 duration=3.88s success=True"}
+{"ts": "2026-08-03 18:09:11,869", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9123 user_tokens=0 response_tokens=155 cached_tokens=0 cache_write_tokens=0 duration=4.01s success=True"}
+{"ts": "2026-08-03 18:09:55,331", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6490 user_tokens=0 response_tokens=3323 cached_tokens=0 cache_write_tokens=0 duration=43.35s success=True"}
+{"ts": "2026-08-03 18:10:04,155", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6483 user_tokens=0 response_tokens=4126 cached_tokens=0 cache_write_tokens=0 duration=52.19s success=True"}
+{"ts": "2026-08-03 18:10:07,757", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6467 user_tokens=0 response_tokens=4420 cached_tokens=0 cache_write_tokens=0 duration=55.78s success=True"}
+  turn  42   186.16s  warnings  19
+{"ts": "2026-08-03 18:10:53,242", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=10190 user_tokens=0 response_tokens=4133 cached_tokens=0 cache_write_tokens=0 duration=44.67s success=True"}
+{"ts": "2026-08-03 18:10:57,993", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8565 user_tokens=0 response_tokens=145 cached_tokens=0 cache_write_tokens=0 duration=3.94s success=True"}
+{"ts": "2026-08-03 18:12:09,437", "level": "INFO", "msg": "llm_call role=character_bg model=Qwen/Qwen3.6-35B-A3B system_tokens=23121 user_tokens=0 response_tokens=5757 cached_tokens=0 cache_write_tokens=0 duration=70.65s success=True"}
+{"ts": "2026-08-03 18:13:10,392", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=26242 user_tokens=0 response_tokens=4434 cached_tokens=0 cache_write_tokens=0 duration=60.87s success=True"}
+{"ts": "2026-08-03 18:14:45,096", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=26328 user_tokens=0 response_tokens=6938 cached_tokens=0 cache_write_tokens=0 duration=94.70s success=True"}
+{"ts": "2026-08-03 18:14:49,458", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9006 user_tokens=0 response_tokens=100 cached_tokens=0 cache_write_tokens=0 duration=4.16s success=True"}
+{"ts": "2026-08-03 18:14:49,514", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8866 user_tokens=0 response_tokens=115 cached_tokens=0 cache_write_tokens=0 duration=4.22s success=True"}
+{"ts": "2026-08-03 18:14:49,936", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8824 user_tokens=0 response_tokens=154 cached_tokens=0 cache_write_tokens=0 duration=4.63s success=True"}
+{"ts": "2026-08-03 18:14:53,005", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=7923 user_tokens=0 response_tokens=121 cached_tokens=0 cache_write_tokens=0 duration=3.54s success=True"}
+{"ts": "2026-08-03 18:14:53,094", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8932 user_tokens=0 response_tokens=120 cached_tokens=0 cache_write_tokens=0 duration=3.58s success=True"}
+{"ts": "2026-08-03 18:14:53,983", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8858 user_tokens=0 response_tokens=294 cached_tokens=0 cache_write_tokens=0 duration=8.69s success=True"}
+{"ts": "2026-08-03 18:15:14,727", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6581 user_tokens=0 response_tokens=1174 cached_tokens=0 cache_write_tokens=0 duration=20.65s success=True"}
+{"ts": "2026-08-03 18:15:57,492", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6625 user_tokens=0 response_tokens=4528 cached_tokens=0 cache_write_tokens=0 duration=63.43s success=True"}
+{"ts": "2026-08-03 18:16:05,552", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6643 user_tokens=0 response_tokens=5108 cached_tokens=0 cache_write_tokens=0 duration=71.48s success=True"}
+{"ts": "2026-08-03 18:16:48,200", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6701 user_tokens=0 response_tokens=3133 cached_tokens=0 cache_write_tokens=0 duration=50.70s success=True"}
+  turn  43   400.98s  warnings   9
+{"ts": "2026-08-03 18:25:25,377", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=10206 user_tokens=0 response_tokens=3640 cached_tokens=0 cache_write_tokens=0 duration=78.82s success=True"}
+{"ts": "2026-08-03 18:26:12,354", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=6509 user_tokens=0 response_tokens=1997 cached_tokens=0 cache_write_tokens=0 duration=46.97s success=True"}
+{"ts": "2026-08-03 18:26:26,308", "level": "ERROR", "msg": "Pipeline step 'director_interpret' failed"}
+Traceback (most recent call last):
+  File "/home/nathan/Documents/Sonder_Engine/agents/runtime.py", line 267, in work
+    holder["v"] = fn()
+                  ^^^^
+  File "/home/nathan/Documents/Sonder_Engine/agents/runtime.py", line 385, in <lambda>
+    yield from _stream_one(bus, key, lambda: compute_step(key, ctx, nonce), holder)
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nathan/Documents/Sonder_Engine/agents/runtime.py", line 222, in compute_step
+    return handler(ctx, nonce)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/nathan/Documents/Sonder_Engine/agents/director.py", line 424, in director_interpret
+    out = _agent_json(
+          ^^^^^^^^^^^^
+  File "/home/nathan/Documents/Sonder_Engine/agents/common.py", line 1009, in _agent_json
+    return complete_validated_json(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nathan/Documents/Sonder_Engine/llm_quality.py", line 284, in complete_validated_json
+    raise RuntimeError(
+RuntimeError: director_interpret: all providers failed (last provider error: HTTP 503: {"error":{"message":"The requested service is temporarily unavailable. Please try again later.","type":"service_unavailable","code":"all_fallbacks_failed"}}); validation: action: value is not a valid dict | model sent: {"kind":"mixed","sequence":[],"speech":"We should go before it gets any later.","speech_volume":"normal","private_thought":null,"action":"stands up","actions":[],"movement":null,"location_query":null,"flow":{"reactors":[],"addressed_to":[],"dialogue_mode":false,"needs_mapping":false,"mapping_request":"","dice":[],"tom_triggers":[],"resolution_flags":{"contested":false,"possible_reactors":[]},"authority_claims":[],"fiction_frame":{},"generation_requests":[]},"notes":""} | reasoning: …The user wants me to repair a JSON response produced by another model.
+The previous model produced `{}` which caused a validation error: "sequence is empty despite nonempty player input".
+The player input was: `"We should go before it gets any later," you say, standing.`
+This is a speech and action from the player character, Sarah Chen.
+I need to construct a valid JSON object matching the `require
+  turn  44   486.54s  warnings   0  FAILED RuntimeError: director_interpret: all providers failed (last provider error: HTT
+{"ts": "2026-08-03 18:27:35,301", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=10166 user_tokens=0 response_tokens=2651 cached_tokens=0 cache_write_tokens=0 duration=68.85s success=True"}
+{"ts": "2026-08-03 18:28:27,727", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=6469 user_tokens=0 response_tokens=2053 cached_tokens=0 cache_write_tokens=0 duration=52.42s success=True"}
+{"ts": "2026-08-03 18:28:41,247", "level": "ERROR", "msg": "Pipeline step 'director_interpret' failed"}
+Traceback (most recent call last):
+  File "/home/nathan/Documents/Sonder_Engine/agents/runtime.py", line 267, in work
+    holder["v"] = fn()
+                  ^^^^
+  File "/home/nathan/Documents/Sonder_Engine/agents/runtime.py", line 385, in <lambda>
+    yield from _stream_one(bus, key, lambda: compute_step(key, ctx, nonce), holder)
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nathan/Documents/Sonder_Engine/agents/runtime.py", line 222, in compute_step
+    return handler(ctx, nonce)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/nathan/Documents/Sonder_Engine/agents/director.py", line 424, in director_interpret
+    out = _agent_json(
+          ^^^^^^^^^^^^
+  File "/home/nathan/Documents/Sonder_Engine/agents/common.py", line 1009, in _agent_json
+    return complete_validated_json(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nathan/Documents/Sonder_Engine/llm_quality.py", line 284, in complete_validated_json
+    raise RuntimeError(
+RuntimeError: director_interpret: all providers failed (last provider error: HTTP 503: {"error":{"message":"The requested service is temporarily unavailable. Please try again later.","type":"service_unavailable","code":"all_fallbacks_failed"}}); validation: action: value is not a valid dict | model sent: {
+  "kind": "mixed",
+  "sequence": [
+    "You listen carefully at the door."
+  ],
+  "speech": null,
+  "speech_volume": "normal",
+  "private_thought": null,
+  "action": "You listen carefully at the door.",
+  "actions": [],
+  "movement": null,
+  "location_query": null,
+  "flow": {
+    "reactors": [],
+    "addressed_to": [],
+    "dialogue_mode": false,
+    "needs_mapping": false,
+    "mapping_request": "",
+    "dice": [],
+    "tom_triggers": [],
+    "resolution_flags": {
+      "contested": false,
+      "possible_reactors": []
+    },
+    "authority_claims": [],
+    "fiction_frame": {},
+    "genera | reasoning: …The user wants me to repair a JSON response produced by another model.
+The original request contains a complex simulation state (Star Trek TNG setting, Enterprise-D bridge, sickbay, Kalvoss cruiser).
+The previous raw output was `{}` and parsed output was `{}`.
+Validation error: "sequence is empty despite nonempty player input"
+Player input: "You listen carefully at the door."
+I need to generate a 
+  turn  45   134.92s  warnings   0  FAILED RuntimeError: director_interpret: all providers failed (last provider error: HTT
+{"ts": "2026-08-03 18:30:31,019", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=10100 user_tokens=0 response_tokens=3898 cached_tokens=0 cache_write_tokens=0 duration=109.64s success=True"}
+{"ts": "2026-08-03 18:30:39,095", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8482 user_tokens=0 response_tokens=196 cached_tokens=0 cache_write_tokens=0 duration=7.28s success=True"}
+{"ts": "2026-08-03 18:35:54,603", "level": "INFO", "msg": "llm_call role=character_bg model=Qwen/Qwen3.6-35B-A3B system_tokens=23688 user_tokens=0 response_tokens=7019 cached_tokens=0 cache_write_tokens=0 duration=314.69s success=True"}
+{"ts": "2026-08-03 18:36:54,185", "level": "INFO", "msg": "llm_call role=character_bg model=Qwen/Qwen3.6-35B-A3B system_tokens=23854 user_tokens=0 response_tokens=4959 cached_tokens=0 cache_write_tokens=0 duration=59.57s success=True"}
+{"ts": "2026-08-03 18:37:49,210", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=26111 user_tokens=0 response_tokens=7228 cached_tokens=0 cache_write_tokens=0 duration=54.93s success=True"}
+{"ts": "2026-08-03 18:38:20,245", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=26466 user_tokens=0 response_tokens=4972 cached_tokens=0 cache_write_tokens=0 duration=31.02s success=True"}
+{"ts": "2026-08-03 18:38:23,564", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9156 user_tokens=0 response_tokens=136 cached_tokens=0 cache_write_tokens=0 duration=3.12s success=True"}
+{"ts": "2026-08-03 18:38:24,226", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9143 user_tokens=0 response_tokens=202 cached_tokens=0 cache_write_tokens=0 duration=3.79s success=True"}
+{"ts": "2026-08-03 18:38:24,516", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9109 user_tokens=0 response_tokens=211 cached_tokens=0 cache_write_tokens=0 duration=4.07s success=True"}
+{"ts": "2026-08-03 18:38:24,609", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9291 user_tokens=0 response_tokens=179 cached_tokens=0 cache_write_tokens=0 duration=4.16s success=True"}
+{"ts": "2026-08-03 18:38:26,667", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=8208 user_tokens=0 response_tokens=159 cached_tokens=0 cache_write_tokens=0 duration=3.10s success=True"}
+{"ts": "2026-08-03 18:38:29,234", "level": "INFO", "msg": "llm_call role=perception model=Qwen/Qwen3.6-35B-A3B system_tokens=9208 user_tokens=0 response_tokens=365 cached_tokens=0 cache_write_tokens=0 duration=5.00s success=True"}
+{"ts": "2026-08-03 18:38:44,829", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6347 user_tokens=0 response_tokens=1670 cached_tokens=0 cache_write_tokens=0 duration=15.47s success=True"}
+{"ts": "2026-08-03 18:38:53,679", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6502 user_tokens=0 response_tokens=3413 cached_tokens=0 cache_write_tokens=0 duration=24.32s success=True"}
+{"ts": "2026-08-03 18:38:59,200", "level": "INFO", "msg": "llm_call role=narrator model=Qwen/Qwen3.6-35B-A3B system_tokens=6678 user_tokens=0 response_tokens=3746 cached_tokens=0 cache_write_tokens=0 duration=29.84s success=True"}
+{"ts": "2026-08-03 18:39:27,228", "level": "INFO", "msg": "llm_call role=utility model=Qwen/Qwen3.6-35B-A3B system_tokens=4718 user_tokens=0 response_tokens=3208 cached_tokens=0 cache_write_tokens=0 duration=24.54s success=True"}
+{"ts": "2026-08-03 18:39:33,804", "level": "INFO", "msg": "llm_call role=utility model=Qwen/Qwen3.6-35B-A3B system_tokens=3812 user_tokens=0 response_tokens=5000 cached_tokens=0 cache_write_tokens=0 duration=31.11s success=True"}
+  turn  46   652.57s  warnings  16
+{"ts": "2026-08-03 18:39:47,588", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=10120 user_tokens=0 response_tokens=2088 cached_tokens=0 cache_write_tokens=0 duration=13.64s success=True"}
+{"ts": "2026-08-03 18:40:10,695", "level": "INFO", "msg": "llm_call role=director model=Qwen/Qwen3.6-35B-A3B system_tokens=6423 user_tokens=0 response_tokens=3720 cached_tokens=0 cache_write_tokens=0 duration=23.10s success=True"}
+{"ts": "2026-08-03 18:40:24,008", "level": "ERROR", "msg": "Pipeline step 'director_interpret' failed"}
+Traceback (most recent call last):
+  File "/home/nathan/Documents/Sonder_Engine/agents/runtime.py", line 267, in work
+    holder["v"] = fn()
+                  ^^^^
+  File "/home/nathan/Documents/Sonder_Engine/agents/runtime.py", line 385, in <lambda>
+    yield from _stream_one(bus, key, lambda: compute_step(key, ctx, nonce), holder)
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nathan/Documents/Sonder_Engine/agents/runtime.py", line 222, in compute_step
+    return handler(ctx, nonce)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/nathan/Documents/Sonder_Engine/agents/director.py", line 424, in director_interpret
+    out = _agent_json(
+          ^^^^^^^^^^^^
+  File "/home/nathan/Documents/Sonder_Engine/agents/common.py", line 1009, in _agent_json
+    return complete_validated_json(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nathan/Documents/Sonder_Engine/llm_quality.py", line 284, in complete_validated_json
+    raise RuntimeError(
+RuntimeError: director_interpret: all providers failed (last provider error: HTTP 503: {"error":{"message":"The requested service is temporarily unavailable. Please try again later.","type":"service_unavailable","code":"all_fallbacks_failed"}}); validation: action: value is not a valid dict | model sent: {
+  "kind": "mixed",
+  "sequence": [
+    {
+      "actor": "sarah_chen",
+      "action": "Steps closer to the biobed, phaser still lowered but ready, and speaks firmly to Reyet Solan.",
+      "speech": "Whatever happens next, stay close to me."
+    },
+    {
+      "actor": "reyet_solan",
+      "action": "Meets Chen's gaze, nods once, and grips the edge of the biobed to steady himself.",
+      "speech": "Understood, Lieutenant. I'm ready."
+    },
+    {
+      "actor": "beverly_crusher",
+      "action": "Glances between Chen and Solan, then taps her combadge to relay the update to Picard.",
+      " | reasoning: …The user wants me to repair a JSON response produced by another model.
+The original request contains a complex state of a Star Trek TNG roleplay simulation.
+The previous model output was `{}`.
+The validation error is: `sequence is empty despite nonempty player input`.
+The player input is: `"Whatever happens next, stay close to me."`
+The player character is Sarah Chen.
+I need to generate a valid JS
+  turn  47    50.19s  warnings   0  FAILED RuntimeError: director_interpret: all providers failed (last provider error: HTT
+
+=== fastest-reliable ===
+  turns completed   7/10
+  median turn       286.27s
+  mean turn         344.39s
+  fastest / slowest 186.16s / 652.57s
+  total wall clock  3082.4s
+  warnings          100
+
+  where the time goes (total across completed turns)
+      810.8s   33.6%  interaction_loop
+      578.7s   24.0%  director_resolve
+      507.7s   21.1%  narrator
+      325.2s   13.5%  director_interpret
+       81.2s    3.4%  commit
+       69.2s    2.9%  perception_outcome
+       34.1s    1.4%  perception_act
+        3.7s    0.2%  mapping_quick
+        0.0s    0.0%  background_react
+        0.0s    0.0%  narrator_extra
+
+  model time by role (the number a config decision turns on)
+     seconds  share  calls   tok/s  fail  role / model
+      1185.6  35.1%     24    79.8     0  director / Qwen/Qwen3.6-35B-A3B
+      1073.5  31.7%     27    84.4     0  narrator / Qwen/Qwen3.6-35B-A3B
+       805.5  23.8%      9    62.5     0  character_bg / Qwen/Qwen3.6-35B-A3B
+       221.6   6.6%     49    35.5     0  perception / Qwen/Qwen3.6-35B-A3B
+        96.0   2.8%      3   118.8     0  utility / Qwen/Qwen3.6-35B-A3B

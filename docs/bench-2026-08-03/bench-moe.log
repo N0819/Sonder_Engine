@@ -1,0 +1,64 @@
+[1/20] qwen3.5-35b-a3b
+      short 7.584s  long 19.928s  64.8 tok/s  schema 0/2
+[2/20] Qwen/Qwen3.6-35B-A3B
+      short 1.689s  long 3.613s  270.8 tok/s  schema 2/2
+[3/20] Qwen/Qwen3-Next-80B-A3B-Instruct
+      short 1.625s  long 4.012s  161.7 tok/s  schema 2/2
+[4/20] nvidia/nemotron-3-nano-30b-a3b
+      short 5.264s  long 10.571s  150.8 tok/s  schema 0/2
+[5/20] inclusionai/ling-3.0-flash
+      short 1.909s  long 2.817s  359.2 tok/s  schema 2/2
+[6/20] inclusionai/ling-2.6-flash
+      short 2.178s  long 3.626s  226.5 tok/s  schema 2/2
+[7/20] google/gemma-4-26b-a4b-it
+      short 2.111s  long 5.016s  140.3 tok/s  schema 2/2
+[8/20] zai-org/glm-4.7-flash
+      short 1.745s  long 34.155s  13.7 tok/s  schema 2/2
+[9/20] stepfun-ai/step-3.5-flash
+      short 7.922s  long 14.548s  120.7 tok/s  schema 0/2
+[10/20] deepseek/deepseek-v4-flash-0731
+      short 4.311s  long 8.386s  105.3 tok/s  schema 2/2
+[11/20] xiaomi/mimo-v2.5
+      short 1.84s  long 9.163s  56.9 tok/s  schema 2/2
+[12/20] qwen/qwen3-30b-a3b
+      short 4.936s  long 10.193s  77.0 tok/s  schema 2/2
+[13/20] holo3-35b-a3b
+      short 1.534s  long 3.459s  179.2 tok/s  schema 2/2
+[14/20] nex-agi/nex-n2-mini
+      short 2.873s  long 9.096s  173.1 tok/s  schema 2/2
+[15/20] alibaba/qwen3.6-27b
+      FAILED  ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+[16/20] qwen3.5-27b
+      short 27.022s  long 36.833s  124.4 tok/s  schema 2/2
+[17/20] THUDM/GLM-4-9B-0414
+      short 3.179s  long 5.751s  125.6 tok/s  schema 2/2
+[18/20] zai-org/glm-latest
+      short 4.673s  long 13.447s  42.9 tok/s  schema 2/2
+[19/20] minimax/minimax-m2.7
+      short 6.032s  long 25.067s  47.8 tok/s  schema 2/2
+[20/20] gemma-4-12b-it
+      short 2.301s  long 11.787s  40.5 tok/s  schema 2/2
+
+=== ranked by short-call wall clock ===
+  short    long   tok/s   ovhd  schema  model
+   1.53    3.46   179.2   1.29 2/2      holo3-35b-a3b
+   1.62    4.01   161.7   1.37 2/2      Qwen/Qwen3-Next-80B-A3B-Instruct
+   1.69    3.61   270.8   1.52 2/2      Qwen/Qwen3.6-35B-A3B
+   1.75   34.16    13.7   0.00 2/2      zai-org/glm-4.7-flash
+   1.84    9.16    56.9   0.80 2/2      xiaomi/mimo-v2.5
+   1.91    2.82   359.2   1.72 2/2      inclusionai/ling-3.0-flash
+   2.11    5.02   140.3   1.74 2/2      google/gemma-4-26b-a4b-it
+   2.18    3.63   226.5   1.89 2/2      inclusionai/ling-2.6-flash
+   2.30   11.79    40.5   0.89 2/2      gemma-4-12b-it
+   2.87    9.10   173.1   2.17 2/2      nex-agi/nex-n2-mini
+   3.18    5.75   125.6   2.80 2/2      THUDM/GLM-4-9B-0414
+   4.31    8.39   105.3   3.77 2/2      deepseek/deepseek-v4-flash-0731
+   4.67   13.45    42.9   1.03 2/2      zai-org/glm-latest
+   4.94   10.19    77.0   0.73 2/2      qwen/qwen3-30b-a3b
+   5.26   10.57   150.8   2.61 0/2      nvidia/nemotron-3-nano-30b-a3b
+   6.03   25.07    47.8   0.00 2/2      minimax/minimax-m2.7
+   7.58   19.93    64.8   1.41 0/2      qwen3.5-35b-a3b
+   7.92   14.55   120.7   4.61 0/2      stepfun-ai/step-3.5-flash
+  27.02   36.83   124.4   8.37 2/2      qwen3.5-27b
+
+wrote /tmp/claude-1000/-home-nathan-Documents-Sonder-Engine/e0bbac89-dd32-496c-8ab8-c5787252d90e/scratchpad/bench-moe.json

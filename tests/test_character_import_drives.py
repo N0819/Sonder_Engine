@@ -55,6 +55,13 @@ def test_a_complete_sheet_warns_about_nothing():
         "taboo": "Will not abandon a post"}
     sheet["initial_state"]["goals"] = [{"goal": "Maintain the seal",
                                         "priority": 0.9}]
+    # Attentional capacity joined the same list of things a card can leave
+    # unauthored (affect.CAPACITY_LADDER). Unlike the two above it has a safe
+    # default -- the pair every story ran on before the dial existed -- but a
+    # sheet that never names it is still not a complete one, and the whole
+    # point of the warning is that nobody looks for a field they do not know
+    # is there. See tests/test_attentional_capacity.py.
+    sheet["psychology"]["capacity"] = "focused"
     assert character_import_warnings(sheet) == []
 
 

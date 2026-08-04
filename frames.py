@@ -126,10 +126,10 @@ def frame_ordinal(frame_id):
 def is_memory_visible(char_id, memory_frame_id, viewer_frame_id, memory_turn_idx=None):
     """A memory formed in memory_frame_id is visible to char_id currently
     being portrayed in viewer_frame_id iff it's diegetically at-or-before
-    the viewer's frame, OR char_id is a registered traveler of the
-    viewer's frame -- travelers keep full continuity of their OWN memory
-    ledger regardless of which era they're standing in; natives get the
-    ordinal cutoff.
+    the viewer's frame, OR char_id is a registered traveler of EITHER frame
+    -- travelers keep full continuity of their OWN memory ledger regardless
+    of which era they're standing in, and of which era they formed it in;
+    natives get the ordinal cutoff.
 
     Spatial frames are checked FIRST and can short-circuit the ordinal
     rule entirely -- see frames.py's module docstring for why the
@@ -176,8 +176,35 @@ def is_memory_visible(char_id, memory_frame_id, viewer_frame_id, memory_turn_idx
 
     if frame_ordinal(memory_frame_id) <= frame_ordinal(viewer_frame_id):
         return True
+    # A later era than the one they are standing in. Two ways that is still
+    # their own memory to reach, and BOTH are needed:
+    #
+    #   * they are a registered traveller of the frame they are standing in --
+    #     a time traveller in Edo still remembers their own later life;
+    #   * they are a registered traveller of the frame the memory was FORMED
+    #     in -- they were there, so they remember it, wherever they are now.
+    #
+    # The second used to be missing, and its absence was invisible because the
+    # first LOOKS like it covers the case. It does not: the present is the
+    # implicit frame, `frame_id is None`, with no row of its own, and
+    # `get_frame(None)` synthesises it with an empty travellers list. So the
+    # first clause can never fire in the present, and a character who visited
+    # the year 5000 and walked home could not recall one moment of it --
+    # everything while standing there, nothing once back where they live.
+    #
+    # Widening this is safe for a reason worth stating: every caller arrives
+    # through `visible_memory_rows`, which has already filtered `char_id=?`.
+    # The only question this function ever answers is whether a mind may reach
+    # its OWN experience, and "registered as having travelled there" is not a
+    # widening of anybody's information -- it is what having been there means.
+    # A native of the present is not a traveller of the future frame and still
+    # sees nothing, which is the firewall the whole feature exists for.
     viewer_frame = get_frame(viewer_frame_id)
-    return bool(viewer_frame and int(char_id) in (viewer_frame.get("travelers") or []))
+    if viewer_frame and int(char_id) in (viewer_frame.get("travelers") or []):
+        return True
+    memory_frame = get_frame(memory_frame_id)
+    return bool(memory_frame
+                and int(char_id) in (memory_frame.get("travelers") or []))
 
 
 def is_recognized_in_frame(char_id, frame_id):

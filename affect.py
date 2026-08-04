@@ -68,6 +68,78 @@ _WANT_CAP = 3
 _WANT_SIMILARITY = 0.4
 _INTENT_CAP = 4
 _INTENT_SIMILARITY = 0.4
+
+# --- Attentional capacity -------------------------------------------------
+#
+# How much this mind holds at once. `_WANT_CAP` and `_INTENT_CAP` were single
+# global constants, identical for every character ever written, and measured
+# over the live corpus the want cap BINDS: 78% of banks sit at it, mean 2.63 of
+# 3. That is not a safety valve catching an outlier, it is the shape of every
+# character's attention, authored once by whoever picked the number 3.
+#
+# The precedent is `theory_of_mind.sheet_capacity`, which scales the hypothesis
+# sheet 5 -> 1 with cognitive absorption on exactly this reasoning: not "your
+# beliefs are worth less" but "you can only keep so much in mind at once". This
+# extends the same idea from a transient state to an authored disposition -- a
+# single-minded character and a character who juggles are different people, and
+# the difference should be writable.
+#
+# `ordinary` IS today's pair, and it is the default everywhere, so an unset
+# capacity behaves exactly as every existing story already does. That matters
+# more here than usual: CLAUDE.md records twice that an unset psychology field
+# fails silently and surfaces fifty beats later as a character who behaves
+# wrongly for no visible reason. This dial cannot do that -- the worst an
+# unset one can be is what shipped -- and `importers.character_import_warnings`
+# still names it so an author knows the dial exists.
+#
+# PROJECTS ARE NOT ON THIS LADDER, deliberately. `PROJECT_CAP` is a DRAMATIC
+# limit, not a cognitive one: with two slots, taking on a third costs something
+# given up by name, with the reason stated. A "capable" character allowed six
+# projects does not become more capable, they lose the displacement rule that
+# makes a project mean anything at all.
+CAPACITY_LADDER = ("narrow", "focused", "ordinary", "broad", "wide")
+CAPACITY_DEFAULT = "ordinary"
+_CAPACITY_CAPS = {
+    "narrow":   (1, 2),
+    "focused":  (2, 3),
+    "ordinary": (_WANT_CAP, _INTENT_CAP),
+    "broad":    (4, 5),
+    "wide":     (5, 6),
+}
+CAPACITY_DESCRIPTIONS = {
+    "narrow": "one thing at a time; whatever is in front of them is the "
+              "whole world until it is finished",
+    "focused": "a single purpose and one thing pulling against it",
+    "ordinary": "the human middle -- a few live wants, a handful of "
+                "commitments in flight",
+    "broad": "keeps more in the air than most people can, and drops less",
+    "wide": "holds a great deal at once; several commitments stay live and "
+            "current without being written down",
+}
+
+
+def normalize_capacity(value):
+    """A ladder rung, or the default. Never raises and never invents a rung."""
+    key = str(value or "").strip().casefold()
+    return key if key in _CAPACITY_CAPS else CAPACITY_DEFAULT
+
+
+def capacity_caps(capacity=None, absorption=0.0):
+    """(want cap, intention cap) for this mind, right now.
+
+    Absorption narrows both by one at the top of the range, floored at one --
+    the same claim `sheet_capacity` makes about hypotheses, applied to what a
+    mind is trying to want and do. A body screaming for attention leaves less
+    room to hold anything else, and this is one step rather than the
+    hypothesis sheet's five because a want cap that collapses to a single
+    entry under pain would erase ambivalence exactly when it matters most.
+    """
+    wants, intents = _CAPACITY_CAPS[normalize_capacity(capacity)]
+    try:
+        pressed = 1 if float(absorption or 0.0) >= 0.8 else 0
+    except (TypeError, ValueError):
+        pressed = 0
+    return max(1, wants - pressed), max(1, intents - pressed)
 _INTENT_EVIDENCE_WINDOW = 3
 _INTENT_DORMANT_AFTER = 30
 # Public: agents/character.py surfaces an active intention as `fading` once
@@ -738,8 +810,12 @@ def resolve_affect(prev_affect, appraisal_out, baseline, turns_since, proposed):
 def _want_text(want):
     return str(want.get("want") or want.get("desire") or want.get("text") or "").strip()
 
-def normalize_wants(wants, valid_intention_ids):
+def normalize_wants(wants, valid_intention_ids, *, want_cap=None):
     """Deterministic floor for a character's declared wants.
+
+    `want_cap` is this character's attentional capacity (see `capacity_caps`);
+    omitted it is the `ordinary` rung, which is the constant this has always
+    used, so every existing caller and story is unchanged.
 
     Caps to 3, merges near-duplicates (claim_similarity >= 0.4, higher
     urgency wins), rewrites unknown `serves` (neither "drive" nor a known
@@ -798,10 +874,11 @@ def normalize_wants(wants, valid_intention_ids):
     kept = [w for w in kept
             if w["serves"] != "situational" or w is best_situational]
 
-    # cap to 3 by urgency, preserving original relative order of survivors
-    if len(kept) > _WANT_CAP:
+    # cap by urgency, preserving original relative order of survivors
+    cap = _WANT_CAP if want_cap is None else max(1, int(want_cap))
+    if len(kept) > cap:
         ranked = sorted(range(len(kept)), key=lambda i: (-kept[i]["urgency"], i))
-        keep_idx = set(ranked[:_WANT_CAP])
+        keep_idx = set(ranked[:cap])
         kept = [w for i, w in enumerate(kept) if i in keep_idx]
 
     if not kept:
@@ -920,8 +997,13 @@ def steering_intent_ids(intentions, turn_idx):
             out.add(str(intent.get("id")))
     return out
 
-def apply_intent_ops(intentions, ops, turn_idx, evidence_ok):
+def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
+                     intent_cap=None):
     """Apply a turn's intention operations under deterministic guards.
+
+    `intent_cap` is this character's attentional capacity (see
+    `capacity_caps`); omitted it is the `ordinary` rung, which is the constant
+    this has always used, so every existing caller and story is unchanged.
 
     Enforced floors: at most 4 active intentions; an `add` that is
     near-duplicate (claim_similarity >= 0.4) of an existing intent becomes
@@ -937,6 +1019,7 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok):
     result = [dict(i) for i in (intentions or []) if isinstance(i, dict)]
     warnings: list[str] = []
     turn_idx = int(_float_or(turn_idx))
+    _cap = _INTENT_CAP if intent_cap is None else max(1, int(intent_cap))
 
     for op in ops or []:
         if not isinstance(op, dict):
@@ -963,9 +1046,9 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok):
                     _revive_intent(match)
                 continue
             active = sum(1 for i in result if i.get("status") == "active")
-            if active >= _INTENT_CAP:
+            if active >= _cap:
                 warnings.append(
-                    f"intent add rejected (cap {_INTENT_CAP} active): {text!r}")
+                    f"intent add rejected (cap {_cap} active): {text!r}")
                 continue
             result.append({
                 "id": _next_intent_id(result),
@@ -1450,12 +1533,26 @@ def project_boundary(projects, intentions, before_status, new_room,
     (events carry no uniform salience field; memory salience is a different
     ledger). Detection is a fact; what the review MEANS stays the
     character's -- the flag invites project_ops, it never applies any.
+
+    A CHARACTER WITH NO PROJECTS STILL GETS BOUNDARIES. This used to open with
+    `if not projects: return None`, and combined with the payload's matching
+    guard it closed the tier permanently: the prompt names the review beat as
+    the occasion to emit project_ops, the review beat required a project, and
+    so no first project could ever be adopted. Measured over the live corpus,
+    0 of 14 banks that carry the field have ever held a project or a former one
+    -- an entire tier of psychology, with the longest single block in the
+    character prompt behind it, that has never once run.
+
+    Only the ARRIVAL reason genuinely needs projects, because it compares the
+    new room against what a held project names. A task closing and the scene
+    or frame changing are boundaries in their own right, and for a character
+    with nothing standing they are the moments the question is worth asking at
+    all: you have just finished something, or you are somewhere new. Nothing
+    here adopts anything -- it invites, exactly as it did before.
     """
-    if not projects:
-        return None
     reasons = []
     if new_room and str(new_room) != str(prev_room or ""):
-        for p in projects:
+        for p in projects or ():
             if not isinstance(p, dict):
                 continue
             proom = _last_named_room(str(p.get("project") or ""), named_rooms)

@@ -1,0 +1,19 @@
+step director_interpret  system 16821 chars  payload 927 chars
+
+  ibm-granite/granite-4.1-8b
+      part  1/2  13.59s  1523 out tok
+        ! parse: LLM returned invalid JSON: Expecting value at position 0
+  mistralai/ministral-14b-instruct-2512
+      PASS  2/2  16.11s  719 out tok
+  qwen3-coder-30b-a3b-instruct
+      PASS  2/2  7.76s  578 out tok
+  nex-agi/nex-n2-pro
+      PASS  2/2  7.88s  858 out tok
+  Qwen/Qwen3.6-35B-A3B
+      PASS  2/2  3.95s  785 out tok
+
+=== director_interpret: models that satisfy the real contract ===
+     3.95s     785 tok  Qwen/Qwen3.6-35B-A3B
+     7.76s     578 tok  qwen3-coder-30b-a3b-instruct
+     7.88s     858 tok  nex-agi/nex-n2-pro
+    16.11s     719 tok  mistralai/ministral-14b-instruct-2512

@@ -1,0 +1,5 @@
+8/8 ok  median 3.15s  {200: 8}  inclusionai/ling-3.0-flash
+8/8 ok  median 1.38s  {200: 8}  Qwen/Qwen3.6-35B-A3B
+7/8 ok  median 1.20s  {200: 7, 429: 1}  Qwen/Qwen3-Next-80B-A3B-Instruct
+3/8 ok  median 0.46s  {429: 5, 200: 3}  google/gemma-4-26b-a4b-it
+4/8 ok  median 1.44s  {429: 4, 200: 4}  deepseek/deepseek-v4-flash-0731

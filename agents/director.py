@@ -434,7 +434,47 @@ def director_interpret(ctx, nonce):
     out, warnings = validate_llm_output("director_interpret", out)
     ctx.warnings.extend(warnings)
 
-    norm_sequence(out)
+    norm_sequence(out, warn=lambda _w: ctx.add_warning("player input: %s" % _w))
+    # A SILENT BEAT DECLARES NOTHING.
+    #
+    # With no player input at all there is nothing to interpret, and anything
+    # in the sequence is the model supplying conduct on the player's behalf --
+    # the one thing the PLAYER AUTHORITY CONTRACT exists to forbid, arriving
+    # from the direction nobody guards because there was no declaration to
+    # compare against.
+    #
+    # Live, chat 59 t154. Empty input; interpret emitted
+    # speech "Kaa Sama Kaa Sama! You're cooking is simply to good to not
+    # indulge in." and action "steps inside the shrine and looks around at the
+    # familiar sight of home" -- both the player's turn-150 declaration,
+    # verbatim, four beats stale. Tamamo then thanked her for praise she had
+    # not given. Across the corpus 10 turns carry an empty input and 2 of them
+    # invented player speech, the other newly ("something reassuring").
+    #
+    # Deterministic, not a prompt request: an empty input is unambiguous, and
+    # the check costs nothing on every other beat. Silence remains a thing the
+    # player DID -- downstream still receives the beat, and
+    # `_player_silence_note` still tells characters about it. What it no longer
+    # receives is words.
+    if not str(ctx.input or "").strip():
+        _invented = [
+            e for e in (out.get("sequence") or [])
+            if isinstance(e, dict) and (e.get("text") or e.get("attempt"))
+        ]
+        if _invented or str(out.get("speech") or "").strip():
+            ctx.add_warning(
+                "director_interpret: player input was empty; discarded "
+                f"{len(_invented)} invented declaration(s) and any speech "
+                "attributed to the player")
+            ctx.tell_director(
+                "The player said and did nothing that beat. An empty input is "
+                "not a cue to restate what they last said -- their silence is "
+                "the whole declaration.")
+        out["sequence"] = []
+        out["speech"] = None
+        out["speech_volume"] = "normal"
+        out["action"] = None
+        out["actions"] = []
     # A speech element that swallowed the raw input's narration is repaired
     # BEFORE anything reads it: perception injects these texts verbatim as
     # dialogue, so narration left here is delivered to every hearer as words

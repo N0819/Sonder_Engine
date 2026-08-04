@@ -1,0 +1,13 @@
+step director_resolve   one door opened, everything past it invented
+
+  Qwen/Qwen3.6-35B-A3B
+        rooms 0 (desc 0ch, anchors 0, exits 0 [0 barriered, 0 directed], exposure 0)  entities 1 (1 described, 1 stateful)  grounded 1/10
+        rooms 0 (desc 0ch, anchors 0, exits 0 [0 barriered, 0 directed], exposure 0)  entities 1 (1 described, 1 stateful)  grounded 1/10
+
+  inclusionai/ling-3.0-flash
+        ! parse: LLM returned invalid JSON: Expecting property name enclosed in double 
+        rooms 0 (desc 0ch, anchors 0, exits 0 [0 barriered, 0 directed], exposure 0)  entities 0 (0 described, 0 stateful)  grounded 0/10
+
+=== world-building depth (usable structure per reply) ===
+     3.5   rooms 0.0  anchors 0.0  barriered exits 0.0  entities 1.0  grounded 1.0/10    5.0s   Qwen/Qwen3.6-35B-A3B
+     0.0   rooms 0.0  anchors 0.0  barriered exits 0.0  entities 0.0  grounded 0.0/10    4.2s   inclusionai/ling-3.0-flash

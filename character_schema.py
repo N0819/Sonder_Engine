@@ -196,6 +196,26 @@ class PsychologyProfile(_PsychologyModel):
         "somatic_signs": [],
     })
     learning: dict = Field(default_factory=lambda: {"associations": []})
+    # How much this mind holds at once: one of affect.CAPACITY_LADDER. Scales
+    # the want and intention caps, which were global constants identical for
+    # every character and which measurably BIND -- 78% of live banks sit at the
+    # want cap. Projects are deliberately NOT scaled by it (see PROJECT_CAP).
+    # `ordinary` is exactly the pair that shipped, so an unset one behaves as
+    # every existing story already does.
+    # Stored EMPTY when unauthored, exactly as `drive.essence` is, rather than
+    # backfilled to the default rung. Every reader resolves it through
+    # `affect.normalize_capacity`, so behaviour is `ordinary` either way -- but
+    # backfilling it here would make "the author chose the middle" and "nobody
+    # ever saw this field" the same stored value, and
+    # `importers.character_import_warnings` would then never fire on any card,
+    # which is the exact silent-failure shape this dial was written to avoid.
+    capacity: str = ""
+
+    @validator("capacity", pre=True)
+    def _capacity(cls, value):
+        import affect
+        key = str(value or "").strip().casefold()
+        return key if key in affect.CAPACITY_LADDER else ""
 
     @validator("traits", pre=True)
     def _traits(cls, value):
@@ -447,6 +467,11 @@ def default_character_data(name: str = "Unnamed") -> dict:
             # never emits. Read-only in the payload; backfilled on normalize for
             # older sheets via _deep_defaults.
             "drive": {"essence": "", "expression": "", "taboo": ""},
+            # Attentional capacity (affect.CAPACITY_LADDER). Left EMPTY when
+            # unauthored so an import warning can tell the difference; every
+            # reader resolves it through affect.normalize_capacity, whose
+            # default is the pair every existing story already ran on.
+            "capacity": "",
         },
         "social": {
             "voice": {

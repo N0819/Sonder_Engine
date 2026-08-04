@@ -40,6 +40,8 @@ their claims against source and the maintained guides before acting on them.
 | What the cast may do off screen | `scene.py` (`OFFSCREEN_LIFE_LADDER`, `normalize_offscreen_life`, `offscreen_life_allows`), `commit.py` (`prepare_mapping_commit` payload gate, `commit_mapping` write gate, `normalize_offscreen_events`) | `app.py` (`dlg_get`/`dlg_put`), `static/js/settings.js` dialogue panel, `mapping_commit` prompt, `docs/OFFSCREEN_LIFE_DESIGN.md`, `tests/test_offscreen_life.py` — the rungs are `schemas.BehaviorController`'s and must stay so; a second friendlier vocabulary would diverge and then disagree. A CEILING, never an instruction: nothing is obliged to act at any level, because cost must keep scaling with dramatic density rather than story length. Gate twice — withhold the dormant cast from the payload AND refuse the write, since a model can volunteer a field nobody asked for. An unreadable level falls to the DEFAULT, never to the floor. Do not give `character_agent` behaviour without the knowledge firewall in that document's decision 2: a ticking character advances on its OWN knowledge, never the player's position or recent acts |
 | Objective action resolution | `agents/director.py` (`director_resolve`) | `schemas.py`, `spatial.py`, `commit.py` — `state_diff.positions` for the PLAYER has two guards and they cover different beats: the passable-route backstop runs only when interpret declared a movement, and `_guard_approach_is_not_arrival` covers the case where it declared none but staged the action `approach`. Approaching, arriving and entering are three beats; resolve only the ones declared |
 | Narration | `agents/narration.py` (`narrator`, `_ENFORCEABLE_PREFIXES`, `_ordered_beat_events`), `agents/common.py` (`_check_narrator_fidelity`) | narrator prompt in `prompts.py`, output validation, `tests/test_merged_speakers.py` — **fidelity has two separate questions and they are easy to conflate**: did the line survive (each view quote present verbatim), and did it land in the right mouth. Two speakers welded into one quoted span passes the first while failing the second, so the merge check is its own pass. Read `event_order` rather than the raw dialogue log for anything player-facing — it is already gated to lines that reached the player's view. An enforceable warning costs a rewrite, so only add one whose false-positive rate you have measured against the stored corpus |
+| Whether a mechanism actually fires | `tools/fire_rates.py` | `tools/salience_replay.py`, `tools/remember_lines.py`, `tests/test_fire_rates.py` — **measure the fire rate before enriching anything.** Five mechanisms here were built, documented, tested and never ran once, and none looked dead from reading the code. Always state the DENOMINATOR: `memory_disputes` against every memory row reads 0 of 6,480 and means nothing (the field did not exist for most of that corpus); against the beats that could have carried one it reads 0 of 181, beside a sibling from the same commit at 78%, and that pair is a diagnosis. A mechanism with no opportunities reports `no chances`, never 0%. These tools open the database `mode=ro`; `salience_replay` copies it first, because `search_memories` writes `access_count` |
+| How much a mind holds at once | `affect.py` (`CAPACITY_LADDER`, `normalize_capacity`, `capacity_caps`), `character_schema.py` (`psychology.capacity`) | `commit.py` (both cap sites), `agents/character.py` (`self.attention`), `prompts.py`, `importers.character_import_warnings`, `static/js/editors.js`, `tests/test_attentional_capacity.py` — scales the want and intention caps only. **Projects are NOT on this ladder**: `PROJECT_CAP` is a dramatic limit, and six slots lose the displacement rule that makes a project cost anything. Unset is stored as `""`, never backfilled to `ordinary` — backfilling makes "the author chose the middle" and "nobody has seen this field" the same value and silently kills the import warning. Tell the character its own ceiling; a want culled without the mind knowing the decision existed is a decision taken from it |
 | Persistence or rollback | `commit.py`, `checkpoints.py` | `db.py`, `memory.py`, restore tests |
 | Portable chat archive export/import | `chat_archive.py` | `app.py` remap primitives, `checkpoints.py`, `memory.py`, archive fidelity tests |
 | Portable pipeline trace export/replay | `pipeline_trace.py`, `tools/pipeline_trace.py` | `agents/storage.py`, `db.py`, `tests/test_pipeline_trace.py`; content-bearing traces are private local artifacts |
@@ -50,6 +52,7 @@ their claims against source and the maintained guides before acting on them.
 | Whether a barrier can be seen/heard/smelled/walked through | `spatial.py` (`_SIGHT_BARRIERS`/`_PASSABLE_BARRIERS`/`_AMBIENT_BARRIERS`/`_SCENT_BARRIERS`, `has_visual`, `sight_level`, `scent_level`, `normalize_barrier`) | `visible_adjacent_rooms`, `tests/test_see_through.py`, `tests/test_membrane_barrier.py` — four separate questions; `window` passes sight only, `bars` sight+sound, `membrane` passage only (the inverse of `window`: a curtained doorway, a tent flap). `has_visual`/`sight_level` is where sight is decided; `scent_level` is where scent is decided. `_SOUND_LADDER` is walked by RELATIVE steps — inserting a rung changes what its NEIGHBOURS shift onto, so `membrane` is deliberately off it. `_SCENT_BARRIERS` gates scent the same way `_SIGHT_BARRIERS` gates sight: `membrane` and `closed_door` muffle, `window`/`wall` block, `open`/`bars` pass |
 | Containers you can be inside (jar/cage/crate/tent) | entity `enclosure` + `interior_rooms` + `state.hatch`, derived in `spatial.py` (`_closed_enclosure_barrier`, `_open_enclosure_barrier`, dock-edge rewrite) | `tests/test_see_through.py`, `tests/test_membrane_barrier.py` — `enclosure` describes BOTH states: `opaque`/`transparent`/`barred` leave an OPEN interior see-through (right for a lid), `membrane` is opaque open or shut and overrides an authored `open_door`. A closed transparent container yields a `window` edge; `_is_carried_interior` keeps a carried container's inside out of the surrounding room's view. `enclosure`/`light_source` are in `_ENTITY_DEFAULT_FIELDS`, without which they could only be set at entity CREATION |
 | A body part-way through an opaque boundary | `spatial_frames.py` (`infer_threshold_crossings`), `spatial.py` (`crossing_of`, `crossing_visible_from`, `spatial_rel_between`, `THRESHOLD_CROSSING_BEATS`) | `commit.py` (called beside `infer_came_from`), `agents/perception.py`, `tests/test_threshold_crossings.py` — a position changes in an instant and a doorway does not; the room LEFT keeps `shapes` sight of the crosser for a couple of beats. A floor on sight, never a bonus, and dropped the moment the body moves again |
+| A body sealed INSIDE another body | `spatial.py` (`_body_interior_holder`, `same_subject`, `_position_of`, `repair_entity_positions`, `scent_level`, `hear_level`), `agents/perception.py` (`_touch_only_sources`, `_self_cannot_see_own_surface`) | `tests/test_body_enclosure_channels.py`, `tests/test_touch_only_identity.py`, `tests/test_self_surface_when_enclosed.py` — **one being, one name.** A being routinely carries two at once (a cast display name and a scene entity id); five separate defects here were a single `==` between them, including a firewall that failed OPEN and delivered another mind's interoceptive state. `spatial.normalize_scene_subjects` folds every subject-keyed ledger at merge so plain equality is correct on STORED data; `same_subject` remains the floor for raw model output that never went through a merge. Fold only where the canonical name is already live as a subject spelling elsewhere in the scene — `positions` legitimately keys objects and unregistered presences by entity id, and renaming those strands carried lights, derived stations and destruction cascades. Three directions, not one symmetric `concealed` flag: `inside_source` (perceiver within this source — maximal), `enclosed_from_source` (perceiver within something else — the room beyond is gone), `source_enclosed` (source within something the perceiver is outside — muffled outward). A perceiver is never sealed from themselves and co-occupants perceive each other normally. Scoped to BODIES via `_is_body_entity`: a crate is not a mass, and opaque is not soundproof. A `positions` value must name a ROOM — an entity id there is a category error that every spatial query answers as `unknown`, which looks exactly like distance |
 | Being carried (pocket/jar/shoulder/hand) | `spatial.py` (`container_of`, `contents_of`, `carrier_chain`, `derive_contained_positions`, `normalize_scene_containment`) | `schemas.py` (`StateDiff.containment`), director prompt, `containment_facts`, `tests/test_containment.py` — a carried body's position is DERIVED from its carrier's, so writing one does nothing; getting out is an explicit release. Not `interior_rooms`, which is for containers you stand inside |
 | Body size (shrinking/growing) and what it makes infeasible | `spatial.py` (`scale_of`, `size_relation`, `contacts_broken_by_scale_change`, `normalize_scene_scales`) | `schemas.py` (`StateDiff.scales`), director prompt, `spatial_facts`/`size_facts`, `tests/test_scale.py` — scale lives in `scene.scales`, is NOT pruned by position (a size is not a co-location), and cancels contacts on the resized body BEFORE the beat's own contact ops so a re-established hold survives |
 | Body position / contact (who is touching whom, and where) | `spatial.py` (`apply_contact_ops`, `normalize_scene_contacts`, `contacts_of`, `_part_identity`, `_same_appendage`, `_displaces`, `contacts_from_entity_state`) | `schemas.py` (`StateDiff.contact_ops`), director prompt, `agents/perception.py` payloads, `spatial_facts`, `tests/test_body_position.py` — a contact is a RELATION stored once in `scene.contacts`, never on either body; positions prune it. **An unqualified part noun is a definite description**: re-asserting the same limb on a new spot MOVES it, because the Director re-describes a standing hold rather than repeating it (`thumb→ear` then `thumb→ear_base` is one thumb). Two carve-outs must survive any change here — anything asserted in the SAME beat stands, and a bare noun never displaces a qualified limb nor the reverse. Do not add a synonym table for body parts: `tail_spade` is a nameable place on a tail, not `tail` blurred, and the structural rule (a refinement repeats the limb's own word) is what keeps that expressible. `detail` is excluded from the identity key exactly as `manner` is. **Contact must have one record**: anything that puts it back into an entity's `state` re-creates a copy nothing ages |
@@ -76,6 +79,56 @@ their claims against source and the maintained guides before acting on them.
 These are architectural guarantees, not stylistic preferences.
 
 ### Information boundaries
+
+**READ THIS BEFORE CHANGING ANY GUARD BELOW.** The firewall is not a
+restriction on knowledge. It is a restriction on the FLOW of knowledge. A mind
+may know anything it has a channel to; what it may not do is acquire a fact
+that reached it through no channel at all. Every rule in this section is that
+one rule, applied to a different pathway.
+
+Five consequences, each of which has been got wrong at least once:
+
+1. **Inference is the product, not the risk.** A character reasoning from what
+   they legitimately perceived to a new conclusion is the thing this engine
+   exists to produce — hence inference memories, `mind_model_updates` with
+   confidence, belief revision, `i_suspect`. Never "harden" a guard by making
+   minds conclude less. A character who remembers a green-glass lantern at the
+   cellar stair and decides its owner is lying has done exactly the right
+   thing; a character who knows a stranger's NAME has not, because no chain of
+   perception yields a name. The test is never how far the reasoning went. It
+   is whether every input it ran on reached that mind.
+
+2. **A leak is a failure of the ENGINE, never of the model.** The deterministic
+   floor must not depend on any model cooperating. If something crossed a gap,
+   the code that was supposed to make it impossible did not run — and no model
+   behaviour excuses that. Fix the seam; do not add a prompt clause and call it
+   closed.
+
+3. **A warning is not a leak.** A scrub firing (`scrubbed unearned identity`,
+   `dropped a body with no sensory channel`) is the system WORKING: nothing
+   crossed. Do not count warnings as model quality or as near-misses. They
+   scale with cast size — five bodies produce far more identity scrubs than
+   one — so comparing warning rates across stories of different sizes measures
+   the story, not the model.
+
+4. **Real leaks fail open and silent**, because the thing that would have
+   announced them is the thing that did not run. Every leak found so far was
+   discovered by measurement, never by an error: an identity comparison that
+   returned False, a ledger form a resolver could not see, a lore field nothing
+   scrubbed. When auditing, look for guards that CANNOT fire rather than guards
+   that fired wrongly.
+
+5. **Firewall integrity is therefore not a model-selection criterion.** It is
+   an invariant. Choose models on latency, contract compliance, problem
+   solving, creation depth and prose. If a model choice could move firewall
+   integrity, that is a defect in the firewall.
+
+And the reason the gap is worth protecting is not safety — it is that the gap
+is GENERATIVE. Dramatic irony, deception, misidentification, a mind acting
+confidently on a false belief, `record_dispute` existing at all: every one
+requires the distance between minds to be real. Collapse it and the result is
+not a freer story, it is one in which nobody can be surprised, deceived, or
+wrong.
 
 - A character may use only its perception, memory, knowledge configuration, relationships, private history, and explicit inferences.
 - Objective world state must not be copied into a character context merely with an instruction to ignore unavailable details.

@@ -1,0 +1,225 @@
+SONDER ENGINE — FASTEST *RELIABLE* NANO-GPT SUBSCRIBER-ONLY CONFIGURATION
+Measured 2026-08-03 against the live catalogue: 658 models, 303 subscription-included.
+Tools: tools/model_bench.py, tools/contract_bench.py, tools/turn_bench.py.
+
+Reliability is the constraint; speed is the objective inside it. A model is
+eligible only if it (1) satisfies the engine's REAL validator for the role it
+is given, and (2) answers consistently. Then, and only then, fastest wins.
+
+===============================================================================
+THE CONFIGURATION
+===============================================================================
+
+Provider 1 = nanogpt, provider 3 = openrouter (embeddings only).
+Every role carries a `fallbacks` list -- see WHY FALLBACKS below; it is the
+single most important line in this file.
+
+{
+  "embeddings":       {"provider": 3, "model": "perplexity/pplx-embed-v1-4b"},
+
+  "director":         {"provider": 1, "model": "Qwen/Qwen3.6-35B-A3B",
+                       "fallbacks": [{"provider": 1, "model": "inclusionai/ling-3.0-flash"}]},
+
+  "character_major":  {"provider": 1, "model": "inclusionai/ling-3.0-flash",
+                       "fallbacks": [{"provider": 1, "model": "Qwen/Qwen3.6-35B-A3B"}]},
+  "character_mid":    {"provider": 1, "model": "inclusionai/ling-3.0-flash",
+                       "fallbacks": [{"provider": 1, "model": "Qwen/Qwen3.6-35B-A3B"}]},
+  "character_bg":     {"provider": 1, "model": "inclusionai/ling-3.0-flash",
+                       "fallbacks": [{"provider": 1, "model": "Qwen/Qwen3.6-35B-A3B"}]},
+
+  "perception":       {"provider": 1, "model": "inclusionai/ling-3.0-flash",
+                       "fallbacks": [{"provider": 1, "model": "Qwen/Qwen3.6-35B-A3B"}]},
+  "narrator":         {"provider": 1, "model": "inclusionai/ling-3.0-flash",
+                       "fallbacks": [{"provider": 1, "model": "Qwen/Qwen3.6-35B-A3B"}]},
+  "mapping":          {"provider": 1, "model": "inclusionai/ling-3.0-flash",
+                       "fallbacks": [{"provider": 1, "model": "Qwen/Qwen3.6-35B-A3B"}]},
+  "utility":          {"provider": 1, "model": "inclusionai/ling-3.0-flash",
+                       "fallbacks": [{"provider": 1, "model": "Qwen/Qwen3.6-35B-A3B"}]},
+  "default":          {"provider": 1, "model": "inclusionai/ling-3.0-flash",
+                       "fallbacks": [{"provider": 1, "model": "Qwen/Qwen3.6-35B-A3B"}]},
+
+  "backdrop_prompt":  {"provider": 1, "model": "inclusionai/ling-3.0-flash"},
+  "ambience_prompt":  {"provider": 1, "model": "inclusionai/ling-3.0-flash"}
+}
+
+Two models, each leading the roles it is measurably better at, each covering
+the other. Two rather than six on purpose: a warm endpoint answers faster than
+a theoretically quicker cold one, and every extra model is another endpoint
+whose rate limit you share.
+
+===============================================================================
+WHY FALLBACKS -- READ THIS EVEN IF YOU SKIP THE REST
+===============================================================================
+
+`providers.resolve_role_candidates` reads a `fallbacks` list per role, and
+`llm_quality.complete_validated_json` walks those candidates when the primary
+fails to validate or the endpoint errors. Without it, ONE transient 503 in one
+of nine stages kills the whole turn -- which is exactly what happened here:
+
+    turn 35  FAILED  perception: all providers failed (last provider error: HTTP 503)
+
+The endpoint was not down. A follow-up probe of that same model returned 8/8
+with a 3.15s median. It was a blip, and a blip should cost a retry, not a beat.
+Choosing a slower "sturdier" model to avoid this would have been the wrong fix:
+it pays a permanent latency tax to insure against something a fallback handles
+for free.
+
+===============================================================================
+ROLE-SPECIFIC CAPABILITY -- WHY THE TWO MODELS SWAP PLACES
+===============================================================================
+
+The same two models rank DIFFERENTLY on different roles, which is why this is a
+per-role config and not one model everywhere. Both figures are median seconds
+to a reply that passes the engine's real validator for that step:
+
+  role contract          Qwen3.6-35B-A3B     ling-3.0-flash    leader
+  ------------------     ---------------     --------------    ---------------
+  director_interpret     3.77s  PASS 2/2     4.34s PASS 2/2    Qwen3.6  (+0.6s)
+  character              7.13s  PASS 2/2     5.12s PASS 2/2    ling     (+2.0s)
+
+Qwen3.6 is quicker at the Director's tight causal object; ling is quicker at
+the character contract, which is far larger and more generative -- and the
+character step runs once PER CHARACTER per beat, so its margin compounds where
+the Director's does not. Each leads where it wins and catches where it loses.
+
+===============================================================================
+HOW THE CANDIDATES WERE FILTERED
+===============================================================================
+
+Stage 1 -- raw speed and can-it-emit-JSON (tools/model_bench.py, 25 models).
+
+  short   long    tok/s  schema  model
+   1.53    3.46   179.2   2/2    holo3-35b-a3b
+   1.62    4.01   161.7   2/2    Qwen/Qwen3-Next-80B-A3B-Instruct
+   1.69    3.61   270.8   2/2    Qwen/Qwen3.6-35B-A3B          <-- CHOSEN
+   1.75   34.16    13.7   2/2    zai-org/glm-4.7-flash
+   1.84    9.16    56.9   2/2    xiaomi/mimo-v2.5
+   1.84    5.92   137.9   2/2    ibm-granite/granite-4.1-8b
+   1.91    2.82   359.2   2/2    inclusionai/ling-3.0-flash    <-- CHOSEN
+   2.11    5.02   140.3   2/2    google/gemma-4-26b-a4b-it
+   2.18    3.63   226.5   2/2    inclusionai/ling-2.6-flash
+   2.30   11.79    40.5   2/2    gemma-4-12b-it
+   2.46   12.05    34.5   2/2    gemma-4-e4b-it
+   2.87    9.10   173.1   2/2    nex-agi/nex-n2-mini
+   3.12    3.88   374.6   0/2    meta-llama/llama-3.2-3b-instruct
+   3.18    5.75   125.6   2/2    THUDM/GLM-4-9B-0414
+   4.31    8.39   105.3   2/2    deepseek/deepseek-v4-flash-0731
+   4.67   13.45    42.9   2/2    zai-org/glm-latest
+   4.94   10.19    77.0   2/2    qwen/qwen3-30b-a3b
+   5.26   10.57   150.8   0/2    nvidia/nemotron-3-nano-30b-a3b
+   5.70    8.42   294.5   0/2    qwen/qwen3.5-9b
+   6.03   25.07    47.8   2/2    minimax/minimax-m2.7
+   7.58   19.93    64.8   0/2    qwen3.5-35b-a3b
+   7.92   14.55   120.7   0/2    stepfun-ai/step-3.5-flash
+  11.67   12.58   191.8   2/2    Qwen/Qwen3-8B
+  27.02   36.83   124.4   2/2    qwen3.5-27b
+
+Stage 2 -- the REAL contract (tools/contract_bench.py: engine's own system
+prompt, realistic payload, validated with schemas.validate_llm_output_strict).
+
+  director_interpret, models that passed 2/2:
+     3.77s  Qwen/Qwen3.6-35B-A3B
+     4.34s  inclusionai/ling-3.0-flash
+     4.49s  Qwen/Qwen3-Next-80B-A3B-Instruct
+     7.89s  google/gemma-4-26b-a4b-it
+     8.84s  nex-agi/nex-n2-pro
+    13.10s  zai-org/glm-4.7
+    19.87s  deepseek/deepseek-v4-flash-0731
+    29.76s  zai-org/glm-latest  (2573 output tokens -- pays for verbosity)
+    43.34s  moonshotai/kimi-k2.6
+
+  character, models that passed 2/2:
+     5.12s  inclusionai/ling-3.0-flash
+     7.13s  Qwen/Qwen3.6-35B-A3B
+
+Stage 3 -- availability (8 sequential calls each):
+    8/8  median 1.38s  Qwen/Qwen3.6-35B-A3B
+    8/8  median 3.15s  inclusionai/ling-3.0-flash
+    7/8  median 1.20s  Qwen/Qwen3-Next-80B-A3B-Instruct  (one 429)
+
+===============================================================================
+REJECTED, AND WHY
+===============================================================================
+
+FASTEST DECODER IN THE CATALOGUE, UNUSABLE.
+  meta-llama/llama-3.2-3b-instruct streams at 374.6 tok/s -- the highest number
+  measured -- and scored 0/2 on schema. qwen/qwen3.5-9b: 294.5 tok/s, 0/2. Every
+  stage here demands parseable JSON, so a schema miss costs a repair pass and
+  the fastest decoder finishes last. Tokens per second is the wrong metric and
+  it is the one every leaderboard reports.
+
+THINKS WHEN YOU DID NOT ASK IT TO.
+  zai-org/glm-4.7-flash: 1.75s short, 34.16s long, an effective 13.7 tok/s.
+  Never use a `:thinking` variant for mapping, perception, utility or
+  background_react; those roles emit small structured objects and reasoning
+  tokens there are pure latency.
+
+RIGHT SPEED, WRONG DOMAIN.
+  holo3-35b-a3b was the fastest schema-valid model on the short call. It is
+  H Company's computer-use vision-language model, fine-tuned from
+  Qwen3.5-35B-A3B for GUI agent work and benchmarked on OSWorld. Rejected on
+  capability AFTER the speed test had already picked it -- which is the reason
+  to read the model card and not just the number.
+
+A NEWER REVISION IS NOT A SAFE ASSUMPTION.
+  qwen3.5-35b-a3b: 7.58s, 0/2 schema.  Qwen3.6-35B-A3B: 1.69s, 2/2, 270.8 tok/s.
+  Same parameter count, same active experts, one revision apart, 4.5x latency
+  and the difference between working and not. Check both directions.
+
+PASSED THE TOY TEST, FAILED THE JOB.
+  Qwen3.6-35B-A3B was first assigned `director` on the strength of a 2/2 score
+  against a three-key JSON object, and then failed the real director_interpret
+  contract three times on the first live turn -- 56s + 23s + 23s = 102 seconds
+  to produce nothing, on chat 60. That is what produced tools/contract_bench.py
+  and Stage 2 above. It passes the real contract comfortably on an ordinary
+  scene; chat 60 is a pathological one (an enclosed character at 0.05 scale),
+  which is precisely the case a fallback exists for.
+
+===============================================================================
+BASELINE -- WHAT THIS REPLACES
+===============================================================================
+
+One real turn of chat 60 on the previous config: 328.7 seconds.
+
+  role             model                                    seconds
+  mapping          deepseek/deepseek-v4-flash-0731:thinking   131.75  <-- 40%
+  perception       inception/mercury-2 (3 calls)               58.60
+  character_major  x-ai/grok-4.20                              48.60
+  director         x-ai/grok-4.20 (2 calls)                    47.92
+  narrator         zai-org/glm-latest                          11.89
+
+The single largest cost in the beat is a THINKING model doing a structural
+spatial refresh: 131.75s, 40% of the turn, to emit a room id, an occupant list
+and an exit list. Dropping `:thinking` from that one role is the biggest
+available win and does not require agreeing with anything else here.
+
+===============================================================================
+METHOD NOTES -- MISTAKES MADE, SO THEY ARE NOT REPEATED
+===============================================================================
+
+* DO NOT BENCHMARK TWO THINGS AT ONCE. Running the availability probe and the
+  character contract test concurrently produced a wall of 429s that read as
+  model unreliability and was entirely self-inflicted: the rate limit is on the
+  ACCOUNT, shared across every model. gemma-4-26b-a4b-it's 3/8 availability
+  score and four models' 0/2 character scores are contaminated by this and
+  should be re-measured sequentially before being believed.
+* A toy schema proves only that a model emits JSON. Use contract_bench.py,
+  which sends the engine's own prompt and runs the engine's own validator.
+* Measure with turn_bench.py, not by feel: it copies the database first, drives
+  the real pipeline, and reads the engine's own llm_call log, so retries and
+  repair passes are counted where they actually land.
+* Re-run before trusting this file after a catalogue change. nano-gpt's
+  included list moves, and two models here changed behaviour across a single
+  revision.
+
+===============================================================================
+EMBEDDINGS STAY ON OPENROUTER -- DO NOT MOVE THEM
+===============================================================================
+
+  * nano-gpt's chat catalogue contains no embedding models at all.
+  * All 6,480 stored memory vectors were embedded with pplx-embed-v1-4b.
+    memory.py compares `embedding_model` per row and scores any row from a
+    different model 0.0 on BOTH vector rankings. Switching does not "re-embed
+    later" -- it silently drops the entire existing bank to keyword-and-exact
+    match while new rows get all four signals. The bank splits into two eras
+    and nothing says a word except one `_warn_stranded_embeddings` log line.

@@ -1,0 +1,44 @@
+[1/14] Gemma-4-31B-Novelist
+      short 4.115s  long 37.919s  10.6 tok/s  schema 2/2
+[2/14] Gemma-4-31B-Gutenberg
+      short 5.126s  long 15.215s  37.5 tok/s  schema 2/2
+[3/14] Qwen3.5-27B-Writer-V2-Derestricted
+      short 12.925s  long 32.037s  11.5 tok/s  schema 2/2
+[4/14] TheDrummer/Cydonia-24B-v4.1
+      short 7.326s  long Nones  ? tok/s  schema 2/2
+[5/14] Gemma-4-31B-Pantheon-Reasoning-1.1
+      short 11.316s  long 31.134s  41.7 tok/s  schema 1/2
+[6/14] Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-Derestricted-Lite
+      short 13.857s  long 28.964s  26.7 tok/s  schema 1/2
+[7/14] Salesforce/Llama-xLAM-2-70b-fc-r
+      FAILED  400 {"error":{"message":"Model Salesforce/Llama-xLAM-2-70b-fc-r is temporarily unavailable. Please try again later.","type":"invalid_request_error","param":"model",
+[8/14] nex-agi/nex-n2-pro
+      short 2.31s  long 4.998s  171.7 tok/s  schema 2/2
+[9/14] openai/gpt-oss-120b
+      short 13.357s  long 26.478s  26.7 tok/s  schema 2/2
+[10/14] qwen3-coder-30b-a3b-instruct
+      short 2.908s  long 5.413s  114.6 tok/s  schema 2/2
+[11/14] mistralai/ministral-14b-instruct-2512
+      short 1.881s  long 4.147s  173.5 tok/s  schema 2/2
+[12/14] ibm-granite/granite-4.1-8b
+      short 1.364s  long 5.405s  114.1 tok/s  schema 2/2
+[13/14] MiniMax-M2
+      short 6.153s  long 13.962s  33.4 tok/s  schema 2/2
+[14/14] nvidia/nemotron-3-super-120b-a12b
+      short 7.212s  long 8.031s  479.8 tok/s  schema 2/2
+
+=== ranked by short-call wall clock ===
+  short    long   tok/s   ovhd  schema  model
+   1.36    5.41   114.1   0.97 2/2      ibm-granite/granite-4.1-8b
+   1.88    4.15   173.5   1.51 2/2      mistralai/ministral-14b-instruct-2512
+   2.31    5.00   171.7   1.93 2/2      nex-agi/nex-n2-pro
+   2.91    5.41   114.6   2.25 2/2      qwen3-coder-30b-a3b-instruct
+   4.12   37.92    10.6   0.00 2/2      Gemma-4-31B-Novelist
+   5.13   15.21    37.5   3.73 2/2      Gemma-4-31B-Gutenberg
+   6.15   13.96    33.4   0.00 2/2      MiniMax-M2
+   7.21    8.03   479.8   7.08 2/2      nvidia/nemotron-3-super-120b-a12b
+   7.33    0.00     0.0   0.00 2/2      TheDrummer/Cydonia-24B-v4.1
+  11.32   31.13    41.7   2.36 1/2      Gemma-4-31B-Pantheon-Reasoning-1.1
+  12.93   32.04    11.5   0.00 2/2      Qwen3.5-27B-Writer-V2-Derestricted
+  13.36   26.48    26.7   1.77 2/2      openai/gpt-oss-120b
+  13.86   28.96    26.7   0.00 1/2      Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-Derestricted-Lite

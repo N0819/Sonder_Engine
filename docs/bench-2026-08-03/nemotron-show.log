@@ -1,0 +1,36 @@
+4 problems x 2 trials — each has a blocked obvious path and an unsignposted way through
+
+  nvidia/nemotron-3-ultra-550b-a55b
+          Unlatch the casement window and climb out onto the roof. unhooks the loose latch, shoves the casement open, and swings o
+          Cross to the casement, lift the loose latch, push the window open, and climb out onto the roof. Crosses to the casement,
+      solved, solved         sealed room
+          Mmph! Tread! Thoid one! Muffle a loud warning around the taper
+          Mmph — Bram! Third tread's gone! Shout a muffled warning around the taper.
+      solved, solved         occupied mouth
+          Grab the bent nail and drive it into the hinge-side gap to jam the door. snatches up the bent nail and jams it into the 
+          Snatch up the bent nail and drive it into the hinge gap to jam the door. snatches up the bent nail and jams it into the 
+      solved, solved         outmatched by scale
+          Your lantern was burning at the cellar stair last night. Green glass, same as always. Nobody else has one. Confront her 
+          Your green-glass lantern was burning at the cellar stair last night. Ask a probing question about the lantern's whereabo
+      solved, solved         the contradiction
+      -> solved 8/8, took the blocked path 0, novel routes 3, 0 unusable
+
+  Qwen/Qwen3.6-35B-A3B
+          Lift the loose latch and throw the casement window open, then scramble out onto the slates. Lifts the loose latch, throw
+          move to the casement window steps toward the gable window unfasten the loose latch hands work the loose latch free push 
+      solved, solved         sealed room
+          shout around the taper steps forward, raising a hand toward Bram while shouting, the taper flaring in her teeth Step for
+          wave arms frantically while holding basin waves arms frantically, taper still in teeth Muffled grunt and frantic waving
+      solved, solved         occupied mouth
+          Run to the hinge side and press my back against the door frame to brace it, using my body weight to slow the swing. Runs
+          Dive for the bent nail and jam it into the hinge gap. dives toward the hinge gap, seizing a bent nail and jamming it bet
+      solved, solved         outmatched by scale
+          I saw your lantern burning at the foot of the stairs last night. I saw your lantern burning at the foot of the stairs la
+          Then explain the green-glass lantern burning at the foot of the stairs last night. Remind her I saw the lantern.
+      solved, solved         the contradiction
+      -> solved 8/8, took the blocked path 0, novel routes 1, 0 unusable
+
+=== problem solving ===
+  BLOCKED = took the obvious path the payload says cannot work
+   8/8   solved   blocked 0   novel 1   0 unusable     6.5s   Qwen/Qwen3.6-35B-A3B
+   8/8   solved   blocked 0   novel 3   0 unusable    17.3s   nvidia/nemotron-3-ultra-550b-a55b

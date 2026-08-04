@@ -1137,7 +1137,152 @@ def _room_notes_from_lore(room_id, ctx, scene=None):
             return content[:600]
     return ""
 
-def norm_sequence(out):
+# A stage direction written INSIDE a speech element: "*leans in* Sit down."
+# Bounded and single-line on purpose: an unpaired asterisk in ordinary prose
+# must not swallow the rest of the line looking for its partner.
+_STAGE_DIRECTION_RE = re.compile(r"\*([^*\n]{1,400}?)\*")
+
+# Function words carry no evidence that two descriptions name the same act --
+# "on her" appears in every second stage direction -- so they are excluded
+# before the overlap in _dedupe_promoted_actions is measured.
+_OVERLAP_STOPWORDS = frozenset({
+    "a", "an", "the", "and", "or", "but", "so", "as", "if", "then",
+    "in", "into", "on", "onto", "at", "to", "toward", "towards", "from",
+    "of", "off", "out", "up", "down", "over", "under", "with", "without",
+    "against", "across", "through", "between", "around", "back",
+    "her", "his", "their", "its", "my", "your", "our", "him", "she", "he",
+    "they", "them", "it", "you", "i", "we", "us", "me",
+    "is", "are", "was", "were", "be", "been", "being", "one", "that", "this",
+    "while", "still", "just", "now", "very", "own", "for", "by",
+})
+
+
+def split_stage_directions(text):
+    """Speech text -> (the words actually spoken, the conduct written into it).
+
+    A character model trained on chat roleplay writes conduct inside the line
+    it speaks -- "*leans in and sets a hand flat on her shoulder* You will want
+    to sit down" -- instead of emitting the {type:'action'} element the
+    sequence contract already provides beside it. Nothing forces this; one live
+    beat declared a proper action element AND smuggled a second act into the
+    speech in the same breath.
+
+    The engine had no opinion about the contents of `text`, so everything in it
+    was treated as SOUND. A body movement then went through the whole
+    audibility apparatus -- distance, muffling, enclosure, deafness -- and a
+    listener who could hear but not see was told about it in so many words:
+    `You hear Reya say: "*leans in...*"`. That is a channel violation. Not a
+    knowledge one -- the person being touched would feel it -- but the flow is
+    wrong, and a wrong flow is an engine failure, never a model's, so the floor
+    here is deterministic rather than a request in the prompt.
+
+    Measured before the fix (chat 62, 12 turns): 52% of that chat's speech
+    elements carried one, against 0.9% across the rest of the corpus. It grew
+    turn over turn because the span was stored in the speaker's own episodic
+    memory as words she SAID and read back to her on the next beat, and it was
+    also the cause of a second symptom -- the Director, a different model,
+    re-rendered the stage direction as prose, which no longer matched the
+    declaration, so the verbatim-speech guard dropped the line as invented on
+    7 of 12 turns against 7 of 1,715 turns corpus-wide.
+
+    A ONE-WORD span is markdown emphasis, not a stage direction ("what does it
+    *feel* like") -- the asterisks come off and the word stays spoken.
+
+    `tone` was considered as the home for the vocal-manner spans (a laugh, a
+    drop in register) and rejected. `_inject_dialogue` renders tone only when
+    the listener can SEE the speaker, so an audible laugh parked there is lost
+    in the dark -- exactly the same class of bug one layer down. Every span
+    becomes conduct instead, and perception delivers it by whatever channel the
+    act actually engages, which is perception's job and not this function's.
+    """
+    raw = str(text or "")
+    if "*" not in raw:
+        return raw, []
+    spans = []
+
+    def _take(match):
+        body = " ".join(match.group(1).split())
+        if not body:
+            return ""
+        if len(body.split()) == 1:
+            # Emphasis on a single spoken word. It stays in the line.
+            return body
+        spans.append(body)
+        return ""
+
+    spoken = _STAGE_DIRECTION_RE.sub(_take, raw)
+    # Collapse the whitespace and orphaned punctuation the excision leaves
+    # behind, so "*leans in* You will..." does not become " You will...".
+    spoken = re.sub(r"\s{2,}", " ", spoken).strip()
+    spoken = re.sub(r"^[,;:.\-—\s]+", "", spoken).strip()
+    return spoken, spans
+
+
+def _promoted_stage_action(span, speech_elem):
+    """One excised stage direction, as the action element it should have been.
+
+    It inherits the speech element's concealment: a stage direction inside a
+    whispered aside was hidden by the words around it, and must not become
+    overt conduct just because it moved onto its own channel. `observable` goes
+    through the same mental-verb check `norm_sequence` applies to any other
+    action, so "*thinks better of it*" resolves to an imperceptible beat rather
+    than a visible one.
+    """
+    observable = "" if _is_mental_action("", span) else span
+    return {
+        "type": "action",
+        "attempt": span,
+        "observable": observable,
+        "visibility": ("concealed"
+                       if speech_elem.get("visibility") == "concealed"
+                       else "overt"),
+        "conceal_from": list(speech_elem.get("conceal_from") or []),
+        "targets": [],
+        "commitment": _classify_action_commitment(span),
+        "verb": "",
+        "stage": "immediate",
+        "intended_effects": [],
+        "asserted_effects": [],
+        "_promoted": True,
+    }
+
+
+def _dedupe_promoted_actions(clean):
+    """Drop a promoted action the character ALSO declared properly.
+
+    The live failure mode narrated one act twice in a single paragraph: once
+    through a real action element and once through the copy smuggled into the
+    speech. The two spellings are almost never identical -- "sets a hand on her
+    shoulder" against "sets a hand FLAT on her shoulder" -- so the comparison is
+    content-word overlap rather than containment, measured against the SHORTER
+    of the two so a long elaboration still matches the short declaration it
+    elaborates.
+
+    Deliberately not fuzzier than that. A false match silently drops conduct
+    the character declared, which is the failure this whole path exists to
+    prevent; a false miss only costs a duplicated beat the narrator can merge.
+    """
+    def _content(text):
+        words = re.sub(r"[^\w\s]", " ", str(text or "")).lower().split()
+        return {w for w in words if w not in _OVERLAP_STOPWORDS}
+
+    declared = [_content(e.get("observable") or e.get("attempt"))
+                for e in clean
+                if e.get("type") == "action" and not e.get("_promoted")]
+    declared = [d for d in declared if len(d) >= 3]
+    kept = []
+    for e in clean:
+        if e.get("type") == "action" and e.get("_promoted"):
+            mine = _content(e.get("attempt"))
+            if len(mine) >= 3 and any(
+                    len(mine & d) / min(len(mine), len(d)) >= 0.8
+                    for d in declared):
+                continue
+        kept.append(e)
+    return kept
+
+
+def norm_sequence(out, warn=None):
     seq = out.get("sequence")
     if not isinstance(seq, list) or not seq:
         seq = []
@@ -1164,6 +1309,17 @@ def norm_sequence(out):
         )
         if t == "speech":
             txt = e.get("text") or e.get("speech")
+            if txt:
+                # Conduct written into the spoken line comes out FIRST and
+                # becomes its own action, placed immediately before the speech
+                # it was buried in. See split_stage_directions: leaving it in
+                # `text` routes a body movement down the acoustic channel.
+                txt, _stage_spans = split_stage_directions(str(txt))
+                for _span in _stage_spans:
+                    clean.append(_promoted_stage_action(_span, e))
+                    if warn:
+                        warn("moved a stage direction out of spoken text into "
+                             "its own action: '%s'" % _span[:80])
             if txt:
                 # Carry the speech element's OWN concealment through
                 # normalization. Dropping it here (as we used to) meant a
@@ -1270,6 +1426,9 @@ def norm_sequence(out):
                     "intended_effects": intended_effects,
                     "asserted_effects": asserted_effects,
                 })
+    # A promoted stage direction the character also declared as a real action
+    # is the same act twice, and the narrator rendered both.
+    clean = _dedupe_promoted_actions(clean)
     # Deterministic concealment backstop (leak-safe). A hushed or unmarked
     # line co-declared with a concealed action is almost always the private
     # communication itself; weak models routinely mark the ACTION concealed
@@ -1304,6 +1463,7 @@ def norm_sequence(out):
     for e in clean:
         e.pop("_raw_vis", None)
         e.pop("_raw_vol", None)
+        e.pop("_promoted", None)
 
     out["sequence"] = clean
     return _sync_sequence_mirrors(out)
@@ -1993,7 +2153,7 @@ def _normalize_character_output(out):
     return out
 
 # Narration ABOUT an utterance, as opposed to the utterance. A player writes
-# their own beat in second person ("you gently pinch her nipple"), so a speech
+# their own beat in second person ("you gently take her by the wrist"), so a speech
 # text carrying `you`/`your` outside its quotes is prose the interpreter lifted
 # whole rather than the line the player spoke. Attribution verbs are kept
 # deliberately narrow -- `say`/`said` and friends, never `tell`/`told` -- so an
@@ -2832,7 +2992,7 @@ def _muffled_fragment(body):
     Each surviving word is emitted as its own ellipsis-separated chunk, and only
     ever verbatim -- `_scrub_invented_dialogue` validates a muffled line by
     checking every chunk against the lines actually spoken, so a chunk stitched
-    across punctuation ("climax, squeeze" -> "climax squeeze") would fail that
+    across punctuation ("ledger, sink" -> "ledger sink") would fail that
     check and get the whole line dropped.
     """
     words = [w.strip(".,;:!?\"'\u201c\u201d\u2018\u2019") for w in (body or "").split()]
@@ -2869,12 +3029,19 @@ def _inject_dialogue(view, display, quote, level, volume, can_see,
             view,
             f"{display}'s voice carries through everything around you, "
             f'low and close: "{body}"')
+    # Two forms of the same verb, because the two frames below take different
+    # ones. "You hear X" is a bare-infinitive construction -- "you hear her
+    # SAY", never "you hear her says" -- and this wrote the inflected form into
+    # both, so every view of a speaker the perceiver could not see carried
+    # broken English: 226 occurrences across 71 turns of the live corpus, all
+    # of them in exactly the situations this engine cares most about (a voice
+    # through a door, in the dark, from inside an enclosure).
     if volume == "shout":
-        verb = "shouts"
+        verb, bare = "shouts", "shout"
     elif volume in ("whisper", "mutter"):
-        verb = "says under their breath"
+        verb, bare = "says under their breath", "say under their breath"
     else:
-        verb = "says"
+        verb, bare = "says", "say"
     manner = ""
     tone = str(tone or "").strip()
     if tone and can_see:
@@ -2886,7 +3053,7 @@ def _inject_dialogue(view, display, quote, level, volume, can_see,
     if can_see:
         add = f'{display} {verb}{manner}: "{body}"'
     else:
-        add = f'You hear {display} {verb}: "{body}"'
+        add = f'You hear {display} {bare}: "{body}"'
     return _append_once(view, add)
 
 _OBSERVED_STOPWORDS = frozenset({
