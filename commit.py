@@ -2513,6 +2513,60 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
 
 # ---- Mapping commit ----
 
+def _names_heard_in(quote, hearer_name, roster, scene, hearer_room):
+    """Roster names spoken inside one line, of somebody standing right there.
+
+    THE GAP THIS CLOSES. `known` gates every identity the engine will let a
+    mind use -- perception scrubs an unearned name out of a view, memory stores
+    "a voice" instead of a speaker, and the narrator will not name a person to
+    somebody who has not met them. It was written in exactly two places:
+    `greetings.py` seeds the one greeting character against the player, and
+    `commit` seeds everyone when a background presence is PROMOTED. Nothing
+    recorded a name learned in play, so a character attached the ordinary way
+    never entered the map and nobody ever learned anybody by being told.
+
+    Measured over the corpus before this: 19 of 42 played stories held fewer
+    recognitions than a fully-acquainted cast. Chat 59 -- 162 turns, two cast,
+    a mother and her daughter -- held ONE directed pair, so every beat scrubbed
+    both names out of both views. The failure that surfaces is not a missing
+    name but a wrong one: a view with one surviving name and one anonymous body
+    invites the model to join them, and the Doctor answered a question the
+    player asked as though Tamamo had asked it.
+
+    THE RULE. A name is learned when it is SPOKEN in your hearing and the
+    person it names is in the room with you. That is the ordinary way people
+    learn names, it needs no model call, and it rides a channel the firewall
+    already governs -- the caller passes only lines this hearer's own view
+    received.
+
+    Two refusals, both of which keep this from becoming a leak:
+
+      * The named person must be PRESENT and in the hearer's room. Hearing
+        about somebody absent teaches you a name, not a face, and letting it
+        through would license recognising a stranger who walks in later.
+      * Your own name teaches you nothing, and a speaker who says a name
+        already knew it.
+    """
+    body = str(quote or "")
+    if not body:
+        return []
+    learned = []
+    for name in roster:
+        candidate = str(name or "").strip()
+        if not candidate or candidate == hearer_name:
+            continue
+        if not re.search(rf"\b{re.escape(candidate)}\b", body, re.I):
+            continue
+        # Present, and here. `_room_of` resolves through the scene's own
+        # subject identity, so a body recorded under an entity id still
+        # matches the display name the line used.
+        named_room = _room_of(scene, candidate) if scene else None
+        if not named_room or (hearer_room and named_room != hearer_room):
+            continue
+        learned.append(candidate)
+    return learned
+
+
 def _known_name_roster(chat, cast):
     """Exact display names perception.py's recognition check requires:
     known[perceiver_name] must contain the OTHER actor's exact name string
@@ -4448,6 +4502,11 @@ def prepare_memory_commit(ctx, *, scene=None):
     sc = scene if scene is not None else (wget(cid, "scene", {}) or {})
     pending_memories = []
     state_updates = []
+    # Names learned by hearing them said, accumulated per hearer and applied
+    # by commit_memories inside the transaction -- this function runs BEFORE
+    # the write lock and must not write. See _names_heard_in.
+    _name_roster = _known_name_roster(chat, ctx.cast)
+    _names_learned = {}
     relationship_ops = []
     belief_reconciles = []
     memory_disputes = []
@@ -4686,6 +4745,14 @@ def prepare_memory_commit(ctx, *, scene=None):
                 quote = d.get("exact_quote", "")
                 qbody = _quote_body(quote)
                 if qbody and (quote in v or qbody in v):
+                    # This line reached THIS hearer's view -- the audibility
+                    # question is already answered above, so a name inside it
+                    # is a name they heard. See _names_heard_in.
+                    for _learned in _names_heard_in(
+                            qbody, cname, _name_roster, sc, char_room):
+                        if _learned not in _hearer_known:
+                            _hearer_known.add(_learned)
+                            _names_learned.setdefault(cname, []).append(_learned)
                     category = _durable_dialogue_category(qbody)
                     memory_mark = _marked_for_memory(own_result, qbody)
                     # This mind asked to keep the line. The phrase list is a
@@ -5536,6 +5603,7 @@ def prepare_memory_commit(ctx, *, scene=None):
             "configured")
     return {
         "memory_batch": memory_batch,
+        "names_learned": _names_learned,
         "state_updates": state_updates,
         "relationship_ops": relationship_ops,
         "belief_reconciles": belief_reconciles,
@@ -5586,6 +5654,20 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
     cid = ctx.chat.id
 
     with transaction():
+        # A name heard this beat, of somebody standing in the room. Applied
+        # here rather than in prepare, which runs outside the write lock;
+        # merged rather than assigned, because `validated_introductions` may
+        # have written the same map earlier in this turn and an explicit
+        # introduction must not be lost to an overwrite.
+        _learned = prepared.get("names_learned") or {}
+        if _learned:
+            _known = wget(cid, "known", {}) or {}
+            for _hearer, _names in _learned.items():
+                _known.setdefault(_hearer, [])
+                for _name in _names:
+                    if _name not in _known[_hearer]:
+                        _known[_hearer].append(_name)
+            wset(cid, "known", _known)
         delete_turn_memories(turn.id)
         memory_ids = add_memories_batch(
             prepared_batch=prepared["memory_batch"],

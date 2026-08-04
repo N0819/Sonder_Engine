@@ -76,6 +76,11 @@ def _install(monkeypatch, calls_log, asks_player_ids):
                         lambda refs, cast: [int(r) for r in refs if str(r).isdigit()
                                             or isinstance(r, int)])
     monkeypatch.setattr(loops, "_drop_non_awake", lambda ctx, ids: ids)
+    # This suite is about focus DEFERRAL, not about who opens an
+    # untargeted beat. Pin the motivation shuffle so the assertions
+    # below are about the thing they name.
+    monkeypatch.setattr(loops, "_untargeted_order",
+                        lambda ctx, ids, nonce: list(ids))
     monkeypatch.setattr(loops, "_requires_director_resolution", lambda r: False)
     monkeypatch.setattr(loops, "_sequence_has_content", lambda r: True)
     monkeypatch.setattr(loops, "_merge_character_results",
@@ -108,28 +113,34 @@ def test_focus_character_answers_before_the_beat_yields(monkeypatch):
     assert calls.index(26) < calls.index(27)
 
 
-def test_focus_character_is_deferred_to_only_once(monkeypatch):
-    """If the focus character ALSO turns to the player, the beat ends — the
-    guard must not let the loop hold itself open."""
+def test_the_beat_ends_once_the_summoned_cast_has_run(monkeypatch):
+    """Every initial reactor gets its one call and then the beat closes. The
+    guards drain the queue; they must not let the loop hold itself open."""
     calls = []
     _install(monkeypatch, calls, asks_player_ids={26, 27})
     ctx = _Ctx(reactors=[26, 27, 28], tom_triggers=[27])
 
     out = loops.interaction_loop(ctx, nonce=0)
 
-    assert calls == [26, 27]
+    assert calls == [26, 27, 28]
     assert out["stop_reason"] == "awaiting player response"
 
 
-def test_unflagged_beat_still_yields_immediately(monkeypatch):
-    """No tom_triggers -> the original stop behaviour is untouched."""
+def test_an_unflagged_reactor_is_not_stranded_either(monkeypatch):
+    """With no tom_triggers the focus guard has nothing to rescue, and the
+    exit used to close the beat on the first speaker. That is the failure the
+    simultaneous wave existed to paper over, and it came straight back when
+    the wave did: chat 59 t161-t162, the Doctor answered and turned to the
+    player, and Tamamo -- standing right there, an initial reactor -- was
+    never called, two beats running. Being flagged is not what earns a
+    character their turn; being summoned to the beat is."""
     calls = []
     _install(monkeypatch, calls, asks_player_ids={26})
     ctx = _Ctx(reactors=[26, 27, 28], tom_triggers=[])
 
     out = loops.interaction_loop(ctx, nonce=0)
 
-    assert calls == [26]
+    assert calls == [26, 27, 28]
     assert out["stop_reason"] == "awaiting player response"
 
 
@@ -141,7 +152,8 @@ def test_focus_character_who_already_spoke_is_not_recalled(monkeypatch):
 
     out = loops.interaction_loop(ctx, nonce=0)
 
-    assert calls == [27]
+    assert calls == [27, 26]
+    assert calls.count(27) == 1, "the focus character was called twice"
     assert out["stop_reason"] == "awaiting player response"
 
 
@@ -178,11 +190,15 @@ def test_director_resolution_deferral_is_also_once_only(monkeypatch):
 
     out = loops.interaction_loop(ctx, nonce=0)
 
-    assert calls == [26, 27]
+    assert calls == [26, 27, 28]
     assert out["stop_reason"] == "physical resolution required"
 
 
-def test_no_focus_means_director_resolution_exits_immediately(monkeypatch):
+def test_the_other_exit_also_waits_for_the_summoned_cast(monkeypatch):
+    """Same rule at the physical-resolution door. The exit is right about what
+    comes AFTER -- no new speaker is drawn in and the beat does end here -- and
+    was wrong about ending before the people it already summoned have had their
+    one turn. The reason survives the deferral."""
     calls = []
     _install(monkeypatch, calls, asks_player_ids=set())
     monkeypatch.setattr(loops, "_requires_director_resolution",
@@ -191,5 +207,5 @@ def test_no_focus_means_director_resolution_exits_immediately(monkeypatch):
 
     out = loops.interaction_loop(ctx, nonce=0)
 
-    assert calls == [26]
+    assert calls == [26, 27, 28]
     assert out["stop_reason"] == "physical resolution required"

@@ -1282,6 +1282,71 @@ def _dedupe_promoted_actions(clean):
     return kept
 
 
+# Words a sentence leans on rather than lands on. An interruption arrives where
+# the speaker drew breath, and the breath is taken just before one of these or
+# just after a comma -- not at an arbitrary word count.
+_BREATH_CONJUNCTIONS = frozenset({
+    "and", "but", "or", "so", "because", "which", "that", "if", "when",
+    "while", "though", "although", "since", "as", "then", "yet", "before",
+    "after", "unless", "until", "whether",
+})
+
+# Below this, a line has nothing to cut. "Wait." interrupted is still "Wait."
+# -- truncating it produces "Wait.—", which reads as a typo, and fictionally
+# there is no room to get inside a one-word line anyway.
+_MIN_INTERRUPTIBLE_WORDS = 5
+
+
+def cut_short_speech(text, ratio=0.6):
+    """A spoken line as it lands when somebody cuts in, or None to leave it.
+
+    Returning None rather than a shortened string is the important half: a
+    short line, or one the speaker already trailed off, is delivered WHOLE and
+    the interrupting beat simply follows it. Forcing a cut on everything is
+    what makes an interruption mechanic read as a bug.
+
+    Where the cut falls was chosen by reading the output rather than by
+    picking a number. A flat halfway cut lands mid-phrase ("the shipment
+    left—"); stopping at a breath point lands where a person actually gets cut
+    off ("the shipment left on Tuesday—"). So: keep whole sentences, cut the
+    final one near `ratio`, and slide that cut to the nearest comma or
+    conjunction within a couple of words.
+
+    The em dash replaces whatever punctuation it lands on, because "to do,—"
+    and "hearth.—" are both wrong and the dash is doing that job now.
+    """
+    body = " ".join(str(text or "").split())
+    if not body:
+        return None
+    # Already trailed off -- the writer has done this themselves.
+    if body.endswith(("—", "–", "-", "...", "…")):
+        return None
+    if len(body.split()) < _MIN_INTERRUPTIBLE_WORDS:
+        return None
+
+    sentences = re.split(r"(?<=[.!?])\s+", body)
+    head, tail = sentences[:-1], sentences[-1]
+    words = tail.split()
+    if len(words) < 3 and head:
+        kept = words
+    else:
+        target = max(1, int(len(words) * ratio))
+        keep = target
+        for index in range(max(1, target - 2), min(len(words), target + 3)):
+            if words[index - 1].endswith(","):
+                keep = index
+                break
+            if words[index].lower().strip(",;:") in _BREATH_CONJUNCTIONS:
+                keep = index
+                break
+            if words[index - 1].lower().strip(",;:") in _BREATH_CONJUNCTIONS:
+                keep = max(1, index - 1)
+                break
+        kept = words[:keep]
+    joined = " ".join(head + [" ".join(kept)]) if head else " ".join(kept)
+    return re.sub(r"[.,;:!?\s—–-]+$", "", joined) + "—"
+
+
 def norm_sequence(out, warn=None):
     seq = out.get("sequence")
     if not isinstance(seq, list) or not seq:
@@ -1334,6 +1399,11 @@ def norm_sequence(out, warn=None):
                     "text": str(txt),
                     "volume": normalize_speech_volume(e.get("volume")),
                     "tone": e.get("tone", ""),
+                    # Who this lands on top of, if the character declared it as
+                    # cutting somebody off. Resolved deterministically in the
+                    # interaction loop against who has actually spoken this
+                    # beat -- a name here is a claim, not an outcome.
+                    "interrupts": str(e.get("interrupts") or "").strip(),
                     "visibility": "concealed" if e.get("visibility") == "concealed" else "overt",
                     "conceal_from": e.get("conceal_from") or [],
                     # raw (pre-normalization) signals, consumed by the
@@ -1417,6 +1487,9 @@ def norm_sequence(out, warn=None):
                     "type": "action",
                     "attempt": att,
                     "observable": str(observable),
+                    # A blow, a hand over a mouth, a grab -- conduct cuts a line
+                    # off exactly as a louder voice does.
+                    "interrupts": str(e.get("interrupts") or "").strip(),
                     "visibility": e.get("visibility", "overt"),
                     "conceal_from": e.get("conceal_from") or [],
                     "targets": tg,

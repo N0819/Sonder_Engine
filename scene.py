@@ -992,7 +992,20 @@ DEFAULT_INTERACTION_CONFIG = {
     "max_micro_rounds": 4,
     "max_character_calls": 6,
     "max_speakers_per_round": 1,
-    "initial_parallel_reactors": 2,
+    # How many characters open the beat in one blind instant. ONE, so causality
+    # builds as the loop runs: each character after the first decides in a room
+    # where the previous one has already acted. Raise it for a beat aimed at
+    # nobody in particular, where the room genuinely reacts as a room -- see
+    # agents/loops.py § ONE AT A TIME.
+    "initial_parallel_reactors": 1,
+    # May reactors who cannot possibly perceive each other -- separate rooms,
+    # no sight, nothing audible even at a shout -- share the opening instant?
+    # The rule is right and the machinery is written and tested
+    # (`agents/loops._isolated_wave`), but every reactor in a beat today is
+    # somebody the player can hear, so this branch would never fire on a real
+    # story and its first live run would be its first exercise. OFF until
+    # there is offscreen life to run through it.
+    "parallel_isolated_reactors": False,
     "max_director_calls": 4,
     "max_perception_calls": 4,
     "allow_npc_initiative": True,

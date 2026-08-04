@@ -1734,6 +1734,57 @@ investigation found and did not close.
   than a simple one.
 
 
+### 1.29 Parallel reaction chains, and the isolated wave that is shelved for them
+
+Written, tested, switched off 2026-08-04. `agents.loops._perceptually_isolated`
+and `_isolated_wave` exist and are covered by
+`tests/test_interaction_first_wave.py`; `parallel_isolated_reactors` is
+`False` in `DEFAULT_INTERACTION_CONFIG`.
+
+**The rule is right.** The beat now opens with ONE character so causality can
+build (§ alpha 7.2), and the one honest exception is a reactor who could not
+possibly perceive the opener -- separate room, no sight, nothing audible.
+Sequencing those two claims an order no reader could detect, and running them
+in one instant is what offscreen simulation needs.
+
+**Why it is off.** Every reactor in a beat today is somebody the player can
+hear, so the branch would never fire on a real story and its first live run
+would be its first exercise. It is switched off until there is offscreen life
+to run through it.
+
+**The loose end whoever turns it on inherits.** Isolation is tested at `loud`,
+not at `shout`. The engine's own model says a shout carries a FRAGMENT between
+far separated rooms, so testing at `shout` makes nothing anywhere isolated and
+the branch dead; testing at `loud` means a character who actually shouts can
+reach somebody the wave already treated as unreachable. The honest fix is
+re-running an isolated reactor when a shout was in fact declared, which needs
+the declaration first and so needs the loop restructured.
+
+**Where this is going.** `_isolated_wave` grows greedily and checks each
+candidate against every member already in the wave, because two characters
+together in a far room can hear each other and belong in sequence with one
+another even though both are isolated from the opener. That is already the
+shape of the real feature: the cast partitions into perceptual components, and
+each component is its own **reaction chain** -- sequential within itself,
+genuinely parallel with the others. The current code produces the partition's
+first slice; the generalisation is to run every component as a chain rather
+than only admitting the isolated ones to one opening wave.
+
+**Interruption is solved, declaratively.** Landed 2026-08-04 -- `interrupts`
+on a speech or action element, resolved against who actually spoke and who
+could actually hear them, with `agents.common.cut_short_speech` breaking the
+interrupted line at a breath point. See `CHANGELOG.md` and
+`tests/test_interruption.py`. It needed no change to ordering, which was the
+point: a character later in the chain has already heard the line they want to
+cut off.
+
+Still open there: the Director does not yet adjudicate an interrupted ACTION.
+The element is marked `interrupted: true` and the Director resolves it like any
+other attempt, so a reach that got grabbed and a reach that did not are handed
+over identically -- the flag is written and nothing reads it. Giving it force
+is a Director rule about which of two colliding attempts survives intact, and
+it is the natural companion to `commitment: "contestable"`.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

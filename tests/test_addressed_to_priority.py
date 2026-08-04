@@ -106,19 +106,30 @@ def test_addressed_character_is_queued_before_earlier_ordered_reactor(
     assert [r["speaker_id"] for r in result["rounds"]][:2] == [14, 12]
 
 
-def test_no_addressed_to_keeps_original_reactor_order(temp_db, monkeypatch):
+def test_no_addressed_to_no_longer_means_registration_order(temp_db, monkeypatch):
+    """This used to assert that an unaddressed beat kept `flow.reactors` order,
+    which is cast-REGISTRATION order and not a fact about the fiction -- the
+    same character opened every untargeted beat for the life of a story.
+
+    Order there is now standing motivation plus a seeded jitter (see
+    `_untargeted_order`). What still holds, and is what this file is really
+    about, is that the ranking neither drops nor invents a reactor when nobody
+    was addressed.
+    """
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
         ("Test", "", time.time()),
     )
 
-    ctx = _make_ctx(chat_id, reactors=[12, 14], addressed_to=[])
+    seen = set()
+    for nonce in range(12):
+        ctx = _make_ctx(chat_id, reactors=[12, 14], addressed_to=[])
+        calls_made = []
+        monkeypatch.setattr(
+            "agents.loops.character_step", _fake_character_step(calls_made),
+        )
+        interaction_loop(ctx, nonce=nonce)
+        assert sorted(calls_made[:2]) == [12, 14]
+        seen.add(calls_made[0])
 
-    calls_made = []
-    monkeypatch.setattr(
-        "agents.loops.character_step", _fake_character_step(calls_made),
-    )
-
-    interaction_loop(ctx, nonce=0)
-
-    assert calls_made[:2] == [12, 14]
+    assert seen == {12, 14}, "one character owned every untargeted beat"

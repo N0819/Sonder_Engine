@@ -1,34 +1,38 @@
-"""Everyone who was in the room when it happened gets to answer it.
+"""The simultaneous first wave: what it fixed, and why it is no longer default.
 
-The interaction loop's early exits end the BEAT, and the commonest of them is
-`_requires_director_resolution`. At the time this was written it fired on any
+THE WAVE. The interaction loop's early exits end the BEAT, and the commonest of
+them is `_requires_director_resolution`. When this was written it fired on any
 declared act with a target — a hug returned, a hand on a shoulder, a glance
 answered. Since the addressed character is deliberately queued first, the usual
 shape was: the addressed character touches somebody, the loop breaks, and every
-other reactor is never called.
-
-(That trigger has since been narrowed to `commitment: "contestable"` — see
-`test_conversation_continues.py`. The wave is still the fix for THIS failure:
-it is about who gets simulated before an exit, whatever raises the exit.)
-
-Measured across the stored corpus before this changed: **153 of 196 beats with
-two or more reactors left at least one reactor never called at all**, 106 of
-those on that one exit. Live in chat 38 t140 — the Doctor stood six feet from
-the embrace, was a reactor, had a pass-1 view of it, and never ran.
+other reactor is never called. Measured across the stored corpus: **153 of 196
+beats with two or more reactors left at least one reactor never called at all**,
+106 of those on that one exit. Live in chat 38 t140 — the Doctor stood six feet
+from the embrace, was a reactor, had a pass-1 view of it, and never ran.
 
 A character who never ran has no appraisal, so no `goal_impacts`, so no drive
 strain from a beat aimed at them; no psychology commit; no memory of having
 chosen to stay quiet — and the narrator, seeing nothing, renders the absence as
-a deliberate silence nobody chose. `_defer_to_focus` already patched exactly
-this for `tom_triggers` characters (see `test_interaction_focus_call.py`); the
-first wave is the general case it was a special case of.
+a deliberate silence nobody chose.
 
-The fix is not "exit later". It is that the first wave was never sequential in
-the fiction: everyone in the initial queue is answering the SAME thing, the
-player's already-fixed declaration, and none of them has seen any other
-reactor's response because none exists yet. `initial_parallel_reactors` has
-been in `DEFAULT_INTERACTION_CONFIG` since long before this and was read by
-nothing.
+WHY IT IS NO LONGER THE DEFAULT. The wave's own argument is that everyone in the
+initial queue is answering the SAME already-fixed thing and none of them has
+seen another's response, so making them take turns claims something false. That
+is right about a beat aimed at the ROOM and wrong about one aimed at a person,
+which is most of them: the others are bystanders to an exchange that has not
+finished, and deciding blind they answer a question that is already answered.
+Live, chat 59 t161 — the player asked the Doctor a direct question, he was
+correctly ranked first and answered, and Tamamo in the same blind instant said
+"Doctor?", prompting a man who had just spoken. The narrator's own fidelity
+check caught it as dialogue rendered out of order.
+
+The stranding it was introduced for is now fixed where it was caused: that exit
+is gated on `commitment: "contestable"` (see `test_conversation_continues.py`),
+and `_defer_to_focus` plus the queue-not-empty guard cover the rest.
+
+So the default is 1 and `initial_parallel_reactors` is the knob. The tests below
+still exercise the wave at 2 and 3, because raising it must keep working — a
+duel, a crowd turning at a noise, any beat where nobody was addressed.
 """
 
 from __future__ import annotations
@@ -49,7 +53,8 @@ class _Turn:
 
 
 class _Ctx:
-    def __init__(self, reactors, tom_triggers=(), addressed=(), cast=None):
+    def __init__(self, reactors, tom_triggers=(), addressed=(), cast=None,
+                 sequence=()):
         self.chat = _Chat()
         self.turn = _Turn()
         self.cast = [
@@ -63,7 +68,8 @@ class _Ctx:
                 "addressed_to": list(addressed),
                 "tom_triggers": list(tom_triggers),
                 "dialogue_mode": True,
-            }
+            },
+            "sequence": [dict(e) for e in sequence],
         }
         self.perception_act = {"views": {}}
         self.reaction_results = {}
@@ -112,6 +118,11 @@ def _install(monkeypatch, calls_log, *, wave=2, physical=(), asks_player=(),
                         lambda existing, additions: (existing or "") + "|".join(additions))
     monkeypatch.setattr(loops, "_next_speaker_candidates",
                         lambda ctx, sid, perceived, spoke: [])
+    # These fixtures are about WAVE mechanics, so the untargeted shuffle is
+    # pinned to identity here and exercised on its own below. Otherwise every
+    # assertion about who ran would be asserting the jitter.
+    monkeypatch.setattr(loops, "_untargeted_order",
+                        lambda ctx, ids, nonce: list(ids))
 
     def fake_character_step(ctx, cid, nonce):
         calls_log.append(cid)
@@ -147,7 +158,9 @@ class TestTheLiveFailure:
 
         out = loops.interaction_loop(ctx, nonce=0)
 
-        assert calls == [41, 35]
+        # All three run now, not two: the exit waits for everybody the beat
+        # summoned, which is the general rule the wave was approximating.
+        assert calls == [41, 35, 40]
         assert out["stop_reason"] == "physical resolution required"
 
     def test_a_question_to_the_player_also_waits_for_the_wave(self, monkeypatch):
@@ -222,7 +235,9 @@ class TestTheWaveIsBounded:
 
         out = loops.interaction_loop(ctx, nonce=0)
 
-        assert calls == [1]
+        # A wave of one is now the DEFAULT, and the beat still gives every
+        # initial reactor its call before the exit stands.
+        assert calls == [1, 2]
         assert out["stop_reason"] == "physical resolution required"
 
     def test_the_call_budget_still_wins(self, monkeypatch):
@@ -283,12 +298,23 @@ class TestSilenceIsAPropertyOfTheWave:
         assert out["stop_reason"] == "natural silence"
 
 
-def test_the_knob_was_declared_long_before_it_was_read():
-    """It is read from config with a fallback of 1, so a caller that has never
-    heard of it behaves exactly as before."""
+def test_the_beat_opens_with_one_character_so_causality_can_build():
+    """Reversed deliberately. The wave opened with two on the argument that
+    everyone is responding to the same fixed thing and so could not have seen
+    each other -- true of a beat aimed at the room, false of one aimed at a
+    person, which is most of them. Addressed to somebody else, the others are
+    bystanders to an exchange that has not finished, and deciding blind they
+    answer a question that is already answered.
+
+    Live, chat 59 t161: the player asked the Doctor a direct question, he was
+    correctly ranked first and answered, and Tamamo in the same blind instant
+    said "Doctor?" -- prompting a man who had just spoken. The narrator's own
+    fidelity check caught it as dialogue rendered out of order.
+
+    The knob stays, for a beat where the room really does react as a room."""
     from scene import DEFAULT_INTERACTION_CONFIG
 
-    assert DEFAULT_INTERACTION_CONFIG["initial_parallel_reactors"] >= 2
+    assert DEFAULT_INTERACTION_CONFIG["initial_parallel_reactors"] == 1
 
 class TestTheAskerStepsOutOfTheWave:
     """The wave's justification is that its members are answering the same
@@ -389,3 +415,185 @@ class TestTheAskerStepsOutOfTheWave:
         loops.interaction_loop(ctx, nonce=0)
 
         assert calls, "the beat must not stall with nobody speaking"
+
+
+class TestOrderIsCausality:
+    """Whoever runs first decides in a room where nothing has happened yet, and
+    everyone after them answers a room that has. So the beat says who goes
+    first, in two places: who was spoken to, and who was acted upon."""
+
+    def test_the_person_spoken_to_opens_the_beat(self, monkeypatch):
+        calls = []
+        _install(monkeypatch, calls, wave=1)
+        ctx = _Ctx([7, 3], addressed=[3])
+
+        loops.interaction_loop(ctx, nonce=0)
+
+        assert calls[0] == 3
+
+    def test_the_person_acted_upon_opens_it_when_nobody_was_spoken_to(
+            self, monkeypatch):
+        calls = []
+        _install(monkeypatch, calls, wave=1)
+        ctx = _Ctx([7, 3], sequence=[
+            {"type": "action", "attempt": "sets a hand on their shoulder",
+             "targets": [3]},
+        ])
+
+        loops.interaction_loop(ctx, nonce=0)
+
+        assert calls[0] == 3
+
+    def test_speech_outranks_action(self, monkeypatch):
+        """An action's `targets` is a looser field than an address -- the
+        deterministic binder fills it from whoever the act plausibly lands on,
+        and a live beat had "sits back down at the table" targeting both people
+        in the room. Treating that as an address would make the ranking say
+        nothing."""
+        calls = []
+        _install(monkeypatch, calls, wave=1)
+        ctx = _Ctx([7, 3], addressed=[7], sequence=[
+            {"type": "action", "attempt": "sits back down at the table",
+             "targets": [3, 7]},
+        ])
+
+        loops.interaction_loop(ctx, nonce=0)
+
+        assert calls[0] == 7
+
+    def test_an_act_landing_on_everyone_leaves_the_prior_order_alone(
+            self, monkeypatch):
+        """Stable sort, so a target list that names the whole room ranks them
+        all together and cast-registration order still decides."""
+        calls = []
+        _install(monkeypatch, calls, wave=1)
+        ctx = _Ctx([7, 3], sequence=[
+            {"type": "action", "attempt": "sits back down", "targets": [7, 3]},
+        ])
+
+        loops.interaction_loop(ctx, nonce=0)
+
+        assert calls == [7, 3]
+
+    def test_everyone_after_the_first_sees_what_the_first_did(
+            self, monkeypatch):
+        """The whole point of opening with one. The second character decides in
+        a room where the first has already spoken."""
+        calls, seen = [], {}
+        _install(monkeypatch, calls, wave=1, seen_views=seen)
+        ctx = _Ctx([7, 3], addressed=[7])
+
+        loops.interaction_loop(ctx, nonce=0)
+
+        assert calls[0] == 7
+        assert "7 spoke" in (seen.get(3) or "")
+        assert "3 spoke" not in (seen.get(7) or "")
+
+
+class TestWhoOpensAnUntargetedBeat:
+    """Cast-REGISTRATION order was deciding when the beat named nobody, which
+    is not a fact about the fiction: the same character opened every untargeted
+    beat for the life of a story, whatever anybody wanted."""
+
+    def _cast_ctx(self, urgencies):
+        ctx = _Ctx(list(urgencies))
+        for row in ctx.cast:
+            row["state"] = json.dumps({"active_state": {"wants": [
+                {"want": "say the thing", "urgency": urgencies[row["id"]]},
+            ]}})
+        return ctx
+
+    def test_standing_pressure_reads_the_top_want(self):
+        ctx = self._cast_ctx({1: 0.2, 2: 0.9})
+
+        assert loops._standing_pressure(ctx, 2) == 0.9
+        assert loops._standing_pressure(ctx, 1) == 0.2
+
+    def test_a_character_with_no_committed_state_has_no_pressure(self):
+        """Missing state is 0, not an error -- a mind that has never been
+        committed has no standing wants, which is the true answer."""
+        ctx = _Ctx([1, 2])
+
+        assert loops._standing_pressure(ctx, 1) == 0.0
+
+    def test_the_urgent_want_usually_opens_the_beat(self):
+        """Usually, not always: it is a lull, nobody was addressed, and a pure
+        ranking would be as fixed as registration order was."""
+        ctx = self._cast_ctx({1: 0.05, 2: 0.95})
+        firsts = [loops._untargeted_order(ctx, [1, 2], nonce)[0]
+                  for nonce in range(40)]
+
+        assert firsts.count(2) > firsts.count(1)
+
+    def test_equal_pressure_still_varies_beat_to_beat(self):
+        """The jitter is what stops one character owning every lull."""
+        ctx = self._cast_ctx({1: 0.5, 2: 0.5})
+        firsts = {loops._untargeted_order(ctx, [1, 2], nonce)[0]
+                  for nonce in range(40)}
+
+        assert firsts == {1, 2}
+
+    def test_the_same_beat_orders_the_same_way_twice(self):
+        """Seeded, so a rerun from a stage replays identically."""
+        ctx = self._cast_ctx({1: 0.4, 2: 0.6})
+
+        assert (loops._untargeted_order(ctx, [1, 2], 7)
+                == loops._untargeted_order(ctx, [1, 2], 7))
+
+    def test_it_never_drops_or_invents_a_reactor(self):
+        ctx = self._cast_ctx({1: 0.1, 2: 0.9, 3: 0.5})
+
+        for nonce in range(20):
+            assert sorted(loops._untargeted_order(ctx, [1, 2, 3], nonce)) \
+                == [1, 2, 3]
+
+
+class TestTheIsolatedException:
+    """Two people in separate rooms, out of sight and out of earshot, are not
+    taking turns in any sense a reader could detect. That is the one case where
+    the wave's original argument -- mutually blind by construction -- is
+    literally true, and it is what offscreen simulation will need.
+
+    Written, tested, and SWITCHED OFF: every reactor in a beat today is
+    somebody the player can hear, so this branch would never fire on a real
+    story, and shipping it live would mean its first run was its first
+    exercise.
+    """
+
+    _SCENE = {
+        "positions": {"A": "hall", "B": "cellar", "C": "hall"},
+        "rooms": {"hall": {"name": "Hall", "adjacent": []},
+                  "cellar": {"name": "Cellar", "adjacent": []}},
+        "entities": {},
+    }
+
+    def test_two_sealed_rooms_are_isolated(self):
+        assert loops._perceptually_isolated(self._SCENE, "A", "B")
+
+    def test_the_same_room_is_never_isolated(self):
+        assert not loops._perceptually_isolated(self._SCENE, "A", "C")
+
+    def test_an_unresolvable_room_fails_closed(self):
+        """A wrong yes puts two characters in one instant while one could hear
+        the other; a wrong no costs a sequential call nobody needed."""
+        assert not loops._perceptually_isolated(self._SCENE, "A", "Nobody")
+        assert not loops._perceptually_isolated({}, "A", "B")
+
+    def test_disabled_the_wave_is_just_the_first_reactor(self):
+        ctx = _Ctx([1, 2])
+        assert loops._isolated_wave(ctx, self._SCENE, [1, 2], False) == [1]
+
+    def test_enabled_it_admits_only_the_unreachable(self, monkeypatch):
+        ctx = _Ctx([1, 2, 3])
+        monkeypatch.setattr(loops, "character_name",
+                            lambda sheet: {"Char1": "A", "Char2": "B",
+                                           "Char3": "C"}[sheet["identity"]["name"]])
+
+        wave = loops._isolated_wave(ctx, self._SCENE, [1, 2, 3], True)
+
+        assert wave == [1, 2]   # C is in the hall with A and waits its turn
+
+    def test_it_is_off_by_default(self):
+        from scene import DEFAULT_INTERACTION_CONFIG
+
+        assert DEFAULT_INTERACTION_CONFIG["parallel_isolated_reactors"] is False
