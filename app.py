@@ -3857,6 +3857,72 @@ def edit_prose(tid: int, body: dict = Body(...)):
     )
     return {"ok": True, "prose": content["prose"]}
 
+# ---- Narration variants: flipping between rerolls of the CURRENT beat ----
+#
+# A full reroll re-runs the pipeline against the same turn and appends a new
+# variant to every step, the newest becoming active -- so a turn rerolled three
+# times holds four renderings of itself and the reader can only see the last.
+# These two routes are the whole affordance for browsing them without opening
+# the technical panel.
+#
+# Deliberately NOT marking anything stale, for the reason `edit_prose` gives
+# directly above: the director/perception/commit steps that already ran are the
+# mechanical record of what happened, commit has already applied side effects
+# that are not idempotent, and choosing which rendering of an already-true beat
+# the reader sees is a presentational operation. Selecting a variant the engine
+# itself generated is strictly less arbitrary than the free-text prose edit that
+# route already permits without staleness.
+#
+# Restricted to the LATEST turn by `_require_latest`. An earlier turn's
+# alternate rendering is a different question -- every turn after it was
+# generated against the prose that IS active -- and swapping one silently would
+# leave the story describing a beat nobody downstream read.
+
+@app.get("/api/turns/{tid}/narration")
+def turn_narration_variants(tid: int):
+    turn = q("SELECT * FROM turns WHERE id=?", (tid,), one=True)
+    if not turn:
+        raise HTTPException(404, "Turn not found")
+    step = q("SELECT * FROM steps WHERE turn_id=? AND key='narrator'",
+             (tid,), one=True)
+    if not step:
+        return {"variants": []}
+    out = []
+    for v in q("SELECT id,content,active,created FROM variants "
+               "WHERE step_id=? ORDER BY id", (step["id"],)):
+        try:
+            prose = (json.loads(v["content"]) or {}).get("prose") or ""
+        except (TypeError, ValueError):
+            prose = ""
+        out.append({"id": v["id"], "active": bool(v["active"]),
+                    "created": v["created"], "prose": prose})
+    return {"variants": out}
+
+
+@app.post("/api/turns/{tid}/narration")
+def turn_narration_select(tid: int, body: dict = Body(...)):
+    turn = q("SELECT * FROM turns WHERE id=?", (tid,), one=True)
+    if not turn:
+        raise HTTPException(404, "Turn not found")
+    _require_latest(turn)
+    step = q("SELECT * FROM steps WHERE turn_id=? AND key='narrator'",
+             (tid,), one=True)
+    if not step:
+        raise HTTPException(404, "This turn has no narrator output")
+    variant = q("SELECT id,content FROM variants WHERE id=? AND step_id=?",
+                (body.get("variant_id"), step["id"]), one=True)
+    if not variant:
+        raise HTTPException(404, "Variant not found on this turn's narration")
+    with transaction():
+        qi("UPDATE variants SET active=0 WHERE step_id=?", (step["id"],))
+        qi("UPDATE variants SET active=1 WHERE id=?", (variant["id"],))
+    try:
+        prose = (json.loads(variant["content"]) or {}).get("prose") or ""
+    except (TypeError, ValueError):
+        prose = ""
+    return {"ok": True, "prose": prose}
+
+
 @app.get("/api/turns/{tid}/pipeline")
 def pipeline_get(tid: int):
     steps = []

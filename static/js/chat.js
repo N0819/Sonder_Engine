@@ -246,6 +246,12 @@ function renderChat() {
       }, "⎇"));
 
     if (isLast) {
+      // The rerolls of THIS beat, browsable in place. Rendered empty and
+      // filled asynchronously: the count needs a request, and blocking the
+      // transcript on it would make every story load wait for a control most
+      // turns do not need.
+      d.append(el("div", { class: "rerollnav hidden" }));
+      _mountRerollNav(t.id, d);
       btns.append(
         el("button", {
           title: "Reroll",
@@ -543,6 +549,130 @@ function handleEvt(ev) {
   }
 }
 
+// ---- Flipping between rerolls of the newest beat ----
+//
+// A full reroll appends a variant to every step and activates the newest, so a
+// turn rerolled three times holds four renderings and the reader could only
+// ever see the last one -- or open the technical panel, find the narrator step,
+// and use its per-step arrows. This is that, in the place people actually look
+// for it.
+//
+// Only the newest turn, and the server enforces it too. An earlier turn's
+// alternate rendering is a different question: every turn after it was
+// generated against the prose that IS active, so swapping one silently would
+// leave the story describing a beat nobody downstream ever read.
+//
+// Selecting a variant does NOT mark anything stale. That is the same position
+// `edit_prose` takes on the server and for the same reason -- the mechanical
+// record of the beat is the director/perception/commit steps, which already
+// ran and already applied side effects that are not idempotent. Which
+// rendering the reader sees is presentation.
+const RR = {
+  turnId: null,     // the turn the arrows currently belong to
+  variants: [],     // [{id, active, prose}] oldest first
+  index: 0,
+  // Held rather than re-queried. The transcript is rebuilt wholesale on every
+  // render, so a selector resolved at press time can land on a node from a
+  // story the reader has already navigated away from.
+  proseEl: null,
+  countEl: null,
+};
+
+async function _mountRerollNav(turnId, turnEl) {
+  RR.turnId = null;
+  RR.variants = [];
+  RR.proseEl = null;
+  RR.countEl = null;
+  let payload;
+  try {
+    payload = await api("GET", `/api/turns/${turnId}/narration`);
+  } catch (e) {
+    return;   // No arrows is a fine outcome; the beat still reads.
+  }
+  // The transcript may have been rebuilt under us while that request was in
+  // flight (a reroll finishing, a different story opened).
+  if (!turnEl.isConnected) return;
+  const variants = (payload && payload.variants) || [];
+  if (variants.length < 2) return;
+
+  RR.turnId = turnId;
+  RR.variants = variants;
+  RR.index = Math.max(0, variants.findIndex(v => v.active));
+  RR.proseEl = turnEl.querySelector(".prose");
+
+  const nav = turnEl.querySelector(".rerollnav");
+  if (!nav) return;
+  nav.classList.remove("hidden");
+  nav.replaceChildren(
+    el("button", {
+      class: "rr-arrow",
+      title: "Previous version of this beat (←)",
+      "aria-label": "Previous version of this beat",
+      onclick: () => showRerollVariant(RR.index - 1)
+    }, "◀"),
+    RR.countEl = el("span", { class: "rr-count" }, ""),
+    el("button", {
+      class: "rr-arrow",
+      title: "Next version of this beat (→)",
+      "aria-label": "Next version of this beat",
+      onclick: () => showRerollVariant(RR.index + 1)
+    }, "▶")
+  );
+  _paintRerollCount();
+}
+
+function _paintRerollCount() {
+  if (RR.countEl) {
+    RR.countEl.textContent = `${RR.index + 1}/${RR.variants.length}`;
+  }
+}
+
+// Wraps, because with two or three versions the reader is comparing rather
+// than seeking, and hitting a wall mid-comparison is the annoying part.
+async function showRerollVariant(next) {
+  if (S.busy || RR.variants.length < 2) return false;
+  const total = RR.variants.length;
+  const index = ((next % total) + total) % total;
+  if (index === RR.index) return false;
+  const variant = RR.variants[index];
+
+  // Paint first, then persist. The prose is already in hand, so the flip is
+  // instant and the request rides behind it; a round trip per arrow press
+  // would make browsing feel like loading.
+  if (RR.proseEl && RR.proseEl.isConnected) {
+    RR.proseEl.textContent = variant.prose || "…";
+  }
+  RR.index = index;
+  _paintRerollCount();
+
+  try {
+    await api("POST", `/api/turns/${RR.turnId}/narration`,
+              { variant_id: variant.id });
+    RR.variants.forEach((v, i) => { v.active = i === index; });
+  } catch (e) {
+    toast("Could not switch version: " + e.message, "err");
+  }
+  return true;
+}
+
+// ← and → anywhere that is not a text field. Guarded on the composer and on
+// any input/textarea/contenteditable, because arrow keys move a caret there
+// and stealing them would be the kind of shortcut people disable.
+document.addEventListener("keydown", event => {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (!$("#modal").classList.contains("hidden")) return;
+  if (document.querySelector(".confirm-overlay")) return;
+  const active = document.activeElement;
+  if (active && (active.isContentEditable
+      || /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName))) return;
+  if (RR.variants.length < 2) return;
+  // Only claim the key once there is something to do with it, so ordinary
+  // horizontal scrolling still works on a story with no rerolls.
+  event.preventDefault();
+  showRerollVariant(RR.index + (event.key === "ArrowLeft" ? -1 : 1));
+});
+
 async function abortActiveRun() {
   const run = _activeRun;
   if (!run || !run.chatId) return false;
@@ -562,6 +692,10 @@ async function runStream(url, body, context = {}) {
   $("#stop").classList.remove("hidden");
   liveReset();
   turnStatusStart();
+  // Unlock the audio context on the gesture that STARTS the wait, not on the
+  // one that ends it -- by then the reader is in another tab and there is no
+  // gesture left to spend. See chime.js.
+  if (typeof chimeArm === "function") chimeArm();
 
   let ok = true;
   try {
@@ -583,6 +717,10 @@ async function runStream(url, body, context = {}) {
         // waiting two seconds for a beat you just watched arrive is a stall.
         if (ok) _freshTurnPending = true;
         await openChat(S.chatId);
+        // After the re-render, so the beat is on screen when it sounds. Only
+        // on success: a failure already raised a toast, and a chime that means
+        // "ready" must not also mean "gone wrong".
+        if (ok && typeof chimePlay === "function") chimePlay();
       } catch (e) {
         toast("Could not refresh story.", "err");
       }

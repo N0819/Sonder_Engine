@@ -1682,6 +1682,58 @@ Found in the same pass, none of them fixed.
   character keeps spending declarations on it.
 
 
+### 1.28 Residuals from the contact-sensation work
+
+Landed 2026-08-04: `spatial.contact_sensation` and
+`agents.perception._deliver_standing_sensations` (see `Design.md` § A standing
+contact is a continuous percept, tests in
+`tests/test_continuous_contact_sensation.py`). These are what the same
+investigation found and did not close.
+
+- **`contacts` accepts a part slot that does not name a body.** A live ledger
+  holds `actor_part: "physical reaction"` against `target_part: "laughter"`.
+  Nothing rejects it at the Director, so it is carried, aged and re-asserted
+  like a real contact. `spatial._is_anatomical_part` is a FLOOR at the renderer
+  — it declines to describe a sensation nobody could have — and the record is
+  still wrong where it is written. The right fix validates the slot on the way
+  into the scene commit. A permissive check is the only kind available: anatomy
+  is open-ended and every story invents some, so the test can only reject what
+  is affirmatively not a part.
+- **`manner` is still free text with no engine semantics.**
+  `contact_manner_kind` now reads it three ways (`interior` / `moving` /
+  `settled`) for sensation rendering, which is the first code anywhere to
+  interpret the field, but nothing else does — a contact recorded
+  `penetrating` still does not populate `contained`, so the §1.24
+  enclosure-direction work does not fire on it. Whether it should is a design
+  question: partial containment is not the same as being sealed inside
+  something, and the two are currently unrelated code paths describing
+  overlapping physical situations.
+- **Observation metadata is computed and consumed by nothing.** `intensity`,
+  `suddenness`, `ambiguity` and `directed_at_self` are re-derived from the
+  scrubbed view for every atom, cost tokens on every character payload, and
+  have no reader in code — `intensity` does not appear anywhere in the
+  character prompt either. They are also nearly constant: `intensity` is 0.35
+  on **96.7%** of 7,508 observations, and only 18 distinct
+  (intensity, suddenness, ambiguity) tuples exist corpus-wide, because the cue
+  lists behind them are an adventure vocabulary (explosions, gunshots, alarms,
+  agony). Either give them a consumer or stop computing them; a field that
+  tells a character every percept is equally important is worse than no field.
+- **`directed_at_self` mislabels the intransitive own-body case.** Of 590
+  observations opening on the perceiver's own body, **64.7%** carry
+  `directed_at_self: false`, because `_SELF_DIRECTED` recognises only
+  agent-first constructions ("grips your", "against you") and "Your body keeps
+  spasming" matches none of them. Fixed for the deterministic sensation clause
+  only, keyed on its verb rather than on a bare leading `your` — "your
+  companion steps back" is not about the perceiver, and a broad rule would
+  claim it is. Inert until the field above has a consumer.
+- **The atom budget collapses channels.** `_observation_spans` merges
+  smallest-first to fit `_MAX_OBSERVATION_ATOMS = 8`, and merging two spans of
+  different channels marks the result `mixed`. That accounts for 16.6% of
+  `mixed` observations — secondary to the 83.4% that matched no cue at all, but
+  it means a beat arriving through MORE senses loses more channel information
+  than a simple one.
+
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
