@@ -43,6 +43,7 @@ from spatial import (
     _body_interior_holder,
     ambient_scope,
     contact_phrase,
+    contact_sensation,
     containment_conceals,
     crossing_visible_from,
     egocentric_frame,
@@ -329,6 +330,12 @@ def _perceiver_spatial_facts(scene, observer, sources):
 # page of body sensation 'hearing"), and a single channel cannot describe a
 # beat that arrives through several at once.
 _CHANNEL_CUES = (
+    # Interoception was a DISTRESS vocabulary -- pain, nausea, wounds, a fixed
+    # list of interior organs -- so it fired on 2.4% of 7,508 corpus
+    # observations and never once in a story built on sustained physical
+    # contact. Interior sensation is interoception whatever its valence, and a
+    # body reporting fullness or an interior stretch is reporting it from the
+    # one channel that carries it.
     ("interoception", (
         r"\bpain\b", r"\bache[sd]?\b", r"\baching\b", r"\bnausea\b",
         r"\bdizzy\b", r"\bexhausted\b", r"\bstarving\b", r"\bwounded\b",
@@ -336,12 +343,22 @@ _CHANNEL_CUES = (
         r"\bbreathless\b", r"\bcannot breathe\b", r"\bout of breath\b",
         r"\bheartbeat\b", r"\byour (?:pulse|heart|lungs|chest|stomach|"
         r"belly|throat|muscles|nerves)\b",
+        r"\bwithin it\b", r"\bfullness\b", r"\binside you\b",
+        r"\bstretch(?:ed|ing)?\b", r"\bclench(?:es|ed|ing)?\b",
+        r"\bcramp(?:s|ed|ing)?\b", r"\bspasm(?:s|ed|ing)?\b",
     )),
+    # Touch was similarly narrow: grips, presses and skin. It had no word for
+    # pressure that is not a grip, for weight, friction, texture, tremor or
+    # heat -- so nearly half of every observation the engine made matched no
+    # channel cue at all and fell through to `mixed`.
     ("touch", (
         r"\btouch(?:es|ed|ing)?\b", r"\bpressure\b", r"\bgrip(?:s|ped|ping)?\b",
         r"\bagainst your\b", r"\bgrips? your\b", r"\bholds? your\b",
         r"\bpress(?:es|ed|ing)? (?:into|against) you\b", r"\bwarmth\b",
         r"\bskin\b",
+        r"\bfriction\b", r"\btexture\b", r"\btremors?\b", r"\btrembl(?:es|ing)\b",
+        r"\bweight of\b", r"\bheat of\b", r"\bcontact\b", r"\bagainst it\b",
+        r"\bclosed around it\b", r"\bregisters?\b", r"\bcontinuous while\b",
     )),
     ("hearing", (
         r"\byou hear\b", r"\bsays?\b", r"\bsaid\b", r"\bvoice\b",
@@ -390,7 +407,12 @@ _SELF_DIRECTED = re.compile(
     r"|wraps around)\s+(?:you|your)\b"
     r"|\byou are\s+(?:being\s+)?(?:\w+(?:ed|en)|struck|hit|shot|torn|thrown"
     r"|caught|dragged|pinned|held|bound)\b"
-    r"|\byour name\b",
+    r"|\byour name\b"
+    # A continuous-contact clause has the perceiver's own body as its subject
+    # ("your shoulder registers ..."), which no agent-first pattern above
+    # reaches. Keyed on the deterministic verb rather than on a bare leading
+    # "your", because "your companion steps back" is not about the perceiver.
+    r"|\byour\s+(?:\w+\s+){0,2}registers?\b",
     re.I,
 )
 
@@ -459,6 +481,93 @@ def _observation_spans(text):
         spans[target][1].extend(spans[source][1])
         spans.pop(source)
     return [(channel, " ".join(parts)) for channel, parts in spans]
+
+
+def _contact_already_felt(view, contact, observer_name, scene):
+    """Does this view already deliver the sensation of this standing contact?
+
+    Matched on the two BODY PARTS the contact names, because that is the part
+    of the record a paraphrase preserves -- a model rendering a tail against a
+    thigh will say tail and thigh whatever else it changes -- while the manner
+    is exactly what it rewrites.
+
+    Both parts must appear IN ONE SENTENCE, on word boundaries. Scanning the
+    whole view for each part separately matched a hip in one clause against a
+    hand in another and called a contact between them delivered; unanchored
+    substrings matched `hip` inside `ship`. A contact is rendered where both
+    of its ends are named together, or it is not rendered.
+
+    Biased toward silence in one direction only: a contact naming no parts at
+    all cannot be matched, and is treated as already delivered rather than
+    appending a clause about `your body` on every beat of an ordinary embrace.
+    """
+    if not isinstance(contact, dict):
+        return True
+    observer = str(observer_name or "").strip()
+    if same_subject(scene, str(contact.get("actor") or ""), observer):
+        mine = str(contact.get("actor_part") or "")
+        theirs = str(contact.get("target_part") or "")
+    else:
+        mine = str(contact.get("target_part") or "")
+        theirs = str(contact.get("actor_part") or "")
+    parts = [p.replace("_", " ").strip().casefold()
+             for p in (mine, theirs) if str(p or "").strip()]
+    if not parts:
+        return True
+    patterns = [re.compile(r"\b%s\b" % re.escape(part)) for part in parts]
+    for sentence in re.split(r"(?<=[.!?])\s+", str(view or "")):
+        folded = sentence.casefold()
+        if all(pattern.search(folded) for pattern in patterns):
+            return True
+    return False
+
+
+def _deliver_standing_sensations(view, observer_name, scene, contacts):
+    """Append the sensation of any standing contact the view left unfelt.
+
+    THE DEFECT THIS IS THE FLOOR FOR. The perception contract specifies the
+    tactile channel only as a substitute for sight: every mandatory clause is
+    conditioned on sight being absent -- in the dark, behind a wall, sealed
+    inside something. Two bodies in continuous contact in a lit room have a
+    wide-open tactile channel and no clause requiring a word of it, so a view
+    written under a token budget renders what is seen and drops what is felt.
+    Measured over 7,508 corpus observations before this: 46.8% classified as
+    `mixed` because no sensory cue matched them at all, and `interoception`
+    accounted for 2.4%.
+
+    A standing contact is neither an event nor inert state. It is a CONTINUOUS
+    PERCEPT -- true every beat and felt every beat, until it ends -- and the
+    engine had no representation for that, only `event` (rendered once) and
+    `state` (mentioned, then inert). This is the third category, delivered
+    deterministically so it does not depend on a model cooperating.
+
+    It subtracts nothing and adds only to a party to the contact: a bystander
+    watching two other people touch gets no clause, because `contact_sensation`
+    returns "" for anyone who is not a party.
+    """
+    additions = []
+    for contact in contacts or []:
+        if _contact_already_felt(view, contact, observer_name, scene):
+            continue
+        clause = contact_sensation(contact, you=observer_name, scene=scene)
+        if clause:
+            additions.append(clause[0].upper() + clause[1:] + ".")
+    if not additions:
+        return view
+    return _append_once(str(view or ""), " ".join(additions))
+
+
+def _standing_contacts_for(scene, observer_name):
+    """The contacts this perceiver is a party to, first-hand by definition."""
+    out = []
+    for contact in (scene or {}).get("contacts") or []:
+        if not isinstance(contact, dict):
+            continue
+        if (same_subject(scene, str(contact.get("actor") or ""), observer_name)
+                or same_subject(scene, str(contact.get("target") or ""),
+                                observer_name)):
+            out.append(contact)
+    return out
 
 
 def _observations_from_clean_views(clean_views):
@@ -608,6 +717,12 @@ def _observer_scene_payload(scene, perceiver):
             continue
         entry = copy.deepcopy(contact)
         entry["standing"] = contact_phrase(contact, you=name)
+        # `standing` is the contact as a third party would state it. `sensation`
+        # is what it delivers to THIS perceiver's body, which is a different
+        # thing and was previously nowhere in the payload -- so a mind in
+        # sustained contact received a diagram of the contact and nothing it
+        # felt. Empty for a contact this perceiver is only watching.
+        entry["sensation"] = contact_sensation(contact, you=name, scene=scene)
         contacts.append(entry)
     scales = {
         key: value for key, value in (scene.get("scales") or {}).items()
@@ -2255,6 +2370,14 @@ def perception_act(ctx, nonce):
             sc, p_name,
             self_forms_by_name.get(p["name"]) or [p["name"]],
         )
+        # A standing contact is felt on the beat the character DECIDES, not
+        # only on the beat it is told about afterwards. Measured in chat 62:
+        # the acting view was a median 460 characters against 812 for the
+        # outcome view of the same character, and carried no sensation from
+        # her own body while three contacts stood -- so she chose her conduct
+        # numb and was told what she had felt once the choice was made.
+        view = _deliver_standing_sensations(
+            view, p["name"], sc, _standing_contacts_for(sc, p["name"]))
         clean_views[pid] = view or None
 
     _disguise_leak_check(ctx, "perception_act", clean_views, perceivers,
@@ -3182,6 +3305,8 @@ def perception_outcome(ctx, nonce):
             ctx.warnings.append(
                 f"perception_outcome: restored a heard line dropped by the "
                 f"scrub chain from view '{pid}': \"{body[:80]}\"")
+        view = _deliver_standing_sensations(
+            view, p["name"], sc, _standing_contacts_for(sc, p["name"]))
         clean_views[pid] = view or None
 
     loop = ctx.interaction_loop or {}

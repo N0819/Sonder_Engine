@@ -103,6 +103,7 @@
         <input id="amb-vol" type="range" min="0" max="1" step="0.01" value="0.35"
                title="Ambience volume" aria-label="Ambience volume">
         <button id="b-amb-reroll" class="icon-button" title="Different sound for this room" aria-label="Different sound for this room">🎲</button>
+        <button id="b-chime" class="icon-button" title="Chime when a turn or a generation finishes" aria-label="Chime when a turn or a generation finishes">🔔</button>
         <button id="b-ambience" class="icon-button" title="Room ambience" aria-label="Room ambience">🎧</button>
       </div>
     </div>
@@ -149,6 +150,10 @@
      particle engine and so no vendored bundle to load. See the header of
      weather-fx.js for why that is a fraction of the power. -->
 <script src="/static/js/weather-fx.js"></script>
+<!-- The "your turn is ready" tap on the shoulder. Synthesised and
+     scheduled on the audio clock so it sounds the same from a
+     background tab, which is the only place it matters. -->
+<script src="/static/js/chime.js"></script>
 <script src="/static/js/chat.js"></script>
 <script src="/static/js/settings.js"></script>
 <script src="/static/js/themes.js"></script>

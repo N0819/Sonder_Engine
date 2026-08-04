@@ -33,6 +33,13 @@ function numOr(v, f) { const n = Number(v); return Number.isFinite(n) ? n : f; }
 
 // ---- API ----
 async function api(method, url, body) {
+  // Arm on the way IN. Generating a character or a lorebook takes minutes, and
+  // this call almost always originates from a click -- which is the gesture
+  // the browser will let us unlock audio with, and the last one available
+  // before the reader tabs away. See chime.js.
+  const chimed = typeof chimeWatches === "function" && chimeWatches(method, url);
+  if (chimed && typeof chimeArm === "function") chimeArm();
+  const startedAt = performance.now();
   let response;
   try {
     response = await fetch(url, {
@@ -71,6 +78,11 @@ async function api(method, url, body) {
       // keep the response body
     }
     throw new Error(message || `HTTP ${response.status}`);
+  }
+  // Only on the way out, and only on success: a rejection has already thrown
+  // above, and every failure path in this app raises its own toast.
+  if (chimed && typeof chimeWorkFinished === "function") {
+    chimeWorkFinished(method, url, performance.now() - startedAt);
   }
   const ct = response.headers.get("content-type") || "";
   return ct.includes("json")

@@ -223,6 +223,16 @@ font-size:var(--prose-size,17px);line-height:1.7;max-width:65ch}
 opacity:.3;transition:opacity .15s ease}
 .turn:hover .tbtns,.turn:focus-within .tbtns{opacity:1}
 .tbtns button{padding:1px 7px;font-size:12px;opacity:.75}
+/* Version arrows for the newest beat. Unlike .tbtns these do NOT hide until
+   hover: a turn with three rerolls behind it should say so while you are
+   reading it, because the whole point is knowing another version exists. */
+.rerollnav{display:flex;align-items:center;gap:6px;margin-top:2px;
+opacity:.55;transition:opacity .15s ease}
+.rerollnav:hover{opacity:1}
+.rerollnav.hidden{display:none}
+.rerollnav .rr-arrow{padding:1px 8px;font-size:12px;line-height:1.5}
+.rr-count{font-size:11px;color:var(--dim);
+font-variant-numeric:tabular-nums;min-width:3ch;text-align:center}
 /* Opacity-on-hover has no touch equivalent -- without this, the turn's
    controls would be unreachable on any device without a mouse. */
 @media(hover:none){.tbtns{opacity:.75}.story-action{opacity:1}}
@@ -540,7 +550,7 @@ display:flex;align-items:center;gap:4px}
 #b-ambience.working{animation:bd-pulse 1.4s ease-in-out infinite}
 /* Muted is a state someone must be able to see without hovering -- the whole
    point of a panic button is that it reads at a glance. */
-#b-amb-mute.muted{border-color:#c0392b;color:#e74c3c}
+#b-amb-mute.muted,#b-chime.muted{border-color:#c0392b;color:#e74c3c}
 #b-amb-reroll:disabled{opacity:.4;cursor:default}
 #amb-vol{width:64px;accent-color:var(--acc)}
 /* The room to float in is (COMPOSER - 720)/2, and the composer is the window

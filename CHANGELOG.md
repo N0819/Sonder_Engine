@@ -1,5 +1,114 @@
 # Changelog
 
+## alpha 7.1 — Still true, and still felt
+
+### Two signals around a finished turn
+
+A turn here is a long wait — a median of several minutes across the benchmark
+corpus — so the reader starts one and goes to do something else. Both of these
+exist for what happens at the other end of that wait.
+
+- **A chime when a turn lands, audible from another tab.** Two sine tones
+  through a gain envelope, synthesised rather than loaded: there is nothing to
+  ship, nothing to fetch, and nothing to fail on a cold cache at the exact
+  moment it is supposed to fire. Scheduled on `ctx.currentTime` and never on a
+  timer, because a backgrounded tab has its timers throttled to roughly once a
+  second, which would smear the two notes into something arrhythmic — the audio
+  clock runs at audio rate whatever the page is doing, so it sounds identical
+  hidden and visible. The audio context is unlocked on the gesture that STARTS
+  the wait rather than the one that ends it; by then the reader is elsewhere
+  and there is no gesture left to spend. Quiet (peak gain 0.06), gone inside a
+  second and a half, and a rising perfect fifth — an interval with no tension
+  in it to resolve. Sounds only on a run that succeeded, since a failure
+  already raises a toast and a chime meaning "ready" must not also mean "gone
+  wrong". Mute is a bell button beside the ambience controls, global and sticky
+  in `localStorage` for the same reason ambience's is.
+
+  It covers **every** long generation, not just turns — a character, a persona,
+  a psychology fill, a lorebook. The rule is duration rather than a list of
+  routes, because a list would be wrong the first time somebody adds one: a
+  mutation that took longer than four seconds gets the same tap on the
+  shoulder, and reads never do. Backdrops and ambience are excluded — the
+  picture appears and the sound starts, so both already announce themselves,
+  and ringing a bell to announce that a sound is about to start would land
+  right on top of the crossfade.
+- **Arrows to flip between the rerolls of the newest beat.** A full reroll
+  appends a variant to every step and activates the newest, so a turn rerolled
+  three times held four renderings of itself and the reader could only see the
+  last — or open the technical panel, find the narrator step, and use its
+  per-step arrows. Now `◀ 2/3 ▶` sits under the turn, and ← / → do the same
+  from anywhere that is not a text field. The flip paints from prose already in
+  hand and persists behind it, so comparing two versions does not feel like
+  loading.
+
+  **Selecting a rendering marks nothing stale**, which is `edit_prose`'s
+  position taken consistently: the mechanical record of a beat is the
+  director/perception/commit steps, which already ran and already applied side
+  effects that are not idempotent. Which rendering the reader sees is
+  presentation, and choosing one the engine itself produced is strictly less
+  arbitrary than the free-text prose edit that route already permits. Latest
+  turn only, enforced server-side — every turn after an earlier one was
+  generated against the prose that is active, so swapping one silently would
+  leave the story describing a beat nobody downstream read.
+
+### A standing contact is felt on every beat, until it ends
+
+The engine had two categories for anything physical: **event** — rendered once,
+on the beat it happens — and **state**, mentioned and then inert. A contact
+between two bodies is neither. It is true every beat *and* felt every beat,
+until the ledger drops it, and there was no representation for that.
+
+What the missing category cost: the perception contract specifies the tactile
+channel only as a **substitute for sight**. Every mandatory clause is
+conditioned on sight being absent — in the dark, behind a wall, sealed inside
+something. Two bodies in continuous contact in a lit room have a wide-open
+tactile channel and nothing requiring a word of it, so a view written under a
+token budget renders what is seen and drops what is felt.
+
+Measured before the fix, over 7,508 corpus observations:
+
+| | |
+|---|---|
+| classified `mixed` because **no sensory cue matched at all** | **46.8%** |
+| `interoception` | 2.4% |
+| own-body percepts filed as not directed at the perceiver | 64.7% of 590 |
+
+And in the story that surfaced it, the **acting** view of a character in three
+standing contacts ran a median 460 characters against 812 for the outcome view
+of the same character. She chose her conduct with no sensation from her own
+body, and was told what she had felt after the choice was made.
+
+- **`spatial.contact_sensation`** renders a standing contact as the continuous
+  percept it is, from one party's side, in plain physical terms — pressure,
+  weight, movement, friction, warmth, and for an interior contact its fullness
+  and stretch. **Asymmetric where the contact is**: the enclosing party feels
+  something within them, the entering party feels something closed around
+  theirs, and rendering either side with the other's phrasing describes a body
+  the perceiver does not have.
+- **`_deliver_standing_sensations` is the deterministic floor**, not a request
+  in the prompt. It appends only what the model left out, only for a party to
+  the contact — a bystander watching two other people touch feels nothing —
+  and matches both parts within ONE sentence on word boundaries, so it neither
+  duplicates a paraphrase nor accepts a hip named in one clause against a hand
+  named in another.
+- **It runs on the acting view too**, which is the half that mattered. A
+  character now decides while feeling what is happening to it.
+- **The channel vocabularies were an adventure register.** `interoception`
+  listed distress — pain, nausea, wounds, a fixed set of interior organs — so
+  it could not fire on any interior sensation that was not an injury. `touch`
+  had no word for pressure that is not a grip, or for weight, friction,
+  texture, tremor or heat. Widened, with interior contact routed to
+  interoception where it belongs: `mixed` falls from 46.8% to 35.5% on the
+  existing corpus, and `interoception` more than doubles.
+- **A part slot that names an act rather than a body renders nothing.** A live
+  ledger holds `physical reaction` against `laughter`; the renderer declines
+  rather than describing a sensation nobody could have. That is a floor — the
+  record is wrong where it is written, and the Director-side gap is logged in
+  `docs/UNBUILT.md` § 1.28.
+- Plural parts take a plural verb and pronoun, via the `_part_is_plural` the
+  contact renderer already carried.
+
+
 ## alpha 7.0 — What fires, what carries, and who anyone is
 
 Three investigations that turned out to share a shape. Each began by measuring

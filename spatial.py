@@ -3402,6 +3402,183 @@ def contact_phrase(contact: dict, *, subject_first=True, you=None) -> str:
     return f"{left} {verb} {right}, {detail}" if detail else f"{left} {verb} {right}"
 
 
+# A contact whose manner places one part WITHIN another rather than against its
+# surface. The distinction is not decorative: an interior contact is felt by the
+# enclosing party as internal state, which is the interoceptive channel, while a
+# surface contact arrives at the skin, which is touch. Reading the second as the
+# first hands a perceiver a body sense they do not have; reading the first as
+# the second loses the only channel that carries it.
+CONTACT_INTERIOR_MANNERS = frozenset({
+    "penetrate", "penetrating", "penetrated", "inside", "within", "insert",
+    "inserted", "inserting", "impale", "impaled", "sheathe", "sheathed",
+    "lodge", "lodged", "embed", "embedded", "buried", "burrow", "burrowed",
+    "pierce", "pierced", "piercing", "enter", "entered", "entering",
+})
+
+# A contact whose manner carries MOTION across the contact surface. A moving
+# contact delivers friction and changing pressure; a settled one delivers steady
+# pressure and shared warmth. Both are continuous, and neither is an event.
+CONTACT_MOVING_MANNERS = frozenset({
+    "rub", "rubbing", "stroke", "stroking", "swirl", "swirling", "circle",
+    "circling", "grind", "grinding", "slide", "sliding", "thrust", "thrusting",
+    "trace", "tracing", "drag", "dragging", "work", "working", "roll",
+    "rolling", "pump", "pumping", "caress", "caressing", "brush", "brushing",
+    "graze", "grazing", "knead", "kneading", "ghost", "ghosting",
+    "digging", "scratch", "scratching", "tickle", "flick",
+})
+
+# (relation, qualities) per manner kind. An interior contact is NOT symmetric:
+# the enclosing party feels something within them, the entering party feels
+# something closed around them, and rendering either side with the other's
+# phrasing describes a body the perceiver does not have.
+# Words that name an act, a sound, or a state rather than a piece of anatomy.
+# The Director periodically fills a contact's part slots with one -- a live
+# ledger holds `actor_part: "physical reaction"` against `target_part:
+# "laughter"` -- and a renderer that trusts the slot produces "your physical
+# reaction registers her laughter against it", which is not a sensation and not
+# a sentence anybody should read.
+#
+# This is a FLOOR, not a validator: the record is wrong where it is written,
+# and the right fix is that `contacts` never accepts a non-part in the first
+# place. Until then, a contact this cannot render is left to `contact_phrase`,
+# which states it as a third-party fact and does not claim anyone felt it.
+_NON_ANATOMICAL_PART_WORDS = frozenset({
+    "reaction", "reactions", "response", "responses", "behaviour", "behavior",
+    "laughter", "laugh", "moan", "moans", "cry", "cries", "sound", "sounds",
+    "noise", "expression", "expressions", "demeanor", "demeanour", "presence",
+    "aura", "energy", "emotion", "emotions", "feeling", "feelings", "mood",
+    "attention", "gaze", "stare", "glance", "state", "status", "posture",
+    "pleasure", "arousal", "climax", "orgasm", "movement", "motion", "action",
+    "act", "acts", "self", "body language", "attitude", "intent", "intention",
+})
+
+
+def _is_anatomical_part(part) -> bool:
+    """Could this string name a place ON a body?
+
+    Permissive by design -- anatomy is open-ended and every story invents some
+    -- so this rejects only what is affirmatively NOT a part.
+    """
+    words = str(part or "").replace("_", " ").strip().casefold()
+    if not words:
+        return True  # No part named is a whole-body contact, which is valid.
+    if words in _NON_ANATOMICAL_PART_WORDS:
+        return False
+    return not any(w in _NON_ANATOMICAL_PART_WORDS for w in words.split())
+
+
+_SENSATION_FORMS = {
+    ("interior", "enclosing"): ("within it",
+                                "pressure, fullness and movement"),
+    ("interior", "entering"): ("closed around it",
+                               "pressure, heat and movement along its length"),
+    ("moving", "either"): ("against it",
+                           "shifting pressure, movement and friction"),
+    ("settled", "either"): ("against it",
+                            "steady pressure, weight and shared warmth"),
+}
+
+
+def contact_manner_kind(manner) -> str:
+    """`interior`, `moving`, or `settled` for one contact manner.
+
+    Falls through to `settled` on an unknown manner, which is the conservative
+    reading: an unrecognised word describes a contact that is simply THERE, and
+    claiming motion or interiority the record does not state would be inventing
+    physical fact rather than reporting it.
+    """
+    word = str(manner or "").strip().casefold()
+    if not word:
+        return "settled"
+    head = re.split(r"[^\w]+", word, maxsplit=1)[0]
+    for candidate in (word, head):
+        if candidate in CONTACT_INTERIOR_MANNERS:
+            return "interior"
+        if candidate in CONTACT_MOVING_MANNERS:
+            return "moving"
+    return "settled"
+
+
+def contact_sensation(contact: dict, *, you: str, scene: dict = None) -> str:
+    """What one STANDING contact continuously delivers to ONE party's body.
+
+    `contact_phrase` renders a contact as an objective third-party fact -- who
+    is touching whom, where. That is what a narrator needs and it is not what
+    the touching party FEELS, so a perceiver in sustained contact received a
+    diagram of the contact and no sensation from it.
+
+    The gap this closes: the perception contract specified the tactile channel
+    only as a SUBSTITUTE for sight -- every mandatory clause was conditioned on
+    sight being absent (in the dark, behind a wall, sealed inside something).
+    With both parties in a lit room and in continuous contact, the channel is
+    wide open and nothing required a word of it, so under a token budget the
+    view rendered what was seen and dropped what was felt. Measured across the
+    corpus before this: 46.8% of all observations classified as `mixed`
+    because no sensory cue matched them at all, and `interoception` accounted
+    for 2.4%.
+
+    A standing contact is neither an event nor inert state. It is a CONTINUOUS
+    PERCEPT: true every beat and felt every beat, until it ends. This renders
+    that percept, in the second person, from the named party's side, in plain
+    physical terms -- pressure, movement, friction, warmth -- and says nothing
+    about what the other body is doing internally, which no contact carries.
+
+    Returns "" when the named party is not a party to the contact: a bystander
+    watching two other people touch feels nothing, and this must never be the
+    thing that tells them otherwise.
+    """
+    if not isinstance(contact, dict):
+        return ""
+    actor = str(contact.get("actor") or "").strip()
+    target = str(contact.get("target") or "").strip()
+    observer = str(you or "").strip()
+    if not actor or not target or not observer:
+        return ""
+    # Through `same_subject`, never `==`: one being routinely carries a cast
+    # display name and a scene entity id at once, and a contact recorded under
+    # one spelling against a perceiver named by the other would silently match
+    # nobody -- leaving the party to a contact feeling nothing from it.
+    def _is_observer(name):
+        if scene is not None:
+            return same_subject(scene, name, observer)
+        return str(name or "").strip().casefold() == observer.casefold()
+
+    if _is_observer(actor):
+        mine, theirs = contact.get("actor_part"), contact.get("target_part")
+        other = target
+    elif _is_observer(target):
+        mine, theirs = contact.get("target_part"), contact.get("actor_part")
+        other = actor
+    else:
+        return ""
+
+    # A slot holding an act, a sound or a state is a malformed record, not a
+    # body. Say nothing rather than render a sensation nobody could have.
+    if not (_is_anatomical_part(mine) and _is_anatomical_part(theirs)):
+        return ""
+
+    kind = contact_manner_kind(contact.get("manner"))
+    if kind == "interior":
+        # `actor` is the party whose part goes in; the target encloses it.
+        side = "entering" if _is_observer(actor) else "enclosing"
+        tail = "continuous while it stays there"
+    else:
+        side, tail = "either", "continuous while the contact holds"
+    relation, quality = _SENSATION_FORMS[(kind, side)]
+    mine = str(mine or "").strip().replace("_", " ")
+    theirs = str(theirs or "").strip().replace("_", " ")
+    site = f"your {mine}" if mine else "your body"
+    source = f"{other}'s {theirs}" if theirs else other
+    # Body parts are routinely plural, and the subject here is the PART, not
+    # the person: "your legs registers" and "against it" for two legs are the
+    # same agreement bug `contact_phrase` already carries `_part_is_plural`
+    # for. The trailing pronoun refers back to the perceiver's own part.
+    plural = _part_is_plural(mine) if mine else False
+    verb = "register" if plural else "registers"
+    relation = relation.replace(" it", " them") if plural else relation
+    return f"{site} {verb} {source} {relation}: {quality}, {tail}"
+
+
 def spatial_facts(scene: dict, observer: str, source_names) -> list:
     """Deterministic, authoritative one-line spatial statements for a beat, from
     the observer's frame -- GROUND TRUTH a weak narrator must not contradict
