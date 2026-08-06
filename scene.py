@@ -113,6 +113,50 @@ def _seed_scene_initial_attire(chat_id, scene, chat=None):
         seed_initial_attire(
             scene, persona_name(sheet), persona_initial_outfit(sheet))
 
+# A character can be absent from a scene without ceasing to exist in the story,
+# and `chat_chars.status` was answering both questions with one word. Three
+# questions were being asked of it:
+#
+#   (a) does this person exist in this chat's world?   -- the roster question
+#   (b) are they in the current scene?                  -- the perception question
+#   (c) should the engine spend a model call on them?   -- the animation question
+#
+# `active_cast` answers (b) and (c) correctly and was being read as an answer
+# to (a) as well. What that cost: a dormant character fell out of
+# `_known_name_roster`, so an introduction naming them was silently dropped and
+# the guard that stops a registered character being puppeted as background
+# furniture stopped covering exactly the people most likely to be furniture.
+# Measured on a live chat: four `ok` introductions emitted on one turn, one
+# survived -- the only pair where both names were active.
+#
+# DEPARTED is the real answer to (a). Nothing writes it yet; `dormant` rows
+# predate the distinction and are read as extant, which is the safe direction:
+# a departed character wrongly nameable is a continuity oddity, a present
+# character wrongly unnameable is the defect above.
+DEPARTED_STATUSES = ("departed",)
+
+
+def extant_cast(chat_id, frame_id=None):
+    """Everyone this chat's world still contains, present or not.
+
+    NOT the cast to animate and NOT the cast to place in a room -- that is
+    `active_cast`, which is deliberately untouched. This answers only "is this
+    a person the story knows about", which is what name resolution, the
+    recognition map and the anti-furniture guard actually need.
+    """
+    placeholders = ",".join("?" * len(DEPARTED_STATUSES))
+    return q(
+        "SELECT ch.id,ch.name,COALESCE(cc.sheet,ch.sheet) AS sheet,"
+        "ch.source,ch.created,ch.resource_uid,"
+        "cc.state AS cstate,cc.status "
+        "FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id "
+        f"WHERE cc.chat_id=? AND cc.status NOT IN ({placeholders}) "
+        "ORDER BY ch.id",
+        (chat_id, *DEPARTED_STATUSES),
+    )
+
+
 def active_cast(chat_id, frame_id=None):
     """frame_id=None (present) reads chat_chars directly, unchanged. A
     real frame LEFT JOINs chat_char_frames and prefers its override when
