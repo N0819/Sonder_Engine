@@ -2573,6 +2573,16 @@ def _known_name_roster(chat, cast):
     for `actor_name in recognized_sources` to ever match. The persona/player
     name and every cast member's character_name() output are the only
     strings that check will ever compare against.
+
+    PRESENCE, NOT EXISTENCE, and deliberately so. `_registered_name_roster`
+    below answers the other question. They are two functions rather than one
+    function with a flag because a flag has a default and a default is a thing
+    to forget -- and the short, obvious name belongs to the narrow one, so the
+    lazy call is the safe call.
+
+    This one is safe to ENUMERATE. The wide one is not: `promote_background_
+    character` iterates a roster straight into the `known` recognition map,
+    and nothing downstream ever re-checks that write.
     """
     from scene import persona_of
     pers = persona_of(chat)
@@ -2583,6 +2593,36 @@ def _known_name_roster(chat, cast):
             roster.append(name)
     for row in cast:
         roster.append(character_name_from_text(row["sheet"]))
+    return roster
+
+
+def _registered_name_roster(chat, cast):
+    """Everyone the STORY knows about, present or not -- the existence answer.
+
+    MEMBERSHIP ONLY. Test strings against it; never iterate it into anything a
+    model reads or a table stores. Six of the eight roster call sites only ask
+    "is this string somebody?", and for those, widening is either harmless or
+    an outright repair -- every exclusion guard gets stronger, including the
+    one that stops a registered character being handed to the background
+    manager as furniture.
+
+    Why it exists: `chat_chars.status` was answering three questions at once --
+    does this person exist, are they in the scene, should we spend a model call
+    on them. Reading the presence answer as the existence answer meant a
+    dormant character could be named by nobody. Measured on chat 34: one turn
+    emitted four `ok` introductions and exactly one survived, the only pair
+    where both names were active.
+    """
+    from scene import extant_cast
+    roster = list(_known_name_roster(chat, cast))
+    try:
+        chat_id = chat["id"]
+    except (TypeError, KeyError, IndexError):
+        return roster
+    for row in extant_cast(chat_id) or []:
+        name = character_name_from_text(row["sheet"])
+        if name and name not in roster:
+            roster.append(name)
     return roster
 
 def _resolve_roster_name(value, roster):
@@ -2929,7 +2969,7 @@ def track_background_presences(ctx, nonce):
     is_opening = not ctx.director_resolve  # res fell back to director_establish
     turn_idx = ctx.turn.idx
 
-    roster = {n.casefold() for n in _known_name_roster(chat, ctx.cast)}
+    roster = {n.casefold() for n in _registered_name_roster(chat, ctx.cast)}
     roster |= {(e.get("name") or "").casefold() for e in (ctx.extra_players or [])}
 
     candidates = set()
@@ -3244,7 +3284,7 @@ def pick_background_reactors(ctx, dr_output, cap=1):
     chat = ctx.chat
     cid = chat.id
 
-    roster = {n.casefold() for n in _known_name_roster(chat, ctx.cast)}
+    roster = {n.casefold() for n in _registered_name_roster(chat, ctx.cast)}
     roster |= {(e.get("name") or "").casefold() for e in (ctx.extra_players or [])}
 
     voiced_this_beat = {
@@ -4012,7 +4052,10 @@ def commit_mapping(ctx, nonce, *, prepared=None):
                 f"offscreen_life is '{_cfg.get('offscreen_life')}'")
 
     known = wget(cid, "known", {})
-    roster = _known_name_roster(chat, ctx.cast)
+    # WIDE for resolution: an introduction naming an offscreen person is still
+    # a sentence about a real person, and dropping it silently is the defect.
+    # The EDGE it would write is gated separately, below.
+    roster = _registered_name_roster(chat, ctx.cast)
     name_to_id = {character_name_from_text(r["sheet"]): r["id"] for r in ctx.cast}
     for vi in (mout.get("validated_introductions") or []):
         if not isinstance(vi, dict) or not vi.get("ok"):
@@ -4022,6 +4065,26 @@ def commit_mapping(ctx, nonce, *, prepared=None):
             vi.get("corrected_learns") or vi.get("learns"), roster,
         )
         if not (who and learns):
+            continue
+        # TWO REQUIREMENTS, KEPT SEPARATE. The roster above answers "is this a
+        # person the story knows about", which is what resolving a name needs.
+        # An introduction needs more: somebody has to have been THERE to be
+        # introduced. Now that the roster includes offscreen characters, a
+        # single check would let the model write an introduction between two
+        # people who were both absent -- trading a missed edge for an invented
+        # one, which is worse, because a wrong edge is indistinguishable from a
+        # right one afterwards and nothing downstream can catch it.
+        from scene import persona_of as _persona_of
+        present = {character_name_from_text(r["sheet"]) for r in ctx.cast}
+        player = (persona_name(_persona_of(chat)) or "").strip()
+        if player:
+            present.add(player)
+        # BOTH parties. `learns` had a frame gate and `who` had none, and that
+        # gate SKIPS rather than blocks for anyone outside `ctx.cast` -- which
+        # is exactly the set the wider roster has just admitted. Hanging the
+        # requirement off an id lookup would open it for them instead of
+        # closing it, so this is a positive test against who was on stage.
+        if who not in present or learns not in present:
             continue
         learns_id = name_to_id.get(learns)
         if learns_id is not None and not is_recognized_in_frame(learns_id, turn.frame_id):
