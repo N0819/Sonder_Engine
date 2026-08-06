@@ -128,3 +128,122 @@ def test_an_unembedded_entry_is_not_called_stale(temp_db, monkeypatch):
     health = memory.lore_embedding_health([book])
     assert health["stale"] == 1
     assert health["unembedded"] == 1
+
+
+# --- the rebuild, and why it has to live in the rebuild ---------------------
+
+def _live_embedder(monkeypatch, dims=2560):
+    """A provider that answers, at `dims` wide."""
+    from providers import EmbeddingBatch
+
+    def meta(texts):
+        v = np.ones(dims, dtype=np.float32) / np.sqrt(dims)
+        return EmbeddingBatch(vectors=[v for _ in texts],
+                              model_key="test:1:model", dimensions=dims,
+                              fallback=False)
+    monkeypatch.setattr(memory, "embed_texts_meta", meta)
+    monkeypatch.setattr(memory, "embed_texts",
+                        lambda texts: meta(texts).vectors)
+
+
+def test_the_rebuild_now_covers_lorebooks(temp_db, monkeypatch):
+    """THE SETTINGS TOOL DID NOT REACH LORE. `rebuild_embeddings` repaired
+    memories and summaries and left `lore_entries` alone, so the one control a
+    host has for "my embedding model changed" silently fixed half the corpus.
+    """
+    book = _book(temp_db)
+    chat = temp_db.qi("INSERT INTO chats(name,lorebook_id,created) "
+                      "VALUES(?,?,?)", ("A story", book, 1.0))
+    stale = _entry(temp_db, book, "Third Floor", "the roost", 256)
+    fresh = _entry(temp_db, book, "Main Hall", "the first floor", 2560)
+    _live_embedder(monkeypatch, 2560)
+
+    report = memory.rebuild_embeddings(chat_id=chat)
+
+    assert report["lore"] == 1, report
+    got = {r["id"]: len(memory._vec(r["embedding"]))
+           for r in temp_db.q("SELECT id, embedding FROM lore_entries")}
+    assert got[stale] == 2560, "the stranded entry was not rebuilt"
+    assert got[fresh] == 2560
+
+
+def test_a_rebuild_uses_the_same_document_update_lore_builds(temp_db,
+                                                             monkeypatch):
+    """A vector built from different text is not comparable with one built
+    from the same text, so a rebuild that quietly changed the recipe would be
+    a subtler version of the bug it fixes. `update_lore` embeds
+    `keys + " " + content` and so must this.
+    """
+    book = _book(temp_db)
+    chat = temp_db.qi("INSERT INTO chats(name,lorebook_id,created) "
+                      "VALUES(?,?,?)", ("A story", book, 1.0))
+    _entry(temp_db, book, "Third Floor", "the roost", 256, keys="roost, third")
+    seen = []
+    from providers import EmbeddingBatch
+
+    def meta(texts):
+        seen.extend(texts)
+        v = np.ones(2560, dtype=np.float32) / np.sqrt(2560)
+        return EmbeddingBatch(vectors=[v for _ in texts],
+                              model_key="test:1:model", dimensions=2560,
+                              fallback=False)
+    monkeypatch.setattr(memory, "embed_texts_meta", meta)
+
+    memory.rebuild_embeddings(chat_id=chat)
+
+    assert "roost, third the roost" in seen, seen
+
+
+def test_a_provider_hiccup_never_writes_a_fallback_over_lore(temp_db,
+                                                             monkeypatch):
+    """A DEGRADED PROVIDER INVERTS THE STALENESS TEST, and this reconciler
+    fires on every checkpoint restore. Lore has no `embedding_model` column,
+    so "stale" means the wrong WIDTH -- and against a 256-wide crc32 fallback
+    every real 2,560-wide entry reads as stale. Without this guard, one reroll
+    during a provider hiccup downgrades the whole corpus the pass exists to
+    protect.
+    """
+    book = _book(temp_db)
+    chat = temp_db.qi("INSERT INTO chats(name,lorebook_id,created) "
+                      "VALUES(?,?,?)", ("A story", book, 1.0))
+    stale = _entry(temp_db, book, "Third Floor", "the roost", 256)
+    from providers import EmbeddingBatch
+
+    def degraded(texts):
+        v = np.ones(256, dtype=np.float32) / np.sqrt(256)
+        return EmbeddingBatch(vectors=[v for _ in texts],
+                              model_key="cheap:crc32:256", dimensions=256,
+                              fallback=True, error="provider down")
+    monkeypatch.setattr(memory, "embed_texts_meta", degraded)
+
+    report = memory.rebuild_embeddings(chat_id=chat)
+
+    # Nothing rebuilt, and nothing downgraded. Lore staleness is measured by
+    # WIDTH, so a degraded provider inverts the test -- every real 2,560-wide
+    # entry would read as stale against a 256-wide fallback target. The pass
+    # declines rather than "migrating" a corpus into the crc32 hash.
+    assert report["lore"] == 0
+    row = temp_db.q("SELECT embedding FROM lore_entries WHERE id=?", (stale,),
+                    one=True)
+    assert len(memory._vec(row["embedding"])) == 256, "downgraded a real vector"
+
+
+def test_a_rebuild_scoped_to_one_chat_leaves_other_books_alone(temp_db,
+                                                               monkeypatch):
+    """The reconciler runs on every checkpoint restore. Re-embedding an
+    unrelated 300-entry lorebook on somebody's reroll would be a surprise bill.
+    """
+    mine = _book(temp_db, "Mine")
+    theirs = _book(temp_db, "Somebody else's")
+    chat = temp_db.qi("INSERT INTO chats(name,lorebook_id,created) "
+                      "VALUES(?,?,?)", ("A story", mine, 1.0))
+    _entry(temp_db, mine, "Third Floor", "the roost", 256)
+    untouched = _entry(temp_db, theirs, "Elsewhere", "not in this story", 256)
+    _live_embedder(monkeypatch, 2560)
+
+    report = memory.rebuild_embeddings(chat_id=chat)
+
+    assert report["lore"] == 1
+    row = temp_db.q("SELECT embedding FROM lore_entries WHERE id=?",
+                    (untouched,), one=True)
+    assert len(memory._vec(row["embedding"])) == 256
