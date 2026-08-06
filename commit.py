@@ -31,7 +31,8 @@ from character_schema import (character_name, character_name_from_text,
                               character_appearance as _char_appearance)
 from frames import is_recognized_in_frame
 import attire as attire_model
-from scene import set_char_state, set_char_status, seed_initial_attire
+from scene import (set_char_state, set_char_status, seed_initial_attire,
+                   get_scene)
 from mechanics import mechanics_sweep, news_latency_seconds, stable_event_key
 from weather import advance_weather, normalize_weather
 from spatial import (merge_scene_with_diff,
@@ -2342,6 +2343,70 @@ def commit_cast_changes(ctx, nonce):
 
 # ---- World entity commit ----
 
+def _is_gated_awareness(cond):
+    """Is this an awareness condition at a level that removes a mind from play?
+
+    `dazed` is deliberately not gated -- a dazed mind is present but degraded --
+    so it is not caught here either. See scene.NON_AWAKE_GATED.
+    """
+    from scene import NON_AWAKE_GATED, _normalize_awareness_level
+    if str(cond.get("kind") or "") != "awareness":
+        return False
+    if not cond.get("active", True):
+        return False
+    state = cond.get("state") if isinstance(cond.get("state"), dict) else {}
+    level = _normalize_awareness_level(state.get("level"))
+    return level in NON_AWAKE_GATED
+
+
+def _subjects_that_moved(ctx, diff):
+    """Who crossed into a different room this beat, by name.
+
+    Read from the diff's own positions against the scene as it stood, so a
+    position re-asserted unchanged is not mistaken for a move -- §1.14 records
+    that resolve asserts positions with no declared movement, and treating
+    those as movement would make this guard fire on people standing still.
+    """
+    moved = set()
+    positions = diff.get("positions")
+    if not isinstance(positions, dict) or not positions:
+        return moved
+    try:
+        before = (get_scene(ctx.chat.id) or {}).get("positions") or {}
+    except Exception:  # noqa: BLE001 - no scene is not a movement claim
+        return moved
+    for subject, room in positions.items():
+        if not room:
+            continue
+        was = before.get(subject)
+        if was and str(was) != str(room):
+            moved.add(str(subject))
+    return moved
+
+
+def _subjects_targeted_by_an_action(ctx):
+    """Who had an action aimed at them this beat.
+
+    The exemption that keeps the guard honest: being drugged, clubbed or
+    carried to a bed is somebody ELSE's act naming you as its target, and it
+    legitimately produces a gated state on a subject who was moving a moment
+    earlier.
+    """
+    targeted = set()
+    interpret = ctx.director_interpret or {}
+    for action in (interpret.get("actions") or []):
+        if not isinstance(action, dict):
+            continue
+        for target in (action.get("targets") or []):
+            if isinstance(target, str) and target.strip():
+                targeted.add(target.strip())
+            elif isinstance(target, dict):
+                name = target.get("name") or target.get("id")
+                if name:
+                    targeted.add(str(name))
+    return targeted
+
+
 def commit_world_entities(ctx, nonce, *, prepared=None):
     """Commit world entities, conditions (and legacy placement cleanup).
 
@@ -2474,12 +2539,55 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
             c.execute("DELETE FROM world_placements WHERE subject_id=? AND chat_id=?",
                       (entity_id, cid))
 
+        # A MIND THAT WALKED OUT OF THE ROOM DID NOT FALL ASLEEP IN IT.
+        #
+        # `director_resolve` may assert an `awareness` condition, and a gated
+        # level (asleep/sedated/unconscious) removes the subject from
+        # perception entirely and stops their character step running. Live
+        # failure: the player typed `"Doctor. I'm going to rest for today..."
+        # You slowly stand. ... "Anyways... good night." You walk towards the
+        # shoji leading to the upstairs opening it.` -- three lines of SPEECH
+        # about a plan, and three narrated acts: stand, yawn, walk.
+        #
+        # `director_interpret` read it correctly and extracted only the acts.
+        # Resolve then minted `{"level": "asleep", "cause": "natural fatigue
+        # after meal, declared intent to rest and sleep"}` -- its own cause
+        # naming the speech it inferred from -- and the player was gated out of
+        # their own story while their character was mid-stride.
+        #
+        # A stated plan is dialogue. Going under is an act. The prompt already
+        # says exactly that ("goes genuinely under", a player assertion is a
+        # "completed-fact claim"), which is the point: it is instruction where
+        # structure is wanted, and the instruction lost.
+        #
+        # The check is a CONTRADICTION, not a reading of intent -- no verb list
+        # to maintain and nothing to interpret. You cannot cross a threshold and
+        # be unconscious in the same beat. Being carried or dragged is not
+        # caught by this: that is somebody else's action naming you as its
+        # target, and a targeted subject is exempt below.
+        moved_this_beat = _subjects_that_moved(ctx, diff)
+        targeted_this_beat = _subjects_targeted_by_an_action(ctx)
+
         for cond_id, cond_list in (diff.get("conditions") or {}).items():
             if not isinstance(cond_list, list):
                 cond_list = [cond_list]
             for cond in cond_list:
                 if not isinstance(cond, dict):
                     continue
+                if _is_gated_awareness(cond):
+                    subject = str(cond.get("subject_id") or "")
+                    if (subject in moved_this_beat
+                            and subject not in targeted_this_beat):
+                        # Dropped, and SAID -- a condition that silently
+                        # vanishes is the mirror of one that silently lands.
+                        ctx.warnings.append(
+                            "dropped an %s condition on %r: they moved rooms "
+                            "this beat and no action targeted them, so the "
+                            "state rests on what they SAID rather than on "
+                            "anything they did" % (
+                                (cond.get("state") or {}).get("level")
+                                or "awareness", subject))
+                        continue
                 cid_val = cond.get("condition_id") or cond_id
                 existing = q("SELECT condition_id FROM world_conditions "
                              "WHERE condition_id=? AND chat_id=?",
