@@ -247,3 +247,177 @@ def test_a_rebuild_scoped_to_one_chat_leaves_other_books_alone(temp_db,
     row = temp_db.q("SELECT embedding FROM lore_entries WHERE id=?",
                     (untouched,), one=True)
     assert len(memory._vec(row["embedding"])) == 256
+
+
+# --- the stamp, and the one-time retrofit that fills it in ------------------
+
+def test_a_new_entry_records_what_embedded_it(temp_db, monkeypatch):
+    """THE ROOT OF THE SILENCE. `add_lore` called `embed_texts`, which returns
+    bare vectors, so the write path could not tell a real embedding from
+    `cheap_embed`'s crc32 hash -- and `embed_texts_meta` degrades to that hash
+    on ANY provider error. 1,061 of 1,418 entries were written that way and
+    nothing recorded it, because there was nowhere to record it.
+    """
+    book = _book(temp_db)
+    _live_embedder(monkeypatch, 2560)
+    entry = memory.add_lore(book, "roost", "Tamamo's quarters")
+
+    row = temp_db.q("SELECT embedding_model, embedding_dim FROM lore_entries "
+                    "WHERE id=?", (entry,), one=True)
+    assert row["embedding_model"] == "test:1:model"
+    assert row["embedding_dim"] == 2560
+
+
+def test_an_entry_written_during_an_outage_says_it_was(temp_db, monkeypatch):
+    """The whole point. A degraded provider must leave a mark at the moment it
+    happens rather than 165 turns later, when the only evidence left is a
+    lorebook the agents appear to ignore.
+    """
+    from providers import EmbeddingBatch
+    book = _book(temp_db)
+    monkeypatch.setattr(memory, "embed_texts_meta", lambda texts: EmbeddingBatch(
+        vectors=[np.ones(256, dtype=np.float32) / 16 for _ in texts],
+        model_key="cheap:crc32:256", dimensions=256, fallback=True,
+        error="provider down"))
+    entry = memory.add_lore(book, "roost", "Tamamo's quarters")
+
+    row = temp_db.q("SELECT embedding_model FROM lore_entries WHERE id=?",
+                    (entry,), one=True)
+    assert row["embedding_model"] == "cheap:crc32:256"
+
+
+def test_the_backfill_identifies_the_fallback_from_the_bytes(temp_db):
+    """PROVIDER-INDEPENDENT BY CONSTRUCTION, which is why it can be trusted.
+    `cheap_embed` is a pure function of the text, so "is this the fallback" is
+    answerable with the provider face-down. Width is not -- width is relative
+    to whatever the provider emits right now, which is exactly how a degraded
+    provider inverts the question.
+
+    Verified against the live corpus this way: 40 of 40 sampled 1024-byte
+    entries were byte-identical to `cheap_embed` of their own text.
+    """
+    from providers import cheap_embed
+    book = _book(temp_db)
+    text_keys, text_content = "roost", "Tamamo's quarters on the third floor"
+    fallback_vec = np.asarray(
+        cheap_embed(text_keys + " " + text_content), dtype=np.float32)
+    stranded = temp_db.qi(
+        "INSERT INTO lore_entries(lorebook_id,keys,content,category,embedding) "
+        "VALUES(?,?,?,?,?)",
+        (book, text_keys, text_content, "layout", fallback_vec.tobytes()))
+    real = _entry(temp_db, book, "Main Hall", "the first floor", 2560)
+
+    report = memory.backfill_lore_embedding_stamps()
+
+    assert report["fallback"] == 1 and report["real"] == 1
+    got = {r["id"]: r["embedding_model"] for r in
+           temp_db.q("SELECT id, embedding_model FROM lore_entries")}
+    assert got[stranded] == "cheap:crc32:256"
+    # NOT a model name: the bytes cannot say which real model made them, and
+    # inventing one would record a guess as a fact.
+    assert got[real] == "unknown:2560"
+
+
+def test_the_backfill_does_not_call_a_real_vector_a_fallback(temp_db):
+    """A 256-wide vector that is NOT the hash of its own text is some other
+    model's output, and stamping it `cheap:crc32:256` would send the rebuild
+    to overwrite a real embedding.
+    """
+    book = _book(temp_db)
+    imposter = _entry(temp_db, book, "Third Floor", "the roost", 256)
+
+    memory.backfill_lore_embedding_stamps()
+
+    row = temp_db.q("SELECT embedding_model FROM lore_entries WHERE id=?",
+                    (imposter,), one=True)
+    assert row["embedding_model"] == "unknown:256"
+
+
+def test_the_backfill_is_resumable_and_does_not_rescan(temp_db):
+    """It hashes a row per entry, so a corpus-sized rescan on every call is
+    the difference between a one-time retrofit and a permanent mechanism.
+    """
+    book = _book(temp_db)
+    _entry(temp_db, book, "Third Floor", "the roost", 256)
+
+    assert memory.backfill_lore_embedding_stamps()["scanned"] == 1
+    assert memory.backfill_lore_embedding_stamps()["scanned"] == 0
+
+
+def test_the_rebuild_prefers_the_stamp_over_the_width(temp_db, monkeypatch):
+    """Width cannot tell two models sharing a width apart. Once a row carries
+    a stamp, that is the exact answer and the proxy is not consulted.
+    """
+    book = _book(temp_db)
+    chat = temp_db.qi("INSERT INTO chats(name,lorebook_id,created) "
+                      "VALUES(?,?,?)", ("A story", book, 1.0))
+    # Same WIDTH as the live model, but a different model wrote it.
+    wrong_model = _entry(temp_db, book, "Third Floor", "the roost", 2560)
+    temp_db.qi("UPDATE lore_entries SET embedding_model=?,embedding_dim=? "
+               "WHERE id=?", ("someone-else:1:model", 2560, wrong_model))
+    _live_embedder(monkeypatch, 2560)
+
+    report = memory.rebuild_embeddings(chat_id=chat)
+
+    assert report["lore"] == 1, "a width-only check would have skipped this"
+    row = temp_db.q("SELECT embedding_model FROM lore_entries WHERE id=?",
+                    (wrong_model,), one=True)
+    assert row["embedding_model"] == "test:1:model"
+
+
+def test_health_answers_correctly_with_no_provider_at_all(temp_db,
+                                                          monkeypatch):
+    """MEASUREMENT MUST NOT DECLINE DURING AN OUTAGE -- that is exactly when
+    somebody is looking. `embed_texts` degrades silently to a 256-wide hash,
+    so asking IT what the live width is turns every real 2,560-wide entry into
+    a "stale" one and reports the corpus backwards.
+
+    This is not hypothetical: a dry run built that way named the 357 CURRENT
+    entries as the stale ones, and would have overwritten the only good
+    vectors in the corpus had it been believed.
+    """
+    book = _book(temp_db)
+    # The engine's own record of what it embeds with.
+    chat = temp_db.qi("INSERT INTO chats(name,created) VALUES(?,?)",
+                      ("A story", 1.0))
+    char = temp_db.qi("INSERT INTO characters(name,sheet,source,created) "
+                      "VALUES(?,?,?,?)", ("Someone", "{}", "{}", 1.0))
+    temp_db.qi("INSERT INTO memories(chat_id,char_id,kind,content,"
+               "embedding_dim,embedding_model) VALUES(?,?,?,?,?,?)",
+               (chat, char, "episodic", "x", 2560, "real:1:model"))
+    stranded = _entry(temp_db, book, "Third Floor", "the roost", 256)
+    temp_db.qi("UPDATE lore_entries SET embedding_model=?,embedding_dim=? "
+               "WHERE id=?", ("cheap:crc32:256", 256, stranded))
+    live = _entry(temp_db, book, "Main Hall", "the first floor", 2560)
+    temp_db.qi("UPDATE lore_entries SET embedding_model=?,embedding_dim=? "
+               "WHERE id=?", ("real:1:model", 2560, live))
+
+    def no_provider(texts):
+        raise RuntimeError("provider down")
+    monkeypatch.setattr(memory, "embed_texts", no_provider)
+
+    health = memory.lore_embedding_health([book])
+
+    assert health["current_dimensions"] == 2560
+    assert health["probed_provider"] is False
+    assert health["stale"] == 1 and health["fallback"] == 1
+
+
+def test_health_never_calls_the_fallback_the_live_model(temp_db):
+    """`cheap:crc32:256` is easily the MAJORITY on a corpus that needs
+    repairing -- 1,031 of 1,418 on the one that prompted this. Taking the most
+    common stamp as "live" would report a wholly broken corpus as healthy.
+    """
+    book = _book(temp_db)
+    for i in range(5):
+        eid = _entry(temp_db, book, "Stale %d" % i, "text", 256)
+        temp_db.qi("UPDATE lore_entries SET embedding_model=?,embedding_dim=? "
+                   "WHERE id=?", ("cheap:crc32:256", 256, eid))
+    good = _entry(temp_db, book, "Real", "text", 2560)
+    temp_db.qi("UPDATE lore_entries SET embedding_model=?,embedding_dim=? "
+               "WHERE id=?", ("real:1:model", 2560, good))
+
+    health = memory.lore_embedding_health([book])
+
+    assert health["current_dimensions"] == 2560, "the fallback won the vote"
+    assert health["stale"] == 5
