@@ -707,3 +707,104 @@ class TestRevisionPrompt:
                  "weather": ["heavy rain"]}
         out = backdrops.compose_prompt(place, None, "")
         assert "Courtyard" in out and "Flagstones" in out and "heavy rain" in out
+
+
+# --- was the edit tried, and did it work? ----------------------------------
+#
+# The fallback from a failed edit to a full generation is deliberate: a
+# provider with no edits endpoint, a model that refuses one, a corrupt anchor,
+# none of those is a reason to have no backdrop. What it was not is VISIBLE.
+# A bare `except` set `data = None` and fell through, so an edit that was tried
+# and failed left exactly the trace of one never attempted. Asked "is the
+# editing suite working", nobody could answer from the artefacts: a room
+# holding three images looks the same whether continuity is running or silently
+# falling back on every beat.
+
+def _stub_request(bd, monkeypatch, tmp_path, sig="c" * 24):
+    monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
+    monkeypatch.setattr(bd, "build_backdrop_request", lambda *a, **k: {
+        "signature": sig, "cached": None, "room_name": "Main Hall",
+        "place": {"name": "Main Hall"}, "flavour": "", "room": "hall",
+    })
+    monkeypatch.setattr(bd, "refine_prompt", lambda draft, place: draft)
+    monkeypatch.setattr(bd, "set_room_anchor", lambda *a, **k: None)
+
+
+def test_a_failed_edit_is_no_longer_indistinguishable_from_never_trying(
+        temp_db, tmp_path, monkeypatch):
+    """THE DEFECT THIS PINS. Both states produced one fresh generation and an
+    identical return value, so `backdrop_continuity` could be on, the anchor
+    present, and every edit failing, and the only visible symptom was a room
+    with several images -- which is also what correct behaviour looks like.
+    """
+    import backdrops as bd
+    import providers
+    _stub_request(bd, monkeypatch, tmp_path)
+    anchor = tmp_path / "anchor.png"
+    anchor.write_bytes(b"\x89PNG anchor")
+    monkeypatch.setattr(bd, "_continuity_enabled", lambda: True)
+    monkeypatch.setattr(bd, "room_anchor",
+                        lambda cid, room: (str(anchor), {"name": "Main Hall"}))
+    monkeypatch.setattr(bd, "compose_revision", lambda *a, **k: "revise it")
+
+    def boom(*a, **k):
+        raise RuntimeError("no edits endpoint")
+
+    monkeypatch.setattr(providers, "edit_image", boom)
+    monkeypatch.setattr(providers, "generate_image",
+                        lambda *a, **k: b"\x89PNG fresh")
+
+    out = bd.generate_backdrop(11, 0)
+
+    assert out["edit_attempted"] is True
+    assert out["edit_used"] is False
+    assert "no edits endpoint" in out["edit_error"]
+    assert "RuntimeError" in out["edit_error"]
+    # Still produced a backdrop: the fallback itself is correct and stays.
+    assert open(out["path"], "rb").read() == b"\x89PNG fresh"
+
+
+def test_a_working_edit_says_it_edited(temp_db, tmp_path, monkeypatch):
+    """The other half of the control. If a success looked the same as a
+    failure the fields would answer nothing.
+    """
+    import backdrops as bd
+    import providers
+    _stub_request(bd, monkeypatch, tmp_path, sig="d" * 24)
+    anchor = tmp_path / "anchor.png"
+    anchor.write_bytes(b"\x89PNG anchor")
+    monkeypatch.setattr(bd, "_continuity_enabled", lambda: True)
+    monkeypatch.setattr(bd, "room_anchor",
+                        lambda cid, room: (str(anchor), {"name": "Main Hall"}))
+    monkeypatch.setattr(bd, "compose_revision", lambda *a, **k: "revise it")
+    monkeypatch.setattr(providers, "edit_image",
+                        lambda prompt, data, *a, **k: b"\x89PNG revised")
+    monkeypatch.setattr(providers, "generate_image",
+                        lambda *a, **k: b"\x89PNG fresh")
+
+    out = bd.generate_backdrop(12, 0)
+
+    assert out["edit_attempted"] is True and out["edit_used"] is True
+    assert "edit_error" not in out
+    assert out["prompt"] == "revise it"
+    assert open(out["path"], "rb").read() == b"\x89PNG revised"
+
+
+def test_continuity_switched_off_reports_no_attempt_rather_than_a_failure(
+        temp_db, tmp_path, monkeypatch):
+    """A SHUT GATE IS NOT A BROKEN EDIT, and conflating them would send anyone
+    reading these fields to debug a provider when the setting is simply off.
+    `backdrop_continuity` defaults off, so this is the common case.
+    """
+    import backdrops as bd
+    import providers
+    _stub_request(bd, monkeypatch, tmp_path, sig="e" * 24)
+    monkeypatch.setattr(bd, "_continuity_enabled", lambda: False)
+    monkeypatch.setattr(providers, "generate_image",
+                        lambda *a, **k: b"\x89PNG fresh")
+
+    out = bd.generate_backdrop(13, 0)
+
+    assert out["edit_attempted"] is False
+    assert out["edit_used"] is False
+    assert "edit_error" not in out
