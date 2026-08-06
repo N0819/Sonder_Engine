@@ -421,3 +421,56 @@ def test_health_never_calls_the_fallback_the_live_model(temp_db):
 
     assert health["current_dimensions"] == 2560, "the fallback won the vote"
     assert health["stale"] == 5
+
+
+def test_a_narrower_live_model_does_not_invert_the_reference(temp_db,
+                                                             monkeypatch):
+    """WIDEST-REAL-STAMP IS RIGHT TODAY AND WRONG ONE MODEL CHANGE FROM NOW.
+
+    It holds only while the live space is the widest one. The moment a
+    genuinely current model is NARROWER than a retired one -- 1,024 real
+    against stranded 2,560 -- widest picks the stranded space as the reference
+    and reports every correct row as needing repair. The healthy probe is
+    authoritative precisely so that cannot happen.
+    """
+    from providers import EmbeddingBatch
+    book = _book(temp_db)
+    narrow_but_live = _entry(temp_db, book, "Current", "text", 1024)
+    temp_db.qi("UPDATE lore_entries SET embedding_model=?,embedding_dim=? "
+               "WHERE id=?", ("new-narrow:1:model", 1024, narrow_but_live))
+    wide_but_retired = _entry(temp_db, book, "Retired", "text", 2560)
+    temp_db.qi("UPDATE lore_entries SET embedding_model=?,embedding_dim=? "
+               "WHERE id=?", ("old-wide:1:model", 2560, wide_but_retired))
+
+    monkeypatch.setattr(memory, "embed_texts_meta", lambda texts: EmbeddingBatch(
+        vectors=[np.ones(1024, dtype=np.float32) / 32 for _ in texts],
+        model_key="new-narrow:1:model", dimensions=1024, fallback=False))
+
+    health = memory.lore_embedding_health([book])
+
+    assert health["current_dimensions"] == 1024
+    # The retired wide entry is the stale one, not the live narrow one.
+    assert health["stale"] == 1
+
+
+def test_a_degraded_probe_is_not_mistaken_for_the_live_model(temp_db,
+                                                             monkeypatch):
+    """`embed_texts_meta` reports `fallback`; `embed_texts` cannot. Trusting a
+    degraded probe is how an earlier version of this reported the corpus
+    backwards and would have overwritten every good vector in it.
+    """
+    from providers import EmbeddingBatch
+    book = _book(temp_db)
+    good = _entry(temp_db, book, "Real", "text", 2560)
+    temp_db.qi("UPDATE lore_entries SET embedding_model=?,embedding_dim=? "
+               "WHERE id=?", ("real:1:model", 2560, good))
+
+    monkeypatch.setattr(memory, "embed_texts_meta", lambda texts: EmbeddingBatch(
+        vectors=[np.ones(256, dtype=np.float32) / 16 for _ in texts],
+        model_key="cheap:crc32:256", dimensions=256, fallback=True,
+        error="down"))
+
+    health = memory.lore_embedding_health([book])
+
+    assert health["current_dimensions"] == 2560, "believed the fallback probe"
+    assert health["stale"] == 0
