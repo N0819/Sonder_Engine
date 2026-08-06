@@ -149,6 +149,13 @@ async def lifespan(_app):
 app = FastAPI(title="Sonder Engine", version="1.0", lifespan=lifespan)
 app.include_router(auth_router)
 
+# The voice anchor rides EVERY narrator call, so it is bounded on both axes:
+# a handful of short passages is a calibration, and a dozen long ones is a
+# permanent tax on every turn of every story. The architecture asks for 3-5.
+EXEMPLAR_MAX_COUNT = 5
+EXEMPLAR_MAX_CHARS = 2000
+
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ---- Host/guest access control ----
@@ -905,6 +912,11 @@ def bootstrap():
         "memory_categories": MEMORY_CATEGORIES,
         "memory_provenance": MEMORY_PROVENANCE,
         "agent_models": json.loads(get_setting("agent_models") or "{}"),
+        # The narrator's voice anchor. Read by agents/narration.py and named in
+        # the narrator prompt's STYLE EXEMPLARS clause since that prompt was
+        # written -- and until now there was no way to put anything in it, so
+        # every install has run with the clause referring to an empty list.
+        "exemplars": json.loads(get_setting("exemplars") or "[]"),
         "max_output_tokens": max_output_tokens(),
         "reasoning_effort": reasoning_efforts(),
         "reasoning_effort_levels": list(REASONING_EFFORTS),
@@ -1018,6 +1030,37 @@ def put_image_model(body: dict = Body(...)):
         cfg["size"] = size
     set_setting("image_model", json.dumps(cfg))
     return {"ok": True, "image_model": cfg}
+
+@app.put("/api/exemplars")
+def put_exemplars(body: dict = Body(...)):
+    """The narrator's voice anchor: a few short passages at the target quality.
+
+    THE SLOT EXISTED AND HAD NO DOOR. `agents/narration.py` has always read
+    `settings.exemplars`, and the narrator prompt has always carried a STYLE
+    EXEMPLARS clause telling the model to study them for voice, rhythm and
+    restraint -- but nothing anywhere could write the setting, so the clause
+    referred to an empty list on every install that has ever run.
+
+    Passages are STYLE, never content: the prompt already says so, and the
+    reason it must is that an exemplar is the one thing in the payload the
+    narrator is told to imitate. A passage naming this story's people would
+    be read as this story's facts.
+    """
+    passages = body.get("exemplars")
+    if not isinstance(passages, list):
+        raise HTTPException(400, "exemplars must be a list of passages")
+    clean = []
+    for passage in passages[:EXEMPLAR_MAX_COUNT]:
+        text = str(passage or "").strip()
+        if not text:
+            continue
+        # Bounded per passage, because this rides EVERY narrator call. Three
+        # long passages are a permanent tax on every turn of every story.
+        clean.append(text[:EXEMPLAR_MAX_CHARS])
+    set_setting("exemplars", json.dumps(clean, ensure_ascii=False))
+    return {"exemplars": clean, "count": len(clean),
+            "max_count": EXEMPLAR_MAX_COUNT, "max_chars": EXEMPLAR_MAX_CHARS}
+
 
 @app.put("/api/backdrops")
 def put_backdrops(body: dict = Body(...)):
