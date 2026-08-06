@@ -56,6 +56,7 @@ from commit import (
     _background_name_mentioned,
     _character_address_of,
     _known_name_roster,
+    _registered_name_roster,
     _quote_body,
     _room_of,
     _valid_pending_reply,
@@ -217,7 +218,7 @@ def background_react(ctx, nonce):
     if not names:
         return _result([], [])
 
-    roster = {n.casefold() for n in _known_name_roster(ctx.chat, ctx.cast)}
+    roster = {n.casefold() for n in _registered_name_roster(ctx.chat, ctx.cast)}
     roster |= {(e.get("name") or "").casefold() for e in (ctx.extra_players or [])}
     sc = wget(ctx.chat.id, "scene", {}) or {}
     presences = wget(ctx.chat.id, "background_presences", {}) or {}
@@ -332,7 +333,7 @@ def managed_presences(ctx, cap):
     presences = wget(cid, "background_presences", {}) or {}
     if not presences:
         return [], None
-    roster = {n.casefold() for n in _known_name_roster(ctx.chat, ctx.cast)}
+    roster = {n.casefold() for n in _registered_name_roster(ctx.chat, ctx.cast)}
     roster |= {(e.get("name") or "").casefold() for e in (ctx.extra_players or [])}
 
     p_room = _player_room(ctx, sc)
