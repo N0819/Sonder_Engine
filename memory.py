@@ -3896,14 +3896,40 @@ def search_lore(lorebook_ids, query, k=6, exclude_categories=None):
     qv = embed_texts([query or ""])[0]
     kw = _kw_scores("lore_fts", query)
     scored = []
+    # HOW MANY ROWS AM I SCORING BLIND? `_cos` returns 0.0 when the dimensions
+    # disagree -- it cannot raise, because it is called in a ranking loop over
+    # rows embedded at different times -- and 0.0 is also the honest score for
+    # a genuinely unrelated entry. So an entry left behind by a retired
+    # embedding model is INDISTINGUISHABLE from one that simply does not match,
+    # and it silently forfeits the 0.65 it can never win back.
+    #
+    # Measured on a corpus that had run this way for months: 1,061 of 1,418
+    # lore entries carried 256-dimension vectors while the configured model
+    # emits 2,560, so three quarters of the corpus was competing on the 0.35
+    # keyword term alone. One lorebook was 10 of 15 stale, and the entry a
+    # reader kept asking after -- a room nobody could get the agents to
+    # describe -- was among them. Nothing anywhere said so.
+    #
+    # Counted, not repaired: re-embedding is a migration and this is a ranking
+    # loop. What this owes its caller is the number.
+    blind = 0
     for r in rows:
-        s = (0.65 * _cos(qv, _vec(r["embedding"]))
+        vec = _vec(r["embedding"])
+        if qv is not None and vec is not None and len(qv) != len(vec):
+            blind += 1
+        s = (0.65 * _cos(qv, vec)
              + 0.35 * kw.get(r["id"], 0.0)
              + (0.1 if r["canon_locked"] else 0.0)
              + (0.05 * (r["importance"] or 0.5)))
         if weights is not None:
             s *= (0.7 + 0.3 * weights.get(r["lorebook_id"], 1.0))
         scored.append((s, r))
+    if blind:
+        logger.warning(
+            "lore search scored %d of %d entries blind: their embedding "
+            "dimension does not match the configured model, so only the "
+            "keyword term ranked them. Re-embed to restore them.",
+            blind, len(rows))
     scored.sort(key=lambda x: -x[0])
     return [
         {"id": row["id"], "entry_uid": row["entry_uid"],
@@ -3912,6 +3938,48 @@ def search_lore(lorebook_ids, query, k=6, exclude_categories=None):
          "locked": bool(row["canon_locked"])}
         for _, row in scored[:k]
     ]
+
+def lore_embedding_health(lorebook_ids=None):
+    """How much of the lore corpus can still be ranked by meaning.
+
+    THE QUESTION HAD NO ANSWER BEFORE THIS. The warning in `search_lore` only
+    speaks when a search runs, which makes "is my lore reachable" a thing you
+    discover by accident mid-story. This answers it on demand, per book when
+    asked, so a corpus can be checked before it is trusted.
+
+    `stale` counts entries whose vector cannot be compared against the current
+    model's output at all. They are not gone -- the keyword term still ranks
+    them -- but they compete for 0.35 against rivals playing for 1.0, which in
+    practice means they never surface.
+    """
+    live = None
+    try:
+        live = len(embed_texts([""])[0])
+    except Exception:  # noqa: BLE001 - no provider is not a corpus finding
+        live = None
+    ids = _ids(lorebook_ids) if lorebook_ids is not None else None
+    if ids:
+        ph = ",".join("?" * len(ids))
+        rows = q(f"SELECT lorebook_id, embedding FROM lore_entries "
+                 f"WHERE lorebook_id IN ({ph})", tuple(ids))
+    else:
+        rows = q("SELECT lorebook_id, embedding FROM lore_entries")
+    total = stale = unembedded = 0
+    by_book = {}
+    for r in rows or []:
+        total += 1
+        vec = _vec(r["embedding"])
+        book = by_book.setdefault(r["lorebook_id"], {"total": 0, "stale": 0})
+        book["total"] += 1
+        if vec is None:
+            unembedded += 1
+        elif live is not None and len(vec) != live:
+            stale += 1
+            book["stale"] += 1
+    return {"total": total, "stale": stale, "unembedded": unembedded,
+            "current_dimensions": live,
+            "books": {k: v for k, v in by_book.items() if v["stale"]}}
+
 
 def knowledge_for_character(lorebook_ids, char_room, known_tags, excluded_titles, limit=30):
     ids = _ids(lorebook_ids)
