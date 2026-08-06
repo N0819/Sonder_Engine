@@ -219,6 +219,12 @@ font-size:calc(var(--prose-size,17px) * .88);line-height:1.55;opacity:.92}
 font-family:var(--prose-font,Charter,"Iowan Old Style","Palatino Linotype",Georgia,serif);
 font-size:var(--prose-size,17px);line-height:1.7;max-width:65ch}
 .turn.stale .prose{opacity:.55}
+/* Why the prose above is dimmed. A dim says something is off; it cannot say
+   which step was re-run, so chat.js writes a sentence naming it. .small and
+   .dim already carry the size and colour -- all this adds is the spacing that
+   keeps the note with its turn, and the prose measure so a long step label
+   does not run the full window width. */
+.stale-note{margin-top:3px;max-width:65ch}
 .tbtns{display:flex;gap:4px;justify-content:flex-end;margin-top:2px;
 opacity:.3;transition:opacity .15s ease}
 .turn:hover .tbtns,.turn:focus-within .tbtns{opacity:1}

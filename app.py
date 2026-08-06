@@ -2163,14 +2163,27 @@ def chat_get(cid: int):
             "card_source": "chat" if row["override_sheet"] is not None else "library",
         })
 
+    # One query for the whole chat, replacing the per-turn COUNT this used to
+    # run: the widened payload is CHEAPER than the boolean it replaces.
+    stale_rows = q(
+        "SELECT s.turn_id, s.key, s.label, s.ord "
+        "FROM steps s JOIN turns t ON t.id = s.turn_id "
+        "WHERE t.chat_id = ? AND s.stale = 1 "
+        "ORDER BY s.turn_id, s.ord",
+        (cid,),
+    )
+    stale_by_turn = {}
+    for r in stale_rows:
+        stale_by_turn.setdefault(r["turn_id"], []).append(r)
+
     turns = []
     for t in q("SELECT * FROM turns WHERE chat_id=? ORDER BY idx", (cid,)):
         nar = active_content(t["id"], "narrator") or {}
-        stale = q(
-            "SELECT COUNT(*) c FROM steps WHERE turn_id=? AND stale=1",
-            (t["id"],),
-            one=True,
-        )["c"]
+        rows = stale_by_turn.get(t["id"]) or []
+        # Lowest ord, not rows[0]. First-row indexing is correct only while
+        # the ORDER BY above holds; min() survives an arbitrary row order.
+        # The ORDER BY is kept regardless, for any reader that does index.
+        earliest = min(rows, key=lambda r: r["ord"]) if rows else None
 
         turns.append(
             {
@@ -2178,7 +2191,17 @@ def chat_get(cid: int):
                 "idx": t["idx"],
                 "player_input": t["player_input"],
                 "prose": nar.get("prose", ""),
-                "stale": stale > 0,
+                "stale": bool(rows),
+                "stale_from": (
+                    {
+                        "ord": earliest["ord"],
+                        "key": earliest["key"],
+                        "label": earliest["label"],
+                    }
+                    if earliest
+                    else None
+                ),
+                "prose_stale": any(r["key"] == "narrator" for r in rows),
                 "frame_id": t["frame_id"],
             }
         )
@@ -2536,6 +2559,20 @@ def guest_state(request: Request):
     if not chat:
         raise HTTPException(404)
 
+    # Same per-chat stale query as chat_get. A guest used to be sent nothing
+    # at all about staleness, so superseded prose reached them looking exactly
+    # like current prose -- not even the host's dim.
+    stale_rows = q(
+        "SELECT s.turn_id, s.key, s.label, s.ord "
+        "FROM steps s JOIN turns t ON t.id = s.turn_id "
+        "WHERE t.chat_id = ? AND s.stale = 1 "
+        "ORDER BY s.turn_id, s.ord",
+        (cid,),
+    )
+    stale_by_turn = {}
+    for r in stale_rows:
+        stale_by_turn.setdefault(r["turn_id"], []).append(r)
+
     turns = []
     for t in q("SELECT * FROM turns WHERE chat_id=? ORDER BY idx", (cid,)):
         extra = active_content(t["id"], "narrator_extra") or {}
@@ -2545,10 +2582,30 @@ def guest_state(request: Request):
             "AND persona_id=?",
             (cid, t["idx"], pid), one=True,
         )
+        rows = stale_by_turn.get(t["id"]) or []
+        earliest = min(rows, key=lambda r: r["ord"]) if rows else None
         turns.append({
             "idx": t["idx"],
             "player_input": my_input["input"] if my_input else None,
             "prose": entry.get("prose", ""),
+            "stale": bool(rows),
+            "stale_from": (
+                {
+                    "ord": earliest["ord"],
+                    "key": earliest["key"],
+                    "label": earliest["label"],
+                }
+                if earliest
+                else None
+            ),
+            # The text a guest reads is narrator_extra, which is its own step
+            # key (read three lines up), not the narrator step's own content.
+            # Keying on "narrator" alone would key the guest's warning on a
+            # step that does not produce what they are looking at, so this
+            # takes the union of the two.
+            "prose_stale": any(
+                r["key"] in ("narrator", "narrator_extra") for r in rows
+            ),
         })
 
     persona = q("SELECT name FROM personas WHERE id=?", (pid,), one=True)
