@@ -57,7 +57,7 @@ def test_a_dormant_character_is_still_someone_the_story_knows_about(temp_db):
     chat = dict(temp_db.q("SELECT * FROM chats WHERE id=?", (chat_id,),
                           one=True))
 
-    roster = commit._known_name_roster(chat, active_cast(chat_id))
+    roster = commit._registered_name_roster(chat, active_cast(chat_id))
 
     assert "The Doctor" in roster
     assert "Guinan" in roster, "dormant read as gone"
@@ -88,7 +88,7 @@ def test_a_departed_character_leaves_the_roster(temp_db):
     chat = dict(temp_db.q("SELECT * FROM chats WHERE id=?", (chat_id,),
                           one=True))
 
-    roster = commit._known_name_roster(chat, active_cast(chat_id))
+    roster = commit._registered_name_roster(chat, active_cast(chat_id))
 
     assert "Someone Who Left" not in roster
     assert [r["name"] for r in extant_cast(chat_id)] == ["The Doctor"]
@@ -119,7 +119,7 @@ def test_a_caller_that_passes_a_narrower_cast_still_gets_the_full_roster(
     chat = dict(temp_db.q("SELECT * FROM chats WHERE id=?", (chat_id,),
                           one=True))
 
-    assert "Guinan" in commit._known_name_roster(chat, [])
+    assert "Guinan" in commit._registered_name_roster(chat, [])
 
 
 def test_the_roster_does_not_repeat_a_character_the_caller_also_passed(
@@ -133,6 +133,48 @@ def test_the_roster_does_not_repeat_a_character_the_caller_also_passed(
     chat = dict(temp_db.q("SELECT * FROM chats WHERE id=?", (chat_id,),
                           one=True))
 
-    roster = commit._known_name_roster(chat, active_cast(chat_id))
+    roster = commit._registered_name_roster(chat, active_cast(chat_id))
 
     assert roster.count("The Doctor") == 1
+
+
+def test_the_enumerated_roster_stays_narrow(temp_db):
+    """THE ONE THAT MUST NOT WIDEN, and the reason this is two functions.
+
+    `promote_background_character` iterates a roster straight into the `known`
+    recognition map -- `for other in roster: known[other].append(her_name)` --
+    and its own query is deliberately `status='active'`. Widening the function
+    it calls would seed durable mutual recognition between a newly promoted
+    character and every dormant one, and nothing downstream re-checks `known`.
+    A prompt leak is embarrassing; a wrong write to the recognition ledger is
+    permanent.
+    """
+    chat_id = _chat(temp_db)
+    _character(temp_db, chat_id, "The Doctor", "active")
+    _character(temp_db, chat_id, "Guinan", "dormant")
+    chat = dict(temp_db.q("SELECT * FROM chats WHERE id=?", (chat_id,),
+                          one=True))
+
+    narrow = commit._known_name_roster(chat, active_cast(chat_id))
+
+    assert "The Doctor" in narrow
+    assert "Guinan" not in narrow, "the enumerated roster widened"
+
+
+def test_promotion_does_not_seed_recognition_with_offscreen_people(temp_db):
+    """The same guarantee, asserted through the caller rather than the helper,
+    because that is where the damage would land.
+    """
+    chat_id = _chat(temp_db)
+    _character(temp_db, chat_id, "The Doctor", "active")
+    _character(temp_db, chat_id, "Guinan", "dormant")
+    chat = dict(temp_db.q("SELECT * FROM chats WHERE id=?", (chat_id,),
+                          one=True))
+    cast_rows = temp_db.q(
+        "SELECT COALESCE(cc.sheet,ch.sheet) AS sheet "
+        "FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
+        "WHERE cc.chat_id=? AND cc.status='active'", (chat_id,))
+
+    seeded = commit._known_name_roster(chat, cast_rows)
+
+    assert "Guinan" not in seeded

@@ -2574,41 +2574,52 @@ def _known_name_roster(chat, cast):
     name and every cast member's character_name() output are the only
     strings that check will ever compare against.
 
-    EXISTENCE, NOT PRESENCE. This is the roster of people the story knows
-    about, so it is built from `extant_cast` and not from whichever cast the
-    caller happens to hold. A dormant character is offscreen, not gone, and
-    reading `active_cast` here meant they could be named by nobody: an
-    introduction mentioning them was dropped on the floor, and the guard that
-    stops a registered character being handed to the background manager as
-    furniture stopped covering exactly the people most likely to be furniture.
+    PRESENCE, NOT EXISTENCE, and deliberately so. `_registered_name_roster`
+    below answers the other question. They are two functions rather than one
+    function with a flag because a flag has a default and a default is a thing
+    to forget -- and the short, obvious name belongs to the narrow one, so the
+    lazy call is the safe call.
 
-    Widened HERE rather than at the eight call sites, because a roster that is
-    correct for name resolution and wrong for enumeration is precisely the
-    shape that gets forgotten. Callers keep passing their cast and it is still
-    honoured -- an extra row a caller holds is still a name the story knows --
-    but the floor no longer depends on what they passed.
+    This one is safe to ENUMERATE. The wide one is not: `promote_background_
+    character` iterates a roster straight into the `known` recognition map,
+    and nothing downstream ever re-checks that write.
     """
-    from scene import extant_cast, persona_of
+    from scene import persona_of
     pers = persona_of(chat)
     roster = []
     if isinstance(pers, dict):
         name = pers.get("identity", {}).get("name")
         if name:
             roster.append(name)
-    rows = list(cast or [])
-    chat_id = (chat or {}).get("id") if hasattr(chat, "get") else None
-    if chat_id is None:
-        try:
-            chat_id = chat["id"]
-        except (TypeError, KeyError, IndexError):
-            chat_id = None
-    if chat_id is not None:
-        seen_ids = {r["id"] for r in rows if "id" in r.keys()} \
-            if rows and hasattr(rows[0], "keys") else set()
-        for row in extant_cast(chat_id) or []:
-            if row["id"] not in seen_ids:
-                rows.append(row)
-    for row in rows:
+    for row in cast:
+        roster.append(character_name_from_text(row["sheet"]))
+    return roster
+
+
+def _registered_name_roster(chat, cast):
+    """Everyone the STORY knows about, present or not -- the existence answer.
+
+    MEMBERSHIP ONLY. Test strings against it; never iterate it into anything a
+    model reads or a table stores. Six of the eight roster call sites only ask
+    "is this string somebody?", and for those, widening is either harmless or
+    an outright repair -- every exclusion guard gets stronger, including the
+    one that stops a registered character being handed to the background
+    manager as furniture.
+
+    Why it exists: `chat_chars.status` was answering three questions at once --
+    does this person exist, are they in the scene, should we spend a model call
+    on them. Reading the presence answer as the existence answer meant a
+    dormant character could be named by nobody. Measured on chat 34: one turn
+    emitted four `ok` introductions and exactly one survived, the only pair
+    where both names were active.
+    """
+    from scene import extant_cast
+    roster = list(_known_name_roster(chat, cast))
+    try:
+        chat_id = chat["id"]
+    except (TypeError, KeyError, IndexError):
+        return roster
+    for row in extant_cast(chat_id) or []:
         name = character_name_from_text(row["sheet"])
         if name and name not in roster:
             roster.append(name)
@@ -2958,7 +2969,7 @@ def track_background_presences(ctx, nonce):
     is_opening = not ctx.director_resolve  # res fell back to director_establish
     turn_idx = ctx.turn.idx
 
-    roster = {n.casefold() for n in _known_name_roster(chat, ctx.cast)}
+    roster = {n.casefold() for n in _registered_name_roster(chat, ctx.cast)}
     roster |= {(e.get("name") or "").casefold() for e in (ctx.extra_players or [])}
 
     candidates = set()
@@ -3273,7 +3284,7 @@ def pick_background_reactors(ctx, dr_output, cap=1):
     chat = ctx.chat
     cid = chat.id
 
-    roster = {n.casefold() for n in _known_name_roster(chat, ctx.cast)}
+    roster = {n.casefold() for n in _registered_name_roster(chat, ctx.cast)}
     roster |= {(e.get("name") or "").casefold() for e in (ctx.extra_players or [])}
 
     voiced_this_beat = {
@@ -4041,7 +4052,10 @@ def commit_mapping(ctx, nonce, *, prepared=None):
                 f"offscreen_life is '{_cfg.get('offscreen_life')}'")
 
     known = wget(cid, "known", {})
-    roster = _known_name_roster(chat, ctx.cast)
+    # WIDE for resolution: an introduction naming an offscreen person is still
+    # a sentence about a real person, and dropping it silently is the defect.
+    # The EDGE it would write is gated separately, below.
+    roster = _registered_name_roster(chat, ctx.cast)
     name_to_id = {character_name_from_text(r["sheet"]): r["id"] for r in ctx.cast}
     for vi in (mout.get("validated_introductions") or []):
         if not isinstance(vi, dict) or not vi.get("ok"):
@@ -4065,7 +4079,12 @@ def commit_mapping(ctx, nonce, *, prepared=None):
         player = (persona_name(_persona_of(chat)) or "").strip()
         if player:
             present.add(player)
-        if learns not in present:
+        # BOTH parties. `learns` had a frame gate and `who` had none, and that
+        # gate SKIPS rather than blocks for anyone outside `ctx.cast` -- which
+        # is exactly the set the wider roster has just admitted. Hanging the
+        # requirement off an id lookup would open it for them instead of
+        # closing it, so this is a positive test against who was on stage.
+        if who not in present or learns not in present:
             continue
         learns_id = name_to_id.get(learns)
         if learns_id is not None and not is_recognized_in_frame(learns_id, turn.frame_id):
