@@ -40,6 +40,7 @@ import re
 import threading
 
 from db import q, wget_for_frame
+from logging_utils import logger
 from spatial import effective_light, light_at, normalize_light, room_of
 from weather import weather_for_room, weather_words
 
@@ -1032,6 +1033,22 @@ def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
         anchor, anchor_place = (room_anchor(chat_id, req.get("room"))
                                 if _continuity_enabled() else (None, {}))
         data = None
+        # THE FALLBACK WAS CORRECT AND INVISIBLE. Any failure here is a reason
+        # to generate normally, as the comment above says -- but a bare `except`
+        # that set `data = None` left an edit which was TRIED AND FAILED with
+        # exactly the trace of one that was never attempted: no log line, no
+        # field, nothing. Asked "is the editing suite working", nobody could
+        # answer from the artefacts, because a room holding several images looks
+        # identical whether continuity is running or silently falling back on
+        # every beat.
+        #
+        # These three say which happened. `edit_attempted` separates a shut gate
+        # from an open one, `edit_used` says whether the returned bytes are a
+        # revision or a fresh generation, and `edit_error` names the failure
+        # that was previously swallowed whole.
+        edit_attempted = bool(anchor)
+        edit_used = False
+        edit_error = ""
         if anchor:
             # A DIFFERENT prompt, not the same one: a generation describes the
             # whole place because nothing exists yet, a revision describes only
@@ -1042,7 +1059,15 @@ def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
                 with open(anchor, "rb") as fh:
                     data = edit_image(revision, fh.read())
                 prompt = revision
-            except Exception:
+                edit_used = data is not None
+            except Exception as exc:
+                # Type and message, not a traceback: this is a routine
+                # provider-shaped failure and the point is to be countable
+                # across turns, not to be debugged from one line.
+                edit_error = "%s: %s" % (type(exc).__name__, exc)
+                logger.info(
+                    "backdrop edit failed, generating instead: chat=%s room=%s "
+                    "error=%s", chat_id, req.get("room"), edit_error)
                 data = None
         if data is None:
             data = generate_image(prompt)
@@ -1058,7 +1083,9 @@ def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
         set_room_anchor(chat_id, req.get("room"), req["signature"],
                         req.get("place"))
     return {"path": path, "signature": req["signature"],
-            "room": req["room_name"], "prompt": prompt, "cached": False}
+            "room": req["room_name"], "prompt": prompt, "cached": False,
+            "edit_attempted": edit_attempted, "edit_used": edit_used,
+            **({"edit_error": edit_error} if edit_error else {})}
 
 
 # --- out-of-band generation queue -----------------------------------------
