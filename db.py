@@ -64,7 +64,7 @@ def parse_scoped_world_key(key):
     return key, None
 
 DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 26
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -182,7 +182,13 @@ CREATE TABLE IF NOT EXISTS lore_entries(
     aliases TEXT NOT NULL DEFAULT '[]',
     scope TEXT NOT NULL DEFAULT '{}',
     relations TEXT NOT NULL DEFAULT '{}',
-    source_notes TEXT NOT NULL DEFAULT ''
+    source_notes TEXT NOT NULL DEFAULT '',
+    -- Which model produced `embedding`. `memories` has carried these
+    -- two since the first rebuild existed; lore had neither, so it
+    -- appeared in no instrument built for "my embedding model
+    -- changed" and 1,061 entries sat on the crc32 fallback unnoticed.
+    embedding_model TEXT,
+    embedding_dim INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_lore_entries_book ON lore_entries(lorebook_id);
 CREATE INDEX IF NOT EXISTS idx_lore_entries_category ON lore_entries(category);
@@ -1232,6 +1238,33 @@ MIGRATIONS = [
         # fact. Backfilling it would require the window's memories, which
         # consolidation has already archived.
         "ALTER TABLE memory_summaries ADD COLUMN support TEXT NOT NULL DEFAULT '[]'",
+    ],
+    # v25 -> v26
+    [
+        # WHICH MODEL EMBEDDED THIS ENTRY. `memories` and `memory_summaries`
+        # have carried these two columns for as long as there has been a
+        # rebuild, and every instrument built for "my embedding model changed"
+        # -- `rebuild_embeddings`, `embedding_bank_status`,
+        # `_warn_stranded_embeddings` -- keys on them. `lore_entries` had
+        # neither, so it appeared in none of those instruments and the
+        # question could not be asked about lore at all.
+        #
+        # What that cost, measured on a live corpus: 1,061 of 1,418 lore
+        # entries were carrying the crc32 hashing fallback -- byte-identical
+        # to `providers.cheap_embed` of their own text, verified on a sample
+        # of 40 out of 40 -- because `add_lore` called `embed_texts`, which
+        # discards the model stamp, rather than `embed_texts_meta`, which
+        # reports it. They had never been embedded semantically at all, and
+        # `search_lore` scored every one of them 0.0 on its 0.65 vector term
+        # while ranking them plausibly enough on keywords that nothing looked
+        # broken for 165 turns.
+        #
+        # NULL means "not yet determined" rather than "no model": the backfill
+        # that stamps existing rows is a separate, resumable pass, because
+        # deciding what embedded a row means recomputing a hash per row and a
+        # migration is the wrong place to do work that can fail halfway.
+        "ALTER TABLE lore_entries ADD COLUMN embedding_model TEXT",
+        "ALTER TABLE lore_entries ADD COLUMN embedding_dim INTEGER",
     ],
 ]
 
