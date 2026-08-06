@@ -2573,16 +2573,45 @@ def _known_name_roster(chat, cast):
     for `actor_name in recognized_sources` to ever match. The persona/player
     name and every cast member's character_name() output are the only
     strings that check will ever compare against.
+
+    EXISTENCE, NOT PRESENCE. This is the roster of people the story knows
+    about, so it is built from `extant_cast` and not from whichever cast the
+    caller happens to hold. A dormant character is offscreen, not gone, and
+    reading `active_cast` here meant they could be named by nobody: an
+    introduction mentioning them was dropped on the floor, and the guard that
+    stops a registered character being handed to the background manager as
+    furniture stopped covering exactly the people most likely to be furniture.
+
+    Widened HERE rather than at the eight call sites, because a roster that is
+    correct for name resolution and wrong for enumeration is precisely the
+    shape that gets forgotten. Callers keep passing their cast and it is still
+    honoured -- an extra row a caller holds is still a name the story knows --
+    but the floor no longer depends on what they passed.
     """
-    from scene import persona_of
+    from scene import extant_cast, persona_of
     pers = persona_of(chat)
     roster = []
     if isinstance(pers, dict):
         name = pers.get("identity", {}).get("name")
         if name:
             roster.append(name)
-    for row in cast:
-        roster.append(character_name_from_text(row["sheet"]))
+    rows = list(cast or [])
+    chat_id = (chat or {}).get("id") if hasattr(chat, "get") else None
+    if chat_id is None:
+        try:
+            chat_id = chat["id"]
+        except (TypeError, KeyError, IndexError):
+            chat_id = None
+    if chat_id is not None:
+        seen_ids = {r["id"] for r in rows if "id" in r.keys()} \
+            if rows and hasattr(rows[0], "keys") else set()
+        for row in extant_cast(chat_id) or []:
+            if row["id"] not in seen_ids:
+                rows.append(row)
+    for row in rows:
+        name = character_name_from_text(row["sheet"])
+        if name and name not in roster:
+            roster.append(name)
     return roster
 
 def _resolve_roster_name(value, roster):
@@ -4022,6 +4051,21 @@ def commit_mapping(ctx, nonce, *, prepared=None):
             vi.get("corrected_learns") or vi.get("learns"), roster,
         )
         if not (who and learns):
+            continue
+        # TWO REQUIREMENTS, KEPT SEPARATE. The roster above answers "is this a
+        # person the story knows about", which is what resolving a name needs.
+        # An introduction needs more: somebody has to have been THERE to be
+        # introduced. Now that the roster includes offscreen characters, a
+        # single check would let the model write an introduction between two
+        # people who were both absent -- trading a missed edge for an invented
+        # one, which is worse, because a wrong edge is indistinguishable from a
+        # right one afterwards and nothing downstream can catch it.
+        from scene import persona_of as _persona_of
+        present = {character_name_from_text(r["sheet"]) for r in ctx.cast}
+        player = (persona_name(_persona_of(chat)) or "").strip()
+        if player:
+            present.add(player)
+        if learns not in present:
             continue
         learns_id = name_to_id.get(learns)
         if learns_id is not None and not is_recognized_in_frame(learns_id, turn.frame_id):
