@@ -594,7 +594,12 @@ def _restore_checkpoint_body(chat_id, r):
         seen = set()
         deduplicated = []
         for entry in cache:
-            key = entry.get("entry_uid") or _lore_cache_fingerprint(entry)
+            # Same key order as the merge in `agents/mapping.py`, and for the
+            # same reason: `id` is the only field two revisions of one entry
+            # are guaranteed to share, and a cached dict without `entry_uid`
+            # cannot collide with one that has it.
+            key = (entry.get("id") or entry.get("entry_uid")
+                   or _lore_cache_fingerprint(entry))
             if key in seen:
                 continue
             seen.add(key)

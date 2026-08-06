@@ -179,16 +179,43 @@ def mapping_quick(ctx, nonce):
         k=8,
         exclude_categories=["knowledge"],
     )
-    cache = wget(chat["id"], "lore_cache", []) or []
+def merge_lore(hits, cache):
+    """Fresh retrieval first, cached entries after, one copy of each entry.
+
+    `id` FIRST, because it is the one field two revisions of the same entry
+    must share. Lore entries ACCRETE -- the engine appends narrative events to
+    them -- and the cache stores SNAPSHOTS rather than references, so the same
+    entry can sit here twice at two lengths.
+
+    `entry_uid or fingerprint` could not collide those. A cached dict written
+    before the uid was carried through has none, so it falls to the
+    fingerprint, and a uid and a fingerprint live in different namespaces. The
+    fingerprint cannot rescue it either: it hashes keys+content, which is
+    exactly what differs between two revisions.
+
+    Measured live, chat 59: ten cached entries, nine distinct ids, entry 2213
+    present twice at 1,572 and 1,442 characters. The shorter copy predates a
+    sentence the longer one carries, so the model was handed the same room
+    twice at two revisions, one of which did not know a character had gone
+    upstairs. A contradiction served as retrieved lore, not a wasted slot.
+
+    `hits` precede `cache`, so keeping the first occurrence keeps the freshly
+    retrieved revision and drops the fossil.
+    """
     seen, merged = set(), []
-    for e in hits + cache:
+    for e in list(hits or []) + list(cache or []):
         if not isinstance(e, dict):
             continue
-        key = e.get("entry_uid") or _lore_fingerprint(e)
+        key = e.get("id") or e.get("entry_uid") or _lore_fingerprint(e)
         if key in seen:
             continue
         seen.add(key)
         merged.append(e)
+    return merged
+
+
+    cache = wget(chat["id"], "lore_cache", []) or []
+    merged = merge_lore(hits, cache)
     return {
         "relevant_lore": merged[:12], "staged_lore": [],
         "scene_patch": {
