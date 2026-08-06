@@ -4172,6 +4172,29 @@ def embedding_bank_status(chat_id=None, char_id=None):
     }
 
 
+def _rebuild_book_ids(chat_id):
+    """Which lorebooks a rebuild covers.
+
+    Scoped to the chat when one is named, because that is how the reconciler
+    is called after a restore and re-embedding an unrelated 300-entry book on
+    somebody's reroll would be a surprise bill. Every book when it is not.
+    """
+    if chat_id is None:
+        return [r["id"] for r in q("SELECT id FROM lorebooks") or []]
+    ids = []
+    row = q("SELECT lorebook_id FROM chats WHERE id=?", (chat_id,), one=True)
+    if row and row["lorebook_id"]:
+        ids.append(row["lorebook_id"])
+    for r in q("SELECT lorebook_id FROM chat_lorebooks WHERE chat_id=?",
+               (chat_id,)) or []:
+        if r["lorebook_id"] not in ids:
+            ids.append(r["lorebook_id"])
+    for r in q("SELECT id FROM lorebooks WHERE chat_id=?", (chat_id,)) or []:
+        if r["id"] not in ids:
+            ids.append(r["id"])
+    return ids
+
+
 def rebuild_embeddings(chat_id=None, char_id=None, *, batch=_REBUILD_BATCH,
                        limit=None, progress=None):
     """Re-embed every row whose vectors were made by a different model.
@@ -4205,7 +4228,7 @@ def rebuild_embeddings(chat_id=None, char_id=None, *, batch=_REBUILD_BATCH,
     target_key, target_dim = live.model_key, live.dimensions
     want_fallback = bool(live.fallback)
     report = {"model": target_key, "dimensions": target_dim,
-              "memories": 0, "summaries": 0, "batches": 0,
+              "memories": 0, "summaries": 0, "lore": 0, "batches": 0,
               "stopped_early": False, "error": ""}
 
     where, args = ["1=1"], []
@@ -4273,20 +4296,81 @@ def rebuild_embeddings(chat_id=None, char_id=None, *, batch=_REBUILD_BATCH,
             report["batches"] += 1
             if progress:
                 progress(report["summaries"], "summaries")
+
+        # LORE WAS LEFT OUT OF THIS, and it has the same disease with none of
+        # the cure. `search_lore` scores an entry 0.0 on its 0.65 vector term
+        # when the dimensions disagree, so a lorebook embedded before the
+        # provider changed goes on ranking by keyword alone and simply looks
+        # like a lorebook the agents ignore. Measured live: 1,061 of 1,418
+        # entries stranded, one book 10 of 15, and the one room a reader kept
+        # asking after was among them.
+        #
+        # It also has to be here rather than in a tool of its own, because
+        # `checkpoints.restore_state` calls `start_rebuild_if_needed` to undo
+        # exactly this damage after a restore -- a checkpoint carries lore
+        # vectors verbatim, so rewinding past a migration silently reverts it.
+        # A repair that lives outside this function is a repair a reroll
+        # quietly discards.
+        #
+        # `lore_entries` has no `embedding_model`/`embedding_dim` columns, so
+        # staleness is the vector's WIDTH rather than a recorded model key.
+        # That is weaker -- two models sharing a width are indistinguishable --
+        # and it is what the schema supports.
+        # NOT WHEN THE TARGET IS THE FALLBACK. Lore staleness is measured by
+        # the vector's WIDTH, so a degraded provider inverts the test: the
+        # crc32 fallback is 256 wide, every real 2,560-wide entry then reads as
+        # stale, and a background reconciler firing on a reroll during a
+        # provider hiccup would quietly downgrade the entire corpus it was
+        # called to protect. The memory pass survives this because it compares
+        # model KEYS and a caller can legitimately rebuild onto the fallback;
+        # lore has no key to compare, so the only safe answer is to wait.
+        book_ids = _rebuild_book_ids(chat_id)
+        if want_fallback and book_ids:
+            logger.info("memory: skipping the lore pass, the embedding "
+                        "provider is degraded and lore staleness is measured "
+                        "by width -- rebuilding now would downgrade it")
+            book_ids = []
+        if book_ids and target_dim:
+            book_ph = ",".join("?" * len(book_ids))
+            while True:
+                rows = q(
+                    f"SELECT id, keys, content FROM lore_entries "
+                    f"WHERE lorebook_id IN ({book_ph}) AND embedding IS NOT NULL "
+                    f"AND length(embedding) != ? ORDER BY id LIMIT ?",
+                    tuple(book_ids) + (target_dim * 4, batch))
+                if not rows:
+                    break
+                # EXACTLY the document `update_lore` builds. A vector made from
+                # different text is not comparable with one made from the same
+                # text, and a rebuild that quietly changed the recipe would be a
+                # subtler version of the bug it fixes.
+                texts = [(r["keys"] or "") + " " + (r["content"] or "")
+                         for r in rows]
+                got = _embed(texts)
+                with transaction():
+                    for index, row in enumerate(rows):
+                        qi("UPDATE lore_entries SET embedding=? WHERE id=?",
+                           (_blob(got.vectors[index]), row["id"]))
+                report["lore"] += len(rows)
+                report["batches"] += 1
+                if progress:
+                    progress(report["lore"], "lore")
     except Exception as exc:
         # Everything committed so far stands, and re-running resumes.
         report["stopped_early"] = True
         report["error"] = str(exc)
         logger.warning("memory: embedding rebuild stopped early after "
-                       "%d memories and %d summaries: %s",
-                       report["memories"], report["summaries"], exc)
+                       "%d memories, %d summaries and %d lore entries: %s",
+                       report["memories"], report["summaries"],
+                       report["lore"], exc)
         return report
 
     # A rebuilt row is no longer stranded, so let the per-retrieval warning
     # speak again if it ever becomes true a second time.
     _STRANDED_REPORTED.clear()
-    logger.info("memory: rebuilt %d memories and %d summaries onto %s",
-                report["memories"], report["summaries"], target_key)
+    logger.info("memory: rebuilt %d memories, %d summaries and %d lore "
+                "entries onto %s", report["memories"], report["summaries"],
+                report["lore"], target_key)
     return report
 
 
