@@ -227,6 +227,15 @@ function renderChat() {
 
     d.append(el("div", { class: "prose" }, t.prose || "…"));
 
+    // A dim tells a reader something is off but not what. stale_from names
+    // the earliest step that was re-run without the rest being recomputed.
+    if (t.stale_from) {
+      d.append(el("div", { class: "stale-note small dim" },
+        t.prose_stale
+          ? `Superseded — this text was written before “${t.stale_from.label}” was re-run.`
+          : `Partly out of date — steps from “${t.stale_from.label}” onward were not recomputed.`));
+    }
+
     const btns = el("div", { class: "tbtns" },
       el("button", {
         title: "Pipeline",
