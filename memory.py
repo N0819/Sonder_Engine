@@ -4116,17 +4116,37 @@ def lore_embedding_health(lorebook_ids=None):
 
 
 def _stamped_live_dimensions():
-    """The width the engine's own writes use, read from what it recorded.
+    """The width the engine's writes use: asked of the provider when it is
+    answering, and of what it recorded when it is not.
 
-    Provider-independent on purpose -- see `lore_embedding_health`. Takes the
-    widest real stamp rather than the most common one: `cheap:crc32:256` can
-    easily be the majority on a corpus that needs repairing, and treating the
-    fallback as "live" would report a broken corpus as healthy.
+    THE PROBE IS AUTHORITATIVE WHEN IT IS HEALTHY, and `embed_texts_meta` says
+    which it is -- `fallback` is exactly that flag. Asking `embed_texts`
+    instead cannot tell the two apart, which is how an earlier version of this
+    reported a corpus backwards during an outage.
+
+    STAMPS ARE THE FALLBACK, NOT THE FIRST ANSWER, because reading them alone
+    inverts the moment a genuinely current model is NARROWER than a retired
+    one: "widest real stamp" would then pick the stranded space as the
+    reference and report every correct row as needing repair. That has not
+    happened here -- the live space is the wider one -- and it is one model
+    change away.
+
+    Within the stamps, widest-real rather than most-common: `cheap:crc32:256`
+    is easily the majority on a corpus that needs repairing, and a majority
+    vote would call a wholly broken corpus healthy.
     """
+    try:
+        probe = embed_texts_meta([""])
+        if probe.dimensions and not probe.fallback:
+            return int(probe.dimensions)
+    except Exception:  # noqa: BLE001 - an unreachable provider is not an answer
+        pass
     rows = q("SELECT embedding_dim AS dim FROM memories "
              "WHERE embedding_dim IS NOT NULL "
-             "GROUP BY embedding_dim ORDER BY COUNT(*) DESC LIMIT 1")
-    if rows:
+             "AND embedding_model IS NOT NULL "
+             "AND embedding_model != 'cheap:crc32:256' "
+             "ORDER BY embedding_dim DESC LIMIT 1")
+    if rows and rows[0]["dim"]:
         return int(rows[0]["dim"])
     rows = q("SELECT MAX(embedding_dim) AS dim FROM lore_entries "
              "WHERE embedding_model IS NOT NULL "
