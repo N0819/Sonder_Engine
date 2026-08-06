@@ -3746,6 +3746,25 @@ def restore_lorebook(lb_id, entries):
 
 # ---- Lorebook Entries ----
 
+def _embed_lore_document(keys, content):
+    """The vector for one lore entry, WITH the model that made it.
+
+    THE WRITE PATH USED TO THROW THAT AWAY. `add_lore` and `update_lore` both
+    called `embed_texts`, which returns bare vectors, so neither could tell a
+    real embedding from `cheap_embed`'s crc32 hash -- and `embed_texts_meta`
+    degrades to that hash on ANY provider error. 1,061 of 1,418 entries on a
+    live corpus were written that way, byte-identical to the fallback,
+    semantically meaningless, and nothing recorded it because there was
+    nowhere to record it and nothing asking.
+
+    Returns `(vector, model_key, dimensions)`. The caller stores all three, so
+    the question "what embedded this row" is answered at the moment of writing
+    rather than reconstructed by hashing every entry in the table afterwards.
+    """
+    got = embed_texts_meta([(keys or "") + " " + (content or "")])
+    return got.vectors[0], got.model_key, got.dimensions
+
+
 def add_lore(lorebook_id, keys, content, turn_added=None, locked=0, category="other",
              title=None, knowledge_tag=None, knowledge_range=None,
              knowledge_locations=None, entry_uid=None,
@@ -3754,14 +3773,25 @@ def add_lore(lorebook_id, keys, content, turn_added=None, locked=0, category="ot
     import uuid
     entry_uid = entry_uid or f"entry_{uuid.uuid4().hex}"
     vec = embedding
+    model_key, dims = None, None
     if vec is None:
-        vec = embed_texts([(keys or "") + " " + (content or "")])[0]
+        vec, model_key, dims = _embed_lore_document(keys, content)
+    else:
+        # A caller-supplied vector arrives from a restore or an import, which
+        # carries the bytes but not the stamp. Its WIDTH is all that is
+        # knowable here, and claiming a model name from it would be a guess
+        # recorded as a fact -- so the model stays NULL and the backfill,
+        # which can hash the text, decides.
+        try:
+            dims = len(vec)
+        except TypeError:
+            dims = None
     return qi("""INSERT INTO lore_entries(
             lorebook_id, keys, content, category, canon_locked, turn_added,
             embedding, title, knowledge_tag, knowledge_range,
             knowledge_locations, entry_uid, importance, aliases, scope,
-            relations, source_notes
-        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            relations, source_notes, embedding_model, embedding_dim
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (lorebook_id, keys or "", content or "",
          category if category in LORE_CATEGORIES else "other",
          locked, turn_added, _blob(vec), title, knowledge_tag,
@@ -3770,19 +3800,28 @@ def add_lore(lorebook_id, keys, content, turn_added=None, locked=0, category="ot
          _storage_json(aliases or []),
          _storage_json(scope or {}),
          _storage_json(relations or {}),
-         source_notes))
+         source_notes, model_key, dims))
 
 def update_lore(entry_id, keys, content, category=None, title=None,
                 knowledge_tag=None, knowledge_range=None, knowledge_locations=None,
                 importance=None, aliases=None, scope=None, relations=None,
                 source_notes=None, embedding=None):
     vec = embedding
+    model_key, dims = None, None
     if vec is None:
-        vec = embed_texts([(keys or "") + " " + (content or "")])[0]
+        vec, model_key, dims = _embed_lore_document(keys, content)
+    else:
+        # Restore/import hands us the bytes without the stamp -- see add_lore.
+        try:
+            dims = len(vec)
+        except TypeError:
+            dims = None
     fields = ["keys=?", "content=?", "embedding=?", "title=?",
-              "knowledge_tag=?", "knowledge_range=?", "knowledge_locations=?"]
+              "knowledge_tag=?", "knowledge_range=?", "knowledge_locations=?",
+              "embedding_model=?", "embedding_dim=?"]
     values = [keys or "", content or "", _blob(vec), title,
-              knowledge_tag, knowledge_range, knowledge_locations]
+              knowledge_tag, knowledge_range, knowledge_locations,
+              model_key, dims]
     
     if category and category in LORE_CATEGORIES:
         fields.append("category=?")
@@ -3939,6 +3978,79 @@ def search_lore(lorebook_ids, query, k=6, exclude_categories=None):
         for _, row in scored[:k]
     ]
 
+def backfill_lore_embedding_stamps(batch=500):
+    """Decide what embedded each unstamped lore entry, once, and record it.
+
+    `lore_entries` gained `embedding_model`/`embedding_dim` long after it
+    gained vectors, so every row written before that carries bytes and no
+    provenance. This is the one-time retrofit that puts lore into the same
+    reconciliation system `memories` has always been in -- after it, the
+    column carries the answer and nothing ever hashes a corpus again.
+
+    THE TEST IS PROVIDER-INDEPENDENT, which is the whole reason it can be
+    trusted. `cheap_embed` is a pure function of the text, so "is this row the
+    crc32 fallback" is answerable with the provider face-down: recompute it
+    and compare bytes. Width alone cannot answer that -- width is relative to
+    whatever the provider happens to be emitting right now, which is exactly
+    how a degraded provider inverts the question.
+
+    A row that is not the fallback is stamped with its WIDTH and a model of
+    `unknown:<dims>`. That is deliberately not a model name: the bytes cannot
+    say which real model made them, and inventing one would record a guess as
+    a fact. It is enough for the rebuild, which only needs to know whether a
+    row matches what the live provider emits.
+
+    ONE CAVEAT, WORTH KEEPING BESIDE IT. This proves "produced by the CURRENT
+    `cheap_embed`". Change its bucket count or its hash and old fallback rows
+    silently stop matching and read as real -- the same class of defect as the
+    one this repairs, a comparison whose premise moved. That is an argument
+    for stamping once and never asking again, which is what this does.
+    """
+    from providers import cheap_embed
+    report = {"scanned": 0, "fallback": 0, "real": 0, "unembedded": 0}
+    while True:
+        rows = q("SELECT id, keys, content, embedding FROM lore_entries "
+                 "WHERE embedding_model IS NULL LIMIT ?", (batch,))
+        if not rows:
+            break
+        with transaction():
+            for row in rows:
+                report["scanned"] += 1
+                vec = _vec(row["embedding"])
+                if vec is None:
+                    # Never embedded is not the same as embedded badly, and
+                    # they need different repairs. Stamped so the scan does
+                    # not revisit it forever.
+                    qi("UPDATE lore_entries SET embedding_model=?, "
+                       "embedding_dim=? WHERE id=?",
+                       ("none:unembedded", None, row["id"]))
+                    report["unembedded"] += 1
+                    continue
+                text = (row["keys"] or "") + " " + (row["content"] or "")
+                is_fallback = False
+                if len(vec) == 256:
+                    try:
+                        want = np.asarray(cheap_embed(text), dtype=np.float32)
+                        is_fallback = (len(want) == len(vec)
+                                       and np.allclose(want, vec))
+                    except Exception:  # noqa: BLE001 - cannot hash, cannot claim
+                        is_fallback = False
+                if is_fallback:
+                    qi("UPDATE lore_entries SET embedding_model=?, "
+                       "embedding_dim=? WHERE id=?",
+                       ("cheap:crc32:256", 256, row["id"]))
+                    report["fallback"] += 1
+                else:
+                    qi("UPDATE lore_entries SET embedding_model=?, "
+                       "embedding_dim=? WHERE id=?",
+                       ("unknown:%d" % len(vec), len(vec), row["id"]))
+                    report["real"] += 1
+    logger.info("memory: stamped %d lore entries (%d fallback, %d real, "
+                "%d unembedded)", report["scanned"], report["fallback"],
+                report["real"], report["unembedded"])
+    return report
+
+
 def lore_embedding_health(lorebook_ids=None):
     """How much of the lore corpus can still be ranked by meaning.
 
@@ -3952,19 +4064,31 @@ def lore_embedding_health(lorebook_ids=None):
     them -- but they compete for 0.35 against rivals playing for 1.0, which in
     practice means they never surface.
     """
-    live = None
-    try:
-        live = len(embed_texts([""])[0])
-    except Exception:  # noqa: BLE001 - no provider is not a corpus finding
-        live = None
+    # MEASUREMENT MUST NOT DECLINE WHEN THE PROVIDER IS DOWN -- that is
+    # precisely when somebody is looking. `embed_texts` degrades silently to a
+    # 256-wide hash, so asking IT what the live width is turns every real
+    # 2,560-wide entry into a "stale" one and reports the corpus backwards.
+    # The stamp on the rows is provider-independent, so it is read first and
+    # the probe is only a fallback for a corpus the backfill has not reached.
+    live = _stamped_live_dimensions()
+    probed = False
+    if live is None:
+        try:
+            live = len(embed_texts([""])[0])
+            probed = True
+        except Exception:  # noqa: BLE001 - no provider is not a corpus finding
+            live = None
     ids = _ids(lorebook_ids) if lorebook_ids is not None else None
     if ids:
         ph = ",".join("?" * len(ids))
-        rows = q(f"SELECT lorebook_id, embedding FROM lore_entries "
+        rows = q(f"SELECT lorebook_id, embedding, embedding_model, "
+                 f"embedding_dim FROM lore_entries "
                  f"WHERE lorebook_id IN ({ph})", tuple(ids))
     else:
-        rows = q("SELECT lorebook_id, embedding FROM lore_entries")
-    total = stale = unembedded = 0
+        rows = q("SELECT lorebook_id, embedding, embedding_model, "
+                 "embedding_dim FROM lore_entries")
+    total = stale = unembedded = unstamped = 0
+    fallback = 0
     by_book = {}
     for r in rows or []:
         total += 1
@@ -3973,12 +4097,43 @@ def lore_embedding_health(lorebook_ids=None):
         book["total"] += 1
         if vec is None:
             unembedded += 1
-        elif live is not None and len(vec) != live:
+            continue
+        if r["embedding_model"] == "cheap:crc32:256":
+            # Proven, not inferred: the backfill matched these against
+            # `cheap_embed` of their own text. They were never embedded
+            # semantically at all.
+            fallback += 1
+        if r["embedding_model"] is None:
+            unstamped += 1
+        width = r["embedding_dim"] or len(vec)
+        if live is not None and width != live:
             stale += 1
             book["stale"] += 1
     return {"total": total, "stale": stale, "unembedded": unembedded,
-            "current_dimensions": live,
+            "fallback": fallback, "unstamped": unstamped,
+            "current_dimensions": live, "probed_provider": probed,
             "books": {k: v for k, v in by_book.items() if v["stale"]}}
+
+
+def _stamped_live_dimensions():
+    """The width the engine's own writes use, read from what it recorded.
+
+    Provider-independent on purpose -- see `lore_embedding_health`. Takes the
+    widest real stamp rather than the most common one: `cheap:crc32:256` can
+    easily be the majority on a corpus that needs repairing, and treating the
+    fallback as "live" would report a broken corpus as healthy.
+    """
+    rows = q("SELECT embedding_dim AS dim FROM memories "
+             "WHERE embedding_dim IS NOT NULL "
+             "GROUP BY embedding_dim ORDER BY COUNT(*) DESC LIMIT 1")
+    if rows:
+        return int(rows[0]["dim"])
+    rows = q("SELECT MAX(embedding_dim) AS dim FROM lore_entries "
+             "WHERE embedding_model IS NOT NULL "
+             "AND embedding_model != 'cheap:crc32:256'")
+    if rows and rows[0]["dim"]:
+        return int(rows[0]["dim"])
+    return None
 
 
 def knowledge_for_character(lorebook_ids, char_room, known_tags, excluded_titles, limit=30):
@@ -4326,18 +4481,34 @@ def rebuild_embeddings(chat_id=None, char_id=None, *, batch=_REBUILD_BATCH,
         # lore has no key to compare, so the only safe answer is to wait.
         book_ids = _rebuild_book_ids(chat_id)
         if want_fallback and book_ids:
+            # NO REPAIR IS AVAILABLE IN THIS STATE, which is a stronger reason
+            # than the one this guard was first written for. Every write the
+            # pass could make while the provider is degraded is a fallback
+            # write -- overwriting a crc32 vector with a freshly computed
+            # crc32 vector -- so "refuse to write a fallback" and "decline the
+            # pass" are the same instruction. It is the decision the memories
+            # path already makes; see the stopped_early test.
             logger.info("memory: skipping the lore pass, the embedding "
-                        "provider is degraded and lore staleness is measured "
-                        "by width -- rebuilding now would downgrade it")
+                        "provider is degraded -- every write it could make "
+                        "would be another fallback")
             book_ids = []
         if book_ids and target_dim:
             book_ph = ",".join("?" * len(book_ids))
             while True:
+                # STAMP FIRST, WIDTH ONLY WHERE THERE IS NO STAMP. A recorded
+                # model key answers "is this row current" exactly; width is a
+                # proxy that cannot tell two models sharing a width apart, and
+                # it is only still here for rows the backfill has not reached.
                 rows = q(
                     f"SELECT id, keys, content FROM lore_entries "
                     f"WHERE lorebook_id IN ({book_ph}) AND embedding IS NOT NULL "
-                    f"AND length(embedding) != ? ORDER BY id LIMIT ?",
-                    tuple(book_ids) + (target_dim * 4, batch))
+                    f"AND ((embedding_model IS NOT NULL "
+                    f"      AND (embedding_model != ? OR embedding_dim != ?)) "
+                    f"  OR (embedding_model IS NULL "
+                    f"      AND length(embedding) != ?)) "
+                    f"ORDER BY id LIMIT ?",
+                    tuple(book_ids) + (target_key, target_dim,
+                                       target_dim * 4, batch))
                 if not rows:
                     break
                 # EXACTLY the document `update_lore` builds. A vector made from
@@ -4349,8 +4520,10 @@ def rebuild_embeddings(chat_id=None, char_id=None, *, batch=_REBUILD_BATCH,
                 got = _embed(texts)
                 with transaction():
                     for index, row in enumerate(rows):
-                        qi("UPDATE lore_entries SET embedding=? WHERE id=?",
-                           (_blob(got.vectors[index]), row["id"]))
+                        qi("UPDATE lore_entries SET embedding=?,"
+                           "embedding_model=?,embedding_dim=? WHERE id=?",
+                           (_blob(got.vectors[index]), got.model_key,
+                            got.dimensions, row["id"]))
                 report["lore"] += len(rows)
                 report["batches"] += 1
                 if progress:
