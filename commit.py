@@ -2650,6 +2650,67 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
 
 # ---- Mapping commit ----
 
+_ADDRESS_ARTICLES = ("the ", "a ", "an ")
+
+
+def _form_in(form, body):
+    """Is this address form spoken in this line?
+
+    Case-insensitive for a distinctive name, case-SENSITIVE for a form that is
+    also an ordinary English word -- the same posture, and the same word list,
+    that `_scrub_unknown_identities` already uses. Live in this database: a
+    Starfleet cast contains `Data`, and matching that case-insensitively would
+    have every line mentioning sensor data introduce a man.
+    """
+    from agents.common import _COMMON_WORD_NAMES
+    flags = 0 if form.casefold() in _COMMON_WORD_NAMES else re.I
+    return bool(re.search(rf"\b{re.escape(form)}\b", body, flags))
+
+
+def _address_forms(roster):
+    """The ways a roster name is actually SAID, keyed by the roster name.
+
+    A name is stored as a display string -- `The Doctor`, `Cmdr. Vale`,
+    `Jean-Luc Picard` -- and nobody speaks in display strings. They say
+    "Doctor", "Vale", "Picard". Requiring the exact stored string meant the
+    ordinary way of addressing somebody taught nobody anything.
+
+    Measured on chat 63: 552 dialogue lines, 33 of them say "Doctor" and the
+    roster holds "The Doctor". The engine's own data shows the same split from
+    the other side -- chat 22's recognition map holds `Data` and `Lt.
+    Commander Data`, `Deanna Troi` and `Counselor Troi`, as separate people
+    who do not know each other.
+
+    A form that two roster members share is DROPPED rather than guessed: two
+    Picards in a room means "Picard" identifies nobody, and inventing an edge
+    is worse than missing one, because a wrong edge cannot be told from a
+    right one afterwards.
+    """
+    candidates = {}
+    for name in roster:
+        full = str(name or "").strip()
+        if not full:
+            continue
+        forms = {full}
+        folded = full.casefold()
+        for article in _ADDRESS_ARTICLES:
+            if folded.startswith(article):
+                forms.add(full[len(article):].strip())
+        tokens = [t for t in re.split(r"\s+", full) if t]
+        if len(tokens) > 1:
+            # The last token: a surname, or the noun under a title.
+            forms.add(tokens[-1].strip(".,"))
+        candidates[full] = {f for f in forms if len(f) >= 3}
+
+    # Ambiguity: a form claimed by two names identifies neither.
+    seen = {}
+    for name, forms in candidates.items():
+        for form in forms:
+            seen.setdefault(form.casefold(), set()).add(name)
+    return {name: {f for f in forms if len(seen[f.casefold()]) == 1}
+            for name, forms in candidates.items()}
+
+
 def _names_heard_in(quote, hearer_name, roster, scene, hearer_room):
     """Roster names spoken inside one line, of somebody standing right there.
 
@@ -2687,12 +2748,13 @@ def _names_heard_in(quote, hearer_name, roster, scene, hearer_room):
     body = str(quote or "")
     if not body:
         return []
+    forms = _address_forms(roster)
     learned = []
     for name in roster:
         candidate = str(name or "").strip()
         if not candidate or candidate == hearer_name:
             continue
-        if not re.search(rf"\b{re.escape(candidate)}\b", body, re.I):
+        if not any(_form_in(form, body) for form in forms.get(candidate, ())):
             continue
         # Present, and here. `_room_of` resolves through the scene's own
         # subject identity, so a body recorded under an entity id still
