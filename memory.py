@@ -4327,6 +4327,36 @@ def embedding_bank_status(chat_id=None, char_id=None):
             f"SELECT COUNT(*) AS n FROM {table} WHERE {clause} AND {stale}",
             tuple(args) + (live.model_key, live.dimensions), one=True)["n"]
         counts[table] = {"total": total, "stranded": stranded}
+    # LORE, counted with the SAME predicate that repairs it. Without this the
+    # bank could not see the one table it has a repair lane for, and
+    # `start_rebuild_if_needed` summed a total lore never entered -- so a
+    # database whose ONLY stale vectors were lore reported "nothing to
+    # rebuild" forever while the lane sat behind it, working, unreachable.
+    #
+    # It must be the REPAIR's predicate and not the `stale` clause above.
+    # Lore rows carry a NULL stamp far more often than memories do, and the
+    # repair treats a NULL stamp as stale only when the vector's WIDTH is
+    # wrong. Counting every unstamped row as stranded would report rows the
+    # repair will never select -- live, four entries already at the correct
+    # width with no stamp -- and the count could then never reach zero, which
+    # turns a reconciler into something that starts a rebuild on every call
+    # forever. A wrong counter here is worse than no counter.
+    book_ids = _rebuild_book_ids(chat_id)
+    lore_total = lore_stranded = 0
+    if book_ids:
+        holes = ",".join("?" * len(book_ids))
+        lore_total = q(f"SELECT COUNT(*) AS n FROM lore_entries "
+                       f"WHERE lorebook_id IN ({holes})",
+                       tuple(book_ids), one=True)["n"]
+        lore_stranded = q(
+            f"SELECT COUNT(*) AS n FROM lore_entries "
+            f"WHERE lorebook_id IN ({holes}) AND embedding IS NOT NULL "
+            "AND ((embedding_model IS NOT NULL "
+            "      AND (embedding_model != ? OR embedding_dim != ?)) "
+            "  OR (embedding_model IS NULL AND length(embedding) != ?))",
+            tuple(book_ids) + (live.model_key, live.dimensions,
+                               (live.dimensions or 0) * 4), one=True)["n"]
+    counts["lore_entries"] = {"total": lore_total, "stranded": lore_stranded}
     return {
         "model": live.model_key,
         "dimensions": live.dimensions,
@@ -4803,8 +4833,15 @@ def start_rebuild_if_needed(chat_id=None, char_id=None, *, force=False):
     except Exception as exc:
         logger.warning("memory: could not check embedding bank: %s", exc)
         return {"started": False, "reason": "status check failed: %s" % exc}
+    # Lore counts. It did not, and `rebuild_embeddings` has had a working lore
+    # lane behind this gate the whole time -- so a database whose only stale
+    # vectors were lore was told "nothing to rebuild" on every startup and
+    # every settings write, forever, while the repair sat one call away.
+    # Measured live: 1,087 lore rows selected by the repair's own predicate,
+    # and this function returning `nothing to rebuild`.
     stranded = (status["memories"]["stranded"]
-                + status["memory_summaries"]["stranded"])
+                + status["memory_summaries"]["stranded"]
+                + status.get("lore_entries", {}).get("stranded", 0))
     if not stranded:
         return {"started": False, "reason": "nothing to rebuild", **status}
     if status["is_fallback"] and not force:
