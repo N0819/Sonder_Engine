@@ -59,6 +59,23 @@ def opposite_bearing(bearing: Optional[str]) -> Optional[str]:
     return _OPPOSITE_BEARING.get(bearing)
 
 
+_OPPOSITE_VERTICAL = {"up": "down", "down": "up"}
+
+
+def normalize_vertical(value) -> Optional[str]:
+    level = str(value or "").strip().casefold()
+    if level in ("up", "upstairs", "above", "upward", "upwards", "ascend"):
+        return "up"
+    if level in ("down", "downstairs", "below", "downward", "downwards",
+                 "descend"):
+        return "down"
+    return None
+
+
+def opposite_vertical(vertical: Optional[str]) -> Optional[str]:
+    return _OPPOSITE_VERTICAL.get(vertical)
+
+
 def relative_bearing(
     facing: Optional[str],
     target: Optional[str],
@@ -162,6 +179,51 @@ def normalize_scene_bearings(scene: dict) -> dict:
                 back["dir"] = opposite_bearing(forward_dir)
             elif back_dir and not forward_dir:
                 edge["dir"] = opposite_bearing(back_dir)
+
+    # `vertical` gets the same treatment `dir` has always had, and for a
+    # sharper reason. A staircase's two ends are not the same direction: if the
+    # hall says the upstairs is UP and the upstairs says the hall is UP too,
+    # then from up there the hall is above you. Live (chat 63) both ends of one
+    # staircase read `up`, and the room it joined had a SECOND staircase going
+    # down to a basement -- with both edges reading the same way there is
+    # nothing left to tell one flight from the other.
+    for room_id, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict) or "vertical" not in edge:
+                continue
+            level = normalize_vertical(edge.get("vertical"))
+            if level:
+                edge["vertical"] = level
+            else:
+                edge.pop("vertical", None)
+
+    for room_id, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict):
+                continue
+            neighbor_id = edge.get("to")
+            if (not neighbor_id or neighbor_id == room_id
+                    or neighbor_id not in rooms):
+                continue
+            back = _find_edge(rooms.get(neighbor_id), room_id)
+            if back is None:
+                continue
+            forward_v, back_v = edge.get("vertical"), back.get("vertical")
+            if forward_v and back_v:
+                if opposite_vertical(forward_v) != back_v:
+                    # Same rule as `dir`: a contradiction is dropped rather
+                    # than guessed. The edge itself survives -- a staircase
+                    # nobody can agree the direction of is still a way through.
+                    edge.pop("vertical", None)
+                    back.pop("vertical", None)
+            elif forward_v and not back_v:
+                back["vertical"] = opposite_vertical(forward_v)
+            elif back_v and not forward_v:
+                edge["vertical"] = opposite_vertical(back_v)
 
     # Judge inferred bearings in the same pass by resolving collisions after
     # reciprocity.
