@@ -1920,7 +1920,10 @@ def _strip_identity_tokens(text, forms):
 # scrubbed, so ordinary lowercase prose is never mangled.
 _COMMON_WORD_NAMES = frozenset({
     "amber", "angel", "art", "ash", "autumn", "bear", "bill", "blue",
-    "brook", "buck", "chase", "clay", "colt", "daisy", "dawn", "dean",
+    # `data` is here on the engine's own evidence, not on principle: chat 22
+    # carries a character named Data, and every line about sensor data is a
+    # line that would otherwise introduce him.
+    "brook", "buck", "chase", "clay", "colt", "daisy", "data", "dawn", "dean",
     "drew", "duke", "earl", "faith", "fern", "fox", "ginger", "glen",
     "grace", "hazel", "heath", "holly", "hope", "hunter", "iris", "ivy",
     "jack", "jade", "jasmine", "joy", "june", "king", "lane", "lily",
