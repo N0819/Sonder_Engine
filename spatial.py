@@ -111,6 +111,84 @@ _BARRIER_ALIASES = {
     "bead curtain": "membrane",
     "veil": "membrane",
     "opaque_opening": "membrane",
+    # Stairs. A staircase is a way between two floors and nothing else -- a
+    # body walks it, sight runs up it -- but no spelling of one was in this
+    # table, so every stair in the database normalized to `wall` and sealed the
+    # floor it joined. Live: `shrine_interior_first_floor` and its own upstairs
+    # were walled apart across five consecutive rerolls while the mapping agent
+    # authored the edge correctly every single time.
+    "stair": "open",
+    "stairs": "open",
+    "staircase": "open",
+    "stairway": "open",
+    "stairwell": "open",
+    "steps": "open",
+    "ladder": "open",
+    "ramp": "open",
+    "path": "open",
+    "ground": "open",
+    "gap": "open",
+    "opening": "open",
+    "torii": "open",
+    "gate": "open",
+    # The entryway of a Japanese house. Used as a barrier value the model means
+    # as "the way in through the genkan".
+    "genkan": "open",
+    "hatch": "open_door",
+    "doors": "open_door",
+    "double_doors": "open_door",
+    "double doors": "open_door",
+    "docking_port": "open_door",
+    "airlock": "closed_door",
+    "blast_door": "closed_door",
+    "blast door": "closed_door",
+    "pressure_door": "closed_door",
+    "pressure door": "closed_door",
+    "fire_door": "closed_door",
+    "fire door": "closed_door",
+    # A paper screen: what "shoji door" already meant, in the spellings the
+    # model actually reaches for.
+    "shoji": "closed_door",
+    "shoji_screen": "closed_door",
+    "shoji screen": "closed_door",
+    "fusuma": "closed_door",
+    "noren": "membrane",
+    "partition": "wall",
+    "bulkhead": "wall",
+    "warded_door": "wall",
+    "warded door": "wall",
+}
+
+# What a qualifier does to the family it is attached to. `open_shoji` and
+# `hatch_open` were unrecognized as whole strings and so became walls, though
+# both halves were understood: the model is describing the STATE of a known
+# thing, not naming an unknown one.
+_BARRIER_OPEN_FORM = {
+    "wall": "open", "closed_door": "open_door", "membrane": "open_door",
+    "open": "open", "open_door": "open_door", "window": "window",
+    "bars": "bars", "separated": "open", "unknown": "open",
+}
+_BARRIER_CLOSED_FORM = {
+    "open": "closed_door", "open_door": "closed_door", "wall": "wall",
+    "closed_door": "closed_door", "membrane": "membrane", "window": "window",
+    "bars": "bars", "separated": "separated", "unknown": "unknown",
+}
+_BARRIER_OPEN_QUALIFIERS = ("open", "unlocked", "ajar", "propped", "unbarred")
+_BARRIER_CLOSED_QUALIFIERS = ("closed", "shut", "locked", "jammed", "stuck",
+                              "padlocked", "blocked")
+# Stronger than closed: the existing table already read `sealed_door` and
+# `bolted_door` as walls, and a qualifier must not quietly promote one back to
+# a door it can be opened through. `barred` is deliberately absent -- it is a
+# FAMILY here (`bars`), not a state.
+_BARRIER_SEAL_QUALIFIERS = ("sealed", "warded", "bolted", "welded", "bricked",
+                            "boarded", "solid")
+# A sealed anything is a wall, whatever it was before. Sight-passing families
+# keep their sight: a welded-shut viewport is still glass.
+_BARRIER_SEALED_FORM = {
+    "window": "window", "bars": "bars",
+    "open": "wall", "open_door": "wall", "closed_door": "wall",
+    "membrane": "wall", "wall": "wall", "separated": "separated",
+    "unknown": "wall",
 }
 
 _VALID_BARRIERS = {
@@ -208,15 +286,101 @@ def scent_level(rel: dict) -> str:
     # everything; unknown is safe-closed.
     return "none"
 
-def normalize_barrier(value: str | None) -> str:
-    """Normalize model-generated barrier names into engine vocabulary."""
-    barrier = str(value or "").strip().casefold()
-    barrier = _BARRIER_ALIASES.get(barrier, barrier)
+def _barrier_exact(key):
+    """One lookup, both spellings. The table is written in both underscore and
+    space forms and the model uses either."""
+    for form in (key, key.replace("_", " "), key.replace(" ", "_")):
+        if form in _BARRIER_ALIASES:
+            return _BARRIER_ALIASES[form]
+        if form in _VALID_BARRIERS:
+            return form
+    return None
 
-    if barrier not in _VALID_BARRIERS:
+
+def normalize_barrier(value: str | None, *, unresolved: set | None = None) -> str:
+    """Normalize model-generated barrier names into engine vocabulary.
+
+    The last line of this function used to be `return "wall"` for anything
+    unrecognized, and a wall is the most restrictive answer the vocabulary has:
+    nothing passes it and nothing sees through it. So every barrier word the
+    table had not been taught became a sealed surface -- silently, with no
+    warning and no way to tell an authored wall from an unread one. Measured
+    over every director and mapping output in the live database: 250 of 1,716
+    barrier declarations, 14.6%, were being turned into walls. The words lost
+    were `staircase`, `narrow wooden staircase`, `shoji`, `open_shoji`,
+    `genkan`, `open_archway`, `hatch_open` -- the parts a building is made of.
+
+    So the phrase is FOLDED rather than enumerated, because a table that must
+    be extended for every new spelling will always be one spelling behind:
+
+    1. the exact string, in either spelling (unchanged, and still first);
+    2. punctuation folded to one separator;
+    3. a state qualifier applied to a understood family -- `open_shoji` is a
+       shoji that is open, not an unknown thing;
+    4. the head noun of the phrase, taken as the LAST understood token, which
+       is where English puts it: `narrow wooden staircase` is a staircase.
+
+    Only then `wall`. Pass `unresolved` to collect the raw words that reached
+    that last line, so an unread barrier can be reported instead of quietly
+    sealing a doorway.
+    """
+    raw = str(value or "").strip().casefold()
+    direct = _barrier_exact(raw)
+    if direct is not None:
+        return direct
+
+    key = re.sub(r"[^a-z0-9]+", "_", raw).strip("_")
+    if not key:
         return "wall"
+    folded = _barrier_exact(key)
+    if folded is not None:
+        return folded
 
-    return barrier
+    tokens = key.split("_")
+
+    # 3. A qualifier on a known family. Either end: the model writes both
+    # `open_shoji` and `hatch_open`.
+    for qualifiers, form in ((_BARRIER_SEAL_QUALIFIERS, _BARRIER_SEALED_FORM),
+                             (_BARRIER_OPEN_QUALIFIERS, _BARRIER_OPEN_FORM),
+                             (_BARRIER_CLOSED_QUALIFIERS, _BARRIER_CLOSED_FORM)):
+        for qualifier in qualifiers:
+            if qualifier not in tokens or len(tokens) < 2:
+                continue
+            rest = [t for t in tokens if t != qualifier]
+            base = _barrier_exact("_".join(rest))
+            if base is None and len(rest) > 1:
+                # The remainder may itself be a phrase -- `open_shoji_stair`.
+                understood = [b for b in (_barrier_exact(t) for t in rest)
+                              if b is not None]
+                base = understood[-1] if understood else None
+            if base is not None:
+                return form.get(base, base)
+
+    # 4. The head noun, which English puts last.
+    understood = [b for b in (_barrier_exact(t) for t in tokens) if b is not None]
+    if understood:
+        return understood[-1]
+
+    if unresolved is not None and raw:
+        unresolved.add(raw)
+    return "wall"
+
+
+def unresolved_barrier_words(rooms) -> list:
+    """Every barrier word in these rooms that nothing in the vocabulary reads.
+
+    Reported rather than silently sealed: a doorway that becomes a wall because
+    the engine could not read the word for it is indistinguishable, downstream,
+    from a wall somebody meant.
+    """
+    seen = set()
+    for room in (rooms or {}).values():
+        if not isinstance(room, dict):
+            continue
+        for edge in (room.get("adjacent") or []):
+            if isinstance(edge, dict) and edge.get("barrier"):
+                normalize_barrier(edge.get("barrier"), unresolved=seen)
+    return sorted(seen)
 
 def normalize_scene_barriers(scene: dict) -> dict:
     """Normalize every adjacency barrier in a scene in place."""
@@ -4979,6 +5143,68 @@ def _shield_standing_bearings(prior_rooms, incoming_rooms):
     return out
 
 
+def _shield_standing_passage(prior_rooms, incoming_rooms, add_warning=None):
+    """Refuse a ONE-SIDED sealing of a doorway that is standing open.
+
+    The mirror of `_shield_standing_bearings`, and it exists because the same
+    thing happened to `barrier` that had already happened to `dir`. Live, chat
+    63 turn 165, across five consecutive rerolls: `mapping_stage` authored the
+    stair between the shrine's two floors as `open_shoji` every single time,
+    and `director_resolve` then re-declared the RETURN edge alone as `wall` --
+    leaving one direction passable, the other sealed, and no route between a
+    hall and its own upstairs.
+
+    A barrier is a property of the doorway, not of the side you stand on. So a
+    one-sided downgrade from passable to `wall` falls back to the incumbent
+    unless the SAME diff seals the reciprocal side too. Sealing a passage takes
+    a two-sided declaration; everything else about the edge still merges, and a
+    room the diff opens UP is never blocked -- this only refuses the close.
+    """
+    if not isinstance(incoming_rooms, dict) or not isinstance(prior_rooms, dict):
+        return incoming_rooms
+
+    def _edge_barrier(rooms, room_id, to_id):
+        room = rooms.get(room_id)
+        if not isinstance(room, dict):
+            return None
+        for e in room.get("adjacent") or []:
+            if isinstance(e, dict) and str(e.get("to")) == str(to_id):
+                return normalize_barrier(e.get("barrier"))
+        return None
+
+    out = {}
+    for room_id, room in incoming_rooms.items():
+        if not isinstance(room, dict) or not room.get("adjacent"):
+            out[room_id] = room
+            continue
+        edges = []
+        touched = False
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict) or not edge.get("to"):
+                edges.append(edge)
+                continue
+            to_id = edge["to"]
+            new_barrier = normalize_barrier(edge.get("barrier"))
+            if new_barrier == "wall":
+                fwd = _edge_barrier(prior_rooms, room_id, to_id)
+                back = _edge_barrier(prior_rooms, to_id, room_id)
+                standing = (fwd in _PASSABLE_BARRIERS
+                            or back in _PASSABLE_BARRIERS)
+                recip = _edge_barrier(incoming_rooms, to_id, room_id)
+                if standing and recip != "wall":
+                    edge = {k: v for k, v in edge.items() if k != "barrier"}
+                    touched = True
+                    if add_warning:
+                        add_warning(
+                            "kept the passage %s -> %s open: it was sealed "
+                            "from one side only, and the other side still "
+                            "reads %r" % (room_id, to_id,
+                                          recip or fwd or back))
+            edges.append(edge)
+        out[room_id] = {**room, "adjacent": edges} if touched else room
+    return out
+
+
 def connect_orphan_new_rooms(scene: dict, prev_scene: dict) -> list:
     """A room created this turn must be reachable from somewhere.
 
@@ -5164,9 +5390,12 @@ def merge_scene_with_diff(
     merged["entities"] = dict(merged.get("entities") or {})
     merged["positions"] = dict(merged.get("positions") or {})
 
+    _prior_rooms = (merged["rooms"]
+                    if isinstance(merged.get("rooms"), dict) else {})
     incoming_rooms = _shield_standing_bearings(
-        merged["rooms"] if isinstance(merged.get("rooms"), dict) else {},
-        diff.get("rooms") or {})
+        _prior_rooms, diff.get("rooms") or {})
+    incoming_rooms = _shield_standing_passage(
+        _prior_rooms, incoming_rooms)
     incoming_entities = diff.get("entities") or {}
     incoming_positions = diff.get("positions") or {}
     incoming_stations = diff.get("stations") or {}
