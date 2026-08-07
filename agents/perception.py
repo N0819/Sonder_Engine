@@ -1570,6 +1570,85 @@ def _behind_sources(scene, observer, sources):
             and entity_arc(scene, observer, s.get("name")) == "rear"]
 
 
+def _co_present_company(scene, observer_name, bodies, known):
+    """proximity_to_sources / behind_sources entries for the bodies simply
+    STANDING with an observer at the top of the beat.
+
+    The action-onset pass runs BEFORE the interaction loop, so
+    `ctx.character_results` is empty and no cast member qualifies as a
+    source the way the outcome pass admits them ("did their character step
+    produce something"). The only channels that could carry a co-present
+    body into a pass-1 payload were therefore the acting player (the
+    `*_to_actor` fields), the observer's single `orientation.focus` slot,
+    and the contact/scale/containment ledgers -- so two recognised
+    characters standing in one lit room did not appear in each other's
+    action-onset payloads at all. Because focus is ONE slot, the failure
+    looked intermittent and one-directional (chat 63, reported three
+    times: Tamamo, focused on the Doctor, sometimes saw him; he, focused
+    on a doorway, never saw her).
+
+    Delivered through the two fields the perception prompt already
+    describes for co-located people, and as PRESENCE -- a tier, a side, an
+    arc -- never anything act-shaped: the contacts ledger already taught
+    this module that a bare relation record reads as an event and gets
+    narrated as one.
+
+    A roster is also a brand-new channel handing a mind other bodies, and
+    the pass-1 output scrub floors only the PLAYER's identity -- so the
+    identity floor is applied INPUT-side, per observer, before the payload
+    exists:
+
+    - a body `visual_level_between` answers "none" for (unlit, concealed
+      by containment, behind a barrier) does not arrive at all;
+    - a recognised body arrives under its name, carrying `sight` so a
+      "shapes" sighting degrades honestly rather than growing a face;
+    - an unrecognised body seen in full arrives as its unknown-actor
+      descriptor, built from its disguise-adjusted VISIBLE appearance;
+    - an unrecognised body seen only as shapes is a bare figure: its
+      appearance summary describes what full sight would show, and a
+      silhouette shows none of it;
+    - a disguised body whose truth this observer is not in `known_to` for
+      is never connected to its name, however well the observer knows
+      the name -- that connection is the thing the disguise conceals.
+    """
+    recognized = known.get(observer_name) or []
+    prox, behind = {}, []
+    for body in bodies:
+        name = body.get("name")
+        if not name or name == observer_name:
+            continue
+        level = visual_level_between(scene, observer_name, name)
+        if level == "none":
+            continue
+        tier = proximity_rel(scene, observer_name, name)
+        if tier is None:
+            continue            # co-located only, like the field it feeds
+        known_to = body.get("disguise_known_to")
+        undisguised_to_me = (
+            known_to is None
+            or str(observer_name).casefold() in known_to)
+        if undisguised_to_me and _recognizes(name, recognized):
+            label = name
+        elif level == "full":
+            label = _unknown_actor_label(
+                name, body.get("appearance"), body.get("aliases"))
+        else:
+            label = "an indistinct figure"
+        stem, n = label, 2
+        while label in prox:    # two strangers can share a descriptor
+            label, n = f"{stem} ({n})", n + 1
+        entry = {
+            "tier": tier,
+            "side": entity_side(scene, observer_name, name),
+            "arc": entity_arc(scene, observer_name, name),
+            "sight": level,
+        }
+        prox[label] = entry
+        if entry["arc"] == "rear":
+            behind.append(label)
+    return prox, behind
+
+
 def _tell_acuity(sheet):
     """Numeric visual/auditory acuity for physical-tell delivery."""
     if not isinstance(sheet, dict):
@@ -2108,11 +2187,33 @@ def perception_act(ctx, nonce):
     if p_disguise:
         action_onset["subject_disguise"] = p_disguise
 
+    # Every cast body with a position, whether or not it acts this beat --
+    # the raw material for `_co_present_company` (which see): pass 1 has no
+    # acting sources yet, so presence must come from who is simply THERE.
+    # Appearance is resolved through the disguise context so an unrecognised
+    # body's descriptor is built from its outward form, never the truth.
+    co_present = []
+    for c in ctx.cast:
+        b_sh, _, _ = sheet_state(c)
+        b_name = character_name(b_sh)
+        b_room = character_room(sc, b_sh)
+        if not b_name or not b_room:
+            continue
+        b_true = _appearance_as_prose(appearance_of(
+            b_name, character_appearance(b_sh), sc))
+        b_visible, _, b_known_to = _subject_disguise_context(
+            chat["id"], b_name, b_true, known)
+        co_present.append({
+            "name": b_name, "room": b_room, "appearance": b_visible,
+            "aliases": character_scene_keys(b_sh)[1:],
+            "disguise_known_to": b_known_to,
+        })
+
     perceivers = []
     flow = interp.get("flow")
     if not isinstance(flow, dict):
         flow = {}
-        
+
     for c in ctx.cast:
         if c["id"] not in flow.get("reactors", []):
             continue
@@ -2134,6 +2235,8 @@ def perception_act(ctx, nonce):
         if containment_conceals(sc, character_name(sh), p_name):
             rel = {**rel, "concealed": True}
         rdata = (sc.get("rooms") or {}).get(r) if r else None
+        prox_to_others, behind_others = _co_present_company(
+            sc, character_name(sh), co_present, known)
 
         perceivers.append({
             "id": c["id"], "name": character_name(sh), "room": r,
@@ -2148,6 +2251,8 @@ def perception_act(ctx, nonce):
             "scent_channel_to_actor": scent_level(rel),
             "proximity_to_actor": proximity_rel(
                 sc, character_name(sh), p_name),
+            "proximity_to_sources": prox_to_others,
+            "behind_sources": behind_others,
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
             "behind_rooms": _behind_rooms(sc, character_name(sh)),
             "focus_target": _focus_target(sc, character_name(sh)),
