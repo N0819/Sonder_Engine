@@ -3874,13 +3874,9 @@ def director_resolve(ctx, nonce):
     # whether the player's own movement arrived this beat.
     _reconcile_near_group_positions(ctx, sc, sd, p_name)
 
-    # Runs whether or not a movement was DECLARED, and after the backstop has
-    # had its say. The reported case declared one -- interpret turned "wander
-    # towards it" into `movement.to_room: distant_mountain_building`, with
-    # `why: "heading towards the flickering light"` -- and the route check
-    # passed it, because the rooms genuinely were adjacent and open. Nothing
-    # there was wrong except that the player never said they were going in.
-    _guard_approach_is_not_arrival(ctx, interp, sd, sc, p_name)
+    # `_guard_approach_is_not_arrival` used to run HERE and was undone on every
+    # beat it fired. It now runs at the END of this function; see the call site
+    # for why the order is load-bearing.
 
     if not out.get("resolved_event"):
         parts = []
@@ -4128,5 +4124,25 @@ def director_resolve(ctx, nonce):
     # whatever remains unencoded. See the seam's block comment above.
     _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
                           tracked_names)
+
+    # LAST, and the order is the whole fix. This guard DELETES a position, and
+    # a deletion is indistinguishable from an omission: the reconciliation pass
+    # above scans the prose for anything the diff fails to encode and merges a
+    # repair delta back in. So the beat's prose ("she crosses the tatami and
+    # slides one panel open, revealing the stairway beyond") kept re-supplying
+    # the very position the guard had just refused, and the guard's own warning
+    # -- "Position unchanged" -- was written into the same step that shipped
+    # the position.
+    #
+    # Live, chat 63 turn 165. The player wrote "You walk towards the shoji
+    # leading to the upstairs opening it". `director_interpret` read it
+    # correctly and set `arrives: false`; the guard fired and said so; and
+    # Hinami was committed upstairs anyway, on the beat she opened the door.
+    # Opening a door is not walking through it.
+    #
+    # Running it after reconciliation costs nothing -- nothing between the two
+    # points reads `sd` -- and gives the deterministic refusal the last word,
+    # which is what it was always documented to have.
+    _guard_approach_is_not_arrival(ctx, interp, out["state_diff"], sc, p_name)
 
     return out
