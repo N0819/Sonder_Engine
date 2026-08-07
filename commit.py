@@ -2202,6 +2202,12 @@ def prepare_scene_commit(ctx):
         # disagreeing with the scene blob (Phase 3a: one source of truth,
         # normalized tables are derived projections of it).
         "diff": diff,
+        # The world as it stood before any of this beat committed. Carried
+        # because the domains below run after commit_scene has already
+        # persisted `sc`, so they cannot re-read "before" for themselves --
+        # see _subjects_that_moved, which silently found nobody moving until
+        # it was given this.
+        "prev_scene": prev_scene,
         "room_registry": _prepare_room_registry(
             cid, chat.lorebook_id, prev_scene, sc),
         "destruction": destruction,
@@ -2359,22 +2365,35 @@ def _is_gated_awareness(cond):
     return level in NON_AWAKE_GATED
 
 
-def _subjects_that_moved(ctx, diff):
+def _subjects_that_moved(ctx, diff, prev_scene=None):
     """Who crossed into a different room this beat, by name.
 
-    Read from the diff's own positions against the scene as it stood, so a
-    position re-asserted unchanged is not mistaken for a move -- §1.14 records
-    that resolve asserts positions with no declared movement, and treating
-    those as movement would make this guard fire on people standing still.
+    Read from the diff's own positions against the scene as it stood BEFORE
+    this beat committed, so a position re-asserted unchanged is not mistaken
+    for a move -- §1.14 records that resolve asserts positions with no declared
+    movement, and treating those as movement would make this guard fire on
+    people standing still.
+
+    `prev_scene` is not an optimization. commit_scene runs BEFORE
+    commit_world_entities inside one transaction, so by the time this guard
+    runs, `get_scene` already returns the post-move positions and every
+    comparison reads equal -- the guard found nobody moving, ever, and was a
+    no-op in production while its tests passed against a hand-fed scene.
+    prepare_scene_commit reads the world once before any of that and hands the
+    genuine pre-beat blob down. The query fallback is for direct callers that
+    never prepared a scene commit, where nothing has been written yet.
     """
     moved = set()
     positions = diff.get("positions")
     if not isinstance(positions, dict) or not positions:
         return moved
-    try:
-        before = (get_scene(ctx.chat.id) or {}).get("positions") or {}
-    except Exception:  # noqa: BLE001 - no scene is not a movement claim
-        return moved
+    if isinstance(prev_scene, dict):
+        before = prev_scene.get("positions") or {}
+    else:
+        try:
+            before = (get_scene(ctx.chat.id) or {}).get("positions") or {}
+        except Exception:  # noqa: BLE001 - no scene is not a movement claim
+            return moved
     for subject, room in positions.items():
         if not room:
             continue
@@ -2441,7 +2460,15 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
     # for a leak that was never the finding. Detect and report the copy-forward
     # instead; the entity still commits, because a stale clause is a narration
     # problem and a missing row is a world-model problem.
-    _prior_entities = (wget(cid, "scene", {}) or {}).get("entities") or {}
+    # From preparation when there is one: commit_scene has already persisted
+    # this beat's blob by the time this runs, so re-reading the world here
+    # returns the POST-merge entities and "prior" would be comparing the new
+    # state against itself. Same hazard as _subjects_that_moved below, same
+    # source. The query stays for direct callers, where nothing is written yet.
+    _prior_scene = prepared.get("prev_scene") if isinstance(prepared, dict) else None
+    if not isinstance(_prior_scene, dict):
+        _prior_scene = wget(cid, "scene", {}) or {}
+    _prior_entities = _prior_scene.get("entities") or {}
     _beat_prose = str(
         (ctx.director_resolve or ctx.director_establish or {}).get(
             "resolved_event") or "").casefold()
@@ -2565,7 +2592,9 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
         # be unconscious in the same beat. Being carried or dragged is not
         # caught by this: that is somebody else's action naming you as its
         # target, and a targeted subject is exempt below.
-        moved_this_beat = _subjects_that_moved(ctx, diff)
+        moved_this_beat = _subjects_that_moved(
+            ctx, diff,
+            prev_scene=(prepared or {}).get("prev_scene"))
         targeted_this_beat = _subjects_targeted_by_an_action(ctx)
 
         for cond_id, cond_list in (diff.get("conditions") or {}).items():
