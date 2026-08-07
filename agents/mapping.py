@@ -179,6 +179,21 @@ def mapping_quick(ctx, nonce):
         k=8,
         exclude_categories=["knowledge"],
     )
+    cache = wget(chat["id"], "lore_cache", []) or []
+    merged = merge_lore(hits, cache)
+    return {
+        "relevant_lore": merged[:12], "staged_lore": [],
+        "scene_patch": {
+            "rooms": {}, "entities": {},
+            "positions": {}, "stations": {},
+            "remove_entities": [], "remove_rooms": [],
+        },
+        "cached": True,
+        "summary": f"{len(merged[:12])} lore entries recalled from "
+                   f"{len(sel)} active book(s) (no mapping call needed).",
+    }
+
+
 def merge_lore(hits, cache):
     """Fresh retrieval first, cached entries after, one copy of each entry.
 
@@ -212,18 +227,3 @@ def merge_lore(hits, cache):
         seen.add(key)
         merged.append(e)
     return merged
-
-
-    cache = wget(chat["id"], "lore_cache", []) or []
-    merged = merge_lore(hits, cache)
-    return {
-        "relevant_lore": merged[:12], "staged_lore": [],
-        "scene_patch": {
-            "rooms": {}, "entities": {},
-            "positions": {}, "stations": {},
-            "remove_entities": [], "remove_rooms": [],
-        },
-        "cached": True,
-        "summary": f"{len(merged[:12])} lore entries recalled from "
-                   f"{len(sel)} active book(s) (no mapping call needed).",
-    }
