@@ -2440,12 +2440,45 @@ def perception_act(ctx, nonce):
         # past the gate above. Quoted speech survives verbatim (a name
         # introduced aloud this beat is legitimate sensory signal;
         # recognition itself only flips at commit).
+        # The roster this scrub enumerates was the PLAYER ALONE -- a
+        # one-element list holding the persona -- so no pattern was ever built
+        # for a cast name and the scrub could not fire on one. Live, chat 63
+        # t165: two co-present bodies, one scrub pass, the warning reporting
+        # `scrubbed unearned identity ['Hinami']` while "Tamamo" sat untouched
+        # in the same sentence, delivered to an observer with no `known` entry
+        # at all. The helper was never wrong; it was asked the wrong question.
+        #
+        # Same roster the outcome pass builds (see `_scrub_view_for`): every
+        # body this observer does not recognise, filtered through `_recognizes`
+        # so an alias/uid form counts as recognition. `co_present` is reused
+        # rather than rebuilt -- it already resolves each body's
+        # disguise-adjusted VISIBLE appearance and its scene aliases, so a
+        # disguised body's descriptor is built from its outward form.
+        #
+        # Gated on the roster being non-empty rather than on `knows_identity`,
+        # which is a scalar about the PLAYER only: under the old gate an
+        # observer who recognised the player but not a cast member got no scrub
+        # at all. Strictly wider -- when `knows_identity` is False the player is
+        # in the roster, so this still fires wherever it used to.
+        recognized = set(known.get(p["name"]) or [])
+        unknown_sources = []
         if not knows_identity:
+            unknown_sources.append(
+                {"name": p_name, "appearance": p_visible, "aliases": []})
+        for body in co_present:
+            if body["name"] == p["name"] or _recognizes(
+                    body["name"], recognized):
+                continue
+            unknown_sources.append({
+                "name": body["name"],
+                "appearance": body.get("appearance"),
+                "aliases": body.get("aliases") or [],
+            })
+        if unknown_sources:
             view, leaked = _scrub_unknown_identities(
                 view,
-                allowed_forms=[p["name"]],
-                unknown_sources=[{"name": p_name,
-                                  "appearance": p_visible}],
+                allowed_forms=[p["name"], *recognized],
+                unknown_sources=unknown_sources,
             )
             if leaked:
                 ctx.warnings.append(
