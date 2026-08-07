@@ -164,6 +164,89 @@ def test_being_put_under_by_someone_else_still_lands(temp_db):
     assert not any("rests on what they SAID" in w for w in ctx.warnings)
 
 
+def test_the_resolve_prompt_does_not_authorise_the_failure(temp_db):
+    """The other half, and the half that actually caused it.
+
+    The clause used to license putting the player under whenever "they declare
+    sleeping" — so the Director had explicit permission for exactly this, and
+    the guard below was arguing with the prompt rather than backstopping it.
+    The occasion is now named as the body going under, per the standing rule
+    that a bare prohibition inverts.
+    """
+    from prompts import DEFAULT_PROMPTS
+
+    body = DEFAULT_PROMPTS["director_resolve"]
+    assert "they declare sleeping" not in body, \
+        "an announced plan is licensed again"
+    assert "ANNOUNCED PLAN IS DIALOGUE" in body
+    assert "NARRATES THE BODY GOING UNDER" in body
+
+
+def test_the_guard_survives_the_scene_being_committed_first(temp_db):
+    """THE SECOND REPRODUCTION, and the reason the first one was not enough.
+
+    `_commit_all_locked` runs commit_scene BEFORE commit_world_entities inside
+    one transaction, so by the time the guard runs, the world blob already
+    holds this beat's positions. Reading the scene there compares upstairs
+    against upstairs, finds nobody moved, and lets every gated condition
+    through -- the guard was a no-op in production for its whole first day
+    while these tests passed, because they hand-built `prepared` and never ran
+    the domain that blinded it.
+
+    Live: chat 63 turn 165 rerolled at 17:16 on the fixed code and minted
+    `awareness_hinami_sleep` again, with the only warning on the turn being an
+    unrelated S3-A8 note.
+    """
+    cid = _chat_with_scene(temp_db, {"Hinami": "shrine_interior_upstairs"})
+    ctx = _ctx_for(cid, actions=[{"attempt": "walks to the shoji",
+                                  "targets": []}])
+    diff = {"positions": {"Hinami": "shrine_interior_upstairs"},
+            "conditions": {"awareness_hinami_sleep": [_cond("asleep")]}}
+
+    commit.commit_world_entities(ctx, "n4", prepared={
+        "diff": diff,
+        "prev_scene": {"positions": {"Hinami": "shrine_interior_first_floor"}},
+    })
+
+    rows = temp_db.q("SELECT kind FROM world_conditions WHERE chat_id=?", (cid,))
+    assert not any(r["kind"] == "awareness" for r in rows), \
+        "the committed scene was read as 'before' and the guard went blind"
+    assert any("rests on what they SAID" in w for w in ctx.warnings), ctx.warnings
+
+
+def test_prepare_scene_commit_carries_the_pre_beat_world(temp_db):
+    """The supply side of the same defect. Nothing downstream of commit_scene
+    can re-read "before" for itself, so preparation has to hand it down --
+    and it must be the pre-beat blob, not an alias of the merged one that
+    normalization has already walked over.
+    """
+    import time as _time
+    from pipeline_context import ChatData, PipelineContext, TurnData
+
+    chat_id = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                         ("Shrine", "", _time.time()))
+    temp_db.wset(chat_id, "scene", {
+        "rooms": {"first_floor": {"name": "Hall", "adjacent": ["upstairs"]},
+                  "upstairs": {"name": "Upstairs", "adjacent": ["first_floor"]}},
+        "positions": {"Hinami": "first_floor"},
+    })
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Shrine", persona_id=None,
+                      lorebook_id=None, scenario="", created=_time.time()),
+        turn=TurnData(id=1, chat_id=chat_id, idx=165, player_input="good night",
+                      created=_time.time()),
+        cast=[], input="good night")
+    ctx.director_resolve = {"state_diff": {"positions": {"Hinami": "upstairs"}}}
+
+    prepared = commit.prepare_scene_commit(ctx)
+
+    assert (prepared["prev_scene"].get("positions") or {}).get("Hinami") \
+        == "first_floor", "preparation handed down the post-merge scene"
+    assert (prepared["scene"].get("positions") or {}).get("Hinami") == "upstairs"
+    assert commit._subjects_that_moved(
+        ctx, prepared["diff"], prev_scene=prepared["prev_scene"]) == {"Hinami"}
+
+
 def test_going_under_where_you_stand_still_lands(temp_db):
     """The case the player named as legitimate: "you close your eyes and slip
     into rest". No movement, so no contradiction, so no guard.
