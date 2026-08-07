@@ -543,7 +543,11 @@ def room_projection(scene, room_id, viewer=None):
     for edge in (room.get("adjacent") or []):
         if not isinstance(edge, dict):
             continue
-        exits.append({k: edge[k] for k in ("barrier", "vertical", "dir")
+        # `name` rides along because it is pure layout too, and it is the only
+        # field that says what the way out IS. A backdrop drawn from
+        # {barrier, vertical, dir} alone can put an opening in the north wall
+        # and cannot know it is a staircase.
+        exits.append({k: edge[k] for k in ("barrier", "vertical", "dir", "name")
                       if edge.get(k)})
     if exits:
         out["exits"] = exits
