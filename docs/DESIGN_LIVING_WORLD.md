@@ -1,7 +1,13 @@
 # The living world — five state-producers, each with a floor and a ceiling
 
-Status: **design, nothing here is built by this document.** The question it
-answers: *a high fidelity but low cost illusion of the world moving around
+Status: **phase 1 landed** (branch `living-floors`): the deterministic
+floors of A, B and D, the settings surface for all five (the
+`LIVING_WORLD_*` ladder in `living_world.py`, declared/built split per the
+`OFFSCREEN_LIFE_BUILT` idiom), and the §6 profile-rung output-shape fix.
+**C and E are deliberately held for phase 2**, behind the epistemic-leak
+audit — see §9, which also records the author's constraints on rumor
+propagation verbatim, because they are design commitments the phase-1
+shapes were built to honour. The question this document answers: *a high fidelity but low cost illusion of the world moving around
 you* — several genuinely different routes to it, each rated on **two axes
 kept deliberately separate: cheapness and fidelity**. Cheap does not win by
 default; the frontier is the deliverable, including the options that are
@@ -411,13 +417,14 @@ this document, and the least of it is code.
 - **Narrated elsewhere** — cutaways, meanwhiles, engine recaps: dead under
   §0.2, and structurally impossible through the narrator anyway. Not rated.
 - **The profile-summary rung as built** (`offscreen.profile_summary_record`
-  `[read]`): its model call is legitimate under §0.1 — its *output shape* is
-  not. It produces a prose summary, and prose has no player-legitimate
-  surface. Redirect the same call to produce state (or A's ensemble fields),
-  and keep any prose strictly as character-payload material that never
-  reaches the player except through the character's own mouth at contact.
-  Let the instrumented run report whether its contribution over the
-  deterministic skeleton is felt at all before deciding its future.
+  `[read]`): its model call is legitimate under §0.1 — its *output shape* was
+  not. It produced a prose summary, and prose has no player-legitimate
+  surface. **Fixed in phase 1**: the call now fills bounded state fields
+  (`{doing, at, manner}`, word-capped on the write path), the stored `tick`
+  string is composed by code from those fields, and prose reaches the player
+  only at contact through the character's own mouth. Let the instrumented run
+  still report whether its contribution over the deterministic skeleton is
+  felt at all before deciding its future.
 - **Interim filler / digest recaps** (BACKGROUND_LIFE §3.9): the fabricated
   gap-summary is a told-not-encountered surface. What survives is aftermath
   state (the presence's `last_seen_clock`, the fuses that fired at their
@@ -487,3 +494,114 @@ continuous for free and nothing else works without them. **If one purchase
 is best:** the full character-agent tick for a single antagonist — rung 3 —
 because a world that can genuinely move against you is the illusion every
 other approach can only imply.
+
+---
+
+## 9. The author's constraints, verbatim — phase-2 commitments
+
+Recorded after approval, unparaphrased on purpose: these are design
+commitments, and paraphrase is how a commitment erodes. The phase-1 shapes
+(B's fuse payloads, D's obligation rows) were built to honour them — every
+event record already carries `{what, where, a time, origin, originator,
+witnessed, disposition}`, the pickup surface a carrier needs, extensible
+with `{carrier, route}` without migration.
+
+### 9.1 Information travels by carriers along routes, never by timer
+
+> rumors of the player can spread but they need a realistic simulated
+> pathway, it can never be assumed that an npc a town away suddenly knows
+> what a player did in another town, We should have simulated info routes a
+> player could potentially intercept like traders or what not.
+
+> or maybe an antagonist is spreading malicious rumors.
+
+A carrier is a thing in the world — a trader, a courier, a caravan — with a
+position and a path, which the player can **intercept, follow, question,
+outrun, or silence**. Propagation delay must be a *consequence of the
+route*, never a configured constant. **This document's §3 delay-line
+propagation is therefore insufficient as written**: the delay line survives
+as the clock the carriers move on, but C's floor must model carriers, not
+timers.
+
+### 9.2 An injected rumor obeys the same physics
+
+> but that needs to spread not instantly apply
+
+An antagonist is a **source, not a broadcast**: their claim enters the
+network at a point in space and time and travels like everything else.
+**Intent buys carriers, not teleportation** — reach (money, couriers, a
+guild, a pulpit) buys more carriers and better routes, never an exemption
+from the delay. That keeps one rule for all information, and it makes the
+antagonist counterable by play: a lie on a courier can be intercepted,
+outrun, or beaten to the destination by the truth.
+
+### 9.3 The player earns importance; nothing grants it
+
+> and the player cannot be given extra importance unless they earn it.
+> Background npcs cannot assume the player is more important than other
+> rumours unless they have genuinely earned reputation.
+
+A rumor's propagation priority is a function of **the rumor** — novelty,
+scale, consequence, relevance to the carrier — never of its subject.
+Reputation is earned, tracked, starts at nothing, and is **downstream** of
+the carrier network, not an input to it. Carriers select by their own
+interest. **The null result is the feature**: most player actions die where
+they happened — the load-bearing test is that an ordinary deed has *not*
+reached the next town after fifty turns. Corollary: an NPC who has never
+received a rumor about the player behaves exactly as if the player is
+nobody — no hedging, no "you seem familiar"; unearned recognition is the
+same defect class as the Kadoman leak. Phase-1 consequence, honoured:
+nothing in A, B or D writes a player-reputation value, and no fuse or
+obligation carries a priority/importance/significance field (pinned by
+test).
+
+### 9.4 The network is a world simulation, not a player-reputation system
+
+> which means rumors must not be player centric, they can be based off
+> world events the player hasn't even witnessed and other character
+> interactions.
+
+Rumor traffic is world events generally — a bridge out, a betrothal, a feud
+between strangers — and the player is one possible subject among many,
+usually minor. This **retires §3's framing** of "the player's own deeds
+precede them" as the ledger's purpose: it is one story the network tells,
+not what the network is for. It also closes the epistemic loop for the
+player: the carrier network is the third legitimate surface beside
+aftermath and walking-in — diegetic and lossy, somebody told you, they may
+be wrong, and you know who. The player learns what happened elsewhere
+because something carried it to them, never because the engine knows it.
+
+### 9.5 Invented gossip enters as claims, never as facts
+
+> or even made up background character interactions.
+
+Texture that was never simulated — two vendors feuding, somebody's cousin's
+wedding — is legitimate carrier traffic, entering through
+`background_claims` + the provisional tier: hearsay with a claimant, a TTL,
+no canonical standing until the Director ratifies. A generated rumor must
+be **indistinguishable in form** from a witnessed one — same record, same
+carrier physics, same route; only the provenance tier differs (phase 1
+already writes `disposition` on every fuse and obligation for exactly this)
+— and repetition is not evidence: ratification is the only door into canon.
+This is also the claims lane's first real producer; its measured 0-of-29
+may be absence of reason rather than defect.
+
+### 9.6 Truth is layered: the event is real, knowledge of it is a claim
+
+> This also means world events can genuinely happen without the player
+> without them ever visiting a location but hearing about what happened to
+> it from rumor via background or other characters
+
+Layer 1: B's fired fuses and D's obligations are **genuine state**, at a
+location and a time, whether or not anyone looks — which is why D
+*accumulates* durable rows as fuses fire rather than minting history at
+arrival: a rumor needs a truth to be a distortion of, and arrival must be
+able to contradict the telling. (This supersedes §2's blanket "every write
+is provisional" for the fuse substrate: a Director-adjudicated cause fired
+by deterministic code is `resolved_fact`; provisionality stays on
+model-produced records.) Layer 2: what reaches anyone is a carrier's
+account — degraded, attributed, possibly stale, possibly malicious — held
+as `told`-provenance memory with a claimant, against `witnessed` at
+arrival. The two can disagree, and going and looking is the only
+reconciliation. Neither layer may write into any character's knowledge as
+a side effect of being true: truth propagates only by route.

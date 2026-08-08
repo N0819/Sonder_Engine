@@ -574,3 +574,117 @@ class TestTheProfileRung:
         assert record.get("summary") in (None, "")
         if record["basis"] == "deterministic":
             assert "fell_back_from" in (record.get("inputs") or {})
+
+
+class TestTheProfileRungEmitsState:
+    """The rung's model call was legitimate (out of band, bounded); its
+    OUTPUT SHAPE was not. It produced a 1-2 sentence prose summary, and
+    offscreen events have no player-legitimate prose surface (the design's
+    rule 0.2: ticks produce state; prose is authored at contact by the
+    machinery already being paid for). The model now fills bounded
+    attribute fields, anything sentence-shaped is refused on the write
+    path, and the stored `tick` string is composed by CODE from the fields
+    so it asserts exactly what they assert."""
+
+    @staticmethod
+    def _trail(monkeypatch):
+        import gaps
+
+        def _gap(cid, kind, sid, since, until, resolution=None, scene=None,
+                 frame_id=None):
+            return {"subject": {"kind": "character", "id": sid},
+                    "moves": [], "events": [], "seed": "s",
+                    "basis": "deterministic"}
+
+        monkeypatch.setattr(gaps, "gap_for", _gap)
+
+    def test_state_fields_land_and_no_summary_does(self, monkeypatch):
+        import json as _json
+
+        import offscreen
+        import providers
+
+        self._trail(monkeypatch)
+        monkeypatch.setattr(
+            providers, "chat_complete",
+            lambda *a, **k: _json.dumps({"doing": "mending nets",
+                                         "at": "quay_1",
+                                         "manner": "unhurried"}))
+        record = offscreen.profile_summary_record(
+            1, {"rooms": {"quay_1": {}}},
+            {"kind": "character", "id": "guinan_7f3a"}, {}, 3, 9)
+        assert record["basis"] == "model"
+        assert record["state"] == {"doing": "mending nets", "at": "quay_1",
+                                   "manner": "unhurried"}
+        assert "summary" not in record
+
+    def test_narration_cannot_ride_an_attribute_field(self, monkeypatch):
+        """A field long enough to hold a sentence will be handed one: a
+        `doing` past the word bound is narration wearing a field name, and
+        it falls back to the deterministic record saying exactly why."""
+        import json as _json
+
+        import offscreen
+        import providers
+
+        self._trail(monkeypatch)
+        monkeypatch.setattr(
+            providers, "chat_complete",
+            lambda *a, **k: _json.dumps({
+                "doing": "spending the evening arguing with the "
+                         "quartermaster about the missing shipment",
+                "at": "", "manner": ""}))
+        record = offscreen.profile_summary_record(
+            1, {"rooms": {}}, {"kind": "character", "id": "guinan_7f3a"},
+            {}, 3, 9)
+        assert record["basis"] == "deterministic"
+        assert "state" not in record
+        assert "state.doing" in record["inputs"]["fell_back_from"]
+
+    def test_a_room_outside_the_world_is_refused(self, monkeypatch):
+        """The same location gate every other rung has: `at` must name a
+        room the world contains, or the record falls back rather than
+        storing a 'quiet office'."""
+        import json as _json
+
+        import offscreen
+        import providers
+
+        self._trail(monkeypatch)
+        monkeypatch.setattr(
+            providers, "chat_complete",
+            lambda *a, **k: _json.dumps({"doing": "reading",
+                                         "at": "a quiet office",
+                                         "manner": ""}))
+        record = offscreen.profile_summary_record(
+            1, {"rooms": {"quay_1": {}}},
+            {"kind": "character", "id": "guinan_7f3a"}, {}, 3, 9)
+        assert record["basis"] == "deterministic"
+        assert "state.at" in record["inputs"]["fell_back_from"]
+
+    def test_the_prompt_no_longer_asks_for_sentences(self):
+        """The earliest stage the data could go wrong is the ask itself: a
+        prompt requesting '1-2 sentences' gets sentences whatever the
+        record shape does with them."""
+        import inspect
+
+        import offscreen
+
+        src = inspect.getsource(offscreen.profile_summary_record)
+        assert "1-2 sentences" not in src
+        assert '"doing"' in src
+
+    def test_the_tick_string_is_composed_by_code(self):
+        """Deterministic composition, not model prose: the stored legacy
+        `tick` asserts the fields and nothing more, so the log cannot
+        smuggle a sentence past the state shape."""
+        from offscreen import compose_tick
+
+        assert compose_tick("Guinan", {"doing": "mending nets",
+                                       "at": "quay_1",
+                                       "manner": "unhurried"}) == \
+            "Guinan — mending nets, unhurried (at quay_1)"
+        assert compose_tick("Guinan", {"doing": "mending nets"}) == \
+            "Guinan — mending nets"
+        assert compose_tick("Guinan", {}) == \
+            "Guinan — about their own business"
