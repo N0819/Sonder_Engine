@@ -28,10 +28,29 @@ let _activeRun = null;
 // looking at, which is the same question this observer already answers --
 // so it stays one observer and one notion of "the current turn" rather than
 // two that can disagree while scrolling.
-// Set when a run has just produced a turn, cleared by the first observer pass
-// that lands on it. The scene layers read it to tell "the reader is waiting for
-// this one" from "the reader is scrolling past it".
-let _freshTurnPending = false;
+// The id of a turn this client just generated, so the scene layers can tell
+// "the reader is waiting for this one" from "the reader is scrolling past it".
+//
+// An id and NOT a one-shot boolean, which is what this was. The flag was spent
+// by the observer pass that READ it, while the work it authorised -- a
+// backdrop commissioned at once instead of after a two-second dwell -- was
+// deferred by BD_SETTLE_MS. renderChat() then guarantees a second notification
+// inside that window: it scrolls to the bottom, and re-asserts the scroll in a
+// requestAnimationFrame because `content-visibility` makes the first
+// scrollHeight an estimate. That second pass found the flag already false,
+// reported the brand-new turn as one being scrolled past, and cancelled the
+// commission before it ever ran -- so a room with no picture yet fell back to
+// the dwell on EVERY generated turn. Measured against live data: of 378 rooms
+// across all stored scenes, 28 had ever been drawn.
+//
+// Keyed by turn, the answer is the same however many times it is asked, which
+// is the only form that survives a deferred read. Cleared when the reader
+// settles somewhere else, because by then they are plainly not waiting on it.
+let _freshTurnId = null;
+// Set the moment a run succeeds, and turned into the id above by the render
+// that follows -- which is the first point at which the new turn HAS an id,
+// since it only exists once the chat has been re-fetched.
+let _freshRunPending = false;
 
 function observeVisibleTurn(msgsEl, turnEntries) {
   if (_visibleTurnObserver) {
@@ -47,6 +66,13 @@ function observeVisibleTurn(msgsEl, turnEntries) {
   const ratios = new Map();
   const turnIdByEl = new Map(turnEntries.map(e => [e.el, e.turnId]));
   const newestTurnId = turnEntries[turnEntries.length - 1].turnId;
+  // A run that has just finished names its turn HERE, where that id first
+  // exists. Doing it in the run's own `finally` is not possible: the turn has
+  // no id until the chat has been re-fetched and re-rendered.
+  if (_freshRunPending) {
+    _freshTurnId = newestTurnId;
+    _freshRunPending = false;
+  }
 
   _visibleTurnObserver = new IntersectionObserver(entries => {
     for (const entry of entries) {
@@ -66,21 +92,27 @@ function observeVisibleTurn(msgsEl, turnEntries) {
     if (bestEl) {
       // A turn the reader just WAITED for is not a turn they scrolled past:
       // its picture and its sound are commissioned immediately, while every
-      // other turn has to be dwelt on first. Consumed once, so scrolling away
-      // and back afterwards behaves like ordinary reading.
-      const fresh = _freshTurnPending && turnIdByEl.get(bestEl) === newestTurnId;
-      if (fresh) _freshTurnPending = false;
+      // other turn has to be dwelt on first.
+      const bestTurnId = turnIdByEl.get(bestEl);
+      const fresh = _freshTurnId !== null && bestTurnId === _freshTurnId
+        && bestTurnId === newestTurnId;
+      // Released only once the reader has settled on a DIFFERENT turn, never
+      // by the act of reading it here: repeated passes over the same new turn
+      // are the render settling, not the reader moving on, and this pass may
+      // be re-run several times before the work it authorises is done.
+      // Scrolling away and back afterwards is then ordinary reading again.
+      if (bestTurnId !== _freshTurnId) _freshTurnId = null;
       // Guarded because backdrops.js is an experimental extra: if it fails to
       // load (or a browser is holding a cached index.html without its script
       // tag), a missing function here would throw inside the observer and
       // take the transcript's own scroll behaviour down with it.
       if (typeof backdropOnVisibleTurn === "function") {
-        backdropOnVisibleTurn(turnIdByEl.get(bestEl), { fresh });
+        backdropOnVisibleTurn(bestTurnId, { fresh });
       }
       // Same observer, same notion of "the turn being read", so the picture
       // and the sound can never disagree about which room the reader is in.
       if (typeof ambienceOnVisibleTurn === "function") {
-        ambienceOnVisibleTurn(turnIdByEl.get(bestEl), { fresh });
+        ambienceOnVisibleTurn(bestTurnId, { fresh });
       }
     }
   }, { root: msgsEl, threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] });
@@ -724,7 +756,7 @@ async function runStream(url, body, context = {}) {
         // The re-render below lands the reader on a brand-new turn. Mark it so
         // its picture and sound are fetched at once rather than after a dwell:
         // waiting two seconds for a beat you just watched arrive is a stall.
-        if (ok) _freshTurnPending = true;
+        if (ok) _freshRunPending = true;
         await openChat(S.chatId);
         // After the re-render, so the beat is on screen when it sounds. Only
         // on success: a failure already raised a toast, and a chime that means
