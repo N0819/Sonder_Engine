@@ -150,6 +150,30 @@ LIVING_WORLD_DESCRIPTIONS = {
     },
 }
 
+#: The offscreen-life rung each depth spends at. The two settings are two
+#: axes of ONE question — ``scene.OFFSCREEN_LIFE_LADDER`` answers how much
+#: authority off-screen work may have, this module answers which machinery
+#: does it — and before this table nothing said which governed: B's floor
+#: minted fuses that genuinely fired while the ladder said ``inert``
+#: ("nothing happens off screen"). The assignments are the ladder's own
+#: descriptions, not new policy: the floors are clock-work, and the
+#: ``deterministic`` rung's text names them verbatim ("scheduled effects
+#: only — arrivals, expiry, news latency"); the ceilings are model-assisted
+#: invention without plans, the ``stochastic`` tier's authority; and E is
+#: the ``character_agent`` rung wearing this module's vocabulary — the
+#: design doc §5 names E's rungs 2 and 3 ``reactive`` and
+#: ``character_agent`` outright, so gating E anywhere lower would be the
+#: two-vocabularies drift the ladder comment in ``scene.py`` warns against.
+LIVING_WORLD_REQUIRES = {
+    "routine_residue": {"floor": "deterministic", "ceiling": "stochastic"},
+    "scheduled_consequence": {"floor": "deterministic",
+                              "ceiling": "stochastic"},
+    "rumor_ledger": {"floor": "deterministic", "ceiling": "stochastic"},
+    "place_obligations": {"floor": "deterministic", "ceiling": "stochastic"},
+    "antagonist_ladder": {"floor": "character_agent",
+                          "ceiling": "character_agent"},
+}
+
 #: All off. The engine never did any of this before the setting existed, and
 #: a merge must not silently change a running story — the same reasoning
 #: that made ``stochastic`` the offscreen default (what the engine already
@@ -158,6 +182,15 @@ LIVING_WORLD_DEFAULT = "off"
 
 #: World-KV key for the per-chat config.
 LIVING_WORLD_KEY = "living_world"
+
+#: The key the off-screen ceiling rides on INSIDE a config dict handed
+#: around this module. It is never stored under ``LIVING_WORLD_KEY`` —
+#: ``normalize_living_world`` strips it from anything written back, so the
+#: ceiling has exactly one durable spelling (``dialogue_config``'s) and
+#: can never shadow it from a second row. Absent, it reads as the ladder
+#: default, exactly as ``scene.normalize_offscreen_life`` treats an
+#: unreadable level.
+OFFSCREEN_CEILING_KEY = "offscreen_life"
 
 
 def normalize_living_world(stored):
@@ -168,7 +201,10 @@ def normalize_living_world(stored):
     default is the live middle of its ladder — the default IS off, so a
     typo does silence a feature; the PUT route returns the normalized
     config so what stuck is visible immediately rather than fifty turns
-    later.
+    later. Dropping unknown keys is also what keeps the STORED config
+    pure: ``OFFSCREEN_CEILING_KEY`` (folded in by ``living_world_config``
+    at read time) never survives a write, so the ceiling cannot acquire a
+    second durable spelling that shadows ``dialogue_config``'s.
     """
     out = {}
     stored = stored if isinstance(stored, dict) else {}
@@ -180,24 +216,47 @@ def normalize_living_world(stored):
 
 
 def living_world_config(cid):
+    """The chat's mechanism config with the off-screen authority ceiling
+    folded in ON THE WAY IN (the ``canonical_url`` rule): every gate that
+    fetches a config composes both axes without remembering to call a
+    second helper — ``commit_transit_sweep``'s mint gate, the Director's
+    residue gate and the mapping seam all compose because the dict they
+    already hold carries the ceiling. The ceiling's durable home stays
+    ``dialogue_config``; it rides here only between read and use.
+    """
     from db import wget
+    from scene import dialogue_config
 
-    return normalize_living_world(wget(cid, LIVING_WORLD_KEY, None) or {})
+    config = normalize_living_world(wget(cid, LIVING_WORLD_KEY, None) or {})
+    config[OFFSCREEN_CEILING_KEY] = dialogue_config(cid)["offscreen_life"]
+    return config
 
 
 def effective_depth(config, approach):
     """The depth that actually RUNS: the requested depth, lowered to the
-    highest built depth at or below it. Setting an unbuilt ceiling behaves
-    as the floor and MARKS the story as wanting the ceiling — the
-    ``character_agent`` convention, so landing a ceiling later is opt-in on
-    a chat that already asked rather than a surprise in every story.
+    highest depth at or below it that is both BUILT and within the story's
+    off-screen authority ceiling (``LIVING_WORLD_REQUIRES``). Two clamps,
+    one convention: setting an unbuilt ceiling behaves as the floor and
+    MARKS the story as wanting the ceiling — the ``character_agent``
+    convention, so landing a ceiling later is opt-in on a chat that
+    already asked rather than a surprise in every story — and a depth the
+    ladder does not permit is capped the same visible way, never silently
+    run: the ladder is the single answer to how much off-screen work MAY
+    do, and these mechanisms answer only which machinery does it.
     """
-    requested = normalize_living_world(config).get(approach,
-                                                   LIVING_WORLD_DEFAULT)
+    from scene import normalize_offscreen_life, offscreen_life_allows
+
+    raw = config if isinstance(config, dict) else {}
+    ceiling = normalize_offscreen_life(raw.get(OFFSCREEN_CEILING_KEY))
+    requested = normalize_living_world(raw).get(approach,
+                                                LIVING_WORLD_DEFAULT)
     built = LIVING_WORLD_BUILT.get(approach, frozenset())
     for depth in reversed(
             LIVING_WORLD_DEPTHS[:LIVING_WORLD_DEPTHS.index(requested) + 1]):
-        if depth == "off" or depth in built:
+        if depth == "off":
+            return depth
+        if depth in built and offscreen_life_allows(
+                ceiling, LIVING_WORLD_REQUIRES[approach][depth]):
             return depth
     return "off"
 
@@ -217,22 +276,34 @@ def living_world_allows(config, approach, depth="floor"):
 
 
 def living_world_levels(config=None):
-    """The ladder as the UI renders it: what is on, what it costs, and what
-    is merely declared — per approach, from the engine's own tables."""
-    config = normalize_living_world(config or {})
+    """The ladder as the UI renders it: what is on, what it costs, what is
+    merely declared, and what the off-screen ceiling caps — per approach,
+    from the engine's own tables. ``requires``/``permitted`` ride along so
+    a mechanism set above the ceiling displays as clamped rather than
+    silently ignored: the clamp the menu shows is the clamp
+    ``effective_depth`` will apply, never a copy that drifts."""
+    from scene import normalize_offscreen_life, offscreen_life_allows
+
+    raw = config if isinstance(config, dict) else {}
+    ceiling = normalize_offscreen_life(raw.get(OFFSCREEN_CEILING_KEY))
+    values = normalize_living_world(raw)
+    composed = {**values, OFFSCREEN_CEILING_KEY: ceiling}
     out = []
     for approach in LIVING_WORLD_APPROACHES:
         desc = LIVING_WORLD_DESCRIPTIONS[approach]
         out.append({
             "approach": approach,
             "label": desc["label"],
-            "value": config[approach],
-            "effective": effective_depth(config, approach),
+            "value": values[approach],
+            "effective": effective_depth(composed, approach),
             "cost": desc["cost"],
             "depths": [
                 {"value": depth,
                  "description": desc.get(depth, ""),
-                 "built": depth in LIVING_WORLD_BUILT[approach]}
+                 "built": depth in LIVING_WORLD_BUILT[approach],
+                 "requires": LIVING_WORLD_REQUIRES[approach][depth],
+                 "permitted": offscreen_life_allows(
+                     ceiling, LIVING_WORLD_REQUIRES[approach][depth])}
                 for depth in LIVING_WORLD_DEPTHS if depth != "off"
             ],
         })

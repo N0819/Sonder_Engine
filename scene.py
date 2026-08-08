@@ -1004,6 +1004,13 @@ def is_player_speaker(speaker, chat):
 #                    knowledge, never the player's location or recent actions,
 #                    or the result is the spookily prescient antagonist this
 #                    architecture exists to avoid.
+#
+# This ladder is the ONE authority ceiling for everything off screen, the
+# living-world mechanisms included: `living_world.LIVING_WORLD_REQUIRES`
+# maps each mechanism depth to the rung it spends at, and
+# `living_world.effective_depth` clamps to it at read time — so `inert`
+# genuinely means nothing happens, rather than "nothing except whatever a
+# second dropdown separately permitted".
 OFFSCREEN_LIFE_LADDER = (
     "inert", "deterministic", "reactive", "stochastic", "character_agent",
 )
