@@ -9,6 +9,7 @@ from memory import (
     record_dispute, raise_importance,
     update_lore, LORE_CATEGORIES, LOREBOOK_TYPES,
     chat_lorebook_ids, chat_lorebook_weights, lorebook_manifest, dump_chat_memories,
+    ensure_chat_canon_book,
     add_lorebook_link, lorebook_descendants,
     restore_chat_memories, dump_lorebook, restore_lorebook,
     knowledge_for_character, get_relationships,
@@ -3201,7 +3202,32 @@ _INERT_ENTITY_KINDS = frozenset({
     "trap", "corpse", "remains",
 })
 
-def track_background_presences(ctx, nonce):
+def prepare_background_claims(ctx):
+    """Embeddings for the canon rows a ratified background claim will become.
+
+    A ratified claim now lands in `lore_entries`, and embedding a lore entry is
+    a provider round-trip. It is decided here, before the outer transaction, on
+    exactly the inputs `settle_claims` will re-decide on inside it. Best-effort:
+    a failure costs the entries their prepared vector, never the turn.
+    """
+    res = ctx.director_resolve or ctx.director_establish or {}
+    sd = res.get("state_diff") or {}
+    try:
+        from background_claims import prepare_canon
+
+        return {"canon_embeddings": prepare_canon(
+            ctx.chat.id, ctx.turn.idx,
+            (ctx.get("background_react") or {}).get("claims"),
+            str(res.get("resolved_event") or ""),
+            ratified_refs=(sd.get("ratified_claims") or []),
+            contradicted_refs=(sd.get("contradicted_claims") or []),
+        )}
+    except Exception as exc:
+        ctx.add_warning(f"background-claim canon preparation failed: {exc}")
+        return {"canon_embeddings": {}}
+
+
+def track_background_presences(ctx, nonce, *, prepared=None):
     """Deterministic, LLM-free tracking of named entities the director
     keeps writing into resolved_event/dialogue_log who are NOT a
     registered cast member, a persona, or an extra player -- e.g. a
@@ -3360,9 +3386,15 @@ def track_background_presences(ctx, nonce):
     # (background_claims.py). Same treatment the Player Authority Contract
     # already gives a player's claim about another character.
     from background_claims import record_claims, settle_claims
+    _sd = res.get("state_diff") or {}
     record_claims(cid, turn_idx, (br or {}).get("claims"))
+    # A ratification WRITES the claim into the chat's canon lorebook, so its
+    # embedding is prepared outside this transaction (prepare_background_claims)
+    # rather than paid for under the write lock.
     settle_claims(cid, turn_idx, str(res.get("resolved_event") or ""),
-                  ((res.get("state_diff") or {}).get("ratified_claims") or []))
+                  ratified_refs=(_sd.get("ratified_claims") or []),
+                  contradicted_refs=(_sd.get("contradicted_claims") or []),
+                  canon_embeddings=(prepared or {}).get("canon_embeddings"))
 
     resolved_event = str(res.get("resolved_event") or "")
     for name, record in presences.items():
@@ -4222,14 +4254,9 @@ def commit_mapping(ctx, nonce, *, prepared=None):
     applied = {"created": 0, "updated": 0}
     lb = chat.lorebook_id
     if (ops or book_ops) and not lb:
-        lb = qi(
-            "INSERT INTO lorebooks(name,chat_id,book_type,summary) VALUES(?,?,?,?)",
-            (
-                f"{chat.name} — canon", cid, "general",
-                "Chat canon: facts, events and specifics established during this chat.",
-            ),
-        )
-        qi("UPDATE chats SET lorebook_id=? WHERE id=?", (lb, cid))
+        # One spelling of "the chat's canon book", shared with the other writer
+        # that can mint it first (background_claims.write_canon).
+        lb = ensure_chat_canon_book(cid)
 
     temp_book_map = _apply_mapping_book_ops(cid, lb, book_ops)
     valid_books = set(chat_lorebook_ids(cid))
@@ -6132,7 +6159,9 @@ def _prepare_turn_commit(ctx):
         scene = prepare_scene_commit(ctx)
         mapping = prepare_mapping_commit(ctx)
         memories = prepare_memory_commit(ctx, scene=scene["scene"])
-        return {"scene": scene, "mapping": mapping, "memories": memories}
+        claims = prepare_background_claims(ctx)
+        return {"scene": scene, "mapping": mapping, "memories": memories,
+                "claims": claims}
     except Exception as exc:
         ctx.add_warning(f"commit preparation failed: {exc}")
         raise RuntimeError(f"Commit preparation failed: {exc}") from exc
@@ -6196,7 +6225,8 @@ def _commit_all_locked(ctx, nonce):
             )
             _commit_domain(
                 ctx, results, "background_presences",
-                lambda: track_background_presences(ctx, nonce),
+                lambda: track_background_presences(
+                    ctx, nonce, prepared=prepared["claims"]),
             )
             _commit_domain(
                 ctx, results, "narration_person",
