@@ -1607,6 +1607,13 @@ class StateDiff(LenientModel):
     # resolution ADOPTS as true (background_claims.py). Ratifying is the
     # Director's alone -- an unratified claim stays hearsay and expires.
     ratified_claims: list[str] = Field(default_factory=list)
+    # ...and the ones this resolution REJECTS. Explicit, because contradiction
+    # is the one verdict prose cannot carry: "the Widow denies it" and "the
+    # Widow says it again" share every distinctive token, so settle_claims can
+    # infer adoption from the objective record but never rejection. Without
+    # this list a claim the Director threw out was indistinguishable from one
+    # it ignored, and went on being offered back to it until the TTL ran out.
+    contradicted_claims: list[str] = Field(default_factory=list)
     # Top-level place label, set only when the beat relocates the party to a
     # genuinely different place (DW-1). commit.py's _refresh_relocated_location
     # prefers this over the new room's own name.

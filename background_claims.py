@@ -21,6 +21,15 @@ recorded, the three possible outcomes are all ordinary fiction:
 
 None of those is incoherent, which is what "robust failure" means here.
 
+"Becomes canon" is a WRITE, not a flag. For two releases this module set
+`rec["status"] = "ratified"` in its own world-KV blob and wrote nothing into
+`lore_entries`, which is where every fact established during play actually
+lives and the only store anything reads back (search_lore -> mapping's
+relevant_lore -> the Director's and perception's payloads). A ratified claim
+therefore became true and unreachable in the same instant -- the exact failure
+the paragraph above says this module exists to prevent, moved one step later.
+`settle_claims` now writes it (see `canon_entry`).
+
 This deliberately mirrors the Player Authority Contract in prompts.py's
 director_interpret entry: a player's claim about another character's past words
 is recorded as CLAIMED, not established, and the named party may confirm,
@@ -37,12 +46,24 @@ from __future__ import annotations
 import hashlib
 import re
 
-from db import wget, wset
+from db import q, wget, wset
 
 # A claim nobody ratifies or contradicts within this many turns has quietly
 # become "something someone said once" -- which is the realistic outcome for
 # most tavern talk. Expired claims are dropped rather than kept forever, so the
 # Director's payload cannot grow without bound across a long chat.
+#
+# Counted in PLAYER TURNS, and every one of them is a real chance: the live
+# claims ride `director_resolve`'s payload unconditionally
+# (agents/director.py's `unratified_claims` field), not only when the player
+# revisits the place the claim is about. So expiry means the sole ratifier
+# declined eight consecutive invitations, which is a decision, not a missed
+# window -- and expiry unsays nothing, it only stops re-asking. Nothing here is
+# tuned per subject kind (a place outliving a person, say): this module cannot
+# tell a place from a person without guessing at a bare capitalized phrase, and
+# the mechanism has produced 0 claims across the whole production corpus, so
+# there is no measurement to tune against yet. See the note in
+# docs/BACKGROUND_LIFE_DESIGN.md.
 CLAIM_TTL_TURNS = 8
 # Never surface more than this many at once; the Director has a job to do.
 MAX_SURFACED = 6
@@ -186,21 +207,24 @@ def novel_proper_nouns(quote, known):
     return out
 
 
-def record_claims(chat_id, turn_idx, claims):
-    """Persist newly-asserted background lore. `claims` is an iterable of
-    {claimant, text, refs, credence}. Idempotent by content hash so a rerun of
-    the same beat does not duplicate."""
-    stored = wget(chat_id, "background_claims", {}) or {}
-    added = 0
+def _mint(chat_id, turn_idx, claims, stored):
+    """{key: record} for the claims of this beat that are not already stored.
+
+    Shared by `record_claims` and `prepare_canon` so both see exactly the same
+    set: a claim can be asserted and ratified in the SAME beat (the manager
+    speaks before the Director resolves), so the pre-transaction pass has to
+    know about claims that are not in the blob yet.
+    """
+    minted = {}
     for c in claims or []:
         claimant = str((c or {}).get("claimant") or "").strip()
         text = str((c or {}).get("text") or "").strip()
         if not claimant or not text:
             continue
         cid_key = _claim_id(chat_id, turn_idx, claimant, text)
-        if cid_key in stored:
+        if cid_key in stored or cid_key in minted:
             continue
-        stored[cid_key] = {
+        minted[cid_key] = {
             "claimant": claimant,
             "text": text,
             "refs": [str(r) for r in ((c or {}).get("refs") or [])],
@@ -209,10 +233,19 @@ def record_claims(chat_id, turn_idx, claims):
             "status": "unratified",
             "expires_turn": turn_idx + CLAIM_TTL_TURNS,
         }
-        added += 1
-    if added:
+    return minted
+
+
+def record_claims(chat_id, turn_idx, claims):
+    """Persist newly-asserted background lore. `claims` is an iterable of
+    {claimant, text, refs, credence}. Idempotent by content hash so a rerun of
+    the same beat does not duplicate."""
+    stored = wget(chat_id, "background_claims", {}) or {}
+    minted = _mint(chat_id, turn_idx, claims, stored)
+    if minted:
+        stored.update(minted)
         wset(chat_id, "background_claims", stored)
-    return added
+    return len(minted)
 
 
 def unratified_claims(chat_id, turn_idx):
@@ -231,42 +264,188 @@ def unratified_claims(chat_id, turn_idx):
     return live[:MAX_SURFACED]
 
 
-def settle_claims(chat_id, turn_idx, resolved_text, ratified_refs=()):
-    """Post-resolution sweep. A claim is RATIFIED when the Director adopted it
-    -- either naming it explicitly in state_diff/ratified_claims, or writing its
-    distinctive reference into the objective record -- and EXPIRED when its TTL
-    ran out with no one taking it up.
+# Canon in this engine is `lore_entries` in the chat's own canon lorebook
+# (memory.ensure_chat_canon_book) -- the only durable store of facts written
+# DURING play, and the only one anything reads back into a prompt. `other` is
+# the honest category: this module cannot tell an invented person from an
+# invented place from an invented incident without guessing, and `knowledge` is
+# excluded from search_lore outright, so a wrong guess there would write the
+# fact straight back out of reach.
+CANON_CATEGORY = "other"
+# A stable, greppable provenance stamp. It is also the denominator this lane
+# has never had: `SELECT count(*) FROM lore_entries WHERE source_notes LIKE
+# 'ratified background claim%'` is how anyone finds out whether ratification
+# has ever happened, which is the measurement any future TTL change needs.
+CANON_SOURCE_PREFIX = "ratified background claim"
 
-    Contradiction is deliberately NOT inferred here. The Director saying
-    something incompatible is a normal beat, and an unratified claim simply
-    stays unratified until it expires; guessing at semantic contradiction with
-    string matching would be worse than leaving it to time.
+
+def canon_entry(rec):
+    """The lore row a ratified claim becomes: keys, title, content, provenance.
+
+    Attributed, never paraphrased. The claim is a line somebody said, and the
+    only way to turn it into a tidy third-person fact would be to ask a model
+    -- which would put a second author between the Director's adoption and what
+    canon ends up saying. The refs are the entry's `keys` because they already
+    are short referring phrases (MAX_REF_WORDS exists for exactly that), which
+    is what lore keys are for.
     """
-    stored = wget(chat_id, "background_claims", {}) or {}
+    claimant = str(rec.get("claimant") or "").strip() or "a bystander"
+    said = " ".join(str(rec.get("text") or "").split())
+    refs = [str(r).strip() for r in (rec.get("refs") or []) if str(r).strip()]
+    return {
+        "keys": ", ".join(refs),
+        "title": refs[0] if refs else "",
+        "content": '%s said: "%s" — the Director has established this as true.'
+                   % (claimant, said),
+        "source_notes": "%s: claimed turn %s by %s, ratified turn %s" % (
+            CANON_SOURCE_PREFIX, rec.get("turn"), claimant,
+            rec.get("ratified_turn")),
+    }
+
+
+def write_canon(chat_id, claim_key, rec, embedding=None):
+    """Write one ratified claim into the chat's canon lorebook.
+
+    Keyed by the claim's own content hash (`entry_uid`), so a rerun of the beat
+    -- checkpoint restore replays commit -- cannot mint a second entry for one
+    ratification. Returns the lore entry id, or None if nothing was written.
+    """
+    from memory import add_lore, ensure_chat_canon_book
+
+    entry_uid = "%s:canon" % claim_key
+    existing = q("SELECT id FROM lore_entries WHERE entry_uid=?",
+                 (entry_uid,), one=True)
+    if existing:
+        return existing["id"]
+    book_id = ensure_chat_canon_book(chat_id)
+    if not book_id:
+        return None
+    entry = canon_entry(rec)
+    return add_lore(
+        book_id, entry["keys"], entry["content"],
+        turn_added=rec.get("ratified_turn"), category=CANON_CATEGORY,
+        title=entry["title"] or None, entry_uid=entry_uid,
+        source_notes=entry["source_notes"], embedding=embedding,
+    )
+
+
+def prepare_canon(chat_id, turn_idx, new_claims, resolved_text,
+                  ratified_refs=(), contradicted_refs=()):
+    """Embeddings for the canon rows this beat is about to write, {key: vector}.
+
+    Runs BEFORE the outer commit transaction. Embedding a lore entry is a
+    provider round-trip with a request timeout on it, and the house rule is
+    that slow provider work happens in preparation rather than under SQLite's
+    write lock -- `prepare_mapping_commit` batches its own lore embeddings for
+    the same reason. Best-effort by contract: a failure here costs the entries
+    their prepared vector, never the turn.
+    """
+    stored = dict(wget(chat_id, "background_claims", {}) or {})
+    stored.update(_mint(chat_id, turn_idx, new_claims, stored))
     if not stored:
-        return {"ratified": 0, "expired": 0}
+        return {}
+    ratified, _contradicted, _conflicted, _expired = _verdicts(
+        stored, turn_idx, resolved_text, ratified_refs, contradicted_refs)
+    if not ratified:
+        return {}
+    from providers import embed_texts
+
+    entries = [canon_entry(stored[k]) for k in ratified]
+    vectors = embed_texts([
+        (e["keys"] + " " + e["content"]).strip() for e in entries])
+    return {k: v for k, v in zip(ratified, vectors) if v is not None}
+
+
+def _verdicts(stored, turn_idx, resolved_text, ratified_refs, contradicted_refs):
+    """(ratified, contradicted, conflicted, expired) claim keys for one sweep.
+
+    Split out of `settle_claims` so the commit path can reach the SAME verdict
+    twice: once before the outer write transaction opens, to embed the canon
+    text without a provider round-trip under SQLite's write lock (AGENTS.md
+    persistence boundaries), and once inside it, where the writes happen.
+    Pure over its inputs so the two passes cannot disagree.
+    """
     text_cf = str(resolved_text or "").casefold()
-    ratified_cf = {str(r).strip().casefold() for r in (ratified_refs or [])}
-    ratified = expired = 0
-    for key, rec in list(stored.items()):
+    ratified_cf = {str(r).strip().casefold()
+                   for r in (ratified_refs or []) if str(r).strip()}
+    contra_cf = {str(r).strip().casefold()
+                 for r in (contradicted_refs or []) if str(r).strip()}
+    ratified, contradicted, conflicted, expired = [], [], [], []
+    for key, rec in stored.items():
         if rec.get("status") != "unratified":
             continue
         refs = [str(r) for r in (rec.get("refs") or [])]
-        adopted = any(r.strip().casefold() in ratified_cf for r in refs) or (
-            bool(refs) and any(r.casefold() in text_cf for r in refs if len(r) >= 4))
-        if adopted:
-            rec["status"] = "ratified"
-            rec["ratified_turn"] = turn_idx
-            ratified += 1
+        named_true = any(r.strip().casefold() in ratified_cf for r in refs)
+        # Contradiction is EXPLICIT ONLY, where adoption may also be inferred
+        # from the Director writing the ref into the objective record. The
+        # asymmetry is deliberate: prose naming a claim's subject is evidence
+        # the fiction took it up, but prose can no more announce a rejection
+        # than it can announce silence -- "the Widow denies it" and "the Widow
+        # says it again" share every distinctive token.
+        named_wrong = any(r.strip().casefold() in contra_cf for r in refs)
+        if named_wrong:
+            contradicted.append(key)
+            # Named in BOTH lists: the Director disagreed with itself. Recorded
+            # as a disagreement rather than resolved into a middling truth --
+            # a contradiction is a dispute, never an average -- and settled the
+            # way that does not write, because canon is a one-way door.
+            if named_true:
+                conflicted.append(key)
+            continue
+        if named_true or (bool(refs) and any(
+                r.casefold() in text_cf for r in refs if len(r) >= 4)):
+            ratified.append(key)
             continue
         if turn_idx > int(rec.get("expires_turn") or -1):
-            # Dropped, not archived: an expired claim is something a stranger
-            # said once and nobody followed up on. Keeping it would grow the
-            # blob forever for no narrative benefit.
-            del stored[key]
-            expired += 1
+            expired.append(key)
+    return ratified, contradicted, conflicted, expired
+
+
+def settle_claims(chat_id, turn_idx, resolved_text, ratified_refs=(),
+                  contradicted_refs=(), canon_embeddings=None):
+    """Post-resolution sweep, and the moment a claim's outcome becomes real.
+
+    RATIFIED -- the Director adopted it, either naming it in
+    `state_diff.ratified_claims` or writing its distinctive reference into the
+    objective record. The claim is WRITTEN INTO CANON here (`canon_entry`);
+    flipping a status field and stopping was the defect this replaces.
+
+    CONTRADICTED -- the Director named it in `state_diff.contradicted_claims`.
+    The record is kept, claimant and all, rather than deleted: that a bystander
+    was wrong is the thing a later beat gets to show, and a rejected claim that
+    left no trace was byte-identical to one nobody bothered with.
+
+    EXPIRED -- the TTL ran out with nobody taking it up. Dropped, not archived:
+    an expired claim is something a stranger said once. Keeping it would grow
+    the blob forever for no narrative benefit.
+
+    `canon_embeddings` is {claim_key: vector} from `prepare_canon`. Absent, the
+    canon write still happens -- correctness first -- and pays for its own
+    embedding where it stands.
+    """
+    stored = wget(chat_id, "background_claims", {}) or {}
+    if not stored:
+        return {"ratified": 0, "contradicted": 0, "expired": 0}
+    ratified, contradicted, conflicted, expired = _verdicts(
+        stored, turn_idx, resolved_text, ratified_refs, contradicted_refs)
+    embeddings = canon_embeddings or {}
+    for key in ratified:
+        rec = stored[key]
+        rec["status"] = "ratified"
+        rec["ratified_turn"] = turn_idx
+        rec["canon_entry_id"] = write_canon(chat_id, key, rec,
+                                            embedding=embeddings.get(key))
+    for key in contradicted:
+        rec = stored[key]
+        rec["status"] = "contradicted"
+        rec["contradicted_turn"] = turn_idx
+        if key in conflicted:
+            rec["ratification_conflict"] = True
+    for key in expired:
+        del stored[key]
     wset(chat_id, "background_claims", stored)
-    return {"ratified": ratified, "expired": expired}
+    return {"ratified": len(ratified), "contradicted": len(contradicted),
+            "expired": len(expired)}
 
 
 def claimant_credence(blurb):
