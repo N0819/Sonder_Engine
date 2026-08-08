@@ -57,6 +57,16 @@ def mapping_stage(ctx, nonce):
     books = _books(ctx, refresh=True)
     weights = _book_weights(ctx, refresh=True)
     hits = search_lore(weights, query, k=14, exclude_categories=["knowledge"])
+    # Living world, approach D: a location entry the mapping agent is about
+    # to work from may carry the history the unvisited place has accrued
+    # (living_world.owed_history). This seam is the obligation ledger's ONLY
+    # consumer -- the place's debt surfaces where the place itself is
+    # generated, never in any mind's payload; arrival is the earning event.
+    try:
+        from living_world import attach_owed_history
+        hits = attach_owed_history(chat["id"], hits)
+    except Exception as exc:
+        ctx.add_warning(f"owed history not attached: {exc}")
 
     pers = persona_of(chat)
 

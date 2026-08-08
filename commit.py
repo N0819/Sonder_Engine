@@ -2286,10 +2286,23 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
     diff = res.get("state_diff") or {}
     cast_names = [character_name_from_text(c["sheet"]) for c in ctx.cast]
 
+    # The player's room in the PREPARED scene -- after this beat's movement
+    # merged -- so a consequence landing exactly where the party now stands
+    # is a walk-in (notice) and one anywhere else stays unencountered state.
+    # Read for the presence gate only; nothing about the fuse's content or
+    # priority may depend on the player (living_world's header contract).
+    _player_room = None
+    try:
+        from scene import persona_of
+        _player_room = _room_of(sc, persona_name(persona_of(ctx.chat)))
+    except Exception:
+        pass
+
     with transaction():
         pending = [dict(r) for r in q(
             "SELECT * FROM scheduled_events WHERE chat_id=? AND "
-            "status='pending' AND kind IN ('transit_arrival','news_arrival') "
+            "status='pending' AND kind IN "
+            "('transit_arrival','news_arrival','consequence') "
             "ORDER BY due_at",
             (cid,),
         )]
@@ -2306,10 +2319,13 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
             turn_id=ctx.turn.id, turn_idx=ctx.turn.idx,
             cast_names=cast_names,
             cast_changes=diff.get("cast_changes") or [],
+            player_room=_player_room,
         )
 
         kind_by_id = {row["event_id"]: row["kind"] for row in pending}
-        fired = scheduled = expired = news_fired = 0
+        row_by_id = {row["event_id"]: row for row in pending}
+        fired = scheduled = expired = news_fired = consequences_fired = 0
+        fired_consequence_rows = []
         for op in event_ops:
             if op[0] == "status":
                 _, event_id, status = op
@@ -2323,6 +2339,10 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
                 if status == "fired":
                     if kind_by_id.get(event_id) == "news_arrival":
                         news_fired += 1
+                    elif kind_by_id.get(event_id) == "consequence":
+                        consequences_fired += 1
+                        if event_id in row_by_id:
+                            fired_consequence_rows.append(row_by_id[event_id])
                     else:
                         fired += 1
             elif op[0] == "schedule":
@@ -2341,6 +2361,54 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
                     "WHERE chat_id=? AND condition_id=?", (cid, op[1]))
                 expired += 1
 
+        # Living world, approach B: mint this resolution's declared fuses.
+        # Gated by the chat's setting (the mint is the feature's surface);
+        # FIRING above is not gated -- rows exist only if minting was on,
+        # and a story that turns the setting off keeps the consequences it
+        # already caused, the way it keeps its scheduled arrivals.
+        consequences_minted = 0
+        try:
+            from living_world import (living_world_allows,
+                                      living_world_config,
+                                      mint_consequences,
+                                      record_obligations)
+            _declared_fuses = diff.get("consequences") or []
+            if living_world_allows(living_world_config(cid),
+                                   "scheduled_consequence", "floor"):
+                mint_rows, mint_warnings = mint_consequences(
+                    cid, sc, frame_id, ctx.turn.id, ctx.turn.idx,
+                    float((clock or {}).get("elapsed_seconds") or 0.0),
+                    _declared_fuses,
+                    player_room=_player_room)
+                for row in mint_rows:
+                    qtx(
+                        "INSERT OR REPLACE INTO scheduled_events"
+                        "(event_id,chat_id,due_at,kind,location_id,payload,"
+                        "seed,status) VALUES(?,?,?,?,?,?,?,?)",
+                        (row["event_id"], row["chat_id"], row["due_at"],
+                         row["kind"], row["location_id"], row["payload"],
+                         row["seed"], row["status"]),
+                    )
+                    consequences_minted += 1
+                for warning in mint_warnings:
+                    ctx.add_warning(f"consequence not minted: {warning}")
+            elif _declared_fuses:
+                # A silently swallowed declaration would look like a quiet
+                # world; the ledger's whole failure history is mechanisms
+                # that never fired and nothing saying so.
+                ctx.add_warning(
+                    f"{len(_declared_fuses)} declared consequence(s) "
+                    "dropped: the scheduled-consequence setting is off "
+                    "for this chat")
+            # Approach D's feed: a fuse fired at an ungenerated place is
+            # history that place now owes. Recorded regardless of the D
+            # setting -- layer-1 truth accumulates; settings gate surfaces
+            # (the honour seam in mapping), never truth.
+            if fired_consequence_rows:
+                record_obligations(cid, fired_consequence_rows)
+        except Exception as exc:
+            ctx.add_warning(f"living-world consequences not committed: {exc}")
+
         # What the deterministic layer made of this beat's output, in the
         # Director's own terms. Carried on the same channel as the mechanical
         # notices because it is the same kind of message: here is what
@@ -2349,7 +2417,9 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
         wset(cid, "engine_notices", notices)
 
     return {"fired": fired, "scheduled": scheduled, "expired": expired,
-            "news_fired": news_fired, "notices": notices}
+            "news_fired": news_fired,
+            "consequences_fired": consequences_fired,
+            "consequences_minted": consequences_minted, "notices": notices}
 
 # ---- Cast changes ----
 

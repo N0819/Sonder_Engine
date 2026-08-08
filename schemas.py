@@ -1627,6 +1627,16 @@ class StateDiff(LenientModel):
     # room gets is a property of the ROOM (`RoomDef.exposure`), never of this.
     weather: Optional[dict] = None
     claim_dispositions: list[dict] = Field(default_factory=list)
+    # Living world, approach B: consequences this resolution sets in motion
+    # OFFSCREEN, minted as fuses at cause time and fired deterministically
+    # when the simulation clock reaches them. {what, where, due_seconds,
+    # witnessed?, originator?}. NOT this beat's own outcome -- that belongs
+    # in the fields above. Commit validates deterministically
+    # (living_world.mint_consequences): `where` must resolve to a known
+    # room or lore place, dues are clamped to honest bounds, at most 2 land
+    # per turn, and the whole lane is inert unless the chat's living-world
+    # setting turned it on.
+    consequences: list[dict] = Field(default_factory=list)
     # Destruction declaration (DestructionEffect shape -- see its
     # docstring). Declared here so model_dump() keeps it through
     # validation (the zone-field precedent above); commit.py validates it
