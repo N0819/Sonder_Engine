@@ -32,6 +32,7 @@ const BD = {
   chatId: null,          // which story the painted backdrop belongs to
   timer: null,
   dwellTimer: null,      // the second, slower one: see backdropOnVisibleTurn
+  pendingTurn: null,     // which turn those two clocks are running for
 };
 
 // Reading what already exists is instant and free; COMMISSIONING one is neither.
@@ -297,6 +298,17 @@ async function backdropForTurn(turnId, opts = {}) {
 // intersection change -- coalesce, or a flick of the wheel becomes a dozen
 // requests for turns the reader never stopped at.
 function backdropOnVisibleTurn(turnId, opts = {}) {
+  // Only a CHANGE of turn restarts the clocks. A repeat notification for the
+  // turn already pending is not the reader moving, and this module causes
+  // several of them itself: renderChat re-asserts its scroll in a
+  // requestAnimationFrame, and clearBackdrop() strips the padding, border and
+  // max-width off every .prose in the transcript, reflowing the whole scroll
+  // container. Restarting a two-second dwell on each of those is how a room
+  // with no picture yet never reaches the pass that would commission one --
+  // and only such a room, because a room already drawn is served by the quick
+  // pass and never needed the dwell at all. That asymmetry is the reported bug.
+  if (turnId === BD.pendingTurn) return;
+  BD.pendingTurn = turnId;
   clearTimeout(BD.timer);
   clearTimeout(BD.dwellTimer);
   // Always the quick pass, which shows whatever is already cached.
@@ -304,7 +316,8 @@ function backdropOnVisibleTurn(turnId, opts = {}) {
     () => backdropForTurn(turnId, { commission: !!opts.fresh }), BD_SETTLE_MS);
   // And, unless this turn was just generated (where the reader is plainly here
   // and waiting), a second pass that is allowed to spend money -- cancelled by
-  // the next scroll tick, so passing through a room never commissions it.
+  // scrolling ON to another turn, so passing through a room never commissions
+  // it.
   if (!opts.fresh) {
     BD.dwellTimer = setTimeout(
       () => backdropForTurn(turnId, { commission: true }), BD_DWELL_MS);
@@ -317,6 +330,11 @@ function backdropResetForRender() {
   BD.byTurn.clear();
   clearTimeout(BD.timer);
   clearTimeout(BD.dwellTimer);
+  // The clocks were just cancelled, so nothing is pending for that turn any
+  // more. Without this, a re-render that lands the reader back on the SAME
+  // turn id would be read as a repeat notification and re-arm nothing -- the
+  // one way the guard above could turn into the very defect it fixes.
+  BD.pendingTurn = null;
   // Opening a different story (or none) must not leave the previous story's
   // room on screen. The observer would eventually correct it, but only once a
   // turn scrolls into view -- an empty chat has none, so it never would.

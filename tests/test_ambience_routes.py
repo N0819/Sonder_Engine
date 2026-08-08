@@ -65,8 +65,7 @@ def quiet_resolution(monkeypatch):
     calls = []
     monkeypatch.setattr(ambience, "resolve_ambience",
                         lambda *a, **kw: calls.append(kw) or None)
-    ambience._AMB_IN_FLIGHT.clear()
-    ambience._AMB_LAST_ERROR.clear()
+    ambience._QUEUE.reset()
     return calls
 
 

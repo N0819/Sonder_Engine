@@ -808,3 +808,61 @@ def test_continuity_switched_off_reports_no_attempt_rather_than_a_failure(
     assert out["edit_attempted"] is False
     assert out["edit_used"] is False
     assert "edit_error" not in out
+
+
+class TestTheGenerationLockTable:
+    """The lock dict grew with the key space and was pruned by nothing.
+
+    A long chat left one dead entry per distinct room-state for the life of the
+    process. The comment defending that -- pruning "would race with the
+    waiters" -- was true of a bare delete and not of a counted one, so the
+    entries were kept for a race that did not have to exist. Measured on the
+    unmodified module: 500 distinct signatures, 500 entries, no work in flight.
+    """
+
+    def test_it_does_not_grow_with_the_number_of_room_states_seen(self):
+        import backdrops as bd
+
+        for i in range(500):
+            with bd._generation_lock((1, "sig%04d" % i)):
+                pass
+
+        assert len(bd._GEN_LOCKS) == 0
+
+    def test_a_key_somebody_is_waiting_on_is_not_dropped_underneath_them(self):
+        """Pruning must not cost the exclusion the lock exists for: two callers
+        for one signature would then generate the identical picture twice,
+        which is the whole expense this table was added to avoid.
+        """
+        import threading
+
+        import backdrops as bd
+
+        inside = []
+        holding = threading.Event()
+        release = threading.Event()
+
+        def first():
+            with bd._generation_lock((1, "shared")):
+                inside.append("first")
+                holding.set()
+                release.wait(3.0)
+                inside.append("first-out")
+
+        def second():
+            holding.wait(3.0)
+            with bd._generation_lock((1, "shared")):
+                inside.append("second")
+
+        threads = [threading.Thread(target=first), threading.Thread(target=second)]
+        for t in threads:
+            t.start()
+        assert holding.wait(3.0)
+        # The second caller is now either waiting on the entry or about to be,
+        # and the entry must still be there for it to wait on.
+        release.set()
+        for t in threads:
+            t.join(3.0)
+
+        assert inside == ["first", "first-out", "second"]
+        assert len(bd._GEN_LOCKS) == 0
