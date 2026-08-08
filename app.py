@@ -119,8 +119,25 @@ def _startup_engine():
     port = os.environ.get("FICTION_ENGINE_PORT", "8008")
     # FICTION_ENGINE_RESET_HOST is the forgot-password escape hatch: wipe
     # the account (and every session) so /login shows first-run setup again.
+    # It runs on EVERY startup while the variable stays set -- an environment
+    # variable cannot un-set itself -- so left in a launch script it silently
+    # wipes each replacement account on the next restart. That happened: an
+    # account re-created after a reset was gone again a restart later, and
+    # nothing had said the hatch was still armed. Announce it every time.
     if os.environ.get("FICTION_ENGINE_RESET_HOST"):
+        had_account = guest.host_account_exists()
         guest.reset_host_account()
+        print(
+            "\n"
+            "Sonder Engine: FICTION_ENGINE_RESET_HOST is set. "
+            + ("The host account and every session were just wiped."
+               if had_account else
+               "No host account existed; nothing to wipe.")
+            + " This repeats on EVERY restart while the variable stays "
+            "set -- unset FICTION_ENGINE_RESET_HOST before creating the "
+            "new account, or the next restart deletes that one too.\n",
+            flush=True,
+        )
     if not guest.host_account_exists():
         print(
             "\n"
