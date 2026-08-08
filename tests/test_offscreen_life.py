@@ -137,21 +137,35 @@ class TestOneShapeForATick:
         assert len(long[0]["tick"]) <= 600
 
 
-class TestTheGateIsAppliedTwice:
-    """Once when asking and once when writing. A setting that only ever spoke
-    to a prompt is a setting a model can decline."""
+class TestTheModelIsOutOfTheTickBusiness:
+    """Step 4 of docs/PROPOSAL_2026-08-06.md section 1.2: the shipped
+    stochastic rung cost a model call (ticks rode the mapping_commit payload
+    and its `tick_seed` seeded nothing — no RNG anywhere in commit.py ever
+    consumed it). The design specifies a seeded draw against standing
+    intentions with NO model call, so low resolution is free for the whole
+    cast rather than affordable for six of them."""
 
-    def test_the_dormant_cast_is_withheld_rather_than_sent_with_a_caveat(self):
-        """Objective state copied into a context with an implicit request to
-        ignore it is the pattern this engine forbids everywhere else, and it is
-        the one that actually leaks."""
+    def test_the_dormant_cast_is_never_offered_to_the_model(self):
+        """Withheld at every level, not gated: asking a lore validator to
+        also author offscreen life was an unadjudicated authoring channel
+        wearing a payload field."""
         import inspect
 
         import commit
 
         src = inspect.getsource(commit.prepare_mapping_commit)
-        assert 'dormant if ticks_allowed else []' in src
-        assert '"offscreen_life": offscreen_level if ticks_allowed else "off"' in src
+        assert "dormant_actors" not in src
+        assert "tick_seed" not in src
+
+    def test_the_prompt_no_longer_asks_for_ticks(self):
+        """A prompt clause that survives its wiring is an instruction the
+        model can still obey into a field nobody reads — or worse, one
+        somebody still writes."""
+        from prompts import get_prompt
+
+        text = get_prompt("mapping_commit")
+        assert "OFF-SCREEN LIFE" not in text
+        assert "offscreen_events" not in text
 
     def test_scene_changed_still_reports_the_scene(self):
         """Overloading it to gate off-screen life would have made a payload lie
@@ -163,14 +177,29 @@ class TestTheGateIsAppliedTwice:
         src = inspect.getsource(commit.prepare_mapping_commit)
         assert '"scene_changed": bool(ctx.director_establish),' in src
 
-    def test_the_write_is_gated_independently(self):
+    def test_a_volunteered_tick_is_refused_on_the_write_path(self):
+        """The model can volunteer a field nobody asked for; the write path
+        must refuse it at EVERY level, because a model-authored tick is an
+        unadjudicated authoring channel whatever the setting says."""
         import inspect
 
         import commit
 
         src = inspect.getsource(commit.commit_mapping)
         assert "normalize_offscreen_events" in src
+        assert "model-volunteered" in src
+
+    def test_the_seeded_draw_is_gated_on_the_same_rung(self):
+        """The ladder still governs; only the mechanism changed. An author
+        who set `deterministic` must not start getting stochastic ticks
+        because the ticks became cheap."""
+        import inspect
+
+        import commit
+
+        src = inspect.getsource(commit.commit_mapping)
         assert '_allows(_cfg.get("offscreen_life"), "stochastic")' in src
+        assert "stochastic_ticks" in src
 
 
 class TestFullIsPermissionNotBehaviour:

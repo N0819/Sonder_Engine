@@ -974,12 +974,21 @@ def is_player_speaker(speaker, chat):
 #
 #                    This is the DEFAULT because it is what the engine did
 #                    unconditionally before the setting existed: turning a
-#                    setting on must not silently change a running story. It
-#                    also diverges from the design document, which specifies
-#                    this rung as a seeded draw with NO model call, where the
-#                    shipped behaviour is a seeded prose sketch that costs one.
-#                    Recorded in `docs/UNBUILT.md` §2.8 rather than papered
-#                    over by relabelling the rung.
+#                    setting on must not silently change a running story.
+#                    As of the background-life work it is the rung the design
+#                    document actually specified: a seeded draw against
+#                    standing intentions with NO model call
+#                    (`offscreen.stochastic_ticks` — same seed, same ticks,
+#                    replayable). The earlier shipped behaviour was a prose
+#                    sketch riding the mapping_commit model call whose
+#                    `tick_seed` no RNG ever consumed; that divergence was
+#                    recorded in `docs/UNBUILT.md` §2.8 and is now closed.
+#                    This level also permits the out-of-band PROFILE ticks
+#                    (`offscreen.schedule_profile_ticks`): one bounded model
+#                    call for the few subjects importance x distance scores
+#                    medium, structurally unable to commit a consequence —
+#                    the same contract this rung's model ticks always had,
+#                    now bounded by spend instead of by cast size.
 #   character_agent  The above, plus real agent ticks advancing a plan and
 #                    writing consequences into the world record -- the villain
 #                    with a clock you can fail to beat.

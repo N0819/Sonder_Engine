@@ -1922,13 +1922,23 @@ grounds only; refusals are capped and tagged (identity-violation counts half,
 preference counts full); on exhaustion the last proposal becomes canon.
 *Conservative defaults, costly exceptions.*
 
-Build order, none of it built:
+Build order, first three landed (bg-life work, 2026-08):
 
-1. **The gap generator** — one subject-agnostic "what changed about X since turn
-   N" generator, shared by characters and rooms.
-2. **Wire `BehaviorController`** — per-character, default `inert`.
-   `schemas.BehaviorController` is declared at one site and consumed nowhere.
-3. **`stochastic` at scene boundaries.**
+1. ~~**The gap generator**~~ — landed as `gaps.gap_for` plus the
+   `subject_last_seen` ledger and the `agents/character.py` reader
+   (`while_you_were_offscreen`). Subject-agnostic; ids via
+   `subjects.resolve_subject`.
+2. **Wire `BehaviorController` per character — superseded in part.** The
+   chat-level ceiling landed in alpha 6.9; the per-character half landed as an
+   IMPORTANCE override (`simulation.offscreen_importance` on the sheet, read by
+   `offscreen.importance_for`) rather than a per-character rung, deliberately:
+   the ladder answers what a character MAY do, importance answers how much they
+   matter, and one vocabulary answering both questions is the `flow.reactors`
+   defect re-minted. A per-character RUNG opt-in remains the right shape for
+   step 4's villain ticks and is still open.
+3. ~~**`stochastic` at scene boundaries.**~~ — landed as
+   `offscreen.stochastic_ticks`: a real seeded draw against standing
+   intentions, no model call, written through `offscreen.append_offscreen_log`.
 4. **`character_agent` ticks** — villain, count cap, knowledge firewall.
 5. **Reactivation proposal.**
 6. **Negotiation** — refusal budgets, tagging, stalemate-eats-canon.
@@ -1962,24 +1972,29 @@ bounds it. Two corrections that fell out of wiring it:
   them to `{actor, tick}` on the way in. The stored history is still mixed —
   nothing reads it yet, so nothing has had to care.
 
-Still open, in the order the design document wants them:
+Landed since (bg-life work, 2026-08): `offscreen_log` has a reader —
+`gaps._skeleton` windows it into every gap and `gaps.interim_for` delivers it
+at re-contact as `while_you_were_offscreen`. The `stochastic` rung is now the
+specified one — a seeded, replayable, model-free draw
+(`offscreen.stochastic_ticks`); the model is no longer asked for ticks at any
+level and a volunteered `offscreen_events` is refused on the write path.
+Resolution above the free rung is importance × distance
+(`offscreen.resolution_for`), recomputed per tick, with the medium
+(profile-summary) rung produced OUT OF BAND on a turn-cadence
+(`offscreen.schedule_profile_ticks` → `jobs.submit`, base_turn-stamped,
+rollback-guarded at landing, never cancelled by a turn starting) and every
+tick stored as a validated provisional record (`canon_provenance`).
 
-- **`offscreen_log` has no reader.** Ticks are written and never surfaced —
-  not at re-contact, not to the Director, not in the UI. Writing without
-  reading is the same defect §1.11 just closed one layer up.
-- **The shipped `stochastic` rung is not the specified one.** The document
-  wants a seeded draw against standing intentions with **no model call**; what
-  ships is a seeded prose sketch that costs one. Named honestly rather than
-  relabelled, but it means the cheap rung is not cheap.
-- **`reactive` and `character_agent` are permission only** — selectable, and
-  currently behaving as `deterministic` and `stochastic` respectively. The
-  gate exists so that when steps 3–4 land they are opt-in on a chat that
-  already asked, rather than a surprise in every running story.
-- **The gap generator (step 1) is not built**, so nothing is generated at
-  re-contact either, and `BehaviorController` is still per-chat rather than
-  per-character. The document is emphatic that ticking must be an opt-in
-  **per-character** property with a bounded count; the chat-level ceiling is
-  half of that.
+Still open:
+
+- **`reactive` is permission only** — selectable, currently behaving as
+  `deterministic`.
+- **`character_agent` is permission, not the built villain rung.** The
+  Director-adjudicated full-agent tick (the only rung that may CHANGE the
+  world) is unbuilt, and it is where the knowledge firewall and the
+  per-character opt-in with a bounded count must land.
+- **The stored `offscreen_log` history is still mixed** across the four legacy
+  shapes plus the new record shape; readers coerce, nothing migrates.
 
 ### 2.9 Predictive staging
 
