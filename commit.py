@@ -35,7 +35,7 @@ from scene import (set_char_state, set_char_status, seed_initial_attire,
                    get_scene)
 from mechanics import mechanics_sweep, news_latency_seconds, stable_event_key
 from weather import advance_weather, normalize_weather
-from spatial import (merge_scene_with_diff,
+from spatial import (merge_scene_with_diff, _merge_entity,
                      normalize_room_id, spatial_rel, hear_level,
                      normalize_barrier, normalize_bearing, opposite_bearing,
                      passable_path, rooms_adjacent, visible_adjacent_rooms)
@@ -2431,11 +2431,33 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
 
     The normalized world_entities rows are a DERIVED projection of the
     scene commit: when the caller passes prepare_scene_commit's result
-    (commit_all always does), the entity definitions come from its
-    post-dedup/post-destruction diff -- the same truth the scene blob was
-    merged from -- so the projection cannot disagree with the blob about
-    rekeyed rooms or a destroyed entity. The raw step diff remains the
-    fallback for direct callers that never prepared a scene commit.
+    (commit_all always does), the set of entities to write comes from its
+    post-dedup/post-destruction diff, so the projection cannot disagree with
+    the blob about a rekeyed room or a destroyed entity. The raw step diff
+    remains the fallback for direct callers that never prepared a scene
+    commit.
+
+    WHICH entities a beat touched is the diff's to say; WHAT they now are is
+    the merged scene's, and taking the second from the diff too is how this
+    projection drifted. The diff is the truth the blob was merged FROM, and
+    `spatial._merge_entity` sits in between: it reads a schema default as
+    silence and refuses a name `_fill_entity_names` derived from the dict key.
+    Writing the raw diff here skipped all of that, so a pose-only beat left
+    the blob saying "Blue Police Box"/vehicle and the row saying "Tardis
+    001"/object -- the same defect tests/test_scene_entity_merge.py was
+    written for, repaired in the blob and left standing in its projection.
+    Measured on the author's live engine.db: of 480 rows, 15 were named
+    literally "Object" (12 of them with a real name -- Hinami, The TARDIS,
+    A Dalek -- sitting in the blob beside them), 19 disagreed with the blob
+    about `name` and 24 about `kind`, including a TARDIS demoted to `object`,
+    which is the field the vehicle-lorebook branch below keys on.
+
+    A name-only guard here would have been a second copy of a policy that
+    already exists, and would have had to be extended by hand for every
+    field the merge learns next; the derived-name refusal is deliberately
+    NOT restated. Direct callers, having no merged scene, run the same
+    `_merge_entity` against the row they are about to overwrite, so there is
+    one rule ("the row is the merged entity") with one implementation.
     """
     chat = ctx.chat
     cid = chat.id
@@ -2473,6 +2495,32 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
         (ctx.director_resolve or ctx.director_establish or {}).get(
             "resolved_event") or "").casefold()
 
+    # The merged entities this beat produced -- the values the row projects.
+    # Read from preparation, never re-read from the world: commit_scene has
+    # already persisted the blob by now, which would work by accident here
+    # and is the same trap _prior_scene above documents.
+    _merged_entities = (prepared.get("scene") or {}).get("entities") \
+        if isinstance(prepared, dict) else None
+    if not isinstance(_merged_entities, dict):
+        _merged_entities = {}
+
+    def _projected(entity_id, entity_def, prior_payload):
+        """What world_entities should now hold for this entity.
+
+        The merged blob when there is one. Otherwise the same merge, run
+        against the row about to be overwritten -- a direct caller must not
+        be the way back into wholesale replacement. An id absent from the
+        merged entities is not an error: _dedup_duplicate_entity_keys folds
+        an entity keyed by id in one beat and by display name in the next,
+        and the fold's own key is the one that survives.
+        """
+        merged = _merged_entities.get(entity_id)
+        if isinstance(merged, dict):
+            return merged
+        if isinstance(prior_payload, dict) and isinstance(entity_def, dict):
+            return _merge_entity(entity_id, prior_payload, entity_def)
+        return entity_def
+
     def _copied_forward_unchanged(entity_id, entity_def):
         prior = _prior_entities.get(entity_id)
         if not isinstance(prior, dict) or not isinstance(entity_def, dict):
@@ -2498,24 +2546,34 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
                     f"entity {entity_id}: this beat's prose names it, but its "
                     f"posture/description came through byte-identical to the "
                     f"pre-beat blob -- possible stale clause (S3-A8)")
-            existing = q("SELECT entity_id FROM world_entities WHERE entity_id=? AND chat_id=?",
+            existing = q("SELECT payload FROM world_entities WHERE entity_id=? AND chat_id=?",
                          (entity_id, cid), one=True)
-            payload = json.dumps(entity_def, ensure_ascii=False)
+            prior_payload = None
+            if existing:
+                try:
+                    prior_payload = json.loads(existing["payload"] or "null")
+                except (TypeError, ValueError):
+                    # An unreadable payload is not an argument for erasing the
+                    # record it belongs to: fall through to the raw diff, which
+                    # is what this line did for every row before the merge.
+                    prior_payload = None
+            row_def = _projected(entity_id, entity_def, prior_payload)
+            payload = json.dumps(row_def, ensure_ascii=False)
             if existing:
                 c.execute(
                     "UPDATE world_entities SET kind=?,subtype=?,name=?,payload=? "
                     "WHERE entity_id=? AND chat_id=?",
-                    (entity_def.get("kind", "object"),
-                     entity_def.get("subtype", ""),
-                     entity_def.get("name", ""),
+                    (row_def.get("kind", "object"),
+                     row_def.get("subtype", ""),
+                     row_def.get("name", ""),
                      payload, entity_id, cid),
                 )
             else:
                 c.execute(
                     """INSERT INTO world_entities(entity_id,chat_id,kind,subtype,name,payload,created_turn_id)
                     VALUES(?,?,?,?,?,?,?)""",
-                    (entity_id, cid, entity_def.get("kind", "object"),
-                     entity_def.get("subtype", ""), entity_def.get("name", ""),
+                    (entity_id, cid, row_def.get("kind", "object"),
+                     row_def.get("subtype", ""), row_def.get("name", ""),
                      payload, turn_id),
                 )
                 # Deterministic vehicle-lorebook creation -- an entity
@@ -2533,7 +2591,11 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
                 # moves, and commit_mapping's lorebook_manifest already
                 # shows it to the model this same turn, so entries route
                 # into it instead of canon without any extra plumbing.
-                if entity_def.get("kind") == "vehicle" and entity_def.get("interior_rooms"):
+                # Read from the projected record for the same reason the row
+                # is: a beat that omits `kind` gets `object` back from the
+                # validator, and a vehicle that arrives demoted never gets
+                # its book at all.
+                if row_def.get("kind") == "vehicle" and row_def.get("interior_rooms"):
                     # Canonical-anchor comparison, not raw id equality: a
                     # re-coined alias id for an existing vehicle
                     # ('tamsin_ferry_entity' vs 'ferry_tamsin') must find
@@ -2554,8 +2616,8 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
                             "INSERT INTO lorebooks(name,chat_id,book_type,summary,parent_id,"
                             "anchor_entity_id,resource_uid) VALUES(?,?,?,?,?,?,?)",
                             (
-                                entity_def.get("name") or entity_id, cid, "vehicle",
-                                f"Everything concerning {entity_def.get('name') or entity_id}.",
+                                row_def.get("name") or entity_id, cid, "vehicle",
+                                f"Everything concerning {row_def.get('name') or entity_id}.",
                                 chat.lorebook_id, entity_id, new_uid("book"),
                             ),
                         )

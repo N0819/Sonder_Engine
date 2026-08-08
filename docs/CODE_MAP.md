@@ -15,7 +15,7 @@
 | `agents/loops.py` | 1008 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 229 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 956 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/perception.py` | 3437 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
+| `agents/perception.py` | 3470 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 1009 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 115 | Step and active-variant persistence helpers. | `db` |
 | `ambience.py` | 2043 |  | `backdrops`, `db`, `weather` |
@@ -29,7 +29,7 @@
 | `chat_archive.py` | 1089 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1076 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 295 |  | `spatial` |
-| `commit.py` | 6248 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 6310 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `db.py` | 1561 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 220 |  | `db` |
 | `greetings.py` | 375 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
@@ -38,13 +38,13 @@
 | `llm_quality.py` | 292 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `mechanics.py` | 274 |  | `spatial`, `spatial_frames` |
-| `memory.py` | 4970 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
+| `memory.py` | 5007 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
 | `paradox.py` | 489 |  | `character_schema`, `db`, `frames` |
 | `pipeline_context.py` | 248 | Typed mutable context passed through a turn pipeline. | `db` |
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 3773 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 3793 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1977 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 502 |  | — |
 | `scene.py` | 1404 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
@@ -142,8 +142,8 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `mapping_stage()` | 32 | 98 lines |
-| `mapping_quick()` | 131 | 51 lines |
-| `merge_lore()` | 182 | 48 lines |
+| `mapping_quick()` | 131 | 64 lines |
+| `merge_lore()` | 197 | 33 lines |
 
 ### `agents/narration.py`
 
@@ -162,8 +162,8 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `perception_outcome()` | 2683 | 755 lines |
-| `perception_act()` | 2055 | 439 lines |
+| `perception_outcome()` | 2716 | 755 lines |
+| `perception_act()` | 2055 | 472 lines |
 | `perception_establish()` | 1887 | 167 lines |
 | `_previous_open_group_continuity()` | 152 | 117 lines |
 | `_observer_scene_payload()` | 654 | 112 lines |
@@ -331,14 +331,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 4743 | 1133 lines |
+| `prepare_memory_commit()` | 4805 | 1133 lines |
 | `prepare_scene_commit()` | 1722 | 493 lines |
-| `track_background_presences()` | 3142 | 225 lines |
-| `commit_world_entities()` | 2429 | 221 lines |
-| `commit_mapping()` | 4137 | 159 lines |
+| `commit_world_entities()` | 2429 | 283 lines |
+| `track_background_presences()` | 3204 | 225 lines |
+| `commit_mapping()` | 4199 | 159 lines |
 | `_prepare_destruction()` | 698 | 158 lines |
 | `update_place_graph()` | 73 | 153 lines |
-| `prepare_mapping_commit()` | 3984 | 151 lines |
+| `prepare_mapping_commit()` | 4046 | 151 lines |
 
 ### `db.py`
 
@@ -436,8 +436,8 @@
 |---|---:|---:|
 | `build_character_memory_context()` | 2627 | 256 lines |
 | `search_memories()` | 1687 | 228 lines |
-| `rebuild_embeddings()` | 4373 | 195 lines |
-| `rebuild_checkpoint_embeddings()` | 4607 | 124 lines |
+| `rebuild_embeddings()` | 4403 | 195 lines |
+| `rebuild_checkpoint_embeddings()` | 4637 | 124 lines |
 | `contrast_memory()` | 1950 | 117 lines |
 | `_origin_on_drift()` | 2528 | 97 lines |
 | `backfill_memory_summary_windows()` | 3014 | 89 lines |
@@ -494,10 +494,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 3764 | 10 lines |
-| `presets()` | 3755 | 2 lines |
-| `active_preset()` | 3758 | 2 lines |
-| `nsfw_enabled()` | 3761 | 2 lines |
+| `get_prompt()` | 3784 | 10 lines |
+| `presets()` | 3775 | 2 lines |
+| `active_preset()` | 3778 | 2 lines |
+| `nsfw_enabled()` | 3781 | 2 lines |
 
 ### `providers.py`
 
