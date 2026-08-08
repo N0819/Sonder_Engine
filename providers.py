@@ -334,11 +334,18 @@ ANTHROPIC_SAMPLERS = ("temperature", "top_p", "top_k")
 # stricter proxy that rejects the structured system-block form.
 PROMPT_CACHE_ENABLED = os.environ.get("FICTION_ENGINE_PROMPT_CACHE", "1") != "0"
 
-def _anthropic_system(system):
+def _anthropic_system(system, prov=None):
     """The `system` field for an Anthropic request: a cache-marked content
     block when caching is on and there is a prompt to cache, else the plain
-    string (Anthropic accepts either form)."""
-    if PROMPT_CACHE_ENABLED and system:
+    string (Anthropic accepts either form).
+
+    `prov` is consulted so that `prompt_cache_deny` means the same thing on the
+    native path as on the aggregator one. Without it the host-facing switch
+    lied for exactly the provider whose caching is least in doubt: a direct
+    kind="anthropic" connection ignored the deny list entirely, so turning
+    caching off in the UI changed nothing and the only real off switch was an
+    env var needing a restart."""
+    if PROMPT_CACHE_ENABLED and system and not _cache_denied(prov):
         return [{"type": "text", "text": system,
                  "cache_control": {"type": "ephemeral"}}]
     return system
@@ -375,6 +382,25 @@ def _setting_name_set(key):
                      for part in str(raw).split(",") if part.strip())
 
 
+def cache_tokens(prov):
+    """The two strings that name a provider in `prompt_cache_allow`/`_deny`:
+    its own name and its kind, casefolded. A name is per-connection; a kind
+    covers every connection of that kind, including ones not created yet."""
+    return (str(_prov_field(prov, "name") or "").strip().casefold(),
+            str(_prov_field(prov, "kind") or "").strip().casefold())
+
+
+def _cache_denied(prov):
+    """`prompt_cache_deny` names this provider, by name or by kind.
+
+    Checked by BOTH caching paths -- native Anthropic and aggregator
+    passthrough -- so the host has one switch rather than one per code path."""
+    if prov is None:
+        return False
+    name, kind = cache_tokens(prov)
+    return bool({kind, name} & _setting_name_set("prompt_cache_deny"))
+
+
 def _cache_passthrough_allowed(prov):
     """Whether this provider may receive a cache-marked system message.
 
@@ -383,13 +409,35 @@ def _cache_passthrough_allowed(prov):
     allowlist and the built-in kinds. FICTION_ENGINE_PROMPT_CACHE=0 remains the
     all-providers kill switch.
     """
-    kind = str(_prov_field(prov, "kind") or "").strip().casefold()
-    name = str(_prov_field(prov, "name") or "").strip().casefold()
-    if {kind, name} & _setting_name_set("prompt_cache_deny"):
+    if _cache_denied(prov):
         return False
+    name, kind = cache_tokens(prov)
     if kind in _CACHE_PASSTHROUGH_KINDS:
         return True
     return bool({kind, name} & _setting_name_set("prompt_cache_allow"))
+
+
+def prompt_cache_enabled_for(prov):
+    """Whether prompt caching is actually in effect for this provider -- the
+    single question the settings UI asks, answered by the same code the request
+    path uses rather than by the UI re-deriving the rule and drifting from it.
+
+    kind="anthropic" caches natively (no message reshaping involved), so it is
+    on by default and only the deny list can turn it off. Everything else goes
+    through the passthrough allowlist."""
+    if not PROMPT_CACHE_ENABLED:
+        return False
+    if str(_prov_field(prov, "kind") or "").strip().casefold() == "anthropic":
+        return not _cache_denied(prov)
+    return _cache_passthrough_allowed(prov)
+
+
+def prompt_cache_supported_for(prov):
+    """Whether caching is on by default for this provider's kind. A provider
+    outside this set can still be opted in, but the UI says so rather than
+    presenting an unticked box that looks like a plain off."""
+    kind = str(_prov_field(prov, "kind") or "").strip().casefold()
+    return kind == "anthropic" or kind in _CACHE_PASSTHROUGH_KINDS
 
 
 def _prov_field(prov, key, default=None):
@@ -1383,7 +1431,7 @@ def _chat_complete_once(
             "model": model,
             "max_tokens": max_tokens,
             "temperature": t,
-            "system": _anthropic_system(system),
+            "system": _anthropic_system(system, prov),
             "messages": [
                 {
                     "role": "user",
@@ -1669,7 +1717,7 @@ async def _chat_complete_async_once(
 
     if prov["kind"] == "anthropic":
         h = {"x-api-key": prov["api_key"] or "", "anthropic-version": "2023-06-01", "content-type": "application/json"}
-        body = {"model": model, "max_tokens": max_tokens, "temperature": t, "system": _anthropic_system(system), "messages": [{"role": "user", "content": user}]}
+        body = {"model": model, "max_tokens": max_tokens, "temperature": t, "system": _anthropic_system(system, prov), "messages": [{"role": "user", "content": user}]}
         for k in ANTHROPIC_SAMPLERS:
             if k in merged:
                 body[k] = merged[k]

@@ -1763,13 +1763,51 @@ function renderFullApiSettings(b) {
           placeholder: p.has_key ? "•••• (key set — leave blank to keep)" : "api key",
           type: "password", style: "width:150px"
         });
-        provBox.append(el("div", { class: "card row" }, nm, kd, bu, ak,
+        // Prompt caching, per connection. It saves on its own click rather
+        // than waiting for Save: it writes different settings rows than the
+        // provider fields do, and folding it into Save would mean an untouched
+        // name field could overwrite a rename typed in another tab.
+        const cacheBox = el("input", {
+          type: "checkbox", ...(p.prompt_cache ? { checked: "" } : {}),
+          ...(p.prompt_cache_locked ? { disabled: "" } : {}),
+        });
+        cacheBox.onchange = async () => {
+          const want = cacheBox.checked;
+          try {
+            const r = await api("PUT", "/api/providers/" + p.id + "/prompt_cache", { enabled: want });
+            // Trust the server's answer, not the click: the deny list can
+            // out-rank an opt-in, so a box that reports what it asked for
+            // rather than what happened would show a state that is not real.
+            cacheBox.checked = !!r.prompt_cache;
+            p.prompt_cache = !!r.prompt_cache;
+            await boot();
+            toast("Prompt caching " + (r.prompt_cache ? "on" : "off")
+              + " for " + (p.name || p.kind) + ".", "ok");
+          } catch (e) {
+            cacheBox.checked = !want;
+            toast("Could not change caching: " + e.message, "err");
+          }
+        };
+        const cacheLabel = el("label", {
+          class: "small",
+          title: p.prompt_cache_locked
+            ? "FICTION_ENGINE_PROMPT_CACHE=0 is set, which turns caching off for every provider and outranks this box."
+            : (p.prompt_cache_default
+              ? "This provider caches the repeated system prompt by default (~90% cheaper on a cache hit). Untick to send it in full every call."
+              : "Off by default — this provider is not known to forward a cache breakpoint, and one that rejects it fails the turn instead of just not caching. Tick to opt it in."),
+        }, cacheBox, " cache");
+        provBox.append(el("div", { class: "card row" }, nm, kd, bu, ak, cacheLabel,
           el("button", { onclick: async () => { await api("PUT", "/api/providers/" + p.id, { name: nm.value, kind: kd.value, base_url: bu.value, api_key: ak.value }); delete S.models[p.id]; await boot(); toast("Provider saved.", "ok"); } }, "Save"),
           el("button", { onclick: async () => { if (!await confirmModal("Delete provider?", { danger: true, confirmLabel: "Delete" })) return; await api("DELETE", "/api/providers/" + p.id); await boot(); closeModal(); $("#b-api").click(); } }, "✕"),
           el("button", { title: "Fetch models", onclick: async e => { e.target.textContent = "…"; await fetchModels(p.id); e.target.textContent = "✓"; } }, "↻ models")));
       }
     };
     renderProv();
+    b.append(el("div", { class: "small", style: "margin:2px 0 8px" },
+      el("b", {}, "cache"), " marks the repeated system prompt so the provider can "
+      + "read it back instead of reprocessing it — much cheaper per call, and it only "
+      + "applies to Claude models (the caching is Anthropic's). Untick it if you suspect "
+      + "caching is costing you latency rather than saving it."));
     const nk = el("select", {}, Object.keys(S.boot.provider_presets).map(k => el("option", { value: k }, k)));
     b.append(el("div", { class: "row", style: "margin:6px 0" }, nk,
       el("button", { onclick: async () => { await api("POST", "/api/providers", { kind: nk.value }); await boot(); closeModal(); $("#b-api").click(); } }, "+ Provider")));
