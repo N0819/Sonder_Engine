@@ -25,12 +25,12 @@
 | `authored_events.py` | 124 |  | `db` |
 | `backdrops.py` | 1197 |  | `db`, `logging_utils`, `outofband`, `spatial`, `weather` |
 | `background_claims.py` | 466 |  | `db` |
-| `canon_provenance.py` | 339 |  | — |
+| `canon_provenance.py` | 360 |  | — |
 | `character_schema.py` | 1363 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `attire`, `schemas` |
 | `chat_archive.py` | 1089 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1076 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 295 |  | `spatial` |
-| `commit.py` | 6367 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 6365 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `db.py` | 1566 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `frames.py` | 220 |  | `db` |
 | `gaps.py` | 479 |  | `canon_provenance`, `db`, `logging_utils`, `providers`, `spatial`, `subjects` |
@@ -42,16 +42,17 @@
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `mechanics.py` | 274 |  | `spatial`, `spatial_frames` |
 | `memory.py` | 5036 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
+| `offscreen.py` | 735 |  | `logging_utils` |
 | `outofband.py` | 276 |  | `logging_utils` |
 | `paradox.py` | 489 |  | `character_schema`, `db`, `frames` |
 | `pipeline_context.py` | 248 | Typed mutable context passed through a turn pipeline. | `db` |
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 3796 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 3785 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 1977 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 502 |  | — |
-| `scene.py` | 1405 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
+| `scene.py` | 1414 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 3648 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 5680 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 975 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
@@ -290,9 +291,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `validate_provisional()` | 233 | 84 lines |
+| `validate_provisional()` | 233 | 105 lines |
 | `_node_id_errors()` | 199 | 32 lines |
-| `promote()` | 319 | 21 lines |
+| `promote()` | 340 | 21 lines |
 | `unavailable()` | 178 | 19 lines |
 | `outranks()` | 159 | 17 lines |
 | `is_node_id()` | 133 | 9 lines |
@@ -349,14 +350,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 4859 | 1133 lines |
+| `prepare_memory_commit()` | 4841 | 1133 lines |
 | `prepare_scene_commit()` | 1723 | 493 lines |
 | `commit_world_entities()` | 2457 | 283 lines |
 | `track_background_presences()` | 3257 | 231 lines |
 | `_prepare_destruction()` | 699 | 158 lines |
-| `commit_mapping()` | 4258 | 154 lines |
+| `commit_mapping()` | 4236 | 158 lines |
 | `update_place_graph()` | 74 | 153 lines |
-| `prepare_mapping_commit()` | 4105 | 151 lines |
+| `prepare_mapping_commit()` | 4105 | 129 lines |
 
 ### `db.py`
 
@@ -487,6 +488,19 @@
 | `backfill_memory_summary_windows()` | 3014 | 89 lines |
 | `restore_lorebook()` | 3667 | 79 lines |
 
+### `offscreen.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `profile_summary_record()` | 435 | 83 lines |
+| `schedule_profile_ticks()` | 632 | 77 lines |
+| `stochastic_ticks()` | 275 | 64 lines |
+| `_non_wall_hops()` | 145 | 41 lines |
+| `append_offscreen_log()` | 345 | 41 lines |
+| `profile_candidates()` | 598 | 32 lines |
+| `dormant_subjects()` | 540 | 29 lines |
+| `resolution_for()` | 227 | 26 lines |
+
 ### `outofband.py`
 
 | Function | Start | Size |
@@ -544,10 +558,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 3787 | 10 lines |
-| `presets()` | 3778 | 2 lines |
-| `active_preset()` | 3781 | 2 lines |
-| `nsfw_enabled()` | 3784 | 2 lines |
+| `get_prompt()` | 3776 | 10 lines |
+| `presets()` | 3767 | 2 lines |
+| `active_preset()` | 3770 | 2 lines |
+| `nsfw_enabled()` | 3773 | 2 lines |
 
 ### `providers.py`
 
@@ -582,11 +596,11 @@
 | `recent_events_for_observer()` | 750 | 59 lines |
 | `director_context()` | 810 | 53 lines |
 | `awareness_conditions()` | 471 | 47 lines |
-| `private_knowledge_for()` | 1362 | 44 lines |
+| `private_knowledge_for()` | 1371 | 44 lines |
 | `_seed_scene_initial_attire()` | 85 | 31 lines |
 | `active_cast()` | 161 | 31 lines |
 | `active_disguises()` | 363 | 31 lines |
-| `normalize_style_guide()` | 1270 | 31 lines |
+| `normalize_style_guide()` | 1279 | 31 lines |
 
 ### `schemas.py`
 

@@ -230,12 +230,27 @@ def _node_id_errors(record: Mapping[str, Any]) -> list[str]:
     return out
 
 
-def validate_provisional(record: Mapping[str, Any]) -> ValidationResult:
+def validate_provisional(
+    record: Mapping[str, Any],
+    *,
+    adjudicated_event_ids: "set[str] | frozenset[str] | None" = None,
+) -> ValidationResult:
     """Check a record before it is stored durably.
 
     This is a WRITE-path check on purpose. A stored invented room, or a ledger
     row keyed by a display name, is a defect that outlives the turn that made
     it, and no read-path filter can undo it afterwards.
+
+    CITING IS NOT MINTING. A provisional record may reference an
+    ``event_id`` something adjudicated elsewhere -- a citation is not a
+    claim to have adjudicated anything -- but it may not mint a new one.
+    The record's shape alone cannot tell the two apart (a minted id and a
+    cited id are both strings), so the caller supplies the citable set as
+    ``adjudicated_event_ids``: ids already minted by an adjudicated ledger
+    (today that is ``scheduled_events``, the only id-bearing event ledger
+    with a runtime writer). With no set supplied the check FAILS CLOSED and
+    refuses every event_id, exactly as before -- an unverifiable citation
+    is indistinguishable from a mint, and the tier must not guess.
     """
 
     if not isinstance(record, Mapping):
@@ -303,11 +318,17 @@ def validate_provisional(record: Mapping[str, Any]) -> ValidationResult:
     if events is None:
         pass
     elif isinstance(events, (list, tuple)):
+        citable = adjudicated_event_ids or frozenset()
         for i, ev in enumerate(events):
-            if isinstance(ev, Mapping) and ev.get("event_id"):
-                errors.append(
-                    f"events[{i}] carries an event_id; only an adjudicated tier mints those"
-                )
+            if not (isinstance(ev, Mapping) and ev.get("event_id")):
+                continue
+            if str(ev.get("event_id")) in citable:
+                continue  # a citation of an adjudicated id, not a mint
+            errors.append(
+                f"events[{i}] event_id {ev.get('event_id')!r} is not in the "
+                "adjudicated set; a provisional record may cite an "
+                "already-adjudicated id, never mint one"
+            )
     else:
         errors.append("events must be a list when present")
 
