@@ -93,6 +93,16 @@ async function api(method, url, body) {
 async function streamPost(url, body, onEvt) {
   const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
   if (!response.ok) {
+    // Same 401 contract as api() above: no valid host session means the
+    // whole tab belongs on the sign-in page. This path missed it, so a
+    // session expiring between turns surfaced as a "Pipeline failed:
+    // Unauthorized" toast on an SPA that looked signed in and wasn't.
+    // 403 stays a thrown error here too -- that's a valid-but-guest-scoped
+    // session, a different meaning.
+    if (response.status === 401) {
+      window.location.href = "/login";
+      throw new Error("Unauthorized");
+    }
     let message = await response.text();
     try { message = JSON.parse(message).detail || message } catch (e) { }
     throw new Error(message || `HTTP ${response.status}`);
