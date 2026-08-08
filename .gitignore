@@ -38,3 +38,6 @@ scene_chat*.json
 # character reasoning when exported with --include-content. Keep generated
 # traces local unless someone deliberately renames/adds a scrubbed fixture.
 *.trace.json
+
+# Written into the agent worktree by the assistant sync script.
+SYNCED.txt
