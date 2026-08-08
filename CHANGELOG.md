@@ -10,15 +10,20 @@ only ways to use them were editing a settings row by hand or restarting the
 process with an env var set. Each provider row in **⚙ API** now carries a
 **cache** checkbox that writes those same settings.
 
-This matters because caching is not unambiguously a win, and the host is the
-only one who can find out. Marking the repeated system prefix makes a cache hit
-~90% cheaper, but the 267 timed calls in `docs/bench-2026-08-03/` do not settle
-what it costs in latency: controlled for response length it is a wash in the
-bands where most calls land (50–150 tokens, 3.63s cached vs 3.76s uncached;
-150–400, 4.29s vs 4.36s), and the one band where cached looks much worse —
-1200+ tokens, 83.70s vs 42.36s — rests on **eight** cached samples and is not
-controlled for role or model. That is a question, not a finding, and answering
-it needs a switch.
+This matters because caching is not unambiguously a win and the host is the only
+one who can find out. A cache hit is ~90% cheaper; what it costs in latency is
+**unmeasured**, and the obvious place to look does not answer it. The 267 timed
+calls in `docs/bench-2026-08-03/` do log `cached_tokens`, but all 62 cache reads
+among them come from one model — `nex-agi/nex-n2-pro` — and not one is a Claude
+model. `_model_is_anthropic` gates the breakpoint, so **none of those reads was
+produced by this engine's marking**; they are the provider's own implicit
+caching. Any cached-vs-uncached split of that file is a comparison of one model
+against all the others wearing a caching costume, which is exactly how it
+produced an apparent 2× penalty at long output lengths.
+
+So the honest state is that nothing here has been measured, and a switch is what
+it takes to measure it: run the same story with the box on and off, against a
+Claude model, and compare.
 
 Two things were broken underneath the missing UI:
 
