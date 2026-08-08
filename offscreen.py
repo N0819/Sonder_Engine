@@ -714,23 +714,36 @@ def schedule_profile_ticks(ctx):
             since_by_subject[cand["id"]] = max(0, turn_idx - TICK_CADENCE_TURNS)
 
     def _produce(job):
-        events = []
-        for cand in candidates:
-            if job.cancelled.is_set():
-                break
-            subject = {"kind": "character", "id": cand["id"]}
-            if cand.get("display"):
-                subject["display"] = cand["display"]
-            record = profile_summary_record(
-                cid, scene, subject, cand.get("sheet"),
-                since_by_subject[cand["id"]], turn_idx, frame_id=frame_id)
-            summary = record.get("summary") or ""
-            if record.get("basis") == "unavailable" or not summary:
-                continue
-            events.append({**record, "actor": cand["id"],
-                           "actor_display": cand.get("display", ""),
-                           "tick": summary})
-        return land_profile_ticks(cid, turn_idx, events)
+        # The job thread starts with a FRESH contextvars context --
+        # threading.Thread does not inherit the submitting turn's -- so
+        # every frame-scoped wget/wset below (append_offscreen_log's
+        # read-modify-write above all) resolved `active_frame_id` to its
+        # default, and a tick scheduled from a nested frame's turn landed
+        # in the PRESENT frame's log. Pin the scheduling turn's frame for
+        # the duration; copying the whole context instead would also drag
+        # the turn's token_sink/cancel_event into background model calls.
+        from db import active_frame_id
+        token = active_frame_id.set(frame_id)
+        try:
+            events = []
+            for cand in candidates:
+                if job.cancelled.is_set():
+                    break
+                subject = {"kind": "character", "id": cand["id"]}
+                if cand.get("display"):
+                    subject["display"] = cand["display"]
+                record = profile_summary_record(
+                    cid, scene, subject, cand.get("sheet"),
+                    since_by_subject[cand["id"]], turn_idx, frame_id=frame_id)
+                summary = record.get("summary") or ""
+                if record.get("basis") == "unavailable" or not summary:
+                    continue
+                events.append({**record, "actor": cand["id"],
+                               "actor_display": cand.get("display", ""),
+                               "tick": summary})
+            return land_profile_ticks(cid, turn_idx, events)
+        finally:
+            active_frame_id.reset(token)
 
     return jobs.submit(cid, f"offscreen_profile:{turn_idx}", _produce,
                        base_turn=turn_idx)
