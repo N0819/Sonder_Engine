@@ -207,3 +207,133 @@ proxy standing in for entity existence; and `background_react` steps standing
 in for claim opportunities. For claims the write site is the single `if claims:`
 at `background.py:529` and it does execute — which is what makes 0-of-29 a real
 finding rather than an artefact.
+
+---
+
+## 12. A different identity defect, found on the way to 0c. Parked here.
+
+Found while measuring the 18-of-38 presence/entity mismatch of §1. It is **not**
+that defect and was not traded for it. Banked so whoever takes it does not have
+to re-derive it.
+
+### The measurement `[measured]`
+
+```sql
+SELECT COUNT(*), SUM(name='Object') FROM world_entities;   -- 480, 15
+```
+
+**15 of 480 rows = 3.1%**, every one under a 16-hex entity id.
+
+Set beside the scene blob — `world.value` where `key='scene'`, joined on
+`(chat_id, entity_id)` through `json_extract(value,'$.entities."<id>".name')`:
+
+| | rows |
+|---|---|
+| table says `Object`, blob carries the authored name | **12** — chats 38, 51, 57, 58, 59, 61, 63, 64 |
+| both sides say `Object` (second generation) | 3 — all chat 27 |
+
+The blob is intact and the projection is degraded, **on `name` and `kind`
+together**: chat 51's `person`/`Hinami` reads `object`/`Object` in the table,
+chat 57's `dalek war machine`/`A Dalek` likewise, chat 58's `vehicle`/`The
+TARDIS` likewise.
+
+So `commit_world_entities`' own docstring (commit.py:2432-2438), which claims
+the projection *"cannot disagree with the blob"* because both derive from the
+prepared diff, is **false**. Corpus-wide there are 19 name disagreements across
+11 chats; these 12 are a subset of them.
+
+### The mint `[read]`
+
+`schemas.py` at sha `ccafc0bb8b776e39` (157,486 B) — every line number below is
+a coordinate in that version. Function `_fill_entity_names`, span 2753-2776:
+
+```
+2773|        derived = (_entity_name_from_key(key)
+2774|                   or str(entity.get("kind") or "").strip().title()
+2775|                   or "Object")
+2776|        entity["name"] = derived
+```
+
+It fires when the key is an opaque 16-hex id (so `_entity_name_from_key`
+returns `''`), no name alias is present, and `kind` is absent or empty. Note
+that `kind='object'` reaches the same output string through the `.title()` at
+2774 rather than the literal at 2775, so **the two routes are indistinguishable
+in the result**. Pinned by `tests/test_scene_integrity_and_promotion_config.py`
+:82-83, which asserts `'Vehicle'` for `kind='vehicle'` and `'Object'` for an
+empty entity dict. The sibling `.title()` at 2748 is inside the *detector*
+`is_derived_entity_name` (2731-2750), not the producer.
+
+### The projection `[read]`
+
+`commit.py` at sha `33d73e6aa66faecd` (305,103 B). Lines 2493, 2508 and 2517
+all sit inside `commit_world_entities`, span 2429-2649. The state_diff loop:
+
+```
+2493|    for entity_id, entity_def in (diff.get("entities") or {}).items():
+...
+2508|         (entity_def.get("kind", "object"),      # UPDATE branch
+2510|          entity_def.get("name", ""),
+...
+2517|         (entity_id, cid, entity_def.get("kind", "object"),   # INSERT branch
+2518|          entity_def.get("subtype", ""), entity_def.get("name", ""),
+```
+
+The kind default is the **lowercase** literal `'object'` and the name default
+is the **empty string**; there is no `.title()` at this site. The display
+string `Object` is minted upstream in schemas.py and copied here.
+
+### The guard — designed, not written, and mine
+
+`commit_world_entities` should project from the **merged scene** rather than
+from the raw diff. Failing that, at 2505-2511 and 2517-2519 it must never
+overwrite an existing row with a value the diff did not carry:
+
+1. when `entity_def` supplies no `name`, leave the column alone on UPDATE
+   instead of writing `''`; same for `kind` instead of writing `'object'`;
+2. refuse an incoming name that `is_derived_entity_name(entity_id, name, kind)`
+   judges derived when the existing row's name is not derived.
+
+Rule 2 is not new machinery: `spatial.py:_merge_entity` (4522-4529) already
+applies exactly that test at merge time. The projection has no equivalent, and
+that asymmetry is where the 12 rows sit.
+
+### What would falsify it
+
+The guard assumes the diff **arrives nameless** and commit.py fills it. That is
+not measured. One query separates the two accounts, against a degraded id whose
+blob name is authored — chat 38 entity `b8c3d2e1f4a547e9`, or chat 59
+`8f847df2d44d43ce`:
+
+```sql
+SELECT v.step_id, s.key FROM variants v
+  JOIN steps s ON v.step_id = s.id
+  JOIN turns t ON s.turn_id = t.id
+ WHERE t.chat_id IN (38, 59) AND v.active = 1
+   AND v.content LIKE '%b8c3d2e1f4a547e9%'
+   AND s.key IN ('director_resolve', 'director_interpret', 'commit')
+ LIMIT 20;
+```
+
+Read the `entities` entry for that id out of the matching variant.
+
+- If it carries `name: "Object"` or no name at all, the fill-then-project
+  mechanism is demonstrated and the guard above is aimed at the right lines.
+- **If it carries `Plain Steel Spanner`, this account is wrong.** The loss is
+  then downstream of commit.py:2493 and the guard repairs nothing.
+
+### Adjacent, and entirely undescribed
+
+- **7** of the 19 name disagreements are not `Object` rows (chats 4×3, 1, 51,
+  61, 62). That class has never been examined.
+- **10** table rows have no `entities` entry in the blob at all: chat 10 (4),
+  chats 41/42/43/44 (1 each), chat 66 (1).
+- **3** rows in chat 27 read `Object` on both sides, i.e. a degraded parent was
+  copied. Chat 27 records `branched_from='[]'` despite carrying a `⎇41` name,
+  so its lineage is recoverable only from the naming convention.
+
+### §11 applied
+
+The write site that would have to execute for a non-zero here is
+`commit_world_entities`' UPDATE at commit.py:2505, and it demonstrably does —
+480 rows exist. So 15 is a real finding rather than an artefact of storage
+shape.
