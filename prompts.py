@@ -1809,7 +1809,7 @@ DEFAULT_PROMPTS = {
  "the beat, list it in that entry's `asserts` so it can be recorded as a claim. Each "
  "assert must be a SHORT referring phrase — the name or thing itself ('Tam Briddock', "
  "'the deck-nine EPS relay'), never a whole sentence — so it can be matched later.\n\n"
- "Output STRICT JSON {entries:[{name, speech:{exact_quote, volume, intended_target, tone}|"
+ "Output STRICT JSON {entries:[{name, speech:{speaker, exact_quote, volume, intended_target, tone}|"
  "null, action:string, asserts:[string]}]} — at most one entry per person, only for people "
  "who actually do something. Use names EXACTLY as given."
 ),

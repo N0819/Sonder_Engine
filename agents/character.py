@@ -11,6 +11,7 @@ from affect import (CRISIS_STRAIN_MIN, INTENT_DORMANT_AFTER,
                     RUPTURE_FORCE_AFTER, ground_tells)
 from db import q, wget
 from character_schema import (
+    cast_entity_id,
     character_name_from_text,
     character_abilities,
     character_curiosity,
@@ -29,6 +30,7 @@ from character_schema import (
     senses_as_text,
 )
 from frames import is_recognized_in_frame
+from gaps import interim_for
 from memory import (
     build_character_memory_context,
     contrast_memory,
@@ -2908,6 +2910,23 @@ def character_step(ctx, cid, nonce):
         "simulation_clock": _sim_clock,
         "variant_seed": nonce,
     }
+
+    # The lazy gap rung (proposal section 1.2 step 2, the reader): a
+    # character acting again after an absence gets the deterministic record
+    # of their own interval -- where they were last seen with the player,
+    # where they stand now, any offscreen ticks about them -- so the interim
+    # is theirs to speak from instead of a blank the model paints over.
+    # `offscreen_log` was written for months and read by nothing; this is
+    # the first reader. Strictly the character's OWN gap: handing a mind a
+    # gap about somebody else would be a channel that bypasses perception.
+    # `interim_for` asks for the free rung and returns None rather than a
+    # payload-tax "nothing happened", so this line costs tokens only when
+    # there is an interval worth having.
+    _interim = interim_for(chat["id"], sc, "character",
+                           cast_entity_id(sh, row["id"]), ctx.turn.idx,
+                           frame_id=ctx.turn.frame_id)
+    if _interim:
+        payload["while_you_were_offscreen"] = _interim
 
     # Authorial offers (P3): propositions the PLAYER authored about THIS
     # character's interior/behavior, rerouted here instead of being enacted as
