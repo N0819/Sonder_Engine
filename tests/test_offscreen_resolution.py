@@ -481,7 +481,12 @@ class TestTheProducer:
                 "subject": {"kind": "character", "id": "guinan_7f3a",
                             "display": "Guinan"},
                 "basis": "deterministic",
-                "summary": "she kept the bar in order",
+                # State, not prose: the profile rung emits fields and the
+                # stored `tick` is composed from them by code. Only the
+                # record shape this fixture stands in for moved -- the frame
+                # assertions below are byte-for-byte unchanged.
+                "state": {"doing": "kept the bar in order",
+                          "at": "hall", "manner": "unhurried"},
                 "producer": "offscreen.profile_summary_record",
             })
         captured = {}
