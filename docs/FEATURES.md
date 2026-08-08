@@ -246,6 +246,21 @@ legitimately perceive, learn, remember or infer.
   number of turns of deliberate interaction that you set. Automatic promotion
   is off unless you switch it on, and extras chattering to each other never
   count toward it.
+- **One ceiling for everything off screen** — A single **off-screen life**
+  setting says how much authority any off-screen work may have, and every
+  mechanism beneath it runs only up to that: *inert* (nothing happens),
+  *deterministic* (only what was already on a clock), *stochastic* (dormant
+  characters accrue a line of what they have been doing — the default, and what
+  the engine has always done), with *reactive* and *character_agent* selectable
+  but **not built yet**, behaving as the nearest built level while marking the
+  story as one that wants them.
+- **A cap on how many** — How many characters may be ticked in one beat, `0`
+  meaning none whatever the level says.
+- **They act on what they know** — An off-screen character acts on their own
+  knowledge, never on where you are or what you just did. Someone who has not
+  been told cannot react to it.
+- **Off-screen work runs beside your turn** — Queued out of band rather than
+  inside the beat, so it does not lengthen the wait for a reply.
 
 ## The world
 
@@ -282,6 +297,17 @@ legitimately perceive, learn, remember or infer.
   inside is moved out.
 - **Split parties** — Two groups who walk apart run separately, neither
   learning what the other did until they reunite.
+- **World mechanisms, each with its own switch** — How much the world does on
+  its own, set per mechanism to *off*, *floor* (deterministic, no model call) or
+  *ceiling* (richer): routine and residue, scheduled consequence, and places
+  that owe a history are **built at floor**; a rumor ledger and an antagonist
+  ladder are selectable and **not built yet**. Everything is *encountered, never
+  reported* — an off-screen event reaches you as changed state when you arrive,
+  or not at all. All off by default, and switching one on changes nothing
+  already written.
+- **The ceiling wins** — A mechanism set richer than the off-screen life ceiling
+  runs at the ceiling, and the settings panel says what it actually runs as
+  rather than what you selected.
 - **Move someone by hand** — Relocate a character from the cast panel while the
   story is idle, without generating a beat.
 
@@ -626,8 +652,12 @@ legitimately perceive, learn, remember or infer.
   models with their price band.
 - **Output ceiling** — One adjustable cap on how much any single call may
   produce.
-- **Prompt caching** — Repeated system prompts marked cacheable where supported,
-  with cache hits logged so you can confirm it works.
+- **Prompt caching, with a switch** — Repeated system prompts marked cacheable
+  where supported, with cache hits logged so you can confirm it works, and a
+  per-provider checkbox to turn it off. It applies to Claude models only, since
+  the caching is Anthropic's; a provider not known to forward a cache
+  breakpoint stays off until you opt it in, because one that *rejects* the
+  breakpoint fails the turn rather than merely not caching.
 - **Retries and repair** — Malformed output is retried and repaired rather than
   breaking your turn; stalls time out instead of hanging.
 - **Timing and token logging** — Each call's duration, tokens and cache usage.

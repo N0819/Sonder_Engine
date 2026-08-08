@@ -166,6 +166,14 @@ only be compared with one from the same model. The engine notices and offers to
 rebuild when you open a story, and API Connections shows the count and a button
 ([`docs/UNBUILT.md`](docs/UNBUILT.md) §1.15).
 
+**Prompt caching is a per-provider checkbox** in API Connections, and it is off
+for any provider not known to forward a cache breakpoint — one that *rejects* it
+fails the turn, which is worse than not caching. It applies to Claude models
+only, because the caching is Anthropic's. Turning it on is not automatically a
+win: across 14 probed models a ~98% hit rate ran anything from **8× faster to
+6.5× slower** than no cache at all ([`docs/UNBUILT.md`](docs/UNBUILT.md) §1.25),
+which is why it is a switch and not a default.
+
 API keys, provider settings, and all story content live in the local database —
 **never commit a populated `engine.db`.**
 

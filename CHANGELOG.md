@@ -10,20 +10,20 @@ only ways to use them were editing a settings row by hand or restarting the
 process with an env var set. Each provider row in **⚙ API** now carries a
 **cache** checkbox that writes those same settings.
 
-This matters because caching is not unambiguously a win and the host is the only
-one who can find out. A cache hit is ~90% cheaper; what it costs in latency is
-**unmeasured**, and the obvious place to look does not answer it. The 267 timed
-calls in `docs/bench-2026-08-03/` do log `cached_tokens`, but all 62 cache reads
-among them come from one model — `nex-agi/nex-n2-pro` — and not one is a Claude
-model. `_model_is_anthropic` gates the breakpoint, so **none of those reads was
-produced by this engine's marking**; they are the provider's own implicit
-caching. Any cached-vs-uncached split of that file is a comparison of one model
-against all the others wearing a caching costume, which is exactly how it
-produced an apparent 2× penalty at long output lengths.
+This matters because caching is **not** unambiguously a win, and that is
+measured, not suspected. `docs/UNBUILT.md` §1.25 probed 14 models: relocating
+the cache breakpoint took `gemma-4-26b-a4b-it` from 33.1s to 4.0s, and took
+`kimi-k2.6` from 5.3s to **34.6s — 6.5× slower** at a 98% hit rate. Cache
+support, cache benefit and raw latency are three independent properties. A host
+whose model is on the wrong side of that needs a switch, and until now had none.
 
-So the honest state is that nothing here has been measured, and a switch is what
-it takes to measure it: run the same story with the box on and off, against a
-Claude model, and compare.
+One warning attached to the entry, because it cost an hour here: the timed calls
+in `docs/bench-2026-08-03/` cannot answer this. All 62 cache reads among them
+come from one model, `nex-agi/nex-n2-pro`, and none of the logged models is a
+Claude — `_model_is_anthropic` gates the breakpoint, so the engine never marked
+any of them and those `cached_tokens` are the provider's own implicit caching.
+Split that file cached-vs-uncached and you are comparing one model against all
+the others, which duly yields a spurious 2× penalty at long outputs.
 
 Two things were broken underneath the missing UI:
 
