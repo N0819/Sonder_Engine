@@ -45,8 +45,7 @@ def backdrop_dir(tmp_path, monkeypatch):
     # here builds the SAME scene -- so without this a failure recorded by one
     # test is still "error" for the next one, which would make these pass or
     # fail depending on the order they ran in.
-    backdrops._IN_FLIGHT.clear()
-    backdrops._LAST_ERROR.clear()
+    backdrops._QUEUE.reset()
     return tmp_path
 
 

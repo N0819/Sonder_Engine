@@ -37,8 +37,8 @@ import hashlib
 import json
 import os
 import re
-import threading
 
+import outofband
 from db import q, wget_for_frame
 from logging_utils import logger
 from spatial import effective_light, light_at, normalize_light, room_of
@@ -898,18 +898,21 @@ def refine_prompt(draft, place):
 # together, the player scrolls back and forth, a second browser tab is open.
 # A per-signature lock makes the second caller WAIT for the first and then
 # take the cache hit instead of paying for the identical picture twice.
-# The dict is never pruned -- one small entry per distinct room-state seen in
-# a process lifetime -- because pruning it would race with the waiters.
-_GEN_LOCKS = {}
-_GEN_LOCKS_GUARD = threading.Lock()
+#
+# This dict used to be kept forever -- "one small entry per distinct room-state
+# seen in a process lifetime", pruned by nothing, because pruning it would race
+# with the waiters. The premise was right and the conclusion was not: a thread
+# blocked on a lock leaves no evidence it wants that lock, so the holder cannot
+# tell if anyone is behind it, but a waiter that counts itself in before it
+# releases the guard IS that evidence. `outofband.KeyedLocks` does exactly that
+# and drops an entry only at zero. Measured on the old code: 500 distinct
+# signatures left 500 entries standing with no work in flight.
+_GEN_LOCKS = outofband.KeyedLocks()
 
 
 def _generation_lock(key):
-    with _GEN_LOCKS_GUARD:
-        lock = _GEN_LOCKS.get(key)
-        if lock is None:
-            lock = _GEN_LOCKS[key] = threading.Lock()
-        return lock
+    """Exclusive use of one signature, for as long as the `with` block runs."""
+    return _GEN_LOCKS.hold(key)
 
 
 # --- continuity ------------------------------------------------------------
@@ -1004,12 +1007,18 @@ def _continuity_enabled():
 
 
 def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
-                      force=False):
+                      force=False, work=None):
     """Produce (or serve from cache) the backdrop for a turn.
 
-    Returns {path, signature, room, prompt, cached}. The prompt is handed to
-    the image generator automatically -- composing and generating are one
-    operation from the caller's point of view.
+    Returns {path, signature, room, prompt, cached}, or None when there is no
+    room to depict and when `work` was cancelled -- in both of those cases
+    there is no image and none was promised. The prompt is handed to the image
+    generator automatically -- composing and generating are one operation from
+    the caller's point of view.
+
+    `work` is the queue's handle when this is running out of band, and None for
+    every direct blocking caller. It is only ever read, at the step boundaries
+    below; nothing here can be cancelled mid-flight.
     """
     from providers import edit_image, generate_image
 
@@ -1028,6 +1037,14 @@ def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
             return {"path": existing, "signature": req["signature"],
                     "room": req["room_name"], "prompt": None, "cached": True}
 
+        # Between steps, never mid-flight. Everything past this line costs
+        # money or minutes, and the commonest way to arrive here already
+        # cancelled is the one the lock above creates: several callers queued
+        # on one signature, released one at a time, for a picture nobody is
+        # looking at any more.
+        if outofband.stopped(work):
+            return None
+
         prompt = refine_prompt(
             compose_prompt(req["place"], style, req["flavour"]), req["place"])
         # Same room, new state: modify the picture that already exists rather
@@ -1036,6 +1053,14 @@ def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
         # reason to generate normally, never a reason to have no backdrop.
         anchor, anchor_place = (room_anchor(chat_id, req.get("room"))
                                 if _continuity_enabled() else (None, {}))
+        # The second boundary, and the one that matters most: `refine_prompt`
+        # may itself have been a model call, and the generation below is the
+        # expensive half. Nothing is checked after it -- bytes already paid for
+        # are written to the cache even by cancelled work, because the cache is
+        # content-addressed by signature and throwing them away buys nothing
+        # while costing the next request the whole generation again.
+        if outofband.stopped(work):
+            return None
         data = None
         # THE FALLBACK WAS CORRECT AND INVISIBLE. Any failure here is a reason
         # to generate normally, as the comment above says -- but a bare `except`
@@ -1104,22 +1129,22 @@ def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
 # The queue is per-signature, like the generation lock it sits above: two
 # requests for the same picture produce one worker, and a request for a room
 # already being drawn simply joins it.
+#
+# The queue itself is `outofband.Queue`, shared with ambience.py, because both
+# tables this used to keep grew with the key space rather than with the work:
+# `_IN_FLIGHT` pruned itself, but `_LAST_ERROR` only ever lost an entry when
+# somebody asked for that exact signature again, which a reader who never walks
+# back into that room never does. See that module for the measurement and for
+# why this is not `jobs.py` yet.
 
-_QUEUE_LOCK = threading.Lock()
-_IN_FLIGHT = {}          # signature -> True while a worker is generating
-_LAST_ERROR = {}         # signature -> str, so a failure is visible, not silent
+_QUEUE = outofband.Queue("backdrop")
 
 
 def backdrop_status(chat_id, signature):
     """'ready' | 'pending' | 'error' | 'absent' for one signature."""
     if cached_backdrop(chat_id, signature):
         return "ready"
-    with _QUEUE_LOCK:
-        if signature in _IN_FLIGHT:
-            return "pending"
-        if signature in _LAST_ERROR:
-            return "error"
-    return "absent"
+    return _QUEUE.status(signature)
 
 
 def backdrop_error(signature):
@@ -1129,8 +1154,18 @@ def backdrop_error(signature):
     explains itself -- out-of-band work that fails silently is worse than work
     that fails loudly.
     """
-    with _QUEUE_LOCK:
-        return _LAST_ERROR.get(signature)
+    return _QUEUE.error(signature)
+
+
+def cancel_backdrops(chat_id):
+    """Stop the generations in flight for one chat. Returns how many were asked.
+
+    Cooperative and BETWEEN steps: a generation already inside a provider call
+    finishes that call, and stops at the next boundary in `generate_backdrop`.
+    Nothing is killed mid-flight, because a half-written image on disk is worse
+    than a wasted one.
+    """
+    return _QUEUE.cancel_group(chat_id)
 
 
 def request_backdrop(chat_id, turn_idx, player_name=None, style=None,
@@ -1149,26 +1184,14 @@ def request_backdrop(chat_id, turn_idx, player_name=None, style=None,
         return {"signature": signature, "status": "ready",
                 "room": req["room_name"]}
 
-    with _QUEUE_LOCK:
-        if signature in _IN_FLIGHT:
-            return {"signature": signature, "status": "pending",
-                    "room": req["room_name"]}
-        _IN_FLIGHT[signature] = True
-        _LAST_ERROR.pop(signature, None)
-
-    def _work():
-        try:
-            generate_backdrop(chat_id, turn_idx, player_name, style,
-                              force=force)
-        except Exception as exc:
-            with _QUEUE_LOCK:
-                _LAST_ERROR[signature] = "%s: %s" % (type(exc).__name__,
-                                                     str(exc)[:300])
-        finally:
-            with _QUEUE_LOCK:
-                _IN_FLIGHT.pop(signature, None)
-
-    threading.Thread(target=_work, name="backdrop-%s" % signature[:8],
-                     daemon=True).start()
+    # `force` SUPERSEDES rather than joins. Asking for a regeneration while one
+    # is already running used to return "pending" and quietly drop the
+    # instruction -- the caller then got the very image they had asked to
+    # replace, from a queue that reported success.
+    _QUEUE.submit(
+        signature,
+        lambda work: generate_backdrop(chat_id, turn_idx, player_name, style,
+                                       force=force, work=work),
+        group=chat_id, supersede=force)
     return {"signature": signature, "status": "pending",
             "room": req["room_name"]}
