@@ -1785,6 +1785,39 @@ over identically -- the flag is written and nothing reads it. Giving it force
 is a Director rule about which of two colliding attempts survives intact, and
 it is the natural companion to `commitment: "contestable"`.
 
+### 1.30 The background-claims lane has never once fired
+
+Measured 2026-08-08, against the live corpus: **0 claims ever recorded, across
+17 chats playing at `scene_life=full` over the corpus's 2,114 turns and 46
+tracked presences.** That is the real denominator -- an earlier 0-of-29 was
+measured against beats, which undercounts the opportunities and made the
+silence look like sparse data instead of a dead lane. The lane's entire
+downstream -- `background_claims.record_claims`, `unratified_claims` riding
+every resolve payload, `settle_claims`, `write_canon`, `canon_provenance` --
+has processed nothing, ever. It is built, tested, documented, and has never
+run on a single live datum: the exact shape the fire-rate rule in `AGENTS.md`
+exists for.
+
+Why, structurally: a claim only enters the lane when `scene_life` output
+survives `_claimed_refs` -- either the model volunteers `asserts` (it never
+has) or `novel_proper_nouns` finds a capitalized phrase not already in
+`_known_world_names` (managed presences mostly answer about things already
+named). Nothing else in the engine mints claims. The lane is therefore held
+shut by prompt compliance alone, in both directions -- nothing enters it, and
+if something ever does, the read-back path it ratifies into is **ungated**:
+`write_canon` writes `category="other"` rows, `knowledge_for_character` gates
+only `category="knowledge"`, `search_lore` has no observer parameter, and the
+audience known at mint time is discarded, so a future per-mind gate cannot be
+built on the read side without re-plumbing provenance through
+`canon_provenance` (currently written and never read by anything epistemic).
+
+For whoever builds the lane's first real producer (the generated-gossip plan):
+land the producer and the read-side gate in the same change, or the first
+claim ever ratified becomes knowledge every mind in the chat reads back
+without having been in the room for it. And re-measure the fire rate after --
+a lane that has never fired gives `no chances`, not 0%, and the first nonzero
+denominator is the first evidence the mechanism exists.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

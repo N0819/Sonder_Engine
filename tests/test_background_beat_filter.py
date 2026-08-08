@@ -172,3 +172,31 @@ def test_background_react_payload_is_filtered(temp_db, monkeypatch):
 
     blob = json.dumps(captured["payload"], ensure_ascii=False)
     assert "midnight" not in blob, "concealed line leaked into background payload"
+
+
+def test_a_known_station_in_another_room_is_not_a_vantage_on_the_beat():
+    """The fall-through inversion: with no audible line, a presence whose
+    station was KNOWN but elsewhere received the full omniscient prose --
+    deterministically computed as out of earshot, then handed strictly MORE
+    than an in-earshot presence. Chat 65's Vendor (fountain_plaza) received
+    eastern_market prose through exactly this path on t2147."""
+    sc = {
+        "rooms": {"bar": {"name": "bar", "adjacent": [{"to": "yard", "barrier": "wall"}]},
+                  "yard": {"name": "yard", "adjacent": [{"to": "bar", "barrier": "wall"}]}},
+        "positions": {}, "entities": {}, "attire": {}, "overlays": {},
+    }
+    dr = {"resolved_event": "In the bar, coins change hands over the counter.",
+          "dialogue_log": []}
+    assert _beat_for_presence(dr, sc, "yard", "Doc", beat_room="bar") == ""
+    # The same station co-located with the beat keeps its bystander's view.
+    assert "coins change hands" in _beat_for_presence(
+        dr, sc, "bar", "Doc", beat_room="bar")
+
+
+def test_an_unknown_beat_room_fails_closed():
+    """Not knowing where the beat resolved is the same epistemic state as not
+    knowing where the presence stands, and the X1 rule already answers that:
+    deliver nothing."""
+    dr = {"resolved_event": "Something happens somewhere.", "dialogue_log": []}
+    assert _beat_for_presence(dr, None, "bar", "Doc") == ""
+    assert _beat_for_presence(dr, None, "bar", "Doc", beat_room=None) == ""

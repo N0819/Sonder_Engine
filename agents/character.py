@@ -2926,7 +2926,17 @@ def character_step(ctx, cid, nonce):
                            cast_entity_id(sh, row["id"]), ctx.turn.idx,
                            frame_id=ctx.turn.frame_id)
     if _interim:
-        payload["while_you_were_offscreen"] = _interim
+        # The gap is prose somebody else wrote -- offscreen ticks and the
+        # mapping_commit model, both of which write canonical names -- so it
+        # passes the same identity floor as `world_knowledge` above, from
+        # the same `known` map: a character must not meet their own interval
+        # pre-identified with names no channel ever gave them.
+        _gated_interim = scrub_names_deep(_interim, _name_scrub)
+        if _gated_interim != _interim:
+            ctx.add_warning(
+                f"character {character_name(sh)}: scrubbed unearned "
+                "identities out of while_you_were_offscreen gap text")
+        payload["while_you_were_offscreen"] = _gated_interim
 
     # Authorial offers (P3): propositions the PLAYER authored about THIS
     # character's interior/behavior, rerouted here instead of being enacted as

@@ -234,6 +234,55 @@ class TestTheSeededDraw:
         assert found, "24 seeds never once drew the recorded intention"
         assert any("Ten Forward" in t["tick"] for t in found)
 
+    def test_anothers_intention_naming_me_is_not_my_tick(self):
+        """Ownership, not mention. Chat 9's live ledger holds Picard's entry
+        naming what has "remained untransmitted to Vrenak"; prose matching
+        put that entry in VRENAK's candidate set, so his own
+        while_you_were_offscreen gap could deliver him the very fact the
+        fiction says he never heard. An intention seeds tick content only
+        for the actor it belongs to."""
+        actors = [{"id": "vrenak", "display": "Vrenak"}]
+        intentions = [{
+            "actor": "picard",
+            "intention": ("The formal refusal of remand and the asylum "
+                          "announcement remain untransmitted to Vrenak."),
+        }]
+        fired = 0
+        for i in range(48):
+            for t in stochastic_ticks(f"s{i}", actors, intentions, 3):
+                fired += 1
+                assert "untransmitted" not in t["tick"]
+                assert t["intention"] == ""
+        assert fired, "48 seeds never fired a single tick"
+
+    def test_an_actors_own_intention_still_seeds_by_id(self):
+        """The ownership check must not gag the legitimate case: a dormant
+        actor with their OWN recorded aim (owner field carrying the subject
+        id, not the display name) still ticks toward it."""
+        actors = [{"id": "vrenak", "display": "Vrenak"}]
+        intentions = [{"actor": "vrenak",
+                       "intention": "press the demand for remand"}]
+        found = [
+            t
+            for i in range(48)
+            for t in stochastic_ticks(f"s{i}", actors, intentions, 3)
+            if t["intention"]
+        ]
+        assert found, "48 seeds never once drew the recorded intention"
+        assert any("press the demand" in t["tick"] for t in found)
+
+    def test_an_unowned_intention_shape_cannot_become_content(self):
+        """A bare-string ledger entry names no owner. It may steer the spend
+        decision (_intention_mentions' contract), but tick content fails
+        CLOSED to the content-free idle line -- content with no owner cannot
+        be proven to be the subject's own."""
+        actors = [{"id": "character:9", "display": "Reyet Solan"}]
+        intentions = ["Reyet Solan means to reach the northern garrison"]
+        for i in range(48):
+            for t in stochastic_ticks(f"s{i}", actors, intentions, 3):
+                assert "garrison" not in t["tick"]
+                assert t["intention"] == ""
+
     def test_a_tick_describes_and_cannot_commit(self):
         """Section 1.0.1: the record shape differs by rung — a rung that
         cannot express a consequence cannot smuggle one. No deltas, no
@@ -397,6 +446,75 @@ class TestTheProducer:
         assert land_profile_ticks(cid, 9, events) == {"written": 1}
         log = wget(cid, "offscreen_log", [])
         assert len(log) == 1 and log[0]["rung"] == "profile"
+
+    def test_the_producer_thread_keeps_the_scheduling_turns_frame(
+            self, temp_db, monkeypatch):
+        """threading.Thread starts with a FRESH contextvars context, so the
+        producer's frame-scoped wget/wset (append_offscreen_log's
+        read-modify-write above all) resolved `active_frame_id` to its
+        default -- the present frame -- and a tick scheduled from a nested
+        frame's turn landed in the wrong era's log. The frame the turn was
+        scheduled FROM must ride into the job."""
+        import threading
+        import types
+
+        import jobs
+        import offscreen
+        from db import wget, wget_for_frame, wset_for_frame
+
+        cid = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("Test", "", time.time()))
+        temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+            (cid, 3, "", time.time()))
+        wset_for_frame(cid, "scene", {
+            "rooms": {"hall": {"adjacent": []}},
+            "positions": {"The Stranger": "hall"},
+        }, 7)
+        monkeypatch.setattr(offscreen, "profile_candidates", lambda *a, **k: [
+            {"id": "guinan_7f3a", "display": "Guinan", "sheet": {}}])
+        monkeypatch.setattr(
+            offscreen, "profile_summary_record",
+            lambda *a, **k: {
+                "disposition": "provisional",
+                "subject": {"kind": "character", "id": "guinan_7f3a",
+                            "display": "Guinan"},
+                "basis": "deterministic",
+                "summary": "she kept the bar in order",
+                "producer": "offscreen.profile_summary_record",
+            })
+        captured = {}
+
+        def _capture(chat_id, key, fn, base_turn=None):
+            captured["fn"] = fn
+            captured["job"] = types.SimpleNamespace(
+                cancelled=threading.Event())
+            return captured["job"]
+
+        monkeypatch.setattr(jobs, "submit", _capture)
+
+        class _Chat(dict):
+            @property
+            def id(self):
+                return self["id"]
+
+        ctx = types.SimpleNamespace(
+            chat=_Chat({"id": cid, "persona_id": None}),
+            turn=types.SimpleNamespace(idx=3, id=1, frame_id=7))
+        assert offscreen.schedule_profile_ticks(ctx) is captured["job"]
+
+        # Run the producer exactly as jobs._run would: on a bare thread
+        # whose context never saw the turn's frame.
+        worker = threading.Thread(target=captured["fn"],
+                                  args=(captured["job"],))
+        worker.start()
+        worker.join(10)
+        assert not worker.is_alive()
+        assert wget_for_frame(cid, "offscreen_log", 7, []), \
+            "the tick must land in the frame it was scheduled from"
+        assert wget(cid, "offscreen_log", []) == [], \
+            "the present frame's log took a nested frame's tick"
 
 
 class TestTheProfileRung:
