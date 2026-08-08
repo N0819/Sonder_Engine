@@ -1227,3 +1227,55 @@ class TestTheFetchRefusesTheWrongSound:
         monkeypatch.setattr(amb, "ambience_settings", lambda: {"key": "k"})
         with pytest.raises(RuntimeError, match="when asked for"):
             amb.freesound_sound(341802)
+
+
+class TestTheResolutionLockTable:
+    """Ambience is the backdrop module's twin, and it inherited the twin's leak:
+    a lock per signature, pruned by nothing, one dead entry per distinct
+    AUDIBLE room-state for the life of the process. Measured on the unmodified
+    module: 500 distinct signatures, 500 entries, no work in flight.
+    """
+
+    def test_it_does_not_grow_with_the_number_of_room_states_seen(self):
+        import ambience as amb
+
+        for i in range(500):
+            with amb._resolution_lock((1, "sig%04d" % i)):
+                pass
+
+        assert len(amb._AMB_LOCKS) == 0
+
+    def test_one_signature_is_still_resolved_once(self):
+        """Pruning must not cost the exclusion the lock exists for: two callers
+        for one room would otherwise both search and both download.
+        """
+        import threading
+
+        import ambience as amb
+
+        order = []
+        holding = threading.Event()
+        release = threading.Event()
+
+        def first():
+            with amb._resolution_lock((1, "shared")):
+                order.append("first")
+                holding.set()
+                release.wait(3.0)
+                order.append("first-out")
+
+        def second():
+            holding.wait(3.0)
+            with amb._resolution_lock((1, "shared")):
+                order.append("second")
+
+        threads = [threading.Thread(target=first), threading.Thread(target=second)]
+        for t in threads:
+            t.start()
+        assert holding.wait(3.0)
+        release.set()
+        for t in threads:
+            t.join(3.0)
+
+        assert order == ["first", "first-out", "second"]
+        assert len(amb._AMB_LOCKS) == 0
