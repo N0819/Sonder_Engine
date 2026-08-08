@@ -107,23 +107,56 @@ def _payload_of(row):
     return payload if isinstance(payload, dict) else {}
 
 
-def _fire_due_events(scene, elapsed, frame_id, pending):
+def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
+                     player_room=None):
     """Pass (a). Returns (event_ops, notices, counts, pending_entity_ids).
 
     pending rows arrive in due_at order (the caller's query) and each is
     frame-gated by the frame_id in its payload: scheduled_events has no
     frame column while simulation clocks are frame-scoped, so an event
     minted in one frame must never fire against another frame's clock.
+
+    ``consequence`` rows (living_world.mint_consequences) fire the same
+    deterministic way and their firing is LAYER-1 FACT — it happened
+    whether or not anyone was there. The notice is the only knowledge
+    surface, and it is emitted ONLY when the player is standing at the
+    fuse's location as it lands (walking in on it); everywhere else the
+    fired row waits to be read at contact (residue, gap skeleton). That
+    presence gate is the §0.2 firewall: an event elsewhere is never told,
+    only encountered.
     """
     event_ops = []
     notices = []
-    fired = news_fired = 0
+    fired = news_fired = consequences_fired = 0
     pending_entity_ids = set()
     entities = scene.get("entities") or {}
     positions = scene.setdefault("positions", {})
 
     for row in pending:
         payload = _payload_of(row)
+        if row.get("kind") == "consequence":
+            if payload.get("frame_id") != frame_id or row["due_at"] > elapsed:
+                continue
+            base_turn = payload.get("base_turn")
+            if base_turn is not None and turn_idx is not None \
+                    and int(base_turn) > int(turn_idx):
+                # The base-revision check at fire time: a fuse minted from a
+                # turn the story no longer contains describes a future whose
+                # cause un-happened. Cancelled loudly, never fired — the
+                # land_profile_ticks discipline, applied to the delay line.
+                event_ops.append(("status", row["event_id"], "cancelled"))
+                continue
+            event_ops.append(("status", row["event_id"], "fired"))
+            consequences_fired += 1
+            if player_room and str(payload.get("where") or "") == \
+                    str(player_room):
+                notices.append(
+                    "Falling due here, now: "
+                    f"{payload.get('what') or 'a scheduled consequence'} "
+                    "(stage it as present state resolving in front of the "
+                    "party)."
+                )
+            continue
         if row.get("kind") == "news_arrival":
             if payload.get("frame_id") != frame_id or row["due_at"] > elapsed:
                 continue
@@ -168,7 +201,9 @@ def _fire_due_events(scene, elapsed, frame_id, pending):
             f"{destination or 'its destination'} and is docked there."
         )
 
-    return event_ops, notices, {"fired": fired, "news_fired": news_fired}, \
+    return event_ops, notices, \
+        {"fired": fired, "news_fired": news_fired,
+         "consequences_fired": consequences_fired}, \
         pending_entity_ids
 
 
@@ -233,7 +268,7 @@ def _expire_conditions(conditions, elapsed):
 def mechanics_sweep(scene, clock, frame_id, pending, *,
                     conditions=(), prev_scene=None, chat_id=None,
                     turn_id=None, turn_idx=None, cast_names=(),
-                    cast_changes=()):
+                    cast_changes=(), player_room=None):
     """Run the ordered passes (a)-(e). Returns (scene, event_ops, notices).
 
     scene is mutated in place and also returned; event_ops is the list of
@@ -248,7 +283,8 @@ def mechanics_sweep(scene, clock, frame_id, pending, *,
 
     # (a) fire due events for this frame.
     event_ops, notices, counts, pending_entity_ids = _fire_due_events(
-        scene, elapsed, frame_id, pending or [])
+        scene, elapsed, frame_id, pending or [],
+        turn_idx=turn_idx, player_room=player_room)
 
     # (b) schedule new arrivals.
     schedule_ops, scheduled = _schedule_new_arrivals(
