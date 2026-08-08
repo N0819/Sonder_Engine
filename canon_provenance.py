@@ -130,6 +130,17 @@ class ValidationResult:
         return self.ok
 
 
+def is_node_id(value: Any) -> bool:
+    """Whether a string is id-shaped rather than prose.
+
+    Public so the gap generator tests room references against the SAME
+    pattern this module's validator enforces -- a second spelling of the
+    regex would drift, and then one module's id is the other's prose.
+    """
+
+    return isinstance(value, str) and bool(_NODE_ID.match(value))
+
+
 def is_canon(disposition: str) -> bool:
     """True only for a disposition something adjudicated."""
 

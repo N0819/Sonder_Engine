@@ -25,6 +25,11 @@ FRAME_SCOPED_WORLD_KEYS = {
     "scene", "known", "simulation_clock", "pending", "background_presences",
     "offscreen_log", "standing_intentions", "pending_obligations",
     "shadow_profile", "lore_cache", "active_books",
+    # {subject_id: {turn, room, elapsed_seconds}} -- who was co-present with
+    # the player, per era like the scene it is read from. Written by
+    # commit_scene, read by gaps.interim_for; keyed by SUBJECT ID from birth
+    # (see gaps.LAST_SEEN_KEY).
+    "subject_last_seen",
 }
 FRAME_SCOPED_WORLD_PREFIXES = ("relationships:",)
 
