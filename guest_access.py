@@ -26,6 +26,7 @@ auth has been bootstrapped), classification is deny-by-default:
 from __future__ import annotations
 
 import hashlib
+import math
 import secrets
 import time
 
@@ -184,22 +185,48 @@ def _join_rate_limited() -> bool:
     return False
 
 
-# /api/auth/login gets the same treatment as /api/join and for the same
-# reason -- the attack is "try many passwords fast." Separate window so a
-# burst of join attempts can't lock the host out (or vice versa).
-_login_attempts: list[float] = []
+# /api/auth/login gets a limiter for the same reason as /api/join -- the
+# attack is "try many passwords fast." Separate window so a burst of join
+# attempts can't lock the host out (or vice versa). Unlike the join
+# window, this one counts FAILURES only: the limiter used to consume a
+# slot on every call, success included, so ten successful sign-ins in a
+# minute -- or the 2026-08 incident, where a password manager's auto-
+# submitted stale credentials burned all ten slots in seconds -- locked
+# the legitimate host out of a single-user app. A successful login is
+# proof the host is present, so it also clears the ledger; an attacker
+# cannot reach that clear without already having the password.
+_login_attempts: list[float] = []  # timestamps of FAILED attempts only
 _LOGIN_WINDOW_SECONDS = 60
 _LOGIN_WINDOW_MAX = 10
 
 
-def login_rate_limited() -> bool:
+def login_retry_after() -> int:
+    """Whole seconds until the next login attempt will be evaluated, or 0
+    when not limited. Non-consuming: checking never spends budget, only
+    record_login_failure() does. The number exists so the login page can
+    show a real countdown instead of a static "wait a minute" -- during
+    the incident there was no way to tell a stuck page from a waiting
+    one."""
     now = time.time()
     while _login_attempts and _login_attempts[0] < now - _LOGIN_WINDOW_SECONDS:
         _login_attempts.pop(0)
-    if len(_login_attempts) >= _LOGIN_WINDOW_MAX:
-        return True
-    _login_attempts.append(now)
-    return False
+    if len(_login_attempts) < _LOGIN_WINDOW_MAX:
+        return 0
+    oldest_counted = _login_attempts[-_LOGIN_WINDOW_MAX]
+    remaining = oldest_counted + _LOGIN_WINDOW_SECONDS - now
+    return max(1, math.ceil(remaining))
+
+
+def record_login_failure() -> None:
+    """A wrong username/password pair spends one slot of the window."""
+    _login_attempts.append(time.time())
+
+
+def record_login_success() -> None:
+    """Clear the failure ledger: the host has proven presence, so stale
+    failures (their own typos, or a password manager's) stop counting
+    against them."""
+    _login_attempts.clear()
 
 
 def redeem_code(code: str) -> dict | None:

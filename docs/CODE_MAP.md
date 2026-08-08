@@ -21,7 +21,7 @@
 | `ambience.py` | 2054 |  | `backdrops`, `db`, `outofband`, `weather` |
 | `app.py` | 4653 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `ambience`, `attire`, `auth_routes`, `backdrops`, `character_schema`, `chat_archive`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `survival`, `updates` |
 | `attire.py` | 1195 |  | — |
-| `auth_routes.py` | 143 | Typed host-authentication HTTP routes and cookie transport. | `guest_access` |
+| `auth_routes.py` | 175 | Typed host-authentication HTTP routes and cookie transport. | `guest_access` |
 | `authored_events.py` | 124 |  | `db` |
 | `backdrops.py` | 1197 |  | `db`, `logging_utils`, `outofband`, `spatial`, `weather` |
 | `background_claims.py` | 466 |  | `db` |
@@ -35,7 +35,7 @@
 | `frames.py` | 220 |  | `db` |
 | `gaps.py` | 479 |  | `canon_provenance`, `db`, `logging_utils`, `providers`, `spatial`, `subjects` |
 | `greetings.py` | 375 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
-| `guest_access.py` | 328 |  | `db` |
+| `guest_access.py` | 355 |  | `db` |
 | `importers.py` | 2474 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `memory`, `prompts`, `providers` |
 | `jobs.py` | 183 |  | `logging_utils` |
 | `llm_quality.py` | 292 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
@@ -246,11 +246,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
+| `auth_login()` | 108 | 60 lines |
 | `auth_setup()` | 69 | 36 lines |
-| `auth_login()` | 108 | 28 lines |
 | `_set_host_cookie()` | 47 | 9 lines |
 | `auth_status()` | 59 | 7 lines |
-| `auth_logout()` | 139 | 5 lines |
+| `auth_logout()` | 171 | 5 lines |
 
 ### `authored_events.py`
 
@@ -413,14 +413,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `redeem_code()` | 205 | 48 lines |
-| `verify_host_login()` | 87 | 26 lines |
-| `list_grants()` | 303 | 26 lines |
-| `create_host_account()` | 62 | 23 lines |
-| `verify_guest_token()` | 255 | 19 lines |
-| `revoke_persona_grants()` | 276 | 13 lines |
-| `revoke_grant()` | 291 | 10 lines |
-| `create_host_session()` | 115 | 9 lines |
+| `redeem_code()` | 232 | 48 lines |
+| `verify_host_login()` | 88 | 26 lines |
+| `list_grants()` | 330 | 26 lines |
+| `create_host_account()` | 63 | 23 lines |
+| `verify_guest_token()` | 282 | 19 lines |
+| `login_retry_after()` | 203 | 15 lines |
+| `revoke_persona_grants()` | 303 | 13 lines |
+| `revoke_grant()` | 318 | 10 lines |
 
 ### `importers.py`
 
@@ -731,7 +731,7 @@
 | GET | `/api/ambience/search` | `ambience_search()` | `app.py:4572` |
 | PUT | `/api/attire_beneath` | `set_attire_beneath()` | `app.py:1213` |
 | POST | `/api/auth/login` | `auth_login()` | `auth_routes.py:108` |
-| POST | `/api/auth/logout` | `auth_logout()` | `auth_routes.py:139` |
+| POST | `/api/auth/logout` | `auth_logout()` | `auth_routes.py:171` |
 | POST | `/api/auth/setup` | `auth_setup()` | `auth_routes.py:69` |
 | GET | `/api/auth/status` | `auth_status()` | `auth_routes.py:59` |
 | GET | `/api/auto_promote` | `get_auto_promote()` | `app.py:2437` |
