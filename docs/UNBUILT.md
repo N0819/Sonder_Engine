@@ -2862,6 +2862,36 @@ v1–v3 are built, including goal-slot currency. Undecided:
   and then losing* to a drive want, which is a different failure from the one
   observed.
 
+### 6.8 Living world — [`DESIGN_LIVING_WORLD.md`](DESIGN_LIVING_WORLD.md)
+
+Phase 1 (branch `living-floors`) built the deterministic floors of A
+(`routines.py`), B (`living_world.mint_consequences` +
+`mechanics._fire_due_events`) and D (`place_obligations` +
+`attach_owed_history`), plus the settings ladder for all five approaches
+(`LIVING_WORLD_BUILT` is the declared/built authority). Held for phase 2,
+which starts when the epistemic-leak audit branch merges:
+
+- **C, the rumor ledger floor** — deliberately NOT the document's §3
+  delay-line as written: the author's constraints (design doc §9, verbatim)
+  require **carriers with positions and routes** the player can intercept,
+  the anti-protagonist priority rule (propagation interest computed from the
+  event, reputation downstream of delivery, the null result as the
+  load-bearing test), and invented gossip entering through
+  `background_claims` + the provisional tier as its first real producer
+  (the lane measured 0-of-29).
+- **E, the antagonist ladder** — rungs 1 and 3 per §5; waits on C because a
+  race lost without an information trail reads as the engine cheating.
+- **The ceilings of A, B, D** — ensemble tick, consequence chaining
+  (needs a significance flag *computed from event properties*, never the
+  subject — §9.3), obligation-aware pre-generation. All documented as
+  extension points only; `LIVING_WORLD_BUILT` marks them unbuilt and
+  `effective_depth` runs a requested ceiling as the floor.
+- **Obligation retirement at honour time** — `attach_owed_history` still
+  annotates a place's lore hits after the place has been generated (accrual
+  stops structurally; attachment does not), and nothing yet marks a debt
+  honoured. Harmless while obligations are rare; close it before C makes
+  places chatty.
+
 ---
 
 ## 7. Experiments not yet run

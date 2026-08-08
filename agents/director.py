@@ -3325,6 +3325,28 @@ def director_resolve(ctx, nonce):
     _mv_for_context = interp.get("movement")
     _mv_target = _mv_for_context.get("to_room") if isinstance(_mv_for_context, dict) else None
 
+    # Living world, approach A: when this beat moves the party into a room
+    # they have been away from, hand the resolve the capped present-tense
+    # diff (routines.residue_for) so the room is staged as it now stands
+    # rather than as last seen. Movement-gated -- a quiet beat gets no
+    # residue to be tempted by -- and deterministic, so a reroll stages the
+    # same room the same way. Delivered to THIS payload only: no character
+    # receives it; what a mind knows about a room rides its own gap record.
+    _destination_residue = None
+    if _mv_target:
+        try:
+            from living_world import living_world_allows, living_world_config
+            if living_world_allows(living_world_config(chat["id"]),
+                                   "routine_residue", "floor"):
+                from routines import residue_for
+                _destination_residue = residue_for(
+                    chat["id"], sc, _mv_target,
+                    frame_id=ctx.turn.frame_id,
+                    now_seconds=float(
+                        (clock or {}).get("elapsed_seconds") or 0.0))
+        except Exception as exc:
+            ctx.add_warning(f"destination residue skipped: {exc}")
+
     # W5's light authority appraisal hint: each present person's evident
     # public role/standing (never private history), for the prompt's
     # AUTHORITY APPRAISAL rule -- an order across a standing gap is
@@ -3422,6 +3444,12 @@ def director_resolve(ctx, nonce):
         # See director_interpret: already-completed mechanical transitions
         # (timed arrivals) the prose should acknowledge, not re-resolve.
         "engine_notices": wget(chat["id"], "engine_notices", []),
+        # Living world, approach A: the entered room's capped present-tense
+        # diff, staged as current state (see the DESTINATION RESIDUE prompt
+        # rule). Absent on beats without an eligible re-entry, so the
+        # default path is byte-identical to a world without the feature.
+        **({"destination_residue": _destination_residue}
+           if _destination_residue else {}),
         # Hearsay a background presence asserted on an earlier beat, still
         # unratified. You are the only ratifier -- adopt, contradict, or ignore
         # (background_claims.py).

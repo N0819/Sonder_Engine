@@ -3161,6 +3161,34 @@ def dlg_put(cid: int, body: dict = Body(...)):
     wset(cid, "dialogue_config", config)
     return config
 
+@app.get("/api/chats/{cid}/living_world")
+def living_world_get(cid: int):
+    """The living-world ladder: five approaches, each off / floor / ceiling.
+
+    The approaches ride with the config (the ``offscreen_life_levels``
+    convention) so the UI renders what is on, what it costs, and what is
+    merely declared from the engine's own tables -- an unbuilt tier is
+    marked by the engine, not by a menu that drifts.
+    """
+    from living_world import living_world_config, living_world_levels
+
+    config = living_world_config(cid)
+    return {"living_world": config,
+            "approaches": living_world_levels(config)}
+
+
+@app.put("/api/chats/{cid}/living_world")
+def living_world_put(cid: int, body: dict = Body(...)):
+    """Set the ladder. Normalized rather than rejected, and the normalized
+    config is returned so what actually stuck is visible immediately --
+    here the default IS off, so this is the surface where a typo shows."""
+    from living_world import LIVING_WORLD_KEY, normalize_living_world
+
+    config = normalize_living_world(body.get("living_world", body))
+    wset(cid, LIVING_WORLD_KEY, config)
+    return {"ok": True, "living_world": config}
+
+
 @app.get("/api/chats/{cid}/background_config")
 def bg_cfg_get(cid: int):
     return background_config(cid)

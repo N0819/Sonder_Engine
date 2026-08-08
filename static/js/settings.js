@@ -155,6 +155,8 @@ $("#b-dlg").onclick = async () => {
   if (S.chatId !== chatId) return;
   const bg = await api("GET", `/api/chats/${chatId}/background_config`);
   if (S.chatId !== chatId) return;
+  const lw = await api("GET", `/api/chats/${chatId}/living_world`);
+  if (S.chatId !== chatId) return;
   const st = el("select", {}, ["terse", "natural", "chatty"].map(s => el("option", { value: s, ...(s === c.style ? { selected: "" } : {}) }, s)));
   const mn = el("input", { type: "number", value: c.min_lines, min: "0" });
   const mx = el("input", { type: "number", value: c.max_lines, min: "0" });
@@ -200,6 +202,20 @@ $("#b-dlg").onclick = async () => {
   // menu spells out what each one means rather than relying on the word.
   const maxOffscreen = el("input", { type: "number", min: "0", max: "12",
                                      value: c.max_offscreen_actors ?? 3 });
+  // Living world (docs/DESIGN_LIVING_WORLD.md). The approaches come from the
+  // server, like the off-screen rungs above, so the menu cannot drift from
+  // the ladder the engine actually implements — and an unbuilt depth is
+  // marked by the engine, never by this file remembering to say so.
+  const lwSelects = {};
+  const lwRows = (lw.approaches || []).map(a => {
+    const sel = el("select", {},
+      [el("option", { value: "off", ...(a.value === "off" ? { selected: "" } : {}) }, "off")]
+        .concat((a.depths || []).map(d => el("option",
+          { value: d.value, ...(d.value === a.value ? { selected: "" } : {}) },
+          d.built ? d.value : `${d.value} — not built yet`))));
+    lwSelects[a.approach] = sel;
+    return el("tr", {}, el("td", {}, a.label), el("td", {}, sel));
+  });
 
   modal("Dialogue config", b => b.append(
     el("div", { class: "small dim", style: "margin-bottom:10px" },
@@ -263,6 +279,23 @@ $("#b-dlg").onclick = async () => {
           " know — never on where you are or what you just did. Someone who has "
           + "not been told cannot react to it."))),
     el("div", { class: "card", style: "margin-top:10px" },
+      el("div", { class: "section-title", style: "margin-top:0" }, "Living world"),
+      el("div", { class: "small dim" },
+        "How much the WORLD does on its own — rooms drifting while unwatched, "
+        + "consequences landing on the clock, unvisited places accruing history. "
+        + "Everything here is encountered, never reported: an off-screen event "
+        + "reaches you as changed state when you arrive, or not at all. All off "
+        + "by default; turning one on changes nothing already written."),
+      el("table", { class: "grid", style: "margin-top:6px" }, lwRows),
+      el("div", { class: "small dim", style: "margin-top:6px" },
+        (lw.approaches || []).map(a => el("div", { style: "margin-top:4px" },
+          el("div", {}, el("b", {}, a.label), " — ",
+            ((a.depths || [])[0] || {}).description || "",
+            (a.value !== "off" && a.value !== a.effective)
+              ? ` Set ${a.value}; runs as ${a.effective} until that tier is built.`
+              : ""),
+          el("div", {}, "Cost — ", a.cost))))),
+    el("div", { class: "card", style: "margin-top:10px" },
       el("div", { class: "section-title", style: "margin-top:0" }, "Background life"),
       el("div", { class: "small dim" },
         "Extras with no character sheet — patrons, crew, bystanders. Normally they "
@@ -319,6 +352,10 @@ $("#b-dlg").onclick = async () => {
         await api("PUT", `/api/chats/${chatId}/background_config`, {
           scene_life: sceneLife.value, max_managed: +maxManaged.value,
           max_reactors: +maxReactors.value
+        });
+        await api("PUT", `/api/chats/${chatId}/living_world`, {
+          living_world: Object.fromEntries(
+            Object.entries(lwSelects).map(([k, s]) => [k, s.value]))
         });
         closeModal(); toast("Dialogue config saved.", "ok");
       } }, "Save"))));
