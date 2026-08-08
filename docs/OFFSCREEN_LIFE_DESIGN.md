@@ -1,15 +1,21 @@
 # Off-screen life, reactivation, and villain ticks — design
 
-> Status: **design / step 2 built, alpha 6.9** — `BehaviorController`'s
-> ladder is now consumed, as the chat-level `offscreen_life` ceiling on
-> `dialogue_config` (`scene.OFFSCREEN_LIFE_LADDER`), settable in the NPC
-> dialogue panel and gated in `commit.prepare_mapping_commit` and
-> `commit.commit_mapping`. Nothing ticks a plan yet; `reactive` and
-> `character_agent` are permission the later steps land behind. Two things
-> wiring it turned up: the engine was ALREADY emitting ungated off-screen
-> ticks on every scene change, and the shipped `stochastic` rung costs a model
-> call where step 3 below specifies none. Both recorded in
-> [`UNBUILT.md`](UNBUILT.md) §2.8. Steps 1 and 3-6 remain unbuilt. Registered as
+> Status: **steps 1-3 built** (step 2 in alpha 6.9, steps 1 and 3 in the
+> bg-life work, 2026-08). The gap generator is `gaps.gap_for` + the
+> `subject_last_seen` ledger, read at re-contact by `agents/character.py` as
+> `while_you_were_offscreen`. `BehaviorController`'s ladder is the chat-level
+> `offscreen_life` ceiling on `dialogue_config`
+> (`scene.OFFSCREEN_LIFE_LADDER`), settable in the NPC dialogue panel. The
+> `stochastic` rung is now the one this document specified: a seeded draw
+> against standing intentions with NO model call
+> (`offscreen.stochastic_ticks`), replacing a shipped rung that rode the
+> mapping_commit model call and whose tick seed no RNG ever consumed. On top,
+> `docs/PROPOSAL_2026-08-06.md` §1.0 superseded the per-character tier with
+> per-tick resolution = importance × distance (`offscreen.resolution_for`),
+> and the medium (profile-summary) rung runs out of band on a cadence
+> (`offscreen.schedule_profile_ticks` → `jobs.submit`), writing provisional
+> records only. Steps 4-6 remain unbuilt; `reactive` and `character_agent`
+> are permission those steps land behind. Registered as
 > [`UNBUILT.md`](UNBUILT.md) §2.7 and §2.8, which those roadmap numbers now
 > point at; this document keeps the argument. Treated here as **one mechanism at
 > three cadences** rather than two features.
