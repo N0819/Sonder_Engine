@@ -35,7 +35,7 @@ THE RUNGS, and what each costs after this module:
                                  replayable, and priced so that low
                                  resolution was affordable for six
                                  characters rather than free for the cast.
-  * profile summary           -- one bounded call, out of band, only for
+  * profile state tick        -- one bounded call, out of band, only for
                                  subjects the resolution function scores
                                  ``medium``. No psychology run, no
                                  adjudication, and STRUCTURALLY unable to
@@ -44,7 +44,11 @@ THE RUNGS, and what each costs after this module:
                                  it writes is the provisional tier's, which
                                  ``canon_provenance.validate_provisional``
                                  refuses to let carry deltas, standing
-                                 intentions or ratified claims.
+                                 intentions or ratified claims. Emits
+                                 STATE FIELDS ({doing, at, manner}), never
+                                 a summary sentence -- offscreen events are
+                                 never narrated, and the earlier prose
+                                 shape violated exactly that rule.
   * full agent                -- NOT BUILT. Director-adjudicated; the only
                                  rung that may ever change the world.
 
@@ -400,8 +404,41 @@ def _adjudicated_event_ids(cid):
 
 
 # ---------------------------------------------------------------------------
-# Step 3a: the profile-summary rung. One call, no psychology, no consequence.
+# Step 3a: the profile rung. One call, no psychology, no consequence -- and
+# STATE, never prose. The call is legitimate (out of band, bounded); its old
+# output shape was not: it produced a 1-2 sentence summary, and an offscreen
+# event has no player-legitimate prose surface (DESIGN_LIVING_WORLD.md
+# section 0.2 -- ticks produce state; prose is authored at contact by the
+# machinery already being paid for). The model now fills three bounded
+# attribute fields; anything longer than a phrase is refused on the write
+# path, because a field that can hold a sentence will be handed one.
 # ---------------------------------------------------------------------------
+
+#: Bounds on the state fields. Word counts, not characters, because the
+#: failure mode is narration smuggled into an attribute -- "she spends the
+#: evening arguing with the quartermaster about the missing shipment" is 11
+#: words of story wearing a field name.
+DOING_MAX_WORDS = 8
+MANNER_MAX_WORDS = 6
+
+
+def compose_tick(who, state):
+    """The deterministic legacy rendering of a state tick: composition by
+    CODE, so the stored string asserts exactly the fields and nothing more.
+    Prose for the player is minted at contact by the character's own mouth;
+    this is the log/payload spelling the existing readers (gaps._skeleton)
+    already consume."""
+    state = state or {}
+    doing = str(state.get("doing") or "").strip()
+    manner = str(state.get("manner") or "").strip()
+    at = str(state.get("at") or "").strip()
+    parts = f"{who} — {doing}" if doing else f"{who} — about their own business"
+    if manner:
+        parts += f", {manner}"
+    if at:
+        parts += f" (at {at})"
+    return parts
+
 
 def _profile_surface(sheet):
     """The observable surface a profile tick may condition on.
@@ -436,10 +473,14 @@ def profile_summary_record(cid, scene, subject, sheet, since_turn, until_turn,
                            frame_id=None):
     """One bounded call over the subject's profile and deterministic trail.
 
-    Returns a PROVISIONAL record (validated by the caller's write path). On
-    any failure -- provider, shape, a room outside the world -- falls back
-    to the deterministic gap record after one retry: a deterministic "she
-    was elsewhere" is worth more than a plausible lie (section 1.0.3).
+    Returns a PROVISIONAL record (validated by the caller's write path)
+    whose model half is STATE -- ``state: {doing, at, manner}``, three
+    bounded attribute fields -- never a summary sentence: offscreen events
+    are never narrated, and a stored sentence is narration waiting for a
+    payload. On any failure -- provider, shape, a room outside the world, a
+    field that runs past its word bound -- falls back to the deterministic
+    gap record after one retry: a deterministic "she was elsewhere" is
+    worth more than a plausible lie (section 1.0.3).
     """
     from gaps import gap_for
     from providers import chat_complete
@@ -468,16 +509,18 @@ def profile_summary_record(cid, scene, subject, sheet, since_turn, until_turn,
     known_rooms.discard("")
 
     sys = (
-        "You write ONE plausible account of what a character has been doing "
-        "off screen, from their public profile and a deterministic trail. "
-        "Routine and manner only -- what they would do, as they would do it. "
-        "Do NOT invent outcomes, alliances, acquisitions, injuries, "
-        "arrivals, discoveries, or any change to the world: describe "
-        "activity, never consequence. The character does not know where any "
-        "other person is or what anyone else has done. Any room you mention "
-        "MUST be an id from rooms_available; mention no room otherwise. "
-        'Output STRICT JSON {"summary": "<1-2 sentences>", '
-        '"rooms": ["<ids used, possibly empty>"]}'
+        "You fill in what one character is plausibly occupied with off "
+        "screen, from their public profile and a deterministic trail, as "
+        "STATE FIELDS -- attributes, not narration. No sentences, no story: "
+        "an activity a person could be found mid-way through, as they would "
+        "do it. Do NOT invent outcomes, alliances, acquisitions, injuries, "
+        "arrivals, discoveries, or any change to the world: an occupation, "
+        "never a consequence. The character does not know where any other "
+        "person is or what anyone else has done. `at` MUST be an id from "
+        "rooms_available, or empty. Output STRICT JSON "
+        f'{{"doing": "<what they are occupied with, {DOING_MAX_WORDS} words '
+        'max, present participle>", "at": "<one room id or empty>", '
+        f'"manner": "<how, {MANNER_MAX_WORDS} words max, may be empty>"}}'
     )
     user = json.dumps({
         "profile": _profile_surface(sheet),
@@ -499,17 +542,27 @@ def profile_summary_record(cid, scene, subject, sheet, since_turn, until_turn,
         if not isinstance(out, dict):
             last_error = "output was not an object"
             continue
-        summary = str(out.get("summary") or "").strip()
-        rooms = out.get("rooms") if isinstance(out.get("rooms"), list) else []
-        bad = [r for r in rooms if str(r) not in known_rooms]
-        if not summary:
-            last_error = "empty summary"
+        doing = " ".join(str(out.get("doing") or "").split()).rstrip(".")
+        manner = " ".join(str(out.get("manner") or "").split()).rstrip(".")
+        at = str(out.get("at") or "").strip()
+        if not doing:
+            last_error = "state.doing missing or empty"
             continue
-        if bad:
-            last_error = f"named rooms outside the world: {bad[:3]!r}"
+        if len(doing.split()) > DOING_MAX_WORDS:
+            # The write-path bound that keeps this rung state-shaped: a
+            # field long enough to hold a sentence has been handed one.
+            last_error = (f"state.doing runs past {DOING_MAX_WORDS} words: "
+                          "narration is not state")
+            continue
+        if len(manner.split()) > MANNER_MAX_WORDS:
+            last_error = (f"state.manner runs past {MANNER_MAX_WORDS} "
+                          "words: narration is not state")
+            continue
+        if at and at not in known_rooms:
+            last_error = f"state.at {at!r} is outside the world"
             continue
         record["basis"] = "model"
-        record["summary"] = summary[:600]
+        record["state"] = {"doing": doing, "at": at, "manner": manner}
         return record
     record["inputs"] = {"fell_back_from": f"profile: {last_error}"}
     logger.info("profile tick fell back: chat=%s subject=%s: %s",
@@ -696,12 +749,17 @@ def schedule_profile_ticks(ctx):
             record = profile_summary_record(
                 cid, scene, subject, cand.get("sheet"),
                 since_by_subject[cand["id"]], turn_idx, frame_id=frame_id)
-            summary = record.get("summary") or ""
-            if record.get("basis") == "unavailable" or not summary:
+            state = record.get("state") or {}
+            if record.get("basis") == "unavailable" or not state.get("doing"):
                 continue
+            # The legacy `tick` alias is composed by CODE from the state
+            # fields -- deterministic, so the stored string asserts exactly
+            # what the fields assert. Prose reaches the player only at
+            # contact, through the character's own mouth.
             events.append({**record, "actor": cand["id"],
                            "actor_display": cand.get("display", ""),
-                           "tick": summary})
+                           "tick": compose_tick(
+                               cand.get("display") or cand["id"], state)})
         return land_profile_ticks(cid, turn_idx, events)
 
     return jobs.submit(cid, f"offscreen_profile:{turn_idx}", _produce,
