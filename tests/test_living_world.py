@@ -466,3 +466,135 @@ class TestTheRoute:
         assert out["living_world"]["rumor_ledger"] == "off"
         again = client.get(f"/api/chats/{chat_id}/living_world").json()
         assert again["living_world"]["routine_residue"] == "floor"
+
+
+class TestOneAuthorityCeiling:
+    """scene.py's off-screen ladder and this module's mechanisms were two
+    dropdowns on one question, composed nowhere: a user could set approach
+    E to ceiling under a ladder at `deterministic` and nothing said which
+    governed — and B's built floor minted fuses that genuinely fired while
+    the ladder said `inert`, "nothing happens off screen". The ladder is
+    now the single authority ceiling (``LIVING_WORLD_REQUIRES``), composed
+    at read time; these tests pin the rule, the fold, the purity of the
+    stored config, and the merged settings surface."""
+
+    def test_the_ceiling_caps_what_a_mechanism_may_run(self):
+        """What broke: ``living_world_allows`` answered from its own axis
+        only, so a story at `inert` still minted scheduled consequences —
+        off-screen work with real authority under a setting that promised
+        none. The effective depth must honour the ceiling, falling the
+        same visible way an unbuilt tier falls, never silently running."""
+        cfg = {"scheduled_consequence": "floor", "offscreen_life": "inert"}
+        assert effective_depth(cfg, "scheduled_consequence") == "off"
+        assert not living_world_allows(cfg, "scheduled_consequence", "floor")
+        cfg["offscreen_life"] = "deterministic"
+        assert effective_depth(cfg, "scheduled_consequence") == "floor"
+        assert living_world_allows(cfg, "scheduled_consequence", "floor")
+
+    def test_a_config_without_a_ceiling_reads_as_the_ladder_default(self):
+        """No running story may change behaviour on merge: every stored
+        ceiling in the live database was absent or `stochastic` (the
+        ladder default), and one live chat plays with the A, B and D
+        floors on at that default — so an absent ceiling must read as the
+        default, under which every built floor and every
+        unbuilt-ceiling-as-floor runs exactly as before composition
+        existed. And every depth of every approach must name a real rung,
+        or a mechanism would be ungoverned the moment it is built."""
+        import scene
+        from living_world import LIVING_WORLD_REQUIRES
+
+        for approach in ("routine_residue", "scheduled_consequence",
+                         "place_obligations"):
+            assert effective_depth({approach: "floor"}, approach) == "floor"
+            assert effective_depth({approach: "ceiling"}, approach) == "floor"
+        assert set(LIVING_WORLD_REQUIRES) == set(LIVING_WORLD_APPROACHES)
+        for approach, depths in LIVING_WORLD_REQUIRES.items():
+            assert set(depths) == {"floor", "ceiling"}
+            for rung in depths.values():
+                assert rung in scene.OFFSCREEN_LIFE_LADDER
+
+    def test_e_is_the_character_agent_rung_by_name(self):
+        """The design doc names E's rungs `reactive` and `character_agent`
+        outright — E is that rung wearing the mechanism vocabulary. Gating
+        it lower would let a plan advance under a ladder that never
+        granted plans; and the DEFAULT ladder level must not include it,
+        so E landing built stays opt-in twice: the mechanism switched on,
+        the ceiling deliberately raised."""
+        from scene import OFFSCREEN_LIFE_DEFAULT, offscreen_life_allows
+        from living_world import LIVING_WORLD_REQUIRES
+
+        assert LIVING_WORLD_REQUIRES["antagonist_ladder"] == {
+            "floor": "character_agent", "ceiling": "character_agent"}
+        assert not offscreen_life_allows(OFFSCREEN_LIFE_DEFAULT,
+                                         "character_agent")
+
+    def test_the_ceiling_folds_in_on_the_way_in(self, temp_db):
+        """A composition helper every gate must remember to call would be
+        forgotten (the canonical_url rule): the config the gates already
+        fetch must carry the chat's own ceiling, so commit's mint gate and
+        the Director's residue gate compose both axes without changing."""
+        from living_world import living_world_config
+
+        cid = _make_chat(temp_db)
+        temp_db.wset(cid, "living_world", {"scheduled_consequence": "floor"})
+        temp_db.wset(cid, "dialogue_config", {"offscreen_life": "inert"})
+        cfg = living_world_config(cid)
+        assert cfg["offscreen_life"] == "inert"
+        assert not living_world_allows(cfg, "scheduled_consequence", "floor")
+        temp_db.wset(cid, "dialogue_config",
+                     {"offscreen_life": "stochastic"})
+        assert living_world_allows(living_world_config(cid),
+                                   "scheduled_consequence", "floor")
+
+    def test_the_stored_config_never_gains_the_ceiling(self, temp_db):
+        """Two durable spellings of one ceiling is the five-defect
+        identity failure waiting: a stale copy under the living_world key
+        would shadow the live dialogue_config. The write path must strip
+        it however it arrives."""
+        import app
+        from living_world import OFFSCREEN_CEILING_KEY
+
+        cid = _make_chat(temp_db)
+        app.living_world_put(cid, {"living_world": {
+            "scheduled_consequence": "floor",
+            OFFSCREEN_CEILING_KEY: "inert"}})
+        stored = temp_db.wget(cid, "living_world", {})
+        assert OFFSCREEN_CEILING_KEY not in stored
+        assert stored["scheduled_consequence"] == "floor"
+
+    def test_levels_name_the_clamp_they_will_apply(self):
+        """A mechanism set above the ceiling must display as clamped, not
+        silently ignored: the payload carries each depth's required rung
+        and whether the current ceiling permits it, so the menu renders
+        the engine's clamp rather than a copy that drifts."""
+        levels = living_world_levels({"scheduled_consequence": "ceiling",
+                                      "offscreen_life": "deterministic"})
+        row = {r["approach"]: r for r in levels}["scheduled_consequence"]
+        assert row["effective"] == "floor"
+        depths = {d["value"]: d for d in row["depths"]}
+        assert depths["floor"]["requires"] == "deterministic"
+        assert depths["floor"]["permitted"] is True
+        assert depths["ceiling"]["requires"] == "stochastic"
+        assert depths["ceiling"]["permitted"] is False
+        levels = living_world_levels({"scheduled_consequence": "floor",
+                                      "offscreen_life": "inert"})
+        row = {r["approach"]: r for r in levels}["scheduled_consequence"]
+        assert row["effective"] == "off"
+        assert all(not d["permitted"] for d in row["depths"])
+
+    def test_the_ui_is_one_card_with_the_ceiling_first(self):
+        """Two cards carried the two axes with the composition left to the
+        reader. One card now shows the ceiling once, first, and each
+        mechanism's clamp live (the ``requires`` rung mirrored
+        client-side), so a depth past the ceiling reads as capped the
+        moment either dropdown moves."""
+        from pathlib import Path
+
+        js = (Path(__file__).resolve().parents[1]
+              / "static/js/settings.js").read_text(encoding="utf-8")
+        assert '"World simulation"' in js
+        assert '"Living world"' not in js  # the second card is gone
+        block = js[js.index('"World simulation"'):
+                   js.index('"Background life"')]
+        assert block.index("offLife") < block.index("lwRows")
+        assert "d.requires" in js and "refreshLw" in js

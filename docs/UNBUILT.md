@@ -2918,7 +2918,11 @@ which starts when the epistemic-leak audit branch merges:
   (needs a significance flag *computed from event properties*, never the
   subject — §9.3), obligation-aware pre-generation. All documented as
   extension points only; `LIVING_WORLD_BUILT` marks them unbuilt and
-  `effective_depth` runs a requested ceiling as the floor.
+  `effective_depth` runs a requested ceiling as the floor. When one lands,
+  it lands behind the rung `LIVING_WORLD_REQUIRES` already declares
+  (`stochastic` for the A-D ceilings, `character_agent` for both depths of
+  E): the off-screen ladder is the one authority ceiling, and a mechanism
+  must never acquire authority the ladder did not grant.
 - **Obligation retirement at honour time** — `attach_owed_history` still
   annotates a place's lore hits after the place has been generated (accrual
   stops structurally; attachment does not), and nothing yet marks a debt

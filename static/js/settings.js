@@ -202,20 +202,41 @@ $("#b-dlg").onclick = async () => {
   // menu spells out what each one means rather than relying on the word.
   const maxOffscreen = el("input", { type: "number", min: "0", max: "12",
                                      value: c.max_offscreen_actors ?? 3 });
-  // Living world (docs/DESIGN_LIVING_WORLD.md). The approaches come from the
-  // server, like the off-screen rungs above, so the menu cannot drift from
-  // the ladder the engine actually implements — and an unbuilt depth is
-  // marked by the engine, never by this file remembering to say so.
-  const lwSelects = {};
+  // Living world mechanisms (docs/DESIGN_LIVING_WORLD.md), same convention —
+  // and the clamp shown is the engine's own: each depth's `requires` rung
+  // arrives computed, and refreshLw mirrors living_world.effective_depth
+  // (the highest depth at or below the request that is built AND within
+  // the ceiling), so moving either dropdown updates what every mechanism
+  // will actually run as. One ceiling, many mechanisms; a mechanism above
+  // the ceiling is clamped visibly, never silently run or ignored.
+  const ladder = (c.offscreen_life_levels || []).map(l => l.value);
+  const permits = d => ladder.indexOf(offLife.value) >= ladder.indexOf(d.requires);
+  const lwSelects = {}, lwStatus = {};
+  const refreshLw = () => (lw.approaches || []).forEach(a => {
+    const value = lwSelects[a.approach].value;
+    let eff = "off", d = null;
+    for (const x of a.depths || []) {
+      if (x.built && permits(x)) eff = x.value;
+      if (x.value === value) { d = x; break; }
+    }
+    lwStatus[a.approach].textContent = !d || eff === value ? "" :
+      `runs as ${eff} — ` + [d.built ? "" : "that tier is unbuilt",
+        permits(d) ? "" : `off-screen life at ${offLife.value} caps it (needs ${d.requires})`]
+        .filter(Boolean).join("; ");
+  });
+  offLife.onchange = refreshLw;
   const lwRows = (lw.approaches || []).map(a => {
-    const sel = el("select", {},
+    const sel = el("select", { onchange: refreshLw },
       [el("option", { value: "off", ...(a.value === "off" ? { selected: "" } : {}) }, "off")]
         .concat((a.depths || []).map(d => el("option",
           { value: d.value, ...(d.value === a.value ? { selected: "" } : {}) },
           d.built ? d.value : `${d.value} — not built yet`))));
+    const status = el("div", { class: "small dim" });
     lwSelects[a.approach] = sel;
-    return el("tr", {}, el("td", {}, a.label), el("td", {}, sel));
+    lwStatus[a.approach] = status;
+    return el("tr", {}, el("td", {}, a.label), el("td", {}, sel, status));
   });
+  refreshLw();
 
   modal("Dialogue config", b => b.append(
     el("div", { class: "small dim", style: "margin-bottom:10px" },
@@ -242,10 +263,13 @@ $("#b-dlg").onclick = async () => {
         el("div", {}, "Stop on question to player — same pause, triggered specifically by an NPC asking you something."),
         el("div", {}, "Silence ends exchange — if nobody has anything to say or do, the scene stops rather than manufacturing more dialogue to fill the turn."))),
     el("div", { class: "card", style: "margin-top:10px" },
-      el("div", { class: "section-title", style: "margin-top:0" }, "Off-screen life"),
+      el("div", { class: "section-title", style: "margin-top:0" }, "World simulation"),
       el("div", { class: "small dim" },
-        "What the cast is allowed to do while you are not watching. This is a "
-        + "ceiling, not an instruction: nothing is obliged to act at any level, "
+        "What the world and cast may do while you are not watching. One "
+        + "ceiling, many mechanisms: ", el("b", {}, "Off-screen life"),
+        " says how much authority any off-screen work may have, and every "
+        + "mechanism beneath runs only up to it. A ceiling, not an instruction: "
+        + "nothing is obliged to act at any level, "
         + "and a quiet turn still costs nothing. Each level adds to the one above it."),
       el("table", { class: "grid", style: "margin-top:6px" },
         el("tr", {}, el("td", {}, "off-screen life"), el("td", {}, offLife)),
@@ -277,23 +301,21 @@ $("#b-dlg").onclick = async () => {
           "Whatever the level, an off-screen character acts on what ",
           el("i", {}, "they"),
           " know — never on where you are or what you just did. Someone who has "
-          + "not been told cannot react to it."))),
-    el("div", { class: "card", style: "margin-top:10px" },
-      el("div", { class: "section-title", style: "margin-top:0" }, "Living world"),
+          + "not been told cannot react to it.")),
+      el("div", { class: "section-title" }, "World mechanisms"),
       el("div", { class: "small dim" },
         "How much the WORLD does on its own — rooms drifting while unwatched, "
         + "consequences landing on the clock, unvisited places accruing history. "
-        + "Everything here is encountered, never reported: an off-screen event "
-        + "reaches you as changed state when you arrive, or not at all. All off "
-        + "by default; turning one on changes nothing already written."),
+        + "Each runs only up to the ceiling above; one set past it says what it "
+        + "actually runs as. Everything here is encountered, never reported: an "
+        + "off-screen event reaches you as changed state when you arrive, or not "
+        + "at all. All off by default; turning one on changes nothing already "
+        + "written."),
       el("table", { class: "grid", style: "margin-top:6px" }, lwRows),
       el("div", { class: "small dim", style: "margin-top:6px" },
         (lw.approaches || []).map(a => el("div", { style: "margin-top:4px" },
           el("div", {}, el("b", {}, a.label), " — ",
-            ((a.depths || [])[0] || {}).description || "",
-            (a.value !== "off" && a.value !== a.effective)
-              ? ` Set ${a.value}; runs as ${a.effective} until that tier is built.`
-              : ""),
+            ((a.depths || [])[0] || {}).description || ""),
           el("div", {}, "Cost — ", a.cost))))),
     el("div", { class: "card", style: "margin-top:10px" },
       el("div", { class: "section-title", style: "margin-top:0" }, "Background life"),

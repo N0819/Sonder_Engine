@@ -3169,12 +3169,19 @@ def living_world_get(cid: int):
     The approaches ride with the config (the ``offscreen_life_levels``
     convention) so the UI renders what is on, what it costs, and what is
     merely declared from the engine's own tables -- an unbuilt tier is
-    marked by the engine, not by a menu that drifts.
+    marked by the engine, not by a menu that drifts. ``approaches`` is
+    computed against the chat's off-screen authority ceiling (folded in at
+    read time by ``living_world_config``; never stored), so ``effective``
+    and each depth's ``requires``/``permitted`` state the clamp the engine
+    will actually apply; the reported ``living_world`` stays the stored
+    mechanisms alone — the ceiling's one durable spelling is
+    ``dialogue_config``'s.
     """
-    from living_world import living_world_config, living_world_levels
+    from living_world import (living_world_config, living_world_levels,
+                              normalize_living_world)
 
     config = living_world_config(cid)
-    return {"living_world": config,
+    return {"living_world": normalize_living_world(config),
             "approaches": living_world_levels(config)}
 
 
