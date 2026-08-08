@@ -181,3 +181,44 @@ def test_private_history_discards_switched_reads_and_saves_to_bound_chat():
         assert block.count("S.chatId !== chatId") >= 2
         assert "/api/chats/${chatId}" in block
         assert "/api/chats/${S.chatId}" not in block
+
+
+BACKDROPS = (ROOT / "static/js/backdrops.js").read_text(encoding="utf-8")
+AMBIENCE = (ROOT / "static/js/ambience.js").read_text(encoding="utf-8")
+
+
+def test_freshness_is_a_property_of_the_turn_not_a_one_shot_flag():
+    """A boolean here was spent by the observer pass that READ it, while the
+    work it authorised -- commissioning a picture at once rather than after a
+    two-second dwell -- was deferred by BD_SETTLE_MS. renderChat guarantees a
+    second pass inside that window (it re-asserts its scroll in a rAF, because
+    content-visibility makes the first scrollHeight an estimate), which then
+    reported a brand-new turn as one being scrolled past.
+    """
+    block = _between(CHAT, "function observeVisibleTurn(", "async function openChat(id)")
+
+    assert "let _freshTurnPending" not in CHAT       # the one-shot is gone
+    assert "let _freshTurnId = null;" in CHAT
+    # Named where the id first exists, which is not the run's own finally.
+    assert "if (_freshRunPending) {" in block
+    assert "_freshTurnId = newestTurnId;" in block
+    # Released by the reader settling elsewhere, never by the act of reading it.
+    assert "if (bestTurnId !== _freshTurnId) _freshTurnId = null;" in block
+    assert "if (fresh) _freshTurnId = null;" not in block
+
+
+def test_a_repeat_pass_over_one_turn_does_not_restart_the_commission_clocks():
+    """Both scene layers restarted a two-second dwell on every notification,
+    and several per render are not the reader moving: the rAF re-scroll, and
+    the reflow clearBackdrop() causes by stripping padding, border and
+    max-width off every .prose. Only a room with no picture yet could be lost
+    to it -- a drawn room is served by the quick pass and never dwells.
+    """
+    for source, state, fn in ((BACKDROPS, "BD", "function backdropOnVisibleTurn("),
+                              (AMBIENCE, "AMB", "function ambienceOnVisibleTurn(")):
+        block = source[source.index(fn):source.index("\n}", source.index(fn))]
+        assert "if (turnId === %s.pendingTurn) return;" % state in block
+        assert "%s.pendingTurn = turnId;" % state in block
+        # And a re-render, which cancels the clocks, must let the same turn arm
+        # them again rather than reading as a repeat.
+        assert "%s.pendingTurn = null;" % state in source

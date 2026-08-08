@@ -18,12 +18,12 @@
 | `agents/perception.py` | 3470 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 1009 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 115 | Step and active-variant persistence helpers. | `db` |
-| `ambience.py` | 2043 |  | `backdrops`, `db`, `weather` |
+| `ambience.py` | 2054 |  | `backdrops`, `db`, `outofband`, `weather` |
 | `app.py` | 4636 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `ambience`, `attire`, `auth_routes`, `backdrops`, `character_schema`, `chat_archive`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `survival`, `updates` |
 | `attire.py` | 1195 |  | — |
 | `auth_routes.py` | 143 | Typed host-authentication HTTP routes and cookie transport. | `guest_access` |
 | `authored_events.py` | 124 |  | `db` |
-| `backdrops.py` | 1174 |  | `db`, `logging_utils`, `spatial`, `weather` |
+| `backdrops.py` | 1197 |  | `db`, `logging_utils`, `outofband`, `spatial`, `weather` |
 | `background_claims.py` | 466 |  | `db` |
 | `character_schema.py` | 1344 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `attire`, `schemas` |
 | `chat_archive.py` | 1089 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
@@ -39,6 +39,7 @@
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `mechanics.py` | 274 |  | `spatial`, `spatial_frames` |
 | `memory.py` | 5036 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
+| `outofband.py` | 276 |  | `logging_utils` |
 | `paradox.py` | 489 |  | `character_schema`, `db`, `frames` |
 | `pipeline_context.py` | 248 | Typed mutable context passed through a turn pipeline. | `db` |
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
@@ -201,7 +202,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `resolve_ambience()` | 1670 | 203 lines |
+| `resolve_ambience()` | 1671 | 221 lines |
 | `_rank_candidates()` | 1083 | 105 lines |
 | `refine_layers()` | 756 | 82 lines |
 | `cached_ambience()` | 479 | 62 lines |
@@ -259,14 +260,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `generate_backdrop()` | 1006 | 87 lines |
+| `generate_backdrop()` | 1009 | 109 lines |
 | `room_projection()` | 496 | 73 lines |
 | `visual_signature()` | 107 | 46 lines |
-| `request_backdrop()` | 1136 | 39 lines |
 | `build_backdrop_request()` | 670 | 37 lines |
 | `scene_after_turn()` | 633 | 35 lines |
 | `branch_lineage()` | 186 | 34 lines |
 | `compose_prompt()` | 778 | 34 lines |
+| `compose_revision()` | 840 | 33 lines |
 
 ### `background_claims.py`
 
@@ -442,6 +443,12 @@
 | `_origin_on_drift()` | 2528 | 97 lines |
 | `backfill_memory_summary_windows()` | 3014 | 89 lines |
 | `restore_lorebook()` | 3667 | 79 lines |
+
+### `outofband.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `stopped()` | 121 | 8 lines |
 
 ### `paradox.py`
 
@@ -861,9 +868,9 @@
 
 ## Frontend JavaScript
 
-### `static/js/ambience.js` (929 lines)
+### `static/js/ambience.js` (944 lines)
 
-Sections: Room ambience (`:2`); seamless looping (`:213`); one-shots (`:636`); the ambience panel (`:685`); the mix (`:703`).
+Sections: Room ambience (`:2`); seamless looping (`:214`); one-shots (`:651`); the ambience panel (`:700`); the mix (`:718`).
 
 Declared functions: `ambienceStored()`, `ambienceElement()`, `entryAudios()`, `ambiencePlayers()`, `applyAmbienceMute()`, `setAmbienceVolume()`, `ambienceLevel()`, `setLayerGain()`, `toggleAmbienceMute()`, `ambienceFadeMix()`, `armSeamlessLoop()`, `crossLoop()`, `retireEntries()`, `stopAmbience()`, `playAmbience()`, `armAmbienceUnlock()`, `ambienceWorking()`, `awaitAmbience()`, `resolveAmbience()`, `ambienceForTurn()`, `rerollAmbience()`, `ambienceOnVisibleTurn()`, `ambienceResetForRender()`, `updateAmbienceBtn()`, `playAmbienceOneshot()`, `ambienceCandidateRow()`, `ambienceLayerRow()`, `ambienceMixPanel()`, `openAmbiencePanel()`, `toggleAmbience()`, `syncAmbience()`.
 
@@ -873,15 +880,15 @@ Sections: Boot & sidebar (`:1`); New chat wizard (`:218`); NSFW (`:661`); Compos
 
 Declared functions: `boot()`, `renderSide()`, `renderChatSidebar()`, `newChatWizard()`, `renderWizardChoice()`, `wizardState()`, `wizardFromScratch()`, `renderWizardPersona()`, `renderWizardCharacters()`, `renderWizardScenario()`, `runWizard()`, `renderCharacterSidebar()`, `renderPersonaSidebar()`, `renderLegacyLoreSidebar()`, `updateNSFWBtn()`, `toggleNSFW()`, `resizeComposer()`, `erCard()`, `erDismiss()`, `erPoll()`, `erWatch()`, `erOfferRebuild()`.
 
-### `static/js/backdrops.js` (378 lines)
+### `static/js/backdrops.js` (396 lines)
 
 Sections: Scene backdrops (`:2`).
 
 Declared functions: `backdropLayers()`, `backdropLuminance()`, `applyBackdropContrast()`, `releaseBackdropLayer()`, `clearBackdrop()`, `showBackdrop()`, `backdropWorking()`, `awaitBackdrop()`, `generateBackdrop()`, `backdropForTurn()`, `backdropOnVisibleTurn()`, `backdropResetForRender()`, `updateBackdropBtn()`, `toggleBackdrops()`, `syncBackdrops()`.
 
-### `static/js/chat.js` (2306 lines)
+### `static/js/chat.js` (2338 lines)
 
-Sections: The turn being read (`:1`); Flipping between rerolls of the newest beat (`:561`); Pipeline drawer: reading a step through a lens (`:859`); Pipeline drawer (`:1052`); Relationship viewer (`:1388`); Memory browser (`:1460`); Private history (`:2248`).
+Sections: The turn being read (`:1`); Flipping between rerolls of the newest beat (`:593`); Pipeline drawer: reading a step through a lens (`:891`); Pipeline drawer (`:1084`); Relationship viewer (`:1420`); Memory browser (`:1492`); Private history (`:2280`).
 
 Declared functions: `observeVisibleTurn()`, `openChat()`, `renderFrameBar()`, `switchFrame()`, `updateChatScopedButtons()`, `renderChat()`, `branchTurn()`, `editTurnInput()`, `editTurnProse()`, `liveReset()`, `friendlyPhase()`, `turnStatusStart()`, `turnStatusSet()`, `turnStatusStop()`, `_streamOn()`, `liveFlush()`, `liveAppend()`, `liveStep()`, `handleEvt()`, `_mountRerollNav()`, `_paintRerollCount()`, `showRerollVariant()`, `abortActiveRun()`, `runStream()`, `confirmCheckpointRestore()`, `runReroll()`, `rerollTurn()`, `exportChat()`, `importChatModal()`, `perceiverViews()`, `loopMindIds()`, `stepLenses()`, `perceiverLabel()`, `facetBadge()`, `lensLabel()`, `renderLensBar()`, `lensSlice()`, `perceiverSlice()`, `mindSlice()`, `keySlice()`, `renderEngineNotes()`, `openPipeline()`, `relMeter()`, `relationshipModal()`, `memModal()`, `exportCharacterMemories()`, `importCharacterMemoriesModal()`, `memQS()`, `memCharId()`, `loadMemoryBrowse()`, `getMemUI()`, `renderMemorySummary()`, `sortedMems()`, `renderMemoryList()`, `memoryCard()`, `fieldWrap()`, `reloadMemView()`, `runMemorySearch()`, `showNewMemoryForm()`, `checkMemoryCoverage()`, `backfillMemoryEras()`, `consolidateMemories()`, `previewMemoryContext()`, `chatPH()`, `personaPH()`.
 

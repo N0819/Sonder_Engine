@@ -67,6 +67,7 @@ const AMB = {
   chatId: null,
   timer: null,
   dwellTimer: null,      // the slower one: see ambienceOnVisibleTurn
+  pendingTurn: null,     // which turn those two clocks are running for
   blocked: false,        // playback refused pending a user gesture
   muted: false,
   volume: 0.35,
@@ -568,14 +569,25 @@ async function rerollAmbience(layer = null) {
 }
 
 function ambienceOnVisibleTurn(turnId, opts = {}) {
+  // Only a CHANGE of turn restarts the clocks -- the same rule, and for the
+  // same reason, as backdrops.js. A repeat notification for the turn already
+  // pending is the render settling, not the reader moving: renderChat
+  // re-asserts its scroll in a requestAnimationFrame, and a backdrop being
+  // cleared reflows the whole transcript. This module draws nothing, so it
+  // never provoked those notifications itself -- but it is fed by the same
+  // observer, and being the twin of the module that had this bug is exactly
+  // how it would acquire it later.
+  if (turnId === AMB.pendingTurn) return;
+  AMB.pendingTurn = turnId;
   clearTimeout(AMB.timer);
   clearTimeout(AMB.dwellTimer);
   // The quick pass plays whatever is already on disk.
   AMB.timer = setTimeout(
     () => ambienceForTurn(turnId, { commission: !!opts.fresh }), AMB_SETTLE_MS);
-  // The slow one is allowed to go looking. Cancelled by the next scroll tick,
-  // so it only ever fires where the reader actually stopped -- except on a
-  // freshly generated turn, where they are plainly here and waiting.
+  // The slow one is allowed to go looking. Cancelled by scrolling ON to
+  // another turn, so it only ever fires where the reader actually stopped --
+  // except on a freshly generated turn, where they are plainly here and
+  // waiting.
   if (!opts.fresh) {
     AMB.dwellTimer = setTimeout(
       () => ambienceForTurn(turnId, { commission: true }), AMB_DWELL_MS);
@@ -586,6 +598,9 @@ function ambienceResetForRender() {
   AMB.byTurn.clear();
   clearTimeout(AMB.timer);
   clearTimeout(AMB.dwellTimer);
+  // See backdropResetForRender: the clocks are cancelled here, so nothing is
+  // pending for that turn and a re-render onto the same turn id must re-arm.
+  AMB.pendingTurn = null;
   if (AMB.chatId !== S.chatId) {
     AMB.chatId = S.chatId;
     AMB.wanted = null;

@@ -53,8 +53,8 @@ import json
 import math
 import os
 import re
-import threading
 
+import outofband
 from backdrops import (_room_of_player, branch_lineage, place_desc,
                        scene_after_turn, time_bucket)
 from db import get_setting, wget, wset
@@ -1647,16 +1647,17 @@ def _pin_manifest(chat_id, signature, pin, room_name):
 # One resolution per signature no matter how many callers want it. Same shape
 # as the backdrop generation lock and for the same reason: two turns in one
 # room become visible together, a second tab is open, the reader scrolls back.
-_AMB_LOCKS = {}
-_AMB_LOCKS_GUARD = threading.Lock()
+#
+# And the same table, for the same reason: this dict was never pruned either,
+# so a long story left one dead entry per distinct audible room-state for the
+# life of the process. Being the twin of a leaking module is how a leak gets
+# copied, so the fix is shared rather than written twice -- see `outofband`.
+_AMB_LOCKS = outofband.KeyedLocks()
 
 
 def _resolution_lock(key):
-    with _AMB_LOCKS_GUARD:
-        lock = _AMB_LOCKS.get(key)
-        if lock is None:
-            lock = _AMB_LOCKS[key] = threading.Lock()
-        return lock
+    """Exclusive use of one signature, for as long as the `with` block runs."""
+    return _AMB_LOCKS.hold(key)
 
 
 def candidate_key(candidate):
@@ -1668,7 +1669,7 @@ def candidate_key(candidate):
 
 
 def resolve_ambience(chat_id, turn_idx, player_name=None, style=None,
-                     force=False, reroll=False, reroll_layer=None):
+                     force=False, reroll=False, reroll_layer=None, work=None):
     """Choose (or serve from cache) the ambience for a turn.
 
     Blocks for the length of a search plus a download, which is why nothing in
@@ -1680,6 +1681,10 @@ def resolve_ambience(chat_id, turn_idx, player_name=None, style=None,
     all. The rejected choice is remembered IN THE MANIFEST -- the one place
     that already travels with branches and archives -- so rerolling walks down
     the result list instead of re-offering what was just refused.
+
+    `work` is the queue's handle when this is running out of band, and None for
+    every direct blocking caller. Returns None when it was cancelled: a room
+    nobody is standing in any more gets no bed, and none was promised.
     """
     req = build_ambience_request(chat_id, turn_idx, player_name, style)
     if not req:
@@ -1691,6 +1696,13 @@ def resolve_ambience(chat_id, turn_idx, player_name=None, style=None,
         existing = cached_ambience(chat_id, req["signature"])
         if existing and not (force or reroll):
             return dict(existing, cached=True)
+
+        # Between steps, never mid-flight. Everything past this line is a model
+        # call, a search or a download, and the commonest way to arrive here
+        # already cancelled is the one the lock above creates: several callers
+        # queued on one signature and released one at a time.
+        if outofband.stopped(work):
+            return None
 
         if req["pin"]:
             if reroll:
@@ -1779,6 +1791,13 @@ def resolve_ambience(chat_id, turn_idx, player_name=None, style=None,
                          for layer in draft if layer.get("query")}
         layers = []
         for index, step in enumerate(plan[:MAX_LAYERS]):
+            # One layer is a search plus a download, so the top of this loop is
+            # a genuine step boundary and the last one that saves anything. A
+            # cancelled resolution writes no manifest at all rather than a
+            # half-built mix: a bed missing the layer it was named for is a
+            # worse artefact than no bed.
+            if outofband.stopped(work):
+                return None
             if index in keep:
                 layers.append(keep[index])
                 continue
@@ -1904,8 +1923,11 @@ def oneshot_signature(name, variant=0):
     return "fx" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:22]
 
 
-def resolve_oneshot(chat_id, name, variant=0):
-    """Fetch (or serve from cache) one non-looping effect. Blocking."""
+def resolve_oneshot(chat_id, name, variant=0, work=None):
+    """Fetch (or serve from cache) one non-looping effect. Blocking.
+
+    Returns None when `work` was cancelled -- see `resolve_ambience`.
+    """
     if name not in ONESHOTS:
         raise ValueError("Unknown effect: %s" % name)
     variant = max(0, min(int(variant or 0), ONESHOT_VARIANTS - 1))
@@ -1918,6 +1940,9 @@ def resolve_oneshot(chat_id, name, variant=0):
         existing = cached_ambience(chat_id, signature)
         if existing:
             return dict(existing, cached=True)
+        # The step boundary: the search and the download are below it.
+        if outofband.stopped(work):
+            return None
         settings = ambience_settings()
         # No model call: a one-shot's query is a constant, so the whole
         # query-writing stage is skipped and this is search-plus-fetch only.
@@ -1952,25 +1977,10 @@ def request_oneshot(chat_id, name, variant=0):
     cached = cached_ambience(chat_id, signature)
     if cached:
         return {"signature": signature, "status": "ready", "name": name}
-    with _AMB_QUEUE_LOCK:
-        if signature in _AMB_IN_FLIGHT:
-            return {"signature": signature, "status": "pending", "name": name}
-        _AMB_IN_FLIGHT[signature] = True
-        _AMB_LAST_ERROR.pop(signature, None)
-
-    def _work():
-        try:
-            resolve_oneshot(chat_id, name, variant)
-        except Exception as exc:
-            with _AMB_QUEUE_LOCK:
-                _AMB_LAST_ERROR[signature] = "%s: %s" % (type(exc).__name__,
-                                                         str(exc)[:300])
-        finally:
-            with _AMB_QUEUE_LOCK:
-                _AMB_IN_FLIGHT.pop(signature, None)
-
-    threading.Thread(target=_work, name="ambience-fx-%s" % name,
-                     daemon=True).start()
+    _QUEUE.submit(
+        signature,
+        lambda work: resolve_oneshot(chat_id, name, variant, work=work),
+        group=chat_id)
     return {"signature": signature, "status": "pending", "name": name}
 
 
@@ -1979,29 +1989,38 @@ def request_oneshot(chat_id, name, variant=0):
 # Nothing may WAIT on a sound. A search plus a download is seconds of network,
 # and a route that blocks on it holds a server worker for the whole time --
 # for audio nobody is waiting on, since the prose is already on screen.
+#
+# Shared with backdrops.py through `outofband.Queue`, because both tables this
+# used to keep grew with the key space rather than with the work:
+# `_AMB_IN_FLIGHT` pruned itself, but `_AMB_LAST_ERROR` only ever lost an entry
+# when somebody asked for that exact signature again, which a reader who never
+# walks back into that room never does. One-shots share the queue too, as they
+# always shared these dicts.
 
-_AMB_QUEUE_LOCK = threading.Lock()
-_AMB_IN_FLIGHT = {}
-_AMB_LAST_ERROR = {}
+_QUEUE = outofband.Queue("ambience")
 
 
 def ambience_status(chat_id, signature):
     """'ready' | 'pending' | 'error' | 'absent' for one signature."""
     if cached_ambience(chat_id, signature):
         return "ready"
-    with _AMB_QUEUE_LOCK:
-        if signature in _AMB_IN_FLIGHT:
-            return "pending"
-        if signature in _AMB_LAST_ERROR:
-            return "error"
-    return "absent"
+    return _QUEUE.status(signature)
 
 
 def ambience_error(signature):
     """The last failure for this signature, or None -- out-of-band work that
     fails silently is worse than work that fails loudly."""
-    with _AMB_QUEUE_LOCK:
-        return _AMB_LAST_ERROR.get(signature)
+    return _QUEUE.error(signature)
+
+
+def cancel_ambience(chat_id):
+    """Stop the resolutions in flight for one chat. Returns how many were asked.
+
+    Cooperative and BETWEEN steps, like `backdrops.cancel_backdrops`: a
+    download already in progress finishes, and the resolution stops at the top
+    of the next layer rather than leaving a half-built mix behind it.
+    """
+    return _QUEUE.cancel_group(chat_id)
 
 
 def request_ambience(chat_id, turn_idx, player_name=None, style=None,
@@ -2018,26 +2037,18 @@ def request_ambience(chat_id, turn_idx, player_name=None, style=None,
         return {"signature": signature, "status": "ready",
                 "room": req["room_name"]}
 
-    with _AMB_QUEUE_LOCK:
-        if signature in _AMB_IN_FLIGHT:
-            return {"signature": signature, "status": "pending",
-                    "room": req["room_name"]}
-        _AMB_IN_FLIGHT[signature] = True
-        _AMB_LAST_ERROR.pop(signature, None)
-
-    def _work():
-        try:
-            resolve_ambience(chat_id, turn_idx, player_name, style, force=force,
-                             reroll=reroll, reroll_layer=reroll_layer)
-        except Exception as exc:
-            with _AMB_QUEUE_LOCK:
-                _AMB_LAST_ERROR[signature] = "%s: %s" % (type(exc).__name__,
-                                                         str(exc)[:300])
-        finally:
-            with _AMB_QUEUE_LOCK:
-                _AMB_IN_FLIGHT.pop(signature, None)
-
-    threading.Thread(target=_work, name="ambience-%s" % signature[:8],
-                     daemon=True).start()
+    # A reroll SUPERSEDES rather than joins, and this is the case that made the
+    # missing cancellation path visible: pressing reroll while the first
+    # resolution was still running returned "pending" and dropped the reroll
+    # entirely, so the host waited and was handed back the very sound they had
+    # just refused -- by a queue reporting success. Joining is right for two
+    # readers who want the same bed and wrong for an explicit instruction to
+    # replace it.
+    _QUEUE.submit(
+        signature,
+        lambda work: resolve_ambience(chat_id, turn_idx, player_name, style,
+                                      force=force, reroll=reroll,
+                                      reroll_layer=reroll_layer, work=work),
+        group=chat_id, supersede=force or reroll)
     return {"signature": signature, "status": "pending",
             "room": req["room_name"]}
