@@ -205,6 +205,34 @@ def _intention_mentions(intention, needles):
     return any(n and n in hay for n in needles)
 
 
+def _intention_owned_by(intention, needles):
+    """Whether one standing-intention entry BELONGS to a needle-named actor.
+
+    Ownership, not mention. ``_intention_mentions`` above is safe where it
+    decides SPEND (its own contract), but ``stochastic_ticks`` uses the match
+    to pick tick CONTENT, and prose matching there moves knowledge: an
+    intention that merely NAMES the subject is somebody else's aim, written by
+    the omniscient mapping_commit model, and copying it into the subject's own
+    ``while_you_were_offscreen`` hands the subject a fact that reached them
+    through no channel. The live case is chat 9: Picard's entry names what has
+    "remained untransmitted to Vrenak", and under mention-matching it sat in
+    VRENAK's candidate set.
+
+    The ledger is untyped but not shapeless -- every dict row observed in
+    production carries an owner field (``actor`` or ``who``). A row with no
+    readable owner, including a bare string, fails CLOSED here: it may still
+    steer a spend decision, but it becomes nobody's tick content, because
+    content with no owner cannot be proven to be the subject's own.
+    """
+    if not isinstance(intention, dict):
+        return False
+    for key in ("actor", "who"):
+        value = intention.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip().casefold() in needles
+    return False
+
+
 def subject_distance(scene, subject_room, player_room, *,
                      intention_at_player=False):
     """Beats-to-contact, in three buckets. Pure over the scene dict.
@@ -307,7 +335,7 @@ def stochastic_ticks(seed, actors, intentions, cap):
         # draws, but adding a caller-side filter after the fact does not.
         needles = [display.casefold()] if display else []
         needles.append(sid.casefold())
-        mine = [i for i in (intentions or []) if _intention_mentions(i, needles)]
+        mine = [i for i in (intentions or []) if _intention_owned_by(i, needles)]
         pick = rng.randrange(len(mine)) if mine else rng.randrange(len(_IDLE_TICKS))
         if roll >= TICK_CHANCE or len(events) >= cap:
             continue

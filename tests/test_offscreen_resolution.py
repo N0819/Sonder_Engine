@@ -234,6 +234,55 @@ class TestTheSeededDraw:
         assert found, "24 seeds never once drew the recorded intention"
         assert any("Ten Forward" in t["tick"] for t in found)
 
+    def test_anothers_intention_naming_me_is_not_my_tick(self):
+        """Ownership, not mention. Chat 9's live ledger holds Picard's entry
+        naming what has "remained untransmitted to Vrenak"; prose matching
+        put that entry in VRENAK's candidate set, so his own
+        while_you_were_offscreen gap could deliver him the very fact the
+        fiction says he never heard. An intention seeds tick content only
+        for the actor it belongs to."""
+        actors = [{"id": "vrenak", "display": "Vrenak"}]
+        intentions = [{
+            "actor": "picard",
+            "intention": ("The formal refusal of remand and the asylum "
+                          "announcement remain untransmitted to Vrenak."),
+        }]
+        fired = 0
+        for i in range(48):
+            for t in stochastic_ticks(f"s{i}", actors, intentions, 3):
+                fired += 1
+                assert "untransmitted" not in t["tick"]
+                assert t["intention"] == ""
+        assert fired, "48 seeds never fired a single tick"
+
+    def test_an_actors_own_intention_still_seeds_by_id(self):
+        """The ownership check must not gag the legitimate case: a dormant
+        actor with their OWN recorded aim (owner field carrying the subject
+        id, not the display name) still ticks toward it."""
+        actors = [{"id": "vrenak", "display": "Vrenak"}]
+        intentions = [{"actor": "vrenak",
+                       "intention": "press the demand for remand"}]
+        found = [
+            t
+            for i in range(48)
+            for t in stochastic_ticks(f"s{i}", actors, intentions, 3)
+            if t["intention"]
+        ]
+        assert found, "48 seeds never once drew the recorded intention"
+        assert any("press the demand" in t["tick"] for t in found)
+
+    def test_an_unowned_intention_shape_cannot_become_content(self):
+        """A bare-string ledger entry names no owner. It may steer the spend
+        decision (_intention_mentions' contract), but tick content fails
+        CLOSED to the content-free idle line -- content with no owner cannot
+        be proven to be the subject's own."""
+        actors = [{"id": "character:9", "display": "Reyet Solan"}]
+        intentions = ["Reyet Solan means to reach the northern garrison"]
+        for i in range(48):
+            for t in stochastic_ticks(f"s{i}", actors, intentions, 3):
+                assert "garrison" not in t["tick"]
+                assert t["intention"] == ""
+
     def test_a_tick_describes_and_cannot_commit(self):
         """Section 1.0.1: the record shape differs by rung — a rung that
         cannot express a consequence cannot smuggle one. No deltas, no
