@@ -8,6 +8,7 @@ from spatial import room_of, spatial_rel
 _UNSET = object()
 
 from character_schema import (
+    cast_entity_id,
     character_abilities,
     character_appearance,
     character_initial_outfit,
@@ -1346,7 +1347,7 @@ def cast_scene_context(cast_rows):
         identity = sheet.get("identity") or {}
         result.append({
             "id": int(row["id"]),
-            "entity_id": identity.get("uid") or f"character:{int(row['id'])}",
+            "entity_id": cast_entity_id(sheet, row["id"]),
             "name": character_name(sheet),
             "aliases": identity.get("aliases") or [],
             "appearance": character_appearance(sheet),
