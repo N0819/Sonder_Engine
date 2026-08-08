@@ -153,6 +153,43 @@ def test_an_event_with_an_id_is_a_consequence_and_is_refused():
     assert not bad.ok
 
 
+def test_citing_an_adjudicated_event_id_is_not_minting_one():
+    """The check used to conflate the two, and the conflict was live: a
+    `gaps.gap_for` record windowing `scheduled_events` carries the REAL ids
+    that ledger minted, and the validator refused the whole record for
+    referencing something adjudicated elsewhere. A reference is not a claim
+    to have adjudicated anything; a NEW id still is."""
+
+    cited = validate_provisional(
+        record(events=[{"turn": 3, "event_id": "ev_9", "summary": "the market closed"}]),
+        adjudicated_event_ids={"ev_9", "ev_12"},
+    )
+    assert cited.ok, cited.errors
+
+    minted = validate_provisional(
+        record(events=[{"turn": 3, "event_id": "ev_99", "summary": "a fire started"}]),
+        adjudicated_event_ids={"ev_9", "ev_12"},
+    )
+    assert not minted.ok
+
+
+def test_with_no_adjudicated_set_the_check_fails_closed():
+    """An unverifiable citation is indistinguishable from a mint, and the
+    tier must not guess. Without this, forgetting to pass the set would
+    silently widen the validator for every caller at once."""
+
+    bare = validate_provisional(
+        record(events=[{"turn": 3, "event_id": "ev_9", "summary": "the market closed"}]),
+        adjudicated_event_ids=None,
+    )
+    assert not bare.ok
+    empty = validate_provisional(
+        record(events=[{"turn": 3, "event_id": "ev_9", "summary": "the market closed"}]),
+        adjudicated_event_ids=set(),
+    )
+    assert not empty.ok
+
+
 def test_unavailable_must_say_why():
     """Silence is how the abort path made a crash and a closed tab
     indistinguishable. Without this the tier repeats it."""

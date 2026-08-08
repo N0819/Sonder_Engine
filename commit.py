@@ -4146,31 +4146,15 @@ def prepare_mapping_commit(ctx):
         chat_lorebook_weights(cid),
         " ".join(map(str, specifics)) or res.get("summary", ""), k=10,
     )
-    dormant = [
-        character_name_from_text(r["sheet"])
-        for r in q(
-            "SELECT COALESCE(cc.sheet,ch.sheet) AS sheet "
-            "FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
-            "LEFT JOIN chat_char_frames ccf "
-            "  ON ccf.chat_id=cc.chat_id AND ccf.char_id=cc.char_id AND ccf.frame_id IS ? "
-            "WHERE cc.chat_id=? AND COALESCE(ccf.status, cc.status)='dormant'",
-            (turn.frame_id, cid),
-        )
-    ]
     raw_shadow = wget(cid, "shadow_profile", "") or ""
     raw_intents = wget(cid, "standing_intentions", []) or []
-    # How much life this chat permits off screen (scene.OFFSCREEN_LIFE_LADDER).
-    # Below `sketch` the dormant cast is not offered to the model AT ALL rather
-    # than offered with an instruction to leave it alone: objective state
-    # copied into a context with an implicit request to ignore it is the
-    # pattern this engine forbids everywhere else, and it is the one that
-    # actually leaks. The commit-side write is gated too — defense in depth,
-    # since the model can volunteer a field nobody asked for.
-    from scene import dialogue_config, offscreen_life_allows
-    _dlg = dialogue_config(cid) or {}
-    offscreen_level = _dlg.get("offscreen_life")
-    max_offscreen = int(_dlg.get("max_offscreen_actors", 3) or 0)
-    ticks_allowed = offscreen_life_allows(offscreen_level, "stochastic") and max_offscreen > 0
+    # Off-screen ticks no longer ride this call AT ALL. The dormant cast is
+    # not offered to the model at any level: the stochastic rung is a seeded
+    # draw in `offscreen.stochastic_ticks` (free, replayable), taken at
+    # commit_mapping, and the model-priced rung above it is the out-of-band
+    # profile summary. Asking a lore validator to also author offscreen life
+    # was an unadjudicated authoring channel wearing a payload field -- and
+    # the seed it was shown seeded nothing, since no RNG ever consumed it.
     payload = {
         "proposed_specifics": specifics,
         "narrator_specificity_audit": narrator_specificity_flags,
@@ -4184,19 +4168,13 @@ def prepare_mapping_commit(ctx):
             "visible_action": ((ctx.director_interpret or {}).get("action") or {}).get("attempt"),
         },
         "current_shadow_profile": raw_shadow[:1200],
-        # `scene_changed` stays truthful about the scene; whether off-screen
-        # life is permitted is its own field. Overloading the first to gate the
-        # second would have made a payload lie about the world to enforce a
-        # setting, and the next reader of it would have believed the lie.
+        # `scene_changed` stays truthful about the scene; it is a fact about
+        # the world, not a gate on anything.
         "scene_changed": bool(ctx.director_establish),
-        "dormant_actors": dormant if ticks_allowed else [],
-        "offscreen_life": offscreen_level if ticks_allowed else "off",
-        "max_offscreen_actors": max_offscreen if ticks_allowed else 0,
         "standing_intentions": raw_intents[:12],
         "beat_introductions": diff.get("introductions") or [],
         "beat_dialogue_log": res.get("dialogue_log") or [],
         "beat_resolved_event": res.get("resolved_event") or "",
-        "tick_seed": seed,
     }
     try:
         from llm_quality import complete_validated_json
@@ -4345,26 +4323,30 @@ def commit_mapping(ctx, nonce, *, prepared=None):
         if isinstance(si, list) and len(si) > 20:
             si = si[-20:]
         wset(cid, "standing_intentions", si)
-    _ticks = normalize_offscreen_events(mout.get("offscreen_events"))
-    if _ticks:
+    _volunteered = normalize_offscreen_events(mout.get("offscreen_events"))
+    if _volunteered:
+        # Nothing asks the model for ticks any more, so anything here is a
+        # field nobody requested -- refused on the write path regardless of
+        # the chat's level, because a model-authored tick is an
+        # unadjudicated authoring channel whatever the setting says.
+        ctx.add_warning(
+            f"discarded {len(_volunteered)} model-volunteered off-screen "
+            "tick(s): ticks are drawn seeded, not authored")
+    # The stochastic rung, as specified: a seeded draw against standing
+    # intentions at scene boundaries, no model call, replayable from the
+    # logged seed. Gated on the same ladder rung the model ticks used to be.
+    if ctx.director_establish:
         from scene import dialogue_config as _dlg_cfg, offscreen_life_allows as _allows
         _cfg = _dlg_cfg(cid) or {}
         _cap = int(_cfg.get("max_offscreen_actors", 3) or 0)
-        # Gated a SECOND time, on the write rather than on the request. The
-        # model can volunteer a field nobody asked for, and a setting that
-        # only ever spoke to a prompt is a setting a model can decline.
         if _allows(_cfg.get("offscreen_life"), "stochastic") and _cap > 0:
-            log = wget(cid, "offscreen_log", [])
-            log.append({"turn": turn.idx, "seed": seed, "events": _ticks[:_cap]})
-            wset(cid, "offscreen_log", log)
-            if len(_ticks) > _cap:
-                ctx.tell_director(
-                    f"Off-screen: kept {_cap} of {len(_ticks)} ticks "
-                    f"(max_offscreen_actors={_cap}).")
-        else:
-            ctx.add_warning(
-                f"discarded {len(_ticks)} off-screen tick(s): this chat's "
-                f"offscreen_life is '{_cfg.get('offscreen_life')}'")
+            import offscreen as _offscreen
+            _ticks = _offscreen.stochastic_ticks(
+                seed, _offscreen.dormant_subjects(cid, turn.frame_id),
+                wget(cid, "standing_intentions", []) or [], _cap)
+            if _ticks:
+                _offscreen.append_offscreen_log(
+                    cid, turn.idx, seed, _ticks, rung="stochastic")
 
     known = wget(cid, "known", {})
     # WIDE for resolution: an introduction naming an offscreen person is still
@@ -6296,6 +6278,22 @@ def _commit_all_locked(ctx, nonce):
     except Exception as exc:
         ctx.add_warning(f"auto-promotion failed: {exc}")
         results["promotions"] = {"promoted": [], "error": str(exc)}
+
+    # Out-of-band offscreen ticks start HERE, after the turn's facts are
+    # durable, and run in parallel with whatever the player does next. A
+    # turn starting never cancels one: cancelling on turn-start would make
+    # the world's progress depend on player idleness, which inverts the
+    # feature (amendments section 4). Arrival is safe because every tick
+    # write is provisional (section 5). Failure is a warning, never a
+    # rollback -- and never silence.
+    try:
+        import offscreen as _offscreen
+
+        job = _offscreen.schedule_profile_ticks(ctx)
+        results["offscreen_ticks"] = job.as_dict() if job else None
+    except Exception as exc:
+        ctx.add_warning(f"offscreen tick scheduling failed: {exc}")
+        results["offscreen_ticks"] = {"error": str(exc)}
 
     return {
         "summary": (
