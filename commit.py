@@ -2231,7 +2231,34 @@ def commit_scene(ctx, nonce, *, prepared=None):
         if prepared.get("destruction"):
             _apply_destruction(
                 ctx.chat.id, ctx.turn.id, prepared["destruction"])
+        _record_subject_last_seen(ctx, sc, prepared.get("clock"))
     return sc
+
+
+def _record_subject_last_seen(ctx, sc, clock):
+    """Stamp everyone co-present with the player this beat, by subject id.
+
+    The one new piece of state the lazy gap rung requires (proposal section
+    1.2 step 2): nothing recorded last-seen before this, so re-contact had no
+    since-turn to ask `gaps.gap_for` about. Merge, never replace -- a subject
+    elsewhere this beat keeps their older stamp, that being the whole point.
+    Failure is contained: a broken sighting ledger must not roll back a
+    turn's scene commit, but it must not vanish either.
+    """
+    try:
+        from gaps import LAST_SEEN_KEY, last_seen_update
+        from scene import persona_of
+        elapsed = float((clock or wget(ctx.chat.id, "simulation_clock", {}) or {})
+                        .get("elapsed_seconds") or 0.0)
+        updates = last_seen_update(
+            sc, ctx.cast, persona_name(persona_of(ctx.chat)),
+            ctx.turn.idx, elapsed)
+        if updates:
+            ledger = wget(ctx.chat.id, LAST_SEEN_KEY, {}) or {}
+            ledger.update(updates)
+            wset(ctx.chat.id, LAST_SEEN_KEY, ledger)
+    except Exception as exc:
+        ctx.add_warning(f"subject_last_seen not recorded: {exc}")
 
 # ---- Mechanics sweep: timed arrivals, expiry, news, engine notices ----
 

@@ -37,6 +37,7 @@ memory.
 from __future__ import annotations
 
 import json
+import logging
 import re
 
 from character_schema import (
@@ -72,6 +73,8 @@ from background_claims import (
 from scene import persona_of
 
 from .common import _agent_json, _unknown_actor_label
+
+_log = logging.getLogger(__name__)
 
 
 def _filtered_player_declaration(ctx):
@@ -496,7 +499,9 @@ def scene_life(ctx, nonce, level, cfg):
         seen.add(canon)
         # Lore this line invents is recorded as a CLAIM, never as fact -- the
         # Director ratifies, contradicts, or lets it expire (background_claims).
-        refs = _claimed_refs(e, quote, known_names)
+        refs = _claimed_refs(e, quote, known_names,
+                             turn=getattr(getattr(ctx, "turn", None), "idx", None),
+                             claimant=canon)
         if refs:
             claims.append({
                 "claimant": canon, "text": quote or action, "refs": refs,
@@ -562,13 +567,38 @@ def _known_world_names(ctx, sc, managed_names):
     return {k for k in known if k}
 
 
-def _claimed_refs(entry, quote, known_names):
+def _claimed_refs(entry, quote, known_names, turn=None, claimant=None):
     """What this entry introduced: the manager's own declaration, plus a
     deterministic novel-proper-noun scan as the backstop for what it failed to
     declare (the same belt-and-braces shape used everywhere else here)."""
     declared = [str(a).strip() for a in (entry.get("asserts") or [])
                 if str(a).strip()]
+    # INSTRUMENTATION 2026-08-08: neither the raw `asserts` nor `detected` is
+    # persisted anywhere, so 29 beats that produced no claim cannot be told
+    # apart -- model omitted the field, model sent it empty, or the filters
+    # below ate every candidate. Both are logged before they are consumed.
+    _log.info("claimed_refs: raw asserts=%r declared=%r", entry.get("asserts"), declared)
     detected = novel_proper_nouns(quote, known_names)
+    _log.info("claimed_refs: detected=%r from quote=%r", detected, quote)
+    # The logger is unreadable from outside a FAILED lab run (engine_lab returns
+    # log_tail only on failure, and lab logs sit outside the workspace root), so
+    # the same two facts are also appended to a file in the tree.
+    try:
+        import os as _os
+        _probe_path = _os.path.join(
+            _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+            "_probe_claimed_refs.jsonl")
+        with open(_probe_path, "a", encoding="utf-8") as _probe_fh:
+            _probe_fh.write(json.dumps({
+                "turn": turn,
+                "claimant": claimant,
+                "raw_asserts": entry.get("asserts"),
+                "declared": declared,
+                "detected": detected,
+                "quote": quote,
+            }, default=str) + "\n")
+    except Exception:  # instrumentation must never fail the stage
+        pass
     known_cf = {k.casefold() for k in known_names}
     out = []
     for ref in declared + detected:
