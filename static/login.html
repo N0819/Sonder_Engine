@@ -62,22 +62,108 @@ const loginErr = document.getElementById("login-err");
 const setupBtn = document.getElementById("setup-btn");
 const loginBtn = document.getElementById("login-btn");
 
+// Every request to the auth endpoints must trace back to ONE deliberate
+// human act. In the 2026-08 lockout incident, auto-submitted saved
+// credentials re-entered by the browser burned the server's global
+// 10-per-minute login budget in seconds and locked the host out of his
+// own app. The gates, in order:
+//   isTrusted  — a synthetic event (password-manager auto-submit, any
+//                scripted dispatch) is not a human act. Autofill may
+//                still FILL the fields; only submission needs a human.
+//   e.repeat   — a held Enter key auto-repeats ~30/s; one hold is one
+//                act, not thirty attempts.
+//   inFlight   — one attempt at a time; keydown used to fire fresh
+//                requests while the last one was still in the air.
+//   cooldownUntil — after a failure the PAGE refuses for a moment, so
+//                rapid retries are stopped here, legibly, instead of by
+//                silently spending the server's global budget.
+const COOLDOWN_MS = 1500;
+let inFlight = false;
+let cooldownUntil = 0;   // epoch ms; submits before this are refused
+let countdownTimer = null;
+
+function humanAct(e, btn) {
+  if (!e.isTrusted || e.repeat || inFlight) return false;
+  // Enter on the focused button also fires its click activation; letting
+  // the keydown through too made one keypress two server attempts.
+  if (e.type === "keydown" && e.target === btn) return false;
+  return true;
+}
+
+function coolingDown(errEl) {
+  const left = cooldownUntil - Date.now();
+  if (left <= 0) return false;
+  // During a lockout the countdown ticker owns the message.
+  if (!countdownTimer) {
+    errEl.textContent = "One attempt at a time — try again in a moment.";
+  }
+  return true;
+}
+
 async function post(url, body) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    const err = new Error(
+      "Could not reach the server. It may be stopped or restarting — "
+      + "this page is fine, the connection is not.");
+    err.network = true;
+    throw err;
+  }
   if (res.ok) return true;
   let detail = `HTTP ${res.status}`;
+  let data = {};
   try {
-    const data = await res.json();
+    data = await res.json();
     if (data.detail) detail = data.detail;
   } catch (e) { /* keep the status fallback */ }
-  throw new Error(detail);
+  const err = new Error(detail);
+  err.status = res.status;
+  err.data = data;
+  throw err;
+}
+
+// The 429 carries retry_after_seconds; count it down on screen. A static
+// "wait a minute" was indistinguishable from a stuck page, which is what
+// turned a 60-second lockout into an hour of wrong theories.
+function beginLockoutCountdown(seconds) {
+  cooldownUntil = Date.now() + seconds * 1000;
+  loginBtn.disabled = true;
+  clearInterval(countdownTimer);
+  const tick = () => {
+    const left = Math.ceil((cooldownUntil - Date.now()) / 1000);
+    if (left > 0) {
+      loginErr.textContent =
+        "Too many failed sign-in attempts. Sign-in unlocks by itself in "
+        + left + "s — no refresh needed.";
+    } else {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+      loginErr.textContent = "You can try signing in again now.";
+      loginBtn.disabled = false;
+    }
+  };
+  tick();
+  countdownTimer = setInterval(tick, 250);
+}
+
+// Re-arm only after the cooldown. The next attempt still requires a
+// fresh trusted click or keypress — nothing on this page ever resubmits
+// by itself.
+function armAfterCooldown(btn) {
+  cooldownUntil = Date.now() + COOLDOWN_MS;
+  setTimeout(() => {
+    if (!countdownTimer) btn.disabled = false;
+  }, COOLDOWN_MS);
 }
 
 async function doSetup() {
+  if (coolingDown(setupErr)) return;
   const username = document.getElementById("setup-username").value.trim();
   const password = document.getElementById("setup-password").value;
   const confirm = document.getElementById("setup-confirm").value;
@@ -90,18 +176,22 @@ async function doSetup() {
     setupErr.textContent = "Passwords do not match.";
     return;
   }
+  inFlight = true;
   setupBtn.disabled = true;
   try {
     await post("/api/auth/setup", { username, password });
     window.location.replace("/");
+    // Stay disabled: navigation is under way, and a re-armed button
+    // here was one more way to fire an extra attempt.
   } catch (e) {
+    inFlight = false;
     setupErr.textContent = e.message;
-  } finally {
-    setupBtn.disabled = false;
+    armAfterCooldown(setupBtn);
   }
 }
 
 async function doLogin() {
+  if (coolingDown(loginErr)) return;
   const username = document.getElementById("login-username").value.trim();
   const password = document.getElementById("login-password").value;
   loginErr.textContent = "";
@@ -109,21 +199,42 @@ async function doLogin() {
     loginErr.textContent = "Username and password are required.";
     return;
   }
+  inFlight = true;
   loginBtn.disabled = true;
   try {
     await post("/api/auth/login", { username, password });
     window.location.replace("/");
+    // Stay disabled — see doSetup.
   } catch (e) {
-    loginErr.textContent = e.message;
-  } finally {
-    loginBtn.disabled = false;
+    inFlight = false;
+    if (e.status === 429 && e.data && e.data.retry_after_seconds) {
+      beginLockoutCountdown(e.data.retry_after_seconds);
+    } else if (e.status === 409 && e.data && e.data.setup_required) {
+      loginErr.textContent =
+        "No host account exists yet — reload this page to reach "
+        + "first-run setup.";
+      armAfterCooldown(loginBtn);
+    } else {
+      // 401 stays the server's generic "Invalid username or password":
+      // never say which half was wrong.
+      loginErr.textContent = e.message;
+      armAfterCooldown(loginBtn);
+    }
   }
 }
 
-setupBtn.onclick = doSetup;
-loginBtn.onclick = doLogin;
-setupForm.addEventListener("keydown", e => { if (e.key === "Enter") doSetup() });
-loginForm.addEventListener("keydown", e => { if (e.key === "Enter") doLogin() });
+setupBtn.addEventListener("click", e => {
+  if (humanAct(e, setupBtn)) doSetup();
+});
+loginBtn.addEventListener("click", e => {
+  if (humanAct(e, loginBtn)) doLogin();
+});
+setupForm.addEventListener("keydown", e => {
+  if (e.key === "Enter" && humanAct(e, setupBtn)) doSetup();
+});
+loginForm.addEventListener("keydown", e => {
+  if (e.key === "Enter" && humanAct(e, loginBtn)) doLogin();
+});
 
 (async function init() {
   try {
