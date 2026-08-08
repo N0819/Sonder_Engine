@@ -1059,6 +1059,25 @@ def character_name_from_text(sheet_text: str | None) -> str:
 def character_tier(sheet: dict) -> str:
     return str(normalize_character_data(sheet).get("simulation", {}).get("tier", "mid"))
 
+
+def cast_entity_id(sheet: dict, char_id) -> str:
+    """The id-shaped spelling a cast member is ALREADY live under.
+
+    `scene.cast_scene_context` has been minting exactly this expression into
+    every mapping/director payload since scene entities existed, so it is the
+    one id a cast member's scene entity is keyed by. Extracted so subject
+    identity (`subjects.py`) resolves to the SAME string instead of deriving
+    its own -- two derivations of one id is the two-spellings defect, one
+    level up.
+
+    Reads the RAW sheet on purpose, never `normalize_character_data`: for a
+    sheet with no authored uid, normalization mints a FRESH `char_<hex>` per
+    call, which would give one being a new name every time anything asked.
+    The `character:<char_id>` fallback is stable because the row id is.
+    """
+    identity = (sheet or {}).get("identity") or {}
+    return str(identity.get("uid") or f"character:{int(char_id)}")
+
 def character_curiosity(sheet: dict) -> float:
     """How readily this character leaves something that works to look for
     something better. 0 = methodical, never abandons a proven way; 1 = restless,

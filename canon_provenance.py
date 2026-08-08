@@ -60,6 +60,18 @@ KNOWN_DISPOSITIONS = (PROVISIONAL,) + ADJUDICATED_DISPOSITIONS
 
 #: A COURTESY LIST, not an enum. Unknown kinds validate; see the module
 #: docstring and ``validate_provisional``.
+#:
+#: ``room`` AND ``place`` ARE BOTH HERE, DELIBERATELY -- settled during 0c.
+#: They look like two spellings of one thing, which is the defect this whole
+#: effort exists to prevent, but they are two LEDGERS for two lifecycle
+#: states: a ``room`` has a ``room_uid`` in ``room_registry``; a ``place`` is
+#: a lorebook location the mapping agent has never generated, which has no
+#: room_uid to be keyed by and is keyed on its lore ``entry_uid`` instead
+#: (amendment 8). Collapsing them would either mint fake room_uids for
+#: ungenerated places or make them unspellable. The seam between the states
+#: is owned by ``subjects.resolve_subject``: a place that HAS since been
+#: generated resolves as the ``room`` subject, so both spellings are never
+#: live for one location at once.
 KNOWN_SUBJECT_KINDS = ("character", "room", "faction", "crowd", "place")
 
 #: section 1.2 step 1: a gap that could not be produced returns
