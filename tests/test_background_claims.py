@@ -143,8 +143,166 @@ def test_ignoring_a_claim_never_raises_or_ratifies_it(temp_db):
     record_claims(cid, 1, [{"claimant": "Old Man", "text": "…",
                             "refs": ["Tam Briddock"]}])
     out = settle_claims(cid, 2, "Nobody by that name ever lived here.")
-    assert out == {"ratified": 0, "expired": 0}
+    assert out["ratified"] == 0 and out["contradicted"] == 0
+    assert out["expired"] == 0
     assert len(unratified_claims(cid, 2)) == 1
+
+
+# --- a ratified claim must reach canon ------------------------------------
+
+def test_ratifying_a_claim_writes_it_into_canon(temp_db):
+    """The whole ratification path existed except the last write.
+    `settle_claims` set rec["status"]="ratified" in a world-KV blob and wrote
+    nothing into `lore_entries`, so a claim became TRUE and unreachable in the
+    same instant: `search_lore` over the chat's books is the only route back
+    into a prompt, and it had nothing to find. The prompt promised canon
+    ("it becomes canon and the world must honour it") and the code set a flag.
+    """
+    from memory import chat_lorebook_weights, search_lore
+    cid = _chat(temp_db)
+    record_claims(cid, 2, [{"claimant": "Old Man by the Hearth",
+                            "text": "That'd be Tam Briddock's boy",
+                            "refs": ["Tam Briddock"], "credence": "low"}])
+    settle_claims(cid, 3, "The barkeep says nothing of it.",
+                  ratified_refs=["Tam Briddock"])
+    hits = search_lore(chat_lorebook_weights(cid), "Tam Briddock", k=10)
+    assert any("Tam Briddock" in (h.get("content") or "") for h in hits)
+
+
+def test_canon_write_survives_a_chat_that_never_wrote_lore_before(temp_db):
+    """A ratified claim can be the FIRST thing a chat ever writes to canon.
+    Only `commit_mapping` minted the chat's canon lorebook, and it is skipped
+    on any beat with no staged lore / world_facts / introductions -- so a
+    ratification landing on such a beat had no book to be written into."""
+    from db import q
+    cid = _chat(temp_db)
+    assert q("SELECT lorebook_id FROM chats WHERE id=?",
+             (cid,), one=True)["lorebook_id"] is None
+    record_claims(cid, 1, [{"claimant": "Old Man", "text": "The east wing "
+                            "has been shut since the flood",
+                            "refs": ["the east wing"]}])
+    settle_claims(cid, 2, "", ratified_refs=["the east wing"])
+    assert q("SELECT lorebook_id FROM chats WHERE id=?",
+             (cid,), one=True)["lorebook_id"] is not None
+
+
+def test_ratifying_the_same_claim_twice_does_not_duplicate_canon(temp_db):
+    """A rerun replays commit. The canon row is keyed by the claim's own
+    content hash so a second settle of the same beat cannot mint a second
+    entry -- the same stable-identifier rule memories already live under."""
+    from db import q
+    cid = _chat(temp_db)
+    record_claims(cid, 1, [{"claimant": "Old Man", "text": "Tam Briddock's boy",
+                            "refs": ["Tam Briddock"]}])
+    settle_claims(cid, 2, "", ratified_refs=["Tam Briddock"])
+    stored = wget(cid, "background_claims", {})
+    for rec in stored.values():
+        rec["status"] = "unratified"
+    from db import wset
+    wset(cid, "background_claims", stored)
+    settle_claims(cid, 2, "", ratified_refs=["Tam Briddock"])
+    rows = q("SELECT id FROM lore_entries WHERE content LIKE ?",
+             ("%Tam Briddock%",))
+    assert len(rows) == 1
+
+
+# --- contradiction ---------------------------------------------------------
+
+def test_the_director_can_record_that_a_presence_was_wrong(temp_db):
+    """The module documented a `contradicted` state in its own header comment
+    and never wrote it. A claim the Director rejected was byte-identical to one
+    it ignored, so the payoff the comment promises -- "because the claimant is
+    recorded the world can show that" -- was unreachable, and the rejected
+    claim went on being offered back to the Director until it expired."""
+    cid = _chat(temp_db)
+    record_claims(cid, 1, [{"claimant": "Old Man", "text": "Tam Briddock's boy",
+                            "refs": ["Tam Briddock"]}])
+    out = settle_claims(cid, 2, "Nobody by that name ever lived here.",
+                        contradicted_refs=["Tam Briddock"])
+    assert out["contradicted"] == 1
+    rec = list(wget(cid, "background_claims", {}).values())[0]
+    assert rec["status"] == "contradicted"
+    assert rec["contradicted_turn"] == 2
+    # The claimant survives: that a bystander was WRONG is the thing a later
+    # beat gets to show.
+    assert rec["claimant"] == "Old Man"
+    # And it stops being offered for adjudication.
+    assert unratified_claims(cid, 2) == []
+
+
+def test_a_contradicted_claim_never_reaches_canon(temp_db):
+    """Ratification is a one-way door into `lore_entries`. A claim named in
+    both lists is the Director disagreeing with itself, and the safe reading of
+    a disagreement is the one that does not write."""
+    from db import q
+    cid = _chat(temp_db)
+    record_claims(cid, 1, [{"claimant": "Old Man", "text": "Tam Briddock's boy",
+                            "refs": ["Tam Briddock"]}])
+    settle_claims(cid, 2, "Tam Briddock's boy never existed.",
+                  ratified_refs=["Tam Briddock"],
+                  contradicted_refs=["Tam Briddock"])
+    rec = list(wget(cid, "background_claims", {}).values())[0]
+    assert rec["status"] == "contradicted"
+    # Not averaged into a half-truth: both verdicts stay on the record.
+    assert rec["ratification_conflict"] is True
+    assert q("SELECT id FROM lore_entries", ()) == []
+
+
+def test_the_commit_path_carries_both_verdicts_end_to_end(temp_db):
+    """The module-level halves can both be right while the wire between them is
+    not: commit read only `state_diff.ratified_claims`, so `contradicted_claims`
+    would have been a schema field and a prompt clause with nothing reading it
+    -- and the canon write has to survive the real `track_background_presences`
+    call, embeddings prepared ahead of the transaction and all."""
+    import time
+    from commit import prepare_background_claims, track_background_presences
+    from memory import chat_lorebook_weights, search_lore
+    from pipeline_context import ChatData, PipelineContext, TurnData
+
+    cid = _chat(temp_db)
+    record_claims(cid, 1, [
+        {"claimant": "Old Man", "text": "That'd be Tam Briddock's boy",
+         "refs": ["Tam Briddock"]},
+        {"claimant": "The Drunk", "text": "The Moorside burned in the spring",
+         "refs": ["the spring fire"]},
+    ])
+    ctx = PipelineContext(
+        chat=ChatData(id=cid, name="T", persona_id=None, lorebook_id=None,
+                      scenario="", created=time.time()),
+        turn=TurnData(id=2, chat_id=cid, idx=2, player_input="",
+                      created=time.time()),
+        cast=[], input="",
+        director_resolve={
+            "resolved_event": "The barkeep sets down the jug.",
+            "state_diff": {"ratified_claims": ["Tam Briddock"],
+                           "contradicted_claims": ["the spring fire"]},
+        },
+    )
+    track_background_presences(ctx, nonce=0,
+                              prepared=prepare_background_claims(ctx))
+
+    stored = wget(cid, "background_claims", {})
+    by_claimant = {r["claimant"]: r for r in stored.values()}
+    assert by_claimant["Old Man"]["status"] == "ratified"
+    assert by_claimant["The Drunk"]["status"] == "contradicted"
+    hits = search_lore(chat_lorebook_weights(cid), "Tam Briddock", k=10)
+    contents = " ".join(h.get("content") or "" for h in hits)
+    assert "Tam Briddock" in contents
+    assert "spring" not in contents
+
+
+def test_contradiction_is_never_inferred_from_prose(temp_db):
+    """Text matching cannot tell "the Widow denies it" from "the Widow says it
+    again". Only an explicit `contradicted_claims` entry contradicts; prose
+    that merely sounds incompatible leaves the claim hearsay, as before."""
+    cid = _chat(temp_db)
+    record_claims(cid, 1, [{"claimant": "Old Man", "text": "…",
+                            "refs": ["Tam Briddock"]}])
+    settle_claims(cid, 2, "There was never any Tam Briddock, the Widow says.")
+    rec = list(wget(cid, "background_claims", {}).values())[0]
+    # The loose text-match ADOPTION path is what fires here, and deliberately:
+    # the Director wrote the ref into the objective record.
+    assert rec["status"] != "contradicted"
 
 
 def test_surfaced_claims_are_bounded(temp_db):

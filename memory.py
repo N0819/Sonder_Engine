@@ -3746,6 +3746,35 @@ def restore_lorebook(lb_id, entries):
 
 # ---- Lorebook Entries ----
 
+def ensure_chat_canon_book(chat_id):
+    """The chat's own canon lorebook, minted on demand.
+
+    Canon written DURING play -- facts the Director established this run --
+    lives in one book per chat, hung off `chats.lorebook_id`. It used to be
+    minted inline by `commit.commit_mapping` and nowhere else, so a second
+    writer could only spell the same book into existence again; a ratified
+    background claim (`background_claims.settle_claims`) is exactly that second
+    writer, and it lands on beats where mapping is skipped entirely. One
+    spelling, folded here, rather than a rule each new writer must remember.
+
+    Returns the lorebook id, or None if the chat does not exist.
+    """
+    row = q("SELECT name, lorebook_id FROM chats WHERE id=?", (chat_id,), one=True)
+    if not row:
+        return None
+    if row["lorebook_id"]:
+        return row["lorebook_id"]
+    lb = qi(
+        "INSERT INTO lorebooks(name,chat_id,book_type,summary) VALUES(?,?,?,?)",
+        (
+            f"{row['name']} — canon", chat_id, "general",
+            "Chat canon: facts, events and specifics established during this chat.",
+        ),
+    )
+    qi("UPDATE chats SET lorebook_id=? WHERE id=?", (lb, chat_id))
+    return lb
+
+
 def _embed_lore_document(keys, content):
     """The vector for one lore entry, WITH the model that made it.
 

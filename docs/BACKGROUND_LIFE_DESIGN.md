@@ -980,10 +980,58 @@ causality.
   it in `state_diff.ratified_claims` *or* writes its reference into the
   objective record — so adoption does not depend on the model remembering to
   fill a list. Unclaimed after `CLAIM_TTL_TURNS` (8), it is dropped.
+- **Write.** Ratification is a *write*, not a flag. `write_canon()` puts the
+  claim into `lore_entries` in the chat's own canon lorebook
+  (`memory.ensure_chat_canon_book`) — the only durable store of facts
+  established during play and the only one anything reads back into a prompt
+  (`search_lore` → mapping's `relevant_lore` → the Director's and perception's
+  payloads). For two releases this step did not exist: `settle_claims` set
+  `status = "ratified"` and stopped, so a claim became true and unreachable in
+  the same instant, which is the *original* failure ("the engine forgot it said
+  this") displaced one step later. Keyed by the claim's own content hash so a
+  replayed commit cannot mint a second row; attributed rather than paraphrased,
+  because asking a model to restate it would put a second author between the
+  Director's adoption and what canon ends up saying; and stamped
+  `source_notes: ratified background claim …`, which is also the only way to
+  count how often this lane has ever fired.
+- **Contradict.** `state_diff.contradicted_claims` is how the Director records
+  that a presence was *wrong*. The record is kept, claimant and all: a
+  bystander who misremembers is characterization a later beat can show, and a
+  rejected claim that left no trace was byte-identical to one nobody bothered
+  with. A claim named in both lists is the Director disagreeing with itself; it
+  settles as contradicted and writes nothing, because canon is a one-way door —
+  the disagreement is recorded (`ratification_conflict`) rather than averaged
+  into a half-truth.
 
-Contradiction is deliberately **not** inferred. Guessing at semantic
-incompatibility with string matching would be worse than leaving it to time: an
-unratified claim simply stays hearsay and expires.
+Contradiction is **explicit only**, where adoption may also be inferred from
+the objective record. The asymmetry is the point: prose naming a claim's
+subject is evidence the fiction took it up, but prose can no more announce a
+rejection than it can announce silence — "the Widow denies it" and "the Widow
+says it again" share every distinctive token.
+
+#### Why `CLAIM_TTL_TURNS` is not tuned per subject
+
+The obvious worry is that a *true* claim can expire before anyone ratifies it —
+and that a claim about a place ("the east wing burned") ought to outlive one
+about a person, who moves. Neither is implemented, on three grounds:
+
+1. **Every turn is a real chance.** `unratified_claims()` rides
+   `director_resolve`'s payload unconditionally, not only when the player
+   returns to the place a claim is about. Eight turns is eight consecutive
+   declines by the sole ratifier — a decision, not a missed window.
+2. **Expiry unsays nothing.** The line was spoken and stays in the dialogue log
+   and the events row. What lapses is the *offer* to adjudicate, not the
+   fiction.
+3. **The module cannot tell a place from a person.** A ref is a bare
+   capitalized phrase or a manager-declared string; classifying it would be the
+   same string-guessing this design already refuses for contradiction, and a
+   misclassification would silently change a claim's lifetime.
+
+And the measurement is missing. Against the production corpus this lane has
+produced **0 claims** (2,411 `background_react` variants, 39 through the
+manager path, 29 that called the detector), so there is no ratification or
+expiry rate to tune against. Get the rate first — the `source_notes` stamp
+above is what makes it countable — then decide.
 
 #### Credence comes from the frozen blurb
 
