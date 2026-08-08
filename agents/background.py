@@ -37,6 +37,7 @@ memory.
 from __future__ import annotations
 
 import json
+import logging
 import re
 
 from character_schema import (
@@ -72,6 +73,8 @@ from background_claims import (
 from scene import persona_of
 
 from .common import _agent_json, _unknown_actor_label
+
+_log = logging.getLogger(__name__)
 
 
 def _filtered_player_declaration(ctx):
@@ -568,7 +571,13 @@ def _claimed_refs(entry, quote, known_names):
     declare (the same belt-and-braces shape used everywhere else here)."""
     declared = [str(a).strip() for a in (entry.get("asserts") or [])
                 if str(a).strip()]
+    # INSTRUMENTATION 2026-08-08: neither the raw `asserts` nor `detected` is
+    # persisted anywhere, so 29 beats that produced no claim cannot be told
+    # apart -- model omitted the field, model sent it empty, or the filters
+    # below ate every candidate. Both are logged before they are consumed.
+    _log.info("claimed_refs: raw asserts=%r declared=%r", entry.get("asserts"), declared)
     detected = novel_proper_nouns(quote, known_names)
+    _log.info("claimed_refs: detected=%r from quote=%r", detected, quote)
     known_cf = {k.casefold() for k in known_names}
     out = []
     for ref in declared + detected:
