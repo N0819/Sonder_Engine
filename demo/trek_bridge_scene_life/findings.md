@@ -141,6 +141,12 @@ should not be inferred by string matching, which is right, but an explicit
 `contradicted_claims` list alongside `ratified_claims` would let the engine know
 a presence was *wrong* and let a later beat show it.
 
+> **Since closed**, exactly as proposed: `StateDiff.contradicted_claims` and
+> `settle_claims(contradicted_refs=...)`. Closing it surfaced a larger gap this
+> run could not see, because the run stopped at the ratification flag and the
+> flag looked like success: adoption never reached canon at all. See §3.13 of
+> `docs/BACKGROUND_LIFE_DESIGN.md`.
+
 **The manager still does not exclude presences the Director already voiced this
 beat.** It behaved correctly every turn across both runs, but nothing enforces
 it (see the tavern findings).
