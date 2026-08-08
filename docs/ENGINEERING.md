@@ -635,7 +635,20 @@ then again warning-only afterwards. A stage that cannot produce valid output
 raises rather than silently substituting.
 
 `prompt_cache.py` places cache breakpoints so the stable prefix of a prompt is
-reused.
+reused. **Whether a given call gets one is decided in `providers.py`, in a
+single predicate both request paths ask** — `prompt_cache_enabled_for`, over
+`_cache_denied` and `_cache_passthrough_allowed`. Native Anthropic
+(`_anthropic_system`) and aggregator passthrough (`_openai_system_message`) are
+two distinct code paths and a rule written into only one of them is a rule that
+silently does not hold; that is exactly what happened, with the native path
+reading `FICTION_ENGINE_PROMPT_CACHE` alone and ignoring the deny list.
+
+The gate stays an **allowlist** — built-in kinds, plus `prompt_cache_allow`,
+minus `prompt_cache_deny`, which outranks both. Allow-by-default was tried and
+reverted: a provider that *rejects* an unrecognized `cache_control` key fails
+the turn, a worse outcome than not caching. The host reaches all of it through a
+per-provider checkbox in ⚙ API rather than by hand-editing a settings row, and
+the UI reads its state from the predicate rather than re-deriving it.
 
 ---
 

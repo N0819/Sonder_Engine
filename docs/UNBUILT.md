@@ -1628,6 +1628,31 @@ cached 0 of 188 live calls; `nex-agi/nex-n2-pro` cached 63 of 79. On a pipeline
 this prefill-dominated (27k-token director payloads), that may outweigh every
 latency difference measured in `docs/bench-2026-08-03/RESULTS.md`.
 
+**Update 2026-08-08 — the switch this entry needed now exists, and the wrong
+file was nearly used to settle it.** Prompt caching is a per-provider checkbox
+in ⚙ API (`prompt_cache_enabled_for`, `PUT /api/providers/{pid}/prompt_cache`),
+so arm 1 above — "is a cache hit actually faster on the models in use" — can now
+be A/B'd on a real story rather than only in `tools/cache_latency.py`.
+
+Two traps found while building it, both worth writing down because both produce
+a confident wrong answer:
+
+- **`docs/bench-2026-08-03/*.log` cannot answer this question.** All 62 cache
+  reads across its 267 timed calls come from ONE model, `nex-agi/nex-n2-pro`,
+  and none of the logged models is a Claude. The engine's breakpoint is gated on
+  `_model_is_anthropic`, so it never marked any of them — those `cached_tokens`
+  are the provider's own implicit caching. Splitting that file cached-vs-uncached
+  compares one model against all the others, and duly produces a spurious 2x
+  "caching penalty" at 1200+ response tokens (83.70s vs 42.36s, n=8). The real
+  measurement is the `tools/cache_probe.py` table above, which controls for
+  model by construction.
+- **The live config caches nothing.** As of 2026-08-08 no configured role runs a
+  Claude model (`minimax/minimax-m3`, `moonshotai/kimi-k2.6`, `x-ai/grok-4.20`,
+  `inception/mercury-2`), so the engine's marking is inert on this install and
+  the new checkbox changes nothing until a role points at a Claude. Note that
+  `kimi-k2.6` — currently `default` and `character_mid` — is the model whose
+  98%-cached arm ran **6.5x slower** in the table above.
+
 ### 1.26 Speech-channel smuggling — landed 2026-08-04
 
 Found in chat 62 (12 turns, character roles on `moonshotai/kimi-k2.6`
