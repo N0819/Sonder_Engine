@@ -414,9 +414,37 @@ async function awaitAmbience(turnId, signature, first, previousToken) {
     if (state.signature !== signature) break;
     if (state.status === "error") break;
   }
-  if (state.status === "error") throw new Error(state.error || "search failed");
-  if (!state.ready) throw new Error("still searching");
-  return state;
+  // Each ending described as itself. The catch-all this replaces said "still
+  // searching" for every one of them -- which was true of exactly one. The
+  // worst case was `absent` (nothing queued any more: never started, or
+  // retired with nothing produced): it satisfied the settled check on the
+  // poll's FIRST look, so a search that was not running reported itself as
+  // still running, instantly, on precisely the rooms that had no sound yet
+  // (chat 65, live).
+  if (state.signature !== signature) {
+    // The room changed under the poll -- a fresh beat, an offscreen tick.
+    // This search is obsolete, not broken: the observer's next pass owns the
+    // room's NEW state, and there is nothing true to say about the old one.
+    return null;
+  }
+  if (state.status === "error") {
+    if (state.error_kind === "notfound") {
+      throw taggedError("notfound",
+        `no matching sound for ${state.room || "this room"} — 🎲 reroll tries different search terms`);
+    }
+    throw taggedError("failed", state.error || "the search failed");
+  }
+  if (state.ready) return state;
+  if (state.status === "pending") {
+    // The one ending the old message honestly fit: the budget (75s) ran out
+    // while the server was still working. It keeps working -- the
+    // query-writing model call alone measures ~27s (ambience.py) -- so the
+    // bed usually lands moments later and the quick pass serves it on the
+    // reader's next settle.
+    throw taggedError("slow",
+      "taking longer than usual — it keeps loading and plays when you next settle here");
+  }
+  throw taggedError("gone", "the search was called off before it finished");
 }
 
 function resolveAmbience(turnId, signature, opts = {}) {
@@ -428,6 +456,7 @@ function resolveAmbience(turnId, signature, opts = {}) {
     opts.reroll ? { reroll: true, layer: opts.layer ?? null } : {})
     .then(res => awaitAmbience(turnId, signature, res, previousToken))
     .then(res => {
+      if (!res) return null;            // obsolete: the room moved on mid-poll
       AMB.byTurn.set(turnId, res);
       // Every other turn in the same room is ready now too -- a room spans
       // several turns and each of them would otherwise re-POST for a bed that
@@ -441,11 +470,20 @@ function resolveAmbience(turnId, signature, opts = {}) {
       return res;
     })
     .catch(error => {
-      // Give up on this bed for the session rather than retrying on every
-      // scroll -- but never on a reroll, which is the reader explicitly asking
-      // for another go.
-      if (!opts.reroll) AMB.failed.add(signature);
-      toast("Ambience: " + (error?.message || "could not find a sound"), "err");
+      // Only a definitive verdict gives up on this bed for the session: a
+      // recorded failure, or a search that concluded there is nothing to
+      // find (retrying finds the identical nothing). A search that was
+      // called off, outlived the poll's patience, or died with the
+      // connection may be asked again -- blacklisting those was how one
+      // mislabelled toast made a room permanently silent for the session.
+      // Never on a reroll, which is the reader explicitly asking for
+      // another go.
+      const verdict = error?.kind === "failed" || error?.kind === "notfound";
+      if (verdict && !opts.reroll) AMB.failed.add(signature);
+      // A verdict about the ROOM is a warn (the feature worked; the answer
+      // was no); only a malfunction gets the error dress.
+      toast("Ambience: " + (error?.message || "could not find a sound"),
+            error?.kind && error.kind !== "failed" ? "warn" : "err");
       return null;
     })
     .finally(() => {

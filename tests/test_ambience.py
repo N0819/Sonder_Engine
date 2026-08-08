@@ -1279,3 +1279,58 @@ class TestTheResolutionLockTable:
 
         assert order == ["first", "first-out", "second"]
         assert len(amb._AMB_LOCKS) == 0
+
+
+class TestErrorKind:
+    """A search that concluded "there is nothing" and a provider that fell
+    over were one string to the client -- "TypeName: message" out of the
+    queue's error table -- so the toast either showed a reader a Python type
+    name or one message for both. The kind is derived HERE, beside the class
+    whose name it reads, and travels as its own payload field.
+    """
+
+    def _fail_with(self, exc):
+        import time
+
+        import ambience as amb
+
+        amb._QUEUE.reset()
+        sig = "kind-test-signature"
+
+        def boom(work):
+            raise exc
+
+        amb._QUEUE.submit(sig, boom)
+        deadline = time.monotonic() + 3.0
+        while amb._QUEUE.status(sig) == "pending" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        try:
+            return amb.ambience_error_kind(sig)
+        finally:
+            amb._QUEUE.reset()
+
+    def test_a_concluded_empty_search_is_notfound(self):
+        kind = self._fail_with(
+            ambience.AmbienceNotFound("No ambience found for: quiet vault"))
+        assert kind == "notfound"
+
+    def test_a_provider_failure_is_failed(self):
+        kind = self._fail_with(RuntimeError("provider fell over"))
+        assert kind == "failed"
+
+    def test_no_failure_on_record_is_no_kind(self):
+        import ambience as amb
+
+        amb._QUEUE.reset()
+        assert amb.ambience_error_kind("never-seen") is None
+
+    def test_an_exhausted_search_raises_the_notfound_type(self, monkeypatch):
+        """The raise itself must be the typed one: a plain RuntimeError here
+        would silently reclassify "no sound exists" as a malfunction and the
+        client would blacklist-and-alarm for an ordinary empty answer."""
+        monkeypatch.setattr(ambience, "search_candidates", lambda *a, **kw: [])
+        monkeypatch.setattr(ambience, "ambience_settings",
+                            lambda: {"source": "freesound", "configured": True,
+                                     "enabled": True})
+        with pytest.raises(ambience.AmbienceNotFound):
+            ambience.resolve_oneshot(1, "thunder")

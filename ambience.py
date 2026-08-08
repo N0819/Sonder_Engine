@@ -1875,8 +1875,8 @@ def resolve_ambience(chat_id, turn_idx, player_name=None, style=None,
                                        query=step["query"]))
 
         if not layers:
-            raise RuntimeError("No ambience found for: %s"
-                               % (plan[0]["query"] if plan else req["room_name"]))
+            raise AmbienceNotFound("No ambience found for: %s"
+                                   % (plan[0]["query"] if plan else req["room_name"]))
         manifest = _write_manifest(chat_id, req["signature"], {
             "room": req["room_name"], "rejected": rejected, "layers": layers,
             "avoid": avoid,
@@ -1949,7 +1949,8 @@ def resolve_oneshot(chat_id, name, variant=0, work=None):
         candidates = search_candidates(ONESHOTS[name], settings["source"],
                                        limit=max(8, ONESHOT_VARIANTS * 2))
         if not candidates:
-            raise RuntimeError("No %s sound found in the configured source." % name)
+            raise AmbienceNotFound(
+                "No %s sound found in the configured source." % name)
         # Nth-best rather than best: that IS the variety. A library with only
         # one usable thunder falls back to it rather than failing.
         best = candidates[min(variant, len(candidates) - 1)]
@@ -2000,6 +2001,17 @@ def request_oneshot(chat_id, name, variant=0):
 _QUEUE = outofband.Queue("ambience")
 
 
+class AmbienceNotFound(RuntimeError):
+    """The search ran to completion and there is genuinely nothing to play.
+
+    Its own type because the client owes the reader a different sentence for
+    it: a provider that fell over is a malfunction, a library with no rain in
+    it is an answer. The queue records failures as "TypeName: message", so the
+    type name doubles as the wire marker `ambience_error_kind` reads back --
+    both halves live in this module and move together.
+    """
+
+
 def ambience_status(chat_id, signature):
     """'ready' | 'pending' | 'error' | 'absent' for one signature."""
     if cached_ambience(chat_id, signature):
@@ -2011,6 +2023,22 @@ def ambience_error(signature):
     """The last failure for this signature, or None -- out-of-band work that
     fails silently is worse than work that fails loudly."""
     return _QUEUE.error(signature)
+
+
+def ambience_error_kind(signature):
+    """'notfound' | 'failed' | None: WHICH KIND of failure is on record.
+
+    Derived from the queue's own "TypeName: message" format, here and nowhere
+    else, so the client never has to parse a Python exception name out of a
+    string meant for reading -- which is what it would otherwise do, and what
+    put "AmbienceNotFound: ..." in a reader-facing toast.
+    """
+    message = _QUEUE.error(signature)
+    if not message:
+        return None
+    return ("notfound"
+            if message.startswith(AmbienceNotFound.__name__ + ":")
+            else "failed")
 
 
 def cancel_ambience(chat_id):
