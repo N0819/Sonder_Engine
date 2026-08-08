@@ -12,6 +12,7 @@ import db
 from db import (q, qi, qtx, transaction, wget, wset, get_setting, set_setting,
                 parse_scoped_world_key, data_version)
 from db import _FRAME_KEY_SEP
+import providers
 from providers import (
     chat_complete, chat_complete_async, token_sink, cancel_event,
     resolve_role, list_models, list_image_models, image_model, provider, agent_models,
@@ -1534,6 +1535,12 @@ def _provider_public(pid):
         return None
     d = dict(row)
     d["has_key"] = bool(d.pop("api_key", None))
+    # Prompt caching, answered by the request path's own predicates rather than
+    # re-derived in JS -- the rule is a three-way interaction (built-in kinds,
+    # an allowlist, a deny list that wins) and two copies of it would drift.
+    d["prompt_cache"] = providers.prompt_cache_enabled_for(row)
+    d["prompt_cache_default"] = providers.prompt_cache_supported_for(row)
+    d["prompt_cache_locked"] = not providers.PROMPT_CACHE_ENABLED
     return d
 
 @app.post("/api/providers")
@@ -1557,6 +1564,62 @@ def put_provider(pid: int, body: dict = Body(...)):
     else:
         qi("UPDATE providers SET name=?,kind=?,base_url=? WHERE id=?",
            (body.get("name", ""), body.get("kind", "generic"), body.get("base_url", ""), pid))
+    return _provider_public(pid)
+
+def _cache_list(key):
+    """`prompt_cache_allow`/`_deny` as an ordered list of casefolded tokens."""
+    raw = get_setting(key) or ""
+    seen, out = set(), []
+    for part in str(raw).split(","):
+        tok = part.strip().casefold()
+        if tok and tok not in seen:
+            seen.add(tok)
+            out.append(tok)
+    return out
+
+@app.put("/api/providers/{pid}/prompt_cache")
+def put_provider_prompt_cache(pid: int, body: dict = Body(...)):
+    """Turn prompt caching on or off for one provider.
+
+    The stored form is two comma-separated settings shared by every provider,
+    so a per-provider switch has to edit them without disturbing anyone else.
+    The case that needs care is a KIND-level deny ("nanogpt") covering several
+    connections: enabling one of them by simply dropping that token would
+    silently enable them all. It is expanded into per-provider denies instead,
+    which preserves what every existing connection is set to. The cost is that
+    a kind-level deny no longer covers connections created LATER -- a real
+    tradeoff, taken because a switch that changes a provider you did not touch
+    is the worse surprise.
+    """
+    row = q("SELECT * FROM providers WHERE id=?", (pid,), one=True)
+    if not row:
+        raise HTTPException(404, "Provider not found")
+    enabled = bool(body.get("enabled"))
+    name, kind = providers.cache_tokens(row)
+    token = name or kind
+    if not token:
+        raise HTTPException(400, "Provider has neither a name nor a kind")
+
+    deny, allow = _cache_list("prompt_cache_deny"), _cache_list("prompt_cache_allow")
+    if enabled:
+        if kind and kind in deny:
+            # Only connections that have a name of their own can be denied
+            # individually; a nameless one would fall back to its kind and
+            # re-deny everybody, so it is left to follow this change.
+            others = [providers.cache_tokens(r)[0]
+                      for r in q("SELECT * FROM providers WHERE id<>?", (pid,))
+                      if providers.cache_tokens(r)[1] == kind]
+            deny = [t for t in deny if t != kind]
+            deny += [t for t in others if t and t != token and t not in deny]
+        deny = [t for t in deny if t != token]
+        if not providers.prompt_cache_supported_for(row) and token not in allow:
+            allow.append(token)
+    elif token not in deny:
+        # `allow` is left alone on purpose: deny wins over it, so pruning it
+        # would only make re-enabling lose an opt-in the host typed by hand.
+        deny.append(token)
+    set_setting("prompt_cache_deny", ",".join(deny))
+    set_setting("prompt_cache_allow", ",".join(allow))
     return _provider_public(pid)
 
 @app.delete("/api/providers/{pid}")

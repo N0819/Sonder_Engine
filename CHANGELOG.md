@@ -2,6 +2,43 @@
 
 ## alpha 7.2 — Order is causality
 
+### Prompt caching is a box in ⚙ API, per connection
+
+The controls existed and nothing could reach them. `prompt_cache_allow`,
+`prompt_cache_deny` and `FICTION_ENGINE_PROMPT_CACHE=0` were all real, and the
+only ways to use them were editing a settings row by hand or restarting the
+process with an env var set. Each provider row in **⚙ API** now carries a
+**cache** checkbox that writes those same settings.
+
+This matters because caching is not unambiguously a win, and the host is the
+only one who can find out. Marking the repeated system prefix makes a cache hit
+~90% cheaper, but the 267 timed calls in `docs/bench-2026-08-03/` do not settle
+what it costs in latency: controlled for response length it is a wash in the
+bands where most calls land (50–150 tokens, 3.63s cached vs 3.76s uncached;
+150–400, 4.29s vs 4.36s), and the one band where cached looks much worse —
+1200+ tokens, 83.70s vs 42.36s — rests on **eight** cached samples and is not
+controlled for role or model. That is a question, not a finding, and answering
+it needs a switch.
+
+Two things were broken underneath the missing UI:
+
+- The **native Anthropic path** never consulted the deny list. `_anthropic_system`
+  read only the env var, so a direct `kind="anthropic"` connection would have
+  reported *off* in the new box while every call went on caching. Both paths now
+  ask the same predicate.
+- A **kind-level deny** covers every connection of that kind, so enabling one of
+  several nanogpt connections by dropping the token would silently enable the
+  others too. The route expands a kind-level deny into per-connection denies
+  instead. The cost, taken deliberately: such a deny no longer covers
+  connections created *later*, because a switch that changes a provider you did
+  not touch is the worse surprise.
+
+The box reports what the server answered rather than what was clicked — deny
+outranks allow, so a box echoing the click could show a state that is not real.
+A provider outside the built-in kinds is opted in through the allowlist rather
+than merely un-denied, and says so on hover; with the env kill switch set, every
+box is disabled and explains why.
+
 ### A beat opens with one character, and causality builds as it runs
 
 The interaction loop opened with a simultaneous wave of two, on the argument
