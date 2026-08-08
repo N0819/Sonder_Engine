@@ -195,9 +195,30 @@ async function awaitBackdrop(turnId, signature, first) {
     // wanted-signature check then declines to paint it.
     if (state.signature !== signature) break;
   }
-  if (state.status === "error") throw new Error(state.error || "generation failed");
-  if (state.status === "pending") throw new Error("still generating after several minutes");
-  return state;
+  // Each ending described as itself -- the twin of awaitAmbience's rule, and
+  // it had the twin's defect in different wording: a signature that drifted
+  // mid-poll broke the loop while the DRIFTED state still said "pending", so
+  // the next line threw "still generating after several minutes" three
+  // seconds in; and `absent` (work retired with nothing produced) fell
+  // through silently, a paid pass that said nothing at all.
+  if (state.signature !== signature) {
+    // Obsolete, not broken: the observer's next pass owns the room's new
+    // state, and there is nothing true to say about the old one.
+    return null;
+  }
+  if (state.status === "error") {
+    throw taggedError("failed", state.error || "generation failed");
+  }
+  if (state.ready) return state;
+  if (state.status === "pending") {
+    // Honestly still rendering when the budget ran out. The budget already
+    // sits past the provider's own three-minute ceiling, but the queue entry
+    // is still active and a later request simply joins it -- so this is
+    // "slow", never a verdict on the room.
+    throw taggedError("slow",
+      "still rendering after several minutes — it appears when you next stop here");
+  }
+  throw taggedError("gone", "the generation was called off before it finished");
 }
 
 function generateBackdrop(turnId, signature) {
@@ -206,6 +227,7 @@ function generateBackdrop(turnId, signature) {
   const job = api("POST", `/api/turns/${turnId}/backdrop`, {})
     .then(res => awaitBackdrop(turnId, signature, res))
     .then(res => {
+      if (!res) return null;            // obsolete: the room moved on mid-poll
       BD.byTurn.set(turnId, res);
       // Every OTHER turn already known to want this same picture is ready
       // now too -- a room usually spans several turns, and without this each
@@ -218,11 +240,15 @@ function generateBackdrop(turnId, signature) {
       return res;
     })
     .catch(error => {
-      // Give up on this picture for the session rather than retrying on
-      // every scroll: whatever failed (no credit, provider down, a room
-      // with nothing to depict) will fail again the same way.
-      BD.failed.add(signature);
-      toast("Backdrop: " + (error?.message || "generation failed"), "err");
+      // Only a recorded verdict gives up on this picture for the session (no
+      // credit, a bad model id, a room with nothing to depict -- those fail
+      // again the same way). A generation that was called off, outlived the
+      // poll's patience, or died with the connection may be asked again:
+      // blacklisting those converted one bad minute into "this room never
+      // gets a picture" for the rest of the session.
+      if (error?.kind === "failed") BD.failed.add(signature);
+      toast("Backdrop: " + (error?.message || "generation failed"),
+            error?.kind && error.kind !== "failed" ? "warn" : "err");
       return null;
     })
     .finally(() => {

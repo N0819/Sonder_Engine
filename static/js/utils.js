@@ -31,6 +31,21 @@ function safeId(s) { return String(s).replace(/[^a-zA-Z0-9_-]/g, "_"); }
 function splitCL(v) { return String(v || "").split(",").map(s => s.trim()).filter(Boolean); }
 function numOr(v, f) { const n = Number(v); return Number.isFinite(n) ? n : f; }
 
+// An Error that carries HOW the work ended, for the out-of-band poll loops in
+// backdrops.js and ambience.js (twins by construction, so the tag lives once).
+// The kinds are the queue's own endings -- "failed" (a recorded verdict),
+// "notfound" (searched, and there genuinely is nothing), "slow" (still
+// honestly pending when the poll budget ran out), "gone" (retired with
+// nothing produced -- called off) -- and the catch that shows the toast picks
+// severity and the give-up decision by tag rather than by re-deriving them
+// from wording. The wording is what went wrong last time: four different
+// endings all read as one message describing none of them.
+function taggedError(kind, message) {
+  const error = new Error(message);
+  error.kind = kind;
+  return error;
+}
+
 // ---- API ----
 async function api(method, url, body) {
   // Arm on the way IN. Generating a character or a lorebook takes minutes, and

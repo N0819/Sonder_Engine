@@ -167,3 +167,32 @@ def test_a_sounding_room_is_not_marked_silent(client, story, tmp_path,
 
 def test_missing_turn_is_404(client):
     assert client.get("/api/turns/999999/ambience").status_code == 404
+
+
+def test_the_payload_says_which_kind_of_failure_is_on_record(
+        client, story, tmp_path, monkeypatch):
+    """The client owes the reader different sentences for "there is no such
+    sound" and "the search broke", and it must not learn which by parsing a
+    Python type name out of the display string. The payload carries the kind
+    as its own field."""
+    import time as _time
+
+    monkeypatch.setattr(ambience, "AMBIENCE_DIR", str(tmp_path))
+    sig = client.get(f"/api/turns/{story['turn_id']}/ambience").json()["signature"]
+
+    ambience._QUEUE.reset()
+
+    def boom(work):
+        raise ambience.AmbienceNotFound("No ambience found for: still air")
+
+    ambience._QUEUE.submit(sig, boom)
+    deadline = _time.monotonic() + 3.0
+    while (ambience._QUEUE.status(sig) == "pending"
+           and _time.monotonic() < deadline):
+        _time.sleep(0.01)
+
+    body = client.get(f"/api/turns/{story['turn_id']}/ambience").json()
+    ambience._QUEUE.reset()
+    assert body["status"] == "error"
+    assert body["error_kind"] == "notfound"
+    assert "No ambience found" in body["error"]

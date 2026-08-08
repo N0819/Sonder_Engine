@@ -89,7 +89,8 @@ from scene import (
 )
 from backdrops import (build_backdrop_request, request_backdrop, cached_backdrop,
                        backdrop_status, backdrop_error)
-from ambience import (FREESOUND_LICENCES, ambience_error, ambience_pin_for,
+from ambience import (FREESOUND_LICENCES, ambience_error, ambience_error_kind,
+                      ambience_pin_for,
                       ambience_pins, ambience_settings, ambience_status,
                       build_ambience_request, cached_ambience,
                       clear_ambience_pin, library_files, media_type_for,
@@ -4491,6 +4492,11 @@ def _ambience_payload(cid, req, status=None):
         "reason": (manifest or {}).get("reason") or "" if silent else "",
         "status": status or (ambience_status(cid, req["signature"]) if req else "absent"),
         "error": ambience_error(req["signature"]) if req else None,
+        # WHICH KIND of recorded failure: 'notfound' is an answer ("this room
+        # has no matching sound") and the client words it as one; 'failed' is
+        # a malfunction. Without the distinction the client's only options
+        # were a Python type name in a toast or one message for both.
+        "error_kind": ambience_error_kind(req["signature"]) if req else None,
         "url": _ambience_url(cid, req["signature"],
                              (manifest or {}).get("rev")) if manifest and not silent
         else None,
