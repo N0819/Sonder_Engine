@@ -175,11 +175,17 @@ class TestTheDeterministicSkeleton:
         cid = _make_chat(temp_db)
         _attach_character(temp_db, cid, "Elyndra", uid=SID)
         _seen(temp_db, cid)
+        # Seeded-rung shape: `basis`/`disposition` prove provenance -- a row
+        # without them is the old omniscient rung's prose and (since the
+        # boundary audit) may not deliver; tests/test_gap_boundaries.py owns
+        # that gate.
         temp_db.wset(cid, "offscreen_log", [
             {"turn": 4, "seed": "s", "events": [
-                {"actor": "Elyndra", "tick": "kept to the archives"}]},
+                {"actor": "Elyndra", "tick": "kept to the archives",
+                 "basis": "deterministic", "disposition": "provisional"}]},
             {"turn": 9, "seed": "s", "events": [
-                {"actor": "Elyndra", "tick": "outside the window"}]},
+                {"actor": "Elyndra", "tick": "outside the window",
+                 "basis": "deterministic", "disposition": "provisional"}]},
         ])
         rec = gap_for(cid, "character", SID, 2, 6, scene=_scene())
         ticks = [e for e in rec["events"] if e["event_id"] is None]

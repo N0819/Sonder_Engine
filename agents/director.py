@@ -72,6 +72,7 @@ from .common import (
     _check_character_speech_authority,
     _check_player_act_authority,
     _check_player_interiority_authority,
+    _check_presence_knowledge_channel,
     _check_prose_quote_authority,
     _quote_body,
     _requires_reaction_phase,
@@ -3426,6 +3427,21 @@ def director_resolve(ctx, nonce):
         # unratified. You are the only ratifier -- adopt, contradict, or ignore
         # (background_claims.py).
         "unratified_claims": _unratified_background_claims(chat["id"], turn["idx"]),
+        # The epistemic envelope of every voiceable presence: where it stands
+        # and when it appeared. YOU are entitled to the omniscient record; a
+        # presence you voice is not -- it knows its role, its own room as
+        # anyone standing there sees it now, and what was said in its earshot
+        # since it appeared. The deterministic floor on dialogue_log enforces
+        # the entity-reference slice of this; the rest rides on the prompt's
+        # presence-knowledge rule keying off this block.
+        "background_presence_knowledge": [
+            {"name": _pn,
+             "room": room_of(sc, _pn)
+                     or ((_pr.get("sketch") or {}).get("station_room") or ""),
+             "appeared_turn": _pr.get("first_turn")}
+            for _pn, _pr in
+            (wget(chat["id"], "background_presences", {}) or {}).items()
+        ],
         "interaction_rounds": loop.get("rounds") or [],
         "reaction_rounds": (ctx.reaction_loop or {}).get("rounds") or [],
         "variant_seed": nonce,
@@ -3930,6 +3946,25 @@ def director_resolve(ctx, nonce):
     # PLAYER-ACT AUTHORITY for the player's CONDUCT is enforced earlier, at the
     # point resolved_event is generated (correction retry). The loop below is
     # the matching guard for their WORDS.
+    #
+    # PRESENCE-KNOWLEDGE CHANNEL: the third mouth in this log. The prompt
+    # licenses the Director to voice unsheeted background presences, and the
+    # Director is entitled to omniscience -- so a voiced presence spoke from
+    # the omniscient working state with no perception object at all (chat 65
+    # t2148: Kadoman, minted turn 9 in eastern_market, referring to "the
+    # strange coins and notes" shown once at turn 4 in fountain_plaza).
+    # The floor is subtractive and costs no call: a presence line making a
+    # DEFINITE reference to a scene entity the presence has no channel to is
+    # dropped, and the presence stays ignorant -- which is the firewall being
+    # visible, and worth more than the smoothness of the dropped line.
+    # Generic knowledge survives on purpose: _check_presence_knowledge_channel
+    # gates single-word matches on the definite article precisely so "local
+    # trade runs on copper and silver" can never be flagged.
+    _xp_names_cf = {str((e or {}).get("name") or "").casefold()
+                    for e in (ctx.extra_players or [])}
+    _bg_recs = wget(chat["id"], "background_presences", {}) or {}
+    _all_quotes = [(str(d.get("speaker") or "").casefold(),
+                    str(d.get("exact_quote") or "")) for d in dlog]
     checked_dlog = []
     for d in dlog:
         speaker = d.get("speaker") or ""
@@ -3952,6 +3987,21 @@ def director_resolve(ctx, nonce):
                     "(player-speech authority)."
                 )
                 continue
+        elif speaker_cf and speaker_cf not in _xp_names_cf:
+            _rec = _bg_recs.get(str(speaker).strip()) or {}
+            _heard = " ".join(
+                [q for s, q in _all_quotes if s != speaker_cf]
+                + [str(interp.get("speech") or ""), str(ctx.input or "")]
+                + [str(r.get("text") or "")
+                   for r in (_rec.get("recent") or []) if isinstance(r, dict)]
+                + [str(v) for v in (_rec.get("blurb") or {}).values()]
+                + [str((_rec.get("sketch") or {}).get("role_hint") or "")])
+            _pleaks = _check_presence_knowledge_channel(
+                speaker, d.get("exact_quote", ""), sc, _rec, _heard)
+            if _pleaks:
+                for _w in _pleaks:
+                    ctx.add_warning("Dropped dialogue line: " + _w)
+                continue
         checked_dlog.append(d)
     dlog = checked_dlog
 
@@ -3963,12 +4013,24 @@ def director_resolve(ctx, nonce):
     # names that are not cast are left alone, since the Director may voice an
     # unsheeted background presence.
     _ordered = []
+    _surviving_speakers = {str(d.get("speaker") or "").casefold() for d in dlog}
     for _spk in (out.get("dialogue_order") or []):
         _cf = str(_spk).casefold()
         if _cf in cast_names_lower and _cf not in char_speech_bodies:
             ctx.add_warning(
                 f"Dropped {_spk!r} from dialogue_order: a registered "
                 "character with no declared speech this beat."
+            )
+            continue
+        # A non-cast name whose every line the presence-knowledge floor
+        # dropped must not survive as a bare speaker either -- t1391's
+        # speaker-with-no-line shape, from the other direction.
+        if (_cf not in cast_names_lower
+                and not is_player_speaker(_spk, chat)
+                and _cf not in _surviving_speakers):
+            ctx.add_warning(
+                f"Dropped {_spk!r} from dialogue_order: no surviving "
+                "dialogue_log line for this speaker."
             )
             continue
         _ordered.append(_spk)

@@ -52,7 +52,7 @@ from __future__ import annotations
 import json
 
 from canon_provenance import is_node_id
-from db import q, wget, wget_for_frame
+from db import active_frame_id, q, wget, wget_for_frame
 from logging_utils import logger
 from providers import chat_complete
 from spatial import room_of
@@ -190,15 +190,32 @@ def _skeleton(cid, scene, subject, since, until, frame_id=None):
             f"scheduled_events skipped: no clock recorded for turn {since}")
     else:
         ledgers.append("scheduled_events")
-        from scene import simulation_clock
+        # THIS frame's clock, not whichever frame the calling thread happens
+        # to have active: `simulation_clock` resolves through the contextvar,
+        # so an explicit frame_id ask on the wrong thread windowed the ledger
+        # by another era's seconds and the frame's own fired events vanished.
         now_seconds = float(
-            (simulation_clock(cid) or {}).get("elapsed_seconds") or 0.0)
+            (_read_key(cid, "simulation_clock", {}, frame_id) or {})
+            .get("elapsed_seconds") or 0.0)
+        # scheduled_events has no frame column; frame identity rides the
+        # payload (mechanics._fire_due_events' own convention). A row minted
+        # by another era is another era's event -- scene.recent_events treats
+        # the same crossing as an information-boundary leak, not noise.
+        fid = active_frame_id.get() if frame_id is None else frame_id
         for row in q(
             "SELECT event_id, kind, location_id, payload FROM scheduled_events "
             "WHERE chat_id=? AND status='fired' AND due_at>? AND due_at<=? "
             "ORDER BY due_at",
             (cid, since_seconds, now_seconds),
         ):
+            try:
+                payload = json.loads(row["payload"] or "{}")
+            except (TypeError, ValueError):
+                payload = {}
+            if not isinstance(payload, dict):
+                payload = {}
+            if payload.get("frame_id") != fid:
+                continue
             entry = None
             location = str(row["location_id"] or "")
             if subject["kind"] in ("room", "place"):
@@ -206,11 +223,19 @@ def _skeleton(cid, scene, subject, since, until, frame_id=None):
                     entry = {"turn": None, "event_id": row["event_id"],
                              "summary": str(row["kind"])}
             else:
-                hay = (str(row["payload"] or "") + " " + location).casefold()
-                needles = [subject["id"].casefold()]
+                # Attribution is structured or not at all: `entity_id` is
+                # the one subject-bearing field any writer stamps. The
+                # substring sweep this replaces matched payload prose, so
+                # another room's event that merely NAMED the subject rode
+                # into their gap with its room id -- a mention is somebody
+                # else's event (offscreen._intention_owned_by's rule, on
+                # the read side). A row with no structured owner is
+                # nobody's content.
+                owner = str(payload.get("entity_id") or "").strip().casefold()
+                needles = {subject["id"].casefold()}
                 if subject.get("display"):
-                    needles.append(str(subject["display"]).casefold())
-                if any(n and n in hay for n in needles):
+                    needles.add(str(subject["display"]).casefold())
+                if owner and owner in needles:
                     entry = {"turn": None, "event_id": row["event_id"],
                              "summary": str(row["kind"])}
             if entry is not None:
@@ -218,11 +243,23 @@ def _skeleton(cid, scene, subject, since, until, frame_id=None):
                     entry["room"] = location
                 events.append(entry)
 
-    # -- offscreen ticks. Turn-stamped but NAME-keyed ('actor' is a display
-    # name -- the live defect section 1.2 cites), so matching goes through
-    # the display spelling and an id-only subject can miss its own ticks.
-    # That miss belongs to the log's key space, not to this reader.
+    # -- offscreen ticks. Turn-stamped. Attribution: a seeded-rung tick's
+    # structured `subject.id` wins; a row without one is matched by its
+    # legacy `actor` field exactly (id or display spelling), never by prose.
+    # CONTENT then needs provenance: the seeded rung stamps
+    # `basis`/`disposition` on every tick it mints, so a row carrying
+    # neither is the OLD model-driven rung's omniscient prose -- chat 9
+    # holds rows like "unaware of the Kalvoss cruiser's arrival", a fact
+    # ABOUT the subject's ignorance phrased with knowledge the subject
+    # lacks -- and delivering it into the subject's own gap hands the mind
+    # a fact that reached it through no channel. Dropped, and the drop is
+    # noted (offscreen._intention_owned_by's ownership rule, on the read
+    # side: prose that cannot prove its provenance is nobody's content).
     ledgers.append("offscreen_log")
+    names = {subject["id"].casefold()}
+    if subject.get("display"):
+        names.add(str(subject["display"]).casefold())
+    unproven = 0
     for batch in _read_key(cid, "offscreen_log", [], frame_id) or []:
         if not isinstance(batch, dict):
             continue
@@ -235,13 +272,24 @@ def _skeleton(cid, scene, subject, since, until, frame_id=None):
         for tick in batch.get("events") or []:
             if not isinstance(tick, dict):
                 continue
-            actor = str(tick.get("actor") or "").strip().casefold()
-            names = {subject["id"].casefold()}
-            if subject.get("display"):
-                names.add(str(subject["display"]).casefold())
-            if actor and actor in names:
-                events.append({"turn": turn, "event_id": None,
-                               "summary": str(tick.get("tick") or "")[:300]})
+            sub = tick.get("subject")
+            if isinstance(sub, dict) and str(sub.get("id") or "").strip():
+                owned = (str(sub["id"]).strip().casefold()
+                         == subject["id"].casefold())
+            else:
+                actor = str(tick.get("actor") or "").strip().casefold()
+                owned = bool(actor) and actor in names
+            if not owned:
+                continue
+            if not (tick.get("basis") and tick.get("disposition")):
+                unproven += 1
+                continue
+            events.append({"turn": turn, "event_id": None,
+                           "summary": str(tick.get("tick") or "")[:300]})
+    if unproven:
+        notes.append(
+            f"dropped {unproven} offscreen tick(s) with no provenance "
+            "(legacy model-written rows may not deliver prose)")
 
     inputs = {"ledgers": ledgers}
     if notes:

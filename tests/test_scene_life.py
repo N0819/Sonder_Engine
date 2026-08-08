@@ -373,3 +373,92 @@ def test_result_reports_mode_and_sub_agents():
     assert out["agent_calls"] == ["blurb_mint", "scene_life"]
     # Default keeps the historical shape for the per-presence path.
     assert _result([], [])["mode"] == "background_react"
+
+
+# --- the shared payload admits the beat prose only when it is shared --------
+
+def _blurbed_presences(placements):
+    out = {}
+    for i, (name, room) in enumerate(placements.items()):
+        out[name] = {"first_turn": 0, "last_turn": 4, "dialogue_turns": [],
+                     "mention_turns": [],
+                     "blurb": {"manner": "m", "trait": "t", "tell": "",
+                               "look": ""},
+                     "sketch": {"station_room": room}}
+    return out
+
+
+def _open_scene():
+    """The tavern with the cellar door OPEN, so ambient scope holds both rooms
+    and the manager can legitimately hold a divergent roster."""
+    sc = _scene()
+    sc["rooms"][COMMON]["adjacent"] = [{"to": CELLAR, "barrier": "open"}]
+    sc["rooms"][CELLAR]["adjacent"] = [{"to": COMMON, "barrier": "open"}]
+    return sc
+
+
+def _run_scene_life(temp_db, monkeypatch, presences, positions):
+    sc = _open_scene()
+    sc["positions"] = positions
+    ctx = _make_ctx(temp_db, presences=presences, scene=sc)
+    ctx.director_resolve = {
+        "resolved_event": "By the fire, the stranger empties a purse of "
+                          "foreign coins onto the table.",
+        "dialogue_log": [],
+    }
+    captured = {}
+    import agents.background as background
+
+    def fake_agent_json(role, step_key, system, payload, **kwargs):
+        captured.setdefault(step_key, []).append(payload)
+        return {"entries": []} if step_key == "scene_life" else {"blurbs": []}
+
+    monkeypatch.setattr(background, "_agent_json", fake_agent_json)
+    background.scene_life(ctx, 0, "full", {})
+    return captured
+
+
+def test_shared_prose_reaches_a_uniformly_co_present_roster(temp_db, monkeypatch):
+    """The common case must keep working: everyone in the beat's room shares
+    the beat, and the prose is legitimately one context."""
+    captured = _run_scene_life(
+        temp_db, monkeypatch,
+        _blurbed_presences({"The Barkeep": COMMON, "Thin Local": COMMON}),
+        {"Kessa Vane": COMMON, "barkeep": COMMON, "local_1": COMMON})
+    (payload,) = captured["scene_life"]
+    assert "foreign coins" in payload["beat"]["resolved_event"]
+
+
+def test_divergent_roster_withholds_the_omniscient_prose(temp_db, monkeypatch):
+    """The batched call is ONE shared context. With the cellarman managed from
+    the next room, admitting the beat prose hands HIS voicing what only the
+    common room perceived -- the field beside the per-presence audience tags
+    nullified them. Layer 1 demands non-admission, not annotation."""
+    captured = _run_scene_life(
+        temp_db, monkeypatch,
+        _blurbed_presences({"The Barkeep": COMMON, "The Cellarman": CELLAR}),
+        {"Kessa Vane": COMMON, "barkeep": COMMON, "cellarman": CELLAR})
+    (payload,) = captured["scene_life"]
+    rooms = {c["room"] for c in payload["cast"]}
+    assert rooms == {COMMON, CELLAR}, (
+        "precondition: the manager must actually hold a divergent roster, "
+        f"got {rooms}")
+    assert payload["beat"]["resolved_event"] == ""
+
+
+def test_blurbs_are_minted_from_the_presences_own_room(temp_db, monkeypatch):
+    """A blurb is FROZEN characterization: chat 65's Vendor (fountain_plaza)
+    carried a blurb minted against the eastern_market place block for the rest
+    of her existence. Each mint call's place block must be the room the
+    presence actually stands in."""
+    presences = _blurbed_presences({"The Barkeep": COMMON,
+                                    "The Cellarman": CELLAR})
+    for rec in presences.values():
+        rec.pop("blurb")
+    captured = _run_scene_life(
+        temp_db, monkeypatch, presences,
+        {"Kessa Vane": COMMON, "barkeep": COMMON, "cellarman": CELLAR})
+    mint_rooms = {p["place"]["room_id"]: [q["name"] for q in p["people"]]
+                  for p in captured.get("blurb_mint", [])}
+    assert mint_rooms.get(COMMON) == ["The Barkeep"]
+    assert mint_rooms.get(CELLAR) == ["The Cellarman"]
