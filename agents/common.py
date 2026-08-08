@@ -28,6 +28,7 @@ from spatial import (
     entity_arc,
     has_visual,
     hear_level,
+    hiding_holders_of,
     nearby_rooms,
     normalize_room_id,
     room_of,
@@ -2741,6 +2742,112 @@ def _check_prose_quote_authority(resolved_event, allowed_bodies):
             warnings.append(
                 "Spoken line in resolved_event that nobody declared "
                 f"(prose-quote authority): {body[:120]!r}"
+            )
+    return warnings
+
+
+# Determiners that make a reference DEFINITE. "That explains the strange
+# coins" refers to HER coins, a thing in the world; "local trade runs on
+# copper and silver coins" is knowledge about coins in general. The definite
+# article is what turns a generality into a claim of acquaintance, so it is
+# what gates the single-word match below.
+_DEFINITE_DETS = ("the", "this", "that", "these", "those",
+                  "your", "her", "his", "their", "its", "my", "our")
+
+
+def _check_presence_knowledge_channel(speaker, quote, sc, presence_rec,
+                                      heard_text):
+    """Scene-entity references in a Director-voiced presence line that the
+    presence has no perceptual channel to.
+
+    The Director is entitled to omniscience -- it owns objective causality --
+    and the resolve prompt licenses it to voice unsheeted background
+    presences. Nothing sat between those two facts: the voicing was authored
+    from the omniscient working state with no perception object for the
+    speaker. Chat 65 t2148 is the measured case -- Kadoman, a presence minted
+    at turn 9 in eastern_market, referring to "the strange coins and notes"
+    shown once at turn 4 in fountain_plaza and pocketed since.
+
+    Deterministic floor, subtractive on purpose: it tests REFERENCES the
+    engine can resolve (scene entities by name or alias), never meaning. A
+    multi-word phrase matches bare; a single-word alias matches only under a
+    definite/possessive determiner, because "the strange coins" claims
+    acquaintance while "gold coins" is generic knowledge -- a presence must
+    keep every true general thing it can say about its own world (the
+    copper-and-silver rule), and a presence with no channel must be free to
+    be ignorant in front of the player.
+
+    The channel test is current-scene only (presences are stateless): an
+    entity offers a channel when it is placed in the presence's own room and
+    not shut inside anything (`hiding_holders_of`, both containment forms).
+    An unplaced entity offers no provable channel -- in the measured corpus
+    the unplaced entities are precisely the pocketed belongings, while room
+    furniture lives in room `anchors`, which this never reads. ``heard_text``
+    is what legitimately names things into the presence's beat: everything
+    spoken aloud this beat by others, plus the presence's own record and
+    characterization. Returns warning strings; empty means no leak.
+    """
+    q = " %s " % re.sub(r"\s+", " ", str(quote or "")).casefold()
+    if not q.strip():
+        return []
+    entities = (sc or {}).get("entities") or {}
+    positions = (sc or {}).get("positions") or {}
+    speaker_cf = str(speaker or "").strip().casefold()
+    heard_cf = str(heard_text or "").casefold()
+
+    p_room = room_of(sc, speaker)
+    if not p_room:
+        by_name = {str((e or {}).get("name") or "").strip().casefold(): eid
+                   for eid, e in entities.items() if isinstance(e, dict)}
+        eid = by_name.get(speaker_cf)
+        if eid:
+            p_room = positions.get(eid) or room_of(sc, eid)
+    if not p_room:
+        p_room = ((presence_rec or {}).get("sketch") or {}).get("station_room")
+
+    warnings = []
+    for eid, edef in entities.items():
+        if not isinstance(edef, dict):
+            continue
+        name = str(edef.get("name") or "").strip()
+        name_cf = name.casefold()
+        if name_cf and name_cf == speaker_cf:
+            continue  # a presence may always speak of itself
+        phrases = {p for p in
+                   ({name} | {str(a).strip()
+                              for a in (edef.get("aliases") or [])})
+                   if p and len(p) >= 3}
+        if not phrases:
+            continue
+        if any(p.casefold() in heard_cf for p in phrases):
+            continue  # named aloud in the presence's beat, or its own record
+        e_room = (positions.get(eid) or room_of(sc, eid)
+                  or (room_of(sc, name) if name else None))
+        concealed = bool(hiding_holders_of(sc, eid)) or (
+            bool(name) and bool(hiding_holders_of(sc, name)))
+        if p_room and e_room == p_room and not concealed:
+            continue  # placed here, in the open: a channel exists
+        hit = None
+        for p in sorted(phrases, key=len, reverse=True):
+            pcf = p.casefold()
+            if len(p.split()) >= 2:
+                if re.search(r"(?<!\w)%s(?!\w)" % re.escape(pcf), q):
+                    hit = p
+                    break
+            elif re.search(
+                    r"(?<!\w)(?:%s)\s+(?:[\w'-]+\s+){0,2}%s(?!\w)"
+                    % ("|".join(_DEFINITE_DETS), re.escape(pcf)), q):
+                hit = p
+                break
+        if hit:
+            where = "unplaced" if not e_room else e_room
+            warnings.append(
+                f"Background presence {speaker!r} references {hit!r} "
+                f"({name or eid}: {where}"
+                + (", concealed" if concealed else "")
+                + f") with no perceptual channel from "
+                + (repr(p_room) if p_room else "an unknown room")
+                + " (presence-knowledge channel)."
             )
     return warnings
 

@@ -106,13 +106,20 @@ def _filtered_player_declaration(ctx):
     return ctx.input or ""
 
 
-def _beat_for_presence(dr, sc, station_room, name):
+def _beat_for_presence(dr, sc, station_room, name, beat_room=None):
     """What the presence objectively perceives of the beat. Prefer the audible
     dialogue at its station room over the raw resolved_event: resolved_event is
     authored from the omniscient objective frame and can narrate content a
     bystander in one room never sensed. Concealed lines (globally, or concealed
     FROM this presence) are dropped, and any concealed quote body that bled into
-    the objective prose is redacted as a backstop."""
+    the objective prose is redacted as a backstop.
+
+    ``beat_room`` is the room the beat resolved in (the player's room). The
+    prose fallback at the bottom is only a bystander's view when the bystander
+    is STANDING THERE: without the gate, a presence whose station was known but
+    elsewhere received the omniscient frame precisely when the dialogue filter
+    above had just delivered them nothing -- deterministically computed as out
+    of earshot, then handed strictly more than an in-earshot presence."""
     resolved = str(dr.get("resolved_event") or "")
     audible = []
     for d in (dr.get("dialogue_log") or []):
@@ -166,6 +173,13 @@ def _beat_for_presence(dr, sc, station_room, name):
     # it here would hand an unplaced presence MORE than the dialogue gate above
     # just withheld.
     if not station_room:
+        return ""
+    # And only for a presence standing in the room the beat resolved in. A
+    # known station in ANOTHER room is a vantage on that other room, not on
+    # this beat; chat 65's Vendor (fountain_plaza) received eastern_market
+    # prose through exactly this fall-through. An unknown beat_room fails
+    # closed for the same reason an unknown station does.
+    if str(station_room) != str(beat_room or ""):
         return ""
     return re.sub(r"\s{2,}", " ", resolved).strip()
 
@@ -439,7 +453,7 @@ def scene_life(ctx, nonce, level, cfg):
     events = _manager_events(ctx, dr, sc, managed, level)
 
     place = _place_block(ctx, p_room)
-    minted = _mint_blurbs(ctx, managed, place)
+    minted = _mint_blurbs(ctx, managed)
 
     cast = []
     for _, name, rec, room in managed:
@@ -453,10 +467,23 @@ def scene_life(ctx, nonce, level, cfg):
             "recent": [r.get("text", "") for r in (rec.get("recent") or [])][-3:],
         })
 
+    # The batched call is ONE shared context: whatever enters it reaches the
+    # voicing of every managed presence at once, so the omniscient beat prose
+    # is admitted only when it is uniformly perceivable -- every managed
+    # presence standing in the room the beat resolved in. Anything less
+    # (someone elsewhere in ambient scope, or no known player room) withholds
+    # the prose entirely and leaves the per-presence audience tags on
+    # `events` as the only channel; tagging prose per presence inside a
+    # shared context would be an annotation, and §3.11 layer 1 demands
+    # non-admission, not annotation. This is the field that nullified
+    # _audience_map's work: the tags said "none" while the prose beside them
+    # said everything.
+    _prose_shared = bool(p_room) and all(
+        room == p_room for _, _n, _r, room in managed)
     payload = {
         "place": place,
         "beat": {
-            "resolved_event": _redacted_resolved_event(dr),
+            "resolved_event": _redacted_resolved_event(dr) if _prose_shared else "",
             "player_declaration": _filtered_player_declaration(ctx),
             "events": events,
             "present_characters": [
@@ -573,32 +600,14 @@ def _claimed_refs(entry, quote, known_names, turn=None, claimant=None):
     declare (the same belt-and-braces shape used everywhere else here)."""
     declared = [str(a).strip() for a in (entry.get("asserts") or [])
                 if str(a).strip()]
-    # INSTRUMENTATION 2026-08-08: neither the raw `asserts` nor `detected` is
-    # persisted anywhere, so 29 beats that produced no claim cannot be told
-    # apart -- model omitted the field, model sent it empty, or the filters
-    # below ate every candidate. Both are logged before they are consumed.
+    # Instrumentation for the never-fired claims lane stays in the LOGGER
+    # only: the earlier file-probe wrote _probe_claimed_refs.jsonl into the
+    # repository root on every run, tests included -- a module writing
+    # untracked content-bearing files into the tree is not instrumentation,
+    # it is debris (see docs/UNBUILT.md, claims-lane fire-rate entry).
     _log.info("claimed_refs: raw asserts=%r declared=%r", entry.get("asserts"), declared)
     detected = novel_proper_nouns(quote, known_names)
     _log.info("claimed_refs: detected=%r from quote=%r", detected, quote)
-    # The logger is unreadable from outside a FAILED lab run (engine_lab returns
-    # log_tail only on failure, and lab logs sit outside the workspace root), so
-    # the same two facts are also appended to a file in the tree.
-    try:
-        import os as _os
-        _probe_path = _os.path.join(
-            _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-            "_probe_claimed_refs.jsonl")
-        with open(_probe_path, "a", encoding="utf-8") as _probe_fh:
-            _probe_fh.write(json.dumps({
-                "turn": turn,
-                "claimant": claimant,
-                "raw_asserts": entry.get("asserts"),
-                "declared": declared,
-                "detected": detected,
-                "quote": quote,
-            }, default=str) + "\n")
-    except Exception:  # instrumentation must never fail the stage
-        pass
     known_cf = {k.casefold() for k in known_names}
     out = []
     for ref in declared + detected:
@@ -620,14 +629,19 @@ def _claimed_refs(entry, quote, known_names, turn=None, claimant=None):
     return out
 
 
-def _mint_blurbs(ctx, managed, place):
-    """One batched call giving a blurb to every managed presence that lacks
-    one (§3.8). Batching is safe here and follows from §3.2 rather than
-    excepting it: a blurb contains no perceptual content, so there is nothing
-    to cross-contaminate. Returned to the caller and persisted by commit --
-    this stage writes nothing itself.
+def _mint_blurbs(ctx, managed):
+    """Batched calls giving a blurb to every managed presence that lacks one
+    (§3.8), one call PER ROOM. Batching is safe here and follows from §3.2
+    rather than excepting it: a blurb contains no perceptual content, so there
+    is nothing to cross-contaminate. But the place block a blurb is minted
+    AGAINST is that presence's own room, not the player's -- a blurb is
+    frozen characterization, and chat 65's Vendor (fountain_plaza) carried a
+    blurb minted from the eastern_market block for the rest of her existence.
+    Returned to the caller and persisted by commit -- this stage writes
+    nothing itself.
     """
-    need = [(name, rec) for _, name, rec, _room in managed if not rec.get("blurb")]
+    need = [(name, rec, room) for _, name, rec, room in managed
+            if not rec.get("blurb")]
     if not need:
         return {}
     existing = []
@@ -636,34 +650,41 @@ def _mint_blurbs(ctx, managed, place):
         if b:
             existing.append({"name": name, **{k: b.get(k, "")
                                               for k in ("manner", "trait")}})
-    payload = {
-        "place": place,
-        "people": [
-            {"name": name,
-             "known": (rec.get("sketch") or {}).get("role_hint", "")}
-            for name, rec in need
-        ],
-        "already_written": existing,
-        "variant_seed": ctx.turn.idx,
-    }
-    try:
-        out = _agent_json("character_bg", "blurb_mint", get_prompt("blurb_mint"),
-                          payload, temperature=0.9)
-        out, warnings = validate_llm_output("blurb_mint", out)
-        ctx.warnings.extend(warnings)
-    except Exception as exc:  # a blurb is colour, never load-bearing
-        ctx.warnings.append("blurb_mint failed: %s" % exc)
-        return {}
-    wanted = {n.casefold(): n for n, _ in need}
     minted = {}
-    for b in (out.get("blurbs") or []):
-        if not isinstance(b, dict):
+    rooms = []
+    for _name, _rec, room in need:
+        if room not in rooms:
+            rooms.append(room)
+    for room in rooms:
+        batch = [(n, r) for n, r, rm in need if rm == room]
+        payload = {
+            "place": _place_block(ctx, room),
+            "people": [
+                {"name": name,
+                 "known": (rec.get("sketch") or {}).get("role_hint", "")}
+                for name, rec in batch
+            ],
+            "already_written": existing,
+            "variant_seed": ctx.turn.idx,
+        }
+        try:
+            out = _agent_json("character_bg", "blurb_mint",
+                              get_prompt("blurb_mint"), payload,
+                              temperature=0.9)
+            out, warnings = validate_llm_output("blurb_mint", out)
+            ctx.warnings.extend(warnings)
+        except Exception as exc:  # a blurb is colour, never load-bearing
+            ctx.warnings.append("blurb_mint failed: %s" % exc)
             continue
-        canon = wanted.get(str(b.get("name") or "").strip().casefold())
-        if not canon:
-            continue
-        minted[canon] = {k: str(b.get(k) or "").strip()[:160]
-                         for k in ("manner", "trait", "tell", "look")}
+        wanted = {n.casefold(): n for n, _ in batch}
+        for b in (out.get("blurbs") or []):
+            if not isinstance(b, dict):
+                continue
+            canon = wanted.get(str(b.get("name") or "").strip().casefold())
+            if not canon:
+                continue
+            minted[canon] = {k: str(b.get(k) or "").strip()[:160]
+                             for k in ("manner", "trait", "tell", "look")}
     return minted
 
 
@@ -814,7 +835,8 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce):
         },
         "beat": {
             "resolved_event": _beat_for_presence(
-                dr, sc, sketch.get("station_room"), name),
+                dr, sc, sketch.get("station_room"), name,
+                beat_room=_player_room(ctx, sc)),
             "addressed_by": addressed_by,
             "player_declaration": _filtered_player_declaration(ctx),
             "present_others": [p for p in present_others if p != name],
