@@ -833,3 +833,71 @@ class TestAuthoredRegionsSurviveTheOpeningTurn:
         out = attire.coerce_diff_shape({"wearing": ["robe"], "regions": regions})
 
         assert out["regions"] == regions
+
+
+# --- the actor is not the target ---------------------------------------------
+
+class TestDecisiveAttributionDoesNotUndressTheActor:
+    """Reported: "an NPC does a motion that would pull off clothes in one
+    motion and it only changes the state to loosened."
+
+    Detection was never the problem -- "in one motion" is in `_DECISIVE`, and
+    `_beat_voices` reads every character's declared action. ATTRIBUTION was.
+    "Corin strips her clothes off in one motion" names no garment the wardrobe
+    knows ("clothes" is not a garment), so it fell through to the name rule,
+    found exactly one name, and marked CORIN decisive. The body actually losing
+    the shift was not flagged, so `advance` clamped it to one rung.
+
+    AGENTS.md states the rule this broke outright: "the ACTOR is not the
+    target". A non-reflexive third-person possessive is the tell that the
+    sentence acts on somebody else.
+    """
+
+    WARDROBE = {"Mira": ["linen shift"], "Corin": ["leather jerkin"]}
+
+    def test_stripping_someone_else_flags_them_not_the_actor(self):
+        hits = attire.decisive_targets(
+            "", ["Corin strips her clothes off in one motion."],
+            self.WARDROBE, player_name="Mira")
+        assert hits == {"Mira"}, "the person losing the clothes is decisive"
+
+    def test_an_actor_undressing_themselves_is_still_the_actor(self):
+        """The fix must not invert the rule it repairs."""
+        hits = attire.decisive_targets(
+            "", ["Corin strips off in one motion."],
+            self.WARDROBE, player_name="Mira")
+        assert hits == {"Corin"}
+
+    def test_reflexive_keeps_the_actor(self):
+        hits = attire.decisive_targets(
+            "", ["Corin tears herself free of the jerkin in one motion."],
+            self.WARDROBE, player_name="Mira")
+        assert hits == {"Corin"}
+
+    def test_a_named_garment_still_decides_first(self):
+        """Garment attribution outranks everything and must be untouched."""
+        hits = attire.decisive_targets(
+            "", ["Corin pulls the linen shift off in one motion."],
+            self.WARDROBE, player_name="Mira")
+        assert hits == {"Mira"}
+
+    def test_ambiguity_undresses_nobody_rather_than_guessing(self):
+        """With more than one candidate the answer is no one: undressing the
+        WRONG person quickly is a worse error than the right one slowly."""
+        hits = attire.decisive_targets(
+            "", ["Corin strips her clothes off in one motion."],
+            {"Mira": ["shift"], "Corin": ["jerkin"], "Ada": ["robe"]},
+            player_name="Mira")
+        assert hits == set()
+
+    def test_the_clamp_is_what_this_controls(self):
+        """End to end: the flag is only worth anything because `advance` reads
+        it. Without it a garment moves one rung; with it, all the way off."""
+        previous = {"torso": {"garments": [
+            {"name": "linen shift", "state": "worn"}]}}
+        proposed = {"torso": {"garments": [
+            {"name": "linen shift", "state": "removed"}]}}
+        slow = attire.advance(previous, proposed, decisive=False)
+        fast = attire.advance(previous, proposed, decisive=True)
+        assert slow["torso"]["garments"][0]["state"] != "removed"
+        assert fast["torso"]["garments"][0]["state"] == "removed"

@@ -20,7 +20,7 @@
 | `agents/storage.py` | 115 | Step and active-variant persistence helpers. | `db` |
 | `ambience.py` | 2082 |  | `backdrops`, `db`, `outofband`, `weather` |
 | `app.py` | 4796 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `ambience`, `attire`, `auth_routes`, `backdrops`, `character_schema`, `chat_archive`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `survival`, `updates` |
-| `attire.py` | 1195 |  | — |
+| `attire.py` | 1227 |  | — |
 | `auth_routes.py` | 175 | Typed host-authentication HTTP routes and cookie transport. | `guest_access` |
 | `authored_events.py` | 124 |  | `db` |
 | `backdrops.py` | 1258 |  | `db`, `logging_utils`, `outofband`, `spatial`, `weather` |
@@ -237,13 +237,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `normalize_regions()` | 256 | 117 lines |
+| `decisive_targets()` | 817 | 89 lines |
 | `dedupe_regions()` | 579 | 82 lines |
 | `coerce_diff_shape()` | 711 | 77 lines |
 | `resolve_garment()` | 509 | 68 lines |
-| `decisive_targets()` | 807 | 67 lines |
-| `apply_flat_change()` | 999 | 66 lines |
-| `advance()` | 876 | 56 lines |
-| `describe()` | 951 | 46 lines |
+| `apply_flat_change()` | 1031 | 66 lines |
+| `advance()` | 908 | 56 lines |
+| `describe()` | 983 | 46 lines |
 
 ### `auth_routes.py`
 
