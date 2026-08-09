@@ -311,6 +311,17 @@ def _stream(gen):
         try:
             for evt in gen:
                 evt_queue.put(evt)
+            # The other half of the stale-snapshot instrumentation. This runs on
+            # the PIPELINE thread, after the generator (commit included) is
+            # exhausted and before the response can close -- so this is the
+            # data_version the client's very next read must be at or above.
+            try:
+                from db import data_version as _dv_fn
+                _pipeline_logger.info(
+                    "turn_committed data_version=%s thread=%s",
+                    _dv_fn(), threading.get_ident())
+            except Exception:
+                pass
         except Exception as exc:
             _pipeline_logger.exception("Pipeline stream failed")
             evt_queue.put({
@@ -2394,6 +2405,34 @@ def chat_get(cid: int):
         bank = {**bank, "stranded": stranded} if stranded else None
     except Exception:
         bank = None
+
+    # INSTRUMENTATION for the "turn does not appear until I switch stories and
+    # switch back" report, 2026-08-08. The transcript rendered is old because
+    # THIS PAYLOAD was old: the frontend re-render provably runs, and the
+    # pipeline provably commits before its stream closes.
+    #
+    # The hypothesis is a stale read snapshot. Connections are thread-local and
+    # long-lived (db.py `_local.conn`), the pipeline commits on its own thread,
+    # and this route is served from uvicorn's threadpool -- so a connection
+    # whose WAL snapshot predates the commit cannot see the turn. That would be
+    # occasional (which thread serves it), would leave the old transcript
+    # intact, and would clear on the next request: all three reported.
+    #
+    # `data_version` is the exact test and db.py already says so -- it changes
+    # when ANOTHER connection commits and never for this one's own writes. Pair
+    # this line with the `turn_committed` line the pipeline logs: if the read's
+    # version is BELOW the commit's, the snapshot was stale and the mechanism
+    # is proven. If they match and the turn is still missing, the hypothesis is
+    # wrong and the hunt moves on.
+    try:
+        _dv = data_version()
+        _max_turn = max((t.get("id") or 0) for t in turns) if turns else 0
+        _pipeline_logger.info(
+            "chat_read chat=%s turns=%d max_turn_id=%s data_version=%s "
+            "thread=%s", cid, len(turns), _max_turn, _dv,
+            threading.get_ident())
+    except Exception:
+        pass
 
     return {
         "chat": dict(chat),
