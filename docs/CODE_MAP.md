@@ -15,7 +15,7 @@
 | `agents/loops.py` | 1008 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 239 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 956 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/perception.py` | 3738 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
+| `agents/perception.py` | 3739 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 1009 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 115 | Step and active-variant persistence helpers. | `db` |
 | `ambience.py` | 2082 |  | `backdrops`, `db`, `outofband`, `weather` |
@@ -171,14 +171,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `perception_outcome()` | 2962 | 777 lines |
-| `perception_act()` | 2282 | 491 lines |
-| `perception_establish()` | 2108 | 173 lines |
+| `perception_outcome()` | 2963 | 777 lines |
+| `perception_act()` | 2283 | 491 lines |
+| `perception_establish()` | 2109 | 173 lines |
 | `_previous_open_group_continuity()` | 152 | 117 lines |
-| `_observer_scene_payload()` | 817 | 117 lines |
-| `_strip_self_narration()` | 1505 | 107 lines |
-| `_inject_onset_speech()` | 1029 | 96 lines |
-| `_source_channels()` | 1310 | 86 lines |
+| `_observer_scene_payload()` | 818 | 117 lines |
+| `_strip_self_narration()` | 1506 | 107 lines |
+| `_inject_onset_speech()` | 1030 | 96 lines |
+| `_source_channels()` | 1311 | 86 lines |
 
 ### `agents/runtime.py`
 

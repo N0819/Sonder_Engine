@@ -33,7 +33,10 @@ surface, the floor restores that surface's observer-safe authored description;
 unmentioned anatomy stays silent, and covered chest detail remains structurally
 unavailable. The model remains free to rephrase or integrate those traits for
 natural prose. The floor accepts a substantive paraphrase and intervenes only
-when the detail has been generalized away.
+when the detail has been generalized away. A second live reroll found that
+generic positional overlap (`inner`, `thighs`) could falsely satisfy the
+semantic check while every authored trait was still absent; those terms no
+longer count as evidence of preservation.
 
 This lands on the repaired observer path: perception previews commit's exact
 attire result on copies, region visibility is now a production-derived
