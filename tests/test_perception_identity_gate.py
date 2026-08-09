@@ -326,14 +326,23 @@ def test_outcome_payload_previews_partial_midriff_coverage_without_chest_leak(
     temp_db.set_setting("attire_beneath", "1")
     sc = temp_db.wget(ctx.chat.id, "scene", {})
     sc["attire"] = {"Hinami": attire.authored_entry(
-        ["fitted tank top"], [], {"torso": {
-            "garments": [{"name": "fitted tank top"}],
-            "beneath": "HOSTILE-WHOLE-TORSO",
-            "beneath_zones": {
-                "chest": "HOSTILE-CHEST",
-                "midriff": "faded scrape scars across the ribs",
+        ["fitted tank top"], [], {
+            "torso": {
+                "garments": [{"name": "fitted tank top"}],
+                "beneath": "HOSTILE-WHOLE-TORSO",
+                "beneath_zones": {
+                    "chest": "HOSTILE-CHEST",
+                    "midriff": "faded scrape scars across the ribs",
+                },
             },
-        }})}
+            "groin": {
+                "garments": [{
+                    "name": "travel shorts",
+                    "state": "removed",
+                }],
+                "beneath": "AUTHORED-BARE-GROIN-DETAIL",
+            },
+        })}
     temp_db.wset(ctx.chat.id, "scene", sc)
     ctx.director_resolve = {
         "resolved_event": "The top rides up, exposing the midriff.",
@@ -357,6 +366,7 @@ def test_outcome_payload_previews_partial_midriff_coverage_without_chest_leak(
     assert "HOSTILE-WHOLE-TORSO" not in payload_text
     assert "HOSTILE-CHEST" not in payload_text
     assert "fitted tank top" in payload_text
+    assert "AUTHORED-BARE-GROIN-DETAIL" in payload_text
     stored = temp_db.wget(ctx.chat.id, "scene", {})
     stored_garment = stored["attire"]["Hinami"]["regions"]["torso"]["garments"][0]
     assert "covered_zones" not in stored_garment, "preview mutated durable state"

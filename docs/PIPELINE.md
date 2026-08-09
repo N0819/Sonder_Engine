@@ -52,7 +52,9 @@ on a copy, applies derived region visibility, and exposes only the outer surface
 or legitimately bare body detail. For partial torso coverage, `chest` and
 `midriff` are rendered separately; a description authored for one zone is never
 used as fallback for the other, and the coarse whole-torso `beneath` string is
-withheld while only one zone is exposed.
+withheld while only one zone is exposed. Other bare regions remain independent:
+for example, a bare `groin` sends its authored anatomy through the same
+observer-safe projection even while a tank top still covers the chest.
 
 ### `narrator`
 
