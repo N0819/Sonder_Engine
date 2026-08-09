@@ -1184,6 +1184,20 @@ def _batch_entries_by_chars(entries, max_batch_chars):
         batches.append(current)
     return batches
 
+def _structure_key(content):
+    """A stable handle for matching a prepared entry back to its source.
+
+    Index alignment cannot be used: the rewrite SPLITS entries (the live
+    Re:Zero import produced 310 rows from 300 sources), so position drifts.
+    The opening of the text survives a rewrite far better than its length or
+    its keys do, and both halves of a split entry legitimately inherit the same
+    structural facts -- both halves of "Lugunica Currency" are still local
+    knowledge about Lugunica.
+    """
+    text = " ".join(str(content or "").split()).casefold()
+    return text[:120] if text else ""
+
+
 def _reinterpret_entries(entries):
     # A flat 15-entries-per-batch cap paired with a flat max_tokens=3000
     # worked for short, terse world-info-style entries, but this format
@@ -1391,6 +1405,37 @@ def import_lorebook(payload, name=None, reinterpret=False,
                 )
         return lb, len(src)
 
+    # THE TREE THE AUTHOR DREW IN THE TITLES. A World Info book is a flat list
+    # and every large one is really a tree, rendered with rule characters in
+    # `comment` -- a field that appeared NOWHERE in this module, so 300 titles
+    # and 116 explicit parent/child relations went in the bin on every import.
+    #
+    # It is recovered before the rewrite because it is the only principled
+    # source for the knowledge fields: `[>] Lugunica Currency` sitting under
+    # `[castle] Dragon Kingdom of Lugunica` says structurally that this is LOCAL
+    # knowledge about Lugunica, which is what lets an innkeeper there be
+    # expected to know it. Asking a model that per entry would cost 300 calls
+    # and answer worse -- the author already encoded it, in the layout.
+    structure = {}
+    try:
+        from lore_structure import derive_knowledge, parse_structure
+        for record in parse_structure(src):
+            body = _structure_key(record.get("content"))
+            if body:
+                tag, rng, locs = derive_knowledge(record)
+                structure[body] = {
+                    "title": record.get("title") or "",
+                    "knowledge_tag": tag,
+                    "knowledge_range": rng,
+                    "knowledge_locations": locs,
+                    # `constant` in the source means always-injected, which is
+                    # the author saying this one matters more than the rest.
+                    # Everything used to land on a flat 0.5.
+                    "importance": 0.9 if record.get("constant") else 0.5,
+                }
+    except Exception:
+        structure = {}
+
     entries = []
     for e in src:
         keys = e.get("key") or e.get("keys") or []
@@ -1446,6 +1491,7 @@ def import_lorebook(payload, name=None, reinterpret=False,
             ),
         )
         for entry, vector in zip(prepared_entries, vectors):
+            meta = structure.get(_structure_key(entry["content"])) or {}
             add_lore(
                 lb,
                 entry["keys"],
@@ -1454,6 +1500,11 @@ def import_lorebook(payload, name=None, reinterpret=False,
                 locked=entry["locked"],
                 category=entry["category"],
                 embedding=vector,
+                title=meta.get("title") or None,
+                knowledge_tag=meta.get("knowledge_tag"),
+                knowledge_range=meta.get("knowledge_range"),
+                knowledge_locations=meta.get("knowledge_locations"),
+                importance=meta.get("importance", 0.5),
             )
 
     return lb, len(prepared_entries)
