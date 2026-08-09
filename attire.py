@@ -804,6 +804,16 @@ def _flatten_note(value):
     return "" if value is None else str(value)
 
 
+# A third-person possessive that is NOT reflexive: "her clothes", "his shirt".
+# Its presence means the sentence acts on somebody other than the body it
+# names, which is the difference between "Corin strips her clothes off" and
+# "Corin strips off".
+_OTHERS_POSSESSIVE = re.compile(r"\b(?:her|his|their|its)\b(?!\s*self)",
+                                re.IGNORECASE)
+_REFLEXIVE = re.compile(r"\b(?:herself|himself|themselves|itself|myself)\b",
+                        re.IGNORECASE)
+
+
 def decisive_targets(player_text, other_texts, wardrobe, player_name=None):
     """WHOSE clothes this beat's words tore off, rather than merely whether.
 
@@ -863,6 +873,28 @@ def decisive_targets(player_text, other_texts, wardrobe, player_name=None):
                      if str(name or "").strip() and re.search(
                          r"\b%s\b" % re.escape(str(name).casefold()), folded)}
             if len(named) == 1:
+                # THE ACTOR IS NOT THE TARGET, and this fallback used to make
+                # them one. "Corin strips her clothes off in one motion" names
+                # no garment the wardrobe knows -- "clothes" is not a garment
+                # -- so it fell to here, found exactly one name, and marked
+                # CORIN as the one being undressed. The person actually losing
+                # the shift stayed clamped to one rung, which is the reported
+                # symptom: a motion that plainly takes clothing off only
+                # reaching `loosened`.
+                #
+                # A non-reflexive third-person possessive is the tell. With
+                # one, the sentence acts on somebody else, so the named body is
+                # the wrong answer: attribute to the only OTHER dressed body if
+                # there is exactly one, and otherwise to nobody. Undressing the
+                # wrong person faster is a worse error than undressing the
+                # right one slowly.
+                if (_OTHERS_POSSESSIVE.search(sentence)
+                        and not _REFLEXIVE.search(sentence)):
+                    others = {name for name in wardrobe if name not in named
+                              and (wardrobe.get(name) or [])}
+                    if len(others) == 1:
+                        hits |= others
+                    continue
                 hits |= named
                 continue
             # Nobody identifiable, or several equally plausible. The player's
