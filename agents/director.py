@@ -3035,6 +3035,42 @@ def _resolve_movement_mover(sc, sd, mv, p_name):
         return key, positions.get(key), str(eid)
     return None, None, None
 
+# WHAT THE DIRECTOR NEEDS FROM AN INTERACTION ROUND, AND WHAT IT MUST NOT HAVE.
+#
+# A round carried each character's ENTIRE decision output -- measured on chat
+# 67 turn 48, 10,791 chars for a single round, of which the conduct is ~2,400:
+# appraisal 1,981, active_state 1,105, response_candidates 1,029,
+# mind_model_updates 768, plus every memory/evidence/belief internal and the
+# per-mind `delivered_views`.
+#
+# The size is the smaller problem. `response_candidates` is what a character
+# WEIGHED AND DID NOT DO, and CLAUDE.md draws the line this crosses: the
+# Director owns objective causality and does not own character psychology. A
+# stage adjudicating what happened should not be reading what was nearly said.
+#
+# So the round is projected to conduct: who spoke, in what order, and what they
+# did. That is what ordering a beat needs, and it is what `dialogue_order` and
+# the speech-authority guards are checked against.
+_ROUND_CONDUCT_KEYS = ("sequence", "speech", "speech_volume", "action",
+                       "actions", "interaction", "name")
+
+
+def _round_conduct(rounds):
+    """Interaction/reaction rounds reduced to what was said and done."""
+    out = []
+    for entry in rounds or []:
+        if not isinstance(entry, dict):
+            continue
+        result = entry.get("result")
+        result = result if isinstance(result, dict) else {}
+        conduct = {k: result[k] for k in _ROUND_CONDUCT_KEYS
+                   if result.get(k) not in (None, "", [], {})}
+        out.append({"round": entry.get("round"),
+                    "speaker": entry.get("speaker"),
+                    "result": conduct})
+    return out
+
+
 def _audit_fact_adjudications(ctx, out, interp):
     """Deterministic W2 backstop: every player-authored WORLD assertion --
     the actor-less `event` claims _extract_authority_claims mints (an
@@ -3477,8 +3513,8 @@ def director_resolve(ctx, nonce):
             for _pn, _pr in
             (wget(chat["id"], "background_presences", {}) or {}).items()
         ],
-        "interaction_rounds": loop.get("rounds") or [],
-        "reaction_rounds": (ctx.reaction_loop or {}).get("rounds") or [],
+        "interaction_rounds": _round_conduct(loop.get("rounds")),
+        "reaction_rounds": _round_conduct((ctx.reaction_loop or {}).get("rounds")),
         "variant_seed": nonce,
     }
 
