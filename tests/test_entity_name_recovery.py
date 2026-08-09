@@ -109,7 +109,18 @@ def test_mapping_scene_patch_entities_are_named():
 
 
 def test_non_dict_entity_value_is_left_alone():
-    """Malformed input must not raise inside preprocessing."""
+    """Malformed input must not raise inside preprocessing.
+
+    That is what this test is for and it is unchanged. What changed on
+    2026-08-08 is the CONSEQUENCE: a malformed `state_diff` sub-field is now
+    pruned and the beat commits what it did adjudicate, rather than the whole
+    resolve being rejected. `entities` is the most consequential field to drop
+    -- a minted carafe is genuinely lost -- but losing the entity beats losing
+    the beat, the drop is warned about rather than silent, and the reconcile
+    seam exists to catch changes asserted in prose but missing from the diff.
+    """
     raw = {"state_diff": {"entities": {"sake_carafe": "a carafe"}}}
     report = validate_llm_output_strict("director_resolve", raw)
-    assert not report.valid  # still rejected, but by the schema, not a crash
+    assert report.valid  # pruned, not crashed and not fatal
+    assert any("entities" in w for w in report.warnings)
+    assert not report.output["state_diff"]["entities"]

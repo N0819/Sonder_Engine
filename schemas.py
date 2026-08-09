@@ -3663,6 +3663,31 @@ def _name_what_was_discarded(step_key, raw, error):
     )
 
 
+# Steps whose `state_diff` is an ENCODING of an adjudication rather than the
+# adjudication itself. The prose, the dialogue and the summary are the beat;
+# the diff is how the beat is written into world state, and the engine already
+# treats it as separable -- `resolve_reconcile`/`resolve_repair` exist to
+# detect changes asserted in prose but missing from the diff and merge a
+# correction additively.
+_DIFF_PRUNABLE_STEPS = ("director_resolve", "resolve_repair")
+
+
+def _prunable_diff_fields(errors):
+    """The `state_diff` sub-fields every error is rooted under, or None.
+
+    None means at least one error is somewhere else -- in `resolved_event`, in
+    `dialogue_log`, in the parse itself -- and nothing may be pruned, because
+    those ARE the adjudication and a beat without them is not a beat.
+    """
+    fields = set()
+    for error in errors:
+        loc = [str(part) for part in (error.get("loc") or [])]
+        if len(loc) < 2 or loc[0] != "state_diff":
+            return None
+        fields.add(loc[1])
+    return fields or None
+
+
 def validate_llm_output_strict(
     step_key: str,
     raw: dict,
@@ -3698,6 +3723,51 @@ def validate_llm_output_strict(
             )
             message = error.get("msg", "invalid value")
             errors.append(f"{location}: {message}")
+
+        # ONE BAD FIELD USED TO COST THE WHOLE BEAT. Live 2026-08-08: a
+        # complete, correct 4,000-token resolve -- resolved_event, summary,
+        # dialogue all intact -- was discarded because `state_diff.time`
+        # arrived as a scalar, and the repair attempt was handed the same
+        # broken example that caused it and could not converge.
+        #
+        # `_coerce_optional_time` fixed that one field. This is the general
+        # form, and it is the same shape as the lorebook import's
+        # repair-then-degrade: when EVERY error is rooted under a `state_diff`
+        # sub-field, drop those sub-fields and re-validate. Absent is already
+        # "no change asserted" for every StateDiff field, so the beat commits
+        # what it did adjudicate and the drift is the reconcile seam's problem
+        # next beat -- which is exactly what that seam exists for.
+        #
+        # DROPPED, NEVER INVENTED. Nothing truthful can be built from a
+        # malformed diff, and a fabricated value is a claim the model never
+        # made. And nothing is pruned when any error sits outside `state_diff`:
+        # the prose, the dialogue and the summary ARE the adjudication, and a
+        # beat without them is not a beat.
+        prunable = (_prunable_diff_fields(exc.errors())
+                    if step_key in _DIFF_PRUNABLE_STEPS else None)
+        if prunable:
+            pruned = dict(prepared)
+            diff = dict(pruned.get("state_diff") or {})
+            for field in prunable:
+                diff.pop(field, None)
+            pruned["state_diff"] = diff
+            try:
+                model = _validate(model_cls, pruned)
+            except ValidationError:
+                pass
+            else:
+                return ValidationReport(
+                    valid=True,
+                    output=_dump(model),
+                    warnings=[
+                        "Dropped malformed state_diff.%s so the beat could "
+                        "commit what it did adjudicate (%s)" % (field, detail)
+                        for field, detail in
+                        ((f, next((e for e in errors
+                                   if e.startswith("state_diff.%s" % f)), ""))
+                         for f in sorted(prunable))
+                    ],
+                )
 
         return ValidationReport(
             valid=False,
