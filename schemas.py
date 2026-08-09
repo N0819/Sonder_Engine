@@ -1682,6 +1682,13 @@ class DirectorResolve(LenientModel):
     # verdict:'confirmed'|'contested'|'false', landing}. Audited
     # deterministically in agents/director.py (_audit_fact_adjudications).
     fact_adjudications: list[dict] = Field(default_factory=list)
+    # ENGINE-AUTHORED, never written by the model (same contract as
+    # `following_ops` above). Background presences whose Director-written line
+    # was removed so the background stage can voice them properly; read by
+    # commit.pick_background_reactors as a forced pick. Declared here because
+    # the schema dump drops unknown keys, which would have silently discarded
+    # the hand-off and turned a re-homed line into a deleted one.
+    routed_to_background: list[str] = Field(default_factory=list)
 
 # ---- Resolve reconciliation (agents/director.py's post-resolve seam) ----
 

@@ -73,6 +73,7 @@ from .common import (
     _check_player_act_authority,
     _check_player_interiority_authority,
     _check_presence_knowledge_channel,
+    director_may_voice,
     _check_prose_quote_authority,
     _quote_body,
     _requires_reaction_phase,
@@ -3994,6 +3995,7 @@ def director_resolve(ctx, nonce):
     _all_quotes = [(str(d.get("speaker") or "").casefold(),
                     str(d.get("exact_quote") or "")) for d in dlog]
     checked_dlog = []
+    _routed_to_background = []
     for d in dlog:
         speaker = d.get("speaker") or ""
         speaker_cf = str(speaker).casefold()
@@ -4017,6 +4019,24 @@ def director_resolve(ctx, nonce):
                 continue
         elif speaker_cf and speaker_cf not in _xp_names_cf:
             _rec = _bg_recs.get(str(speaker).strip()) or {}
+            # DIALOGUE BELONGS TO THE BACKGROUND STAGE, MINTING STAYS HERE.
+            # The Director keeps every authority over what EXISTS -- it mints
+            # the presence, places it, moves it, gives it an action -- and
+            # gives up authoring its WORDS unless it is a simple creature
+            # whose speech a dedicated call could not improve
+            # (`director_may_voice`). Dropping the line here is what makes the
+            # speaker eligible again: `pick_background_reactors` stands down
+            # for anyone already in `dialogue_log`, so removing the line hands
+            # them to the stage that gives them their own call, their own
+            # perception object and their own recognition of the room.
+            if not director_may_voice(speaker, sc, _rec):
+                ctx.add_warning(
+                    f"Routed {speaker!r}'s line to the background stage: the "
+                    "Director mints presences and moves them; it does not "
+                    "write their dialogue.")
+                if str(speaker).strip() not in _routed_to_background:
+                    _routed_to_background.append(str(speaker).strip())
+                continue
             _heard = " ".join(
                 [q for s, q in _all_quotes if s != speaker_cf]
                 + [str(interp.get("speech") or ""), str(ctx.input or "")]
@@ -4032,6 +4052,11 @@ def director_resolve(ctx, nonce):
                 continue
         checked_dlog.append(d)
     dlog = checked_dlog
+    # Read by commit.pick_background_reactors as a FORCED pick: a presence the
+    # Director wanted to speak for is salient by construction, and without this
+    # the backstop's own salience test could drop the line entirely rather than
+    # re-home it -- trading clunky dialogue for silence, which is worse.
+    out["routed_to_background"] = _routed_to_background
 
     # `dialogue_order` is a bare list of names carried to perception, and
     # nothing checked it against who actually spoke. In chat 56 t1391 it read

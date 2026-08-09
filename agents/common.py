@@ -2755,6 +2755,63 @@ _DEFINITE_DETS = ("the", "this", "that", "these", "those",
                   "your", "her", "his", "their", "its", "my", "our")
 
 
+# WHAT THE DIRECTOR MAY STILL SPEAK FOR.
+#
+# Measured 2026-08-08 across the whole corpus: background lines authored in
+# `director_resolve` run a MEDIAN OF 8 WORDS against the sheeted cast's 16, and
+# 27% of them are four words or fewer against the cast's 13% -- "Dragon
+# Kingdom...", "Kadomon.", "Sorry-sorry-". 2,042 of the 2,240 background lines
+# in the corpus came from the Director; the stage built to voice extras
+# produced 200, because `pick_background_reactors` is a BACKSTOP that stands
+# down whenever the Director already spoke for someone.
+#
+# So the model adjudicating physics, dialogue order, state diffs and time in
+# one pass was also writing every extra's dialogue, as filler, with no
+# perception object for the speaker. That is one cause with two symptoms: the
+# flatness above, and the Kadoman leak that `_check_presence_knowledge_channel`
+# exists to catch.
+#
+# These kinds keep the Director's voice because a full character call would buy
+# nothing: their speech is formulaic or barely linguistic -- a beast's snarl, a
+# swarm, a drone's stock phrase. Anything PERSON-shaped is routed to the
+# background stage, which gives it its own call, its own perception object and
+# its own recognition of the room. The list is deliberately narrow: routing a
+# borderline speaker costs one call and gets a better line, while keeping one
+# costs the defect this whole change exists to remove.
+_DIRECTOR_VOICEABLE_KINDS = frozenset({
+    "creature", "monster", "beast", "animal", "mount", "swarm",
+    "undead", "zombie", "revenant", "drone", "automaton", "construct",
+    "golem",
+})
+
+
+def director_may_voice(speaker, scene, presence_rec=None):
+    """Whether the Director may author this background speaker's dialogue.
+
+    Kind is read from the scene entity, then from the presence record's own
+    sketch. An UNKNOWN kind routes to the background stage -- the conservative
+    direction, because the failure it avoids (a person voiced as filler) is the
+    one that was actually measured, and the cost of being wrong is one model
+    call rather than a flat line and a possible leak.
+    """
+    name = str(speaker or "").strip()
+    if not name:
+        return False
+    ents = (scene or {}).get("entities") or {}
+    ent = ents.get(name)
+    if not isinstance(ent, dict):
+        lowered = name.casefold()
+        ent = next((v for k, v in ents.items()
+                    if isinstance(v, dict)
+                    and (str(k).casefold() == lowered
+                         or str(v.get("name") or "").casefold() == lowered)), None)
+    kind = str((ent or {}).get("kind") or "").strip().casefold()
+    if not kind:
+        kind = str(((presence_rec or {}).get("sketch") or {}).get("kind")
+                   or "").strip().casefold()
+    return kind in _DIRECTOR_VOICEABLE_KINDS
+
+
 def _check_presence_knowledge_channel(speaker, quote, sc, presence_rec,
                                       heard_text):
     """Scene-entity references in a Director-voiced presence line that the

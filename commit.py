@@ -3681,6 +3681,16 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         str(d.get("speaker") or "").casefold()
         for d in (dr_output.get("dialogue_log") or [])
     }
+    # Presences whose Director-authored line was REMOVED so this stage could
+    # voice them instead (agents/director.py). They are salient by
+    # construction -- the Director chose to speak for them -- so they are
+    # forced past `cap` exactly as a directly-addressed presence is, and they
+    # must never count as `voiced_this_beat`, which is the whole hand-off.
+    forced_routed = [
+        str(n).strip() for n in (dr_output.get("routed_to_background") or [])
+        if str(n).strip() and str(n).strip().casefold() not in roster
+    ]
+    voiced_this_beat -= {n.casefold() for n in forced_routed}
     diff = dr_output.get("state_diff") or {}
     for entity_def in (diff.get("entities") or {}).values():
         if isinstance(entity_def, dict) and entity_def.get("name"):
@@ -3705,6 +3715,13 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         # raw-text checks below can miss entirely (an address by role or
         # epithet never mentions the tracked name).
         flow_addressed = _presence_in_addressed_refs(name, addressed_refs)
+        # The Director wrote a line for this presence and the engine removed
+        # it so this stage could do the job properly. Salience is not in
+        # question -- the Director already judged them worth speaking for --
+        # so this qualifies and forces exactly like a flow address. Without
+        # it the salience tests below could reject a presence whose line was
+        # just deleted, turning clunky dialogue into silence.
+        routed = name in forced_routed
         addressed = _background_name_mentioned(name, player_input)
         # A registered character (or the player) who spoke directly TO this
         # presence this beat -- read-only here; the owed-reply debt is written
@@ -3714,12 +3731,13 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         owed = _valid_pending_reply(record, turn_idx)
         mentioned = _background_name_mentioned(name, resolved_event)
         dialogue_turns = record.get("dialogue_turns") or []
-        if not (flow_addressed or addressed or char_addr or owed
+        if not (flow_addressed or routed or addressed or char_addr or owed
                 or mentioned or dialogue_turns):
             continue
-        if flow_addressed:
+        if flow_addressed or routed:
             forced += 1
-        priority = (bool(flow_addressed), bool(addressed), bool(char_addr),
+        priority = (bool(flow_addressed or routed), bool(addressed),
+                    bool(char_addr),
                     bool(owed), bool(mentioned), len(dialogue_turns),
                     record.get("last_turn") or -1)
         candidates.append((priority, name))

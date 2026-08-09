@@ -171,7 +171,26 @@ def test_declared_player_line_is_kept(temp_db, monkeypatch):
     assert not any("player-speech authority" in w for w in ctx.warnings)
 
 
-def test_unsheeted_background_entity_dialogue_is_not_filtered(temp_db, monkeypatch):
+def test_a_person_shaped_background_line_is_routed_not_silently_kept(
+        temp_db, monkeypatch):
+    """CONTRACT CHANGED 2026-08-08, deliberately. This test asserted that an
+    unsheeted speaker's Director-written line survives untouched, which was
+    right while the Director was the only thing that would ever voice them.
+
+    It is not right any more. Measured across the corpus, background lines
+    written in `director_resolve` run a median of 8 words against the cast's
+    16, and 2,042 of the 2,240 background lines came from there because
+    `pick_background_reactors` stands down for anyone already in the log. The
+    Director now mints presences and moves them; the background stage speaks
+    for them.
+
+    What this test still proves is what it always proved: an unsheeted speaker
+    is NOT run through the registered-character filter, which would drop the
+    line as an invention and lose it. It is re-homed, visibly, and the name is
+    handed on -- so the assertion moved from "kept" to "routed", never to
+    "discarded". A creature keeps the Director's voice; see
+    tests/test_background_dialogue_ownership.py for that side.
+    """
     import agents.director as director
 
     ctx, char_id = _make_ctx(temp_db, character_results=None)
@@ -185,5 +204,10 @@ def test_unsheeted_background_entity_dialogue_is_not_filtered(temp_db, monkeypat
     out = director.director_resolve(ctx, nonce=0)
 
     bodies = [d["exact_quote"] for d in out["dialogue_log"]]
-    assert any("Hold still" in b for b in bodies)
-    assert not ctx.warnings
+    assert not any("Hold still" in b for b in bodies)
+    # Handed to the stage that will voice her, NOT dropped on the floor.
+    assert "Dr. Crusher" in (out.get("routed_to_background") or [])
+    assert any("background stage" in w for w in ctx.warnings)
+    # And never mistaken for a registered character's invented line, which is
+    # the failure this test was originally written to catch.
+    assert not any("registered character" in w for w in ctx.warnings)
