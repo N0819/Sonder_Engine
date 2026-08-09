@@ -1,8 +1,13 @@
 # Region visibility: concealment, applied to bodies
 
-Status: **argued, not built.** Written 2026-08-08 from a design conversation.
-Nothing here is implemented; `attire.py` still carries the four-state ladder
-this replaces.
+Status: **step 2 built (`f0721da`), the rest argued.** Written 2026-08-08 from
+a design conversation.
+
+`attire.concealing_garments` and `agents.common.region_visibility` exist and
+are derived, with no production callers yet — deliberately, since payload-shape
+changes are the silent-drift class. `attire.py` still carries the four-state
+ladder this note argues against; collapsing it is step 4 and is gated on the
+re-measurement in step 1.
 
 ## The proposal, in the author's words
 
@@ -92,6 +97,50 @@ behind you cannot see your front, and the engine already computes facing,
 expressible today. That is the one new piece, and it is what "world objects can
 cover" needs.
 
+### Step 3 splits unevenly, and the cheap half is very cheap
+
+Found while building step 2. "World objects can cover a region" is two
+different problems wearing one phrase, and only one of them needs the missing
+concept.
+
+**Draped cover — a blanket over a sleeper, a cloak across a lap.** This needs
+NO spatial concept at all. It is omnidirectional (everyone loses the same
+regions, from every angle) and region-scoped, which is precisely how a garment
+already behaves. So the object does not need a new relation: commit can mint it
+into the body's own attire regions as a non-`attaches` garment when the
+Director drapes it — the exact mirror of `_mint_shed_garments`, which already
+turns a removed garment into a room object — and `region_visibility` attributes
+it with **zero changes**, because it is a covering garment as far as the
+coverage model is concerned.
+
+What that costs: one commit-side path, and a decision about what happens when
+the body moves (does the blanket travel, or fall?). What it buys: the whole
+intuitive half of the feature, using machinery that already works in the
+opposite direction.
+
+**Line-of-sight cover — a table, a counter, a parapet.** This is the genuinely
+new piece, and it is new because it is *directional*: whether the counter hides
+your legs depends on where the observer is standing, which is not a fact about
+you or about the counter but about the three of you. Sketch, deliberately not
+built:
+
+- an entity field `cover: {"height": "waist" | "chest" | "full"}` in
+  `_ENTITY_DEFAULT_FIELDS`;
+- derived per observer from what already exists — observer and body on opposite
+  sides of the cover's anchor (`stations` plus `entity_side`/`_relative_sector`)
+  conceals the regions at or below that height;
+- surfaced as a fourth `by` kind, `{"cover": ["the oak table"]}`, which the
+  existing one-key-dict shape absorbs without changing a single caller.
+
+What that costs is the reason it is separated: a Pydantic declaration (mind the
+`stations` `extra="ignore"` scar), a commit merge path, and archive/checkpoint/
+branch handling — the full `docs/DATABASE.md` checklist. It is real schema work
+and should be costed as such rather than folded into "add object coverage".
+
+**So the order within step 3 is: draped first, line-of-sight second, and they
+should be judged separately.** Draped cover is close to free and delivers the
+case most stories actually want. Line-of-sight cover is a feature.
+
 ## Cover and entanglement are two things, not one
 
 Worth separating before either is built, because conflating them repeats a
@@ -150,7 +199,9 @@ does not add a parallel store.
    the `overt|concealed` vocabulary and per-observer scoping. No schema change,
    no ladder change — it is purely additive and immediately useful to
    perception.
-3. Add object coverage, which needs the missing spatial `cover` concept.
+3. Add object coverage — **draped first** (no new concept; mint it as a
+   covering garment), then line-of-sight cover, which is the part that needs
+   the missing spatial concept and the schema work. See the split above.
 4. Only then collapse the ladder, once visibility is carrying the weight the
    middle rungs were supposed to.
 
