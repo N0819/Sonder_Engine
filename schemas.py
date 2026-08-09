@@ -2597,6 +2597,29 @@ def _coerce_empty_dict_to_list(value):
         return []
     return value
 
+def _coerce_optional_time(value):
+    """`state_diff.time` is Optional[dict]; a scalar becomes None, not a crash.
+
+    Live, GLM-5.2 on a Green Door Inn beat: the model sent a non-dict and the
+    whole turn died on `state_diff.time: value is not a valid dict` -- the
+    resolved_event, the summary, the dialogue and every other field in a
+    correct 4,000-token response thrown away over one optional field.
+
+    Dropping it is the honest repair rather than a lenient one. The field
+    carries start/duration/end seconds, and nothing truthful can be built from
+    a bare string; the engine drifts its own clock when the field is absent,
+    which is exactly the state an omitted `time` already describes. So the
+    beat survives saying "this turn asserted no time advance", which is true,
+    instead of dying with a number invented to satisfy a validator.
+
+    The cause is fixed separately, in OUTPUT_EXAMPLES: the example showed
+    `"time": null` while the prompt described the six-field object in prose
+    two thousand lines away, so the model had a scalar to copy -- and the
+    repair attempt was handed the same null and could not converge.
+    """
+    return value if isinstance(value, dict) else None
+
+
 def _coerce_conditions(value):
     def condition_dict(entry, key=""):
         if isinstance(entry, str) and entry.strip():
@@ -2881,6 +2904,8 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
                 _hoist_misplaced_entity_siblings(target, _STATE_DIFF_SIBLING_FIELDS)
             if target is not None and "conditions" in target:
                 target["conditions"] = _coerce_conditions(target["conditions"])
+            if target is not None and "time" in target:
+                target["time"] = _coerce_optional_time(target["time"])
         if isinstance(target, dict):
             for field in _STATE_DIFF_DICT_FIELDS:
                 if field in target:
@@ -3175,7 +3200,23 @@ OUTPUT_EXAMPLES = {
             "cast_changes": [],
             "world_facts": [],
             "introductions": [],
-            "time": None,
+            # THE SHAPE, NOT A PLACEHOLDER. This was `None`, and the resolve
+            # prompt describes the field in prose two thousand lines away
+            # ("Emit state_diff.time with start_seconds, duration_seconds,
+            # end_seconds, mode ('action'|'time_skip'), explicit (bool), and
+            # display_advance"). A model that reads the EXAMPLE sees a scalar
+            # and sends one -- live, GLM-5.2 sent a string and the turn died on
+            # `state_diff.time: value is not a valid dict`.
+            #
+            # Worse, this same example is the `required_json_example` handed to
+            # the repair attempt, so the repair was shown the identical `null`
+            # and had no way to converge. One malformed field killed the whole
+            # beat twice over. Same class as the `ratified_claims` defect, one
+            # step further: not described-but-never-shown, but described one
+            # way and SHOWN AS ANOTHER TYPE.
+            "time": {"start_seconds": 0, "duration_seconds": 60,
+                     "end_seconds": 60, "mode": "action",
+                     "explicit": False, "display_advance": ""},
             "claim_dispositions": [],
         },
         "changes_asserted": [
@@ -3339,7 +3380,23 @@ OUTPUT_EXAMPLES = {
             "cast_changes": [],
             "world_facts": [],
             "introductions": [],
-            "time": None,
+            # THE SHAPE, NOT A PLACEHOLDER. This was `None`, and the resolve
+            # prompt describes the field in prose two thousand lines away
+            # ("Emit state_diff.time with start_seconds, duration_seconds,
+            # end_seconds, mode ('action'|'time_skip'), explicit (bool), and
+            # display_advance"). A model that reads the EXAMPLE sees a scalar
+            # and sends one -- live, GLM-5.2 sent a string and the turn died on
+            # `state_diff.time: value is not a valid dict`.
+            #
+            # Worse, this same example is the `required_json_example` handed to
+            # the repair attempt, so the repair was shown the identical `null`
+            # and had no way to converge. One malformed field killed the whole
+            # beat twice over. Same class as the `ratified_claims` defect, one
+            # step further: not described-but-never-shown, but described one
+            # way and SHOWN AS ANOTHER TYPE.
+            "time": {"start_seconds": 0, "duration_seconds": 60,
+                     "end_seconds": 60, "mode": "action",
+                     "explicit": False, "display_advance": ""},
             "claim_dispositions": [],
         },
         "dispositions": [
