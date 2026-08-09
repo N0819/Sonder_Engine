@@ -76,6 +76,15 @@ than cosmetic: region visibility is inherently per-observer. Someone standing
 behind you cannot see your front, and the engine already computes facing,
 `behind_sources` and `proximity_to_sources` for exactly this class of question.
 
+> **Correction, found while building step 2.** The sentence above overreaches.
+> "Someone behind you cannot see your front" is not derivable from anything on
+> disk: `REGIONS` is `head, torso, arms, hands, waist, groin, legs, feet` and
+> has **no front/back axis**, so there is no "front of the torso" to subtract.
+> Vantage therefore applies at BODY level -- rear arc, sight level, containment
+> -- which is what the engine actually computes. Per-region facing would be a
+> new anatomical model, which is invention rather than the promotion this
+> design claimed to be. Anyone reaching for it should cost it as new schema.
+
 ## What is genuinely missing
 
 **There is no spatial `cover` concept.** Grep across `spatial.py` and

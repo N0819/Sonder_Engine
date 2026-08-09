@@ -426,15 +426,44 @@ def _sync_spanning_garments(regions):
     return regions
 
 
+def concealing_garments(regions):
+    """Per region, WHAT still covers it: {region: [garment name, ...]}.
+
+    The attribution `covered_regions` computes and then throws away. Region
+    visibility is a per-observer question ("which regions are concealed from
+    this observer, and by what"), and the garment half of "by what" is decided
+    here, in the pure coverage model, so the scene-side derivation never has to
+    re-state the covering predicate -- two spellings of "does this garment
+    cover" would drift exactly the way `wearing`/`state`/`regions` did.
+
+    The predicate is `covered_regions`'s own: a removed garment no longer
+    conceals, and a garment that only ATTACHES never did -- a hair clip is
+    present without covering, which is the whole reason `attaches` exists. A
+    spanning garment is named under every region it covers, because that is
+    what covering several regions means. A qualifying garment with no name is
+    still a covering ("?", matching `compact_line`), since losing the covered
+    fact over a missing label would undress the region.
+    """
+    out = {}
+    for region in REGIONS:
+        names = []
+        for garment in ((regions or {}).get(region) or {}).get("garments") or []:
+            if garment.get("state") == "removed" or garment.get("attaches"):
+                continue
+            name = " ".join(str(garment.get("name") or "").split()) or "?"
+            if name not in names:
+                names.append(name)
+        if names:
+            out[region] = names
+    return out
+
+
 def covered_regions(regions):
     """Which regions still have something on them."""
     # Anatomical order, not alphabetical: "torso, waist, groin, legs" is a
-    # body, and "groin, legs, torso, waist" is a word list.
-    return [
-        region for region in REGIONS
-        if any(g.get("state") != "removed" and not g.get("attaches")
-               for g in ((regions or {}).get(region) or {}).get("garments") or [])
-    ]
+    # body, and "groin, legs, torso, waist" is a word list. (REGIONS order,
+    # which concealing_garments already walks.)
+    return list(concealing_garments(regions))
 
 
 def exposed_regions(regions):
@@ -444,11 +473,10 @@ def exposed_regions(regions):
     not unmodelled. A region nobody ever mentioned is simply absent from
     `regions` and so appears in neither list.
     """
+    cover = concealing_garments(regions)
     return [
         region for region in REGIONS
-        if region in (regions or {})
-        and not any(g.get("state") != "removed" and not g.get("attaches")
-                    for g in ((regions or {}).get(region) or {}).get("garments") or [])
+        if region in (regions or {}) and region not in cover
     ]
 
 
