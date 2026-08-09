@@ -24,6 +24,15 @@ of the shape. This does not suppress other exposed regions: chat 68's bare
 `groin` now carries Hinami's authored anatomy into each eligible observer's
 perception payload independently of the still-worn top.
 
+The first live reroll exposed one final seam: supplying exact anatomy to the
+perception model did not require it to keep that detail. It foregrounded
+Hinami's bare stomach and parted legs, then generalized both away. Perception
+now has a deterministic fidelity floor analogous to its heard-dialogue and
+standing-contact floors. When the model's own view foregrounds an exposed
+surface, the floor restores that surface's observer-safe authored description;
+unmentioned anatomy stays silent, and covered chest detail remains structurally
+unavailable.
+
 This lands on the repaired observer path: perception previews commit's exact
 attire result on copies, region visibility is now a production-derived
 function, shed clothing is atomic with canonical removal and placement, and

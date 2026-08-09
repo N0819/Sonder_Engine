@@ -356,10 +356,20 @@ def test_outcome_payload_previews_partial_midriff_coverage_without_chest_leak(
     def capture(role, key, system, payload, **kw):
         perceiver = payload["perceivers"][0]
         captured[str(perceiver["id"])] = payload
-        return {"views": {str(perceiver["id"]): "The room is still."}}
+        if str(perceiver["id"]) == str(moon_id):
+            view = (
+                "Hinami's bare stomach shows as she lies back and parts her "
+                "legs, but the model stays generic."
+            )
+        else:
+            view = (
+                "Your bare stomach shows as you lie back and part your legs, "
+                "but the model stays generic."
+            )
+        return {"views": {str(perceiver["id"]): view}}
 
     monkeypatch.setattr(perception, "_agent_json", capture)
-    perception.perception_outcome(ctx, nonce=0)
+    result = perception.perception_outcome(ctx, nonce=0)
 
     payload_text = json.dumps(captured[str(moon_id)])
     assert "faded scrape scars" in payload_text
@@ -367,9 +377,40 @@ def test_outcome_payload_previews_partial_midriff_coverage_without_chest_leak(
     assert "HOSTILE-CHEST" not in payload_text
     assert "fitted tank top" in payload_text
     assert "AUTHORED-BARE-GROIN-DETAIL" in payload_text
+    final_view = result["views"][str(moon_id)]
+    assert "faded scrape scars" in final_view
+    assert "AUTHORED-BARE-GROIN-DETAIL" in final_view
+    assert "HOSTILE-WHOLE-TORSO" not in final_view
+    assert "HOSTILE-CHEST" not in final_view
+    player_view = result["views"]["player"]
+    assert "Your exposed midriff" in player_view
+    assert "faded scrape scars" in player_view
+    assert "Your exposed groin" in player_view
+    assert "AUTHORED-BARE-GROIN-DETAIL" in player_view
+    assert "HOSTILE-WHOLE-TORSO" not in player_view
+    assert "HOSTILE-CHEST" not in player_view
     stored = temp_db.wget(ctx.chat.id, "scene", {})
     stored_garment = stored["attire"]["Hinami"]["regions"]["torso"]["garments"][0]
     assert "covered_zones" not in stored_garment, "preview mutated durable state"
+
+
+def test_body_detail_floor_does_not_dump_unforegrounded_anatomy():
+    """Observer-safe does not mean relevant every beat. The floor preserves a
+    detail the model foregrounded; it must not turn the perception view into a
+    standing anatomy inventory."""
+    import agents.perception as perception
+
+    view = "You listen to rain tick softly against the window."
+    projected = [{"body": "you", "regions": {
+        "groin": "bare — HOSTILE-UNMENTIONED-ANATOMY",
+    }}]
+
+    restored, additions = perception._deliver_foreground_body_details(
+        view, projected)
+
+    assert restored == view
+    assert additions == []
+    assert "HOSTILE-UNMENTIONED-ANATOMY" not in restored
 
 
 def test_introduction_quote_survives_but_bare_name_is_scrubbed(temp_db, monkeypatch):
