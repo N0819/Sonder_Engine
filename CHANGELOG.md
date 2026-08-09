@@ -2,6 +2,221 @@
 
 ## alpha 7.2 — Order is causality
 
+### The world keeps going when you are not there — floors first, under one ceiling
+
+Three of the five state-producers in `docs/DESIGN_LIVING_WORLD.md` are built at
+their **deterministic floor**, each behind a per-chat setting that defaults off,
+because a merge must not change a running story. The two that are not built say
+so in the engine's own vocabulary rather than in a menu somebody has to remember
+to update (`LIVING_WORLD_BUILT`, the `OFFSCREEN_LIFE_BUILT` idiom).
+
+- **A** (`routines.py`) — routine, jitter and entropy recomputed at contact; the
+  capped present-tense diff reaches `director_resolve` as `destination_residue`
+  on movement beats. Nothing ticks, nothing is stored, nothing is narrated.
+- **B** (`living_world` + `mechanics`) — `state_diff.consequences` mints fuses at
+  cause time (location gate, due clamp, cap 2/turn) and they fire
+  deterministically against a base-revision check. A firing is fact with nobody
+  watching; **the notice is presence-gated**, so an event elsewhere is
+  encountered later as changed state, never reported to you.
+- **D** (`living_world` + mapping) — fuses that fire at ungenerated places
+  accumulate durable obligations *before* anyone asks, so a later rumour has a
+  truth to be a distortion of. The ledger's only reader is the mapping seam at
+  generation, pinned by test: arrival is the earning event, and truth is not a
+  channel.
+
+**C** (rumor ledger) waits on the epistemic audit and **E** (antagonist ladder)
+waits on C. §9 of the design doc records the author's carrier and
+anti-protagonist constraints verbatim — a rumour needs a simulated pathway, it
+must not be player-centric, and the player earns importance rather than being
+granted it.
+
+**And they compose.** The dialogue-config modal carried two settings that were
+two axes of one question and were composed nowhere: the off-screen ladder says
+how much authority off-screen work may have, the living-world config says which
+machinery runs — and B's built floor minted fuses that genuinely fired while the
+ladder said `inert`, which means *nothing happens off screen*.
+`LIVING_WORLD_REQUIRES` now maps every mechanism depth to the rung it spends at,
+read from the ladder's own descriptions rather than invented, and
+`effective_depth` clamps to the ceiling exactly as it already clamped to what is
+built — **visibly**, falling to the highest depth both built and permitted,
+never silently running and never silently ignored. The composition folds in at
+`living_world_config` (the `canonical_url` rule), so every existing gate
+composes both axes with no caller changed. The settings UI is one **World
+simulation** card: ceiling first, mechanisms beneath, each clamp shown.
+
+### Off-screen life is a real draw, priced by who matters and how close they are
+
+The shipped `stochastic` rung rode the `mapping_commit` model call, and its
+`tick_seed` **seeded nothing** — no RNG in `commit.py` ever consumed it. Ticks
+were neither cheap nor replayable, so every rung above them was priced against a
+fiction. `offscreen.stochastic_ticks` is now a real `random.Random(seed)` draw
+against standing intentions: free, and byte-identical on a reroll. The model is
+no longer asked for ticks at any level, and a volunteered `offscreen_events` is
+refused on the write path.
+
+Above that, **resolution is `f(importance, distance)`** — a pure function
+computed per tick and never stored, so a villain sharpens as you approach and
+dims when you leave, without anyone editing a setting. Importance derives from
+what the engine already knows (cast, sheet, tier, psychology, memories) with
+`simulation.offscreen_importance` as an override on top, deliberately *not* the
+`BehaviorController` ladder, which answers permission — one vocabulary answering
+two questions is the `flow.reactors` defect re-minted. Distance is
+beats-to-contact over scene adjacency, anchored on the `subject_last_seen` room.
+
+The few subjects scoring `medium` get an out-of-band **profile-summary tick**:
+one bounded call, no psychology run, a provisional-tier record validated on the
+write path and rollback-guarded by `base_turn` at landing. It emits **state**,
+not prose — the stored `tick` string is composed from the fields by code, so it
+asserts exactly what the fields assert, and prose reaches you only at contact
+through the character's own mouth. This is `jobs.py`'s first production
+consumer: until now the out-of-band queue had no producer at all.
+
+### A background presence cannot cite what it never saw
+
+The resolve prompt licenses the Director to voice unsheeted background
+presences, and the Director is entitled to omniscience. **Nothing sat between
+those two facts.** Chat 65 t2148 is the measured case: Kadoman, a presence
+minted at turn 9 in `eastern_market`, referring to "the strange coins and notes"
+shown once at turn 4 in `fountain_plaza` and pocketed since — the yen entities
+ride every resolve payload as objective scene state. Corpus-wide, **291
+`dialogue_log` entries** are Director-voiced presence speech with no firewall of
+any kind.
+
+Four deterministic seams. The backstop drops a presence line making a
+**definite** reference to a scene entity the presence has no channel to, and the
+presence stays ignorant. Generic knowledge survives on purpose — single-word
+matches gate on the definite article, so "local trade runs on copper and silver"
+can never be flagged. The resolve payload now carries each presence's epistemic
+envelope, and the prompt's voicing license states what a presence knows by
+naming the concrete occasion rather than forbidding in the abstract.
+
+Gap ledgers are gated on ownership, provenance and frame; a tick is seeded only
+from the actor's own intention, never one that merely names them.
+
+### Signing in demands a human act, and a lockout says how long
+
+The 2026-08 incident: a password manager auto-resubmitted saved stale
+credentials on `/login`, each synthetic submission burned one slot of the global
+10-per-60s window, and within seconds the host's own correct sign-in was refused
+with nothing on screen but *"Too many attempts, wait a minute"*. A 60-second
+lockout read as a broken page and cost an hour.
+
+Every auth request must now trace to **one deliberate human act**: synthetic
+(`isTrusted === false`) events are ignored, a held Enter's auto-repeat is one
+attempt, Enter on the focused button no longer double-fires with its click, one
+attempt may be in flight at a time, and after a failure the page itself refuses
+for 1.5s — legibly — instead of spending the server's budget. Autofill may still
+*fill*; only submission needs a human.
+
+Failures say what happened: server-unreachable, no-account-yet and lockout are
+distinct, and a lockout counts down on screen from the server's
+`retry_after_seconds` (also sent as `Retry-After`). The credential 401 stays
+deliberately generic — never say which half was wrong.
+
+**The limiter counts failures only.** It used to consume a slot on every call,
+successes included, so ten successful sign-ins in a minute locked the host out
+of a single-user application.
+
+### A dead session goes to the login page, and the reset hatch announces itself
+
+Two halves of the same lockout. `streamPost()` — the fetch every turn submission
+rides — missed the 401-to-`/login` contract `api()` has carried since host auth
+landed, so a session expiring between turns surfaced as a *"Pipeline failed:
+Unauthorized"* toast on an app that looked signed in and was not. And
+`FICTION_ENGINE_RESET_HOST` re-wipes the host account on **every** restart while
+it stays set, with nothing in the startup output saying the hatch was still
+armed — so an account re-created after a reset died a restart later, looking
+like an auth bug rather than a stale variable. Startup now names the variable to
+unset, and stays silent when the hatch is unarmed.
+
+### Every ending describes itself, and a transient failure no longer silences a room
+
+*"Still searching for ambience"* was thrown for four different endings and was
+true of exactly one. The worst was **absent** — nothing queued any more, never
+started, or retired having produced nothing — which satisfied the settled check
+on the poll's *first* look, so a search that was not running reported itself as
+still running, instantly, on precisely the rooms that had no sound yet.
+
+The backdrop twin had the same defect in different wording: a signature that
+drifted mid-poll broke the loop while the drifted state still said `pending`, so
+*"still generating after several minutes"* appeared three seconds in, and
+`absent` fell through silently — a paid pass that said nothing at all.
+
+Endings are tagged at the throw — `failed`, `notfound`, `slow`, `gone` — and the
+catch takes both severity and the give-up decision from the tag. **Only a
+definitive verdict blacklists a signature for the session.** A search called
+off, outlived by the poll's patience, or killed with the connection may be asked
+again; blacklisting those is how one mislabelled minute made a room permanently
+silent.
+
+### The room the reader stopped in gets commissioned, not the one they left
+
+A room that already had a picture showed it; a **new** room stayed blank for
+good. The asymmetry was the diagnosis — a drawn room is served by the quick pass
+and never needs the paying pass at all, so only a room that had to be
+*commissioned* could be lost.
+
+`_freshTurnPending` was a one-shot, spent by the observer pass that read it while
+the work it authorised was deferred by 220ms — and `renderChat` guarantees a
+second pass inside that window, because `content-visibility` makes the first
+`scrollHeight` an estimate. That second pass found the flag already false,
+reported a brand-new turn as one being scrolled past, and cancelled the
+commission before it ran. Freshness is now the turn's **id**, so the answer is
+the same however many times it is asked — the only form that survives a deferred
+read — and it is released when the reader settles somewhere *else*, never by the
+act of reading it.
+
+### Foundations: provenance tiers, an out-of-band queue, and subject identity
+
+- `canon_provenance.py` — a **provisional** tier with a validator, and
+  `KNOWN_SUBJECT_KINDS` kept an **open** vocabulary so crowds have their
+  identity seam waiting. A provisional record may *cite* an adjudicated
+  `event_id` and may never *mint* one.
+- `jobs.py` — the out-of-band queue: `base_turn` rollback guarding,
+  cancellation, pruning, capped history. Its queues are bounded.
+- `gaps.py` — the gap generator and the reader nothing had
+  (`while_you_were_offscreen`), with its three properties enforced.
+
+### A ratified claim reaches canon, and an entity keeps its name
+
+`world_entities` projected the raw **diff** rather than the merged scene, so an
+object's name decayed to `Object`; the commit path now projects the merged
+scene, and a 68-row repair was applied to the live database (`Object` 15 → 3,
+the survivors named that way in the blob too).
+
+Separately, `ratified_claims` appeared in `prompts.py` in **prose** and never in
+the JSON output-shape line the model actually fills — a field described but
+never shown in the skeleton is a field the model omits — so a claim became true
+and unreachable in the same instant.
+
+### CI actions are pinned to commit SHAs
+
+From an external security review: `zizmor` reported `unpinned-uses`.
+`actions/checkout` and `actions/setup-python` are now pinned to full commit
+SHAs with the version in a trailing comment, so a moved tag cannot change what
+runs in CI.
+
+### A Director's note is not a picture
+
+Live, chat 67: a style guide was set **after** the story's rooms were drawn, and
+the engine reported every existing backdrop absent and began paying to redraw
+them. The whole guide was hashed into the cache key, `director_notes` and
+`mapping_notes` included — instructions to other agents that never touch a
+pixel.
+
+`place_desc` states the rule this broke, four lines above the defect: the key is
+a function of what reaches the image, because *"a key that hashes text the
+prompt never sees would pay for regenerations the picture cannot show"*.
+`weather` was already keyed as the rendered words for exactly this reason;
+`style` was the one field still hashed raw. `VISUAL_STYLE_KEYS` is now the three
+fields the prompt actually writes, blank values dropped so that clearing a genre
+returns a story to the images it already has rather than stranding them behind a
+third key. Two parametrized tests pin the property in both directions, so the
+list cannot drift from the prompt that justifies it.
+
+Not retroactive, deliberately: `genre` and `tone` *do* reach the image, so a
+room drawn without them really is a different picture.
+
 ### Prompt caching is a box in ⚙ API, per connection
 
 The controls existed and nothing could reach them. `prompt_cache_allow`,
