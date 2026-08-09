@@ -1233,7 +1233,7 @@ def rederive_entry(entry):
 BARE = "bare"
 
 
-def compact_line(regions, beneath_visible=False):
+def compact_line(regions, beneath_visible=False, look=0):
     """One body's clothing as a SINGLE line, every region in a fixed order.
 
     `head:-|torso:blouse|waist:apron|groin:skirt(loosened)|legs:skirt|feet:sandals`
@@ -1261,6 +1261,10 @@ def compact_line(regions, beneath_visible=False):
     never be the path that leaks what a story chose not to spell out.
     """
     parts = []
+    # A spanning garment appears in every region it covers, so its look would
+    # be repeated verbatim two or three times in one line. Said once, at its
+    # first region; after that the name alone identifies it.
+    look_said = set()
     for region in REGIONS:
         entry = (regions or {}).get(region) or {}
         # ATTACHING IS NOT COVERING, and the two have to be able to coexist in
@@ -1300,7 +1304,33 @@ def compact_line(regions, beneath_visible=False):
             state = garment.get("state") or "worn"
             condition = garment.get("condition") or ""
             notes = [n for n in (state if state != "worn" else "", condition) if n]
-            pieces.append("%s(%s)" % (name, ", ".join(notes)) if notes else name)
+            # A GARMENT'S LOOK REACHES PROSE ONLY THROUGH THIS PAYLOAD. The
+            # Director is the sole path by which what a thing looks like gets
+            # into the narration, so stripping descriptions outright would
+            # quietly cost the story its clothing detail -- a change nothing
+            # errors on and nobody notices for fifty beats. `look` keeps the
+            # FIRST CLAUSE, which is where a garment's appearance lives, and
+            # drops the provenance after it: "a small spring-clip holding a
+            # single feather" survives, "souvenir from some distant region,
+            # pinned into her copper-gold hair near the left fox ear" does not.
+            described = name
+            key = name.casefold()
+            if look and key not in look_said:
+                # Sentence boundaries only. Splitting on the COMMA as well
+                # turned "A snug, ribbed tank top in charcoal" into "A snug" --
+                # a bare adjective, which is worse than no description at all.
+                # A comma separates adjectives here far more often than clauses.
+                clause = re.split(r"[;\u2014.]", str(garment.get("description") or ""), 1)[0]
+                clause = " ".join(clause.split())
+                if len(clause) > int(look):
+                    # On a word boundary. A look cut mid-word ("A snug") reads
+                    # as a corrupted field rather than a short description.
+                    clause = clause[:int(look)].rsplit(" ", 1)[0]
+                clause = clause.strip(" ,;-")
+                if clause and clause.casefold() != key:
+                    described = "%s=%s" % (name, clause)
+                    look_said.add(key)
+            pieces.append("%s(%s)" % (described, ", ".join(notes)) if notes else described)
         parts.append("%s:%s%s" % (region, "+".join(pieces),
                                   _attached_text(attached)))
     return "|".join(parts)

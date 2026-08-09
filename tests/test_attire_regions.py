@@ -969,3 +969,55 @@ class TestCompactLine:
             {"name": "belt", "state": "worn", "attaches": True},
             {"name": "apron", "state": "worn"}]}}
         assert "waist:apron[at:belt]" in attire.compact_line(regions)
+
+    # --- how a garment's LOOK survives the compaction ------------------------
+
+    def test_a_garments_look_survives_because_nothing_else_carries_it(self):
+        """The Director's payload is the ONLY path by which what a garment
+        looks like reaches prose. Stripping descriptions outright is a change
+        nothing errors on and nobody notices for fifty beats — the story just
+        quietly stops describing clothes."""
+        regions = {"torso": {"garments": [
+            {"name": "travel jacket",
+             "description": "A modern open-front jacket cut short at the waist"}]}}
+        line = attire.compact_line(regions, look=60)
+        assert "travel jacket=A modern open-front jacket" in line
+
+    def test_a_comma_does_not_end_the_look(self):
+        """Live: splitting on the comma turned "A snug, ribbed tank top in
+        charcoal" into "A snug" — a bare adjective, worse than no description.
+        A comma separates adjectives here far more often than clauses."""
+        regions = {"torso": {"garments": [
+            {"name": "tank top",
+             "description": "A snug, ribbed tank top in charcoal"}]}}
+        assert "A snug, ribbed" in attire.compact_line(regions, look=60)
+
+    def test_the_look_is_cut_on_a_word_boundary(self):
+        """A look cut mid-word reads as a corrupted field rather than a short
+        description."""
+        regions = {"torso": {"garments": [
+            {"name": "coat", "description": "A heavy weatherproofed travelling coat"}]}}
+        line = attire.compact_line(regions, look=20)
+        assert "weatherpro|" not in line and "weatherpro(" not in line
+
+    def test_a_spanning_garment_says_its_look_once(self):
+        """One garment covering three regions would otherwise repeat its whole
+        description three times in one line."""
+        garment = {"name": "kimono", "description": "A dark silk kimono"}
+        regions = {"torso": {"garments": [dict(garment)]},
+                   "arms": {"garments": [dict(garment)]},
+                   "legs": {"garments": [dict(garment)]}}
+        line = attire.compact_line(regions, look=60)
+        assert line.count("A dark silk kimono") == 1, "the look is said once"
+        # And every region it spans still NAMES it, so the Director can still
+        # address the garment in any of them. Counted per region rather than
+        # per occurrence, because the description contains the name too.
+        slots = dict(part.split(":", 1) for part in line.split("|"))
+        assert all("kimono" in slots[r] for r in ("torso", "arms", "legs"))
+
+    def test_look_is_off_by_default(self):
+        """The compact line stays compact unless a caller asks for appearance."""
+        regions = {"torso": {"garments": [
+            {"name": "coat", "description": "A heavy travelling coat"}]}}
+        assert attire.compact_line(regions) == attire.compact_line(regions, look=0)
+        assert "heavy" not in attire.compact_line(regions)
