@@ -1,6 +1,7 @@
 import copy, json, time, re, uuid, base64, struct, zlib, hashlib, numpy as np
 from contextlib import contextmanager
 from db import q, qi, transaction
+from logging_utils import logger
 from memory import (
     add_lore, LORE_CATEGORIES, LOREBOOK_TYPES, LOREBOOK_LINK_TYPES,
     KNOWLEDGE_TAGS, KNOWLEDGE_RANGES, add_lorebook_link,
@@ -1194,6 +1195,7 @@ def _reinterpret_entries(entries):
     # Batch by total character volume instead of entry count, and size
     # max_tokens off each batch's actual volume with real headroom.
     out = []
+    failures = []
     batches = _batch_entries_by_chars(entries, max_batch_chars=6000)
 
     with _silent_provider_stream():
@@ -1238,11 +1240,75 @@ def _reinterpret_entries(entries):
                             "locked": 0,
                         })
             except Exception as exc:
-                raise RuntimeError(
-                    f"Lore reinterpretation failed in batch "
-                    f"{i + 1}/{len(batches)}: {exc}"
-                ) from exc
+                # ONE BAD BATCH USED TO LOSE THE WHOLE BOOK. This raised, and
+                # `import_lorebook` turned it into "AI lore reinterpretation
+                # failed" -- so on the 300-entry, 354,677-character Re:Zero
+                # book, roughly 59 batches deep, a single malformed response
+                # discarded every batch that had already succeeded and every
+                # one that would have.
+                #
+                # Two escalating recoveries, in the order that costs least:
+                first_error = exc
+                recovered = None
+                if raw:
+                    # 1. REPAIR. The model is handed back its own output and
+                    #    the error, never the source payload again -- the same
+                    #    shape llm_quality.complete_validated_json uses, and
+                    #    affordable for the same reason: closing a bracket does
+                    #    not need the question restated. One attempt, never a
+                    #    loop; a model that cannot emit valid JSON twice will
+                    #    not manage it on the fifth, and a repair loop is how a
+                    #    429 becomes a bill.
+                    try:
+                        fixed = chat_complete(
+                            "utility",
+                            get_prompt("lore_reinterpret"),
+                            json.dumps({
+                                "instruction": (
+                                    "Your previous reply could not be used. "
+                                    "Return the SAME entries as valid JSON of "
+                                    "the form {\"entries\": [...]}, preserving "
+                                    "every entry and all of its content."),
+                                "error": str(exc)[:400],
+                                "previous_reply": raw[:20000],
+                            }, ensure_ascii=False),
+                            temperature=0.1,
+                            max_tokens=max_tokens,
+                        )
+                        recovered = (_jparse(fixed) or {}).get("entries") or []
+                    except Exception:
+                        recovered = None
+                if recovered:
+                    for e in recovered:
+                        if e.get("content"):
+                            cat = e.get("category")
+                            out.append({
+                                "keys": e.get("keys", ""),
+                                "content": e["content"],
+                                "category": (cat if cat in LORE_CATEGORIES
+                                             else guess_category(e.get("keys"),
+                                                                 e["content"])),
+                                "locked": 0,
+                            })
+                    failures.append(
+                        f"batch {i + 1}/{len(batches)}: recovered by repair "
+                        f"after {first_error}")
+                    continue
+                # 2. KEEP THE SOURCE. A batch that cannot be rewritten is
+                #    imported UNREWRITTEN rather than dropped: the author's own
+                #    text, categorised heuristically. Losing the model's
+                #    polish on a few entries is a far smaller harm than losing
+                #    the entries, and the import stays a complete book.
+                for k, c, locked in batch:
+                    out.append({"keys": k, "content": c, "locked": locked,
+                                "category": guess_category(k, c)})
+                failures.append(
+                    f"batch {i + 1}/{len(batches)}: kept {len(batch)} "
+                    f"entries unrewritten after {first_error}")
 
+    if failures:
+        logger.warning("lore reinterpretation: %d of %d batches degraded; %s",
+                       len(failures), len(batches), "; ".join(failures[:5]))
     return out
 
 def import_lorebook(payload, name=None, reinterpret=False,
