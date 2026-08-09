@@ -1425,6 +1425,9 @@ def import_lorebook(payload, name=None, reinterpret=False,
                 tag, rng, locs = derive_knowledge(record)
                 structure[body] = {
                     "title": record.get("title") or "",
+                    # The `[>]` parent, by TITLE. Ids do not exist yet, so the
+                    # link is resolved in a second pass after every row has one.
+                    "parent_title": record.get("parent") or "",
                     "knowledge_tag": tag,
                     "knowledge_range": rng,
                     "knowledge_locations": locs,
@@ -1490,9 +1493,10 @@ def import_lorebook(payload, name=None, reinterpret=False,
                 payload_meta.get("anchor_entity_id"),
             ),
         )
+        inserted = []
         for entry, vector in zip(prepared_entries, vectors):
             meta = structure.get(_structure_key(entry["content"])) or {}
-            add_lore(
+            inserted.append((meta, add_lore(
                 lb,
                 entry["keys"],
                 entry["content"],
@@ -1505,7 +1509,32 @@ def import_lorebook(payload, name=None, reinterpret=False,
                 knowledge_range=meta.get("knowledge_range"),
                 knowledge_locations=meta.get("knowledge_locations"),
                 importance=meta.get("importance", 0.5),
-            )
+            )))
+
+        # THE `[>]` TREE, as `relations.refines_entry_ids`. That vocabulary
+        # already exists and already means this -- "Lugunica Currency" refines
+        # "Dragon Kingdom of Lugunica" -- so the hierarchy needs no new column
+        # and no entry moved between books, which would have orphaned every
+        # chat_lorebooks link and every entry_uid a story has cited.
+        #
+        # A SECOND PASS because a parent's row id does not exist while its
+        # children are being written. Titles are unique enough within one book
+        # to resolve on; a title that resolves to nothing is left unlinked
+        # rather than guessed at.
+        by_title = {}
+        for meta, row_id in inserted:
+            title = (meta.get("title") or "").strip()
+            if title and title not in by_title:
+                by_title[title] = row_id
+        for meta, row_id in inserted:
+            parent = (meta.get("parent_title") or "").strip()
+            parent_id = by_title.get(parent)
+            if not parent_id or parent_id == row_id:
+                continue
+            qi("UPDATE lore_entries SET relations=? WHERE id=?",
+               (json.dumps({"supersedes_entry_id": None,
+                            "refines_entry_ids": [parent_id],
+                            "contradicts_entry_ids": []}), row_id))
 
     return lb, len(prepared_entries)
 

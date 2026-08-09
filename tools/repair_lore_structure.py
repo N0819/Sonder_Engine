@@ -67,6 +67,7 @@ def facts_for(record):
         "knowledge_locations": (json.dumps(locations, ensure_ascii=False)
                                 if locations else None),
         "importance": 0.9 if record.get("constant") else None,
+        "parent_title": (record.get("parent") or "").strip() or None,
     }
 
 
@@ -117,11 +118,16 @@ def plan(con, book_id, records):
     rows = list(con.execute(
         "SELECT * FROM lore_entries WHERE lorebook_id=? ORDER BY id", (book_id,)))
     steps, unmatched = [], 0
+    titles, parents, existing = {}, {}, {}
+    for row in rows:
+        existing[row["id"]] = row["relations"]
     for row, record, _score in align(rows, records):
         if record is None:
             unmatched += 1
             continue
         meta = facts_for(record)
+        titles[row["id"]] = meta.get("title")
+        parents[row["id"]] = meta.get("parent_title")
         updates = {}
         for column in ("title", "knowledge_tag", "knowledge_range",
                        "knowledge_locations", "importance"):
@@ -139,6 +145,30 @@ def plan(con, book_id, records):
                 updates[column] = value
         if updates:
             steps.append((row["id"], updates))
+
+    # THE `[>]` TREE, resolved in a second pass now that every row's title is
+    # known. `relations.refines_entry_ids` already means exactly this, so the
+    # hierarchy needs no new column and moves no entry between books. Only an
+    # entry with no relations of its own is linked -- a `refines` or
+    # `contradicts` a host or the engine already recorded is a real claim about
+    # this book, and outranks a structural guess.
+    by_title = {}
+    for row_id, title in titles.items():
+        if title and title not in by_title:
+            by_title[title] = row_id
+    for row_id, parent_title in parents.items():
+        parent_id = by_title.get(parent_title or "")
+        if not parent_id or parent_id == row_id:
+            continue
+        current = existing.get(row_id)
+        if current not in (None, "", "{}", "[]"):
+            continue
+        merged = dict(dict(steps).get(row_id) or {})
+        merged["relations"] = json.dumps({"supersedes_entry_id": None,
+                                          "refines_entry_ids": [parent_id],
+                                          "contradicts_entry_ids": []})
+        steps = [(rid, upd) for rid, upd in steps if rid != row_id]
+        steps.append((row_id, merged))
     return steps, unmatched
 
 

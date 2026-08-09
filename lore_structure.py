@@ -171,7 +171,28 @@ def _matches(text, words):
     return any(re.search(r"\b" + re.escape(w) + r"\b", low) for w in words)
 
 
-def derive_knowledge(record):
+# WORLD MECHANICS VS LOCATIONAL KNOWLEDGE, and why STRUCTURE decides it alone.
+#
+# How the world works is not where you are standing, and the two must not be
+# confused: an innkeeper knowing the local currency is a different claim from
+# an innkeeper knowing how souls reincarnate. That distinction is already made
+# by SECTION -- Abilities, Magic, Authority and Curse resolve `global`, and
+# only what the author filed under a Locations heading is ever `local`.
+#
+# Using the entry's `category` as a second signal was tried and MEASURED WORSE,
+# so it is deliberately absent. `guess_category` calls `Lugunica Currency` a
+# `mechanic`, which would have destroyed the exact case this feature exists to
+# serve, and it calls Costuul, Flanders, the Kararagi City-States and the Holy
+# Kingdom of Gusteko `mechanic`/`myth` too -- four real places that would have
+# lost their locality to fix one genuinely mis-filed leaf (`Od Lagna`, the
+# entity governing the cycle of souls, sitting under "Other Locations" because
+# it is a thing you can point at).
+#
+# One mis-filed entry is the cheaper error, and the author's own placement is
+# better evidence than a keyword guess over the same text.
+
+
+def derive_knowledge(record, category=None):
     """`(knowledge_tag, knowledge_range, knowledge_locations)` for one record.
 
     `(None, None, None)` for authoring scaffolding -- a "Writing Style" entry
@@ -201,6 +222,21 @@ def derive_knowledge(record):
     # Lugunica because of where its author put it, and nothing else in the file
     # says so.
     if _matches(both, _LOCATION_WORDS):
+        # AN EXPLICIT NESTING OUTRANKS A GUESSED CATEGORY. A `[›]` child was
+        # placed under its parent BY THE AUTHOR, so "Lugunica Currency" under
+        # "Dragon Kingdom of Lugunica" is local to Lugunica and stays that way
+        # -- `guess_category` calls it a `mechanic`, and letting that win threw
+        # away the one case this whole feature exists to serve.
+        #
+        # The veto applies only to a LEAF, where nothing was nested and the
+        # section is the only evidence. That is where "Od Lagna" sits -- the
+        # entity governing the world's cycle of souls, filed under "Other
+        # Locations" because it is a thing you can point at. A rule about how
+        # the world works is true and known the same way everywhere.
+        if record.get("level") == "child":
+            where = _place_name(record.get("parent"))
+            if where:
+                return (tag, "local", [where])
         where = _place_name(record.get("parent") or record.get("title"))
         return (tag, "local", [where] if where else None)
     return (tag, "global", None)

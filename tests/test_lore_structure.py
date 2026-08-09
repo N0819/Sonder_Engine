@@ -146,3 +146,47 @@ def test_the_import_carries_all_of_it_through(temp_db):
     assert currency["knowledge_tag"] == "common"
     assert currency["knowledge_range"] == "local"
     assert "Dragon Kingdom of Lugunica" in (currency["knowledge_locations"] or "")
+
+
+def test_the_child_tree_lands_as_refines_entry_ids(temp_db):
+    """`[›]` is a parent link, and `relations.refines_entry_ids` already means
+    exactly that -- "Lugunica Currency" refines "Dragon Kingdom of Lugunica".
+
+    Using the existing vocabulary is the point: the hierarchy needs no new
+    column and moves no entry between books, which would have orphaned every
+    `chat_lorebooks` link and every `entry_uid` a story has already cited.
+    """
+    import json
+
+    import importers
+    book = {"entries": {str(i): e for i, e in enumerate(_book())}}
+    lb, _n = importers.import_lorebook(book, name="tree", reinterpret=False)
+    rows = {r["id"]: r for r in
+            temp_db.q("SELECT * FROM lore_entries WHERE lorebook_id=?", (lb,))}
+    by_title = {r["title"]: r for r in rows.values()}
+
+    calamity = by_title["Great Calamity"]
+    parent_ids = json.loads(calamity["relations"])["refines_entry_ids"]
+    assert rows[parent_ids[0]]["title"] == "World History"
+
+
+def test_a_leaf_has_no_parent_link(temp_db):
+    """Only `[›]` children hang from anything. A leaf linking to whatever
+    preceded it would invent a hierarchy the author did not draw."""
+    import json
+
+    import importers
+    book = {"entries": {str(i): e for i, e in enumerate(_book())}}
+    lb, _n = importers.import_lorebook(book, name="tree", reinterpret=False)
+    rows = temp_db.q("SELECT * FROM lore_entries WHERE lorebook_id=?", (lb,))
+    history = next(r for r in rows if r["title"] == "World History")
+    assert not json.loads(history["relations"] or "{}").get("refines_entry_ids")
+
+
+def test_world_mechanics_do_not_become_local_knowledge(temp_db):
+    """Knowing the local currency is a different claim from knowing how souls
+    reincarnate. Sections that describe the world's machinery resolve global,
+    and only what the author filed under a Locations heading is ever local."""
+    recs = {r["title"]: r for r in parse_structure(_book())}
+    assert derive_knowledge(recs["Authority of Sloth"])[1] == "global"
+    assert derive_knowledge(recs["Lugunica Currency"])[1] == "local"
