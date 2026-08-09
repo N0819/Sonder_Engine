@@ -15,7 +15,7 @@
 | `agents/loops.py` | 1008 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 239 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 956 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/perception.py` | 3735 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
+| `agents/perception.py` | 3738 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 1009 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 115 | Step and active-variant persistence helpers. | `db` |
 | `ambience.py` | 2082 |  | `backdrops`, `db`, `outofband`, `weather` |
@@ -51,7 +51,7 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 3865 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 3867 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 2025 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
@@ -171,14 +171,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `perception_outcome()` | 2959 | 777 lines |
-| `perception_act()` | 2279 | 491 lines |
-| `perception_establish()` | 2105 | 173 lines |
+| `perception_outcome()` | 2962 | 777 lines |
+| `perception_act()` | 2282 | 491 lines |
+| `perception_establish()` | 2108 | 173 lines |
 | `_previous_open_group_continuity()` | 152 | 117 lines |
-| `_observer_scene_payload()` | 814 | 117 lines |
-| `_strip_self_narration()` | 1502 | 107 lines |
-| `_inject_onset_speech()` | 1026 | 96 lines |
-| `_source_channels()` | 1307 | 86 lines |
+| `_observer_scene_payload()` | 817 | 117 lines |
+| `_strip_self_narration()` | 1505 | 107 lines |
+| `_inject_onset_speech()` | 1029 | 96 lines |
+| `_source_channels()` | 1310 | 86 lines |
 
 ### `agents/runtime.py`
 
@@ -585,10 +585,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 3856 | 10 lines |
-| `presets()` | 3847 | 2 lines |
-| `active_preset()` | 3850 | 2 lines |
-| `nsfw_enabled()` | 3853 | 2 lines |
+| `get_prompt()` | 3858 | 10 lines |
+| `presets()` | 3849 | 2 lines |
+| `active_preset()` | 3852 | 2 lines |
+| `nsfw_enabled()` | 3855 | 2 lines |
 
 ### `providers.py`
 

@@ -63,7 +63,10 @@ itself foregrounds an exposed surface (for example, a bare stomach or parted
 legs), the corresponding authored detail is restored from that observer's
 already-filtered `body_regions`. It never inventories unrelated anatomy, and a
 covered zone cannot enter because it has no bare-surface detail in the
-projection.
+projection. This is semantic fidelity, not quotation fidelity: the model may
+rephrase or integrate the description for natural flow, and the floor stays
+silent when the resulting view retains concrete distinguishing traits. It acts
+only when the view collapses them to a generic exposed body part.
 
 ### `narrator`
 
