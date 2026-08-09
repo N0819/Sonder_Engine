@@ -1060,3 +1060,27 @@ class TestCompactLine:
             {"name": "belt", "state": "worn", "attaches": True},
             {"name": "sash", "state": "worn", "attaches": True}]}}
         assert "[at:belt;sash]" in attire.compact_line(regions)
+
+
+# --- coverage with attribution ----------------------------------------------
+
+def test_covered_and_its_attribution_are_one_predicate():
+    """`concealing_garments` is what `covered_regions` is derived from, so
+    "is it covered" and "what covers it" cannot disagree -- a second spelling
+    of the covering predicate would drift exactly the way `wearing`/`state`/
+    `regions` did before `rederive_entry`."""
+    regions = attire.normalize_regions({"regions": {
+        "torso": {"garments": [{"name": "a ceremonial kimono", "auto": True}]},
+        "head": {"garments": [{"name": "a hair clip", "attaches": True}]},
+        "feet": {"garments": [{"name": "heavy boots", "state": "removed"}]},
+    }})
+    cover = attire.concealing_garments(regions)
+    assert list(cover) == attire.covered_regions(regions)
+    # The kimono spans, and is named at every region it covers -- that is what
+    # covering several regions means.
+    for region in ("torso", "arms", "waist", "groin", "legs"):
+        assert cover[region] == ["a ceremonial kimono"]
+    # A hair clip is present without covering; boots on the floor cover nothing.
+    assert "head" not in cover
+    assert "feet" not in cover
+    assert attire.exposed_regions(regions) == ["head", "feet"]

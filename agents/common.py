@@ -32,6 +32,8 @@ from spatial import (
     nearby_rooms,
     normalize_room_id,
     room_of,
+    same_subject,
+    visual_level_between,
 )
 from theory_of_mind import _TOM_CONFIDENCE_CAPS, cap_mind_model_updates
 
@@ -491,6 +493,100 @@ def scene_compact_attire(sc, look=ATTIRE_LOOK_CHARS):
         for name, entry in (sc.get("attire") or {}).items()
         if isinstance(entry, dict)
     }
+
+
+def region_visibility(sc, observer, body, entry=None):
+    """Which of one body's regions THIS observer can see, and what conceals
+    the rest -- concealment, applied to bodies instead of acts.
+
+    Returns every region in `attire.REGIONS`, in anatomical order, in the
+    vocabulary concealed action already uses:
+
+        {"torso": {"visibility": "concealed", "by": {"garments": ["kimono"]}},
+         "hands": {"visibility": "overt"},
+         ...}
+
+    `by` is a one-key dict naming the KIND of concealer alongside the
+    concealers themselves, and the kinds are exactly the three the engine can
+    already answer for:
+
+      - `garments` -- what `attire.concealing_garments` says still covers the
+        region. A garment that only attaches never appears here: a hair clip
+        is present without covering.
+      - `containment` -- the body is shut inside something the observer is
+        outside (or the observer is shut inside something themselves), read
+        through `hiding_holders_of`/`containment_conceals` so the parented
+        interior-room form conceals exactly as the `contained` ledger form
+        does.
+      - `vantage` -- the observer's own position is what fails: the body is in
+        their rear arc (`entity_arc`, the `behind_sources` rule -- no NEW
+        visual detail from a blind spot), or `visual_level_between` answers
+        `none`/`shapes` for darkness, barriers, or distance. At `shapes` a
+        silhouette shows presence and outline, not what is worn or bare, so
+        every region is concealed -- the same reading `_co_present_company`
+        gives an unrecognised figure.
+
+    DERIVED, NEVER STORED. `wearing`/`state`/`regions` are already three
+    representations of one wardrobe and they drifted until `rederive_entry`
+    existed; a stored per-region `visible` flag would be a fourth with the
+    same failure mode and no new information. This is a pure read: the
+    coverage half comes from the reconciled regions (which also migrates a
+    legacy flat-list body on read), the observer half from the scene, and
+    nothing is written anywhere.
+
+    Per-observer on purpose -- the point of the transfer from `conceal_from`.
+    Two observers of one body get different answers when one stands behind it,
+    or outside the wardrobe it is hiding in. A body is never concealed from
+    itself by containment or vantage (`same_subject`, not `==` -- a being
+    routinely carries a display name and an entity id at once): a perceiver is
+    never sealed from themselves and is never in their own blind spot. Their
+    own garments still conceal their regions, because covered is covered.
+
+    Safe-closed: an observer the scene cannot place sees nothing, which is the
+    same answer every other spatial query gives for `unknown`.
+    """
+    sc = sc if isinstance(sc, dict) else {}
+    if entry is None:
+        ledger = sc.get("attire") or {}
+        entry = ledger.get(body)
+        if entry is None:
+            key = str(body or "").strip().casefold()
+            entry = next((value for name, value in ledger.items()
+                          if str(name).strip().casefold() == key), None)
+    regions = {}
+    if isinstance(entry, dict):
+        regions = (attire_model.rederive_entry(entry) or {}).get("regions") or {}
+    cover = attire_model.concealing_garments(regions)
+
+    body_level = None
+    if not same_subject(sc, observer, body):
+        level = visual_level_between(sc, observer, body)
+        if level != "full":
+            # Attribution only: whether sight fails is spatial's composed
+            # answer (light, barriers, containment, crossing grace), never
+            # re-derived here where a second copy of that policy would drift.
+            if containment_conceals(sc, observer, body):
+                holders = (hiding_holders_of(sc, body)
+                           or hiding_holders_of(sc, observer))
+                body_level = {"containment":
+                              [str(holders[0])] if holders else []}
+            else:
+                body_level = {"vantage": ["seen only in silhouette"
+                                          if level == "shapes"
+                                          else "out of sight"]}
+        elif entity_arc(sc, observer, body) == "rear":
+            body_level = {"vantage": ["behind the observer"]}
+
+    out = {}
+    for region in attire_model.REGIONS:
+        if body_level is not None:
+            out[region] = {"visibility": "concealed", "by": dict(body_level)}
+        elif region in cover:
+            out[region] = {"visibility": "concealed",
+                           "by": {"garments": list(cover[region])}}
+        else:
+            out[region] = {"visibility": "overt"}
+    return out
 
 
 def _perceptible_entities(sc, perceiver_names=None):
