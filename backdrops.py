@@ -654,6 +654,33 @@ def arrival_turn_for_room(chat_id, turn_idx, room_id, player_name=None,
     return arrival
 
 
+def arrival_flavour(chat_id, turn_idx, room_id, player_name=None):
+    """Optional atmosphere for an image prompt, from the ARRIVAL beat.
+
+    Mid-scene prose is people talking; arrival prose describes the place. People
+    and speech are stripped. A supplement only -- `place` is the source of
+    record, so a thin or empty string costs the picture nothing.
+
+    IT IS SEPARATE FROM `build_backdrop_request` BECAUSE IT IS EXPENSIVE AND THE
+    READ PATH DOES NOT WANT IT. `arrival_turn_for_room` walks up to eight
+    per-turn checkpoints backwards, and on a real story those blobs are ~4.7MB
+    each -- so computing this cost up to ~38MB of JSON parsing. Measured on chat
+    67 it was 0.548s of the 0.758s that seventeen `build_backdrop_request` calls
+    took: 72% of the read path, spent on a field only `generate_backdrop` reads.
+
+    Worse, it GREW with a stay: the lookback walks further back the longer the
+    player has been in one room, so the same seventeen turns cost 56ms at the
+    beat of arrival and 146ms five beats later. `GET /api/turns/{id}/backdrop`
+    is polled while the reader scrolls and serves cache hits, so a picture that
+    was already on disk paid all of that before it could be shown -- which is
+    exactly what "it used to load instantly" describes, on a story whose
+    checkpoints have since grown to megabytes.
+    """
+    return to_visual_register(_setting_only(player_view_for_turn(
+        chat_id, arrival_turn_for_room(chat_id, turn_idx, room_id,
+                                       player_name))))
+
+
 def _turn_frame(chat_id, turn_idx):
     row = q("SELECT frame_id FROM turns WHERE chat_id=? AND idx=?",
             (chat_id, turn_idx), one=True)
@@ -719,13 +746,11 @@ def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None):
         # from. Rich (architecture, light, exits, damage) and safe by
         # construction (no entities, no positions, no people).
         "place": room_projection(scene, room_id, viewer=player_name),
-        # Optional atmosphere only, from the ARRIVAL beat (mid-scene prose is
-        # people talking; arrival prose describes the place). People and speech
-        # are stripped, but this is a supplement -- `place` is the source of
-        # record, so a thin or empty flavour string costs nothing.
-        "flavour": to_visual_register(_setting_only(player_view_for_turn(
-            chat_id, arrival_turn_for_room(chat_id, turn_idx, room_id,
-                                           player_name)))),
+        # `flavour` USED TO BE COMPUTED HERE, and it was by far the most
+        # expensive thing this function did -- see `arrival_flavour`, which the
+        # one caller that needs it now calls for itself. Nothing else may put
+        # it back: this dict is built on the READ path, which serves cache hits
+        # and never writes a prompt.
         "time": scene.get("time") or "",
         "location": scene.get("location") or "",
         # For the weather overlay (static/js/weather-fx.js), which draws only
@@ -1075,8 +1100,14 @@ def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
         if outofband.stopped(work):
             return None
 
+        # Computed HERE, past every cache check and inside the lock, because it
+        # is the expensive part of the old request dict and only a call that is
+        # actually going to draw needs it. `req.get` is not a fallback for a
+        # missing key -- the key is gone; this is the one place it is made.
+        flavour = arrival_flavour(chat_id, turn_idx, req.get("room"),
+                                  player_name)
         prompt = refine_prompt(
-            compose_prompt(req["place"], style, req["flavour"]), req["place"])
+            compose_prompt(req["place"], style, flavour), req["place"])
         # Same room, new state: modify the picture that already exists rather
         # than inventing the place again. Any failure here -- a provider with
         # no edits endpoint, a model that refuses one, a corrupt anchor -- is a

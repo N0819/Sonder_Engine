@@ -15,6 +15,7 @@ These tests pin the two properties that make it safe and affordable:
 
 from __future__ import annotations
 
+import json
 import os
 
 import pytest
@@ -251,7 +252,9 @@ def test_concurrent_requests_for_one_room_generate_one_image(temp_db, tmp_path,
     monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
     monkeypatch.setattr(bd, "build_backdrop_request", lambda *a, **k: {
         "signature": "a" * 24, "cached": None, "room_name": "Ten Forward",
-        "place": {"name": "Ten Forward"}, "flavour": "",
+        # No `flavour`: it left this dict for `arrival_flavour`, which the
+        # generate path calls for itself.
+        "place": {"name": "Ten Forward"},
     })
     monkeypatch.setattr(bd, "refine_prompt", lambda draft, place: draft)
 
@@ -294,7 +297,7 @@ def test_no_half_written_image_is_ever_visible(temp_db, tmp_path, monkeypatch):
     monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
     monkeypatch.setattr(bd, "build_backdrop_request", lambda *a, **k: {
         "signature": "b" * 24, "cached": None, "room_name": "Corridor",
-        "place": {"name": "Corridor"}, "flavour": "",
+        "place": {"name": "Corridor"},
     })
     monkeypatch.setattr(bd, "refine_prompt", lambda draft, place: draft)
 
@@ -932,3 +935,44 @@ def test_a_field_the_prompt_ignores_stays_out_of_the_key(field):
     assert (backdrops.compose_prompt(place, {field: "SENTINELVALUE"}, "")
             == backdrops.compose_prompt(place, {}, ""))
     assert field not in backdrops.VISUAL_STYLE_KEYS
+
+
+# --- what the READ path is allowed to cost -----------------------------------
+
+def test_the_read_path_does_not_walk_the_checkpoint_history(temp_db, monkeypatch):
+    """"It used to load images instantly."
+
+    `build_backdrop_request` serves `GET /api/turns/{id}/backdrop`, which the
+    reader's scrolling polls and which NEVER generates anything. It was
+    computing `flavour` -- and `flavour` needs `arrival_turn_for_room`, which
+    walks up to eight per-turn checkpoints backwards, blobs that are ~4.7MB
+    each on a real story.
+
+    Measured on live chat 67: 0.548s of the 0.758s that seventeen calls took,
+    72% of the read path, for a field only `generate_backdrop` reads. And it
+    GREW with a stay, because the lookback walks further the longer the player
+    stays put -- 56ms on the beat of arrival, 146ms five beats later. Moving it
+    to the one caller that needs it took those seventeen calls from 1203ms to
+    312ms and made the per-call cost flat.
+    """
+    import backdrops as bd
+
+    walked = []
+    real = bd.arrival_turn_for_room
+    monkeypatch.setattr(bd, "arrival_turn_for_room",
+                        lambda *a, **k: walked.append(a) or real(*a, **k))
+
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Backdrop read path", "", 0.0))
+    scene = _scene()
+    temp_db.qi("INSERT INTO checkpoints(chat_id,turn_idx,blob,created) "
+               "VALUES(?,?,?,?)",
+               (cid, 1, json.dumps({"world": {"scene": scene}}), 0.0))
+
+    req = bd.build_backdrop_request(cid, 0, "Hinami", None)
+    assert req is not None and req["signature"]
+    assert walked == [], "the read path walked the checkpoint history again"
+    # And the key is GONE rather than emptied, so a caller that needs the
+    # atmosphere is forced to the function that makes it instead of silently
+    # composing a prompt with a blank where the arrival prose should be.
+    assert "flavour" not in req
