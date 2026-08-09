@@ -900,3 +900,72 @@ class TestANoteMayOnlyIntroduceWhatTheStorySaid:
             {"notes": {"shift": "linen shift, rucked"}},
             self._worn(), {"wearing": self._worn()})
         assert out.get("add") == ["linen shift"]
+
+
+# --- one line per body, for the Director's payload ---------------------------
+
+class TestCompactLine:
+    """`attire` is the single largest key in the scene object — 10,629 of
+    31,759 chars on a live 9-turn story, bigger than `rooms` or `entities` —
+    and the Director does not need the garment graph to adjudicate a beat. It
+    needs to know what is on each body and how far off.
+
+    `compact_line` renders that as ONE line with a FIXED region order:
+    measured on the same live scene, 10,629 chars becomes 1,016, a 90% cut,
+    against `describe`'s 72%. The fixed order is not cosmetic — a body whose
+    clothing did not change renders byte-identically, which is what lets a
+    provider's prefix cache absorb it instead of charging for it again.
+    """
+
+    def test_every_region_answers_in_a_fixed_order(self):
+        line = attire.compact_line({"torso": {"garments": [
+            {"name": "blouse", "state": "worn"}]}})
+        assert line.split("|")[0].startswith("head:")
+        assert [p.split(":")[0] for p in line.split("|")] == list(attire.REGIONS)
+
+    def test_state_rides_with_the_garment(self):
+        line = attire.compact_line({"groin": {"garments": [
+            {"name": "skirt", "state": "loosened"}]}})
+        assert "groin:skirt(loosened)" in line
+
+    def test_a_removed_garment_is_replaced_by_what_is_beneath(self):
+        """Not "shift(removed)" — the slot reports what is THERE now. Naming
+        what is gone is how a prompt describes a shirt on the floor as though
+        it were still on the body."""
+        regions = {"torso": {"garments": [{"name": "shift", "state": "removed"}],
+                             "beneath": "pale skin"}}
+        assert "torso:pale skin" in attire.compact_line(regions, beneath_visible=True)
+
+    def test_the_exposure_lasts_until_something_covers_it_again(self):
+        """A body stays exposed until it is dressed — by new attire or by the
+        garment it discarded. So this is the STANDING state, not the moment."""
+        regions = {"torso": {"garments": [{"name": "shift", "state": "removed"},
+                                          {"name": "wool coat", "state": "worn"}],
+                             "beneath": "pale skin"}}
+        assert "torso:wool coat" in attire.compact_line(regions, beneath_visible=True)
+
+    def test_a_region_never_covered_says_bare_and_nothing_more(self):
+        """`attire_beneath` is the host's choice and off by default. An
+        uncovered region must not become a standing description of the body."""
+        regions = {"hands": {"garments": [], "beneath": "calloused palms"}}
+        assert "hands:bare" in attire.compact_line(regions, beneath_visible=True)
+
+    def test_the_host_setting_is_honoured(self):
+        regions = {"torso": {"garments": [{"name": "shift", "state": "removed"}],
+                             "beneath": "pale skin"}}
+        assert "torso:bare" in attire.compact_line(regions, beneath_visible=False)
+
+    def test_attaching_is_not_covering_and_both_are_shown(self):
+        """A hair clip conceals nothing, so a head wearing only one is still
+        bare — the rule `covered_regions` already applies. Folding them
+        together would report a covered head on the strength of a hair pin."""
+        regions = {"head": {"garments": [
+            {"name": "feather hair clip", "state": "worn", "attaches": True}]}}
+        line = attire.compact_line(regions)
+        assert "head:bare[at:feather hair clip]" in line
+
+    def test_an_attachment_rides_alongside_real_cover(self):
+        regions = {"waist": {"garments": [
+            {"name": "belt", "state": "worn", "attaches": True},
+            {"name": "apron", "state": "worn"}]}}
+        assert "waist:apron[at:belt]" in attire.compact_line(regions)
