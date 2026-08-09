@@ -1021,3 +1021,42 @@ class TestCompactLine:
             {"name": "coat", "description": "A heavy travelling coat"}]}}
         assert attire.compact_line(regions) == attire.compact_line(regions, look=0)
         assert "heavy" not in attire.compact_line(regions)
+
+    # --- the line has to be readable without guessing -----------------------
+
+    def test_a_comma_in_a_look_cannot_be_mistaken_for_a_separator(self):
+        """The whole reason the structural joins are not commas. "A snug,
+        ribbed tank top in charcoal" sat beside "(loosened, wine-stained)" and
+        nothing could tell a description's comma from a separator's."""
+        regions = {"torso": {"garments": [
+            {"name": "tank top", "state": "loosened",
+             "condition": "wine-stained, torn",
+             "description": "A snug, ribbed tank top in charcoal"}]}}
+        line = attire.compact_line(regions, look=60)
+        assert "(loosened;wine-stained, torn)" in line
+
+    def test_the_look_comes_last_so_its_end_is_unambiguous(self):
+        """It is the only free-text field, and it runs to the next `+` or `|`
+        -- neither of which it can contain. In the middle, "...in
+        charcoal(open)" read as though the parenthesis were part of the
+        description."""
+        regions = {"torso": {"garments": [
+            {"name": "shirt", "state": "open", "description": "A linen shirt"}]}}
+        line = attire.compact_line(regions, look=60)
+        assert "shirt(open)=A linen shirt" in line
+
+    def test_structural_characters_cannot_enter_from_authored_text(self):
+        """A garment named with a pipe or an equals would make the line
+        unreadable, and card authors write whatever they like."""
+        regions = {"torso": {"garments": [
+            {"name": "robe|of=split[chars]", "state": "worn"}]}}
+        slots = dict(part.split(":", 1) for part
+                     in attire.compact_line(regions).split("|"))
+        assert len(slots) == len(attire.REGIONS)
+        assert "robe of split chars" in slots["torso"]
+
+    def test_attachments_are_semicolon_separated(self):
+        regions = {"waist": {"garments": [
+            {"name": "belt", "state": "worn", "attaches": True},
+            {"name": "sash", "state": "worn", "attaches": True}]}}
+        assert "[at:belt;sash]" in attire.compact_line(regions)
