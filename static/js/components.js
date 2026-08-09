@@ -425,6 +425,7 @@ function fStrList(label, vals) {
 // report a body wearing only an obi as covered where it matters most.
 const ATTIRE_REGIONS = ["head", "torso", "arms", "hands", "waist", "groin",
                         "legs", "feet"];
+const ATTIRE_REGION_ZONES = { torso: ["chest", "midriff"] };
 
 // Coverage presets, offered as one-click shortcuts inside the picker. Not the
 // only way to answer -- the checkboxes are -- but the four spans real clothing
@@ -440,7 +441,7 @@ const ATTIRE_COVERAGE = [
 // A dropdown of checkboxes: what this garment covers, any combination of it.
 // `auto` is the default and means "work it out from the name" -- resolved in
 // attire.py, so the cue table has exactly one implementation.
-function fCoveragePicker(covers, auto, attaches) {
+function fCoveragePicker(covers, auto, attaches, coveredZones = {}) {
   const boxes = new Map(ATTIRE_REGIONS.map(region => [region, el("input", {
     type: "checkbox", ...((covers || []).includes(region) ? { checked: "" } : {})
   })]));
@@ -449,18 +450,32 @@ function fCoveragePicker(covers, auto, attaches) {
   // lives in the same control: a ribbon sits in the hair and covers no head.
   const attachBox = el("input", {
     type: "checkbox", ...(attaches ? { checked: "" } : {}) });
+  const zoneBoxes = new Map();
+  Object.entries(ATTIRE_REGION_ZONES).forEach(([region, zones]) => {
+    const explicit = Object.prototype.hasOwnProperty.call(coveredZones || {}, region);
+    const selected = explicit ? (coveredZones[region] || []) : zones;
+    zoneBoxes.set(region, new Map(zones.map(zone => [zone, el("input", {
+      type: "checkbox", ...(selected.includes(zone) ? { checked: "" } : {})
+    })])));
+  });
   const summary = el("summary", { style: "cursor:pointer;font-size:12px" });
 
   const picked = () => ATTIRE_REGIONS.filter(r => boxes.get(r).checked);
   const sync = () => {
     const on = picked();
     boxes.forEach(b => { b.disabled = autoBox.checked; });
+    zoneBoxes.forEach((zoneMap, region) => zoneMap.forEach(b => {
+      b.disabled = autoBox.checked || !boxes.get(region).checked;
+    }));
     summary.textContent = (attachBox.checked ? "worn at: " : "covers: ") + (
       autoBox.checked ? "auto" : (on.length ? on.join(", ") : "nothing yet"));
   };
   autoBox.onchange = sync;
   attachBox.onchange = sync;
   boxes.forEach(b => { b.onchange = () => { autoBox.checked = false; sync(); }; });
+  zoneBoxes.forEach(zoneMap => zoneMap.forEach(b => {
+    b.onchange = () => { autoBox.checked = false; sync(); };
+  }));
 
   const preset = (label, regions) => el("button", {
     type: "button", class: "ghost", style: "font-size:11px;padding:2px 6px",
@@ -483,12 +498,30 @@ function fCoveragePicker(covers, auto, attaches) {
     el("div", { class: "small dim", style: "margin-top:6px" },
       "waist is the belt line; groin is covered separately, so a sash alone "
       + "leaves it bare."),
+    ...[...zoneBoxes.entries()].map(([region, zoneMap]) =>
+      el("div", { class: "row small", style: "flex-wrap:wrap;gap:8px;margin-top:6px" },
+        el("span", { class: "dim" }, region + " zones still covered:"),
+        ...[...zoneMap.entries()].map(([zone, box]) =>
+          el("label", {}, box, " " + zone)))),
     el("div", { class: "row", style: "flex-wrap:wrap;gap:4px;margin-top:6px" },
       ...ATTIRE_COVERAGE.map(([label, regions]) => preset(label, regions))));
 
   sync();
-  return { node, read: () => (autoBox.checked ? null : picked()),
-           attaches: () => attachBox.checked };
+  return {
+    node,
+    read: () => (autoBox.checked ? null : picked()),
+    coveredZones: () => {
+      const result = {};
+      zoneBoxes.forEach((zoneMap, region) => {
+        if (autoBox.checked || !boxes.get(region).checked) return;
+        const all = ATTIRE_REGION_ZONES[region];
+        const selected = all.filter(zone => zoneMap.get(zone).checked);
+        if (selected.length !== all.length) result[region] = selected;
+      });
+      return result;
+    },
+    attaches: () => attachBox.checked
+  };
 }
 
 function fAttireGarments(label, regions) {
@@ -503,6 +536,7 @@ function fAttireGarments(label, regions) {
       const covers = (g.covers && g.covers.length ? g.covers : [region]);
       seen.set(name.toLowerCase(), {
         name, covers, description: g.description || "",
+        coveredZones: { ...(g.covered_zones || {}) },
         attaches: !!g.attaches, condition: g.condition || "" });
     });
   });
@@ -515,7 +549,8 @@ function fAttireGarments(label, regions) {
     const description = el("input", {
       value: g.description || "", placeholder: "what it looks like (optional)",
       style: "flex:2;min-width:0" });
-    const covers = fCoveragePicker(g.covers, !!g.auto, !!g.attaches);
+    const covers = fCoveragePicker(
+      g.covers, !!g.auto, !!g.attaches, g.coveredZones || {});
     return {
       node: [name, description, covers.node],
       read: () => {
@@ -523,6 +558,7 @@ function fAttireGarments(label, regions) {
         const picked = covers.read();
         return { name: name.value.trim(), description: description.value.trim(),
                  covers: picked || [], auto: picked === null,
+                 covered_zones: covers.coveredZones(),
                  attaches: covers.attaches(), condition: g.condition || "" };
       }
     };
@@ -535,11 +571,26 @@ function fAttireGarments(label, regions) {
       value: ((regions || {})[region] || {}).beneath || "",
       placeholder: "underneath (optional)", style: "flex:2;min-width:0"
     });
+    const zoneInputs = (ATTIRE_REGION_ZONES[region] || []).map(zone => ({
+      zone,
+      input: el("input", {
+        value: (((regions || {})[region] || {}).beneath_zones || {})[zone] || "",
+        placeholder: zone + " underneath (optional)", style: "flex:2;min-width:0"
+      })
+    }));
     return {
-      region, read: () => input.value.trim(),
-      node: el("div", { class: "row", style: "gap:6px;margin-bottom:4px" },
-        el("span", { class: "small dim", style: "flex:none;width:52px" }, region),
-        input)
+      region,
+      read: () => ({
+        beneath: input.value.trim(),
+        zones: Object.fromEntries(zoneInputs
+          .map(z => [z.zone, z.input.value.trim()]).filter(([, text]) => text))
+      }),
+      node: el("div", { style: "margin-bottom:6px" },
+        el("div", { class: "row", style: "gap:6px;margin-bottom:4px" },
+          el("span", { class: "small dim", style: "flex:none;width:52px" }, region),
+          input),
+        ...zoneInputs.map(z => el("div", { class: "row", style: "gap:6px;margin:2px 0 2px 58px" },
+          el("span", { class: "small dim", style: "width:48px" }, z.zone), z.input)))
     };
   });
 
@@ -557,15 +608,18 @@ function fAttireGarments(label, regions) {
         entry.garments.push({
           name: g.name, description: g.description, state: "worn",
           attaches: g.attaches, condition: g.condition,
+          ...(Object.keys(g.covered_zones || {}).length
+            ? { covered_zones: g.covered_zones } : {}),
           ...(g.auto ? { auto: true }
                      : (g.covers.length > 1 ? { covers: g.covers.slice(1) } : {}))
         });
       });
       beneath.forEach(b => {
-        const text = b.read();
-        if (!text) return;
+        const value = b.read();
+        if (!value.beneath && !Object.keys(value.zones).length) return;
         const entry = out[b.region] || (out[b.region] = { garments: [], beneath: "" });
-        entry.beneath = text;
+        entry.beneath = value.beneath;
+        if (Object.keys(value.zones).length) entry.beneath_zones = value.zones;
       });
       return out;
     }

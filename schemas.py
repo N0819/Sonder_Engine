@@ -1482,6 +1482,11 @@ class AttireDiff(LenientModel):
     replace: Optional[list[str]] = None
     state: Optional[list[str]] = None
     conditions: dict[str, str] = Field(default_factory=dict)
+    # A still-worn garment may expose part of a coarse region without being
+    # removed: {garment_handle: {torso: [chest]}} means it still covers the
+    # chest and exposes the midriff. The vocabulary is validated in attire.py
+    # so legacy/near-miss model output can degrade fieldwise rather than abort.
+    coverage: dict = Field(default_factory=dict)
     # Authored clothing by region -- the opening turn's shape, carrying each
     # garment's description and what is beneath it.
     regions: dict[str, dict] = Field(default_factory=dict)

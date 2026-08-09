@@ -46,6 +46,13 @@ but never replaces an existing `scene.attire` entry.
 ### `perception_establish`
 
 Builds the player’s opening view from the established scene and spatial/perceptual constraints.
+Attire/body detail reaches a model only through the observer-scoped
+`scene.body_regions` projection. It previews commit's canonical attire change
+on a copy, applies derived region visibility, and exposes only the outer surface
+or legitimately bare body detail. For partial torso coverage, `chest` and
+`midriff` are rendered separately; a description authored for one zone is never
+used as fallback for the other, and the coarse whole-torso `beneath` string is
+withheld while only one zone is exposed.
 
 ### `narrator`
 

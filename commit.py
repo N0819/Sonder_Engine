@@ -1810,6 +1810,11 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
         _after = attire_model.apply_flat_change(
             _before, cur["wearing"], decisive=name in _decisive_names,
             conditions=_marks if isinstance(_marks, dict) else None)
+        _after, _coverage_notes = attire_model.apply_coverage_changes(
+            _after, d.get("coverage"))
+        if report:
+            for _coverage_note in _coverage_notes:
+                ctx.tell_director(_coverage_note)
         cur["regions"] = _after
         cur["wearing"] = attire_model.flat_wearing(_after)
         _notes = attire_model.flat_state(_after)
