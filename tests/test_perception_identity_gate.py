@@ -432,6 +432,34 @@ def test_body_detail_floor_accepts_natural_rephrasing():
     assert additions == []
 
 
+def test_body_detail_floor_rejects_live_generic_inner_thigh_overlap():
+    """Chat 68's second reroll: `inner` + `thighs` are positional language,
+    not evidence that any authored genital traits survived."""
+    import agents.perception as perception
+
+    view = (
+        "You part your knees slightly, leaving a modest gap between your "
+        "thighs. Her fingers press your inner thigh wider as she steps "
+        "between your parted legs, flush against your bare entrance. Your "
+        "groin registers steady pressure and shared warmth."
+    )
+    projected = [{"body": "you", "regions": {
+        "groin": (
+            "bare — A neat patch of copper-gold curls above her vulva, kept "
+            "trimmed. Outer labia full and soft, slightly darker than her "
+            "tanned skin. Inner folds pink and smooth, tucked within."
+        ),
+    }}]
+
+    restored, additions = perception._deliver_foreground_body_details(
+        view, projected)
+
+    assert additions
+    assert "copper-gold curls" in restored
+    assert "vulva" in restored
+    assert "Your exposed groin" in restored
+
+
 def test_perception_prompt_permits_rephrasing_but_forbids_generic_loss():
     from prompts import DEFAULT_PROMPTS
 

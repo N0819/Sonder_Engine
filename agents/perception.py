@@ -571,8 +571,9 @@ def _standing_contacts_for(scene, observer_name):
 
 
 _BODY_DETAIL_GENERIC = frozenset({
-    "bare", "body", "exposed", "skin", "soft", "their", "there", "these",
-    "they", "this", "those", "very", "warm", "with", "your",
+    "above", "bare", "below", "between", "body", "exposed", "full", "inner",
+    "outer", "skin", "soft", "their", "there", "these", "they", "thigh",
+    "thighs", "this", "those", "very", "warm", "with", "within", "your",
 })
 
 _SELF_EXPOSED_REGION_CUES = {
