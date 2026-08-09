@@ -2431,6 +2431,13 @@ def _omission_subject_encoded(sd, subject, forms=None):
                                      or hits(op.get("from_id"))
                                      or hits(op.get("to_id"))):
             return True
+    for op in (sd.get("contact_ops") or []):
+        if not isinstance(op, dict):
+            continue
+        if hits(op.get("actor")) or hits(op.get("target")):
+            return True
+        if _norm_subject(subject) in ("contact", "contacts"):
+            return True
     return False
 
 # Category synonyms a model may plausibly write in a manifest entry, folded
@@ -2444,6 +2451,7 @@ _OMISSION_CATEGORY_ALIASES = {
     "entity": "entities", "object": "entities",
     "condition": "conditions", "status_effect": "conditions",
     "clothing": "attire", "outfit": "attire",
+    "contact": "contacts", "body_position": "contacts",
     "item": "inventory", "inventory_ops": "inventory",
     "cast": "cast_changes", "arrival": "cast_changes",
     "departure": "cast_changes",
@@ -2542,6 +2550,15 @@ def _evidence_present(sd, omission, forms=None):
         return False
     if category == "attire":
         return any(hits(k) for k in (sd.get("attire") or {}))
+    if category == "contacts":
+        for op in (sd.get("contact_ops") or []):
+            if not isinstance(op, dict):
+                continue
+            if hits(op.get("actor")) or hits(op.get("target")):
+                return True
+            if _norm_subject(subject) in ("contact", "contacts"):
+                return True
+        return False
     if category == "inventory":
         return any(
             isinstance(op, dict) and (hits(op.get("object_id"))
@@ -2706,6 +2723,19 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
     out["state_diff"] = sd
     resolved_event = out.get("resolved_event", "")
     dialogue_log = out.get("dialogue_log") or []
+
+    # An explicitly shed clothing entity is already a structured assertion
+    # that the named garment left the named wearer. Promote that relation into
+    # the attire/position fields before omission detection, so the same
+    # resolution cannot create a floor object while leaving it on the body.
+    # Pure structured recovery only: the garment must resolve uniquely against
+    # the prior wardrobe; no prose is parsed.
+    for recovered in attire_model.recover_shed_entity_changes(sc, sd):
+        if recovered.get("garment"):
+            ctx.tell_director(
+                "attire: read explicitly shed clothing entity "
+                f"{recovered['entity_id']!r} as removing "
+                f"{recovered['garment']!r} from {recovered['owner']!r}.")
 
     # ---- Tier 0: deterministic floor -------------------------------------
     # Runs BEFORE the omission scans below so they read the corrected diff. The

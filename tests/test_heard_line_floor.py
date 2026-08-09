@@ -63,6 +63,18 @@ class TestTheFloorItself:
         assert restored == []
         assert out.count("Shrine first") == 1
 
+    def test_dialogue_tag_punctuation_does_not_duplicate_the_line(self):
+        """Live chat 68: a period in the dialogue log becomes a comma before
+        a speech tag; that grammatical change is not a second line."""
+        delivered = [("Elyra Voss", '"Lie back."',
+                      "normal", True, False)]
+        view = '"Lie back," Elyra commands, her voice low.'
+
+        out, restored = self._floor(view, delivered)
+
+        assert restored == []
+        assert out == view
+
     def test_several_lost_lines_all_return(self):
         delivered = [
             ("The Doctor", '"Shrine first, then we pick a direction."',

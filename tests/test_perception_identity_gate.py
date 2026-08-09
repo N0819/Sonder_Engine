@@ -230,6 +230,90 @@ def test_outcome_stage_scrubs_stranger_view(temp_db, monkeypatch):
     )
 
 
+def test_outcome_payload_previews_attire_and_delivers_exposed_region_detail(
+        temp_db, monkeypatch):
+    """Chat 68's two missing seams together: perception must see commit's
+    canonicalized removal, and the body detail it exposes must enter only the
+    observer-scoped payload rather than the shared omniscient context."""
+    import attire
+    import agents.perception as perception
+
+    ctx, moon_id, _ = _make_ctx(
+        temp_db, known={"Dr. Moon": ["Hinami"]})
+    temp_db.set_setting("attire_beneath", "1")
+    sc = temp_db.wget(ctx.chat.id, "scene", {})
+    sc["attire"] = {"Hinami": attire.authored_entry(
+        ["fitted tank top"], [], {"torso": {
+            "garments": [{"name": "fitted tank top"}],
+            "beneath": "a distinctive silver scar across the ribs",
+        }})}
+    temp_db.wset(ctx.chat.id, "scene", sc)
+    ctx.director_resolve = {
+        "resolved_event": "The fitted tank top comes off.",
+        "dialogue_log": [], "dialogue_order": [],
+        "state_diff": {"attire": {"Hinami": {"remove": ["tank top"]}}},
+    }
+    monkeypatch.setattr(attire, "decisive_targets",
+                        lambda *a, **k: {"Hinami"})
+    captured = {}
+
+    def capture(role, key, system, payload, **kw):
+        perceiver = payload["perceivers"][0]
+        captured[str(perceiver["id"])] = payload
+        return {"views": {str(perceiver["id"]): "The room is still."}}
+
+    monkeypatch.setattr(perception, "_agent_json", capture)
+    perception.perception_outcome(ctx, nonce=0)
+
+    body_regions = captured[str(moon_id)]["scene"]["body_regions"]
+    hinami = next(row for row in body_regions if row["body"] == "Hinami")
+    assert "distinctive silver scar" in hinami["regions"]["torso"]
+    assert "fitted tank top" not in hinami["regions"]["torso"]
+    # Previewing is pure with respect to the stored pre-commit scene.
+    stored = temp_db.wget(ctx.chat.id, "scene", {})
+    assert stored["attire"]["Hinami"]["wearing"] == ["fitted tank top"]
+
+
+def test_outcome_payload_withholds_exposed_body_detail_in_darkness(
+        temp_db, monkeypatch):
+    """A hostile marker must be absent from the actual model payload when
+    the observer has no visual channel, even though the garment came off and
+    the observer recognizes the body."""
+    import attire
+    import agents.perception as perception
+
+    ctx, moon_id, _ = _make_ctx(
+        temp_db, known={"Dr. Moon": ["Hinami"]})
+    temp_db.set_setting("attire_beneath", "1")
+    sc = temp_db.wget(ctx.chat.id, "scene", {})
+    sc["rooms"]["room1"]["light"] = "dark"
+    sc["attire"] = {"Hinami": attire.authored_entry(
+        ["fitted tank top"], [], {"torso": {
+            "garments": [{"name": "fitted tank top"}],
+            "beneath": "HOSTILE-HIDDEN-SCAR-MARKER",
+        }})}
+    temp_db.wset(ctx.chat.id, "scene", sc)
+    ctx.director_resolve = {
+        "resolved_event": "The fitted tank top comes off.",
+        "dialogue_log": [], "dialogue_order": [],
+        "state_diff": {"attire": {"Hinami": {"remove": ["tank top"]}}},
+    }
+    monkeypatch.setattr(attire, "decisive_targets",
+                        lambda *a, **k: {"Hinami"})
+    captured = {}
+
+    def capture(role, key, system, payload, **kw):
+        perceiver = payload["perceivers"][0]
+        captured[str(perceiver["id"])] = payload
+        return {"views": {str(perceiver["id"]): "The room is dark."}}
+
+    monkeypatch.setattr(perception, "_agent_json", capture)
+    perception.perception_outcome(ctx, nonce=0)
+
+    moon_payload = captured[str(moon_id)]
+    assert "HOSTILE-HIDDEN-SCAR-MARKER" not in json.dumps(moon_payload)
+
+
 def test_introduction_quote_survives_but_bare_name_is_scrubbed(temp_db, monkeypatch):
     """Mid-beat introduction: the name spoken aloud is sensory signal and
     must stay verbatim inside the quote; recognition only flips at commit

@@ -13,7 +13,7 @@ Deliberately database-free: pure dicts in, a dict out.
 
 from __future__ import annotations
 
-from agents.common import region_visibility
+from agents.common import observer_body_regions, region_visibility
 
 
 # One room with beared anchors, so facing can put a body in an observer's
@@ -206,3 +206,44 @@ def test_the_attire_ledger_key_is_matched_tolerantly():
     body."""
     sc = _scene({"Watcher": "taproom", "Mira": "taproom"}, {"Mira": MIRA})
     assert _concealed(region_visibility(sc, "Watcher", "mira")) == ["torso"]
+
+
+def test_observer_projection_delivers_exposed_authored_body_detail(temp_db):
+    """The production consumer: an authored region description reaches a
+    legitimate observer only after that region has actually been uncovered."""
+    temp_db.set_setting("attire_beneath", "1")
+    entry = {"regions": {
+        "torso": {
+            "garments": [{"name": "linen shirt", "state": "removed"}],
+            "beneath": "a distinctive silver scar across the ribs",
+        },
+        "waist": {
+            "garments": [{"name": "wool sash", "state": "worn",
+                          "description": "coarse blue wool"}],
+            "beneath": "a hidden tattoo no observer has earned",
+        },
+    }}
+    sc = _scene({"Watcher": "taproom", "Mira": "taproom"}, {"Mira": entry})
+
+    projected = observer_body_regions(
+        sc, "Watcher", {"Mira": "the traveller"})
+
+    assert projected[0]["body"] == "the traveller"
+    assert "distinctive silver scar" in projected[0]["regions"]["torso"]
+    assert "coarse blue wool" in projected[0]["regions"]["waist"]
+    assert "hidden tattoo" not in str(projected)
+    assert "Mira" not in str(projected), "canonical identity leaked in the new channel"
+
+
+def test_observer_projection_withholds_body_detail_without_sight(temp_db):
+    temp_db.set_setting("attire_beneath", "1")
+    dark = {"cellar": {"name": "Cellar", "light": "dark"}}
+    sc = {"rooms": dark,
+          "positions": {"Watcher": "cellar", "Mira": "cellar"},
+          "attire": {"Mira": {"regions": {"torso": {
+              "garments": [{"name": "shirt", "state": "removed"}],
+              "beneath": "a distinctive silver scar across the ribs",
+          }}}}}
+
+    assert observer_body_regions(
+        sc, "Watcher", {"Mira": "the traveller"}) == []

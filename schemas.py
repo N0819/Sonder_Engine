@@ -1695,7 +1695,7 @@ class DirectorResolve(LenientModel):
 class ReconcileOmission(LenientModel):
     """One persistent, physically consequential change asserted as completed
     in resolved_event prose but not encoded anywhere in the state_diff."""
-    category: str = "other"   # rooms|adjacency|positions|entities|conditions|attire|inventory|cast_changes|time|other
+    category: str = "other"   # rooms|adjacency|positions|entities|conditions|attire|contact|inventory|cast_changes|time|other
     subject: str = ""         # room id / entity id / character name concerned
     change: str = ""          # one short sentence stating the persistent change
     evidence: str = ""        # short verbatim quote from resolved_event
@@ -3202,6 +3202,7 @@ OUTPUT_EXAMPLES = {
             "remove_adjacent": [],
             "conditions": {},
             "inventory_ops": [],
+            "contact_ops": [],
             "overlays": {},
             "attire": {},
             "cast_changes": [],

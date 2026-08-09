@@ -1720,6 +1720,127 @@ def _advance_ground(cid, sc):
         sc.pop("ground", None)
 
 
+def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
+    """Apply one validated attire diff to a scene copy.
+
+    This is the single attire projection used by both the pre-commit outcome
+    preview and durable scene preparation.  Keeping it here prevents
+    perception from approximating commit's alias resolution, decisive-removal
+    rule, region derivation, and shed-object minting with a second spelling.
+    ``sc`` and ``diff`` are caller-owned copies in the perception path.
+    """
+    if not isinstance(sc, dict) or not isinstance(diff, dict):
+        return sc
+    res = res or {}
+    for recovered in attire_model.recover_shed_entity_changes(sc, diff):
+        if recovered.get("position"):
+            sc.setdefault("positions", {})[recovered["entity_id"]] = (
+                recovered["position"])
+        if report and recovered.get("garment"):
+            ctx.tell_director(
+                "attire: read explicitly shed clothing entity "
+                f"{recovered['entity_id']!r} as removing "
+                f"{recovered['garment']!r} from {recovered['owner']!r}.")
+
+    att = sc.setdefault("attire", {})
+    canonical_attire_key = _heal_attire_identity_keys(sc, ctx.cast)
+    # WHOSE clothes this beat tore off, not merely whether somebody's did.
+    _decisive_names = attire_model.decisive_targets(
+        getattr(ctx.turn, "player_input", "") or "",
+        _beat_voices(ctx, res),
+        {_name: attire_model.flat_wearing(attire_model.normalize_regions(_entry))
+         for _name, _entry in att.items() if isinstance(_entry, dict)},
+        player_name=_player_name_or_none(ctx),
+    )
+    _shed = []
+    _gained = set()
+    for name, d in (diff.get("attire") or {}).items():
+        name = canonical_attire_key(name)
+        if not isinstance(d, dict):
+            continue
+        d = attire_model.coerce_diff_shape(d)
+        cur = att.setdefault(name, {"wearing": [], "state": []})
+        cur.setdefault("wearing", [])
+        cur.setdefault("state", [])
+
+        d = interpret_attire_notes(
+            d, attire_model.flat_wearing(attire_model.normalize_regions(cur)),
+            cur, prose=str(res.get("resolved_event") or ""))
+        for _read in d.pop("_notes_read", None) or []:
+            if report:
+                ctx.tell_director(_read)
+        if d.get("wearing") is not None and not any(
+                d.get(k) for k in ("add", "remove", "replace")):
+            cur["wearing"] = sanitize_attire_items(list(d.get("wearing") or []))
+            if d.get("state") is not None:
+                cur["state"] = (d["state"] if isinstance(d["state"], list)
+                                else [d["state"]])
+            if isinstance(d.get("regions"), dict) and d["regions"]:
+                cur["regions"] = attire_model.normalize_regions(
+                    {"wearing": cur["wearing"], "regions": d["regions"]})
+        else:
+            previous_names = list(cur["wearing"])
+            if isinstance(d.get("replace"), list):
+                replaced = []
+                for handle in d["replace"]:
+                    text = str(handle or "").strip()
+                    canonical = attire_model.resolve_garment(
+                        text, previous_names) or text
+                    if canonical and canonical not in replaced:
+                        replaced.append(canonical)
+                cur["wearing"] = sanitize_attire_items(replaced)
+            for handle in d.get("add") or []:
+                text = str(handle or "").strip()
+                canonical = attire_model.resolve_garment(
+                    text, cur["wearing"]) or text
+                if canonical and canonical not in cur["wearing"]:
+                    cur["wearing"].append(canonical)
+            cur["wearing"] = sanitize_attire_items(cur["wearing"])
+            for handle in d.get("remove") or []:
+                canonical = attire_model.resolve_garment(
+                    handle, cur["wearing"])
+                if canonical in cur["wearing"]:
+                    cur["wearing"].remove(canonical)
+            if d.get("state") is not None:
+                cur["state"] = (d["state"] if isinstance(d["state"], list)
+                                else [d["state"]])
+
+        _before = attire_model.normalize_regions(cur)
+        _marks = d.get("conditions")
+        _after = attire_model.apply_flat_change(
+            _before, cur["wearing"], decisive=name in _decisive_names,
+            conditions=_marks if isinstance(_marks, dict) else None)
+        cur["regions"] = _after
+        cur["wearing"] = attire_model.flat_wearing(_after)
+        _notes = attire_model.flat_state(_after)
+        if _notes:
+            _authored = [
+                n for n in (cur.get("state") or [])
+                if isinstance(n, str) and n.strip() and n not in _notes
+                and not (
+                    n.casefold().startswith("bare at the ")
+                    and any(n.casefold() in note.casefold() for note in _notes)
+                )
+            ]
+            cur["state"] = _notes + _authored
+        _had = {g["name"].casefold()
+                for entry in _before.values()
+                for g in (entry.get("garments") or [])
+                if g.get("state") != "removed"}
+        for _entry in _after.values():
+            for _g in _entry.get("garments") or []:
+                if (_g.get("state") != "removed"
+                        and _g["name"].casefold() not in _had):
+                    _gained.add(_g["name"].casefold())
+        for _region, _garment in attire_model.newly_removed(_before, _after):
+            _shed.append((name, _garment,
+                          attire_model.condition_of(_after, _garment)))
+
+    _mint_shed_garments(
+        sc, [s for s in _shed if s[1].casefold() not in _gained], diff)
+    return sc
+
+
 def prepare_scene_commit(ctx):
     """Build the exact post-turn scene without mutating durable state.
 
@@ -1976,120 +2097,7 @@ def prepare_scene_commit(ctx):
             if not _pending:
                 sc.pop("approach", None)
 
-    att = sc.setdefault("attire", {})
-    canonical_attire_key = _heal_attire_identity_keys(sc, ctx.cast)
-    # WHOSE clothes this beat tore off, not merely whether somebody's did.
-    #
-    # Every voice in the beat is read, not just the player's: a character who
-    # rips a shirt open is as decisive as a player who does, and the rule
-    # exists to stop the engine being slower than its own fiction. Scoped per
-    # body, because one flag for the whole beat meant the player yanking their
-    # own coat off undressed everyone standing near them.
-    _decisive_names = attire_model.decisive_targets(
-        getattr(ctx.turn, "player_input", "") or "",
-        _beat_voices(ctx, res),
-        {_name: attire_model.flat_wearing(attire_model.normalize_regions(_entry))
-         for _name, _entry in att.items() if isinstance(_entry, dict)},
-        player_name=_player_name_or_none(ctx),
-    )
-    _shed = []
-    # Garments that arrive on SOMEBODY this beat. A coat that comes off one
-    # body and onto another in the same breath -- "she takes off her coat and
-    # drapes it over his shoulders" -- has not been dropped, and minting it as
-    # an object on the floor leaves two coats: one on his shoulders, one at
-    # their feet. Newly-arrived rather than merely present, so two guards each
-    # in "a wool cloak" still get a real cloak on the floor when one of them
-    # takes his off.
-    _gained = set()
-    for name, d in (diff.get("attire") or {}).items():
-        name = canonical_attire_key(name)
-        if not isinstance(d, dict):
-            continue
-        # Coerced HERE as well as at validation, because rerunning a stage
-        # replays a diff stored before the schema knew this shape.
-        d = attire_model.coerce_diff_shape(d)
-        cur = att.setdefault(name, {"wearing": [], "state": []})
-        cur.setdefault("wearing", [])
-        cur.setdefault("state", [])
-
-        d = interpret_attire_notes(
-            d, attire_model.flat_wearing(attire_model.normalize_regions(cur)),
-            cur, prose=str(res.get("resolved_event") or ""))
-        for _read in d.pop("_notes_read", None) or []:
-            ctx.tell_director(_read)
-        # A whole-outfit write (`wearing` with no add/remove/replace) is what
-        # director_establish sends. It used to `continue` straight past the
-        # reconciliation below, which made it the one shape that could still
-        # undress someone in a single beat -- fine on the opening turn, where
-        # everything is dressing, but nothing stopped a resolve emitting it.
-        if d.get("wearing") is not None and not any(
-                d.get(k) for k in ("add", "remove", "replace")):
-            cur["wearing"] = sanitize_attire_items(list(d.get("wearing") or []))
-            if d.get("state") is not None:
-                cur["state"] = d["state"] if isinstance(d["state"], list) else [d["state"]]
-            # Authored regions are the richest clothing detail any story gets
-            # -- every garment's description, and what is under it, straight
-            # off the cards. They were being read past here and rebuilt from
-            # bare names, so beat 0 threw them away on every body in every
-            # story. (The schema was dropping them too; AttireState declares
-            # `regions` now.)
-            if isinstance(d.get("regions"), dict) and d["regions"]:
-                cur["regions"] = attire_model.normalize_regions(
-                    {"wearing": cur["wearing"], "regions": d["regions"]})
-        else:
-            if isinstance(d.get("replace"), list):
-                cur["wearing"] = sanitize_attire_items(list(d["replace"]))
-            for it in d.get("add") or []:
-                it = str(it).strip()
-                if it and it not in cur["wearing"]:
-                    cur["wearing"].append(it)
-            cur["wearing"] = sanitize_attire_items(cur["wearing"])
-            for it in d.get("remove") or []:
-                if it in cur["wearing"]:
-                    cur["wearing"].remove(it)
-            if d.get("state") is not None:
-                cur["state"] = d["state"] if isinstance(d["state"], list) else [d["state"]]
-
-        # Regions, and the one-rung-per-beat rule. The Director speaks in whole
-        # garments, so "remove the sash" means gone -- which is exactly the
-        # instant undress this reconciliation exists to stop. `wearing` and
-        # `state` are then DERIVED from the regions, so the two shapes cannot
-        # disagree about the same body.
-        _before = attire_model.normalize_regions(cur)
-        # What has just HAPPENED to a garment -- spilled wine, a tear, soaking.
-        # It belongs to the garment rather than to the body, so that taking the
-        # shirt off leaves the stain on the shirt instead of on the person.
-        _marks = d.get("conditions")
-        _after = attire_model.apply_flat_change(
-            _before, cur["wearing"], decisive=name in _decisive_names,
-            conditions=_marks if isinstance(_marks, dict) else None)
-        cur["regions"] = _after
-        cur["wearing"] = attire_model.flat_wearing(_after)
-        _notes = attire_model.flat_state(_after)
-        if _notes:
-            # Anything the Director wrote in prose is kept alongside the
-            # derived notes rather than replaced by them.
-            # Strings only. A `state` written as a garment-keyed dict used to
-            # be wrapped whole into this list, where it sat among the sentences
-            # as a raw object for the rest of the story; it is read as
-            # `conditions` now, which is what it was always trying to say.
-            _authored = [n for n in (cur.get("state") or [])
-                         if isinstance(n, str) and n.strip() and n not in _notes]
-            cur["state"] = _notes + _authored
-        _had = {g["name"].casefold()
-                for entry in _before.values()
-                for g in (entry.get("garments") or [])
-                if g.get("state") != "removed"}
-        for _entry in _after.values():
-            for _g in _entry.get("garments") or []:
-                if _g.get("state") != "removed" and _g["name"].casefold() not in _had:
-                    _gained.add(_g["name"].casefold())
-        for _region, _garment in attire_model.newly_removed(_before, _after):
-            _shed.append((name, _garment,
-                          attire_model.condition_of(_after, _garment)))
-
-    _mint_shed_garments(
-        sc, [s for s in _shed if s[1].casefold() not in _gained], diff)
+    apply_attire_diff(sc, diff, ctx, res)
 
     est = ctx.director_establish
     if est:
