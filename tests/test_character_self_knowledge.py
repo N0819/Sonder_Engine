@@ -197,14 +197,27 @@ class TestACharacterKnowsWhatItIsWearing:
         prompt = DEFAULT_PROMPTS["character"]
         assert "do not describe another person's clothing" in prompt.lower()
 
-    def test_the_payload_still_carries_it(self):
+    def test_the_payload_still_carries_it(self, temp_db):
         """The other half of the pair: if this field is ever renamed or
-        dropped, the prompt above becomes a promise about nothing."""
+        dropped, the prompt above becomes a promise about nothing.
+
+        The PROJECTION changed on 2026-08-08 -- `attire_view`'s structured
+        shape became `compact_attire`'s single line, 53-71% smaller measured
+        across three live chats -- and the field did not. So this now asserts
+        what it always meant to: the key is there AND it actually says what the
+        body is wearing. A source-string match would have passed on a call that
+        returned nothing.
+        """
         import inspect
 
         import agents.character as character
+        from agents.common import compact_attire
         src = inspect.getsource(character)
-        assert '"attire": attire_view(' in src
+        assert '"attire": compact_attire(' in src
+
+        dressed = compact_attire({"wearing": ["a linen shirt"], "state": []})
+        assert "linen shirt" in dressed, (
+            "the projection must carry the garments, not just the key")
 
 
 class TestSilenceIsSomethingThePlayerDid:

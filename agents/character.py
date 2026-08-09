@@ -71,6 +71,7 @@ from .common import (
     _word_shingles,
     assign_event_ids,
     attire_view,
+    compact_attire,
     cap_mind_model_updates,
     character_room,
     norm_sequence,
@@ -2646,7 +2647,11 @@ def character_step(ctx, cid, nonce):
         # and what of itself is uncovered -- that is interoception, not
         # observation -- so this is the one place the region view is of the
         # reader's own body rather than someone else's.
-        "attire": attire_view(sc.get("attire", {}).get(character_name(sh))),
+        # Same compact line the Director gets. A body knows what it is
+        # wearing, and knows it in the same terms the beat will be adjudicated
+        # in -- two shapes for one fact is how `wearing` and `regions` drifted
+        # apart in the first place.
+        "attire": compact_attire(sc.get("attire", {}).get(character_name(sh))),
         "recent_self_lines": _self_lines,
         # One row per turn rather than one row per utterance. This is the
         # semantic continuity ledger: a chatty speaker cannot push the last
