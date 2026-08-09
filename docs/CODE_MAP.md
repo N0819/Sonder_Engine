@@ -36,11 +36,12 @@
 | `gaps.py` | 527 |  | `canon_provenance`, `db`, `logging_utils`, `providers`, `spatial`, `subjects` |
 | `greetings.py` | 375 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
 | `guest_access.py` | 355 |  | `db` |
-| `importers.py` | 2474 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `memory`, `prompts`, `providers` |
+| `importers.py` | 2591 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `logging_utils`, `memory`, `prompts`, `providers` |
 | `jobs.py` | 183 |  | `logging_utils` |
 | `living_world.py` | 596 |  | `logging_utils`, `mechanics` |
 | `llm_quality.py` | 292 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
+| `lore_structure.py` | 206 |  | — |
 | `mechanics.py` | 310 |  | `spatial`, `spatial_frames` |
 | `memory.py` | 5036 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
 | `offscreen.py` | 834 |  | `logging_utils` |
@@ -428,14 +429,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `import_lorebook()` | 1248 | 146 lines |
-| `apply_lorebook_plan()` | 2286 | 124 lines |
-| `_lore_gen_entry_batch()` | 1938 | 118 lines |
-| `_run_lore_gen_job()` | 2060 | 112 lines |
-| `fill_appearance()` | 998 | 92 lines |
-| `import_character()` | 535 | 91 lines |
-| `_lore_gen_structure()` | 1868 | 66 lines |
-| `_lore_gen_context()` | 1691 | 65 lines |
+| `import_lorebook()` | 1328 | 183 lines |
+| `_reinterpret_entries()` | 1201 | 126 lines |
+| `apply_lorebook_plan()` | 2403 | 124 lines |
+| `_lore_gen_entry_batch()` | 2055 | 118 lines |
+| `_run_lore_gen_job()` | 2177 | 112 lines |
+| `fill_appearance()` | 999 | 92 lines |
+| `import_character()` | 536 | 91 lines |
+| `_lore_gen_structure()` | 1985 | 66 lines |
 
 ### `jobs.py`
 
@@ -477,6 +478,17 @@
 |---|---:|---:|
 | `log_llm_call()` | 91 | 28 lines |
 | `measure_step()` | 72 | 18 lines |
+
+### `lore_structure.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `parse_structure()` | 78 | 45 lines |
+| `derive_knowledge()` | 174 | 33 lines |
+| `clean_title()` | 46 | 16 lines |
+| `classify_title()` | 64 | 12 lines |
+| `_matches()` | 160 | 12 lines |
+| `_place_name()` | 151 | 7 lines |
 
 ### `mechanics.py`
 
