@@ -570,6 +570,165 @@ def _standing_contacts_for(scene, observer_name):
     return out
 
 
+_BODY_DETAIL_GENERIC = frozenset({
+    "bare", "body", "exposed", "skin", "soft", "their", "there", "these",
+    "they", "this", "those", "very", "warm", "with", "your",
+})
+
+_SELF_EXPOSED_REGION_CUES = {
+    "torso": (
+        re.compile(
+            r"\byour\b[^.!?\n]{0,28}\b(?:bare|exposed|naked)\b"
+            r"[^.!?\n]{0,18}\b(?:chest|breasts?|stomach|abdomen|belly|"
+            r"midriff|ribs?|torso)\b", re.I),
+        re.compile(
+            r"\b(?:chest|breasts?|stomach|abdomen|belly|midriff|ribs?|torso)\b"
+            r"[^.!?\n]{0,18}\b(?:bare|exposed|naked)\b", re.I),
+    ),
+    "groin": (
+        re.compile(
+            r"\byou\b[^.!?\n]{0,55}\b(?:part|spread|open)\w*\b"
+            r"[^.!?\n]{0,35}\b(?:legs|thighs)\b", re.I),
+        re.compile(r"\bbetween your\b[^.!?\n]{0,24}\b(?:legs|thighs)\b", re.I),
+        re.compile(
+            r"\byour\b[^.!?\n]{0,28}\b(?:bare|exposed|naked)\b"
+            r"[^.!?\n]{0,18}\b(?:groin|crotch|genitals?|vulva|penis|cock)\b",
+            re.I),
+    ),
+}
+
+_OTHER_EXPOSED_REGION_CUES = {
+    "torso": (
+        re.compile(
+            r"\b(?:her|his|their)\b[^.!?\n]{0,28}\b(?:bare|exposed|naked)\b"
+            r"[^.!?\n]{0,18}\b(?:chest|breasts?|stomach|abdomen|belly|"
+            r"midriff|ribs?|torso)\b", re.I),
+        re.compile(
+            r"\b(?:bare|exposed|naked)\b[^.!?\n]{0,18}"
+            r"\b(?:chest|breasts?|stomach|abdomen|belly|midriff|ribs?|torso)\b",
+            re.I),
+    ),
+    "groin": (
+        re.compile(
+            r"\b(?:she|he|they)\b[^.!?\n]{0,55}\b(?:part|spread|open)\w*\b"
+            r"[^.!?\n]{0,35}\b(?:her|his|their)?\s*(?:legs|thighs)\b", re.I),
+        re.compile(
+            r"\b(?:part|spread|open)\w*\b[^.!?\n]{0,35}"
+            r"\b(?:her|his|their)\s+(?:legs|thighs)\b", re.I),
+        re.compile(
+            r"\bbetween (?:her|his|their)\b[^.!?\n]{0,24}\b(?:legs|thighs)\b",
+            re.I),
+        re.compile(
+            r"\b(?:her|his|their)\b[^.!?\n]{0,28}\b(?:bare|exposed|naked)\b"
+            r"[^.!?\n]{0,18}\b(?:groin|crotch|genitals?|vulva|penis|cock)\b",
+            re.I),
+    ),
+}
+
+
+def _bare_body_details(region, surface):
+    """Authored bare-surface details carried by one observer-safe region.
+
+    The body-region projection is deliberately prose-shaped for the perception
+    model.  This parser reads only the two shapes that projection itself emits:
+    a fully bare region (``bare — detail``) or a partially bare zone
+    (``midriff: bare — detail``).  Covered-zone and garment descriptions never
+    match, so this floor cannot turn a covered chest into anatomy.
+    """
+    text = str(surface or "").strip()
+    if not text:
+        return []
+    out = []
+    for match in re.finditer(
+            r"(?:^|;\s*)([a-z_ ]+):\s*bare\s+—\s+(.+?)"
+            r"(?=;\s*[a-z_ ]+:|$)", text, re.I | re.S):
+        detail = match.group(2).strip()
+        if detail:
+            out.append((match.group(1).strip().replace("_", " "), detail))
+    if out:
+        return out
+    match = re.match(
+        r"^bare\s+—\s+(.+?)(?=;\s*[^;]+\[worn at, covers nothing\]|$)",
+        text, re.I | re.S)
+    if match and match.group(1).strip():
+        return [(str(region or "body region").replace("_", " "),
+                 match.group(1).strip())]
+    return []
+
+
+def _authored_detail_already_present(view, detail):
+    """Whether the view retained enough distinctive authored wording."""
+    view_tokens = set(re.findall(r"[a-z0-9]+", str(view or "").casefold()))
+    detail_tokens = []
+    for token in re.findall(r"[a-z0-9]+", str(detail or "").casefold()):
+        if len(token) >= 4 and token not in _BODY_DETAIL_GENERIC:
+            detail_tokens.append(token)
+    distinctive = list(dict.fromkeys(detail_tokens))
+    if not distinctive:
+        return True
+    required = min(4, max(2, (len(distinctive) + 3) // 4))
+    return len(view_tokens.intersection(distinctive)) >= required
+
+
+def _self_body_detail(detail):
+    """An authored third-person body description in a second-person view."""
+    text = str(detail or "")
+    replacements = (
+        (r"\bherself\b", "yourself"), (r"\bHerself\b", "Yourself"),
+        (r"\bhers\b", "yours"), (r"\bHers\b", "Yours"),
+        (r"\bher\b", "your"), (r"\bHer\b", "Your"),
+        (r"\bshe\b", "you"), (r"\bShe\b", "You"),
+    )
+    for pattern, replacement in replacements:
+        text = re.sub(pattern, replacement, text)
+    return text
+
+
+def _deliver_foreground_body_details(view, body_regions):
+    """Restore authored anatomy the perception model generalized away.
+
+    This is a fidelity floor, not an anatomy dump.  The model first decides
+    what the observer notices.  Only when its own view foregrounds an exposed
+    surface (for example ``your bare stomach`` or ``you part your legs``) does
+    this append the observer-safe authored detail for that region.  The input
+    has already crossed garment, darkness, containment, vantage, and identity
+    gates in ``observer_body_regions``.
+    """
+    original = str(view or "")
+    additions = []
+    rows = [row for row in (body_regions or []) if isinstance(row, dict)]
+    paragraphs = [p for p in re.split(r"\n\s*\n", original) if p.strip()]
+    for row in rows:
+        label = str(row.get("body") or "someone").strip()
+        self_view = label.casefold() == "you"
+        if self_view:
+            relevant_text = original
+            cue_map = _SELF_EXPOSED_REGION_CUES
+        else:
+            relevant_text = "\n".join(
+                p for p in paragraphs if label.casefold() in p.casefold())
+            cue_map = _OTHER_EXPOSED_REGION_CUES
+        if not relevant_text:
+            continue
+        for region, surface in (row.get("regions") or {}).items():
+            patterns = cue_map.get(str(region).casefold()) or ()
+            if not patterns or not any(p.search(relevant_text) for p in patterns):
+                continue
+            for place, detail in _bare_body_details(region, surface):
+                if _authored_detail_already_present(original, detail):
+                    continue
+                rendered = _self_body_detail(detail) if self_view else detail
+                subject = (f"Your exposed {place} is visible"
+                           if self_view else f"{label}'s exposed {place} is visible")
+                addition = f"{subject}: {rendered}".strip()
+                if addition[-1:] not in ".!?":
+                    addition += "."
+                additions.append(addition)
+    if not additions:
+        return original, []
+    return _append_once(original, " ".join(additions)), additions
+
+
 def _observations_from_clean_views(clean_views):
     """Project final, scrubbed prose views into structured observations.
 
@@ -2585,6 +2744,21 @@ def perception_act(ctx, nonce):
         # numb and was told what she had felt once the choice was made.
         view = _deliver_standing_sensations(
             view, p["name"], sc, _standing_contacts_for(sc, p["name"]))
+        # BODY-DETAIL FIDELITY FLOOR. The observer-scoped payload can carry the
+        # exact exposed anatomy and the perception model can still collapse it
+        # to generic "bare stomach" / "parted legs" prose. Rebuild the same
+        # identity-safe projection and restore only details for regions the
+        # MODEL'S OWN VIEW foregrounded; unrelated anatomy remains silent.
+        body_labels = _observer_body_labels(
+            p, known, {p_name: p_visible}, include=[p.get("name")])
+        body_projection = _observer_scene_payload(
+            sc, p, body_labels=body_labels).get("body_regions") or []
+        view, restored_body_details = _deliver_foreground_body_details(
+            view, body_projection)
+        for detail in restored_body_details:
+            ctx.warnings.append(
+                "perception_act: restored foreground body detail omitted "
+                f"by the model from view '{pid}': {detail[:120]}")
         clean_views[pid] = view or None
 
     _disguise_leak_check(ctx, "perception_act", clean_views, perceivers,
@@ -3522,6 +3696,20 @@ def perception_outcome(ctx, nonce):
                 f"scrub chain from view '{pid}': \"{body[:80]}\"")
         view = _deliver_standing_sensations(
             view, p["name"], sc, _standing_contacts_for(sc, p["name"]))
+        # Same floor as action-onset, now against commit's previewed attire.
+        # This is the seam chat 68 exposed: the model received exact midriff
+        # and groin descriptions, foregrounded both surfaces, and still
+        # returned only generic "bare stomach" / "parted legs" language.
+        body_labels = _observer_body_labels(
+            p, known, appearances, include=[p.get("name")])
+        body_projection = _observer_scene_payload(
+            sc, p, body_labels=body_labels).get("body_regions") or []
+        view, restored_body_details = _deliver_foreground_body_details(
+            view, body_projection)
+        for detail in restored_body_details:
+            ctx.warnings.append(
+                "perception_outcome: restored foreground body detail omitted "
+                f"by the model from view '{pid}': {detail[:120]}")
         clean_views[pid] = view or None
 
     loop = ctx.interaction_loop or {}

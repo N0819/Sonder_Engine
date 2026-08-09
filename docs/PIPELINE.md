@@ -56,6 +56,15 @@ withheld while only one zone is exposed. Other bare regions remain independent:
 for example, a bare `groin` sends its authored anatomy through the same
 observer-safe projection even while a tank top still covers the chest.
 
+The projection is an information boundary, not a guarantee that a generative
+perception model will retain every allowed detail. After the model returns,
+perception applies a deterministic body-detail fidelity floor: if the view
+itself foregrounds an exposed surface (for example, a bare stomach or parted
+legs), the corresponding authored detail is restored from that observer's
+already-filtered `body_regions`. It never inventories unrelated anatomy, and a
+covered zone cannot enter because it has no bare-surface detail in the
+projection.
+
 ### `narrator`
 
 Renders the opening player-facing prose from the perception result.
