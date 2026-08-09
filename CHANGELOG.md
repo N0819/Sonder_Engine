@@ -1,6 +1,38 @@
 # Changelog
 
-## alpha 7.2 — Order is causality
+## Unreleased — Development
+
+### A still-worn top can expose the midriff without exposing the chest
+
+Live chat 68 supplied the case the coarse attire regions could not state. The
+active narration had a fitted tank top rucked high over the ribs and stomach,
+but attire could answer only `torso covered` or `torso bare`. The first answer
+withheld body description that should have reached perception; the second would
+have leaked chest detail the garment still concealed. The garment's free-text
+condition knew what happened, but making code interpret "hem dragged to
+midriff" would turn prose into a second, drifting state machine.
+
+Torso therefore has a deliberately small coverage axis: `chest | midriff`.
+`covered_zones:{torso:[...]}` on a still-worn garment says which zones it still
+covers, and `beneath_zones` authors the body description separately. Resolve
+writes the transition in `attire.<body>.coverage`; commit resolves short handles
+against the canonical wardrobe; compact Director payloads and observer-scoped
+perception render the two surfaces independently. The old whole-torso
+`beneath` string is never used as a partial fallback, so revealing a stomach
+cannot reveal a covered chest by accident. The card editor exposes both sides
+of the shape.
+
+This lands on the repaired observer path: perception previews commit's exact
+attire result on copies, region visibility is now a production-derived
+function, shed clothing is atomic with canonical removal and placement, and
+contact reconciliation reads `contact_ops`. Terminal dialogue punctuation is
+also normalized before quote fidelity/injection, so a dialogue-tag comma no
+longer duplicates a logged period-ended line.
+
+The changelog boundary itself was repaired here. Everything after the
+`alpha-7.2` tag now lives under this **Unreleased** heading; the published
+`alpha 7.2 — Order is causality` entry begins again at its tagged content and
+is no longer retroactively enlarged by development commits.
 
 ### The world keeps going when you are not there — floors first, under one ceiling
 
@@ -258,6 +290,8 @@ outranks allow, so a box echoing the click could show a state that is not real.
 A provider outside the built-in kinds is opted in through the allowlist rather
 than merely un-denied, and says so on hover; with the env kill switch set, every
 box is disabled and explains why.
+
+## alpha 7.2 — Order is causality
 
 ### A beat opens with one character, and causality builds as it runs
 

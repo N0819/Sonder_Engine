@@ -437,6 +437,7 @@ def attire_view(entry, body=""):
     lines = attire_model.describe(
         regions, beneath_visible=_beneath_visible(), body=body)
     exposed = attire_model.exposed_regions(regions)
+    partial = attire_model.partially_exposed_regions(regions)
     return {
         "wearing": coherent.get("wearing") or [],
         "state": coherent.get("state") or [],
@@ -446,6 +447,7 @@ def attire_view(entry, body=""):
         # hanging open is still ON, and a region nobody has mentioned is
         # unmodelled rather than bare, so neither appears here.
         **({"exposed": exposed} if exposed else {}),
+        **({"partially_exposed": partial} if partial else {}),
     }
 
 

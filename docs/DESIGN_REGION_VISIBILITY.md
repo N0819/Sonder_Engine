@@ -1,13 +1,47 @@
 # Region visibility: concealment, applied to bodies
 
-Status: **step 2 built (`f0721da`), the rest argued.** Written 2026-08-08 from
-a design conversation.
+Status: **step 2 built (`f0721da`) and wired to perception (`56bd561`);
+partial torso coverage built in the current unreleased development line.**
+Written 2026-08-08 from a design conversation and updated 2026-08-09 after
+the first live consumer and partial-coverage case landed.
 
 `attire.concealing_garments` and `agents.common.region_visibility` exist and
-are derived, with no production callers yet — deliberately, since payload-shape
-changes are the silent-drift class. `attire.py` still carries the four-state
+are derived. `agents.common.observer_body_regions` is now their production
+consumer: every perception pass receives only observer-safe body surfaces, and
+adversarial tests prove concealed authored markers never enter the model
+payload. `attire.py` still carries the four-state
 ladder this note argues against; collapsing it is step 4 and is gated on the
 re-measurement in step 1.
+
+## Partial coverage inside a coarse region
+
+The first production case exposed a distinction the original eight-region
+model could not state: Hinami's tank top remained worn over her chest while its
+rucked hem exposed her ribs and stomach. Treating all of `torso` as bare would
+leak the chest description; treating all of it as covered loses the midriff.
+Parsing "hem dragged to midriff" from a condition would make free prose a
+second state machine.
+
+The additive answer keeps `REGIONS` coarse for contact, injury, position and
+facing, and gives only the torso a closed coverage axis: `chest | midriff`.
+A garment may carry `covered_zones:{torso:[...]}`; absence means both zones,
+and the list states which zones remain covered. The torso region may carry
+`beneath_zones:{chest,midriff}`. The coarse `beneath` string remains the
+backward-compatible answer only when the whole region is exposed; it is never
+used for one-zone exposure.
+
+Resolve authors the transition structurally through
+`attire.<body>.coverage:{<garment>:{torso:[zones still covered]}}`. Commit
+resolves the garment handle against the canonical wardrobe and stores the
+coverage override with the garment. Perception derives a surface for each zone
+and then applies the existing body-level vantage/containment gate. Thus a
+payload may say `chest: fitted tank top; midriff: bare — faded scars`, but can
+never receive the covered chest's body description merely because both zones
+belong to `torso`.
+
+This is deliberately not a general fine-grained anatomy. Add another zone axis
+only when a measured story action needs independent coverage and an author can
+supply its body description without inference.
 
 ## The proposal, in the author's words
 

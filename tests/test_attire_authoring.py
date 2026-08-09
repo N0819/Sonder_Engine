@@ -498,6 +498,55 @@ class TestAShedGarmentIsARealObject:
             "utility sash with pouches"]
         assert diff["positions"]["utility_sash_hinami"] == "room_a"
 
+    def test_commit_applies_partial_coverage_through_a_short_handle(
+            self, temp_db):
+        """Coverage is standing state, separate from a descriptive condition:
+        a rucked tank remains worn while only its midriff zone becomes bare."""
+        import commit
+        from pipeline_context import ChatData, PipelineContext, TurnData
+
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("Coverage", "", time.time()))
+        turn_id = temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+            (chat_id, 1, "wait", time.time()))
+        ctx = PipelineContext(
+            chat=ChatData(id=chat_id, name="Coverage", persona_id=None,
+                          lorebook_id=None, scenario="", created=time.time()),
+            turn=TurnData(id=turn_id, chat_id=chat_id, idx=1,
+                          player_input="wait", created=time.time()),
+            cast=[], input="wait")
+        ctx.director_interpret = {}
+        ctx.director_resolve = {"resolved_event": "The top rides up."}
+        sc = {"attire": {"Hinami": attire.authored_entry(
+            ["fitted tank top"], [], {"torso": {
+                "garments": [{"name": "fitted tank top"}],
+                "beneath_zones": {"midriff": "old scrape scars"},
+            }})}}
+        diff = {"attire": {"Hinami": {
+            "conditions": {"tank top": "hem rucked above the stomach"},
+            "coverage": {"tank top": {"torso": ["chest"]}},
+        }}}
+
+        commit.apply_attire_diff(sc, diff, ctx, ctx.director_resolve)
+
+        hinami = sc["attire"]["Hinami"]
+        assert hinami["wearing"] == ["fitted tank top"]
+        garment = hinami["regions"]["torso"]["garments"][0]
+        assert garment["covered_zones"] == {"torso": ["chest"]}
+        assert garment["condition"] == "hem rucked above the stomach"
+        assert attire.partially_exposed_regions(hinami["regions"]) == {
+            "torso": ["midriff"]}
+
+        restored, notes = attire.apply_coverage_changes(
+            hinami["regions"],
+            {"tank top": {"torso": ["midriff", "chest"]}},
+        )
+        assert notes == []
+        assert "covered_zones" not in restored["torso"]["garments"][0]
+        assert attire.partially_exposed_regions(restored) == {}
+
 
 class TestTheRoutes:
     """The wiring, once, through the real app: a stubbed model reaching the
@@ -594,6 +643,9 @@ def test_both_card_editors_offer_regions_and_the_generator():
     assert "ATTIRE_COVERAGE" in components
     assert "kimono, toga, jumpsuit" in components
     assert "auto — work it out from the garment's name" in components
+    assert 'const ATTIRE_REGION_ZONES = { torso: ["chest", "midriff"] }' in components
+    assert "covered_zones" in components
+    assert "beneath_zones" in components
     # The one warning an author most needs where they are authoring.
     assert "a sash alone" in components
 

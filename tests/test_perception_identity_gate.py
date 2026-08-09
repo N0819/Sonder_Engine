@@ -314,6 +314,54 @@ def test_outcome_payload_withholds_exposed_body_detail_in_darkness(
     assert "HOSTILE-HIDDEN-SCAR-MARKER" not in json.dumps(moon_payload)
 
 
+def test_outcome_payload_previews_partial_midriff_coverage_without_chest_leak(
+        temp_db, monkeypatch):
+    """The live Hinami case: commit and perception read the same structured
+    coverage diff while the still-worn top protects the covered zone."""
+    import attire
+    import agents.perception as perception
+
+    ctx, moon_id, _ = _make_ctx(
+        temp_db, known={"Dr. Moon": ["Hinami"]})
+    temp_db.set_setting("attire_beneath", "1")
+    sc = temp_db.wget(ctx.chat.id, "scene", {})
+    sc["attire"] = {"Hinami": attire.authored_entry(
+        ["fitted tank top"], [], {"torso": {
+            "garments": [{"name": "fitted tank top"}],
+            "beneath": "HOSTILE-WHOLE-TORSO",
+            "beneath_zones": {
+                "chest": "HOSTILE-CHEST",
+                "midriff": "faded scrape scars across the ribs",
+            },
+        }})}
+    temp_db.wset(ctx.chat.id, "scene", sc)
+    ctx.director_resolve = {
+        "resolved_event": "The top rides up, exposing the midriff.",
+        "dialogue_log": [], "dialogue_order": [],
+        "state_diff": {"attire": {"Hinami": {
+            "coverage": {"tank top": {"torso": ["chest"]}},
+        }}},
+    }
+    captured = {}
+
+    def capture(role, key, system, payload, **kw):
+        perceiver = payload["perceivers"][0]
+        captured[str(perceiver["id"])] = payload
+        return {"views": {str(perceiver["id"]): "The room is still."}}
+
+    monkeypatch.setattr(perception, "_agent_json", capture)
+    perception.perception_outcome(ctx, nonce=0)
+
+    payload_text = json.dumps(captured[str(moon_id)])
+    assert "faded scrape scars" in payload_text
+    assert "HOSTILE-WHOLE-TORSO" not in payload_text
+    assert "HOSTILE-CHEST" not in payload_text
+    assert "fitted tank top" in payload_text
+    stored = temp_db.wget(ctx.chat.id, "scene", {})
+    stored_garment = stored["attire"]["Hinami"]["regions"]["torso"]["garments"][0]
+    assert "covered_zones" not in stored_garment, "preview mutated durable state"
+
+
 def test_introduction_quote_survives_but_bare_name_is_scrubbed(temp_db, monkeypatch):
     """Mid-beat introduction: the name spoken aloud is sensory signal and
     must stay verbatim inside the quote; recognition only flips at commit

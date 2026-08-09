@@ -51,6 +51,16 @@ import re
 # no single region can be right.
 REGIONS = ("head", "torso", "arms", "hands", "waist", "groin", "legs", "feet")
 
+# A coarse region may have a small, closed set of independently coverable
+# surfaces where play actually needs the distinction.  This is deliberately
+# not a second anatomy: contacts, injury, position and facing continue to use
+# REGIONS.  Zones answer one narrower question -- can a still-worn garment
+# expose part of this region? -- without making a condition string such as
+# "hem rucked up" executable state.
+REGION_ZONES = {
+    "torso": ("chest", "midriff"),
+}
+
 # Ordered. A garment moves DOWN this list, one rung at a time, and never skips
 # unless something says so explicitly.
 GARMENT_STATES = ("worn", "loosened", "open", "removed")
@@ -253,6 +263,58 @@ def _clean(text, limit=BENEATH_LIMIT):
     return cut.rstrip(" ,;:-—")
 
 
+def _clean_beneath_zones(region, value):
+    """Validated authored body descriptions for one region's zones."""
+    allowed = REGION_ZONES.get(region) or ()
+    if not allowed or not isinstance(value, dict):
+        return {}
+    out = {}
+    for zone in allowed:
+        text = _clean(value.get(zone), BENEATH_LIMIT)
+        if text:
+            out[zone] = text
+    return out
+
+
+def _clean_covered_zones(value):
+    """Canonical garment coverage overrides: {region: [zones still covered]}.
+
+    Absence means the garment covers every zone of every region it occupies.
+    An empty list is meaningful: the garment remains worn at that region but
+    has been displaced enough to cover none of its zones.
+    """
+    if not isinstance(value, dict):
+        return {}
+    out = {}
+    for region, allowed in REGION_ZONES.items():
+        if region not in value:
+            continue
+        raw = value.get(region)
+        raw = raw if isinstance(raw, (list, tuple, set)) else [raw]
+        selected = set()
+        for zone in raw:
+            zone = str(zone or "").strip().casefold()
+            if zone in allowed:
+                selected.add(zone)
+        picked = [zone for zone in allowed if zone in selected]
+        # Full coverage is the default and needs no stored override.
+        if tuple(picked) != tuple(allowed):
+            out[region] = picked
+    return out
+
+
+def covered_zones_for(garment, region):
+    """The zones of ``region`` this garment currently covers."""
+    zones = REGION_ZONES.get(region)
+    if not zones:
+        return (region,)
+    overrides = garment.get("covered_zones")
+    if not isinstance(overrides, dict) or region not in overrides:
+        return zones
+    selected = set(overrides.get(region) or [])
+    return tuple(zone for zone in zones if zone in selected)
+
+
 def normalize_regions(outfit):
     """Any outfit shape -- old flat list or new regions -- as regions.
 
@@ -309,6 +371,10 @@ def normalize_regions(outfit):
                     # off the body it is. A shirt can be soaked and still worn.
                     "condition": _clean(item.get("condition"), CONDITION_LIMIT),
                 }
+                covered_zones = _clean_covered_zones(
+                    item.get("covered_zones"))
+                if covered_zones:
+                    garment["covered_zones"] = covered_zones
                 garments.append(garment)
                 # A dress covers torso and legs; a coat, torso and arms. The
                 # garment is recorded in every region it covers, and the sync
@@ -325,8 +391,12 @@ def normalize_regions(outfit):
                     if extra in REGIONS and extra != region:
                         spanning.setdefault(extra, []).append(dict(garment))
             beneath = _clean(entry.get("beneath"))
-            if garments or beneath:
+            beneath_zones = _clean_beneath_zones(
+                region, entry.get("beneath_zones"))
+            if garments or beneath or beneath_zones:
                 out[region] = {"garments": garments, "beneath": beneath}
+                if beneath_zones:
+                    out[region]["beneath_zones"] = beneath_zones
     # The legacy list, folded in under whatever the authored regions did not
     # already say. Additive: an author who wrote regions is not overruled by
     # the flat list their card also carries.
@@ -450,12 +520,110 @@ def concealing_garments(regions):
         for garment in ((regions or {}).get(region) or {}).get("garments") or []:
             if garment.get("state") == "removed" or garment.get("attaches"):
                 continue
+            if not covered_zones_for(garment, region):
+                continue
             name = " ".join(str(garment.get("name") or "").split()) or "?"
             if name not in names:
                 names.append(name)
         if names:
             out[region] = names
     return out
+
+
+def zone_concealing_garments(regions):
+    """Per coverable zone, the garments whose surface still occupies it.
+
+    Regions without a finer zone axis are intentionally absent.  Their
+    existing all-or-nothing answer remains ``concealing_garments``.
+    """
+    out = {}
+    for region, zones in REGION_ZONES.items():
+        if region not in (regions or {}):
+            continue
+        by_zone = {zone: [] for zone in zones}
+        for garment in ((regions.get(region) or {}).get("garments") or []):
+            if garment.get("state") == "removed" or garment.get("attaches"):
+                continue
+            name = " ".join(str(garment.get("name") or "").split()) or "?"
+            for zone in covered_zones_for(garment, region):
+                if name not in by_zone[zone]:
+                    by_zone[zone].append(name)
+        out[region] = by_zone
+    return out
+
+
+def partially_exposed_regions(regions):
+    """{region: [bare zones]} where other zones remain garment-covered."""
+    out = {}
+    for region, by_zone in zone_concealing_garments(regions).items():
+        bare = [zone for zone in REGION_ZONES[region] if not by_zone[zone]]
+        if bare and len(bare) < len(REGION_ZONES[region]):
+            out[region] = bare
+    return out
+
+
+def apply_coverage_changes(regions, changes):
+    """Apply structured partial-garment coverage to normalized regions.
+
+    Shape: ``{garment_handle: {region: [zones still covered]}}``.  Handles
+    resolve against the current wardrobe exactly like remove/conditions.  A
+    malformed or ambiguous entry is ignored and reported; the caller can pass
+    those messages to the Director without risking an information leak.
+    """
+    if not isinstance(changes, dict):
+        return regions, []
+    regions = normalize_regions({"regions": regions})
+    worn = flat_wearing(regions)
+    notes = []
+    for handle, region_changes in changes.items():
+        target = resolve_garment(handle, worn)
+        if not target or not isinstance(region_changes, dict):
+            notes.append(
+                f"attire: ignored coverage for {handle!r}; it did not resolve "
+                "uniquely against the worn garments.")
+            continue
+        valid = {}
+        for region, raw_zones in region_changes.items():
+            region = str(region or "").strip().casefold()
+            allowed = REGION_ZONES.get(region)
+            if not allowed:
+                continue
+            raw_zones = (raw_zones if isinstance(raw_zones, (list, tuple, set))
+                         else [raw_zones])
+            selected = set()
+            for zone in raw_zones:
+                zone = str(zone or "").strip().casefold()
+                if zone in allowed:
+                    selected.add(zone)
+            picked = [zone for zone in allowed if zone in selected]
+            valid[region] = picked
+        if not valid:
+            notes.append(
+                f"attire: ignored coverage for {handle!r}; no known region "
+                "zones were supplied.")
+            continue
+        found = False
+        for region, entry in regions.items():
+            for garment in entry.get("garments") or []:
+                if garment.get("name", "").casefold() != target.casefold():
+                    continue
+                found = True
+                overrides = dict(garment.get("covered_zones") or {})
+                for changed_region, picked in valid.items():
+                    allowed = REGION_ZONES[changed_region]
+                    if tuple(picked) == tuple(allowed):
+                        overrides.pop(changed_region, None)
+                    else:
+                        overrides[changed_region] = picked
+                if overrides:
+                    garment["covered_zones"] = overrides
+                else:
+                    garment.pop("covered_zones", None)
+        if not found:
+            notes.append(
+                f"attire: ignored coverage for {handle!r}; the resolved "
+                "garment had no region records.")
+    return _sync_spanning_garments(regions), notes
 
 
 def covered_regions(regions):
@@ -773,7 +941,12 @@ def dedupe_regions(regions):
                                  CONDITION_LIMIT),
                 description=record.get("description") or garment.get("description", ""),
             ))
-        out[region] = {"garments": garments, "beneath": entry.get("beneath") or ""}
+        out[region] = {"garments": garments,
+                       "beneath": entry.get("beneath") or ""}
+        beneath_zones = _clean_beneath_zones(
+            region, entry.get("beneath_zones"))
+        if beneath_zones:
+            out[region]["beneath_zones"] = beneath_zones
     return out
 
 
@@ -790,7 +963,7 @@ _NO_CHANGE_NOTES = frozenset({
 })
 
 _DIFF_KNOWN_KEYS = ("wearing", "add", "remove", "replace", "state",
-                    "conditions", "regions", "notes")
+                    "conditions", "coverage", "regions", "notes")
 
 
 def is_no_change_note(text):
@@ -885,6 +1058,13 @@ def coerce_diff_shape(diff):
                     if handle:
                         marks[handle] = _flatten_note(text)
                 out["conditions"] = marks
+            continue
+        if name == "coverage":
+            # {garment handle: {region: [zones still covered]}}. Keep the
+            # structure intact; apply_coverage_changes validates zones and
+            # resolves the handle against the live wardrobe.
+            if isinstance(value, dict):
+                out["coverage"] = value
             continue
         if name in ("wearing", "add", "remove", "replace"):
             if value is None:
@@ -1064,14 +1244,26 @@ def advance(previous, proposed, decisive=False):
             description = _clean(garment.get("description"), DESCRIPTION_LIMIT)
             if not description and before:
                 description = before.get("description") or ""
-            garments.append({"name": name, "description": description,
-                             "attaches": bool(garment.get("attaches")
-                                              if garment.get("attaches") is not None
-                                              else (before or {}).get("attaches")),
-                             "state": state, "condition": condition})
+            covered_zones = _clean_covered_zones(
+                garment.get("covered_zones")
+                if garment.get("covered_zones") is not None
+                else (before or {}).get("covered_zones"))
+            record = {"name": name, "description": description,
+                      "attaches": bool(garment.get("attaches")
+                                       if garment.get("attaches") is not None
+                                       else (before or {}).get("attaches")),
+                      "state": state, "condition": condition}
+            if covered_zones:
+                record["covered_zones"] = covered_zones
+            garments.append(record)
         out[region] = {"garments": garments,
                        "beneath": entry.get("beneath")
                        or (previous.get(region) or {}).get("beneath") or ""}
+        beneath_zones = _clean_beneath_zones(
+            region, entry.get("beneath_zones")
+            or (previous.get(region) or {}).get("beneath_zones"))
+        if beneath_zones:
+            out[region]["beneath_zones"] = beneath_zones
     # A region the proposal simply did not mention is unchanged, not undressed.
     for region, entry in previous.items():
         out.setdefault(region, entry)
@@ -1132,9 +1324,28 @@ def describe(regions, beneath_visible=False, body=""):
                 anchored = not covers or covers[0] == region
                 if covers and anchored:
                     text += " [one garment, covering %s]" % ", ".join(covers)
+                zones = REGION_ZONES.get(region)
+                if (zones and isinstance(garment.get("covered_zones"), dict)
+                        and region in garment["covered_zones"]):
+                    covered = covered_zones_for(garment, region)
+                    exposed = [zone for zone in zones if zone not in covered]
+                    text += " [covers %s; exposes %s]" % (
+                        ", ".join(covered) or "none",
+                        ", ".join(exposed) or "none")
                 if anchored and garment.get("description"):
                     text += " — %s" % garment["description"]
                 pieces.append(text)
+            zones = REGION_ZONES.get(region)
+            if zones:
+                by_zone = zone_concealing_garments(regions).get(region) or {}
+                bare_zones = [zone for zone in zones if not by_zone.get(zone)]
+                beneath_zones = _clean_beneath_zones(
+                    region, entry.get("beneath_zones"))
+                for zone in bare_zones:
+                    detail = (beneath_zones.get(zone, "")
+                              if beneath_visible else "")
+                    pieces.append("%s bare%s" % (
+                        zone, " — %s" % detail if detail else ""))
             lines.append("%s: %s" % (region, ", ".join(pieces)))
             continue
         if beneath_visible:
@@ -1168,25 +1379,54 @@ def perceptible_region_surfaces(regions, beneath_visible=False):
             g for g in (entry.get("garments") or [])
             if isinstance(g, dict) and g.get("state") != "removed"
         ]
-        covering = next((g for g in present if not g.get("attaches")), None)
+        worn = [g for g in present if not g.get("attaches")]
         ornaments = [g for g in present if g.get("attaches")]
         parts = []
-        if covering:
-            surface = _garment_text(covering)
-            if covering.get("description"):
-                surface += " — %s" % covering["description"]
-            parts.append(surface)
+        zones = REGION_ZONES.get(region)
+        partial = bool(zones and any(
+            isinstance(g.get("covered_zones"), dict)
+            and region in g["covered_zones"] for g in worn))
+        if partial:
+            beneath_zones = _clean_beneath_zones(
+                region, entry.get("beneath_zones"))
+            zone_parts = []
+            described = set()
+            for zone in zones:
+                covering = next(
+                    (g for g in worn if zone in covered_zones_for(g, region)),
+                    None)
+                if covering:
+                    surface = _garment_text(covering)
+                    key = covering.get("name", "").casefold()
+                    if covering.get("description") and key not in described:
+                        surface += " — %s" % covering["description"]
+                        described.add(key)
+                else:
+                    surface = "bare"
+                    beneath = (beneath_zones.get(zone, "")
+                               if beneath_visible else "")
+                    if beneath:
+                        surface += " — %s" % beneath
+                zone_parts.append("%s: %s" % (zone, surface))
+            parts.append("; ".join(zone_parts))
         else:
-            surface = "bare"
-            shed = any(
-                isinstance(g, dict) and g.get("state") == "removed"
-                for g in (entry.get("garments") or [])
-            )
-            beneath = (_clean(entry.get("beneath"), BENEATH_LIMIT)
-                       if shed and beneath_visible else "")
-            if beneath:
-                surface += " — %s" % beneath
-            parts.append(surface)
+            covering = next((g for g in worn), None)
+            if covering:
+                surface = _garment_text(covering)
+                if covering.get("description"):
+                    surface += " — %s" % covering["description"]
+                parts.append(surface)
+            else:
+                surface = "bare"
+                shed = any(
+                    isinstance(g, dict) and g.get("state") == "removed"
+                    for g in (entry.get("garments") or [])
+                )
+                beneath = (_clean(entry.get("beneath"), BENEATH_LIMIT)
+                           if shed and beneath_visible else "")
+                if beneath:
+                    surface += " — %s" % beneath
+                parts.append(surface)
         for ornament in ornaments:
             text = "%s [worn at, covers nothing]" % _garment_text(ornament)
             if ornament.get("description"):
@@ -1254,6 +1494,10 @@ def apply_flat_change(previous, wanted, decisive=False, conditions=None):
                 garments.append(dict(garment, state="removed"))
         proposed[region] = {"garments": garments,
                             "beneath": entry.get("beneath") or ""}
+        beneath_zones = _clean_beneath_zones(
+            region, entry.get("beneath_zones"))
+        if beneath_zones:
+            proposed[region]["beneath_zones"] = beneath_zones
     for key, name in wanted_keys.items():
         if key in seen:
             continue
@@ -1341,6 +1585,9 @@ def flat_state(regions):
     bare = exposed_regions(regions)
     if bare:
         notes.append("bare at the %s" % ", ".join(bare))
+    for region, zones in partially_exposed_regions(regions).items():
+        notes.append("partly bare at the %s: %s" % (
+            region, ", ".join(zones)))
     return notes
 
 
@@ -1355,6 +1602,8 @@ def is_derived_state_note(note):
     if not text:
         return False
     if text.startswith("bare at the "):
+        return True
+    if text.startswith("partly bare at the "):
         return True
     return any(text.endswith(" " + state) for state in ("loosened", "open"))
 
@@ -1415,6 +1664,28 @@ def _safe(text):
     return " ".join(str(text or "").translate(_LINE_STRUCTURAL).split())
 
 
+def _compact_garment_piece(garment, look, look_said):
+    """One compact-line garment value, including its first unsaid look."""
+    name = _safe(garment.get("name")) or "?"
+    state = garment.get("state") or "worn"
+    condition = garment.get("condition") or ""
+    notes = [_safe(n) for n in
+             (state if state != "worn" else "", condition) if n]
+    described = ""
+    key = name.casefold()
+    if look and key not in look_said:
+        clause = re.split(r"[;—.]", str(garment.get("description") or ""), 1)[0]
+        clause = " ".join(clause.split())
+        if len(clause) > int(look):
+            clause = clause[:int(look)].rsplit(" ", 1)[0]
+        clause = clause.strip(" ,;-")
+        if clause and clause.casefold() != key:
+            described = _safe(clause)
+            look_said.add(key)
+    piece = "%s(%s)" % (name, ";".join(notes)) if notes else name
+    return "%s=%s" % (piece, described) if described else piece
+
+
 def compact_line(regions, beneath_visible=False, look=0):
     """One body's clothing as a SINGLE line, every region in a fixed order.
 
@@ -1459,6 +1730,29 @@ def compact_line(regions, beneath_visible=False, look=0):
                    if g.get("state") != "removed"]
         worn = [g for g in present if not g.get("attaches")]
         attached = [g for g in present if g.get("attaches")]
+        zones = REGION_ZONES.get(region)
+        partial = bool(zones and any(
+            isinstance(g.get("covered_zones"), dict)
+            and region in g["covered_zones"] for g in worn))
+        if partial:
+            beneath_zones = _clean_beneath_zones(
+                region, entry.get("beneath_zones"))
+            zone_parts = []
+            for zone in zones:
+                covering = next(
+                    (g for g in worn if zone in covered_zones_for(g, region)),
+                    None)
+                if covering:
+                    value = _compact_garment_piece(
+                        covering, look, look_said)
+                else:
+                    beneath = (beneath_zones.get(zone, "")
+                               if beneath_visible else "")
+                    value = _safe(beneath) or BARE
+                zone_parts.append("%s>%s" % (zone, value))
+            parts.append("%s:%s%s" % (
+                region, "/".join(zone_parts), _attached_text(attached)))
+            continue
         if not worn:
             # BENEATH ONLY SURFACES WHERE SOMETHING CAME OFF. A region that was
             # never covered -- hands, usually -- is `bare` and says nothing

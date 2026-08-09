@@ -359,6 +359,12 @@ legitimately perceive, learn, remember or infer.
   actual state rather than as a sentence somebody has to remember. This is where
   clothing is written on a card; an older or imported card has its clothes
   sorted onto body parts automatically, ready to be corrected.
+- **A garment can expose only part of the torso** — Chest and midriff are
+  independently coverable surfaces inside the otherwise-coarse torso region.
+  A rucked top can remain worn over the chest while the midriff and its authored
+  body description become visible; covered-chest and whole-torso fallback text
+  stay out of observer payloads. The card editor exposes both the garment's
+  zone coverage and separate underneath descriptions for those zones.
 - **Worn at, versus worn over** — A ribbon, a necklace, a ring or a pair of
   spectacles sits somewhere without covering it, so someone in nothing but a
   hair ribbon is bare-headed, and taking it off uncovers nobody.

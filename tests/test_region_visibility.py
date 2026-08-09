@@ -235,6 +235,54 @@ def test_observer_projection_delivers_exposed_authored_body_detail(temp_db):
     assert "Mira" not in str(projected), "canonical identity leaked in the new channel"
 
 
+def test_partial_torso_projection_reveals_midriff_but_not_chest(temp_db):
+    """A rucked top is still worn. Its structured zone coverage exposes only
+    the midriff; neither the coarse whole-torso fallback nor the covered chest
+    description may cross the observer firewall."""
+    temp_db.set_setting("attire_beneath", "1")
+    entry = {"regions": {"torso": {
+        "garments": [{
+            "name": "fitted tank top", "state": "worn",
+            "covered_zones": {"torso": ["chest"]},
+        }],
+        "beneath": "HOSTILE-WHOLE-TORSO-FALLBACK",
+        "beneath_zones": {
+            "chest": "HOSTILE-COVERED-CHEST-DETAIL",
+            "midriff": "soft stomach and faded scrape scars across the ribs",
+        },
+    }}}
+    sc = _scene({"Watcher": "taproom", "Mira": "taproom"}, {"Mira": entry})
+
+    projected = observer_body_regions(
+        sc, "Watcher", {"Mira": "the traveller"})
+    torso = projected[0]["regions"]["torso"]
+
+    assert "chest: fitted tank top" in torso
+    assert "midriff: bare" in torso
+    assert "soft stomach" in torso
+    assert "HOSTILE-WHOLE-TORSO-FALLBACK" not in torso
+    assert "HOSTILE-COVERED-CHEST-DETAIL" not in torso
+
+
+def test_partial_outer_garment_reveals_an_underlayer_not_skin(temp_db):
+    temp_db.set_setting("attire_beneath", "1")
+    entry = {"regions": {"torso": {
+        "garments": [
+            {"name": "rucked blouse", "state": "worn",
+             "covered_zones": {"torso": ["chest"]}},
+            {"name": "linen undershirt", "state": "worn"},
+        ],
+        "beneath_zones": {"midriff": "HOSTILE-SKIN-DETAIL"},
+    }}}
+    sc = _scene({"Watcher": "taproom", "Mira": "taproom"}, {"Mira": entry})
+
+    torso = observer_body_regions(
+        sc, "Watcher", {"Mira": "the traveller"})[0]["regions"]["torso"]
+
+    assert "midriff: linen undershirt" in torso
+    assert "HOSTILE-SKIN-DETAIL" not in torso
+
+
 def test_observer_projection_withholds_body_detail_without_sight(temp_db):
     temp_db.set_setting("attire_beneath", "1")
     dark = {"cellar": {"name": "Cellar", "light": "dark"}}

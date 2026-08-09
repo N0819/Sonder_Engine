@@ -1086,6 +1086,7 @@ def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None):
             for entry in (outfit.get("regions") or {}).values():
                 if isinstance(entry, dict):
                     entry["beneath"] = ""
+                    entry["beneath_zones"] = {}
         merged["initial_outfit"] = outfit
     return normalize(merged)
 
