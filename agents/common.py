@@ -456,6 +456,43 @@ def scene_attire_view(sc):
     }
 
 
+# How much of a garment's appearance rides in a payload. The Director is the
+# only path by which what a thing looks like reaches prose, so it gets enough
+# to describe with; a character looking at their own clothes gets the same,
+# because a body knows what it is wearing.
+ATTIRE_LOOK_CHARS = 60
+
+
+def compact_attire(entry, look=ATTIRE_LOOK_CHARS):
+    """One body's clothing as a single line -- see `attire.compact_line`.
+
+    Replaces the multi-field `attire_view` in PAYLOADS only. Measured on chat
+    67: the view sent to the Director was 3,789 chars, this is 1,314 -- 65%,
+    ~618 tokens off every resolve call. `attire_view` itself stays as it is for
+    panels and anything that wants the structured shape.
+
+    Rederived rather than read raw, for the reason `attire_view` gives: the
+    stored `wearing`/`state` pair and `regions` could disagree, and this must
+    render the reconciled truth. It is also what migrates a LEGACY body -- a
+    story whose attire predates regions entirely -- into regions on read, so
+    an old chat needs no backfill to be rendered by this.
+    """
+    if not isinstance(entry, dict):
+        return ""
+    regions = (attire_model.rederive_entry(entry) or {}).get("regions") or {}
+    return attire_model.compact_line(
+        regions, beneath_visible=_beneath_visible(), look=look)
+
+
+def scene_compact_attire(sc, look=ATTIRE_LOOK_CHARS):
+    """`compact_attire` across every body in the scene."""
+    return {
+        name: compact_attire(entry, look=look)
+        for name, entry in (sc.get("attire") or {}).items()
+        if isinstance(entry, dict)
+    }
+
+
 def _perceptible_entities(sc, perceiver_names=None):
     """The entities dict to serialize into a PERCEPTION payload.
 

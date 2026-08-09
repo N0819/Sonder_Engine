@@ -91,6 +91,7 @@ from .common import (
     player_speech_lines,
     repair_narrated_speech_elements,
     scene_attire_view,
+    scene_compact_attire,
 )
 
 def _cast_match_forms(cast):
@@ -3386,7 +3387,12 @@ def director_resolve(ctx, nonce):
             # writing fresh each time, blind. Showing the exact part nouns
             # already on record is what lets a re-assertion BE one.
             "contacts": sc.get("contacts") or [],
-            "attire": scene_attire_view(sc),
+            # One line per body instead of the structured view: 3,789 chars
+            # to 1,314 on chat 67, ~618 tokens off every resolve call. The
+            # names the Director writes back are all still here, and
+            # `attire.resolve_garment` was already built to bind the loose
+            # handles it writes against what the body actually wears.
+            "attire": scene_compact_attire(sc),
             "time": sc.get("time"),
         },
         "simulation_clock": clock,
