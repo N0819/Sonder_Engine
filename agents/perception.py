@@ -666,7 +666,10 @@ def _authored_detail_already_present(view, detail):
     distinctive = list(dict.fromkeys(detail_tokens))
     if not distinctive:
         return True
-    required = min(4, max(2, (len(distinctive) + 3) // 4))
+    # Two retained concrete traits are enough: prose may legitimately rephrase
+    # or compress the card description. One generic region word ("stomach")
+    # is not enough, which is exactly the live omission this floor catches.
+    required = 1 if len(distinctive) == 1 else 2
     return len(view_tokens.intersection(distinctive)) >= required
 
 

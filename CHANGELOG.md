@@ -31,7 +31,9 @@ now has a deterministic fidelity floor analogous to its heard-dialogue and
 standing-contact floors. When the model's own view foregrounds an exposed
 surface, the floor restores that surface's observer-safe authored description;
 unmentioned anatomy stays silent, and covered chest detail remains structurally
-unavailable.
+unavailable. The model remains free to rephrase or integrate those traits for
+natural prose. The floor accepts a substantive paraphrase and intervenes only
+when the detail has been generalized away.
 
 This lands on the repaired observer path: perception previews commit's exact
 attire result on copies, region visibility is now a production-derived

@@ -413,6 +413,35 @@ def test_body_detail_floor_does_not_dump_unforegrounded_anatomy():
     assert "HOSTILE-UNMENTIONED-ANATOMY" not in restored
 
 
+def test_body_detail_floor_accepts_natural_rephrasing():
+    """The contract is semantic preservation, not verbatim card recitation."""
+    import agents.perception as perception
+
+    view = "Your bare stomach shows old scars along your ribs."
+    projected = [{"body": "you", "regions": {
+        "torso": (
+            "chest: linen top; midriff: bare — "
+            "A few faded scrape scars dot your ribs from travel."
+        ),
+    }}]
+
+    restored, additions = perception._deliver_foreground_body_details(
+        view, projected)
+
+    assert restored == view
+    assert additions == []
+
+
+def test_perception_prompt_permits_rephrasing_but_forbids_generic_loss():
+    from prompts import DEFAULT_PROMPTS
+
+    clause = DEFAULT_PROMPTS["perception"].split("VISIBLE BODY REGIONS:", 1)[1]
+    clause = clause.split("PRONOUNS:", 1)[0].casefold()
+    assert "rephrase" in clause
+    assert "preserve its substantive concrete traits" in clause
+    assert "generic 'bare skin'" in clause
+
+
 def test_introduction_quote_survives_but_bare_name_is_scrubbed(temp_db, monkeypatch):
     """Mid-beat introduction: the name spoken aloud is sensory signal and
     must stay verbatim inside the quote; recognition only flips at commit
