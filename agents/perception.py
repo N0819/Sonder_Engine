@@ -1527,6 +1527,38 @@ def _behind_rooms(scene, observer):
     return [e.get("to") for e in frame.get("behind") or [] if e.get("to")]
 
 
+def _visible_rooms_for(scene, observer, room_id):
+    """`visible_adjacent_rooms`, minus whatever is at this observer's back.
+
+    THE RULE WAS COMPUTED AND THEN NOT APPLIED. `visible_adjacent_rooms` asks a
+    question about the ROOM -- it takes no observer at all -- so it reports every
+    open-barrier neighbour as in view however the perceiver happens to be turned.
+    `_behind_rooms` computes the correction directly above, and its docstring
+    states the rule it exists to enforce: "an observer does not receive NEW
+    VISUAL detail from a room behind them". Nothing subtracted one from the
+    other. Both lists went into the same perceiver payload, naming the same
+    room, and the model was left to reconcile them.
+
+    Live, chat 67 t9: Hinami stands on Commercial Lane facing EAST, having come
+    from Fountain Plaza, which is west and therefore behind her.
+    `visible_rooms` and `behind_rooms` both named `fountain_plaza`, and her view
+    came back with "Across the street, a middle-aged man by the fountain watches
+    the foreign notes catch the light" -- a person, doing something, in a room
+    she was not looking at, who then reappeared the following turn.
+
+    Only SIGHT is gated, which is the whole point: this list exists behind
+    `_SIGHT_BARRIERS`, while sound and the other channels ride
+    `_source_channels` and are untouched. She can still hear the fountain. And
+    `_behind_rooms` is empty when an observer has no movement history, so an
+    observer who has not moved is not gated by this at all.
+    """
+    rooms = visible_adjacent_rooms(scene, room_id)
+    behind = {r for r in (_behind_rooms(scene, observer) or []) if r}
+    if not behind:
+        return rooms
+    return [r for r in rooms if r.get("room_id") not in behind]
+
+
 def _focus_target(scene, observer):
     """The NAME of the source the observer is attending (their focus), when
     focus rests on a co-located entity/character. Perception gives a focused
@@ -1925,7 +1957,7 @@ def perception_establish(ctx, nonce):
         "room_name": (p_rdata or {}).get("name") or p_room or "an unspecified area",
         "room_notes": ((p_rdata or {}).get("notes") or _room_notes_from_lore(p_room, ctx, sc)),
         "ambient_location": _ambient_location_for(sc, p_room),
-        "visible_rooms": visible_adjacent_rooms(sc, p_room),
+        "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
         "senses": senses_of(pers), "attention": "engaged",
         "knows_identity": True,
         "entity_state": p_state,
@@ -1948,7 +1980,7 @@ def perception_establish(ctx, nonce):
             "room_name": (rdata or {}).get("name") or r or "an unspecified area",
             "room_notes": ((rdata or {}).get("notes") or _room_notes_from_lore(r, ctx, sc)),
             "ambient_location": _ambient_location_for(sc, r),
-            "visible_rooms": visible_adjacent_rooms(sc, r),
+            "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
             "senses": senses_of(sh), "attention": act.get("goal") or "ambient",
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
             "entity_state": entity_states.get(character_name(sh)) or {},
@@ -2243,7 +2275,7 @@ def perception_act(ctx, nonce):
             "room_name": (rdata or {}).get("name") or r or "an unspecified area",
             "room_notes": ((rdata or {}).get("notes") or _room_notes_from_lore(r, ctx, sc)),
             "ambient_location": _ambient_location_for(sc, r),
-            "visible_rooms": visible_adjacent_rooms(sc, r),
+            "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
             "senses": senses_of(sh),
             "attention": act.get("goal") or "ambient",
             "spatial_to_actor": rel,
@@ -2919,7 +2951,7 @@ def perception_outcome(ctx, nonce):
         "room_name": (p_rdata or {}).get("name") or p_room or "an unspecified area",
         "room_notes": ((p_rdata or {}).get("notes") or _room_notes_from_lore(p_room, ctx, sc)),
         "ambient_location": _ambient_location_for(sc, p_room),
-        "visible_rooms": visible_adjacent_rooms(sc, p_room),
+        "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
         "senses": senses_of(pers), "attention": "engaged",
         "knows_identity": True,
         **_source_channels(sc, p_name, p_room, sources, prev_sc=prev_scene),
@@ -2940,7 +2972,7 @@ def perception_outcome(ctx, nonce):
             "room_name": (e_rdata or {}).get("name") or e_room or "an unspecified area",
             "room_notes": ((e_rdata or {}).get("notes") or _room_notes_from_lore(e_room, ctx, sc)),
             "ambient_location": _ambient_location_for(sc, e_room),
-            "visible_rooms": visible_adjacent_rooms(sc, e_room),
+            "visible_rooms": _visible_rooms_for(sc, e_name, e_room),
             "senses": senses_of(extra), "attention": "engaged",
             "knows_identity": True,
             **_source_channels(sc, e_name, e_room, sources, prev_sc=prev_scene),
@@ -2965,7 +2997,7 @@ def perception_outcome(ctx, nonce):
             "room_name": (rdata or {}).get("name") or r or "an unspecified area",
             "room_notes": ((rdata or {}).get("notes") or _room_notes_from_lore(r, ctx, sc)),
             "ambient_location": _ambient_location_for(sc, r),
-            "visible_rooms": visible_adjacent_rooms(sc, r),
+            "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
             "senses": senses_of(sh),
             "attention": act.get("goal") or "ambient",
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
