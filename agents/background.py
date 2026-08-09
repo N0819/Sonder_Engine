@@ -281,6 +281,28 @@ def _place_block(ctx, room_id):
         block["ambient_location"] = _ambient_location_for(sc, room_id) if room_id else ""
     except Exception:
         block["ambient_location"] = ""
+    # GENERAL WORLD KNOWLEDGE. Neither background path carried any lore at all,
+    # so an innkeeper in Lugunica could not be expected to know what Lugunica
+    # trades in -- and that gap got worse the moment dialogue moved here from
+    # the Director, which at least had the omniscient working state to draw on.
+    #
+    # This is the firewall being applied, not bypassed. The channel rule bars a
+    # presence from facts that reached it through no channel; it has never
+    # barred what everybody in the setting knows, and
+    # `_check_presence_knowledge_channel` gates single-word matches on the
+    # definite article precisely so "trade runs on copper and silver" survives
+    # while "the strange coins" does not. Lore is the former.
+    #
+    # ROOM-SCOPED, via the same helper perception uses, which carries the
+    # blocked-slug scoping for a sealed or nested observer. Handing over the
+    # whole lorebook would be a real leak: books hold secrets, and an extra is
+    # the last mind that should be told one.
+    try:
+        from agents.common import _room_notes_from_lore
+        block["world_knowledge"] = (
+            _room_notes_from_lore(room_id, ctx, sc) if room_id else "")[:600]
+    except Exception:
+        block["world_knowledge"] = ""
     try:
         from scene import fiction_model, style_guide
         block["genre"] = (fiction_model(ctx.chat.id).get("genre") or {}).get("primary") or ""
@@ -828,6 +850,11 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce):
                             "tone": pr.get("tone", ""), "beats_ago": 1}
 
     payload = {
+        # The per-presence path carried NO place block whatever -- not the
+        # room, not the time, not the setting, not a word of lore. It knew its
+        # own role_hint and the beat, and nothing about the world it stands in.
+        "place": _place_block(ctx, sketch.get("station_room")
+                              or _player_room(ctx, sc)),
         "entity": {
             "name": name,
             "role_hint": sketch.get("role_hint", ""),
