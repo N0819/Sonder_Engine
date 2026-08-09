@@ -20,7 +20,9 @@ against the canonical wardrobe; compact Director payloads and observer-scoped
 perception render the two surfaces independently. The old whole-torso
 `beneath` string is never used as a partial fallback, so revealing a stomach
 cannot reveal a covered chest by accident. The card editor exposes both sides
-of the shape.
+of the shape. This does not suppress other exposed regions: chat 68's bare
+`groin` now carries Hinami's authored anatomy into each eligible observer's
+perception payload independently of the still-worn top.
 
 This lands on the repaired observer path: perception previews commit's exact
 attire result on copies, region visibility is now a production-derived
