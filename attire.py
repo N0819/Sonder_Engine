@@ -1225,3 +1225,91 @@ def rederive_entry(entry):
                 and not is_derived_state_note(note)]
     return {**entry, "regions": regions,
             "wearing": flat_wearing(regions), "state": derived + authored}
+
+
+# What a region reads as when nothing is on it and the story does not spell out
+# the body underneath. Not "" -- an empty value reads as "unknown" to a model,
+# and the whole point of a fixed region list is that every region answers.
+BARE = "bare"
+
+
+def compact_line(regions, beneath_visible=False):
+    """One body's clothing as a SINGLE line, every region in a fixed order.
+
+    `head:-|torso:blouse|waist:apron|groin:skirt(loosened)|legs:skirt|feet:sandals`
+
+    `describe` renders one line per region and includes each garment's
+    description, which is right for a panel and wasteful for the Director:
+    measured on a live scene, raw attire is 10,629 chars and `describe`
+    summaries are 2,999. This is tighter again, and it is tighter in the way
+    that matters for a prompt -- the region list is FIXED and always in the same
+    order, so the shape of the line never changes and only its values do.
+
+    That fixed shape is not cosmetic. Cacheability is a property of the prefix,
+    and a body whose clothing did not change this beat renders byte-identically,
+    which is what lets a provider's prefix cache absorb it instead of charging
+    for it again.
+
+    A REMOVED garment does not linger as "(removed)". The region reports what is
+    THERE now -- the layer beneath if the story spells that out, otherwise
+    `bare`. Naming what is gone is how a prompt ends up describing a shirt that
+    is on the floor as though it were still on the body.
+
+    `beneath_visible` is the host's `attire_beneath` choice and is honoured
+    exactly as `describe` honours it: with it off, an uncovered region says
+    `bare` and the body's own description fills the gap. This function must
+    never be the path that leaks what a story chose not to spell out.
+    """
+    parts = []
+    for region in REGIONS:
+        entry = (regions or {}).get(region) or {}
+        # ATTACHING IS NOT COVERING, and the two have to be able to coexist in
+        # one slot. A hair clip, a belt, a necklace is `worn at` a region and
+        # conceals nothing, so a head wearing only a clip is still bare -- which
+        # is exactly the rule `covered_regions` already applies (`state !=
+        # "removed" and not attaches`). Folding them together would report a
+        # covered head on the strength of a hair pin.
+        present = [g for g in (entry.get("garments") or [])
+                   if g.get("state") != "removed"]
+        worn = [g for g in present if not g.get("attaches")]
+        attached = [g for g in present if g.get("attaches")]
+        if not worn:
+            # BENEATH ONLY SURFACES WHERE SOMETHING CAME OFF. A region that was
+            # never covered -- hands, usually -- is `bare` and says nothing
+            # further; a region whose garment is now `removed` reports what the
+            # removal exposed. The distinction matters twice over: it keeps the
+            # line honest about what actually happened this beat, and it keeps
+            # the underlayer out of every payload for stories that merely have
+            # uncovered regions, which is most of them.
+            # The STANDING state, not the moment of removal. A body stays
+            # exposed until it is covered again -- by new attire or by the
+            # garment it discarded -- so the underlayer belongs in the payload
+            # for as long as that is true, not only on the beat it became true.
+            # Putting something back on ends it, because the region then has a
+            # worn garment and never reaches this branch.
+            shed = any(g.get("state") == "removed"
+                       for g in (entry.get("garments") or []))
+            beneath = (_clean(entry.get("beneath"), BENEATH_LIMIT)
+                       if (shed and beneath_visible) else "")
+            parts.append("%s:%s%s" % (region, beneath or BARE,
+                                       _attached_text(attached)))
+            continue
+        pieces = []
+        for garment in worn:
+            name = garment.get("name") or "?"
+            state = garment.get("state") or "worn"
+            condition = garment.get("condition") or ""
+            notes = [n for n in (state if state != "worn" else "", condition) if n]
+            pieces.append("%s(%s)" % (name, ", ".join(notes)) if notes else name)
+        parts.append("%s:%s%s" % (region, "+".join(pieces),
+                                  _attached_text(attached)))
+    return "|".join(parts)
+
+
+def _attached_text(attached):
+    """Attaching garments as a suffix, so the slot's main value stays the
+    answer to "is this covered" and the pins ride alongside rather than
+    displacing it."""
+    if not attached:
+        return ""
+    return "[at:%s]" % ", ".join(g.get("name") or "?" for g in attached)
