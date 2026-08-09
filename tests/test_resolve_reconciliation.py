@@ -176,6 +176,25 @@ def _action_interp(authority_claims=None):
     }
 
 
+def test_contact_manifest_checks_contact_ops_in_the_right_dimension():
+    """A contact transition was previously classified as ``other`` because
+    neither the prompt nor the evidence table admitted contact as a category.
+    Correct contact_ops then triggered a needless repair and a false warning."""
+    sd = _normalize_diff_shape({"contact_ops": [{
+        "op": "add", "actor": "Elyra Voss", "actor_part": "left hand",
+        "target": "Hinami", "target_part": "hip", "manner": "grip",
+    }]})
+
+    assert _evidence_present(sd, {
+        "category": "contact", "subject": "Elyra Voss",
+        "change": "Her left hand settles on Hinami's hip.",
+    })
+    assert _evidence_present(sd, {
+        "category": "contact", "subject": "contacts",
+        "change": "The standing contact changes.",
+    })
+
+
 def _dialogue_interp():
     return {
         "sequence": [{"type": "speech", "text": "How are you holding up?",

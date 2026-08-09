@@ -431,6 +431,73 @@ class TestAShedGarmentIsARealObject:
         commit._mint_shed_garments(sc, [("Mira", "silk sash")], diff)
         assert list(sc["entities"]) == list(first)
 
+    def test_a_short_remove_handle_uses_the_canonical_garment(
+            self, temp_db, monkeypatch):
+        """Live chat 68: ``tank top`` must remove ``fitted tank top``.
+
+        The resolver already knew the answer; commit's exact ``in`` check was
+        the one bypass that left the garment worn beside its floor object.
+        """
+        import commit
+        from pipeline_context import ChatData, PipelineContext, TurnData
+
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("Attire", "", time.time()))
+        turn_id = temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+            (chat_id, 1, "wait", time.time()))
+        ctx = PipelineContext(
+            chat=ChatData(id=chat_id, name="Attire", persona_id=None,
+                          lorebook_id=None, scenario="", created=time.time()),
+            turn=TurnData(id=turn_id, chat_id=chat_id, idx=1,
+                          player_input="wait", created=time.time()),
+            cast=[], input="wait")
+        ctx.director_interpret = {}
+        ctx.director_resolve = {"resolved_event": "The top comes off."}
+        monkeypatch.setattr(attire, "decisive_targets",
+                            lambda *a, **k: {"Hinami"})
+        sc = {
+            "positions": {"Hinami": "room_a"},
+            "attire": {"Hinami": attire.authored_entry(
+                ["fitted tank top"], [], {"torso": {
+                    "garments": [{"name": "fitted tank top"}],
+                    "beneath": "a silver scar",
+                }})},
+        }
+        diff = {"attire": {"Hinami": {"remove": ["tank top"]}}}
+
+        commit.apply_attire_diff(sc, diff, ctx, ctx.director_resolve)
+
+        assert "fitted tank top" not in sc["attire"]["Hinami"]["wearing"]
+        assert sc["attire"]["Hinami"]["regions"]["torso"][
+            "garments"][0]["state"] == "removed"
+        shed = [e for e in sc["entities"].values()
+                if e.get("name") == "fitted tank top"]
+        assert len(shed) == 1
+
+    def test_an_explicit_shed_entity_recovers_removal_and_position(self):
+        """The other live split: an entity cannot say shed while the same
+        unique garment remains on the named wearer's body."""
+        sc = {
+            "positions": {"Hinami": "room_a"},
+            "entities": {},
+            "attire": {"Hinami": {
+                "wearing": ["utility sash with pouches"], "state": []}},
+        }
+        diff = {"entities": {"utility_sash_hinami": {
+            "name": "utility sash", "aliases": ["sash"],
+            "state": {"clothing": True, "shed": True,
+                      "worn_by": "Hinami"},
+        }}}
+
+        recovered = attire.recover_shed_entity_changes(sc, diff)
+
+        assert recovered[0]["garment"] == "utility sash with pouches"
+        assert diff["attire"]["Hinami"]["remove"] == [
+            "utility sash with pouches"]
+        assert diff["positions"]["utility_sash_hinami"] == "room_a"
+
 
 class TestTheRoutes:
     """The wiring, once, through the real app: a stubbed model reaching the

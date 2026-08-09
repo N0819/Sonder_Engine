@@ -589,6 +589,51 @@ def region_visibility(sc, observer, body, entry=None):
     return out
 
 
+def observer_body_regions(sc, observer, body_labels=None):
+    """Observer-safe attire/body surfaces for a perception payload.
+
+    ``body_labels`` maps canonical scene subjects to labels already safe for
+    this observer (``you``, a recognized name, or an appearance-derived
+    descriptor).  Canonical keys are never emitted.  Vantage/containment
+    concealment removes a region entirely; garment concealment exposes only
+    the garment surface, while an overt region may expose its authored
+    ``beneath`` description when the host enabled that feature and a garment
+    has actually been removed there.
+    """
+    sc = sc if isinstance(sc, dict) else {}
+    labels = dict(body_labels or {str(observer): "you"})
+    ledger = sc.get("attire") or {}
+    results = []
+    for body, label in labels.items():
+        entry = ledger.get(body)
+        if entry is None:
+            folded = str(body or "").strip().casefold()
+            entry = next((value for key, value in ledger.items()
+                          if str(key).strip().casefold() == folded), None)
+        if not isinstance(entry, dict):
+            continue
+        coherent = attire_model.rederive_entry(entry) or {}
+        regions = coherent.get("regions") or {}
+        surfaces = attire_model.perceptible_region_surfaces(
+            regions, beneath_visible=_beneath_visible())
+        visibility = region_visibility(sc, observer, body, entry=coherent)
+        delivered = {}
+        for region in attire_model.REGIONS:
+            surface = surfaces.get(region)
+            if not surface:
+                continue
+            verdict = visibility.get(region) or {}
+            cause = verdict.get("by") or {}
+            if verdict.get("visibility") == "concealed" \
+                    and "garments" not in cause:
+                continue
+            delivered[region] = surface
+        if delivered:
+            results.append({"body": str(label or "someone"),
+                            "regions": delivered})
+    return results
+
+
 def _perceptible_entities(sc, perceiver_names=None):
     """The entities dict to serialize into a PERCEPTION payload.
 
@@ -2147,8 +2192,19 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources):
 def _contains_quote(view, quote):
     body = _quote_body(quote)
     normalized_view = re.sub(r"\s+", " ", str(view or "").casefold())
-    normalized_body = re.sub(r"\s+", " ", body.casefold())
-    return bool(normalized_body and normalized_body in normalized_view)
+    normalized_body = re.sub(r"\s+", " ", body.casefold()).rstrip(".,!?…;:")
+    if not normalized_body:
+        return False
+    # A dialogue tag changes terminal punctuation mechanically: the logged
+    # line ``Lie back.`` becomes ``"Lie back," she says``.  That is the same
+    # delivered quote, and treating it as absent appends a duplicate exact-line
+    # injection.  Internal punctuation remains significant; only the terminal
+    # mark is ignored, with a word boundary so ``back`` cannot match
+    # ``backwards``.
+    return re.search(
+        r"(?<!\w)%s(?=$|[^\w])" % re.escape(normalized_body),
+        normalized_view,
+    ) is not None
 
 def normalize_character_refs(values, cast):
     valid_ids = {int(row["id"]) for row in cast}
@@ -5109,7 +5165,7 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     # other and the retry loop would be pushing the model to violate one to
     # satisfy the other.
     excluded_bodies = {
-        re.sub(r"\s+", " ", _quote_body(q).casefold())
+        re.sub(r"\s+", " ", _quote_body(q).casefold()).rstrip(".,!?…;:")
         for q in (exclude_quotes or []) if _quote_body(q)
     }
     quote_pattern = _QUOTE_BODY_RE
@@ -5118,9 +5174,9 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         quote = re.sub(r"\s+", " ", match.group(1).strip())
         if not quote:
             continue
-        if quote.casefold() in excluded_bodies:
+        if quote.casefold().rstrip(".,!?…;:") in excluded_bodies:
             continue
-        if quote.casefold() not in normalized_prose:
+        if not _contains_quote(normalized_prose, quote):
             warnings.append(
                 f"Dialogue from view missing or altered in narrator prose: \"{quote[:80]}\""
             )

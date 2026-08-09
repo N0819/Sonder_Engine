@@ -645,13 +645,14 @@ from .common import (
     player_speech_lines,
     _strip_identity_tokens,
     _unknown_actor_label,
+    observer_body_regions,
     cast_room,
     character_room,
     character_scene_keys,
 )
 
 
-def _observer_scene_payload(scene, perceiver):
+def _observer_scene_payload(scene, perceiver, body_labels=None):
     """Project objective scene state to one observer before any model call.
 
     This is intentionally stricter than an output scrub: relations that name a
@@ -746,7 +747,7 @@ def _observer_scene_payload(scene, perceiver):
             contained[key] = value
         elif subject in visible_names and holder in visible_names:
             contained[key] = value
-    return {
+    payload = {
         "location": scene.get("location"),
         "time": scene.get("time"),
         "rooms": rooms,
@@ -763,6 +764,32 @@ def _observer_scene_payload(scene, perceiver):
         # of anything round a corner.
         "sightlines": corridor_sightlines(scene, room_id) if room_id else [],
     }
+    body_regions = observer_body_regions(
+        scene, name, body_labels or {name: "you"})
+    if body_regions:
+        payload["body_regions"] = body_regions
+    return payload
+
+
+def _observer_body_labels(perceiver, known, appearances, *, include=()):
+    """Canonical body -> observer-safe label for the body-region payload."""
+    observer = str(perceiver.get("name") or "")
+    recognized = set((known or {}).get(observer) or []) | {observer}
+    candidates = dict(appearances or {})
+    for name in include or ():
+        candidates.setdefault(str(name), "")
+    labels = {}
+    for body, appearance in candidates.items():
+        body = str(body or "").strip()
+        if not body:
+            continue
+        if observer.strip().casefold() == body.casefold():
+            labels[body] = "you"
+        elif _recognizes(body, recognized):
+            labels[body] = body
+        else:
+            labels[body] = _unknown_actor_label(body, appearance)
+    return labels
 
 
 # Concurrency for the per-observer perception fan-out. Capped rather than
@@ -1922,6 +1949,8 @@ def perception_establish(ctx, nonce):
     sc = get_scene(chat["id"], chat)
     diff = est.get("state_diff") or {}
     sc = merge_scene_with_diff(sc, diff)
+    from commit import apply_attire_diff
+    apply_attire_diff(sc, copy.deepcopy(diff), ctx, est, report=False)
 
     pers = persona_of(chat)
     known = wget(chat["id"], "known", {})
@@ -2032,7 +2061,11 @@ def perception_establish(ctx, nonce):
         scoped = copy.deepcopy(payload)
         scoped["cast_pronouns"] = _pronouns_for_perceiver(
             all_pronouns, perceiver, known)
-        scoped["scene"] = _observer_scene_payload(sc, perceiver)
+        labels = _observer_body_labels(
+            perceiver, known, {p_name: p_appearance},
+            include=[perceiver.get("name")])
+        scoped["scene"] = _observer_scene_payload(
+            sc, perceiver, body_labels=labels)
         scoped["declared_act"]["player_seed"] = (
             declared["player_seed"]
             if str(perceiver["id"]) == "player"
@@ -2359,7 +2392,11 @@ def perception_act(ctx, nonce):
         scoped = copy.deepcopy(payload)
         scoped["cast_pronouns"] = _pronouns_for_perceiver(
             all_pronouns, perceiver, known)
-        scoped["scene"] = _observer_scene_payload(sc, perceiver)
+        labels = _observer_body_labels(
+            perceiver, known, {p_name: p_visible},
+            include=[perceiver.get("name")])
+        scoped["scene"] = _observer_scene_payload(
+            sc, perceiver, body_labels=labels)
         declared_for_observer = scoped["declared_act"]
         if not perceiver.get("knows_identity"):
             neutral = _unknown_actor_label(p_name, p_visible)
@@ -2764,12 +2801,16 @@ def perception_outcome(ctx, nonce):
     # import: commit.py must stay ignorant of agent modules (facade rule),
     # so the dependency points this way only (same precedent as commit's
     # own _is_player).
-    from commit import dedup_minted_rooms
+    from commit import apply_attire_diff, dedup_minted_rooms
 
     diff = copy.deepcopy(res.get("state_diff") or {})
     dedup_minted_rooms(chat["id"], sc, diff)
     prev_scene = sc
     sc = merge_scene_with_diff(sc, diff)
+    # Attire is commit-owned and intentionally absent from spatial's generic
+    # merge. Preview the exact same canonicalized/region-derived result commit
+    # will persist, on copies, before any observer-specific body projection.
+    apply_attire_diff(sc, diff, ctx, res, report=False)
 
     # Refresh per-character orientation (came_from/focus/facing) on the merged
     # scene. infer_* run at COMMIT, which is AFTER the narrator -- so without
@@ -3128,7 +3169,11 @@ def perception_outcome(ctx, nonce):
         scoped["cast_pronouns"] = _pronouns_for_perceiver(
             all_pronouns, perceiver, known)
         scoped["resolved_event"] = perceiver.get("resolved_event") or ""
-        scoped["scene"] = _observer_scene_payload(sc, perceiver)
+        labels = _observer_body_labels(
+            perceiver, known, appearances,
+            include=[perceiver.get("name")])
+        scoped["scene"] = _observer_scene_payload(
+            sc, perceiver, body_labels=labels)
         spatial_channels = perceiver.get("spatial_to_sources") or {}
         visual_channels = perceiver.get("visual_channel_to_sources") or {}
         scoped["sources"] = [

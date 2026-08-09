@@ -77,6 +77,14 @@ class TestTheLiveFailure:
 
 
 class TestItDoesNotOverfire:
+    def test_dialogue_tag_terminal_comma_is_fidelity_equivalent(self):
+        view = '"Lie back," Elyra commands.'
+        out = _check_narrator_fidelity(
+            {"prose": '"Lie back."'}, view,
+            recent_prose=[], exclude_quotes=[])
+        assert [w for w in out
+                if w.startswith("Dialogue from view missing")] == []
+
     def test_one_speaker_in_a_span_is_not_a_merge(self):
         prose = '"Be at ease, both of you." She settles.'
         assert _merges(prose) == []

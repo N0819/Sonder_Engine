@@ -604,6 +604,95 @@ def resolve_garment(name, worn_names, allow_head_noun=True):
     return hits[0] if len(hits) == 1 else None
 
 
+def recover_shed_entity_changes(scene, diff):
+    """Promote an explicitly shed clothing entity back into the attire diff.
+
+    A model can encode one physical fact in two adjacent fields: create an
+    object whose state says ``{clothing:true, shed:true, worn_by:<body>}``, yet
+    omit the matching attire removal and the object's floor position.  Keeping
+    the object while leaving the same garment on the body is not leniency; it
+    is two contradictory outcomes for one act.
+
+    The entity already supplies every fact needed to recover conservatively:
+    this is clothing, it has been shed, it names its former wearer, and its
+    name must resolve uniquely against that body's live wardrobe.  No prose is
+    parsed and no new garment is invented.  The supplied ``diff`` is mutated
+    so resolve reconciliation, perception preview, and commit can all consume
+    the same recovered encoding.  Returns short records describing what was
+    recovered, for engine notes/tests.
+    """
+    if not isinstance(scene, dict) or not isinstance(diff, dict):
+        return []
+    incoming_entities = diff.get("entities")
+    if not isinstance(incoming_entities, dict):
+        return []
+
+    ledger = scene.get("attire") or {}
+    if not isinstance(ledger, dict):
+        return []
+    owner_keys = {
+        str(key).strip().casefold(): key
+        for key, value in ledger.items() if isinstance(value, dict)
+    }
+    attire_diff = diff.setdefault("attire", {})
+    if not isinstance(attire_diff, dict):
+        attire_diff = diff["attire"] = {}
+    positions_diff = diff.setdefault("positions", {})
+    if not isinstance(positions_diff, dict):
+        positions_diff = diff["positions"] = {}
+
+    recovered = []
+    scene_entities = scene.get("entities") or {}
+    scene_positions = scene.get("positions") or {}
+    for entity_id, incoming in incoming_entities.items():
+        if not isinstance(incoming, dict):
+            continue
+        existing = (scene_entities.get(entity_id)
+                    if isinstance(scene_entities, dict) else None) or {}
+        old_state = existing.get("state") if isinstance(existing, dict) else {}
+        new_state = incoming.get("state")
+        state = dict(old_state) if isinstance(old_state, dict) else {}
+        if isinstance(new_state, dict):
+            state.update(new_state)
+        if not state.get("clothing") or not state.get("shed"):
+            continue
+        owner_raw = str(state.get("worn_by") or "").strip()
+        owner = owner_keys.get(owner_raw.casefold())
+        if not owner:
+            continue
+
+        entry = ledger.get(owner) or {}
+        worn = flat_wearing(normalize_regions(entry))
+        names = [incoming.get("name"), existing.get("name")]
+        names.extend(incoming.get("aliases") or [])
+        names.extend(existing.get("aliases") or [])
+        target = next(
+            (resolved for candidate in names
+             if candidate
+             for resolved in [resolve_garment(candidate, worn)]
+             if resolved),
+            None,
+        )
+        if target:
+            change = coerce_diff_shape(attire_diff.get(owner) or {})
+            removals = change.setdefault("remove", [])
+            if target not in removals:
+                removals.append(target)
+            attire_diff[owner] = change
+
+        placed = entity_id in positions_diff or entity_id in scene_positions
+        where = scene_positions.get(owner)
+        if not placed and where:
+            positions_diff[entity_id] = where
+
+        if target or (not placed and where):
+            recovered.append({
+                "entity_id": str(entity_id), "owner": str(owner),
+                "garment": target, "position": positions_diff.get(entity_id),
+            })
+    return recovered
+
+
 def dedupe_regions(regions):
     """Collapse two records of ONE garment back into one, on read.
 
@@ -1054,6 +1143,57 @@ def describe(regions, beneath_visible=False, body=""):
         else:
             lines.append("%s: bare" % region)
     return lines
+
+
+def perceptible_region_surfaces(regions, beneath_visible=False):
+    """The visible surface of each authored region, without hidden layers.
+
+    ``describe`` is an objective/Director view: it may name under-layers while
+    marking them as such.  Perception needs a stricter projection.  An outside
+    observer sees the first covering garment and ornaments worn at the region,
+    or the exposed body description after a garment has actually come off.
+    It never receives a garment beneath another garment, nor ``beneath`` text
+    for a region that has not been uncovered in play.
+
+    Spatial and observer-specific concealment is deliberately not decided
+    here; ``agents.common.observer_body_regions`` applies ``region_visibility``
+    to these pure attire surfaces.
+    """
+    out = {}
+    for region in REGIONS:
+        entry = (regions or {}).get(region)
+        if not isinstance(entry, dict):
+            continue
+        present = [
+            g for g in (entry.get("garments") or [])
+            if isinstance(g, dict) and g.get("state") != "removed"
+        ]
+        covering = next((g for g in present if not g.get("attaches")), None)
+        ornaments = [g for g in present if g.get("attaches")]
+        parts = []
+        if covering:
+            surface = _garment_text(covering)
+            if covering.get("description"):
+                surface += " — %s" % covering["description"]
+            parts.append(surface)
+        else:
+            surface = "bare"
+            shed = any(
+                isinstance(g, dict) and g.get("state") == "removed"
+                for g in (entry.get("garments") or [])
+            )
+            beneath = (_clean(entry.get("beneath"), BENEATH_LIMIT)
+                       if shed and beneath_visible else "")
+            if beneath:
+                surface += " — %s" % beneath
+            parts.append(surface)
+        for ornament in ornaments:
+            text = "%s [worn at, covers nothing]" % _garment_text(ornament)
+            if ornament.get("description"):
+                text += " — %s" % ornament["description"]
+            parts.append(text)
+        out[region] = "; ".join(parts)
+    return out
 
 
 def apply_flat_change(previous, wanted, decisive=False, conditions=None):
