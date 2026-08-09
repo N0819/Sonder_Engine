@@ -1233,6 +1233,20 @@ def rederive_entry(entry):
 BARE = "bare"
 
 
+# The characters that MEAN something in a compact line. A garment name or a
+# look containing one would make the line ambiguous to read -- and commas are
+# the reason this exists: "A snug, ribbed tank top in charcoal" sat next to
+# "(loosened, wine-stained)" and nothing could tell a description's comma from
+# a separator's. Structural joins now use `;`, which a look cannot contain
+# because `;` is one of the sentence boundaries the look is cut at, and every
+# value is stripped of the rest on the way out.
+_LINE_STRUCTURAL = str.maketrans({c: " " for c in "|:=+[];"})
+
+
+def _safe(text):
+    return " ".join(str(text or "").translate(_LINE_STRUCTURAL).split())
+
+
 def compact_line(regions, beneath_visible=False, look=0):
     """One body's clothing as a SINGLE line, every region in a fixed order.
 
@@ -1295,15 +1309,16 @@ def compact_line(regions, beneath_visible=False, look=0):
                        for g in (entry.get("garments") or []))
             beneath = (_clean(entry.get("beneath"), BENEATH_LIMIT)
                        if (shed and beneath_visible) else "")
-            parts.append("%s:%s%s" % (region, beneath or BARE,
+            parts.append("%s:%s%s" % (region, _safe(beneath) or BARE,
                                        _attached_text(attached)))
             continue
         pieces = []
         for garment in worn:
-            name = garment.get("name") or "?"
+            name = _safe(garment.get("name")) or "?"
             state = garment.get("state") or "worn"
             condition = garment.get("condition") or ""
-            notes = [n for n in (state if state != "worn" else "", condition) if n]
+            notes = [_safe(n) for n in
+                     (state if state != "worn" else "", condition) if n]
             # A GARMENT'S LOOK REACHES PROSE ONLY THROUGH THIS PAYLOAD. The
             # Director is the sole path by which what a thing looks like gets
             # into the narration, so stripping descriptions outright would
@@ -1313,7 +1328,7 @@ def compact_line(regions, beneath_visible=False, look=0):
             # drops the provenance after it: "a small spring-clip holding a
             # single feather" survives, "souvenir from some distant region,
             # pinned into her copper-gold hair near the left fox ear" does not.
-            described = name
+            described = ""
             key = name.casefold()
             if look and key not in look_said:
                 # Sentence boundaries only. Splitting on the COMMA as well
@@ -1328,9 +1343,15 @@ def compact_line(regions, beneath_visible=False, look=0):
                     clause = clause[:int(look)].rsplit(" ", 1)[0]
                 clause = clause.strip(" ,;-")
                 if clause and clause.casefold() != key:
-                    described = "%s=%s" % (name, clause)
+                    described = _safe(clause)
                     look_said.add(key)
-            pieces.append("%s(%s)" % (described, ", ".join(notes)) if notes else described)
+            # NAME(state;condition)=look, in that order. The look goes LAST
+            # because it is the only free-text field: it runs to the next `+`
+            # or `|`, neither of which it can contain, so a reader always knows
+            # where it ends. With the look in the middle, "…in charcoal(open)"
+            # read as though the parenthesis belonged to the description.
+            piece = "%s(%s)" % (name, ";".join(notes)) if notes else name
+            pieces.append("%s=%s" % (piece, described) if described else piece)
         parts.append("%s:%s%s" % (region, "+".join(pieces),
                                   _attached_text(attached)))
     return "|".join(parts)
@@ -1342,4 +1363,4 @@ def _attached_text(attached):
     displacing it."""
     if not attached:
         return ""
-    return "[at:%s]" % ", ".join(g.get("name") or "?" for g in attached)
+    return "[at:%s]" % ";".join(_safe(g.get("name")) or "?" for g in attached)
