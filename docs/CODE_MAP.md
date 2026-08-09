@@ -23,7 +23,7 @@
 | `attire.py` | 1195 |  | — |
 | `auth_routes.py` | 175 | Typed host-authentication HTTP routes and cookie transport. | `guest_access` |
 | `authored_events.py` | 124 |  | `db` |
-| `backdrops.py` | 1197 |  | `db`, `logging_utils`, `outofband`, `spatial`, `weather` |
+| `backdrops.py` | 1227 |  | `db`, `logging_utils`, `outofband`, `spatial`, `weather` |
 | `background_claims.py` | 466 |  | `db` |
 | `canon_provenance.py` | 360 |  | — |
 | `character_schema.py` | 1363 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `attire`, `schemas` |
@@ -267,14 +267,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `generate_backdrop()` | 1009 | 109 lines |
-| `room_projection()` | 496 | 73 lines |
-| `visual_signature()` | 107 | 46 lines |
-| `build_backdrop_request()` | 670 | 37 lines |
-| `scene_after_turn()` | 633 | 35 lines |
-| `branch_lineage()` | 186 | 34 lines |
-| `compose_prompt()` | 778 | 34 lines |
-| `compose_revision()` | 840 | 33 lines |
+| `generate_backdrop()` | 1039 | 109 lines |
+| `room_projection()` | 526 | 73 lines |
+| `visual_signature()` | 135 | 48 lines |
+| `build_backdrop_request()` | 700 | 37 lines |
+| `scene_after_turn()` | 663 | 35 lines |
+| `branch_lineage()` | 216 | 34 lines |
+| `compose_prompt()` | 808 | 34 lines |
+| `compose_revision()` | 870 | 33 lines |
 
 ### `background_claims.py`
 

@@ -104,6 +104,34 @@ def _room_of_player(scene, player_name):
     return (scene or {}).get("player_room")
 
 
+# The style-guide fields an image prompt is allowed to see, and therefore the
+# only ones that may appear in the cache key. `genre` and `tone` are written
+# into `compose_prompt`; `avoid` into both it and `compose_revision`.
+#
+# `director_notes` and `mapping_notes` are instructions to OTHER AGENTS and
+# never touch a pixel. Hashing the whole guide meant editing a Director note
+# invalidated every backdrop in the story at once, which is what happened live:
+# chat 67 ("Lagunica adventure") gained a style guide after its rooms were
+# drawn, every signature moved, and the engine reported every existing image
+# absent and began paying to redraw them.
+#
+# This is `place_desc`'s rule applied to the other half of the key -- the key is
+# a function of what reaches the image, and a key that hashes text the prompt
+# never sees pays for regenerations the picture cannot show.
+VISUAL_STYLE_KEYS = ("genre", "tone", "avoid")
+
+
+def visual_style(style):
+    """The part of a house style that changes how a room is DRAWN.
+
+    Empty values are dropped rather than stored, so "field absent" and "field
+    present but blank" hash identically -- clearing a genre must return a story
+    to the images it already has, not strand them behind a third key.
+    """
+    style = style or {}
+    return {key: style[key] for key in VISUAL_STYLE_KEYS if style.get(key)}
+
+
 def visual_signature(scene, room_id, style=None, viewer=None):
     """A stable hash of everything that changes how `room_id` LOOKS.
 
@@ -134,7 +162,9 @@ def visual_signature(scene, room_id, style=None, viewer=None):
         # see. Keying on the rendered description keeps the rule the rest of
         # this module follows: the key is a function of what reaches the image.
         "weather": weather_words(weather_for_room(scene, room_id), "sight"),
-        "style": style or {},
+        # The style fields that reach the IMAGE, not the whole house style --
+        # see `visual_style`.
+        "style": visual_style(style),
     }
     for key in _VISUAL_STATE_KEYS:
         value = scene.get(key)

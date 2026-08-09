@@ -866,3 +866,69 @@ class TestTheGenerationLockTable:
 
         assert inside == ["first", "first-out", "second"]
         assert len(bd._GEN_LOCKS) == 0
+
+
+# --- the house style, and which half of it the picture can see ---------------
+
+def test_a_directors_note_does_not_invalidate_every_backdrop():
+    """Live, chat 67 ("Lagunica adventure ⎇0"): a style guide was set after the
+    story's rooms were drawn, and the engine reported EVERY existing image
+    absent and began paying to redraw them.
+
+    The whole guide was hashed into the cache key, including `director_notes`
+    and `mapping_notes` — instructions to other agents that never touch a
+    pixel. `place_desc` states the rule this broke: the key is a function of
+    what reaches the image, because a key hashing text the prompt never sees
+    pays for regenerations the picture cannot show.
+    """
+    scene = _scene()
+    plain = visual_signature(scene, "ten_forward", None, viewer="Hinami")
+    noted = visual_signature(
+        scene, "ten_forward",
+        {"director_notes": "Refer to RE:Zero canon",
+         "mapping_notes": "Refer to RE:Zero canon"},
+        viewer="Hinami")
+    assert noted == plain
+
+
+def test_a_genre_does_invalidate_because_it_reaches_the_prompt():
+    """The other direction, and the reason this is a whitelist rather than a
+    denylist of the two note fields: `genre` is written into `compose_prompt`,
+    so a room drawn under one genre really is a different picture."""
+    scene = _scene()
+    plain = visual_signature(scene, "ten_forward", None, viewer="Hinami")
+    genred = visual_signature(scene, "ten_forward", {"genre": "RE:Zero"},
+                              viewer="Hinami")
+    assert genred != plain
+
+
+def test_clearing_a_style_field_returns_the_images_it_had():
+    """Absent and present-but-blank must hash identically, or clearing a genre
+    strands a story behind a THIRD key instead of returning it to the pictures
+    it already paid for."""
+    scene = _scene()
+    assert (visual_signature(scene, "ten_forward", {}, viewer="Hinami")
+            == visual_signature(scene, "ten_forward",
+                                {"genre": "", "tone": None}, viewer="Hinami"))
+
+
+@pytest.mark.parametrize("field", backdrops.VISUAL_STYLE_KEYS)
+def test_every_keyed_style_field_actually_reaches_a_prompt(field):
+    """The anti-drift check. `VISUAL_STYLE_KEYS` is only correct while every
+    field in it changes what the image model is asked for — a field added here
+    but not to the prompt reintroduces exactly the defect above."""
+    place = {"name": "Ten Forward", "desc": "Amber light."}
+    before = backdrops.compose_prompt(place, {}, "")
+    after = backdrops.compose_prompt(place, {field: "SENTINELVALUE"}, "")
+    assert before != after
+    assert "SENTINELVALUE" in after
+
+
+@pytest.mark.parametrize("field", ("director_notes", "mapping_notes"))
+def test_a_field_the_prompt_ignores_stays_out_of_the_key(field):
+    """The converse, stated as a property rather than a list: if setting a
+    field cannot change the prompt, it must not change the key."""
+    place = {"name": "Ten Forward", "desc": "Amber light."}
+    assert (backdrops.compose_prompt(place, {field: "SENTINELVALUE"}, "")
+            == backdrops.compose_prompt(place, {}, ""))
+    assert field not in backdrops.VISUAL_STYLE_KEYS
