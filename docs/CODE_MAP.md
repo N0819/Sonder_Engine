@@ -47,7 +47,7 @@
 | `lore_structure.py` | 242 |  | — |
 | `mechanics.py` | 310 |  | `spatial`, `spatial_frames` |
 | `memory.py` | 5152 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
-| `offscreen.py` | 1503 |  | `logging_utils` |
+| `offscreen.py` | 1593 |  | `logging_utils` |
 | `outofband.py` | 276 |  | `logging_utils` |
 | `paradox.py` | 489 |  | `character_schema`, `db`, `frames` |
 | `pipeline_context.py` | 248 | Typed mutable context passed through a turn pipeline. | `db` |
@@ -564,7 +564,7 @@
 | `advance_reactive_plans()` | 822 | 85 lines |
 | `_normalize_plan_stages()` | 595 | 67 lines |
 | `stochastic_ticks()` | 327 | 64 lines |
-| `full_agent_candidates()` | 1235 | 55 lines |
+| `agent_context()` | 1526 | 60 lines |
 
 ### `outofband.py`
 
