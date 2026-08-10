@@ -3599,7 +3599,7 @@ def _muffled_fragment(body):
 
 
 def _inject_dialogue(view, display, quote, level, volume, can_see,
-                    conducted=False, tone=""):
+                    conducted=False, tone="", articulation=""):
     if level == "none":
         return view
     body = _quote_body(quote)
@@ -3628,6 +3628,18 @@ def _inject_dialogue(view, display, quote, level, volume, can_see,
         verb, bare = "says under their breath", "say under their breath"
     else:
         verb, bare = "says", "say"
+    # Articulation is FORMATION, stamped at the source (see
+    # _stamp_dialogue_articulation): the same malformed sound reaches every
+    # listener, so it renders identically for all of them and rides the
+    # dialogue tag rather than gating the level. The quote itself stays
+    # verbatim -- the fidelity scrubs match on it, and dialogue fidelity
+    # forbids rewriting words actually said.
+    if articulation == "slurred":
+        artic = ", the words slurred around an occupied tongue"
+    elif articulation == "stifled":
+        artic = ", the words stifled and barely shaped"
+    else:
+        artic = ""
     manner = ""
     tone = str(tone or "").strip()
     if tone and can_see:
@@ -3637,9 +3649,9 @@ def _inject_dialogue(view, display, quote, level, volume, can_see,
         else:
             manner = f" with {tone} in their voice"
     if can_see:
-        add = f'{display} {verb}{manner}: "{body}"'
+        add = f'{display} {verb}{manner}{artic}: "{body}"'
     else:
-        add = f'You hear {display} {bare}: "{body}"'
+        add = f'You hear {display} {bare}{artic}: "{body}"'
     return _append_once(view, add)
 
 _OBSERVED_STOPWORDS = frozenset({

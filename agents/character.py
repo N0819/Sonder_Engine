@@ -52,7 +52,8 @@ from scene import (
 )
 from schemas import validate_llm_output
 from spatial import (contact_phrase, contacts_of, corridor_sightlines, room_of,
-                     spatial_digest, sprint_reach, visible_adjacent_rooms)
+                     spatial_digest, speech_articulation_impediment,
+                     sprint_reach, visible_adjacent_rooms)
 from survival import vitals_of
 from place_purpose import (affords_here, felt_needs, here_affords,
                            place_options)
@@ -2728,6 +2729,29 @@ def character_step(ctx, cid, nonce):
         })
     if _standing_contacts:
         _self["standing_contacts"] = _standing_contacts
+    # Own-mouth self-knowledge, the sibling of body_state below: a person
+    # KNOWS their tongue is on someone, and a mind that was never told wrote
+    # clean full sentences mid-lick (measured live: "Every inch of you,
+    # darling.", articulate, tongue extended -- the model composing her line
+    # believed her mouth was free). The sensation clause in her view says the
+    # contact exists; this states its consequence for speaking, so the mind
+    # can CHOOSE -- lift, finish first, or speak anyway and mean the slur.
+    # Phrased without the other party's name on purpose: it is a fact about
+    # this body's own mouth, so it owes nothing to the recognition gate.
+    _speech_kind, _ = speech_articulation_impediment(sc, character_name(sh))
+    if _speech_kind == "slurred":
+        _self["speaking_now"] = {
+            "articulation": "slurred",
+            "sense": ("Your tongue is engaged on another body; words spoken "
+                      "through it will come out slurred until you lift it."),
+        }
+    elif _speech_kind == "stifled":
+        _self["speaking_now"] = {
+            "articulation": "stifled",
+            "sense": ("Your mouth is filled, sealed, or covered by a "
+                      "standing contact; barely a word can be shaped until "
+                      "it ends."),
+        }
     # Following is a voluntary, durable decision this mind owns. Surface its
     # own relation as self-knowledge even after a fast target has pulled ahead;
     # separation does not silently decide whether it keeps chasing or stops.
