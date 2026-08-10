@@ -74,7 +74,7 @@ def parse_scoped_world_key(key):
     return key, None
 
 DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 28
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -620,6 +620,23 @@ CREATE TABLE IF NOT EXISTS world_events(
     PRIMARY KEY(chat_id, event_id)
 );
 CREATE INDEX IF NOT EXISTS idx_world_events_chat_time ON world_events(chat_id, occurred_at);
+
+CREATE TABLE IF NOT EXISTS relationship_events(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    frame_id INTEGER REFERENCES frames(id) ON DELETE SET NULL,
+    char_id INTEGER NOT NULL,
+    target TEXT NOT NULL,
+    axis TEXT NOT NULL,
+    delta REAL NOT NULL,
+    triggers TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    provenance TEXT NOT NULL DEFAULT '',
+    turn_idx INTEGER NOT NULL DEFAULT 0,
+    created REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_relationship_events_pair
+    ON relationship_events(chat_id, char_id, target);
 
 CREATE TABLE IF NOT EXISTS world_entities(
     entity_id TEXT NOT NULL,
@@ -1307,6 +1324,34 @@ MIGRATIONS = [
         "ALTER TABLE world_events_new RENAME TO world_events",
         "CREATE INDEX IF NOT EXISTS idx_world_events_chat_time "
         "ON world_events(chat_id, occurred_at)",
+    ],
+    # v27 -> v28
+    [
+        # Why a stance is where it is. The scalar graph keeps ONE
+        # `salient_event` string and overwrites it on every update, so the
+        # reason a character stopped trusting somebody survived exactly until
+        # the next time their feelings moved at all.
+        #
+        # Measured before building: 98.8% of the 5,704 stance movements in the
+        # live corpus already carry `trigger_event_ids`. The model was saying
+        # why the whole time and the seam was throwing it away -- 5,638
+        # recorded reasons destroyed. This is an append-only ledger of what
+        # was already being said.
+        "CREATE TABLE IF NOT EXISTS relationship_events("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,"
+        "frame_id INTEGER REFERENCES frames(id) ON DELETE SET NULL,"
+        "char_id INTEGER NOT NULL,"
+        "target TEXT NOT NULL,"
+        "axis TEXT NOT NULL,"
+        "delta REAL NOT NULL,"
+        "triggers TEXT NOT NULL DEFAULT '',"
+        "note TEXT NOT NULL DEFAULT '',"
+        "provenance TEXT NOT NULL DEFAULT '',"
+        "turn_idx INTEGER NOT NULL DEFAULT 0,"
+        "created REAL NOT NULL)",
+        "CREATE INDEX IF NOT EXISTS idx_relationship_events_pair "
+        "ON relationship_events(chat_id, char_id, target)",
     ],
 ]
 
