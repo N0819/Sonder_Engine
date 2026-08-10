@@ -33,8 +33,10 @@ more than a plausible lie.
 
 THE LOW RUNGS MAY DESCRIBE, NEVER COMMIT (section 1.0.1). ``deltas`` stays
 empty at both rungs built here, and the medium prompt is shaped so a
-consequence has no field to land in. Only the full-agent rung -- unbuilt,
-Director-adjudicated -- may change the world.
+consequence has no field to land in. Only the full-agent rung -- built in
+``offscreen.schedule_agent_ticks``, Director-adjudicated -- may change the
+world, and it does so through ``living_world.mint_consequences`` like every
+other fuse.
 
 WHAT THE SKELETON READS: fired mechanics rows are promoted into the
 checkpointed, frame-scoped ``world_events`` spine and gaps consume that

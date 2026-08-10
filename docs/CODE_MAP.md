@@ -38,7 +38,7 @@
 | `db.py` | 1657 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `degradation.py` | 171 |  | — |
 | `frames.py` | 220 |  | `db` |
-| `gaps.py` | 548 |  | `canon_provenance`, `db`, `logging_utils`, `providers`, `spatial`, `subjects` |
+| `gaps.py` | 550 |  | `canon_provenance`, `db`, `logging_utils`, `providers`, `spatial`, `subjects` |
 | `greetings.py` | 375 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
 | `guest_access.py` | 355 |  | `db` |
 | `importers.py` | 2651 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `logging_utils`, `memory`, `prompts`, `providers` |
@@ -49,7 +49,7 @@
 | `lore_structure.py` | 242 |  | — |
 | `mechanics.py` | 310 |  | `spatial`, `spatial_frames` |
 | `memory.py` | 5152 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
-| `offscreen.py` | 2141 |  | `logging_utils` |
+| `offscreen.py` | 2158 |  | `logging_utils` |
 | `outofband.py` | 276 |  | `logging_utils` |
 | `paradox.py` | 489 |  | `character_schema`, `db`, `frames` |
 | `pipeline_context.py` | 248 | Typed mutable context passed through a turn pipeline. | `db` |
@@ -457,14 +457,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_skeleton()` | 144 | 175 lines |
-| `last_seen_update()` | 444 | 70 lines |
-| `_medium_overlay()` | 325 | 57 lines |
-| `gap_for()` | 384 | 54 lines |
-| `interim_for()` | 516 | 33 lines |
-| `_record()` | 76 | 22 lines |
-| `_derived_resolution()` | 106 | 22 lines |
-| `_subject_room()` | 130 | 12 lines |
+| `_skeleton()` | 146 | 175 lines |
+| `last_seen_update()` | 446 | 70 lines |
+| `_medium_overlay()` | 327 | 57 lines |
+| `gap_for()` | 386 | 54 lines |
+| `interim_for()` | 518 | 33 lines |
+| `_record()` | 78 | 22 lines |
+| `_derived_resolution()` | 108 | 22 lines |
+| `_subject_room()` | 132 | 12 lines |
 
 ### `greetings.py`
 
@@ -586,14 +586,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `land_agent_tick()` | 1835 | 187 lines |
-| `schedule_agent_ticks()` | 2024 | 118 lines |
-| `schedule_profile_ticks()` | 1353 | 113 lines |
-| `apply_plan_ops()` | 664 | 110 lines |
-| `profile_summary_record()` | 1090 | 99 lines |
-| `advance_epoch()` | 909 | 98 lines |
-| `advance_reactive_plans()` | 822 | 85 lines |
-| `agent_adjudication()` | 1741 | 69 lines |
+| `land_agent_tick()` | 1852 | 187 lines |
+| `schedule_agent_ticks()` | 2041 | 118 lines |
+| `schedule_profile_ticks()` | 1370 | 113 lines |
+| `apply_plan_ops()` | 681 | 110 lines |
+| `profile_summary_record()` | 1107 | 99 lines |
+| `advance_epoch()` | 926 | 98 lines |
+| `advance_reactive_plans()` | 839 | 85 lines |
+| `agent_adjudication()` | 1758 | 69 lines |
 
 ### `outofband.py`
 

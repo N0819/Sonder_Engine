@@ -37,8 +37,10 @@ World epochs, events and typed plans (built)
 - A first safe carrier slice: a registered character physically present at a
   public event can acquire its witnessed surface; the report follows that
   holder's real movement and is visible only to that holder's private agent.
-- Explicit per-character opt-in and bounded, private-reason candidate selection
-  for future full off-screen character work.
+- The full `character_agent` rung end to end: explicit per-character opt-in,
+  bounded private-reason candidate selection, a fail-closed private context,
+  one character call, one Director adjudication, and one atomic guarded
+  landing.
 - Opportunity and fire-rate instrumentation for the new mechanisms.
 
 The last point is important: mechanisms are not complete merely because their
@@ -197,10 +199,70 @@ Also add repeated-reference canon locking based on independent evidence paths.
 Repeated self-reference by one generated summary must not promote or lock a
 claim.
 
-### 5. Build the full `character_agent` rung
+### 5. Build the full `character_agent` rung — **BUILT** (2026-08-10)
 
-Candidate selection is built; the paid producer and landing path are not. Each
-selected opted-in character needs one reduced off-screen turn:
+The paid producer and the landing path landed beside the candidate selector.
+`offscreen.schedule_agent_ticks` runs from the commit tail (`commit.py`, next
+to `schedule_profile_ticks`) after the turn's facts are durable; a turn
+starting never cancels the job, and a failure is a warning rather than a
+rollback. One reduced off-screen turn per selected candidate: the fail-closed
+`offscreen.agent_context` (an allowlist, `AGENT_CONTEXT_KEYS`, on a signature
+with no `scene` parameter to forget to leave out), one character call
+proposing an attempt (`agent_proposal`, word-bounded), one Director call
+resolving it against the objective scene (`agent_adjudication`, which refuses
+a whole verdict whose `moved_to` is not a room the world contains), and
+`land_agent_tick`.
+
+Three gates compose before any model is asked, each failing toward not
+spending: a world epoch; `living_world_allows(..., "antagonist_ladder",
+"ceiling")`, which composes the chat's `offscreen_life=character_agent`
+ceiling through `LIVING_WORLD_REQUIRES` so no second copy of that rule exists
+to drift; and `full_agent_candidates`, which needs the card opt-in
+(`simulation.offscreen_agent`) plus a private reason — that mind's own active
+plan, or carried evidence newer than its own last paid tick.
+
+The required safeguards below, checked against source:
+
+- **`max_offscreen_actors` remains a hard cap** — enforced.
+  `schedule_agent_ticks` reads it from `dialogue_config`, returns no job at
+  zero, and passes it as the selector's `cap`.
+- **No call occurs merely because a character exists** — enforced. Opt-in plus
+  a private reason, and `full_agent_candidates` reads no player position, no
+  objective event payload, and no omniscient scene content.
+- **One base turn, frame, and epoch guard every job** — enforced. No epoch id,
+  no job; the job carries `base_turn=turn_idx`; the producer thread pins
+  `active_frame_id` to the scheduling turn's frame.
+- **A reroll or restore cannot double-land work** — enforced inside the
+  landing transaction by three guards in order (the epoch must still be
+  current, the story must not have rewound past the base turn, and the
+  subject's own `last_epoch_id` must not already carry this epoch), and by
+  stable identity where re-landing is legitimate replay: the fuse is
+  `INSERT OR REPLACE` on a `stable_event_key`, the memory upserts on its own
+  `event_key`, and the log batch dedupes on its seed.
+- **Only Director-adjudicated full-agent work may create new world
+  consequences** — enforced. The single permitted consequence comes from the
+  Director's verdict and passes `living_world.mint_consequences` into
+  `scheduled_events`; `world_events` is never written here, so this rung grows
+  no second writer of what objectively happened.
+- **Off-screen output is structured state, never narrator prose** — enforced.
+  The attempt is bounded to `AGENT_ATTEMPT_MAX_WORDS`, the log record carries
+  `{doing, at, manner}`, and both the tick line and the autobiographical
+  memory are composed by code (`compose_agent_tick`, `compose_agent_memory`)
+  so a reroll re-mints them byte-identically.
+- **Diagnostics remain spoiler-gated and outside the fiction** — nothing
+  enforces this, because no diagnostic surface exists to gate. `offscreen_log`
+  has exactly one reader, `gaps.interim_for`, which delivers a subject's own
+  gap at contact under a provenance filter. The spoiler-gated causal inspector
+  is still §8's work.
+
+Built is not fired. Measured on this tree's `engine.db` (2026-08-10),
+`tools/fire_rates.py` still reports `no chances` for both full-agent rows —
+0 of 97 recorded epochs carried an opportunity at all — so §1 remains the gate
+on this item, for exactly the reason §2 records.
+
+The original text of this item follows.
+
+Each selected opted-in character needs one reduced off-screen turn:
 
 1. assemble a fail-closed private context from that character's sheet,
    psychology, memories, beliefs, authored plans, last-known trail, and carried
@@ -253,7 +315,7 @@ Measure proposal quality before building the full negotiation protocol. If
 needed, add bounded disputes only for identity, knowledge, and continuity
 violations; objective adjudicated events cannot be negotiated away.
 
-### 7. Build and measure the five model-assisted ceilings
+### 7. Build and measure the five model-assisted ceilings — **PARTLY BUILT**
 
 Ceilings remaining (C's artifact-wording ceiling and E's adaptive rung are
 built; the rest expose only their deterministic or reactive floor):
@@ -267,8 +329,9 @@ built; the rest expose only their deterministic or reactive floor):
   bill still stands.
 - **Place obligations:** predict likely-next locations and perform
   obligation-aware generation out of band before arrival.
-- **Antagonist ladder:** run the full adaptive `character_agent` turn described
-  above.
+- **Antagonist ladder:** — **BUILT** (2026-08-10): `offscreen.schedule_agent_ticks`
+  runs the full adaptive `character_agent` turn described in §5, one reduced
+  Director-adjudicated turn per opted-in candidate per world epoch.
 
 Each ceiling must remain off the player's critical path and be triggered by
 dramatic density, never raw cast size, map size, story length, or wall-clock
