@@ -48,6 +48,32 @@ player's own mind supplies it live, every turn. The engine exists to give that
 mind a believable, causally honest, selectively ignorant world to act in, and to
 hand the player the dials to shape it.
 
+### Genre-agnostic substrate, world-specific law
+
+The engine should be able to serve any genre without teaching its core that one
+genre's interpretation is universal. Core state describes reusable facts:
+identity, space, time, contact, motion, containment, visibility, perception,
+knowledge, authority, conditions and causality. It should not hard-code what a
+wound, spell, transformation, technology, supernatural weakness or social
+custom means in every world.
+
+Genre-specific mechanics belong in lorebooks when they are authored or already
+canonical. When canon is silent, the Director infers the local rule from the
+fiction model, established facts and immediate circumstances. The ordering is:
+explicit canon first, established story facts second, Director inference last.
+An inference may fill a gap but never silently override a lorebook rule. The
+engine's job is to represent, validate, persist and deliver the resulting facts
+without losing their causal or epistemic boundaries.
+
+This is also the quality bar. Sonder Engine is not successful merely because it
+can generate plausible prose in many genres; a raw LLM call already does that
+with fewer seams and often smoother local writing. The orchestration must earn
+its cost by producing demonstrably better long-form continuity, causality,
+character agency, epistemic integrity, memory and world-specific coherence.
+The target is eventually to handle any genre to a higher standard than an
+unmediated model call, while being honest that every structured boundary can
+lose nuance until it is made reliable.
+
 ### The two principles everything else serves
 
 1. **Structure over instruction.** Anything you want guaranteed must be
