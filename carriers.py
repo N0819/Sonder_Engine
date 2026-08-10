@@ -50,6 +50,21 @@ REPORT_CAP = 16
 ROUTE_CAP = 12
 PAYLOAD_CAP = 4
 
+#: Where the PLAYER's carrier state lives.
+#:
+#: A cast member keeps held reports in `chat_chars.cstate`. A persona has no
+#: such row, so the player had nowhere to hold one -- and `_cast_index`, which
+#: reads cast rows, could not name the player at all. Every carrier verb
+#: refused them by construction: "courier sender 'Corin' is not a registered
+#: character", "artifact poster 'Corin' is not a registered character". In a
+#: single-player engine the likeliest sender of news was the one participant
+#: who structurally could not send it.
+#:
+#: A world key rather than a table, because there is exactly one persona per
+#: chat. It holds the same shape a cast row's state does, so every reader
+#: below is indifferent to which of the two it was handed.
+PERSONA_STATE_KEY = "persona_carrier_state"
+
 #: How many public surfaces still standing in a room a newcomer may take in on
 #: arrival. Bounded so this is walking into a room and seeing what happened,
 #: not archaeology: a body reads the barred gate in front of it, and does not
@@ -308,7 +323,59 @@ def _crowds_acquire(ctx, event_rows, standing_rows):
     return opportunities, acquired
 
 
-def _cast_index(cid, frame_id, scene):
+def persona_entry(cid, chat, scene):
+    """The player, shaped like any other carrier — or None if unresolvable.
+
+    Failing toward None rather than a placeholder keeps the old behaviour for
+    a chat with no resolvable persona: only registered characters carry, which
+    is the safe direction (`couriers._player_name` fails the same way).
+    """
+    from db import wget
+    from scene import persona_of
+
+    from character_schema import persona_name
+
+    if chat is None or not hasattr(chat, "get"):
+        return None
+    try:
+        persona = persona_of(chat)
+    except Exception:                          # noqa: BLE001 - absent persona
+        return None
+    persona = persona or {}
+    # A normalized persona keeps its name under `identity`, exactly as a
+    # character does; reading a flat `name` off it silently yields None and
+    # the player drops back out of the index, which is how this went unnoticed
+    # the first time it was written.
+    identity = persona.get("identity") or {}
+    name = str(persona_name(persona) or identity.get("name") or "").strip()
+    if not name:
+        return None
+    state = wget(cid, PERSONA_STATE_KEY, {}) or {}
+    return {"row": None, "persona": True, "name": name,
+            "aliases": [str(a) for a in (identity.get("aliases") or []) if a],
+            "uid": str(identity.get("uid") or ""),
+            "state": state if isinstance(state, dict) else {},
+            "room": str(room_of(scene, name) or "")}
+
+
+def save_state(cid, entry, state, *, frame_id=None):
+    """Persist one carrier's state, wherever that carrier keeps it.
+
+    The one place the two homes meet. Cast state is a column; persona state is
+    a world key. Branching at each of the five call sites would be a guard
+    every writer had to remember, and this project's history is unambiguous
+    about what happens to those.
+    """
+    if entry.get("persona"):
+        from db import wset
+
+        wset(cid, PERSONA_STATE_KEY, state)
+        return
+    set_char_state(cid, entry["row"]["id"],
+                   json.dumps(state, ensure_ascii=False), frame_id=frame_id)
+
+
+def _cast_index(cid, frame_id, scene, chat=None):
     """Registered characters this beat, by every name they answer to.
 
     EXTANT, not active, for the same reason acquisition reads extant: being
@@ -343,6 +410,16 @@ def _cast_index(cid, frame_id, scene):
                     *(identity.get("aliases") or [])]:
             if key:
                 index.setdefault(str(key).strip().casefold(), entry)
+
+    # The player, last, so a cast member who happens to share the persona's
+    # name keeps the name -- a registered body with a row is the more specific
+    # reading, and `setdefault` already encodes that preference above.
+    player = persona_entry(cid, chat, scene)
+    if player:
+        for key in [player["name"], player.get("uid"),
+                    *(player.get("aliases") or [])]:
+            if key:
+                index.setdefault(str(key).strip().casefold(), player)
     return index
 
 
@@ -432,7 +509,7 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
 
     cid = ctx.chat.id
     frame_id = ctx.turn.frame_id
-    index = _cast_index(cid, frame_id, scene)
+    index = _cast_index(cid, frame_id, scene, chat=getattr(ctx, "chat", None))
     crowd_index = _crowd_index(cid, scene, frame_id)
     crowds_dirty = {}
 
@@ -585,10 +662,7 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
         applied += 1
 
     for key, state in dirty.items():
-        entry = index[key]
-        set_char_state(cid, entry["row"]["id"],
-                       json.dumps(state, ensure_ascii=False),
-                       frame_id=frame_id)
+        save_state(cid, index[key], state, frame_id=frame_id)
     if crowds_dirty:
         from db import wget, wset
 

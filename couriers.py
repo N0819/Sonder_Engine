@@ -81,7 +81,8 @@ import json
 
 import crowds as crowds_model
 import degradation
-from carriers import REPORT_CAP, STATE_KEY, TELL_FANOUT_CAP, _cast_index
+from carriers import (REPORT_CAP, STATE_KEY, TELL_FANOUT_CAP, _cast_index,
+                      save_state)
 
 
 #: The world-KV key couriers live under, spelled once, frame-scoped in
@@ -416,9 +417,7 @@ def _hold_report(entry, event_id):
 
 
 def _give_report(cid, frame_id, entry, copy):
-    """Append a report copy to a registered character's carried state."""
-    from scene import set_char_state
-
+    """Append a report copy to one carrier's held state, player included."""
     state = entry.get("state") or {}
     reports = [dict(r) for r in state.get(STATE_KEY) or []
                if isinstance(r, dict)]
@@ -428,8 +427,7 @@ def _give_report(cid, frame_id, entry, copy):
     reports.append(copy)
     state[STATE_KEY] = reports[-REPORT_CAP:]
     entry["state"] = state
-    set_char_state(cid, entry["row"]["id"],
-                   json.dumps(state, ensure_ascii=False), frame_id=frame_id)
+    save_state(cid, entry, state, frame_id=frame_id)
     return True
 
 
@@ -780,7 +778,7 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
     couriers = [dict(c) for c in wget(cid, COURIERS_WORLD_KEY, []) or []
                 if isinstance(c, dict)]
     before = json.dumps(couriers, sort_keys=True, ensure_ascii=False)
-    index = _cast_index(cid, frame_id, scene)
+    index = _cast_index(cid, frame_id, scene, chat=getattr(ctx, "chat", None))
     by_uid = {str(c.get("uid") or ""): c for c in couriers}
     rejected = []
     metrics = {"couriers_offered": 0, "dispatched": 0, "courier_moves": 0,
@@ -904,10 +902,7 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
                     state[STATE_KEY] = (
                         [dict(r) for r in state.get(STATE_KEY) or []
                          if isinstance(r, dict)] + [invented])[-REPORT_CAP:]
-                    from scene import set_char_state
-                    set_char_state(cid, sender["row"]["id"],
-                                   json.dumps(state, ensure_ascii=False),
-                                   frame_id=frame_id)
+                    save_state(cid, sender, state, frame_id=frame_id)
                     sender["state"] = state
                     held = invented
                 if held is None:

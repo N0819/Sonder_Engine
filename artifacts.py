@@ -191,7 +191,7 @@ def run_artifacts(ctx, scene, ops):
     from db import wget, wset
     from spatial import room_of
 
-    from carriers import REPORT_CAP, STATE_KEY, _cast_index
+    from carriers import REPORT_CAP, STATE_KEY, _cast_index, save_state
     from couriers import _give_report, _hold_report, _player_name
 
     cid = ctx.chat.id
@@ -201,7 +201,7 @@ def run_artifacts(ctx, scene, ops):
     artifacts = [dict(a) for a in wget(cid, ARTIFACTS_WORLD_KEY, []) or []
                  if isinstance(a, dict)]
     before = json.dumps(artifacts, sort_keys=True, ensure_ascii=False)
-    index = _cast_index(cid, frame_id, scene)
+    index = _cast_index(cid, frame_id, scene, chat=getattr(ctx, "chat", None))
     by_uid = {str(a.get("uid") or ""): a for a in artifacts}
     rejected = []
     metrics = {"artifact_ops_offered": 0, "artifacts_posted": 0,
@@ -270,10 +270,7 @@ def run_artifacts(ctx, scene, ops):
                 state[STATE_KEY] = (
                     [dict(r) for r in state.get(STATE_KEY) or []
                      if isinstance(r, dict)] + [invented])[-REPORT_CAP:]
-                from scene import set_char_state
-                set_char_state(cid, poster["row"]["id"],
-                               json.dumps(state, ensure_ascii=False),
-                               frame_id=frame_id)
+                save_state(cid, poster, state, frame_id=frame_id)
                 poster["state"] = state
                 held = invented
             if held is None:
