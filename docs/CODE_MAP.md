@@ -26,7 +26,7 @@
 | `backdrops.py` | 1258 |  | `db`, `logging_utils`, `outofband`, `spatial`, `weather` |
 | `background_claims.py` | 466 |  | `db` |
 | `canon_provenance.py` | 360 |  | — |
-| `carriers.py` | 421 |  | `character_schema`, `crowds`, `db`, `degradation`, `living_world`, `scene`, `spatial` |
+| `carriers.py` | 482 |  | `character_schema`, `crowds`, `db`, `degradation`, `living_world`, `scene`, `spatial` |
 | `character_schema.py` | 1383 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `attire`, `schemas` |
 | `chat_archive.py` | 1096 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1105 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
@@ -54,12 +54,12 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 4181 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 4188 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 2025 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1424 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
-| `schemas.py` | 3985 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `schemas.py` | 3992 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 6370 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 975 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
@@ -310,11 +310,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_tellings()` | 245 | 177 lines |
+| `apply_tellings()` | 281 | 202 lines |
 | `advance_carriers()` | 95 | 106 lines |
+| `_invented_claim()` | 229 | 34 lines |
 | `_cast_index()` | 203 | 24 lines |
 | `reports_for_state()` | 72 | 21 lines |
-| `_crowd_index()` | 229 | 14 lines |
+| `_crowd_index()` | 265 | 14 lines |
 | `_character_room()` | 60 | 10 lines |
 
 ### `character_schema.py`
@@ -622,10 +623,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 4172 | 10 lines |
-| `presets()` | 4163 | 2 lines |
-| `active_preset()` | 4166 | 2 lines |
-| `nsfw_enabled()` | 4169 | 2 lines |
+| `get_prompt()` | 4179 | 10 lines |
+| `presets()` | 4170 | 2 lines |
+| `active_preset()` | 4173 | 2 lines |
+| `nsfw_enabled()` | 4176 | 2 lines |
 
 ### `providers.py`
 
@@ -680,14 +681,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 3040 | 245 lines |
+| `preprocess_llm_output()` | 3047 | 245 lines |
 | `_lenient_coerce()` | 517 | 159 lines |
-| `semantic_output_errors()` | 3709 | 113 lines |
-| `validate_llm_output_strict()` | 3884 | 102 lines |
-| `_coerce_conditions()` | 2811 | 50 lines |
+| `semantic_output_errors()` | 3716 | 113 lines |
+| `validate_llm_output_strict()` | 3891 | 102 lines |
+| `_coerce_conditions()` | 2818 | 50 lines |
 | `_declared()` | 357 | 48 lines |
 | `_coerce_station_table()` | 49 | 41 lines |
-| `_coerce_evidence_refs()` | 1905 | 41 lines |
+| `_coerce_evidence_refs()` | 1912 | 41 lines |
 
 ### `spatial.py`
 

@@ -226,6 +226,42 @@ def _cast_index(cid, frame_id, scene):
     return index
 
 
+def _invented_claim(claim, ctx, speaker):
+    """A claim with no event behind it, held by whoever made it up.
+
+    The id is minted from the text and the speaker so it can be passed on,
+    disputed and recognised later like any other -- an invented claim that
+    could not be referred to could not be caught out either, and being caught
+    out is the only interesting thing that ever happens to a lie.
+
+    `claim:` rather than `event:` so nothing can mistake it for objective
+    history. It is never written to `world_events`; the ledger of what
+    happened must not acquire rows for things that did not.
+    """
+    import hashlib
+
+    text = " ".join(str(claim or "").split())[:320]
+    material = "%s|%s|%s" % (ctx.chat.id, speaker.get("name") or "", text)
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
+    return {
+        "world_event_id": "claim:%s" % digest,
+        "source_event_id": "",
+        "claim": text,
+        "kind": "claim",
+        "occurred_at": 0.0,
+        "acquired_turn": int(ctx.turn.idx),
+        "acquired_location": speaker.get("room") or "",
+        "current_location": speaker.get("room") or "",
+        "route": [speaker.get("room") or ""],
+        "hops": 0,
+        "retellings": 0,
+        "told_by": "",
+        # Visible to its author and to nobody downstream: the copy handed to a
+        # listener is provenance `told`, exactly like a copy of the truth.
+        "provenance": "invented",
+    }
+
+
 def _crowd_index(cid, scene, frame_id):
     """Crowds standing in rooms, by uid -- the anonymous carriers.
 
@@ -350,6 +386,31 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
                     and str(report.get("world_event_id")) == event_id:
                 held = report
                 break
+        if held is None and not event_id and str(op.get("claim") or "").strip():
+            # A LIE, or an honest mistake, entering through the same physics as
+            # the truth. This is the one thing that lets an antagonist work by
+            # saying something, and it is deliberately indistinguishable
+            # DOWNSTREAM: the listener's row is shaped exactly like a report of
+            # something real, because a mind that could tell a lie from a fact
+            # by inspecting its own memory is not a mind that can be deceived,
+            # and being deceivable is the whole reason the perception layer
+            # exists.
+            #
+            # The asymmetry is at the source only. The speaker's own row says
+            # `invented` -- they know what they did -- and there is no world
+            # event behind it, which nothing in the fiction can query. Nothing
+            # marks it false anywhere a mind reads: wrongness stays diegetic.
+            if speaker.get("crowd") is not None:
+                rejected.append(
+                    "a crowd repeats what it heard; it does not start things")
+                continue
+            invented = _invented_claim(op.get("claim"), ctx, speaker)
+            speaker_state = dirty.get(speaker_key) or speaker["state"]
+            speaker_state[STATE_KEY] = (
+                [dict(r) for r in speaker_state.get(STATE_KEY) or []
+                 if isinstance(r, dict)] + [invented])[-REPORT_CAP:]
+            dirty[speaker_key] = speaker_state
+            held, event_id = invented, invented["world_event_id"]
         if held is None:
             rejected.append("%s does not carry %r and cannot pass it on"
                             % (speaker["name"], event_id or "that report"))
