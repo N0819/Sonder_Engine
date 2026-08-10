@@ -569,7 +569,69 @@ def drive(db):
 
     carry_a_report(db, cid, cast, report)
     tell_a_report(db, cid, cast, report)
+    report["milestone"] = milestone(report)
     return report
+
+
+#: The "minimum convincing 8.0 milestone" from
+#: `docs/OFFSCREEN_WORLD_COMPLETION.md`, verbatim, with what in this drive
+#: would demonstrate each. Kept here rather than in prose so the answer is
+#: recomputed from what actually ran instead of remembered from what was
+#: intended -- the difference between the two is most of this project's
+#: expensive discoveries.
+MILESTONE = (
+    ("a place changes across an absence without a model call",
+     "routine residue ceiling"),
+    ("a scheduled or reactive consequence genuinely fires",
+     "reactive_fired"),
+    ("one witness learns while another unreached mind stays ignorant",
+     "witness_vs_unreached"),
+    ("information follows a route and arrives late, degraded, or not at all",
+     "degraded_chain"),
+    ("an opted-in character adapts only after evidence reaches them",
+     "character_agent rung"),
+    ("the player meets consistent aftermath before an explanation",
+     "needs a played story"),
+    ("the returning character remembers its own off-screen experience",
+     "needs a played story"),
+    ("reroll, restore, branch, archive and import rewind the same history",
+     "test suite"),
+)
+
+
+def milestone(report):
+    """Which lines of the 8.0 milestone this run actually demonstrated.
+
+    A harness can only ever answer some of them. The ones it cannot are named
+    as such rather than left out, because a checklist that silently omits what
+    it does not test reads as a passing checklist.
+    """
+    beats = report.get("beats") or []
+    tell = report.get("tellings") or {}
+    chain = tell.get("chain") or []
+    crowd = report.get("crowd_carrier") or {}
+
+    fired = any(int(b.get("reactive_fired") or 0) > 0 for b in beats)
+    ignorant = (bool(chain) and not tell.get("unreached_holds"))
+    faded = len({c["heard"] for c in chain}) > 1
+    stopped = any("stops here" in w for a in tell.get("attempts") or []
+                  for w in a.get("warnings") or [])
+    rode = bool((crowd.get("beako_holds") or []))
+
+    shown = {
+        "a scheduled or reactive consequence genuinely fires": fired,
+        "one witness learns while another unreached mind stays ignorant":
+            ignorant,
+        "information follows a route and arrives late, degraded, or not at all":
+            faded and stopped and rode,
+    }
+    out = []
+    for line, how in MILESTONE:
+        if line in shown:
+            out.append({"line": line, "shown": bool(shown[line]), "by": how})
+        else:
+            out.append({"line": line, "shown": None, "by": how})
+    return out
 
 
 def main():
@@ -587,6 +649,14 @@ def main():
     if args.json:
         print(json.dumps(report, indent=2))
         return 0
+
+    print("minimum convincing 8.0 milestone\n")
+    for item in report.get("milestone") or []:
+        mark = {True: "yes", False: "NO ", None: " . "}[item["shown"]]
+        print("  [%s] %s" % (mark, item["line"]))
+        if item["shown"] is None:
+            print("        not answerable here — %s" % item["by"])
+    print()
 
     acc = report.get("plan_acceptance") or {}
     print("off-screen drive — did the floors get a chance, and take it?\n")
