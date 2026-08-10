@@ -352,3 +352,185 @@ class TestTimeDoesNotRunBackwards:
         body = inspect.getsource(commit)
         guard = body[body.index("if claimed < was:"):]
         assert "duration_seconds" in guard.split("clock[")[0]
+
+
+class TestACrowdWitnessesItsOwnRoom:
+    """A crowd standing where a public surface lands takes it up.
+
+    The crowds module could hold hearsay and `apply_tellings` could make one
+    retell — but nothing ever put anything IN a crowd, so across a played
+    fifty-beat quest two throngs stood in eventful rooms for forty beats and
+    finished holding nothing. The anonymous-carrier layer the roadmap calls
+    built was reachable only through an explicit Director telling that no
+    beat ever wrote.
+    """
+
+    def _crowd_in(self, db, cid, room):
+        crowd = crowds.new_crowd(cid, room, band="a throng",
+                                 composition="market traders", since_turn=1)
+        db.wset(cid, "crowds", [crowd])
+        return crowd
+
+    def test_the_colocated_crowd_takes_up_the_public_surface(self, temp_db):
+        from carriers import advance_carriers
+
+        cid, _chars, scene, ctx = _world(temp_db)
+        self._crowd_in(temp_db, cid, "square")
+        result = advance_carriers(
+            ctx, scene, {"events": [{"event_id": "world_bell"}]})
+        assert result["crowd_opportunities"] == result["crowd_acquired"] == 1
+        held = crowds.crowd_hearsay(temp_db.wget(cid, "crowds", [])[0])
+        assert [r["claim"] for r in held] == ["the warning bell rang twice"]
+        # Verbatim at the source: the square contains eyewitnesses, and a
+        # crowd wrong about what it watched together would be the engine
+        # being wrong, not a rumour being a rumour.
+        assert held[0]["retellings"] == 0
+        assert held[0]["provenance"] == "witnessed_surface"
+
+    def test_a_crowd_elsewhere_learns_nothing(self, temp_db):
+        """Same physics as a body: no timer, no broadcast — co-location with
+        the surface or silence."""
+        from carriers import advance_carriers
+
+        cid, _chars, scene, ctx = _world(temp_db)
+        self._crowd_in(temp_db, cid, "road")
+        result = advance_carriers(
+            ctx, scene, {"events": [{"event_id": "world_bell"}]})
+        assert result["crowd_acquired"] == 0
+        assert crowds.crowd_hearsay(temp_db.wget(cid, "crowds", [])[0]) == []
+
+    def test_it_does_not_take_the_same_surface_twice(self, temp_db):
+        """A rerun or a later beat over the same standing surface must fold,
+        not stack — the same stable-id discipline every commit writer keeps."""
+        from carriers import advance_carriers
+
+        cid, _chars, scene, ctx = _world(temp_db)
+        self._crowd_in(temp_db, cid, "square")
+        advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
+        again = advance_carriers(ctx, scene, {"events": []})
+        assert again["crowd_acquired"] == 0
+        held = crowds.crowd_hearsay(temp_db.wget(cid, "crowds", [])[0])
+        assert len(held) == 1
+
+    def test_the_setting_gates_crowd_acquisition_too(self, temp_db):
+        from carriers import advance_carriers
+
+        cid, _chars, scene, ctx = _world(temp_db, enabled=False)
+        self._crowd_in(temp_db, cid, "square")
+        advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
+        assert crowds.crowd_hearsay(temp_db.wget(cid, "crowds", [])[0]) == []
+
+
+class TestADormantBodyCanBeTold:
+    """Being dormant is a decision about engine spend, not a claim that the
+    body left the world.
+
+    `_cast_index` read only the active cast, so a dormant character standing
+    in the room was unaddressable as a LISTENER: a messenger could reach the
+    villain's own hall, speak, and have the telling refused as "names someone
+    unregistered". The acquisition path had already been widened to the extant
+    cast for exactly this reason; the telling path had not, and the asymmetry
+    made the one remote mind the agent rung exists for untellable.
+    """
+
+    def _story(self, db):
+        import time
+        cid = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                    ("Telling", "", time.time()))
+        chars = {}
+        for name, uid, status in (("Mora", "mora_uid", "active"),
+                                  ("Maelor", "maelor_uid", "dormant")):
+            sheet = json.dumps({"identity": {"name": name, "uid": uid}})
+            char_id = db.qi(
+                "INSERT INTO characters(name,sheet,source,created) "
+                "VALUES(?,?,?,?)", (name, sheet, "{}", time.time()))
+            db.qi("INSERT INTO chat_chars(chat_id,char_id,status,state) "
+                  "VALUES(?,?,?,'{}')", (cid, char_id, status))
+            chars[name] = char_id
+        db.wset(cid, "living_world", {"rumor_ledger": "floor"})
+        scene = {"rooms": {"hall": {"name": "Hall"}},
+                 "positions": {"Mora": "hall", "Maelor": "hall"}}
+        state = {"carried_reports": [{
+            "world_event_id": "world_bell", "source_event_id": "",
+            "claim": "the warning bell rang twice", "kind": "consequence",
+            "occurred_at": 50.0, "retellings": 0}]}
+        db.qi("UPDATE chat_chars SET state=? WHERE chat_id=? AND char_id=?",
+              (json.dumps(state), cid, chars["Mora"]))
+        ctx = types.SimpleNamespace(
+            chat=types.SimpleNamespace(id=cid),
+            turn=types.SimpleNamespace(idx=5, frame_id=None),
+            director_resolve={"dialogue_log": [
+                {"speaker": "Mora", "text": "The bell rang twice."}]},
+            director_establish=None)
+        return cid, chars, scene, ctx
+
+    def test_a_dormant_listener_in_the_room_receives_the_copy(self, temp_db):
+        from carriers import apply_tellings
+
+        cid, chars, scene, ctx = self._story(temp_db)
+        applied, rejected = apply_tellings(
+            ctx, scene, [{"speaker": "Mora", "listener": "Maelor",
+                          "world_event_id": "world_bell"}])
+        assert (applied, rejected) == (1, [])
+        held = _state(temp_db, cid, chars["Maelor"])["carried_reports"]
+        assert held[0]["provenance"] == "told"
+        assert held[0]["told_by"] == "Mora"
+        assert held[0]["retellings"] == 1
+
+    def test_a_dormant_speaker_still_cannot_tell(self, temp_db):
+        """The widening is listener-side only by construction: a dormant mind
+        the engine did not run said nothing, so the spoke-this-beat gate — 
+        which reads the dialogue_log — has no line to find."""
+        from carriers import apply_tellings
+
+        cid, chars, scene, ctx = self._story(temp_db)
+        applied, rejected = apply_tellings(
+            ctx, scene, [{"speaker": "Maelor", "listener": "Mora",
+                          "world_event_id": "world_bell"}])
+        assert applied == 0
+        assert any("said nothing this beat" in r for r in rejected)
+
+
+class TestEveryClockReaderSharesTheMonotonicRule:
+    """The guard lived only in the scene commit; `prepare_memory_commit` read
+    the raw `end_seconds` beside it.
+
+    Same class of defect one seam over: a beat whose clock claim the scene
+    commit had just refused still stamped affect decay, strain windows and
+    belief provenance with the backwards value — psychology windowed on a
+    clock the world itself did not keep.
+    """
+
+    def test_a_backwards_claim_advances_by_its_duration(self):
+        from commit import _monotonic_elapsed
+
+        elapsed, backwards = _monotonic_elapsed(
+            {"elapsed_seconds": 5400.0},
+            {"start_seconds": 0, "duration_seconds": 30, "end_seconds": 30})
+        assert elapsed == 5430.0
+        assert backwards == (30.0, 5400.0)
+
+    def test_an_honest_claim_is_taken_at_its_word(self):
+        from commit import _monotonic_elapsed
+
+        elapsed, backwards = _monotonic_elapsed(
+            {"elapsed_seconds": 5400.0},
+            {"duration_seconds": 3600, "end_seconds": 9000})
+        assert (elapsed, backwards) == (9000.0, None)
+
+    def test_a_diff_with_no_claim_holds_the_clock(self):
+        from commit import _monotonic_elapsed
+
+        elapsed, backwards = _monotonic_elapsed(
+            {"elapsed_seconds": 5400.0}, {"display_advance": "later"})
+        assert (elapsed, backwards) == (5400.0, None)
+
+    def test_the_memory_seam_reads_through_the_same_helper(self):
+        """One rule, one spelling: a second reader with its own arithmetic is
+        how the two disagreed in the first place."""
+        import inspect
+
+        import commit
+        body = inspect.getsource(commit.prepare_memory_commit)
+        assert "_monotonic_elapsed(_clock, _time_diff)" in body
+        assert 'get("end_seconds"' not in body

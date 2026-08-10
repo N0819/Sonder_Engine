@@ -3977,6 +3977,18 @@ def director_resolve(ctx, nonce):
                     frame_id=ctx.turn.frame_id,
                     now_seconds=float(
                         (clock or {}).get("elapsed_seconds") or 0.0))
+                # Instrumentation, stashed for the commit blob: residue is
+                # payload-side, so `tools/fire_rates.py` (which reads commit
+                # results) could never see it -- the one living-world floor
+                # with no measurable denominator, in the codebase whose
+                # costliest recurring discovery is mechanisms nobody could
+                # tell were dead. Opportunity = a movement-declaring beat
+                # with the floor on; fires = facts actually delivered.
+                ctx["_destination_residue_report"] = {
+                    "to_room": str(_mv_target),
+                    "delivered": len((_destination_residue or {})
+                                     .get("facts") or []),
+                }
         except Exception as exc:
             ctx.add_warning(f"destination residue skipped: {exc}")
 
@@ -4966,6 +4978,14 @@ def _crowds_view(chat_id, scene):
             "heading": crowd.get("heading") or None,
             "density": crowds_model.density(crowd.get("band"), size),
             "emerged": list(crowd.get("emerged") or []),
+            # The reports this crowd is repeating, WITH their ids. Same
+            # defect as the crowd uid and the carried-report id, same cause:
+            # the prompt says a crowd may pass its talk on through
+            # telling_ops, and a Director never shown a world_event_id the
+            # crowd holds could only ever have that op refused with "does
+            # not carry that report". Found the same way -- by reading the
+            # captured payload as the model.
+            "talk": crowds_model.talk_view(crowd, cap=4),
         })
     return out
 

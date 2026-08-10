@@ -1846,6 +1846,46 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
     return sc
 
 
+def _monotonic_elapsed(prev_clock, time_diff):
+    """The story clock this beat's time diff yields. TIME DOES NOT RUN
+    BACKWARDS.
+
+    `end_seconds` is an absolute position on the story clock, and a model
+    that emits `start_seconds: 0` every beat -- an easy and entirely natural
+    reading of a field named "start" -- resets the world to the length of its
+    own beat, over and over. Measured on a fifty-beat quest with several
+    explicit hour-long skips: the clock finished at 30.0 seconds while its
+    own display read "an hour and a half", and everything windowed on seconds
+    went quiet with it -- routine residue never fired once, because the gap
+    between a room's last sighting and now was always zero.
+
+    The duration is still honoured when the absolute position is nonsense: a
+    beat that took an hour advances the clock by an hour rather than being
+    discarded, because the elapsed time is the part the fiction actually
+    asserted.
+
+    ONE helper on purpose: `prepare_memory_commit` reads the same diff to
+    stamp affect/strain/belief windows, and reading the raw field there let
+    a backwards beat window this beat's psychology on a clock the scene
+    commit had already refused. Returns ``(elapsed_seconds, backwards)``
+    where ``backwards`` is None or ``(claimed, was)`` for the caller's
+    warning.
+    """
+    was = float((prev_clock or {}).get("elapsed_seconds", 0.0) or 0.0)
+    td = time_diff if isinstance(time_diff, dict) else {}
+    try:
+        claimed = float(td.get("end_seconds", was))
+    except (TypeError, ValueError):
+        claimed = was
+    if claimed < was:
+        try:
+            duration = max(0.0, float(td.get("duration_seconds", 0.0) or 0.0))
+        except (TypeError, ValueError):
+            duration = 0.0
+        return was + duration, (claimed, was)
+    return claimed, None
+
+
 def prepare_scene_commit(ctx):
     """Build the exact post-turn scene without mutating durable state.
 
@@ -2147,32 +2187,11 @@ def prepare_scene_commit(ctx):
         td = diff["time"]
         if isinstance(td, dict):
             clock = copy.deepcopy(prev_clock)
-            was = float(clock.get("elapsed_seconds", 0.0) or 0.0)
-            claimed = float(td.get("end_seconds", was))
-            # TIME DOES NOT RUN BACKWARDS. `end_seconds` is an absolute
-            # position on the story clock, and a model that emits
-            # `start_seconds: 0` every beat -- an easy and entirely natural
-            # reading of a field named "start" -- resets the world to the
-            # length of its own beat, over and over.
-            #
-            # Measured on a fifty-beat quest with several explicit hour-long
-            # skips: the clock finished at 30.0 seconds while its own display
-            # read "an hour and a half". Everything downstream that windows on
-            # seconds went quiet with it -- routine residue never fired once,
-            # because the gap between a room's last sighting and now was
-            # always zero.
-            #
-            # The duration is still honoured when the absolute position is
-            # nonsense: a beat that took an hour advances the clock by an hour
-            # rather than being discarded, because the elapsed time is the
-            # part the fiction actually asserted.
-            if claimed < was:
-                duration = max(0.0, float(td.get("duration_seconds", 0.0) or 0.0))
-                claimed = was + duration
+            claimed, backwards = _monotonic_elapsed(prev_clock, td)
+            if backwards is not None:
                 ctx.add_warning(
                     "state_diff.time.end_seconds ran backwards (%.0f < %.0f); "
-                    "advanced by its own duration instead" % (
-                        float(td.get("end_seconds", was)), was))
+                    "advanced by its own duration instead" % backwards)
             clock["elapsed_seconds"] = claimed
             if td.get("display_advance"):
                 clock["display"] = td["display_advance"]
@@ -5157,9 +5176,12 @@ def prepare_memory_commit(ctx, *, scene=None):
     _time_diff = ((res.get("state_diff") or {}).get("time")
                   if isinstance(res.get("state_diff"), dict) else None)
     if isinstance(_time_diff, dict):
-        _clock_seconds = float(
-            _time_diff.get("end_seconds", _clock.get("elapsed_seconds", 0.0))
-            or 0.0)
+        # The same monotonic read as the scene commit's, from the same
+        # helper. This site read the raw `end_seconds` for two releases
+        # after the clock itself was guarded, so a backwards beat stamped
+        # affect decay, strain windows and belief provenance with a clock
+        # the scene commit had just refused to store.
+        _clock_seconds, _ = _monotonic_elapsed(_clock, _time_diff)
     else:
         _clock_seconds = float(_clock.get("elapsed_seconds") or 0.0)
 
@@ -6725,6 +6747,17 @@ def _commit_all_locked(ctx, nonce):
     except Exception as exc:
         ctx.add_warning(f"offscreen agent scheduling failed: {exc}")
         results["offscreen_agent"] = {"error": str(exc)}
+
+    # Approach A's floor is computed on the Director payload path, which no
+    # commit domain ever sees -- so without this echo the one mechanism whose
+    # whole failure history is "nobody could tell it never fired" would stay
+    # unmeasurable by tools/fire_rates.py forever. Present only on beats
+    # whose resolve stage actually ran with a declared movement (a rerun
+    # replayed from storage carries no stash), so absence reads as
+    # `no chances`, never as 0%.
+    _residue_report = ctx.get("_destination_residue_report")
+    if isinstance(_residue_report, dict):
+        results["routine_residue"] = dict(_residue_report)
 
     return {
         "summary": (

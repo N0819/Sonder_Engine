@@ -18,10 +18,6 @@ Lines in **bold** are what the engine did, not what was narrated.
 
 The water has gone the colour of ash and will not settle.
 
-> **crowd declared**
-> **an absent mind stirred**
-> **epoch: location**
-
 ### 2. I ask Sera how long it has been like this.
 
 Sera says three days, and that the Fenwater went first.
@@ -52,12 +48,17 @@ Half of them blame Maelor. Half blame the village council.
 
 By noon Corin's shoulders are raw and the pails are still empty.
 
-> **an absent mind stirred**
 > **epoch: time**
 
 ### 9. I look at the well cover.
 
 Grey stone, knitted shut, still warm.
+
+> **world event recorded**
+> **a public surface**
+> **the crowd took it up**
+> **an absent mind stirred**
+> **epoch: due_event**
 
 ### 10. I ask Bryn if he can break it.
 
@@ -93,12 +94,10 @@ It is running. Something broke the seal on it from above.
 
 The light goes out of the sky somewhere behind them.
 
-> **world event recorded**
-> **a public surface**
 > **a plan's stage fired**
 > **an absent mind stirred**
 > **MAELOR THINKS**
-> **epoch: time, due_event, reactive_due**
+> **epoch: time, reactive_due**
 
 ### 18. I sleep badly.
 
@@ -120,6 +119,7 @@ Siege Town is standing, and that is the most that can be said.
 
 > **crowd declared**
 > **somebody witnessed it**
+> **the crowd took it up**
 
 ### 21. I ask the townsfolk what they know of Maelor.
 
@@ -144,6 +144,7 @@ The town goes quiet the way a held breath is quiet.
 > **world event recorded**
 > **a public surface**
 > **somebody witnessed it**
+> **the crowd took it up**
 > **an absent mind stirred**
 > **MAELOR THINKS**
 > **epoch: time, due_event**
@@ -244,16 +245,28 @@ It is quick, and afterwards the hall is very quiet.
 
 Sera is at the gate, cold and furious and alive.
 
-### 50. We go home.
+### 50. We come down through the market square.
 
-The Fenwater is running. It is the loudest thing in the Vale.
+The square is quieter than the morning they left it, and the grain stalls stand stripped bare.
+
+> **crowd declared**
+> **the room remembered the absence**
+
+### 51. We go home.
+
+The Fenwater is running. It is the loudest thing in the Vale, under the villagers' talk of riders and empty grain stores.
+
+> **somebody was told**
 
 ---
 
 ## What each mind ended up believing
 
 - **Sera** (active) — 'a seal had been prised at and left cracked' *(witnessed_surface)*
+- **Sera** (active) — 'a seal had been prised at and left cracked' *(witnessed_surface)*
 - **Sera** (active) — 'the cistern lid was fused shut from the inside' *(witnessed_surface)*
+- **Sera** (active) — 'riders took the grain stores in the night' *(told by talk among the villagers with empty pails, 1 retelling(s) from the truth)*
+- **Bryn** (active) — 'a seal had been prised at and left cracked' *(witnessed_surface)*
 - **Bryn** (active) — 'a seal had been prised at and left cracked' *(witnessed_surface)*
 - **Bryn** (active) — 'the cistern lid was fused shut from the inside' *(witnessed_surface)*
 - **Maelor** (active) — 'the ward closed with a sound like a struck bell' *(witnessed_surface)*
