@@ -2253,9 +2253,26 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources):
         return view, []
     return "".join(segments), leaked
 
+# Typographic variants folded before quote comparison. A model renders the
+# same line twice with different typography -- measured live: `"I‑I must
+# of..."` with U+2011 hyphens and curly apostrophes, restored a second time
+# with ASCII punctuation -- and a byte-wise dedupe called them two different
+# lines, so one spoken line landed twice in one view.
+_TYPOGRAPHY_FOLD = str.maketrans({
+    "‐": "-", "‑": "-", "‒": "-", "–": "-", "—": "-",
+    "‘": "'", "’": "'", "“": '"', "”": '"',
+    "…": "...",
+})
+
+
+def _fold_typography(text):
+    return str(text or "").translate(_TYPOGRAPHY_FOLD)
+
+
 def _contains_quote(view, quote):
-    body = _quote_body(quote)
-    normalized_view = re.sub(r"\s+", " ", str(view or "").casefold())
+    body = _fold_typography(_quote_body(quote))
+    normalized_view = re.sub(
+        r"\s+", " ", _fold_typography(view).casefold())
     normalized_body = re.sub(r"\s+", " ", body.casefold()).rstrip(".,!?…;:")
     if not normalized_body:
         return False
@@ -3578,6 +3595,33 @@ def _content_tokens(text):
                 break
         toks.append(raw)
     return toks
+
+
+def self_name_forms(primary_name, forms=None):
+    """Every textual handle that means THIS perceiver, for _self_second_person.
+
+    The scene keys alone are not enough: they carry the full display name and
+    authored aliases, and prose does not. Measured live, a Director clause
+    said "the base of Elyra's shaft" inside Elyra Voss's own view, and her
+    forms -- 'Elyra Voss', 'elyra_voss_imp', 'Madame Elyra', ... -- matched
+    none of it, so her own view named her in the third person on fifteen
+    turns of one story. Prose reaches for the FIRST name of a multi-word
+    name, so the word tokens of the primary name are forms too --
+    `_player_name_forms` already draws exactly this conclusion for the
+    player, which is why only the CHARACTERS' views carried the defect.
+
+    Tokens come from the primary name only, never from aliases: an alias like
+    'The Succu-Masseuse' would contribute 'The'. An ordinary-word token is
+    safe to include because _self_second_person already matches those
+    case-sensitively (_COMMON_WORD_NAMES).
+    """
+    out, seen = [], set()
+    for form in [*(forms or []), *_player_name_forms(primary_name)]:
+        text = str(form or "").strip()
+        if text and text.casefold() not in seen:
+            seen.add(text.casefold())
+            out.append(text)
+    return out
 
 
 def _self_second_person(text, forms):

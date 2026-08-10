@@ -1047,3 +1047,182 @@ class TestLiftingContactWrittenAsThePartsOwnDoing:
         scene = self._lift({"hand_position": "clenched_at_her_own_side"})
 
         assert scene["entities"]["hinami"]["state"]["hand_position"]
+
+
+class TestEnvelopmentFold:
+    """An envelopment stated from the enclosing side is folded, not trusted.
+
+    The ledger's interior direction is fixed: actor_part is the part that is
+    INSIDE, and the target encloses it. Live (chat 69 "Horny Story. ⎇49"), a
+    penetration stood eight beats as `vagina -> shaft, engulf, relation
+    surface` -- so both parties were told "against" about a body enclosed to
+    the hilt -- and the mirror spelling `lips -> tip, seal, interior` read,
+    under the fixed direction, as lips inside the thing they sealed around.
+    """
+
+    def _apply(self, op, report=None):
+        scene = _scene()
+        return apply_contact_ops(scene, [dict(op, op="add")],
+                                 report=report), scene
+
+    def test_an_envelopment_manner_folds_to_the_enclosed_side(self):
+        _, scene = self._apply({
+            "actor": "Hinami", "actor_part": "mouth",
+            "target": "Bramwell", "target_part": "finger",
+            "manner": "engulf", "relation": "surface", "motion": "moving"})
+        [contact] = scene["contacts"]
+
+        assert (contact["actor"], contact["actor_part"]) == ("Bramwell", "finger")
+        assert contact["target"] == "Hinami"
+        assert contact["relation"] == "interior"
+        assert contact["target_interior"] == "mouth"
+
+    def test_interior_with_an_enclosing_organ_as_actor_folds_too(self):
+        _, scene = self._apply({
+            "actor": "Hinami", "actor_part": "lips",
+            "target": "Bramwell", "target_part": "finger",
+            "manner": "seal", "relation": "interior", "motion": "settled"})
+        [contact] = scene["contacts"]
+
+        assert (contact["actor"], contact["actor_part"]) == ("Bramwell", "finger")
+        assert contact["target_interior"] == "mouth"
+        # The organ remains the contact endpoint; the cavity is the enclosure.
+        assert contact["target_part"] == "lips"
+
+    def test_an_entering_part_already_correctly_directed_is_left_alone(self):
+        """A tongue ENTERS things far more often than it encloses them; the
+        same story's `tongue -> folds, interior` was correctly directed as
+        written, and folding it would have created the very reversal the fold
+        exists to remove."""
+        _, scene = self._apply({
+            "actor": "Bramwell", "actor_part": "tongue",
+            "target": "Hinami", "target_part": "ear",
+            "manner": "press", "relation": "interior", "motion": "moving"})
+        [contact] = scene["contacts"]
+
+        assert (contact["actor"], contact["actor_part"]) == ("Bramwell", "tongue")
+
+    def test_the_fold_is_reported_so_the_model_learns_the_direction(self):
+        report = []
+        self._apply({
+            "actor": "Hinami", "actor_part": "mouth",
+            "target": "Bramwell", "target_part": "finger",
+            "manner": "engulf", "relation": "surface", "motion": "moving"},
+            report=report)
+
+        assert any("enclosed side" in note for note in report)
+
+    def test_a_saved_scene_heals_on_normalization(self):
+        """The stored records predate the fold; the next merge must fold
+        them the same way, or the eight-beat ledger stays wrong forever."""
+        scene = _scene(contacts=[{
+            "actor": "Hinami", "actor_part": "mouth",
+            "target": "Bramwell", "target_part": "finger",
+            "manner": "engulf", "relation": "surface", "motion": "moving"}])
+        scene = normalize_scene_contacts(scene)
+        [contact] = scene["contacts"]
+
+        assert contact["relation"] == "interior"
+        assert contact["actor"] == "Bramwell"
+
+    def test_a_mirror_reassertion_cannot_reverse_interior_direction(self):
+        """A standing surface hold re-asserted as interior from the other
+        side must adopt the interior record's own direction. Updating the
+        stored pair in place grafted `interior` onto the reversed direction,
+        which puts the enclosing organ inside the part it encloses."""
+        scene = _scene(contacts=[{
+            "actor": "Hinami", "actor_part": "mouth",
+            "target": "Bramwell", "target_part": "finger",
+            "manner": "touch", "relation": "surface", "motion": "settled"}])
+        apply_contact_ops(scene, [{
+            "op": "add", "actor": "Bramwell", "actor_part": "finger",
+            "target": "Hinami", "target_part": "", "target_interior": "mouth",
+            "manner": "rest", "relation": "interior", "motion": "settled"}])
+        [contact] = scene["contacts"]
+
+        assert (contact["actor"], contact["actor_part"]) == ("Bramwell", "finger")
+        assert contact["relation"] == "interior"
+
+
+class TestMatterIsNotAContact:
+    """A part slot holding matter is refused at write time, with a notice.
+
+    _NON_ANATOMICAL_PART_WORDS was a render floor -- its own comment said the
+    right fix was that `contacts` never accepts a non-part. Live (chat 69),
+    `juices -> balls, coat` stood two beats as a contact between a fluid and
+    a body, narrated as standing state.
+    """
+
+    def test_a_fluid_part_is_refused(self):
+        scene = _scene()
+        apply_contact_ops(scene, [{
+            "op": "add", "actor": "Hinami", "actor_part": "juices",
+            "target": "Bramwell", "target_part": "chest", "manner": "coat"}])
+
+        assert scene["contacts"] == []
+
+    def test_the_refusal_is_reported_with_the_right_ledger_named(self):
+        report = []
+        scene = _scene()
+        apply_contact_ops(scene, [{
+            "op": "add", "actor": "Hinami", "actor_part": "juices",
+            "target": "Bramwell", "target_part": "chest", "manner": "coat"}],
+            report=report)
+
+        assert any("substance_ops" in note for note in report)
+
+    def test_a_saved_fluid_contact_heals_on_normalization(self):
+        scene = _scene(contacts=[{
+            "actor": "Hinami", "actor_part": "juices",
+            "target": "Bramwell", "target_part": "chest", "manner": "coat"}])
+
+        assert normalize_scene_contacts(scene)["contacts"] == []
+
+    def test_an_ordinary_part_still_passes(self):
+        scene = _scene()
+        apply_contact_ops(scene, [dict(_hold(), op="add")])
+
+        assert len(scene["contacts"]) == 1
+
+
+class TestCavityGripFolds:
+    """A strict cavity gripping another body's part is enclosing it.
+
+    The same live penetration that stood as `engulf, surface` also stood a
+    beat as `vagina -> shaft, clench, relation surface`. A mouth presses
+    against skin all the time -- a kiss on a neck is a surface fact -- so the
+    grip tier folds STRICT cavities only.
+    """
+
+    def test_a_cavity_grip_folds_to_interior(self):
+        scene = _scene()
+        apply_contact_ops(scene, [{
+            "op": "add", "actor": "Hinami", "actor_part": "throat",
+            "target": "Bramwell", "target_part": "finger",
+            "manner": "clench", "relation": "surface", "motion": "moving"}])
+        [contact] = scene["contacts"]
+
+        assert (contact["actor"], contact["actor_part"]) == ("Bramwell", "finger")
+        assert contact["relation"] == "interior"
+        assert contact["target_interior"] == "throat"
+
+    def test_lips_gripping_nothing_of_the_sort(self):
+        """Mouth and lips are not strict cavities: 'lips press neck' and its
+        grasping cousins are ordinary surface contact."""
+        scene = _scene()
+        apply_contact_ops(scene, [{
+            "op": "add", "actor": "Hinami", "actor_part": "lips",
+            "target": "Bramwell", "target_part": "neck",
+            "manner": "squeeze", "relation": "surface", "motion": "settled"}])
+        [contact] = scene["contacts"]
+
+        assert (contact["actor"], contact["actor_part"]) == ("Hinami", "lips")
+        assert contact["relation"] == "surface"
+
+    def test_a_hand_gripping_stays_a_hand_gripping(self):
+        scene = _scene()
+        apply_contact_ops(scene, [dict(_hold(manner="grip"), op="add")])
+        [contact] = scene["contacts"]
+
+        assert (contact["actor"], contact["actor_part"]) == ("Bramwell", "hand")
+        assert contact["relation"] == "surface"

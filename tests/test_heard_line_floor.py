@@ -135,3 +135,27 @@ class TestWhatTheFloorDoesNotDo:
 
         src = inspect.getsource(perception.perception_outcome)
         assert "restored a heard line dropped by the" in src
+
+
+class TestTypographyCannotSplitOneLine:
+    """One spoken line rendered with two typographies is one line.
+
+    Live (chat 69 "Horny Story. ⎇49", turn 63): the model rendered a line
+    with U+2011 non-breaking hyphens and curly apostrophes; the floor's
+    restore pass then re-injected the same line from the log in ASCII
+    punctuation, and the byte-wise `_contains_quote` saw two different
+    strings -- so the perceiver was handed the same sentence twice in one
+    view.
+    """
+
+    def test_a_curly_rendering_contains_its_ascii_line(self):
+        view = 'She murmurs, “I‑I can’t stay long.”'
+        assert _contains_quote(view, '"I-I can\'t stay long."')
+
+    def test_the_fold_works_in_the_other_direction_too(self):
+        view = 'She murmurs, "I-I can\'t stay long."'
+        assert _contains_quote(view, '“I‑I can’t stay long.”')
+
+    def test_a_genuinely_different_line_still_reads_as_absent(self):
+        view = 'She murmurs, “I‑I can’t stay long.”'
+        assert not _contains_quote(view, '"I can stay all night."')

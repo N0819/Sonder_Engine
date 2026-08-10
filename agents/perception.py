@@ -814,6 +814,7 @@ from .common import (
     _perceptible_entities,
     _dedupe_view_sentences,
     _player_name_forms,
+    self_name_forms,
     _quote_body,
     _sentence_subjects,
     _ensure_environment,
@@ -2814,7 +2815,11 @@ def perception_act(ctx, nonce):
     self_forms_by_name = {}
     for c in ctx.cast:
         _sh = json.loads(c["sheet"])
-        self_forms_by_name[character_name(_sh)] = character_scene_keys(_sh)
+        # Scene keys plus the primary name's own word tokens: the Director's
+        # clauses reach for a bare first name, and scene keys alone left
+        # "Elyra's shaft" standing in Elyra Voss's own view (self_name_forms).
+        self_forms_by_name[character_name(_sh)] = self_name_forms(
+            character_name(_sh), character_scene_keys(_sh))
 
     onset_targets = {str(t).casefold() for t in (action.get("targets") or [])}
     onset_loud = any(str(e.get("volume", "")).lower() in ("loud", "shout")
@@ -3630,10 +3635,11 @@ def perception_outcome(ctx, nonce):
     # named the perceiver and broke the view's person). See
     # agents/common.py's _self_second_person.
     self_forms_by_name = {
-        nm: [nm, *(cast_aliases.get(nm) or [])] for nm in appearances
+        nm: self_name_forms(nm, [nm, *(cast_aliases.get(nm) or [])])
+        for nm in appearances
     }
-    self_forms_by_name[p_name] = [
-        p_name, *((pers.get("identity") or {}).get("aliases") or [])]
+    self_forms_by_name[p_name] = self_name_forms(
+        p_name, [p_name, *((pers.get("identity") or {}).get("aliases") or [])])
 
     # Only the LAST overt sub-action of each actor's sequence represents
     # their terminal, currently-visible state. Earlier sub-actions (e.g.

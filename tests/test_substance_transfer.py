@@ -313,3 +313,76 @@ class TestPerceptionBoundary:
         record = witness["substances"][0]
         assert record["target"] == "Vessel"
         assert "source" not in record
+
+
+class TestOneReleaseIsOneRecord:
+    """A release the Director wrote twice at two part-precisions is one event.
+
+    Live (chat 69 "Horny Story. ⎇49", turn 34): one release arrived as an
+    `add` naming the endpoint part and a `deposit` omitting it, in the same
+    beat, otherwise word-for-word identical. `_substance_id` hashes the part
+    slots, so the pair minted two standing records, and the saved scene still
+    carried both verbatim-identical rows at the end of the story.
+    """
+
+    def _doubled(self):
+        # The measured shape: identical everywhere except one op's silence
+        # about target_part.
+        precise = _release(op="add", target="Vessel", placement="interior",
+                           target_interior="reservoir", target_part="inlet",
+                           detail="a second measured release")
+        blurred = _release(op="deposit", target="Vessel",
+                           placement="interior", target_interior="reservoir",
+                           detail="a second measured release")
+        return precise, blurred
+
+    def test_the_blurred_twin_does_not_mint_a_second_record(self):
+        precise, blurred = self._doubled()
+        scene = _scene()
+        apply_substance_ops(scene, [precise, blurred])
+
+        assert len(scene["substances"]) == 1
+
+    def test_the_surviving_record_keeps_the_precise_endpoint(self):
+        precise, blurred = self._doubled()
+        scene = _scene()
+        apply_substance_ops(scene, [blurred, precise])
+
+        [record] = scene["substances"]
+        assert record["target_part"] == "inlet"
+
+    def test_a_scene_saved_with_the_twin_pair_heals_on_the_next_apply(self):
+        precise, blurred = self._doubled()
+        scene = _scene()
+        apply_substance_ops(scene, [precise])
+        [kept] = scene["substances"]
+        twin = dict(kept, target_part="", substance_id="substance:legacytwin")
+        scene["substances"].append(twin)
+        apply_substance_ops(scene, [])
+
+        assert len(scene["substances"]) == 1
+
+    def test_a_second_release_along_the_route_updates_rather_than_stacks(self):
+        """The boundary the dedupe must not move: identity has never included
+        `detail`, so a later release along the same route UPDATES the standing
+        record (its account wins) rather than stacking a second row. The
+        blurred-twin fold only ever fires on rows that agree word for word."""
+        first = _release(op="add", target="Vessel", placement="interior",
+                         target_interior="reservoir",
+                         detail="the first release")
+        second = _release(op="add", target="Vessel", placement="interior",
+                          target_interior="reservoir",
+                          detail="a later, larger release")
+        scene = _scene()
+        apply_substance_ops(scene, [first, second])
+
+        [record] = scene["substances"]
+        assert record["detail"] == "a later, larger release"
+
+    def test_the_contract_names_the_wrong_body_part_failure(self):
+        """Live (turn 63 of the same story): matter recorded on the TARGET
+        with the SOURCE's own part in target_part -- a part the target's body
+        does not have."""
+        resolve = DEFAULT_PROMPTS["director_resolve"]
+        assert "places on the TARGET's own body" in resolve
+        assert "One release is ONE op" in resolve
