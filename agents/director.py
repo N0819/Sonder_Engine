@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import random
 import re
@@ -469,6 +470,19 @@ def _route_authorial_npc_beat(ctx, out, actor_forms=()):
         _sync_sequence_mirrors(out)
 
 
+def _opening_pose_snapshots(out):
+    """Explicit opening poses plus legacy entity_states.posture seeds."""
+    poses = copy.deepcopy(
+        out.get("poses") if isinstance(out.get("poses"), dict) else {})
+    for subject, state in (out.get("entity_states") or {}).items():
+        if subject in poses or not isinstance(state, dict):
+            continue
+        posture = str(state.get("posture") or "").strip()
+        if posture:
+            poses[subject] = {"posture": posture}
+    return poses
+
+
 def director_establish(ctx, nonce):
     chat = ctx.chat
     pers = persona_of(chat)
@@ -548,6 +562,12 @@ def director_establish(ctx, nonce):
     out.setdefault("fiction_frame", {})
     out.setdefault("simulation_clock", {"elapsed_seconds": 0.0, "display": "now"})
 
+    # Opening entity_states historically reached opening perception and then
+    # vanished. Seed the durable pose ledger from them so player personas and
+    # registered cast do not need duplicate scene entities merely to remain
+    # seated/lying/standing after turn zero. An explicit structured pose wins.
+    opening_poses = _opening_pose_snapshots(out)
+
     out["state_diff"] = {
         "rooms": out.get("rooms") if isinstance(out.get("rooms"), dict) else {},
         "entities": out.get("entities") if isinstance(out.get("entities"), dict) else {},
@@ -560,6 +580,7 @@ def director_establish(ctx, nonce):
         "remove_entities": [],
         "remove_rooms": [],
         "stations": out.get("stations") if isinstance(out.get("stations"), dict) else {},
+        "poses": opening_poses,
         # The opening's standing holds, through the same merge every later beat
         # uses (spatial.apply_contact_ops). Without this the one physical act a
         # greeting usually contains -- a grip, a carry, a body pinned -- was
@@ -2087,7 +2108,7 @@ def _normalize_diff_shape(sd):
     Safety net for the LLM returning a string/list where an object belongs."""
     if not isinstance(sd, dict):
         sd = {}
-    for k in ("positions", "stations", "rooms", "entities", "overlays", "attire",
+    for k in ("positions", "stations", "poses", "rooms", "entities", "overlays", "attire",
               "conditions", "scales", "containment", "vitals"):
         if not isinstance(sd.get(k), dict):
             sd[k] = {}
@@ -2543,7 +2564,7 @@ def _strip_blank_diff_placeholders(sd):
         })
 
     for field, category in (("rooms", "rooms"), ("entities", "entities"),
-                            ("attire", "attire")):
+                            ("attire", "attire"), ("poses", "poses")):
         table = sd.get(field)
         if not isinstance(table, dict):
             continue
@@ -2572,7 +2593,7 @@ def _strip_blank_diff_placeholders(sd):
 def _diff_is_substantive(sd):
     """True when the diff asserts any physical change at all (post-strip)."""
     for key in ("rooms", "entities", "conditions", "attire", "overlays",
-                "positions", "remove_entities", "remove_rooms",
+                "positions", "poses", "remove_entities", "remove_rooms",
                 "remove_adjacent", "inventory_ops", "contact_ops",
                 "substance_ops", "cast_changes"):
         if sd.get(key):
@@ -2608,6 +2629,7 @@ def _reconcile_scene_slice(sc, cast, p_room, sd):
         "rooms": _contextual_rooms(sc, cast, *extra),
         "positions": sc.get("positions") or {},
         "entities": sc.get("entities") or {},
+        "poses": sc.get("poses") or {},
         "substances": sc.get("substances") or [],
     }
 
@@ -2651,6 +2673,8 @@ def _merge_repair_into_diff(sd, patch):
             sd["conditions"][key] = incoming_list
     for key, room in (patch.get("positions") or {}).items():
         sd["positions"].setdefault(key, room)
+    for key, pose in (patch.get("poses") or {}).items():
+        sd["poses"].setdefault(key, pose)
     for field in ("remove_entities", "remove_rooms", "remove_adjacent",
                   "inventory_ops", "contact_ops", "substance_ops", "cast_changes", "world_facts",
                   "introductions"):
@@ -2723,7 +2747,7 @@ def _omission_subject_encoded(sd, subject, forms=None):
     fallback; _evidence_present is the category-aware form."""
     hits = _make_subject_hit(subject, forms)
 
-    for field in ("rooms", "entities", "attire", "positions"):
+    for field in ("rooms", "entities", "attire", "positions", "poses"):
         for key, value in (sd.get(field) or {}).items():
             if hits(key):
                 return True
@@ -2775,6 +2799,8 @@ _OMISSION_CATEGORY_ALIASES = {
     "barrier": "adjacency",
     "position": "positions", "movement": "positions",
     "station": "stations", "placement": "stations",
+    "pose": "poses", "posture": "poses", "body_pose": "poses",
+    "body_arrangement": "poses",
     "entity": "entities", "object": "entities",
     "condition": "conditions", "status_effect": "conditions",
     "clothing": "attire", "outfit": "attire",
@@ -2841,6 +2867,8 @@ def _evidence_present(sd, omission, forms=None):
         # within-room one with it.
         return any(hits(k) for k in (sd.get("stations") or {})) \
             or any(hits(k) for k in (sd.get("positions") or {}))
+    if category == "poses":
+        return any(hits(k) for k in (sd.get("poses") or {}))
     if category in ("adjacency", "transit"):
         if room_hit_with_adjacency() or removal_edge_hit() \
                 or entity_transit_hit():

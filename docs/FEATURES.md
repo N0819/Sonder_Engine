@@ -92,6 +92,12 @@ legitimately perceive, learn, remember or infer.
   not a full line, and a whisper does not cross a hall.
 - **Felt but not seen** — Someone you can touch but not see registers as motion
   and pressure; you never learn what act is producing it.
+- **Bodies keep their actual arrangement** — Standing, sitting, lying,
+  supported, above/beneath another body, or physically constrained persist as
+  objective pose instead of being regenerated from generic visual prose.
+- **Familiar people are not reintroduced every beat** — Stable age, beauty,
+  species traits, tails and card clothing stay established; full description
+  returns for discovery, disguise, transformation or a visible change.
 - **Material consequences persist** — Fluids, powders, gases, residue and other
   story-defined matter remain on or within their destination until something
   removes them; an interior recipient experiences the consequence without
