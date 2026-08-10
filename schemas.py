@@ -1627,6 +1627,13 @@ class TellingOp(LenientModel):
     speaker: str = ""
     listener: str = ""
     world_event_id: str = ""
+    # Set INSTEAD of world_event_id when the speaker is saying something no
+    # event backs: a lie, a boast, an honest mistake. It enters through the
+    # same carrier physics as the truth and is indistinguishable downstream --
+    # a mind that could tell a lie from a fact by inspecting its own memory is
+    # not a mind that can be deceived. The speaker's own row records that they
+    # made it up; nothing a listener can reach ever says so.
+    claim: str = ""
 
 
 class CrowdOp(LenientModel):

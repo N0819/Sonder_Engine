@@ -206,3 +206,74 @@ class TestACrowdCarriesTalk:
                       "has told %d people"):
             after = body[body.index("said nothing this beat"):]
             assert guard in after
+
+
+class TestALieTravelsLikeTheTruth:
+    """Malicious and invented claims enter through the same carrier physics.
+
+    The point is what a listener CANNOT do. A mind that could tell a lie from a
+    fact by inspecting its own memory is not a mind that can be deceived, and
+    being deceivable is the entire reason this engine keeps objective truth,
+    perception, memory and belief in separate layers.
+    """
+
+    def test_an_invented_claim_never_reaches_objective_history(self):
+        """`world_events` is the ledger of what happened. It must not acquire
+        rows for things that did not, so an invented claim is keyed `claim:`
+        and lives only in the minds that hold it."""
+        import inspect
+        import types
+
+        import carriers
+        ctx = types.SimpleNamespace(chat=types.SimpleNamespace(id=1),
+                                    turn=types.SimpleNamespace(idx=3))
+        made_up = carriers._invented_claim("the duke is dead", ctx,
+                                           {"name": "Rem", "room": "hall"})
+        assert made_up["world_event_id"].startswith("claim:")
+        assert made_up["kind"] == "claim"
+        # Nothing on the telling path writes objective history.
+        assert "INSERT INTO world_events" not in \
+            inspect.getsource(carriers.apply_tellings)
+
+    def test_the_liar_knows_and_the_listener_cannot(self):
+        """The asymmetry exists at the source ONLY. The speaker's own row says
+        `invented`; the copy handed on is shaped exactly like a copy of the
+        truth, because a difference a listener could inspect would be a
+        deception the fiction cannot support."""
+        import inspect
+
+        import carriers
+        source = inspect.getsource(carriers.apply_tellings)
+        # The copy handed to a listener is built in exactly one place, and it
+        # is the same dict whether the claim is true or invented.
+        assert source.count('"provenance": "told"') == 1
+        assert '"provenance": "invented"' not in source
+
+    def test_a_crowd_does_not_start_things(self):
+        """A crowd repeats what reaches it. Letting one ORIGINATE a claim
+        would make anonymous talk a source of new facts with nobody behind
+        it — an assertion no mind can be held to and no player can chase."""
+        import inspect
+
+        import carriers
+        assert "a crowd repeats what it heard; it does not start things" \
+            in inspect.getsource(carriers.apply_tellings)
+
+    def test_an_invented_claim_can_be_referred_to_later(self):
+        """Its id is minted from the text and the speaker, so it can be passed
+        on, disputed and recognised like any other. A lie that could not be
+        referred to could not be caught out, and being caught out is the only
+        interesting thing that ever happens to one."""
+        import types
+
+        import carriers
+        ctx = types.SimpleNamespace(
+            chat={"id": 1}, turn=types.SimpleNamespace(idx=3))
+        ctx.chat = types.SimpleNamespace(id=1)
+        speaker = {"name": "Rem", "room": "hall"}
+        first = carriers._invented_claim("the duke is dead", ctx, speaker)
+        again = carriers._invented_claim("the duke is dead", ctx, speaker)
+        other = carriers._invented_claim("the duke lives", ctx, speaker)
+        assert first["world_event_id"] == again["world_event_id"]
+        assert first["world_event_id"] != other["world_event_id"]
+        assert first["retellings"] == 0 and first["told_by"] == ""

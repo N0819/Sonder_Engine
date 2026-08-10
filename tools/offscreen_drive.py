@@ -399,6 +399,47 @@ def tell_a_report(db, cid, cast, report):
     rumor_rides_a_crowd(db, cid, cast, report, event_id, held_by)
 
 
+def a_lie_travels_like_the_truth(db, cid, cast, report, held_by):
+    """Something no event backs, entering through the same physics.
+
+    The point is what a listener CANNOT do. A mind that could tell a lie from a
+    fact by inspecting its own memory is not a mind that can be deceived, and
+    being deceivable is the entire reason this engine keeps objective truth,
+    perception, memory and belief in separate layers. So the copy handed on is
+    shaped exactly like a copy of the truth, and the asymmetry exists only at
+    the source: the speaker's own row says `invented`, and there is no world
+    event behind it that anything in the fiction can query.
+    """
+    from commit import commit_information_carriers
+
+    scene = _two_rooms({"Mora": "hall", "Rem": "hall", "Otto": "hall",
+                        "Ram": "hall", "Beako": "hall"})
+    ctx = make_ctx(cid, cast, 30, db, resolve={
+        "state_diff": {"telling_ops": [
+            {"speaker": "Rem", "listener": "Otto",
+             "claim": "Kestrel opened the gate to forty riders at the Hall"}]},
+        "dialogue_log": [{"speaker": "Rem", "text": "He let them in."}],
+    })
+    with db.transaction():
+        out = commit_information_carriers(ctx, {"scene": scene}, {}) or {}
+
+    liar = [r for r in held_by("Rem") if r["provenance"] == "invented"]
+    duped = [r for r in held_by("Otto")
+             if str(r["world_event_id"]).startswith("claim:")]
+    truthful = [r for r in held_by("Otto")
+                if not str(r["world_event_id"]).startswith("claim:")]
+    report["invention"] = {
+        "told": out.get("told"), "warnings": list(ctx.warnings),
+        "the_liar_knows": [(r["claim"], r["provenance"]) for r in liar],
+        "what_the_dupe_holds": [
+            {k: r.get(k) for k in ("claim", "provenance", "retellings",
+                                   "told_by")} for r in duped],
+        "a_true_report_the_dupe_holds": [
+            {k: r.get(k) for k in ("claim", "provenance", "retellings",
+                                   "told_by")} for r in truthful],
+    }
+
+
 def rumor_rides_a_crowd(db, cid, cast, report, event_id, held_by):
     """A crowd is the anonymous carrier, and it needs no new travel machinery.
 
@@ -460,6 +501,8 @@ def rumor_rides_a_crowd(db, cid, cast, report, event_id, held_by):
                   "world_event_id": event_id}], scene=yard)
     steps.append({"step": "Beako catches the talk in the yard",
                   "told": told.get("told"), "warnings": warns})
+
+    a_lie_travels_like_the_truth(db, cid, cast, report, held_by)
 
     report["crowd_carrier"] = {
         "steps": steps,
