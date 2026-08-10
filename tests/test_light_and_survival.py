@@ -780,7 +780,6 @@ class TestAuthoringSettingsSurviveARestore:
         "style_guide",                # genre and tone
         "dialogue_config",            # NPC autonomy
         "background_config",
-        "narration_person",
         "paradox_policy",
         "fixed_points",               # the author's constraints, not the
                                       # paradoxes they detect
@@ -799,6 +798,15 @@ class TestAuthoringSettingsSurviveARestore:
         "standing_intentions",
         "paradoxes",            # what the fixed points caught, not the points
         "lore_cache",
+        # Was on the preserved list, and this class's own docstring is why it
+        # should not have been: "every key here is EDITED THROUGH THE
+        # INTERFACE". Narration person is not — it is detected from how the
+        # player writes, and has no endpoint and no control anywhere in the UI.
+        # Preserving it meant one misdetection outlived the turn that caused
+        # it, the restore meant to undo it, and every reroll after. Observed
+        # live: a checkpoint holding "second" restored into a world still
+        # holding "first", and the story stayed in the wrong person.
+        "narration_person",
     ])
     def test_story_state_is_not(self, key):
         """The other half of the contract: rewinding must actually rewind."""

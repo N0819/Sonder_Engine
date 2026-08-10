@@ -4513,6 +4513,13 @@ def _dedupe_view_sentences(text):
     return _unmask_quoted_spans("".join(kept).rstrip(), spans)
 
 _NARRATION_QUOTE_RE = re.compile(r'["“][^"“”]*["”]')
+#: A doubled opening mark makes the paired pattern match an EMPTY span and
+#: desynchronise every quote after it on the line -- observed live. Folded to
+#: one mark before pairing rather than special-cased afterwards.
+_NARRATION_DOUBLED_QUOTE_RE = re.compile(r'["“]{2,}')
+#: An opening mark with no partner, running to end of line. Applied only after
+#: the paired passes, so it can only ever catch what is genuinely unclosed.
+_NARRATION_DANGLING_QUOTE_RE = re.compile(r'["“][^"“”]*$', re.MULTILINE)
 _NARRATION_SQUOTE_RE = re.compile(r"(?<!\w)'[^']{3,}?'(?!\w)")
 _FIRST_PERSON_RE = re.compile(
     r"\b(i|i'm|i've|i'll|i'd|me|my|mine|myself"
@@ -4543,8 +4550,17 @@ def _narration_person_counts(raw_input, player_name=None, player_pronouns=None):
       dict values (obj == poss == "her") no longer masquerade as the player
       being narrated in third person.
     """
-    narrative = _NARRATION_QUOTE_RE.sub(" ", str(raw_input or ""))
+    narrative = _NARRATION_DOUBLED_QUOTE_RE.sub('"', str(raw_input or ""))
+    narrative = _NARRATION_QUOTE_RE.sub(" ", narrative)
     narrative = _NARRATION_SQUOTE_RE.sub(" ", narrative)
+    # Whatever quote mark is left opened dialogue that never closed, so the
+    # rest of the line is dialogue too. Folded here rather than guarded at the
+    # call sites, because a guard that must be remembered will be forgotten and
+    # this one was: the paired pattern needs a closing mark, so an unterminated
+    # quote let every "I" and "my" inside the speech vote on how the NARRATION
+    # should read. Rare and decisive -- 11 of 2163 live player turns change
+    # verdict, and one of them latched a whole story into first person.
+    narrative = _NARRATION_DANGLING_QUOTE_RE.sub(" ", narrative)
     counts = {
         "first": len(_FIRST_PERSON_RE.findall(narrative)),
         "second": len(_SECOND_PERSON_RE.findall(narrative)),
