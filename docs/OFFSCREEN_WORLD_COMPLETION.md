@@ -67,7 +67,19 @@ remains ignorant, rerolling replays rather than duplicates history, and the
 player learns only through aftermath, present perception, investigation, or a
 fallible speaker.
 
-### 2. Build crowds and persistent fixtures
+### 2. Build crowds and persistent fixtures — **BUILT** (2026-08-10)
+
+All five steps are in the tree; see
+[`PROPOSAL_CROWDS.md`](PROPOSAL_CROWDS.md) §7a for what the building
+corrected in the design. `crowds.py` is pure; `StateDiff.crowd_ops` is how a
+Director says it; `commit.commit_crowds` is the persistence boundary;
+`agents.common.crowds_for_room` is the per-observer surface;
+`tools/crowd_drive.py` walks the chain. Crowds are also the first anonymous
+information carrier (§3), which closes the last line of this item.
+
+The module shipped pure and correct and could not occur: perception read the
+world key faithfully and nothing ever wrote it. Worth remembering when reading
+any other "built" line in this document.
 
 Places need structured inhabitants instead of population implied only by prose.
 Two related forms are required:
@@ -91,7 +103,23 @@ Build in this order:
 Crowds should also become possible information carriers, but they must not
 absorb authored cast or create persistent strangers nobody interacted with.
 
-### 3. Complete the information-carrier network
+### 3. Complete the information-carrier network — **PARTLY BUILT**
+
+Built: explicit copying (`state_diff.telling_ops`, refused unless the speaker
+holds the report, spoke this beat and shares the room); deterministic
+subtractive degradation at each copy (`degradation.py` — count, then place,
+then name, with the name last so a rumor stays useful near its source);
+bounded fan-out (`carriers.TELL_FANOUT_CAP`) and an exhaustion cap so a claim
+with nothing left stops travelling; durable claimant and provenance on told
+reports; anonymous crowd carriers that move because the crowd moves; and
+malicious or invented claims entering through the same physics, keyed `claim:`
+so they never reach `world_events`.
+
+Still unbuilt: courier, caravan, letter and artifact carriers; positions and
+movement over routes rather than endpoints; route fan-out across the place
+graph rather than within a room.
+
+The original text of this item follows.
 
 The registered first-person witness is the minimum epistemically safe floor,
 not a complete rumor network. Add:
@@ -113,7 +141,22 @@ knowledge. The player must be able to intercept, follow, question, outrun, or
 silence a route. Information about the player receives no special priority;
 reputation is earned downstream of actual propagation.
 
-### 4. Add durable social history
+### 4. Add durable social history — **PARTLY BUILT**
+
+`relationship_events` is an append-only ledger carrying source, target, axis,
+bounded magnitude, triggering event ids, turn, frame and provenance, and it
+survives checkpoint, rewind, branch and archive/import. The scalar graph stays
+the projection, and a test asserts it equals the sum of its own history.
+
+Measured first: 98.8% of the 5,704 stance movements in the live corpus already
+carried `trigger_event_ids`. The model had been saying why the whole time and
+the seam discarded it. Evidence is MARKED rather than demanded — an
+unevidenced movement is recorded as such, because refusing it would throw away
+a feeling the character genuinely had and leave the graph wrong.
+
+Still unbuilt: repeated-reference canon locking on independent evidence paths.
+
+The original text of this item follows.
 
 Current relationship state cannot reliably answer why a stance changed. Add a
 `relationship_events` ledger containing:
