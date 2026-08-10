@@ -74,6 +74,14 @@ The target is eventually to handle any genre to a higher standard than an
 unmediated model call, while being honest that every structured boundary can
 lose nuance until it is made reliable.
 
+That advantage is not wholly hypothetical. Long-term character memory has
+already proved more durable than raw model context: it survives context-window
+pressure, process restarts and story restoration as character-owned,
+provenance-bearing evidence, then retrieves earlier experience into a bounded
+current prompt. This proves durability, not perfection—selection, consolidation
+and interpretation can still fail—but it is a concrete case where structure has
+already delivered something an unmediated context cannot sustain.
+
 ### The two principles everything else serves
 
 1. **Structure over instruction.** Anything you want guaranteed must be
