@@ -12,13 +12,16 @@ import json
 import time
 
 from agents.director import (
+    _merge_character_contact_endings,
     _merge_player_contact_assertions,
+    _validated_character_contact_endings,
     _validated_player_contact_assertions,
 )
 from character_schema import default_character_data, default_persona_data
 from pipeline_context import ChatData, PipelineContext, TurnData
 from prompts import DEFAULT_PROMPTS
 from schemas import validate_llm_output
+from spatial import apply_contact_ops
 
 
 def _scene():
@@ -57,6 +60,74 @@ def test_interpret_schema_and_prompt_carry_exact_contact_assertions():
     assert "motion is settled|moving" in prompt
     assert "target_interior names the passage, chamber, material" in prompt
     assert "use op:'cross'" in prompt
+
+    character, warnings = validate_llm_output(
+        "character", {"contact_ops": [
+            {"op": "remove", "contact_ref": "contact:0"}]})
+    assert not warnings
+    assert character["contact_ops"][0]["contact_ref"] == "contact:0"
+    assert "self.standing_contacts" in DEFAULT_PROMPTS["character"]
+    assert "character_contact_endings" in DEFAULT_PROMPTS["director_resolve"]
+
+
+def test_character_contact_endings_remove_only_selected_contacts():
+    scene = _scene()
+    scene["contacts"] = [
+        {"actor": "Hinami", "actor_part": "tongue", "target": "Elyra Voss",
+         "target_part": "lips", "manner": "kiss", "relation": "interior",
+         "target_interior": "mouth", "motion": "moving"},
+        {"actor": "Elyra Voss", "actor_part": "mouth", "target": "Hinami",
+         "target_part": "mouth", "manner": "kiss", "relation": "surface",
+         "motion": "settled"},
+        {"actor": "Elyra Voss", "actor_part": "hand", "target": "Hinami",
+         "target_part": "waist", "manner": "hold", "relation": "surface",
+         "motion": "settled"},
+    ]
+    sheet = default_character_data("Elyra Voss")
+
+    class Ctx:
+        cast = [{"id": 7, "sheet": json.dumps(sheet)}]
+        character_results = {7: {"contact_ops": [
+            {"op": "remove", "contact_ref": "contact:0"},
+            {"op": "remove", "contact_ref": "contact:1"},
+        ]}}
+
+    endings = _validated_character_contact_endings(Ctx(), scene)
+    # The stale resolve repeats both onset kisses; the actor-owned ending wins.
+    resolved = [
+        {"op": "add", **{k: v for k, v in contact.items()
+                          if k != "unasserted"}}
+        for contact in scene["contacts"][:2]
+    ]
+    # A symmetric rephrasing is the same stale physical relation.
+    resolved[1] = {
+        **resolved[1],
+        "actor": scene["contacts"][1]["target"],
+        "actor_part": scene["contacts"][1]["target_part"],
+        "target": scene["contacts"][1]["actor"],
+        "target_part": scene["contacts"][1]["actor_part"],
+    }
+    merged = _merge_character_contact_endings(endings, resolved)
+    after = apply_contact_ops(json.loads(json.dumps(scene)), merged, _age=False)
+
+    assert [(c["actor_part"], c["target_part"]) for c in after["contacts"]] == [
+        ("hand", "waist")]
+
+
+def test_character_contact_refs_cannot_remove_someone_elses_contact():
+    scene = _scene()
+    scene["contacts"] = [{
+        "actor": "Hinami", "actor_part": "hand", "target": "A Door",
+        "target_part": "handle", "manner": "hold",
+    }]
+    sheet = default_character_data("Elyra Voss")
+
+    class Ctx:
+        cast = [{"id": 7, "sheet": json.dumps(sheet)}]
+        character_results = {7: {"contact_ops": [
+            {"op": "remove", "contact_ref": "contact:0"}]}}
+
+    assert _validated_character_contact_endings(Ctx(), scene) == []
 
 
 def test_felt_contact_can_refine_standing_relation_but_not_mint_npc_act():

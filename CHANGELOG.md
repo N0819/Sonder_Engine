@@ -2,6 +2,25 @@
 
 ## Unreleased — Development
 
+### Memory formation is chronological and contact endings are actor-owned
+
+A witnessed beat now forms one coherent first-hand episode. The character's
+declaration is no longer stored beside that view as a malformed duplicate
+(`I chose to attempted …`); a grammatical chronological self row is retained
+only when no usable view exists. Durable received lines and inferred
+conclusions remain provenance-separated and are delivered in their own recent
+lanes instead of masquerading as additional episodes from the same turn.
+Inference formatting now drops empty evidence and duplicate subject prefixes,
+while entity/key-phrase extraction filters common sentence-start and function
+word noise.
+
+Character decisions now receive opaque handles for their exact standing
+contacts and can declare completed removals structurally. Resolve validates
+each handle against the onset ledger, removes only the named contact, and
+rejects a stale Director re-add of that same relation. This makes a pull-away
+survive into the next perception while preserving unrelated simultaneous
+contacts; contested escape attempts remain Director-adjudicated.
+
 ### Paid off-screen minds now require explicit card opt-in and a private reason
 
 Character cards gain `simulation.offscreen_agent`, default false and exposed as

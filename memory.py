@@ -663,11 +663,14 @@ def monitoring_subtree(chat_id, book_id, scene=None, max_depth=6):
 # ---- Memory normalization and storage helpers ----
 
 _STOPWORDS = {
-    "about", "after", "again", "against", "because", "before", "being",
-    "could", "does", "from", "have", "into", "itself", "might", "other",
-    "should", "something", "their", "there", "these", "they", "this",
-    "through", "under", "what", "when", "where", "which", "while", "with",
-    "would", "your", "said", "says", "then", "that", "were", "been",
+    "about", "after", "again", "against", "also", "and", "are", "because",
+    "before", "being", "but", "can", "could", "did", "does", "doing", "for",
+    "from", "had", "has", "have", "her", "hers", "him", "his", "how", "into",
+    "its", "itself", "just", "might", "not", "now", "other", "our", "ours",
+    "said", "says", "she", "should", "something", "than", "that", "the", "their",
+    "theirs", "them", "then", "there", "these", "they", "this", "those", "through",
+    "under", "very", "was", "we", "were", "what", "when", "where", "which", "while",
+    "who", "will", "with", "would", "you", "your", "yours", "been",
 }
 
 _OLD_CUES = (
@@ -728,15 +731,44 @@ def _gist(text: str, limit: int = 240) -> str:
         if len(candidate) > limit:
             break
         out = candidate
-    return out or text[:limit].rsplit(" ", 1)[0]
+    if out:
+        return out
+    clipped = text[:max(1, limit - 1)].rsplit(" ", 1)[0].rstrip(" ,;:-")
+    return (clipped or text[:max(1, limit - 1)]) + "…"
 
 def _extract_entities(text: str, limit: int = 12) -> list[str]:
-    candidates = re.findall(r"\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b", text or "")
-    blocked = {"You", "The", "This", "That", "Then", "Your", "They", "Something"}
+    text = str(text or "")
+    matches = list(re.finditer(
+        r"\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b", text))
+    blocked = {
+        "A", "An", "And", "At", "But", "He", "Her", "Here", "His",
+        "I", "It", "Its", "Later", "Now", "She", "So",
+        "Something", "That", "The", "Their", "Then", "There", "These", "They",
+        "This", "Those", "We", "What", "When", "Where", "Which", "While", "Who",
+        "Why", "With", "You", "Your",
+    }
+    # Legacy inference rows encode their subject explicitly as
+    # ``About <subject>: <claim>``.  Preserve that semantic handle even when
+    # the subject is a lower-case role ("the stranger"), which capitalization
+    # heuristics can never recover and confidence reconciliation requires.
     out = []
-    for c in candidates:
-        c = c.strip()
+    for subject in re.findall(r"(?:^|[.!?]\s+)About\s+([^:\n]{1,80}):", text):
+        subject = " ".join(subject.split()).strip()
+        if subject and subject not in out:
+            out.append(subject)
+    for match in matches:
+        c = match.group(0).strip()
         if c in blocked or c in out:
+            continue
+        # Capitalization alone does not make a sentence's first word an
+        # entity.  A one-off single token at a sentence boundary is ambiguous
+        # and was the source of labels such as adjectives, imperatives and
+        # exclamations.  Keep multi-word proper forms and names that recur;
+        # otherwise decline to invent an entity from typography alone.
+        prefix = text[:match.start()].rstrip()
+        at_sentence_start = not prefix or prefix[-1] in ".!?"
+        if at_sentence_start and " " not in c and not re.search(
+                rf"\b{re.escape(c)}\b", text[match.end():]):
             continue
         out.append(c)
         if len(out) >= limit:
@@ -2816,6 +2848,20 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     ponder_refs = [str(m.get("event_key") or "") for m in pondered
                    if str(m.get("event_key") or "")]
     recent_projected = [_with_reading(m, current_turn_idx) for m in recent]
+    # A recent-life stream must be one chronological row per experienced beat,
+    # not a turn-sized blob of episode + durable quote + self duplicate +
+    # conclusion.  Keep the epistemic side records available, but in their own
+    # lanes so neither chronology nor provenance has to be reconstructed by the
+    # character model.
+    recent_experienced = [
+        m for m in recent_projected
+        if m.get("epistemic_origin") == "what_i_experienced"]
+    recent_received = [
+        m for m in recent_projected
+        if m.get("epistemic_origin") == "what_i_was_told"]
+    recent_conclusions = [
+        m for m in recent_projected
+        if m.get("epistemic_origin") == "what_i_concluded"]
     recalled_projected = [
         _with_reading(m, current_turn_idx) for m in recalled]
     for item in (*recent_projected, *recalled_projected):
@@ -2865,7 +2911,11 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                   if str(item).strip()],
             ]))[:6],
         },
-        "recent_episodes": recent_projected,
+        "recent_episodes": recent_experienced,
+        **({"recent_received_information": recent_received}
+           if recent_received else {}),
+        **({"recent_conclusions": recent_conclusions}
+           if recent_conclusions else {}),
         "recalled_old_memories": recalled_projected,
         # First-hand only. What reached this character through someone else's
         # account, and what they worked out for themselves, are carried

@@ -74,6 +74,9 @@ def test_memory_carries_surface_valence_and_arousal(temp_db, monkeypatch):
     assert m["emotional_context"] == "afraid"
     assert abs(m["valence"] - (-0.6)) < 1e-9
     assert abs(m["arousal"] - 0.7) < 1e-9
+    assert m["content"] == "I said \"I won't do it.\""
+    assert "chose to" not in m["content"]
+    assert "attempted" not in m["content"]
 
 
 def test_memory_affect_defaults_to_zero_without_surface(temp_db, monkeypatch):
@@ -98,3 +101,56 @@ def test_memory_affect_defaults_to_zero_without_surface(temp_db, monkeypatch):
     prepare_memory_commit(ctx)
     own = [m for m in captured["memories"] if m.get("category") == "self"]
     assert own and own[0]["valence"] == 0.0 and own[0]["arousal"] == 0.0
+
+
+def test_witnessed_episode_replaces_duplicate_self_fragment(temp_db, monkeypatch):
+    chat_id, char_id, cast = _story(temp_db)
+    captured = _capture_batch(monkeypatch)
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Test", persona_id=None,
+                      lorebook_id=None, scenario="", created=time.time()),
+        turn=TurnData(id=101, chat_id=chat_id, idx=5,
+                      player_input="leave", created=time.time()),
+        cast=cast, input="leave",
+        director_resolve={"resolved_event": "Vorne leaves.", "dialogue_log": []},
+    )
+    ctx.character_results = {char_id: {
+        "salience": 0.9,
+        "sequence": [{"type": "action", "attempt": "pull away from the kiss"}],
+        "active_state": {"mood": "resolved"},
+    }}
+    ctx.perception_outcome = {"views": {
+        str(char_id): "You pull away from the kiss and draw a clean breath."}}
+
+    prepare_memory_commit(ctx)
+    mems = captured["memories"]
+
+    assert [m["category"] for m in mems] == ["episode"]
+    assert mems[0]["content"] == (
+        "You pull away from the kiss and draw a clean breath.")
+
+
+def test_inference_memory_omits_empty_evidence_and_duplicate_subject(
+        temp_db, monkeypatch):
+    chat_id, char_id, cast = _story(temp_db, "Elyra")
+    captured = _capture_batch(monkeypatch)
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Test", persona_id=None,
+                      lorebook_id=None, scenario="", created=time.time()),
+        turn=TurnData(id=102, chat_id=chat_id, idx=6,
+                      player_input="watch", created=time.time()),
+        cast=cast, input="watch",
+        director_resolve={"resolved_event": "Hinami pauses.", "dialogue_log": []},
+    )
+    ctx.character_results = {char_id: {"mind_model_updates": [{
+        "about_entity": "Hinami", "claim": "Hinami wants distance",
+        "confidence": 0.6, "evidence": [{"fact": ""}, {}],
+    }]}}
+
+    prepare_memory_commit(ctx)
+    inference = next(m for m in captured["memories"]
+                     if m["category"] == "inference")
+
+    assert inference["content"] == "Hinami wants distance."
+    assert "About Hinami: Hinami" not in inference["content"]
+    assert "Evidence:" not in inference["content"]

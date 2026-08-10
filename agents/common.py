@@ -354,6 +354,7 @@ def _merge_character_results(existing, new):
         "remember_lines",
         "memory_disputes",
         "memory_effects",
+        "contact_ops",
     ):
         combined = _concat_dedup(existing.get(field), new.get(field))
         if combined or field in existing or field in new:
