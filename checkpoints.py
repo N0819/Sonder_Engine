@@ -119,6 +119,14 @@ def snapshot_state(chat_id):
          "seed": r["seed"], "status": r["status"]}
         for r in q("SELECT * FROM scheduled_events WHERE chat_id=?", (chat_id,))
     ]
+    world_events = [
+        {"event_id": r["event_id"], "turn_id": r["turn_id"],
+         "frame_id": r["frame_id"], "occurred_at": r["occurred_at"],
+         "duration_seconds": r["duration_seconds"], "kind": r["kind"],
+         "location_id": r["location_id"], "payload": r["payload"],
+         "seed": r["seed"], "committed": r["committed"]}
+        for r in q("SELECT * FROM world_events WHERE chat_id=?", (chat_id,))
+    ]
     room_registry = [
         {"room_uid": r["room_uid"], "owning_book_id": r["owning_book_id"],
          "parent_entity": r["parent_entity"], "name": r["name"],
@@ -154,6 +162,7 @@ def snapshot_state(chat_id):
         "world_placements": world_placements,
         "world_conditions": world_conditions,
         "scheduled_events": scheduled,
+        "world_events": world_events,
         "room_registry": room_registry,
         "fiction_worlds": fiction_worlds,
         "fiction_locations": fiction_locations,
@@ -339,7 +348,7 @@ def _restore_chat_personas(chat_id, personas):
            (chat_id, p["persona_id"], p.get("status", "active"), p.get("frame_id")))
 
 def insert_world_tables(chat_id, b, delete_first=False):
-    """Insert the six normalized world_* arrays from blob dict `b` into
+    """Insert the normalized world-state arrays from blob dict `b` into
     chat_id's tables. Ids in `b` are assumed already remapped for the
     target chat (checkpoint restore restores same-chat verbatim; branch/
     import remap first). `delete_first` clears the chat's existing rows
@@ -383,6 +392,17 @@ def insert_world_tables(chat_id, b, delete_first=False):
            (ev["event_id"], chat_id, ev["due_at"], ev["kind"],
             ev.get("location_id"), ev.get("payload", "{}"),
             ev.get("seed", ""), ev.get("status", "pending")))
+
+    if delete_first:
+        qi("DELETE FROM world_events WHERE chat_id=?", (chat_id,))
+    for ev in b.get("world_events") or []:
+        qi("""INSERT INTO world_events(event_id,chat_id,turn_id,frame_id,
+            occurred_at,duration_seconds,kind,location_id,payload,seed,committed)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+           (ev["event_id"], chat_id, ev.get("turn_id"), ev.get("frame_id"),
+            ev["occurred_at"], ev.get("duration_seconds", 0.0), ev["kind"],
+            ev.get("location_id"), ev.get("payload", "{}"), ev.get("seed"),
+            ev.get("committed", time.time())))
 
     if delete_first:
         qi("DELETE FROM room_registry WHERE chat_id=?", (chat_id,))

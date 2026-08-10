@@ -1955,7 +1955,8 @@ def _normalize_diff_shape(sd):
             sd[k] = {}
     for k in ("cast_changes", "world_facts", "introductions", "following_ops",
               "remove_entities", "remove_rooms", "remove_adjacent",
-              "inventory_ops", "contact_ops", "claim_dispositions"):
+              "inventory_ops", "contact_ops", "claim_dispositions",
+              "consequences", "offscreen_plan_ops"):
         if not isinstance(sd.get(k), list):
             sd[k] = []
     sd.setdefault("time", None)
@@ -3637,10 +3638,20 @@ def director_resolve(ctx, nonce):
     # same room the same way. Delivered to THIS payload only: no character
     # receives it; what a mind knows about a room rides its own gap record.
     _destination_residue = None
+    _offscreen_planning = {"enabled": False, "plans": []}
+    try:
+        from living_world import living_world_allows, living_world_config
+        _living_cfg = living_world_config(chat["id"])
+        _offscreen_planning["enabled"] = living_world_allows(
+            _living_cfg, "antagonist_ladder", "floor")
+        if _offscreen_planning["enabled"]:
+            _offscreen_planning["plans"] = (
+                wget(chat["id"], "offscreen_plans", []) or [])[:8]
+    except Exception as exc:
+        ctx.add_warning(f"offscreen plan context skipped: {exc}")
     if _mv_target:
         try:
-            from living_world import living_world_allows, living_world_config
-            if living_world_allows(living_world_config(chat["id"]),
+            if living_world_allows(_living_cfg,
                                    "routine_residue", "floor"):
                 from routines import residue_for
                 _destination_residue = residue_for(
@@ -3739,6 +3750,7 @@ def director_resolve(ctx, nonce):
         "dialogue_mode": bool(flow.get("dialogue_mode", False)),
         "relevant_lore": lore_for(ctx),
         "standing_intentions": raw_intents[:12],
+        "offscreen_planning": _offscreen_planning,
         "pending_obligations": pending_obligation_view(chat["id"], turn["idx"]),
         # F5: the world-pressure ledger -- every open ongoing off-character
         # process, each of which the prompt's WORLD PRESSURE rule requires

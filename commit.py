@@ -1862,6 +1862,13 @@ def prepare_scene_commit(ctx):
     # mutating the shared dict would desync it from what was saved.
     diff = copy.deepcopy(res.get("state_diff") or {})
     prev_scene = wget(cid, "scene", {}) or {}
+    # Carried beside prev_scene for the off-screen epoch. Once the scene
+    # domain writes the new clock, a later commit domain cannot recover which
+    # coarse time boundary THIS beat crossed. Keep the exact pre-turn value in
+    # the prepared bundle instead of opening a second clock authority.
+    prev_clock = copy.deepcopy(wget(
+        cid, "simulation_clock", {"elapsed_seconds": 0.0, "display": "now"}
+    ) or {"elapsed_seconds": 0.0, "display": "now"})
     destruction = _prepare_destruction(
         cid, prev_scene, diff, add_warning=ctx.add_warning)
     room_renames = dedup_minted_rooms(
@@ -2134,7 +2141,7 @@ def prepare_scene_commit(ctx):
     if diff.get("time"):
         td = diff["time"]
         if isinstance(td, dict):
-            clock = wget(cid, "simulation_clock", {"elapsed_seconds": 0.0, "display": "now"})
+            clock = copy.deepcopy(prev_clock)
             clock["elapsed_seconds"] = float(td.get("end_seconds", clock.get("elapsed_seconds", 0.0)))
             if td.get("display_advance"):
                 clock["display"] = td["display_advance"]
@@ -2222,6 +2229,7 @@ def prepare_scene_commit(ctx):
         # see _subjects_that_moved, which silently found nobody moving until
         # it was given this.
         "prev_scene": prev_scene,
+        "prev_clock": prev_clock,
         "room_registry": _prepare_room_registry(
             cid, chat.lorebook_id, prev_scene, sc),
         "destruction": destruction,
@@ -2339,6 +2347,7 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
         row_by_id = {row["event_id"]: row for row in pending}
         fired = scheduled = expired = news_fired = consequences_fired = 0
         fired_consequence_rows = []
+        fired_events = []
         for op in event_ops:
             if op[0] == "status":
                 _, event_id, status = op
@@ -2350,6 +2359,15 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
                     "WHERE chat_id=? AND event_id=?",
                     (status, cid, event_id))
                 if status == "fired":
+                    if event_id in row_by_id:
+                        fired_events.append({
+                            "event_id": event_id,
+                            "kind": row_by_id[event_id]["kind"],
+                            "location_id": row_by_id[event_id]["location_id"],
+                            "occurred_at": row_by_id[event_id]["due_at"],
+                            "payload": row_by_id[event_id]["payload"],
+                            "seed": row_by_id[event_id]["seed"],
+                        })
                     if kind_by_id.get(event_id) == "news_arrival":
                         news_fired += 1
                     elif kind_by_id.get(event_id) == "consequence":
@@ -2432,7 +2450,64 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
     return {"fired": fired, "scheduled": scheduled, "expired": expired,
             "news_fired": news_fired,
             "consequences_fired": consequences_fired,
-            "consequences_minted": consequences_minted, "notices": notices}
+            "consequences_minted": consequences_minted,
+            "fired_events": fired_events, "notices": notices}
+
+
+def commit_world_event_spine(ctx, transit_result):
+    """Promote fired mechanics rows into checkpointed objective history.
+
+    ``scheduled_events`` answers what is still due; ``world_events`` answers
+    what objectively happened. This seam is deliberately downstream of the
+    mechanics adjudication and cannot invent an event. Stable ids make a
+    repeated landing harmless, while the containing turn transaction and the
+    table's checkpoint/branch/archive plumbing make reroll authoritative.
+    """
+    rows = []
+    for fired in (transit_result or {}).get("fired_events") or []:
+        if not isinstance(fired, dict) or not fired.get("event_id"):
+            continue
+        raw_payload = fired.get("payload")
+        try:
+            payload = json.loads(raw_payload or "{}") \
+                if isinstance(raw_payload, str) else copy.deepcopy(raw_payload or {})
+        except (json.JSONDecodeError, TypeError):
+            payload = {"detail": str(raw_payload or "")[:500]}
+        if not isinstance(payload, dict):
+            payload = {"detail": payload}
+        payload["source_event_id"] = str(fired["event_id"])
+        world_event_id = stable_event_key(
+            "world_event", ctx.chat.id, ctx.turn.frame_id, fired["event_id"])
+        if q("SELECT 1 FROM world_events WHERE chat_id=? AND event_id=?",
+             (ctx.chat.id, world_event_id), one=True):
+            continue
+        qtx(
+            "INSERT OR IGNORE INTO world_events("
+            "event_id,chat_id,turn_id,frame_id,occurred_at,duration_seconds,"
+            "kind,location_id,payload,seed,committed) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (world_event_id, ctx.chat.id, ctx.turn.id, ctx.turn.frame_id,
+             float(fired.get("occurred_at") or 0.0), 0.0,
+             str(fired.get("kind") or "event"), fired.get("location_id"),
+             json.dumps(payload, ensure_ascii=False), fired.get("seed"),
+             time.time()),
+        )
+        rows.append({
+            "event_id": world_event_id,
+            "source_event_id": str(fired["event_id"]),
+            "kind": str(fired.get("kind") or "event"),
+            "location_id": fired.get("location_id"),
+        })
+    return {"offered": len((transit_result or {}).get("fired_events") or []),
+            "written": len(rows), "events": rows}
+
+
+def commit_information_carriers(ctx, prepared_scene, world_event_result):
+    """Acquire/move character-owned public reports after memory state lands."""
+    from carriers import advance_carriers
+
+    return advance_carriers(
+        ctx, (prepared_scene or {}).get("scene") or {}, world_event_result)
 
 # ---- Cast changes ----
 
@@ -4433,22 +4508,6 @@ def commit_mapping(ctx, nonce, *, prepared=None):
         ctx.add_warning(
             f"discarded {len(_volunteered)} model-volunteered off-screen "
             "tick(s): ticks are drawn seeded, not authored")
-    # The stochastic rung, as specified: a seeded draw against standing
-    # intentions at scene boundaries, no model call, replayable from the
-    # logged seed. Gated on the same ladder rung the model ticks used to be.
-    if ctx.director_establish:
-        from scene import dialogue_config as _dlg_cfg, offscreen_life_allows as _allows
-        _cfg = _dlg_cfg(cid) or {}
-        _cap = int(_cfg.get("max_offscreen_actors", 3) or 0)
-        if _allows(_cfg.get("offscreen_life"), "stochastic") and _cap > 0:
-            import offscreen as _offscreen
-            _ticks = _offscreen.stochastic_ticks(
-                seed, _offscreen.dormant_subjects(cid, turn.frame_id),
-                wget(cid, "standing_intentions", []) or [], _cap)
-            if _ticks:
-                _offscreen.append_offscreen_log(
-                    cid, turn.idx, seed, _ticks, rung="stochastic")
-
     known = wget(cid, "known", {})
     # WIDE for resolution: an introduction naming an offscreen person is still
     # a sentence about a real person, and dropping it silently is the defect.
@@ -6250,6 +6309,28 @@ def commit_authored_events(ctx, nonce):
             "minted": minted}
 
 
+def commit_offscreen_epoch(ctx, prepared_scene, transit_result):
+    """Advance the shared off-screen epoch inside the turn transaction.
+
+    Kept as a named commit domain instead of an inline import so the generated
+    code map, failure warning, and pipeline trace all expose this persistence
+    boundary. The implementation is pure/deterministic plus world-KV writes;
+    model-priced work remains at the post-commit tail.
+    """
+    from offscreen import advance_epoch
+
+    return advance_epoch(ctx, prepared_scene, transit_result)
+
+
+def commit_offscreen_plans(ctx, prepared_scene):
+    """Apply Director-adjudicated, character-grounded reactive plan ops."""
+    from offscreen import apply_plan_ops
+
+    clock = (prepared_scene.get("clock")
+             or wget(ctx.chat.id, "simulation_clock", {}) or {})
+    return apply_plan_ops(ctx, prepared_scene.get("scene") or {}, clock)
+
+
 def commit_all(ctx, nonce):
     """Commit one turn exactly once and atomically.
 
@@ -6300,6 +6381,11 @@ def _commit_all_locked(ctx, nonce):
                     ctx, nonce, prepared=prepared["scene"]),
             )
             _commit_domain(
+                ctx, results, "world_events",
+                lambda: commit_world_event_spine(
+                    ctx, results.get("transit") or {}),
+            )
+            _commit_domain(
                 ctx, results, "scene",
                 lambda: commit_scene(ctx, nonce, prepared=prepared["scene"]),
             )
@@ -6328,10 +6414,29 @@ def _commit_all_locked(ctx, nonce):
                 lambda: commit_mapping(ctx, nonce, prepared=prepared["mapping"]),
             )
             _commit_domain(
+                ctx, results, "offscreen_plans",
+                lambda: commit_offscreen_plans(ctx, prepared["scene"]),
+            )
+            # A first-class frame-scoped epoch, after mapping so a freshly
+            # validated standing intention can participate, but independent of
+            # mapping's skip path. `director_establish` is an opening-stage
+            # result, not a scene-boundary event; leaving ticks in
+            # commit_mapping made the documented mechanism fire once per chat.
+            _commit_domain(
+                ctx, results, "offscreen_epoch",
+                lambda: commit_offscreen_epoch(
+                    ctx, prepared["scene"], results.get("transit") or {}),
+            )
+            _commit_domain(
                 ctx, results, "memories",
                 lambda: commit_memories(
                     ctx, nonce, prepared=prepared["memories"], consolidate=False,
                 ),
+            )
+            _commit_domain(
+                ctx, results, "information_carriers",
+                lambda: commit_information_carriers(
+                    ctx, prepared["scene"], results.get("world_events") or {}),
             )
             _commit_domain(
                 ctx, results, "background_presences",
@@ -6390,7 +6495,8 @@ def _commit_all_locked(ctx, nonce):
     try:
         import offscreen as _offscreen
 
-        job = _offscreen.schedule_profile_ticks(ctx)
+        job = _offscreen.schedule_profile_ticks(
+            ctx, results.get("offscreen_epoch") or {})
         results["offscreen_ticks"] = job.as_dict() if job else None
     except Exception as exc:
         ctx.add_warning(f"offscreen tick scheduling failed: {exc}")

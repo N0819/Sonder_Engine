@@ -577,6 +577,8 @@ def _build_world_id_remap(blob, protected_ids=None):
         reg(cond.get("condition_id"))
     for ev in blob.get("scheduled_events") or []:
         reg(ev.get("event_id"))
+    for ev in blob.get("world_events") or []:
+        reg(ev.get("event_id"))
     for fw in blob.get("fiction_worlds") or []:
         reg(fw.get("world_id"))
     for fl in blob.get("fiction_locations") or []:
@@ -603,7 +605,7 @@ def _apply_world_id_remap(blob, remap):
         return obj
 
     for key in ("world_entities", "world_placements", "world_conditions",
-                "scheduled_events", "room_registry",
+                "scheduled_events", "world_events", "room_registry",
                 "fiction_worlds", "fiction_locations"):
         if blob.get(key):
             blob[key] = deep_remap(blob[key])
@@ -814,6 +816,13 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
         if "retired_turn_id" in ent:
             ent["retired_turn_id"] = turn_idmap.get(ent.get("retired_turn_id"))
 
+    # Objective events are frame facts and their turn is a local FK. Both
+    # integer ids must follow branch/import remapping independently of the
+    # string world-id pass below.
+    for ev in blob.get("world_events") or []:
+        ev["turn_id"] = turn_idmap.get(ev.get("turn_id"))
+        ev["frame_id"] = frame_idmap.get(ev.get("frame_id"))
+
     # room_registry rows embed turn FKs (same rule as world_entities) plus
     # the owning book's INTEGER id, which the generic string remap below
     # never touches -- remap it through bookmap (None when the book wasn't
@@ -828,7 +837,7 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
 
     if world_id_remap:
         for key in ("world_entities", "world_placements", "world_conditions",
-                    "scheduled_events", "room_registry",
+                    "scheduled_events", "world_events", "room_registry",
                     "fiction_worlds", "fiction_locations"):
             if blob.get(key):
                 blob[key] = _deep_remap_ids(blob[key], world_id_remap)
@@ -4004,7 +4013,7 @@ def turn_branch(tid: int):
         world_tables = json.loads(json.dumps({
             k: (blob.get(k) or [])
             for k in ("world_entities", "world_placements", "world_conditions",
-                      "scheduled_events", "room_registry",
+                      "scheduled_events", "world_events", "room_registry",
                       "fiction_worlds", "fiction_locations")
         }))
         if world_id_remap:
@@ -4014,6 +4023,9 @@ def turn_branch(tid: int):
         for ent in world_tables["world_entities"]:
             ent["created_turn_id"] = idmap.get(ent.get("created_turn_id"))
             ent["retired_turn_id"] = idmap.get(ent.get("retired_turn_id"))
+        for ev in world_tables["world_events"]:
+            ev["turn_id"] = idmap.get(ev.get("turn_id"))
+            ev["frame_id"] = frame_idmap.get(ev.get("frame_id"))
         # room_registry: turn FKs through the branch turn idmap; the owning
         # book's integer id through bookmap (parent_entity already followed
         # the entity remap via _deep_remap_ids above).

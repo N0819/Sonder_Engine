@@ -48,7 +48,7 @@ function defaultCharacterSheet() {
   return {
     identity: { name: "New Character", aliases: [], pronouns: { subject: "they", object: "them", possessive: "their" } },
     initial_outfit: { regions: {} },
-    simulation: { tier: "mid", temperature: 0.8, sampler: {} },
+    simulation: { tier: "mid", temperature: 0.8, sampler: {}, offscreen_agent: false },
     embodiment: { senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", notes: "ordinary human senses" }], visible: { summary: "A person of unremarkable appearance.", build: "", face: "", hair: "", eyes: "", distinctive_features: [] }, latent: [], interoception: { acuity: 0.5, pain_sensitivity: 0.5, fatigue_sensitivity: 0.5, pleasure_sensitivity: 0.5 } },
     psychology: { drive: { essence: "", expression: "", taboo: "" }, capacity: "", traits: [], values: [], self_model: { summary: "", protected_beliefs: [], pride_triggers: [], shame_triggers: [], beliefs: [] }, coping: { under_stress: [], default_conflict_style: "", strategies: [], recovery_supports: [] }, stress_profile: { baseline_reactivity: 0.5, recovery_rate: 0.5, overload_threshold: 0.8, attentional_style: "", somatic_signs: [] }, learning: { associations: [] } },
     social: { voice: { register: "", cadence: "", verbosity: "natural", markers: [], notes: "" }, baseline_stances: { unknown_person: { trust: 0, warmth: 0, threat_sensitivity: 0 } } },
@@ -246,6 +246,10 @@ function charEditor(c, options = {}) {
   );
   f.tier = fSelect("Tier", [["bg", "background"], ["mid", "recurring"], ["major", "major/antagonist"]], sheet.simulation?.tier);
   f.temperature = fNum("Temperature (0.5–1.1)", sheet.simulation?.temperature, "0.05");
+  f.offscreen_agent = el("label", { class: "tgl", style: "margin-top:8px" },
+    el("input", { type: "checkbox" }),
+    " Allow this character to act autonomously while off screen");
+  f.offscreen_agent.querySelector("input").checked = Boolean(sheet.simulation?.offscreen_agent);
 
   f.summary = fArea(
     "Body appearance — stable visible features, excluding clothing",
@@ -412,7 +416,11 @@ function charEditor(c, options = {}) {
           + "nothing covers it, and is used only when it has been switched "
           + "on in Settings."),
         fillAppearance,
-        f.tier.node, f.temperature.node),
+        f.tier.node, f.temperature.node, f.offscreen_agent,
+        el("div", { class: "small dim" },
+          "Opt-in only. It does nothing unless this story also enables the "
+          + "character-agent ceiling; off-screen decisions use only this "
+          + "character's own carried knowledge.")),
       el("details", { open: "" }, el("summary", {}, "Embodiment (Visible & Senses)"),
         f.summary.node, f.senses.node, f.build.node, f.face.node, f.hair.node,
         f.eyes.node, f.distinctive.node, f.latent.node,
@@ -470,7 +478,9 @@ function charEditor(c, options = {}) {
             // sent from here -- two authored copies of one outfit is how the
             // ledger ends up saying different things about the same body.
             initial_outfit: { regions: f.outfit_regions.read() },
-            simulation: { tier: f.tier.read(), temperature: f.temperature.read(), sampler: {} },
+            simulation: { tier: f.tier.read(), temperature: f.temperature.read(),
+              sampler: {},
+              offscreen_agent: f.offscreen_agent.querySelector("input").checked },
             embodiment: {
               senses: f.senses.read(),
               visible: { summary: f.summary.read(), build: f.build.read(), face: f.face.read(), hair: f.hair.read(), eyes: f.eyes.read(), distinctive_features: f.distinctive.read() },

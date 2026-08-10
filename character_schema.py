@@ -418,7 +418,7 @@ def default_character_data(name: str = "Unnamed") -> dict:
         },
         "initial_outfit": {"wearing": [], "state": [], "regions": {}},
         "simulation": {"tier": "mid", "temperature": 0.8, "sampler": {},
-                       "curiosity": 0.5},
+                       "curiosity": 0.5, "offscreen_agent": False},
         "embodiment": {
             "senses": [
                 {"channel": "vision", "acuity": "ordinary", "range": "ordinary", "notes": ""},
@@ -911,6 +911,7 @@ def normalize_character_data(value: dict) -> dict:
             "tier": str(value.get("tier") or "mid"),
             "temperature": _float_or(value.get("temperature"), 0.8),
             "sampler": copy.deepcopy(value.get("sampler") or {}),
+            "offscreen_agent": bool(value.get("offscreen_agent", False)),
         },
         "embodiment": {
             "senses": _legacy_senses(value.get("senses")),
@@ -1058,6 +1059,12 @@ def character_name_from_text(sheet_text: str | None) -> str:
 
 def character_tier(sheet: dict) -> str:
     return str(normalize_character_data(sheet).get("simulation", {}).get("tier", "mid"))
+
+
+def character_offscreen_agent(sheet: dict) -> bool:
+    """Author-owned opt-in for the paid off-screen character ceiling."""
+    return bool(normalize_character_data(sheet).get(
+        "simulation", {}).get("offscreen_agent", False))
 
 
 def cast_entity_id(sheet: dict, char_id) -> str:

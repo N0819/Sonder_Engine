@@ -1,11 +1,11 @@
 # The living world — five state-producers, each with a floor and a ceiling
 
-Status: **phase 1 landed** (branch `living-floors`): the deterministic
-floors of A, B and D, the settings surface for all five (the
+Status: **deterministic/reactive floors A–E landed**: A, B and D's original
+floors, C's physical first-person carrier envelopes, E's bounded typed-plan executor, the settings surface for all five (the
 `LIVING_WORLD_*` ladder in `living_world.py`, declared/built split per the
 `OFFSCREEN_LIFE_BUILT` idiom), and the §6 profile-rung output-shape fix.
-**C and E are deliberately held for phase 2**, behind the epistemic-leak
-audit — see §9, which also records the author's constraints on rumor
+**C's crowd/message/degradation layers and E's adaptive ceiling remain held for later phases**, behind the
+epistemic-leak audit — see §9, which also records the author's constraints on rumor
 propagation verbatim, because they are design commitments the phase-1
 shapes were built to honour. The question this document answers: *a high fidelity but low cost illusion of the world moving around
 you* — several genuinely different routes to it, each rated on **two axes
@@ -246,6 +246,18 @@ state a room simply contains). Every surfaced item routes through
 `background_claims` with claimant credence `[read]`, so wrongness is
 diegetic: the drunk's version reads as a drunk's version.
 
+**Built first physical slice `[read]`.** `carriers.advance_carriers` emits only
+the non-empty public `witnessed` surface of a newly promoted `world_events`
+row, and only into the frame-specific state of a registered character whose
+body is at that location. The envelope then moves because that holder's scene
+position moves; another character in the destination receives nothing by
+proximity. Only the holder's private agent payload sees it, so transmission to
+a listener must occur on-page through the existing speech/perception/memory
+path. This supplies E's knowledge firewall now. Anonymous crowds/messages,
+explicit copying, graph fan-out, and subtractive degradation at each copy are
+extensions to this minimum physical floor; do not relabel objective event
+existence as knowledge to skip them.
+
 **Ceiling — authored artifacts.** When an item propagates to a
 surface-bearing location, one small out-of-band call mints the artifact's
 actual text — the proclamation's wording, the bill's clumsy woodcut caption
@@ -352,20 +364,21 @@ so they know what has reached them, at latency, and nothing else. Sometimes
 wrong about where you are, occasionally beaten by slow information: the
 engine's thesis, in one character.
 
-**Rung 1 — the tracked plan (floor).** Authored or Director-adjudicated
-stages with preconditions and seeded due-draws. Advancement is deterministic
-state mutation — stage 3 reached, intention updated, fuses minted into B —
-zero calls. **Adaptation calls only** (§0.3): when C's news intersects the
-track's assumptions (a deterministic check), the character declares from
-psychology and the Director adjudicates — ~2 calls per dramatic event
-`[estimate]`, producing a revised track. The player gets a real, losable
-race; the villain is a clock with a knife.
+**Rung 1 — the tracked plan (floor; reactive executor built `[read]`).** A
+present character's explicit declaration may be Director-adjudicated into at
+most six typed stages. Commit checks that the stored basis came from that
+character's result on the same beat; absent minds cannot be assigned an
+objective. Time or fired-event triggers advance the stage deterministically and
+may mint only the consequence effect adjudicated when the plan opened — zero
+calls at firing. This is a clock with a knife, not yet a schemer: assumption
+intersection and adaptive track revision still wait on C.
 
-**Rung 2 — `reactive` (declared in the ladder, unbuilt `[read]`).**
-Triggers without an autonomous plan: the trap in the empty room, the
-standing order that fires when its condition does. Near-free — the
-deterministic half of rung 1 without the track. Worth wiring mostly because
-the ladder already promises it.
+**Rung 2 — `reactive` (built `[read]`).** This is the authority ceiling used by
+the tracked-plan floor above: triggers execute authored stages without an
+autonomous decision. It is frame-scoped and checkpointed, capped at eight
+plans/six stages and three fires per epoch. A crossed stage deadline creates an
+epoch even inside an hour bucket. It cannot inspect undelivered player state,
+revise an objective, or invent an effect at firing.
 
 **Rung 3 — the full `character_agent` tick (the ceiling, costed as
 asked).** The proposal's §1.0.1a reduced turn, per acting character per
@@ -400,14 +413,16 @@ the architecture's named failure mode is rebuilt. *The unfair loss*: a race
 lost without an evidence trail reads as the engine cheating — **E without B
 and C is worse than no E**; rumors, prices, patrols and refugees are what
 make the loss a tragedy instead of a gotcha. *The tier that never fires*:
-this ladder's own history — `reactive` and `character_agent` are permission
-with no behaviour today `[read]` — which is why E sits behind the
-measurement gate regardless of budget.
+commit metrics and `tools/fire_rates.py` now retain offered/accepted ops,
+considered/fired stages, and effect opportunities/mints; `character_agent`
+remains permission with no behavior. E's adaptive ceiling therefore stays
+behind the measurement and carrier gates regardless of budget.
 
-**Substrate.** `standing_intentions` (plumbed to the Director, advanced by
-nothing `[read]`), `jobs.py`, the seeded-draw discipline, B and C. New: the
-track object, the intersection check, the reduced-turn producer, the
-adjudication seam, offscreen memory commit. The genuinely novel work in
+**Substrate.** Built floor: `offscreen_plans`, `offscreen_epoch`, the same-beat
+grounding check, B's consequence validator, and the checkpoint-safe
+`world_events` objective spine. Still new: C, the assumption
+intersection check, per-character opt-in, reduced-turn producer, adaptive
+adjudication seam, and offscreen memory commit. The genuinely novel work in
 this document, and the least of it is code.
 
 ---

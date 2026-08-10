@@ -47,7 +47,8 @@ CREATE TABLE chat_chars (chat_id INT, char_id INT, status TEXT, state TEXT,
 """
 
 
-def _db(tmp_path, turns=(), results_by_turn=None, memories=(), states=()):
+def _db(tmp_path, turns=(), results_by_turn=None, commit_by_turn=None,
+        memories=(), states=()):
     """A corpus small enough to reason about by hand."""
     path = tmp_path / "corpus.db"
     con = sqlite3.connect(path)
@@ -63,6 +64,13 @@ def _db(tmp_path, turns=(), results_by_turn=None, memories=(), states=()):
         con.execute(
             "INSERT INTO variants (step_id, content, active) VALUES (?,?,1)",
             (step_id, json.dumps({"character_results": results})))
+    for tid, content in (commit_by_turn or {}).items():
+        step_id += 1
+        con.execute("INSERT INTO steps (id, turn_id, key) VALUES (?,?,?)",
+                    (step_id, tid, "commit"))
+        con.execute(
+            "INSERT INTO variants (step_id, content, active) VALUES (?,?,1)",
+            (step_id, json.dumps(content)))
     for row in memories:
         con.execute(
             "INSERT INTO memories (chat_id, char_id, turn_id, salience, "
@@ -225,6 +233,52 @@ class TestCapacity:
                                  "former_projects": [{"id": "p1"}]}}),
         ])
         assert _by_name(_collect(path))["has ever held a project"]["fired"] == 1
+
+
+class TestOffscreenDenominators:
+    def test_pre_epoch_commits_are_not_counted_as_chances(self, tmp_path):
+        path = _db(
+            tmp_path,
+            turns=[(1, 1, 0), (2, 1, 1), (3, 1, 2)],
+            commit_by_turn={
+                1: {"results": {"scene": {}}},
+                2: {"results": {"offscreen_epoch": {
+                    "opportunity": False, "eligible": False,
+                    "actors_considered": 0, "stochastic_fired": 0,
+                }}},
+                3: {"results": {"offscreen_epoch": {
+                    "opportunity": True, "eligible": True,
+                    "actors_considered": 2, "stochastic_fired": 1,
+                    "profile_opportunity": True, "profile_candidates": 1,
+                    "profile_scheduled": True,
+                    "reactive_considered": 2, "reactive_fired": 1,
+                    "reactive_effect_opportunities": 1,
+                    "reactive_effects_minted": 1,
+                }, "offscreen_plans": {
+                    "offered": 2, "applied": 1, "active": 1,
+                }, "information_carriers": {
+                    "events_offered": 3, "public_surfaces": 2,
+                    "carrier_opportunities": 2, "acquired": 1,
+                }}},
+            },
+        )
+        rows = _by_name(_collect(path))
+        assert (rows["world epoch opportunity"]["fired"],
+                rows["world epoch opportunity"]["chances"]) == (1, 2)
+        assert (rows["seeded tick batch wrote events"]["fired"],
+                rows["seeded tick batch wrote events"]["chances"]) == (1, 1)
+        assert (rows["profile job scheduled"]["fired"],
+                rows["profile job scheduled"]["chances"]) == (1, 1)
+        assert (rows["reactive plan op accepted"]["fired"],
+                rows["reactive plan op accepted"]["chances"]) == (1, 2)
+        assert (rows["reactive stage fired"]["fired"],
+                rows["reactive stage fired"]["chances"]) == (1, 2)
+        assert (rows["reactive effect minted"]["fired"],
+                rows["reactive effect minted"]["chances"]) == (1, 1)
+        assert (rows["public event surface emitted"]["fired"],
+                rows["public event surface emitted"]["chances"]) == (2, 3)
+        assert (rows["character acquired carried report"]["fired"],
+                rows["character acquired carried report"]["chances"]) == (1, 2)
 
 
 class TestSalienceShape:

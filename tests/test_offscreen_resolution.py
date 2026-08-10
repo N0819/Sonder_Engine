@@ -14,13 +14,13 @@ import time
 from offscreen import (
     IMPORTANCE_LEVELS,
     OVERRIDE_FIELD,
-    TICK_CADENCE_TURNS,
     derived_importance,
     importance_for,
     resolution_for,
     stochastic_ticks,
     subject_distance,
-    tick_due,
+    EPOCH_SECONDS,
+    epoch_reasons,
 )
 
 
@@ -312,9 +312,9 @@ class TestTheLogHasOneDoor:
     def test_commit_writes_through_the_helper(self):
         import inspect
 
-        import commit
+        import offscreen
 
-        src = inspect.getsource(commit.commit_mapping)
+        src = inspect.getsource(offscreen.advance_epoch)
         assert "append_offscreen_log" in src
         assert 'wset(cid, "offscreen_log"' not in src
 
@@ -364,21 +364,109 @@ class TestTheLogHasOneDoor:
         assert append_offscreen_log(cid, 7, "s", [bad]) == []
         assert wget(cid, "offscreen_log", []) == []
 
+    def test_the_same_epoch_batch_cannot_land_twice(self, temp_db):
+        from db import wget
+        from offscreen import append_offscreen_log
+
+        cid = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("Test", "", time.time()))
+        event = {
+            "disposition": "provisional",
+            "subject": {"kind": "character", "id": "mora_11ab"},
+            "basis": "deterministic", "actor": "mora_11ab",
+            "tick": "she carried on",
+        }
+        assert len(append_offscreen_log(cid, 7, "epoch_same", [event])) == 1
+        assert append_offscreen_log(cid, 7, "epoch_same", [event]) == []
+        assert len(wget(cid, "offscreen_log", [])) == 1
+
+
+class TestEpochCheckpointDiscipline:
+    def test_epoch_and_log_restore_with_the_turn_checkpoint(self, temp_db):
+        """Both are diegetic frame state in world KV, so the foundational
+        whole-state checkpoint restores them atomically without a bespoke
+        side-channel serializer."""
+        from checkpoints import ensure_checkpoint, restore_checkpoint
+        from db import wget, wset
+
+        cid = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("Test", "", time.time()))
+        original_epoch = {"epoch_id": "epoch_before", "sequence": 2,
+                          "turn": 6}
+        original_log = [{"turn": 6, "seed": "epoch_before",
+                         "rung": "stochastic", "events": []}]
+        wset(cid, "offscreen_epoch", original_epoch)
+        wset(cid, "offscreen_log", original_log)
+        ensure_checkpoint(cid, 7)
+
+        wset(cid, "offscreen_epoch", {"epoch_id": "discarded", "sequence": 3})
+        wset(cid, "offscreen_log", original_log + [{"seed": "discarded"}])
+        restore_checkpoint(cid, 7)
+
+        assert wget(cid, "offscreen_epoch", {}) == original_epoch
+        assert wget(cid, "offscreen_log", []) == original_log
+
+    def test_an_old_job_cannot_land_after_restore_changes_the_epoch(self,
+                                                                    temp_db):
+        from db import wget, wset
+        from offscreen import land_profile_ticks
+
+        cid = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("Test", "", time.time()))
+        temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+            (cid, 9, "", time.time()))
+        wset(cid, "offscreen_epoch", {"epoch_id": "restored_epoch"})
+        events = [{
+            "disposition": "provisional",
+            "subject": {"kind": "character", "id": "mora_11ab"},
+            "basis": "model", "actor": "mora_11ab", "tick": "waited",
+        }]
+        assert land_profile_ticks(
+            cid, 9, events, epoch_id="discarded_epoch") == {
+                "written": 0, "discarded": 1}
+        assert wget(cid, "offscreen_log", []) == []
+
 
 class TestTheProducer:
-    """Section 1.0.2: produce on a cadence, out of band, in parallel with
+    """Section 1.0.2: produce on a world epoch, out of band, in parallel with
     turns — and a turn starting must never cancel an in-flight tick, because
     that makes the world's progress depend on player idleness (amendment 4)."""
 
-    def test_the_cadence_is_a_pure_function_of_the_turn_index(self):
-        """No wall clock, no unseeded RNG: rerun-from-stage and reroll must
-        not silently change whether the world was alive (BACKGROUND_LIFE
-        section 5's rule, applied to this cadence)."""
-        assert not tick_due(0)
-        assert [i for i in range(1, 10) if tick_due(i)] == [
-            i for i in range(1, 10) if i % TICK_CADENCE_TURNS == 0]
-        assert not tick_due(None)
-        assert not tick_due("soon")
+    def test_the_epoch_is_derived_from_canonical_edges_not_turn_count(self):
+        base = {"location": "Harbor"}
+        assert epoch_reasons(
+            turn_idx=8, previous_scene=base, scene=base,
+            previous_clock={"elapsed_seconds": 5},
+            clock={"elapsed_seconds": 3599}, transit_result={}) == []
+        assert epoch_reasons(
+            turn_idx=9, previous_scene=base, scene=base,
+            previous_clock={"elapsed_seconds": EPOCH_SECONDS - 1},
+            clock={"elapsed_seconds": EPOCH_SECONDS},
+            transit_result={}) == ["time"]
+        assert epoch_reasons(
+            turn_idx=10, previous_scene=base,
+            scene={"location": "Citadel"},
+            previous_clock={"elapsed_seconds": EPOCH_SECONDS},
+            clock={"elapsed_seconds": EPOCH_SECONDS},
+            transit_result={}) == ["location"]
+        assert epoch_reasons(
+            turn_idx=11, previous_scene=base, scene=base,
+            previous_clock={"elapsed_seconds": EPOCH_SECONDS},
+            clock={"elapsed_seconds": EPOCH_SECONDS},
+            transit_result={"consequences_fired": 1}) == ["due_event"]
+
+    def test_an_opening_is_an_epoch_but_an_upgrade_is_not(self):
+        assert epoch_reasons(
+            turn_idx=0, previous_scene={}, scene={"location": "Harbor"},
+            previous_clock={}, clock={}, transit_result={}) == ["opening"]
+        assert epoch_reasons(
+            turn_idx=40, previous_scene={"location": "Harbor"},
+            scene={"location": "Harbor"}, previous_clock={}, clock={},
+            transit_result={}) == []
 
     def test_the_producer_is_wired_at_the_commit_tail(self):
         """jobs.py had zero production consumers — a queue with no producer.
@@ -472,14 +560,18 @@ class TestTheProducer:
             "rooms": {"hall": {"adjacent": []}},
             "positions": {"The Stranger": "hall"},
         }, 7)
+        wset_for_frame(cid, "offscreen_epoch", {
+            "epoch_id": "epoch_frame_7", "turn": 3,
+        }, 7)
         monkeypatch.setattr(offscreen, "profile_candidates", lambda *a, **k: [
-            {"id": "guinan_7f3a", "display": "Guinan", "sheet": {}}])
+            {"id": "guinan_7f3a", "display": "Guinan", "sheet": {}},
+            {"id": "mora_11ab", "display": "Mora", "sheet": {}},
+        ])
         monkeypatch.setattr(
             offscreen, "profile_summary_record",
             lambda *a, **k: {
                 "disposition": "provisional",
-                "subject": {"kind": "character", "id": "guinan_7f3a",
-                            "display": "Guinan"},
+                "subject": a[2],
                 "basis": "deterministic",
                 # State, not prose: the profile rung emits fields and the
                 # stored `tick` is composed from them by code. Only the
@@ -507,7 +599,9 @@ class TestTheProducer:
         ctx = types.SimpleNamespace(
             chat=_Chat({"id": cid, "persona_id": None}),
             turn=types.SimpleNamespace(idx=3, id=1, frame_id=7))
-        assert offscreen.schedule_profile_ticks(ctx) is captured["job"]
+        assert offscreen.schedule_profile_ticks(ctx, {
+            "opportunity": True, "epoch_id": "epoch_frame_7",
+        }) is captured["job"]
 
         # Run the producer exactly as jobs._run would: on a bare thread
         # whose context never saw the turn's frame.
@@ -516,8 +610,11 @@ class TestTheProducer:
         worker.start()
         worker.join(10)
         assert not worker.is_alive()
-        assert wget_for_frame(cid, "offscreen_log", 7, []), \
+        framed_log = wget_for_frame(cid, "offscreen_log", 7, [])
+        assert framed_log, \
             "the tick must land in the frame it was scheduled from"
+        assert len(framed_log[0]["events"]) == 2, \
+            "every selected subject belongs to the one epoch batch"
         assert wget(cid, "offscreen_log", []) == [], \
             "the present frame's log took a nested frame's tick"
 

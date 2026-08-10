@@ -98,6 +98,7 @@ class ChatArchiveData(LenientModel):
     # imported story's checkpoints would restore with no vectors at all.
     memory_vectors: list[dict[str, Any]] = Field(default_factory=list)
     events: list[dict[str, Any]] = Field(default_factory=list)
+    world_events: list[dict[str, Any]] = Field(default_factory=list)
     checkpoints: list[dict[str, Any]] = Field(default_factory=list)
     lorebook: dict[str, Any] | None = None
     lorebooks: list[dict[str, Any]] = Field(default_factory=list)
@@ -115,6 +116,7 @@ class ChatArchiveData(LenientModel):
         "memory_summaries",
         "memory_vectors",
         "events",
+        "world_events",
         "checkpoints",
         "lorebooks",
         "chat_personas",
@@ -254,6 +256,7 @@ class ChatArchiveService:
         # Live normalized world tables keep world.scene/fixed_points aligned
         # with actual rows on the first post-import commit.
         for table in (
+            "world_events",
             "world_entities",
             "world_placements",
             "world_conditions",
@@ -901,6 +904,7 @@ class ChatArchiveService:
             world_tables = {
                 table: [dict(row) for row in data.get(table) or []]
                 for table in (
+                    "world_events",
                     "world_entities",
                     "world_placements",
                     "world_conditions",
@@ -917,6 +921,9 @@ class ChatArchiveService:
                 entity["retired_turn_id"] = turn_idmap.get(
                     entity.get("retired_turn_id")
                 )
+            for event in world_tables["world_events"]:
+                event["turn_id"] = turn_idmap.get(event.get("turn_id"))
+                event["frame_id"] = frame_idmap.get(event.get("frame_id"))
             for room in world_tables["room_registry"]:
                 room["created_turn_id"] = turn_idmap.get(
                     room.get("created_turn_id")

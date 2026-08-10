@@ -964,11 +964,12 @@ def is_player_speaker(speaker, chat):
 #   deterministic    Scheduled effects only -- timed arrivals, expiry, dock
 #                    edges, news latency. This is `mechanics.py`: built, always
 #                    running, and free. The rung names the floor.
-#   reactive         The above, plus responding to triggers that fire, with no
-#                    autonomous plan. NOT BUILT -- currently behaves as
-#                    `deterministic`.
-#   stochastic       The above, plus seeded ticks for dormant actors at scene
-#                    boundaries, bounded by `max_offscreen_actors` and written
+#   reactive         The above, plus firing a bounded, already-adjudicated
+#                    stage from a typed character-owned plan when its time or
+#                    event trigger lands. No model call and no new invention.
+#   stochastic       The above, plus seeded ticks for dormant actors at a
+#                    frame-scoped world epoch, bounded by
+#                    `max_offscreen_actors` and written
 #                    to `offscreen_log`. One sentence each, no plan, no world
 #                    writes, no memory.
 #
@@ -1021,15 +1022,17 @@ OFFSCREEN_LIFE_DEFAULT = "stochastic"
 OFFSCREEN_LIFE_DESCRIPTIONS = {
     "inert": "Nothing happens off screen",
     "deterministic": "Scheduled effects only — arrivals, expiry, news latency",
-    "reactive": "…plus responding to triggers, no plans (not built yet)",
-    "stochastic": "…plus seeded ticks for dormant actors at scene changes",
+    "reactive": "…plus firing authored plan stages on typed triggers",
+    "stochastic": "…plus seeded ticks for dormant actors at world epochs",
     "character_agent": "…plus characters advancing their own plans (not built yet)",
 }
 
 # Which rungs actually do something today, for the UI to mark. Kept beside the
 # ladder rather than in the UI so an unbuilt rung cannot quietly start reading
 # as built when it ships and nobody updates the menu.
-OFFSCREEN_LIFE_BUILT = frozenset({"inert", "deterministic", "stochastic"})
+OFFSCREEN_LIFE_BUILT = frozenset({
+    "inert", "deterministic", "reactive", "stochastic",
+})
 
 
 def normalize_offscreen_life(value):

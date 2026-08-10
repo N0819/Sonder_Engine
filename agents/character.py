@@ -2916,6 +2916,20 @@ def character_step(ctx, cid, nonce):
         "variant_seed": nonce,
     }
 
+    # Approach C's physical carrier envelope. This is THIS character's own
+    # witnessed public surface, stored in their frame-specific state; no other
+    # character receives it. A listener can learn it only if the holder speaks
+    # on-page and ordinary perception/memory carries that speech across.
+    try:
+        from carriers import reports_for_state
+        _carried_reports = reports_for_state(stored_state)
+    except Exception as exc:
+        _carried_reports = []
+        ctx.add_warning(
+            f"character {character_name(sh)}: carried reports unavailable: {exc}")
+    if _carried_reports:
+        payload["carried_reports"] = _carried_reports
+
     # The lazy gap rung (proposal section 1.2 step 2, the reader): a
     # character acting again after an absence gets the deterministic record
     # of their own interval -- where they were last seen with the player,
@@ -2957,6 +2971,16 @@ def character_step(ctx, cid, nonce):
             "major": "character_major"}.get(character_tier(sh), "character_mid")
 
     _cprompt = get_prompt("character").replace("{name}", character_name(sh))
+    if _carried_reports:
+        _cprompt += (
+            "\n\nCARRIED REPORTS: carried_reports contains public event surfaces "
+            "YOU personally witnessed and have physically carried from their "
+            "acquired location. They may be stale. You may act on or mention "
+            "them naturally, but do not sharpen, complete, or infer hidden "
+            "details beyond the stored claim. Nobody else knows one merely "
+            "because you carry it; they learn only if it is communicated "
+            "on-page."
+        )
     if _window_open:
         # The base contract never documents drive_shift; the instruction to emit
         # one exists ONLY inside an engine-opened rupture window, so a drive can

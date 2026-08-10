@@ -1,7 +1,9 @@
-"""The living world: the settings surface for its five approaches, and the
-deterministic floors of two of them (B: scheduled consequence, D: places
-that owe a history). Approach A's pure functions live in ``routines.py``;
-this module owns the config, the fuse mint, and the obligation ledger.
+"""The living world: settings for five approaches and their built floors.
+
+Approach A's pure functions live in ``routines.py``; C's physical witnessed
+carrier envelopes live in ``carriers.py``; E's reactive executor lives in
+``offscreen.py``. This module owns the shared config, B's fuse mint, and D's
+obligation ledger.
 
 ``docs/DESIGN_LIVING_WORLD.md`` is the argument; §9 there records the
 author's constraints verbatim. The floors landed here are deterministic,
@@ -39,13 +41,15 @@ structurally — each rule names the structure that holds it):
     the event's own properties (the author's constraint: the player earns
     reputation downstream of propagation, or is correctly nobody).
 
-CARRIER-READY BY SHAPE. Phase 2 moves information by carriers along routes,
-never by timer alone. Every fuse payload and obligation row therefore
+CARRIER-READY BY SHAPE. Information moves by carriers along routes, never by
+timer alone. Every fuse payload and obligation row therefore
 already carries {what, where, a time, origin, originator, witnessed,
 disposition} — the pickup surface a courier needs — and the payloads are
 JSON, so a route-bound {carrier, route} pair extends them without
-migration. What this phase deliberately does NOT build: emission, routes,
-carriers, or any reader that turns these rows into anyone's knowledge.
+migration. The built C floor emits only a non-empty witnessed surface to a
+registered character physically present when it lands; that envelope follows
+the holder's actual scene movement and only their private agent reads it.
+Anonymous crowd/message carriers and copy-time degradation remain later layers.
 """
 
 from __future__ import annotations
@@ -77,15 +81,17 @@ LIVING_WORLD_APPROACHES = (
 
 #: Which depths actually DO something today. Kept beside the ladder, like
 #: ``scene.OFFSCREEN_LIFE_BUILT``, so an unbuilt tier cannot quietly start
-#: reading as built when it ships and nobody updates a menu. C and E are
-#: deliberately empty: C is an epistemic mechanism and waits on the leak
-#: audit; E waits on C (a loss without rumors is a gotcha, not a tragedy).
+#: reading as built when it ships and nobody updates a menu. C's physical
+#: carrier floor and E's deterministic/reactive floor are built. E advances
+#: only Director-adjudicated stages authored from a character's own on-screen
+#: declaration. Its adaptive ceiling still waits on C (a loss caused by
+#: information the antagonist never received is a gotcha, not a tragedy).
 LIVING_WORLD_BUILT = {
     "routine_residue": frozenset({"floor"}),
     "scheduled_consequence": frozenset({"floor"}),
-    "rumor_ledger": frozenset(),
+    "rumor_ledger": frozenset({"floor"}),
     "place_obligations": frozenset({"floor"}),
-    "antagonist_ladder": frozenset(),
+    "antagonist_ladder": frozenset({"floor"}),
 }
 
 #: What each approach and depth buys, and what it costs — served to the UI
@@ -117,12 +123,12 @@ LIVING_WORLD_DESCRIPTIONS = {
     },
     "rumor_ledger": {
         "label": "Rumor ledger",
-        "floor": "What is known WHERE: word of events travels by carriers "
-                 "along routes, degrades as it goes, and reaches you only "
-                 "through someone or something in the scene.",
+        "floor": "Public event surfaces travel inside actual witnesses; "
+                 "another mind learns only through on-page communication, "
+                 "never because an objective-event timer fired.",
         "ceiling": "Notices and proclamations get real written text when "
                    "word reaches a surface that would post one.",
-        "cost": "floor: free when it lands — a graph walk; ceiling: ~1 "
+        "cost": "floor: free — bounded character state; ceiling: ~1 "
                 "small call per posted artifact",
     },
     "place_obligations": {
@@ -170,7 +176,7 @@ LIVING_WORLD_REQUIRES = {
                               "ceiling": "stochastic"},
     "rumor_ledger": {"floor": "deterministic", "ceiling": "stochastic"},
     "place_obligations": {"floor": "deterministic", "ceiling": "stochastic"},
-    "antagonist_ladder": {"floor": "character_agent",
+    "antagonist_ladder": {"floor": "reactive",
                           "ceiling": "character_agent"},
 }
 

@@ -153,6 +153,36 @@ class TestTheDeterministicSkeleton:
         rec = gap_for(cid, "room", "hall", 2, 6, scene=_scene())
         assert [e["event_id"] for e in rec["events"]] == ["ev_market_close"]
 
+    def test_promoted_world_event_is_primary_and_not_duplicated(
+            self, temp_db, monkeypatch):
+        _no_model(monkeypatch)
+        cid = _make_chat(temp_db)
+        turn_id = temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+            (cid, 4, "", 1.0))
+        temp_db.wset(cid, "simulation_clock",
+                     {"elapsed_seconds": 500.0, "display": "later"})
+        source_payload = json.dumps({"frame_id": None})
+        temp_db.qi(
+            "INSERT INTO scheduled_events(event_id,chat_id,due_at,kind,"
+            "location_id,payload,seed,status) VALUES(?,?,?,?,?,?,?,?)",
+            ("scheduled_close", cid, 300.0, "consequence", "hall",
+             source_payload, "s", "fired"))
+        temp_db.qi(
+            "INSERT INTO world_events(event_id,chat_id,turn_id,frame_id,"
+            "occurred_at,duration_seconds,kind,location_id,payload,seed,committed) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            ("world_close", cid, turn_id, None, 300.0, 0.0, "consequence",
+             "hall", json.dumps({"frame_id": None,
+                                  "source_event_id": "scheduled_close"}),
+             "s", 1.0))
+        temp_db.wset(cid, LAST_SEEN_KEY,
+                     {"hall": {"turn": 2, "room": "hall",
+                               "elapsed_seconds": 100.0}})
+        rec = gap_for(cid, "room", "hall", 2, 6, scene=_scene())
+        assert rec["events"] == [{"turn": 4, "event_id": "world_close",
+                                  "summary": "consequence", "room": "hall"}]
+
     def test_without_a_clock_anchor_the_clock_ledger_is_skipped_and_said(
             self, temp_db, monkeypatch):
         """`scheduled_events` fires on seconds, the window is turns, and only

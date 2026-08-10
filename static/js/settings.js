@@ -281,10 +281,10 @@ $("#b-dlg").onclick = async () => {
           + "clock: someone arriving when they said they would, food spoiling, news "
           + "taking days to travel. Costs nothing and is always running anyway; this "
           + "level just says that is all you want."),
-        el("div", {}, el("b", {}, "reactive"), " — responding to things that happen, "
-          + "without making any plans. ", el("b", {}, "Not built yet"), " — behaves as "
-          + "deterministic."),
-        el("div", {}, el("b", {}, "stochastic"), " — when the scene changes, dormant "
+        el("div", {}, el("b", {}, "reactive"), " — a character may carry out bounded "
+          + "stages they explicitly declared while present. Time and event triggers "
+          + "fire only the effect already adjudicated; there is no new model call or plan."),
+        el("div", {}, el("b", {}, "stochastic"), " — at meaningful world changes, dormant "
           + "characters get a sentence of what they have been up to, kept in a log. "
           + "No plans, no decisions, nothing that moves anyone. This is what the "
           + "engine has always done, which is why it is the default."),
