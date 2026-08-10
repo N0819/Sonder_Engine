@@ -65,7 +65,7 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
 
 - `world_entities`: normalized projection of the scene's entities, derived at commit (`commit_world_entities(prepared=...)`). Read at runtime only for fixed-point existence checks (`paradox._entity_exists`) and book-anchor alias resolution (`commit._entity_alias_map`). **Which** entities a beat touched comes from the post-dedup diff; **what** they now are comes from the merged scene, and taking the second from the diff too is how this projection drifted: `spatial._merge_entity` sits between the diff and the blob, reading a schema default as silence and refusing a name `schemas._fill_entity_names` derived from the dict key. Writing the raw diff skipped all of it, so a pose-only beat left the blob saying "Blue Police Box"/vehicle and the row saying "Tardis 001"/object — 15 of 480 live rows named literally `Object`, 19 disagreeing with the blob about `name`, 24 about `kind`. A row heals the next time a beat touches that entity; `tools/reproject_world_entities.py` sweeps the ones nothing will touch again (read-only without `--apply`, and it skips an entity whose frames disagree, since `scene` is frame-scoped and this table is not).
 - `world_placements`: DECOMMISSIONED (Phase 3a) — nothing inserts or reads it; kept only so old snapshots/exports restore. The two surviving runtime writers are deletes (legacy cleanup in `commit_world_entities`, and `paradox.py`). Positions live solely in the frame-scoped `scene.positions`.
-- `world_events`, `world_conditions`, `scheduled_events`: objective event timeline, active conditions, and future events (`transit_arrival`, `news_arrival`). `scheduled_events` is keyed `(chat_id, event_id)` since v16 (same repartition v14 applied to entities/conditions).
+- `world_events`, `world_conditions`, `scheduled_events`: objective event timeline, active conditions, and future events (`transit_arrival`, `news_arrival`, `consequence`). `scheduled_events` is the due queue; `commit_world_event_spine` promotes only mechanically fired rows into `world_events`. Both event tables are keyed `(chat_id,event_id)`; `world_events.frame_id` is an explicit FK and its `turn_id` names the commit that observed the occurrence. The payload retains `source_event_id`, so readers can suppress the legacy queue row rather than report one occurrence twice.
 - `room_registry`: the sole cross-frame ledger of room identity/existence-over-time/retirement, keyed `(chat_id, room_uid)` and scoped to an owning lorebook. It is a deterministic projection of every scene write: `commit_scene` maintains it in the same commit domain, and the manual world editor (`world_put`) reconciles it through `commit.sync_room_registry_with_scene`. Rooms and lorebooks are retired (`retired_turn_id`), never deleted, on removal/destruction.
 - `fiction_worlds`, `fiction_locations`, `transit_edges`: DEPRECATED dead macro schema (nothing in the runtime pipeline reads or writes them; kept only so old imports restore — removal is planned).
 
@@ -83,6 +83,37 @@ Authority model (Phase 3a): the frame-scoped `world.scene` blob is the single ru
   same, addressed to one temporal frame. Most `world` keys are frame-scoped —
   use these when the era matters, which for live world state it almost always
   does.
+
+`offscreen_epoch`, `offscreen_plans`, and `offscreen_log` are frame-scoped world
+keys. The epoch and reactive plans are primary diegetic state; the log is
+provisional diegetic history. All three therefore
+ride the existing whole-`world` checkpoint/archive/branch path and roll back
+together. A plan stores its current stage and bounded history, so restore never
+replays a discarded plan advance. Background jobs carry an epoch id in addition to `base_turn`: the
+turn check catches rollback behind the producer, while the epoch check catches
+a restore/branch at the same numeric turn but on a different world edge. Stable
+epoch+rung batch identity makes landing idempotent.
+
+`world_events` joined `snapshot_state`/`insert_world_tables`, portable
+export/import, branch remapping, deletion, and fidelity tests with its first
+runtime writer (schema v27). Same-chat checkpoint restore preserves ids and
+removes discarded-timeline rows; portable import may preserve ids because the
+primary key is chat-partitioned; branching mints new event ids and remaps
+payload references plus turn/frame FKs. Do not add a second event ledger.
+
+Physical information envelopes use the bounded `carried_reports` member of a
+character's existing `chat_chars.state` / `chat_char_frames.state`, not another
+global truth table. Each row cites a `world_events` id and stores only its
+public witnessed surface plus acquisition/current locations and route. It
+therefore inherits character-state checkpoint, frame, branch, and archive
+behavior. The objective payload is never copied into this private state.
+
+`character.simulation.offscreen_agent` is author-owned configuration on the
+card (and story-card override), default false. It is not runtime state and does
+not itself schedule work. Runtime `state.offscreen_agent.last_turn` is the
+character/frame-owned landing marker used to reject repeated spend on the same
+carried evidence; it must continue to travel through the existing character
+state checkpoint/archive/branch paths.
 
 Use `qtx` for a multi-statement invariant that must roll back together. Nested domain transactions become savepoints. `commit_all` supplies one outer transaction for all primary turn effects, so any exception rolls the complete turn back. Do not perform provider or embedding calls while a write transaction is open.
 

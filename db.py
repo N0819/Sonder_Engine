@@ -23,7 +23,9 @@ active_frame_id = contextvars.ContextVar("active_frame_id", default=None)
 # frame is currently executing.
 FRAME_SCOPED_WORLD_KEYS = {
     "scene", "known", "simulation_clock", "pending", "background_presences",
-    "offscreen_log", "standing_intentions", "pending_obligations",
+    "offscreen_log", "offscreen_epoch", "offscreen_plans",
+    "standing_intentions",
+    "pending_obligations",
     "shadow_profile", "lore_cache", "active_books",
     # {subject_id: {turn, room, elapsed_seconds}} -- who was co-present with
     # the player, per era like the scene it is read from. Written by
@@ -69,7 +71,7 @@ def parse_scoped_world_key(key):
     return key, None
 
 DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -601,16 +603,18 @@ CREATE TABLE IF NOT EXISTS checkpoints(
 CREATE INDEX IF NOT EXISTS idx_checkpoints_chat ON checkpoints(chat_id, turn_idx);
 
 CREATE TABLE IF NOT EXISTS world_events(
-    event_id TEXT PRIMARY KEY,
+    event_id TEXT NOT NULL,
     chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
     turn_id INTEGER REFERENCES turns(id) ON DELETE SET NULL,
+    frame_id INTEGER REFERENCES frames(id) ON DELETE SET NULL,
     occurred_at REAL NOT NULL,
     duration_seconds REAL NOT NULL DEFAULT 0,
     kind TEXT NOT NULL,
     location_id TEXT,
     payload TEXT NOT NULL,
     seed TEXT,
-    committed REAL NOT NULL
+    committed REAL NOT NULL,
+    PRIMARY KEY(chat_id, event_id)
 );
 CREATE INDEX IF NOT EXISTS idx_world_events_chat_time ON world_events(chat_id, occurred_at);
 
@@ -1270,6 +1274,36 @@ MIGRATIONS = [
         # migration is the wrong place to do work that can fail halfway.
         "ALTER TABLE lore_entries ADD COLUMN embedding_model TEXT",
         "ALTER TABLE lore_entries ADD COLUMN embedding_dim INTEGER",
+    ],
+    # v26 -> v27
+    [
+        # Activate the previously dormant objective-event spine without
+        # inheriting its two persistence defects: a global event id collides
+        # on same-install import, and no frame column makes an event from one
+        # era visible in another. The table has no runtime rows in released
+        # builds, but the copy keeps hand-authored/experimental rows intact.
+        "DROP TABLE IF EXISTS world_events_new",
+        "CREATE TABLE world_events_new("
+        "event_id TEXT NOT NULL,"
+        "chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,"
+        "turn_id INTEGER REFERENCES turns(id) ON DELETE SET NULL,"
+        "frame_id INTEGER REFERENCES frames(id) ON DELETE SET NULL,"
+        "occurred_at REAL NOT NULL,"
+        "duration_seconds REAL NOT NULL DEFAULT 0,"
+        "kind TEXT NOT NULL,"
+        "location_id TEXT,"
+        "payload TEXT NOT NULL,"
+        "seed TEXT,"
+        "committed REAL NOT NULL,"
+        "PRIMARY KEY(chat_id, event_id))",
+        "INSERT INTO world_events_new(event_id,chat_id,turn_id,frame_id,"
+        "occurred_at,duration_seconds,kind,location_id,payload,seed,committed) "
+        "SELECT event_id,chat_id,turn_id,NULL,occurred_at,duration_seconds,"
+        "kind,location_id,payload,seed,committed FROM world_events",
+        "DROP TABLE world_events",
+        "ALTER TABLE world_events_new RENAME TO world_events",
+        "CREATE INDEX IF NOT EXISTS idx_world_events_chat_time "
+        "ON world_events(chat_id, occurred_at)",
     ],
 ]
 

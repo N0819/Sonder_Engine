@@ -77,7 +77,7 @@ class TestTheDefaultPreservesWhatTheEngineAlreadyDid:
     def test_the_default_is_the_rung_that_was_already_running(self):
         """Turning a setting on must not silently change a running story, and
         the ungated behaviour was exactly this rung: seeded ticks for dormant
-        actors at scene changes."""
+        actors at meaningful world boundaries."""
         from scene import OFFSCREEN_LIFE_DEFAULT
 
         assert OFFSCREEN_LIFE_DEFAULT == "stochastic"
@@ -197,9 +197,25 @@ class TestTheModelIsOutOfTheTickBusiness:
 
         import commit
 
-        src = inspect.getsource(commit.commit_mapping)
-        assert '_allows(_cfg.get("offscreen_life"), "stochastic")' in src
-        assert "stochastic_ticks" in src
+        import offscreen
+
+        mapping_src = inspect.getsource(commit.commit_mapping)
+        epoch_src = inspect.getsource(offscreen.advance_epoch)
+        assert "stochastic_ticks" not in mapping_src
+        assert 'offscreen_life_allows(cfg.get("offscreen_life"), "stochastic")' in epoch_src
+        assert "stochastic_ticks" in epoch_src
+
+    def test_the_tick_does_not_depend_on_mapping_having_work(self):
+        """Mapping's skip path is common. Off-screen life is its own commit
+        domain so a turn with no new lore still gets a real epoch."""
+        import inspect
+
+        import commit
+
+        src = inspect.getsource(commit._commit_all_locked)
+        assert '"offscreen_epoch"' in src
+        assert "commit_offscreen_epoch" in src
+        assert "advance_epoch" in inspect.getsource(commit.commit_offscreen_epoch)
 
 
 class TestFullIsPermissionNotBehaviour:
@@ -220,7 +236,7 @@ class TestFullIsPermissionNotBehaviour:
         js = (Path(__file__).resolve().parents[1]
               / "static/js/settings.js").read_text(encoding="utf-8")
         block = js[js.index('"Off-screen life"'):js.index('"Background life"')]
-        assert block.count("Not built yet") == 2  # reactive and character_agent
+        assert block.count("Not built yet") == 1  # character_agent only
         assert "behaves as stochastic" in block
 
     def test_the_ui_renders_the_engines_own_ladder(self):

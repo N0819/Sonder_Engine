@@ -2,6 +2,140 @@
 
 ## Unreleased — Development
 
+### Paid off-screen minds now require explicit card opt-in and a private reason
+
+Character cards gain `simulation.offscreen_agent`, default false and exposed as
+an explicit editor checkbox. This is beneath both story-level gates: checking a
+card does nothing unless the chat requests the `character_agent` authority
+ceiling and enables the antagonist-ladder ceiling. A broad setting therefore
+cannot silently animate the dormant cast.
+
+`offscreen.full_agent_candidates` is the deterministic selector for the later
+paid producer. It considers dormant opted-in characters in stable database
+order and applies the existing actor cap. A character earns selection only for
+an active authored plan they own or a `carried_reports` item acquired after
+their own last paid tick. The selector reads no player position, player action,
+omniscient scene digest, or objective-event payload. Static evidence with no
+active plan spends nothing.
+
+No full-agent model call or world-write authority lands in this slice; the UI
+still marks `character_agent` unbuilt. The separation is deliberate: opt-in and
+selection can now be audited without a provider call obscuring whether the
+right mind was eligible.
+
+### Public events can now travel inside actual character witnesses
+
+Living-world C now has a physical, zero-call floor. A fired objective event
+emits information only when its payload contains a non-empty `witnessed`
+surface, and only registered characters whose bodies are at that event's
+canonical location acquire it. Hidden `what`, originator metadata, and the rest
+of the omniscient event payload never enter the envelope. An unwitnessed event
+still happens but informs nobody.
+
+The report lives in that character's frame-specific state under
+`carried_reports`. It records event/source identity, exact public surface,
+acquisition time/place, current holder location, and a bounded physical route.
+It moves because its holder moves through the ordinary scene graph—never
+because a timer broadcasts knowledge. Sharing a destination does not copy it
+to another mind. Only the holder's private character payload receives a capped
+projection; somebody else learns through ordinary on-page speech, perception,
+and memory.
+
+The `information_carriers` commit domain runs after normal memory/state landing
+so a prepared character-state update cannot erase a newly acquired envelope.
+Character state already participates in frame overrides, checkpoints, branches,
+and portable archives; an explicit restore test proves acquisition/route rewind.
+Metrics distinguish fired event offers, public surfaces, co-located carrier
+opportunities, acquisitions, and physical moves. Anonymous crowd/message
+carriers, deliberate report copying, and subtractive copy degradation remain C
+extensions; the engine-owned setting text describes the narrower floor actually
+built. This is sufficient to keep later full agents from reading the objective
+world ledger directly.
+
+### Fired mechanics now leave checkpoint-safe objective event history
+
+The previously dormant `world_events` table is now the common fired-event
+spine. `scheduled_events` remains the future/due queue; a new atomic
+`world_events` commit domain promotes only rows mechanics actually marked
+`fired`. The promoted record has a stable id, source-event id, canonical
+location, simulation time, owning turn/frame, payload, and seed. It performs no
+invention, and repeated promotion is idempotent.
+
+This writer landed only with its persistence boundary. Schema v27 repartitions
+the table by `(chat_id,event_id)` and adds an explicit frame FK. Checkpoint
+snapshot/restore and normalized-table insertion, portable export/import, branch
+id/payload/turn/frame remapping, chat deletion, and legacy v26 migration all
+ship together. Tests prove restore removes discarded-timeline events, import
+can retain the stable id in another chat without collision, and a branch mints
+its own event identity while remapping referenced entity and integer FKs.
+
+`gaps._skeleton` now reads the objective spine first and uses fired
+`scheduled_events` only as a compatibility fallback for older stories. The
+stored `source_event_id` suppresses duplicate delivery when both rows exist.
+This is still truth, not knowledge: no character receives an event merely
+because it exists; carrier C remains the mechanism that can deliver an account.
+
+### Reactive off-screen plans now fire without an autonomous model call
+
+The `reactive` rung is now real rather than permission that silently behaved as
+`deterministic`. A present character may explicitly declare a future course;
+the Director may encode that declaration as a bounded `offscreen_plan_ops`
+track, but commit accepts it only when its `basis` is grounded in that
+character's result from the same beat. Absent minds cannot be assigned plans,
+and the Director cannot use the lane to invent an objective for them.
+
+Plans are frame-scoped `offscreen_plans` world state: at most eight active
+plans, six stages each, with typed story-time or fired-event triggers. A stage
+may carry one consequence effect adjudicated when the plan is opened. When its
+trigger lands, `offscreen.advance_reactive_plans` performs no model call and can
+only mint that stored effect; it cannot adapt, inspect the player, or invent a
+new act. Crossing a plan deadline creates a world epoch even inside the same
+simulation-hour bucket, while the crossing guard prevents a held invalid effect
+from spinning on every dialogue turn. Event triggers are narrowed by kind and,
+optionally, canonical location.
+
+Plan authoring is its own atomic commit domain before `offscreen_epoch`, so a
+newly declared plan and its epoch observation share the turn transaction.
+Checkpoint restore, archive, and branch behavior come from the existing whole
+frame-scoped-world path; an explicit restore regression proves a discarded
+timeline restores its plan stage and history. Fire-rate reporting now separates
+offered/accepted plan ops, considered/fired stages, and pre-adjudicated effect
+opportunities/mints. The settings UI marks only `character_agent` as unbuilt.
+
+### Off-screen life now advances on a checkpointed world epoch
+
+The documented stochastic rung was effectively inert in live stories:
+`commit_mapping` gated it on `director_establish`, an opening-stage result that
+normally exists once per chat, and mapping's common no-new-lore skip returned
+before the gate. The model-priced profile producer meanwhile used an unrelated
+every-three-turn cadence, making a long conversation cost more merely because
+it occupied more turns.
+
+Off-screen work now shares one frame-scoped `offscreen_epoch`, fired by a real
+top-level location change, a crossed in-world hour, an opening scene, or a due
+scheduled event. Multiple causes in one beat collapse to one stable epoch id,
+one actor cap, and one seed. Seeded ticks run as their own atomic commit domain
+even when mapping has nothing to write; profile jobs are scheduled only from an
+eligible epoch. Existing stories baseline quietly rather than receiving a
+retroactive tick on upgrade.
+
+Checkpoint discipline is part of the implementation. Epoch state and the
+provisional log are frame-scoped world state, so the existing whole-state
+snapshot restores both atomically; an out-of-band result must still name the
+currently restored epoch before it may land, and stable `(epoch, rung)` batch
+identity prevents a reroll/job race from appending twice. Tests cover restore,
+cross-frame landing, stale-epoch refusal, and duplicate landing. Commit results
+now retain epoch opportunities, eligible actors, fires, profile candidates, and
+job scheduling; `tools/fire_rates.py` reports each against the turns or epochs
+that actually could have used it.
+
+The architectural direction and build order are now durable in
+`docs/PROPOSAL_ARCHITECTURAL_COMPLETION.md`, with the shorter execution map in
+`docs/AGENT_HANDOFF_ARCHITECTURE.md`. Both make the checkpoint/archive/branch
+gate explicit. That gate has now been exercised by the event-spine change above:
+the first writer landed in the same change as checkpoint, archive, branch,
+deletion, migration, and fidelity coverage.
+
 ### A still-worn top can expose the midriff without exposing the chest
 
 Live chat 68 supplied the case the coarse attire regions could not state. The

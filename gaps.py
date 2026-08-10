@@ -36,15 +36,12 @@ empty at both rungs built here, and the medium prompt is shaped so a
 consequence has no field to land in. Only the full-agent rung -- unbuilt,
 Director-adjudicated -- may change the world.
 
-WHAT THE SKELETON READS, and one finding worth the note: the proposal's
-record shape carries ``events: [{turn, event_id, summary}]``, but nothing in
-the tree ever writes ``world_events`` -- the only id-bearing event ledger
-with a runtime writer is ``scheduled_events`` (fired transit/news arrivals,
-clock-stamped), and the only turn-stamped offscreen ledger is
-``offscreen_log`` (name-keyed, id-less). So an event entry carries a real
-``event_id`` when ``scheduled_events`` minted one and ``None`` when the
-source never had one; inventing ids here would be minting identity in a
-reader, which is 0c's defect from the other side.
+WHAT THE SKELETON READS: fired mechanics rows are promoted into the
+checkpointed, frame-scoped ``world_events`` spine and gaps consume that
+objective record. Legacy fired ``scheduled_events`` rows remain a fallback for
+stories predating the spine. The only other turn-stamped offscreen ledger is
+``offscreen_log``; a source without an id remains id-less, because inventing
+identity in a reader would be 0c's defect from the other side.
 """
 
 from __future__ import annotations
@@ -174,8 +171,8 @@ def _skeleton(cid, scene, subject, since, until, frame_id=None):
             moves.append({"turn": until, "from_room": str(from_room),
                           "to_room": str(to_room), "basis": "deterministic"})
 
-    # -- fired scheduled events, windowed by the simulation clock. The ledger
-    # is clock-stamped, not turn-stamped, so the window needs the clock at
+    # -- objective world events, windowed by the simulation clock. The ledger
+    # is clock-stamped, so the window needs the clock at
     # `since` -- which only the last-seen entry records. When the caller's
     # window does not start at the last sighting, the clock bound is unknown
     # and the ledger is skipped with a note rather than guessed at.
@@ -187,9 +184,9 @@ def _skeleton(cid, scene, subject, since, until, frame_id=None):
             since_seconds = None
     if since_seconds is None:
         notes.append(
-            f"scheduled_events skipped: no clock recorded for turn {since}")
+            f"world events skipped: no clock recorded for turn {since}")
     else:
-        ledgers.append("scheduled_events")
+        ledgers.append("world_events")
         # THIS frame's clock, not whichever frame the calling thread happens
         # to have active: `simulation_clock` resolves through the contextvar,
         # so an explicit frame_id ask on the wrong thread windowed the ledger
@@ -197,30 +194,20 @@ def _skeleton(cid, scene, subject, since, until, frame_id=None):
         now_seconds = float(
             (_read_key(cid, "simulation_clock", {}, frame_id) or {})
             .get("elapsed_seconds") or 0.0)
-        # scheduled_events has no frame column; frame identity rides the
-        # payload (mechanics._fire_due_events' own convention). A row minted
-        # by another era is another era's event -- scene.recent_events treats
-        # the same crossing as an information-boundary leak, not noise.
         fid = active_frame_id.get() if frame_id is None else frame_id
-        for row in q(
-            "SELECT event_id, kind, location_id, payload FROM scheduled_events "
-            "WHERE chat_id=? AND status='fired' AND due_at>? AND due_at<=? "
-            "ORDER BY due_at",
-            (cid, since_seconds, now_seconds),
-        ):
+
+        def append_if_owned(row, *, turn=None):
             try:
                 payload = json.loads(row["payload"] or "{}")
             except (TypeError, ValueError):
                 payload = {}
             if not isinstance(payload, dict):
                 payload = {}
-            if payload.get("frame_id") != fid:
-                continue
             entry = None
             location = str(row["location_id"] or "")
             if subject["kind"] in ("room", "place"):
                 if location == subject["id"]:
-                    entry = {"turn": None, "event_id": row["event_id"],
+                    entry = {"turn": turn, "event_id": row["event_id"],
                              "summary": str(row["kind"])}
             else:
                 # Attribution is structured or not at all: `entity_id` is
@@ -236,12 +223,46 @@ def _skeleton(cid, scene, subject, since, until, frame_id=None):
                 if subject.get("display"):
                     needles.add(str(subject["display"]).casefold())
                 if owner and owner in needles:
-                    entry = {"turn": None, "event_id": row["event_id"],
+                    entry = {"turn": turn, "event_id": row["event_id"],
                              "summary": str(row["kind"])}
             if entry is not None:
                 if is_node_id(location):
                     entry["room"] = location
                 events.append(entry)
+
+        promoted_sources = set()
+        for row in q(
+            "SELECT we.event_id,we.kind,we.location_id,we.payload,t.idx AS turn_idx "
+            "FROM world_events we LEFT JOIN turns t ON t.id=we.turn_id "
+            "WHERE we.chat_id=? AND we.frame_id IS ? AND we.occurred_at>? "
+            "AND we.occurred_at<=? ORDER BY we.occurred_at",
+            (cid, fid, since_seconds, now_seconds),
+        ):
+            try:
+                payload = json.loads(row["payload"] or "{}")
+            except (TypeError, ValueError):
+                payload = {}
+            if isinstance(payload, dict) and payload.get("source_event_id"):
+                promoted_sources.add(str(payload["source_event_id"]))
+            append_if_owned(row, turn=row["turn_idx"])
+
+        # Legacy fallback: released stories may contain fired scheduled rows
+        # from before world_events had a writer. Do not duplicate rows already
+        # promoted into the spine.
+        for row in q(
+            "SELECT event_id,kind,location_id,payload FROM scheduled_events "
+            "WHERE chat_id=? AND status='fired' AND due_at>? AND due_at<=? "
+            "ORDER BY due_at", (cid, since_seconds, now_seconds),
+        ):
+            if str(row["event_id"]) in promoted_sources:
+                continue
+            try:
+                payload = json.loads(row["payload"] or "{}")
+            except (TypeError, ValueError):
+                payload = {}
+            if not isinstance(payload, dict) or payload.get("frame_id") != fid:
+                continue
+            append_if_owned(row)
 
     # -- offscreen ticks. Turn-stamped. Attribution: a seeded-rung tick's
     # structured `subject.id` wins; a row without one is matched by its

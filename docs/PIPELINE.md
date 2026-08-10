@@ -78,6 +78,33 @@ Renders the opening player-facing prose from the perception result.
 
 Persists validated scene, entity, cast, lore, event, relationship, and memory changes through `commit_all`.
 
+After the deterministic transit sweep, the `world_events` domain promotes only
+scheduled rows mechanics actually fired into the objective, frame-scoped event
+spine. The queue remains future state; the spine is happened state. Promotion
+is stable/idempotent and shares the outer transaction, so a later domain failure
+rolls both the fired status and its objective record back. Checkpoints restore
+the table with the rest of the pre-turn world.
+
+Off-screen life has two named commit domains after mapping and before memory.
+`offscreen_plans` first accepts/cancels only Director encodings grounded in a
+present character's declaration from this beat. `offscreen_epoch` then derives one
+stable frame-scoped opportunity from the committed beat: opening, top-level
+location change, crossed simulation-hour bucket, due mechanical event, or
+crossed deadline of the active stage in a stored plan. A reactive stage may
+fire only its already-adjudicated effect and performs no provider call. The
+epoch domain is independent of mapping's no-work skip. Its
+seeded draw and epoch/log writes remain inside the turn transaction. Only the
+model-priced profile producer starts at the post-commit tail, carrying the base
+turn, frame, and epoch id; landing refuses a world restored to another epoch.
+
+After the ordinary `memories` domain settles each acting character's prepared
+state, `information_carriers` acquires public event surfaces for registered
+characters physically at the event location and advances the bounded route on
+reports whose holder moved. It must remain after `memories`: writing earlier
+would let the precomputed state update erase the envelope. The report is stored
+only in that holder's frame-specific character state and projected only into
+their private character payload; co-location never copies it to another mind.
+
 ## Normal turn
 
 The plan is built dynamically from `director_interpret.flow`.

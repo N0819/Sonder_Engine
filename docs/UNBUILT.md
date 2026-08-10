@@ -1997,9 +1997,12 @@ Build order, first three landed (bg-life work, 2026-08):
 3. ~~**`stochastic` at scene boundaries.**~~ — landed as
    `offscreen.stochastic_ticks`: a real seeded draw against standing
    intentions, no model call, written through `offscreen.append_offscreen_log`.
-4. **`character_agent` ticks** — villain, count cap, knowledge firewall.
-5. **Reactivation proposal.**
-6. **Negotiation** — refusal budgets, tagging, stalemate-eats-canon.
+4. ~~**Typed `reactive` plan stages.**~~ Grounded same-beat declarations,
+   frame-scoped stages, typed time/event triggers, and pre-adjudicated effects
+   now execute without a model call.
+5. **`character_agent` ticks** — villain, count cap, knowledge firewall.
+6. **Reactivation proposal.**
+7. **Negotiation** — refusal budgets, tagging, stalemate-eats-canon.
 
 Precedent that did not exist when the note was written: `background_claims.py`
 is exactly the "commit invention as claims, not facts" mechanism its decision 3
@@ -2038,19 +2041,57 @@ specified one — a seeded, replayable, model-free draw
 level and a volunteered `offscreen_events` is refused on the write path.
 Resolution above the free rung is importance × distance
 (`offscreen.resolution_for`), recomputed per tick, with the medium
-(profile-summary) rung produced OUT OF BAND on a turn-cadence
+(profile-summary) rung produced OUT OF BAND on the shared world epoch
 (`offscreen.schedule_profile_ticks` → `jobs.submit`, base_turn-stamped,
-rollback-guarded at landing, never cancelled by a turn starting) and every
+rollback- and epoch-guarded at landing, never cancelled by a turn starting) and every
 tick stored as a validated provisional record (`canon_provenance`).
+
+The earlier “scene boundary” wiring was not a boundary: it tested
+`director_establish`, which normally exists only on turn 0, inside mapping's
+skip-prone commit path. Unreleased development moves it into its own atomic
+commit domain and records a frame-scoped `offscreen_epoch` on opening,
+top-level location change, crossed in-world hour, or due event. The epoch and
+log ride the existing whole-world checkpoint, and completed background work
+must still match the restored epoch before landing. `tools/fire_rates.py` now
+measures epoch opportunities, seeded fires, candidate selection, and scheduled
+profile jobs against their actual denominators.
+
+The fired-event substrate is no longer open. Schema v27 activates
+`world_events` as a frame-scoped, chat-partitioned objective spine; the transit
+domain promotes only events mechanics actually fired. It landed with
+checkpoint restore, portable archive, branch id/payload/FK remapping, deletion,
+legacy migration, and fidelity tests. `gaps` reads it first and falls back to
+legacy fired scheduled rows without double-delivering a promoted event.
+
+The first carrier delivery slice is now built: a non-empty public witnessed
+surface is acquired only by a registered character physically at the event,
+stored in that holder's frame-specific state, moved with their actual position,
+and exposed only to their private character agent. Co-location never broadcasts
+it. Still open inside C: anonymous crowd/message/artifact carriers, explicit
+copy events, subtractive degradation at copies, and bounded route fan-out.
+
+Landed next in unreleased development: **`reactive` is now behavior, not merely
+permission.** A Director resolve may encode `offscreen_plan_ops`, but commit
+requires the named registered character to have declared its basis on that
+same beat. Plans are bounded frame-scoped state; typed time/event triggers can
+fire only an effect adjudicated when the plan opened. There is no model call,
+adaptation, or new invention at firing. Crossing a plan deadline itself creates
+an epoch, and checkpoint restore rewinds the plan stage/history with the world.
 
 Still open:
 
-- **`reactive` is permission only** — selectable, currently behaving as
-  `deterministic`.
 - **`character_agent` is permission, not the built villain rung.** The
   Director-adjudicated full-agent tick (the only rung that may CHANGE the
   world) is unbuilt, and it is where the knowledge firewall and the
   per-character opt-in with a bounded count must land.
+
+The first half of that sentence has now landed: cards expose an explicit
+`simulation.offscreen_agent` opt-in (default false), and deterministic
+`full_agent_candidates` selects only dormant opted-in minds with their own
+active authored plan or carried evidence newer than their last paid tick. It is
+bounded and reads no player/omniscient content. The reduced character call,
+Director adjudication, atomic landing, memory, and last-tick write remain
+unbuilt, so `character_agent` correctly remains marked unavailable in the UI.
 - **The stored `offscreen_log` history is still mixed** across the four legacy
   shapes plus the new record shape; readers coerce, nothing migrates.
 

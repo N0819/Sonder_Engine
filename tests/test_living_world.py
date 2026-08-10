@@ -70,12 +70,11 @@ class TestTheLadder:
             assert LIVING_WORLD_BUILT[approach] <= set(LIVING_WORLD_DEPTHS)
             assert "off" not in LIVING_WORLD_BUILT[approach]
 
-    def test_c_and_e_declare_nothing_built(self):
-        """Phase 1 holds the rumor ledger and the antagonist ladder for the
-        epistemic audit — building C on today's leak would be building on
-        sand. Their rows must say so, or the UI sells an unbuilt feature."""
-        assert LIVING_WORLD_BUILT["rumor_ledger"] == frozenset()
-        assert LIVING_WORLD_BUILT["antagonist_ladder"] == frozenset()
+    def test_c_and_es_safe_floors_are_built(self):
+        """C exposes only a holder's witnessed surfaces; E fires only
+        already-authored stages. Their adaptive/artifact ceilings stay off."""
+        assert LIVING_WORLD_BUILT["rumor_ledger"] == frozenset({"floor"})
+        assert LIVING_WORLD_BUILT["antagonist_ladder"] == frozenset({"floor"})
 
     def test_the_default_is_off_for_everything(self):
         """The engine never did any of this before the setting existed; a
@@ -99,10 +98,10 @@ class TestTheLadder:
         already asked rather than a surprise."""
         cfg = {"scheduled_consequence": "ceiling"}
         assert effective_depth(cfg, "scheduled_consequence") == "floor"
-        assert effective_depth({"rumor_ledger": "floor"},
-                               "rumor_ledger") == "off"
+        assert effective_depth({"rumor_ledger": "ceiling"},
+                               "rumor_ledger") == "floor"
         assert effective_depth({"antagonist_ladder": "ceiling"},
-                               "antagonist_ladder") == "off"
+                               "antagonist_ladder") == "floor"
 
     def test_allows_is_ordered_and_fails_closed(self):
         cfg = {"routine_residue": "floor"}
@@ -453,7 +452,7 @@ class TestTheRoute:
         assert out["living_world"] == {
             a: "off" for a in LIVING_WORLD_APPROACHES}
         by_key = {row["approach"]: row for row in out["approaches"]}
-        assert by_key["rumor_ledger"]["depths"][0]["built"] is False
+        assert by_key["rumor_ledger"]["depths"][0]["built"] is True
         assert by_key["routine_residue"]["depths"][0]["built"] is True
         assert by_key["routine_residue"]["cost"]
 
@@ -513,7 +512,7 @@ class TestOneAuthorityCeiling:
             for rung in depths.values():
                 assert rung in scene.OFFSCREEN_LIFE_LADDER
 
-    def test_e_is_the_character_agent_rung_by_name(self):
+    def test_e_uses_the_two_plan_rungs_by_name(self):
         """The design doc names E's rungs `reactive` and `character_agent`
         outright — E is that rung wearing the mechanism vocabulary. Gating
         it lower would let a plan advance under a ladder that never
@@ -524,7 +523,8 @@ class TestOneAuthorityCeiling:
         from living_world import LIVING_WORLD_REQUIRES
 
         assert LIVING_WORLD_REQUIRES["antagonist_ladder"] == {
-            "floor": "character_agent", "ceiling": "character_agent"}
+            "floor": "reactive", "ceiling": "character_agent"}
+        assert offscreen_life_allows(OFFSCREEN_LIFE_DEFAULT, "reactive")
         assert not offscreen_life_allows(OFFSCREEN_LIFE_DEFAULT,
                                          "character_agent")
 

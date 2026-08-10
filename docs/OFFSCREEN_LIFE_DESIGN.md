@@ -1,6 +1,7 @@
 # Off-screen life, reactivation, and villain ticks — design
 
-> Status: **steps 1-3 built** (step 2 in alpha 6.9, steps 1 and 3 in the
+> Status: **steps 1-3 and the reactive floor built in unreleased development**
+> (step 2 in alpha 6.9, steps 1 and 3 in the
 > bg-life work, 2026-08). The gap generator is `gaps.gap_for` + the
 > `subject_last_seen` ledger, read at re-contact by `agents/character.py` as
 > `while_you_were_offscreen`. `BehaviorController`'s ladder is the chat-level
@@ -12,10 +13,14 @@
 > mapping_commit model call and whose tick seed no RNG ever consumed. On top,
 > `docs/PROPOSAL_2026-08-06.md` §1.0 superseded the per-character tier with
 > per-tick resolution = importance × distance (`offscreen.resolution_for`),
-> and the medium (profile-summary) rung runs out of band on a cadence
+> and the medium (profile-summary) rung runs out of band on the shared,
+> frame-scoped world epoch
 > (`offscreen.schedule_profile_ticks` → `jobs.submit`), writing provisional
-> records only. Steps 4-6 remain unbuilt; `reactive` and `character_agent`
-> are permission those steps land behind. Registered as
+> records only. The typed `reactive` rung is now a bounded plan-stage
+> executor: commit accepts only a present character's grounded declaration,
+> and a later epoch can fire only its pre-adjudicated effect, without a model
+> call. Full `character_agent` adaptation and later steps remain unbuilt.
+> Registered as
 > [`UNBUILT.md`](UNBUILT.md) §2.7 and §2.8, which those roadmap numbers now
 > point at; this document keeps the argument. Treated here as **one mechanism at
 > three cadences** rather than two features.
@@ -89,8 +94,8 @@ class BehaviorController(str, Enum):
 |---|---|---|
 | `inert` | Nothing happened. Gap generated at re-contact, or not at all | Free |
 | `deterministic` | Scheduled effects only — arrival, expiry, news latency | Free (already built, `mechanics.py`) |
-| `reactive` | Responds to triggers that fire, no autonomous plan | Near-free; gated |
-| `stochastic` | Seeded draw against standing intentions at scene boundaries | Cheap, no LLM |
+| `reactive` | Fires bounded authored stages on typed time/event triggers; no autonomous invention | Near-free; built, gated |
+| `stochastic` | Seeded draw against standing intentions at world epochs | Cheap, no LLM |
 | `character_agent` | Real agent tick advancing a plan and writing consequences into the world | Paid — bounded count only |
 
 **The cost thesis is not violated by ticking a villain.** A villain *is* dramatic
@@ -109,6 +114,10 @@ More leverage than the feature's size suggests:
   Nothing advances it. That is the entire gap.
 - **`mechanics.py`** — the deterministic half is built: timed arrivals, expiry,
   dock edges, **news latency**, seeded and idempotent via `stable_event_key`.
+- **`world_events`** — the frame-scoped objective happened-event spine.
+  `scheduled_events` remains the due queue; commit promotes only mechanics-fired
+  rows, and the spine is checkpointed, archived, branch-remapped, and consumed
+  by gaps. Existence in this ledger is truth, not delivery to a mind.
 - **`pick_background_reactor` (`commit.py`)** — the exact gating pattern to
   copy: a deterministic, LLM-free check returning `None` for the large majority
   of turns, so the expensive path is entered only when something earned it.
@@ -118,7 +127,7 @@ More leverage than the feature's size suggests:
 
 ## Decisions to lock before building
 
-### 1. Cadence: scene boundary or in-world clock, never per turn
+### 1. Cadence: meaningful world epoch, never raw turn cadence
 
 Cheaper, and dramatically better. A villain who advances once per in-world day
 reads as a schemer; one who advances every beat reads as noise. The architecture
@@ -185,15 +194,26 @@ dispute protocol before knowing what characters dispute.
    changes a running story the moment it appears is not a setting anyone can
    trust. The per-CHARACTER half, which is the one this document calls the
    opt-in, is still open.
-3. **`stochastic` at scene boundaries** — seeded draws against standing
-   intentions. No LLM, so the cadence and write-back can be proven cheaply.
-4. **`character_agent` ticks** — the villain. Deterministic gate first, then one
+3. ~~**`stochastic` at scene boundaries**~~ — seeded draws against standing
+   intentions. The first wiring mistook `director_establish` for a recurring
+   boundary and therefore normally fired only at opening. Unreleased
+   development replaces that gate and the profile rung's raw turn cadence
+   with one checkpointed, frame-scoped `offscreen_epoch`: opening, top-level
+   location change, crossed in-world hour, due event, or crossed reactive-plan
+   deadline. Commit results retain
+   opportunities and fires. No LLM, so the trigger and write-back are proven
+   cheaply.
+4. ~~**Typed `reactive` plan stages**~~ — `offscreen_plan_ops` is grounded in
+   the actor's same-beat declaration, stored frame-scoped, and fired by code on
+   time/event triggers. It cannot adapt or invent at firing.
+5. **`character_agent` ticks** — the villain. Deterministic gate first, then one
    bounded call. Enforce the count cap and the knowledge firewall here.
-5. **Reactivation proposal** — gap generator applied at re-contact.
-6. **Negotiation** — refusal budgets, tagging, stalemate-eats-canon.
+6. **Reactivation proposal** — gap generator applied at re-contact.
+7. **Negotiation** — refusal budgets, tagging, stalemate-eats-canon.
 
-Steps 1–3 are cheap and prove the shape. Step 4 is where the drama lives. Steps
-5–6 can trail well behind.
+The deterministic and reactive floors are cheap and prove the shape. The full
+character-agent step is where the expensive adaptive drama lives; settlement
+and negotiation can trail well behind.
 
 ## Open questions
 
@@ -208,3 +228,8 @@ Steps 1–3 are cheap and prove the shape. Step 4 is where the drama lives. Step
 - Should the player be able to *see* the tick log in god-mode? Consistent with
   "omniscience relocated outside the diegesis to the user", the answer is
   probably yes, with a spoiler gate.
+
+The first open question is now decided in code: **author choice only**. A card's
+`simulation.offscreen_agent` flag defaults false. Even opted-in characters are
+selected only when they own an active authored plan or new carried evidence;
+there is no automatic promotion by importance.

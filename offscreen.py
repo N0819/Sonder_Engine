@@ -59,7 +59,8 @@ The player's room is read only by the DISTANCE axis -- which decides spend,
 not content, so it cannot make anyone prescient; being near the player buys
 a character a better-lit tick, never knowledge of them.
 
-TICKS DESCRIBE, NEVER COMMIT (section 1.0.1). No write from this module
+LOWER-RUNG TICKS DESCRIBE, NEVER COMMIT (section 1.0.1). No profile or seeded
+write from this module
 moves a body (``scene.positions`` changes have no warrant check -- UNBUILT
 section 1.20 -- and an offscreen writer would be the missing third warrant,
 built by accident), advances an intention, or touches canon. Arrival is the
@@ -76,8 +77,10 @@ not that consumer.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import random
+import re
 
 from logging_utils import logger
 
@@ -101,6 +104,23 @@ DISTANCES = ("same_room", "same_region", "elsewhere")
 SAME_REGION_HOPS = 6
 
 RESOLUTIONS = ("inert", "low", "medium")
+
+# One epoch per crossed in-world hour, plus top-level location changes and
+# due-event fires. A conversation can consume many turns and only seconds;
+# making its cast live once per N turns prices story length rather than
+# dramatic density. The bucket is intentionally coarse and is a trigger, not
+# a claim that every setting experiences time in one-hour narrative units.
+EPOCH_SECONDS = 60 * 60
+EPOCH_KEY = "offscreen_epoch"
+PLAN_KEY = "offscreen_plans"
+PLAN_CAP = 8
+PLAN_STAGE_CAP = 6
+REACTIVE_FIRE_CAP = 3
+PLAN_TRIGGER_MIN_SECONDS = 60.0
+PLAN_TRIGGER_MAX_SECONDS = 30 * 86400.0
+PLAN_EVENT_KINDS = frozenset({
+    "consequence", "news_arrival", "transit_arrival",
+})
 
 #: The sheet field for the manual importance override:
 #: ``simulation.offscreen_importance``. Deliberately NOT the
@@ -411,24 +431,594 @@ def append_offscreen_log(cid, turn_idx, seed, events, *, rung="stochastic"):
         return []
     with transaction():
         log = wget(cid, "offscreen_log", []) or []
+        # Stable batch identity makes reroll/background races harmless. A
+        # completed job may still be in flight while its base turn is restored;
+        # if the same epoch is recomputed, either result may arrive first but
+        # the fiction receives one batch. Checkpoints restore this whole log,
+        # so a discarded timeline's batch disappears with its other facts.
+        if any(
+            isinstance(batch, dict)
+            and str(batch.get("seed") or "") == str(seed)
+            and str(batch.get("rung") or "") == str(rung)
+            for batch in log
+        ):
+            return []
         log.append({"turn": int(turn_idx), "seed": str(seed),
                     "rung": rung, "events": kept})
         wset(cid, "offscreen_log", log)
     return kept
 
 
+# ---------------------------------------------------------------------------
+# The shared world epoch. This is primary state and runs inside commit_all's
+# transaction; only the model-priced profile work is scheduled afterward.
+# ---------------------------------------------------------------------------
+
+def _as_seconds(clock):
+    try:
+        return max(0.0, float((clock or {}).get("elapsed_seconds") or 0.0))
+    except (TypeError, ValueError, AttributeError):
+        return 0.0
+
+
+def epoch_reasons(*, turn_idx, previous_scene, scene, previous_clock, clock,
+                  transit_result):
+    """Return the canonical reasons this beat creates one epoch opportunity.
+
+    Pure over the pre/post scene and clock plus the already-committed mechanics
+    result. Multiple causes in one beat are one epoch: one world edge, one
+    actor cap, one seed. A pre-existing story that first encounters this code
+    is baselined rather than retroactively ticked by a migration artifact.
+    """
+    reasons = []
+    try:
+        idx = int(turn_idx)
+    except (TypeError, ValueError):
+        idx = -1
+
+    before_scene = previous_scene if isinstance(previous_scene, dict) else {}
+    after_scene = scene if isinstance(scene, dict) else {}
+    before_location = str(before_scene.get("location") or "").strip()
+    after_location = str(after_scene.get("location") or "").strip()
+
+    if idx == 0 and not before_scene:
+        reasons.append("opening")
+    if before_location and after_location and before_location != after_location:
+        reasons.append("location")
+
+    before_bucket = int(_as_seconds(previous_clock) // EPOCH_SECONDS)
+    after_bucket = int(_as_seconds(clock) // EPOCH_SECONDS)
+    if after_bucket > before_bucket:
+        reasons.append("time")
+
+    mechanics = transit_result if isinstance(transit_result, dict) else {}
+    due_count = sum(
+        max(0, int(mechanics.get(key) or 0))
+        for key in ("fired", "news_fired", "consequences_fired", "expired")
+        if str(mechanics.get(key) or "0").lstrip("-").isdigit()
+    )
+    if due_count:
+        reasons.append("due_event")
+    return reasons
+
+
+def _epoch_id(cid, frame_id, turn_idx, elapsed, location, reasons):
+    material = json.dumps(
+        [int(cid), frame_id, int(turn_idx), round(float(elapsed), 3),
+         str(location or ""), list(reasons)],
+        ensure_ascii=False, separators=(",", ":"),
+    )
+    return "epoch_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:20]
+
+
+def _plan_slug(value):
+    return re.sub(r"[^a-z0-9_-]+", "_", str(value or "").casefold()).strip("_")[:80]
+
+
+def _plan_words(value):
+    stop = {"a", "an", "and", "at", "for", "from", "i", "in", "it",
+            "my", "of", "on", "or", "the", "this", "to", "we", "will"}
+    return {w for w in re.findall(r"[a-z0-9']+", str(value or "").casefold())
+            if len(w) > 2 and w not in stop}
+
+
+def _declared_plan_actors(ctx):
+    """Character-owned declaration text keyed by stable id and display name.
+
+    The Director may adjudicate a plan but cannot mint its objective. This is
+    the structural half of that ownership rule: a stored `basis` has to match
+    something the named character actually returned this beat.
+    """
+    from character_schema import (cast_entity_id, character_name,
+                                  character_name_from_text)
+
+    out = {}
+    results = getattr(ctx, "character_results", None) or {}
+    for row in getattr(ctx, "cast", None) or []:
+        try:
+            char_id = int(row["id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        raw_sheet = row.get("sheet") if isinstance(row, dict) else row["sheet"]
+        try:
+            sheet = json.loads(raw_sheet or "{}") if isinstance(raw_sheet, str) \
+                else (raw_sheet or {})
+        except (TypeError, ValueError):
+            sheet = {}
+        result = results.get(char_id) or results.get(str(char_id)) or {}
+        if not isinstance(result, dict):
+            continue
+        pieces = []
+        for event in result.get("sequence") or []:
+            if not isinstance(event, dict):
+                continue
+            pieces.extend(str(event.get(k) or "") for k in (
+                "text", "attempt", "observable", "reason") if event.get(k))
+        pieces.extend(str(result.get(k) or "") for k in ("speech",) if result.get(k))
+        action = result.get("action") or {}
+        if isinstance(action, dict):
+            pieces.extend(str(action.get(k) or "") for k in (
+                "attempt", "observable", "reason") if action.get(k))
+        for field in ("intent_ops", "project_ops"):
+            for op in result.get(field) or []:
+                if isinstance(op, dict):
+                    pieces.extend(str(v) for v in op.values()
+                                  if isinstance(v, str) and v.strip())
+        corpus = " ".join(" ".join(pieces).split())
+        if not corpus:
+            continue
+        display = (character_name_from_text(raw_sheet or "{}")
+                   if isinstance(raw_sheet, str) else character_name(sheet))
+        sid = cast_entity_id(sheet, char_id)
+        entry = {"id": sid, "display": display, "char_id": char_id,
+                 "corpus": corpus}
+        for key in {sid.casefold(), display.casefold(), str(char_id)}:
+            if key:
+                out[key] = entry
+    return out
+
+
+def _basis_is_grounded(basis, corpus):
+    basis_text = " ".join(str(basis or "").split())
+    corpus_text = " ".join(str(corpus or "").split())
+    if len(basis_text) < 6 or not corpus_text:
+        return False
+    if basis_text.casefold() in corpus_text.casefold():
+        return True
+    words = _plan_words(basis_text)
+    if not words:
+        return False
+    overlap = words & _plan_words(corpus_text)
+    return len(overlap) >= min(3, len(words)) and len(overlap) / len(words) >= 0.5
+
+
+def _normalize_plan_stages(cid, scene, frame_id, ctx, actor, stages,
+                           elapsed):
+    """Validate plan stages now, while their Director adjudication is current."""
+    from living_world import mint_consequences
+    from subjects import resolve_subject
+
+    normalized, warnings = [], []
+    for index, raw in enumerate((stages or [])[:PLAN_STAGE_CAP]):
+        if not isinstance(raw, dict):
+            warnings.append(f"stage {index} is not an object")
+            continue
+        trigger = raw.get("trigger") or {}
+        if not isinstance(trigger, dict):
+            warnings.append(f"stage {index} has no trigger object")
+            continue
+        event_kind = str(trigger.get("event_kind") or "").strip().casefold()
+        trigger_out = {}
+        if event_kind:
+            if event_kind not in PLAN_EVENT_KINDS:
+                warnings.append(f"stage {index} has unknown event_kind {event_kind!r}")
+                continue
+            trigger_out["event_kind"] = event_kind
+            location = str(trigger.get("location") or "").strip()
+            if location:
+                resolved = resolve_subject(cid, scene, "place", location, frame_id)
+                if not resolved:
+                    warnings.append(
+                        f"stage {index} trigger location {location!r} is unknown")
+                    continue
+                trigger_out["location_id"] = resolved.subject.id
+        else:
+            try:
+                after = float(trigger.get("after_seconds"))
+            except (TypeError, ValueError):
+                warnings.append(f"stage {index} needs after_seconds or event_kind")
+                continue
+            after = min(max(after, PLAN_TRIGGER_MIN_SECONDS),
+                        PLAN_TRIGGER_MAX_SECONDS)
+            trigger_out.update({"after_seconds": after,
+                                "due_at": float(elapsed) + after})
+
+        effect = raw.get("effect")
+        effect_out = None
+        if effect is not None:
+            if hasattr(effect, "dict"):
+                effect = effect.dict()
+            if not isinstance(effect, dict):
+                warnings.append(f"stage {index} effect is not an object")
+                continue
+            rows, effect_warnings = mint_consequences(
+                cid, scene, frame_id, ctx.turn.id, ctx.turn.idx, elapsed,
+                [effect], player_room="")
+            if not rows:
+                warnings.extend(f"stage {index}: {w}" for w in effect_warnings)
+                continue
+            payload = json.loads(rows[0]["payload"])
+            effect_out = {
+                "what": payload["what"], "where": payload["where"],
+                "due_seconds": payload["declared_due_seconds"],
+                "witnessed": payload.get("witnessed") or "",
+                "originator": actor["id"],
+            }
+        normalized.append({
+            "stage_id": _plan_slug(raw.get("stage_id")) or f"stage_{index + 1}",
+            "trigger": trigger_out, "effect": effect_out,
+        })
+    return normalized, warnings
+
+
+def apply_plan_ops(ctx, scene, clock):
+    """Persist grounded `open|cancel` operations for the reactive rung.
+
+    Called inside the primary turn transaction. It performs no model work and
+    stores frame-scoped world KV, so checkpoints/branches/archive inherit the
+    state without a parallel persistence mechanism.
+    """
+    from db import wget, wset
+    from living_world import living_world_allows, living_world_config
+
+    cid = ctx.chat.id
+    raw_ops = ((ctx.director_resolve or ctx.director_establish or {})
+               .get("state_diff") or {}).get("offscreen_plan_ops") or []
+    if not isinstance(raw_ops, list):
+        raw_ops = []
+    allowed = living_world_allows(
+        living_world_config(cid), "antagonist_ladder", "floor")
+    if not allowed:
+        if raw_ops:
+            ctx.add_warning(
+                f"discarded {len(raw_ops)} off-screen plan op(s): "
+                "the antagonist-ladder floor is off or above the authority ceiling")
+        return {"offered": len(raw_ops), "applied": 0, "active": 0,
+                "warnings": len(raw_ops), "enabled": False}
+
+    plans = wget(cid, PLAN_KEY, []) or []
+    plans = [dict(p) for p in plans if isinstance(p, dict) and p.get("plan_id")]
+    by_id = {str(p["plan_id"]): p for p in plans}
+    actors = _declared_plan_actors(ctx)
+    elapsed = _as_seconds(clock)
+    applied = 0
+    warnings = []
+
+    for index, raw in enumerate(raw_ops[:PLAN_CAP]):
+        if hasattr(raw, "dict"):
+            raw = raw.dict()
+        if not isinstance(raw, dict):
+            warnings.append(f"op {index} is not an object")
+            continue
+        op = str(raw.get("op") or "open").strip().casefold()
+        actor_key = str(raw.get("actor") or "").strip().casefold()
+        actor = actors.get(actor_key)
+        if not actor:
+            warnings.append(
+                f"op {index} actor {raw.get('actor')!r} made no plan declaration this beat")
+            continue
+        basis = " ".join(str(raw.get("basis") or "").split())[:240]
+        if not _basis_is_grounded(basis, actor["corpus"]):
+            warnings.append(f"op {index} basis is not grounded in {actor['display']}'s declaration")
+            continue
+        plan_id = _plan_slug(raw.get("plan_id"))
+        if not plan_id:
+            material = f"{cid}:{ctx.turn.frame_id}:{actor['id']}:{raw.get('objective')}:{ctx.turn.idx}"
+            plan_id = "plan_" + hashlib.sha256(material.encode()).hexdigest()[:16]
+
+        if op == "cancel":
+            plan = by_id.get(plan_id)
+            if not plan or plan.get("actor_id") != actor["id"]:
+                warnings.append(f"op {index} cannot cancel unknown/unowned plan {plan_id!r}")
+                continue
+            if plan.get("status") == "active":
+                plan["status"] = "cancelled"
+                plan["updated_turn"] = int(ctx.turn.idx)
+                plan.setdefault("history", []).append({
+                    "event": "cancelled", "turn": int(ctx.turn.idx),
+                    "basis": basis,
+                })
+                plan["history"] = plan["history"][-20:]
+                applied += 1
+            continue
+        if op != "open":
+            warnings.append(f"op {index} has unknown operation {op!r}")
+            continue
+        if plan_id in by_id:
+            warnings.append(f"op {index} plan_id {plan_id!r} already exists")
+            continue
+        if len([p for p in plans if p.get("status") == "active"]) >= PLAN_CAP:
+            warnings.append(f"active plan cap {PLAN_CAP} reached")
+            break
+        objective = " ".join(str(raw.get("objective") or "").split())[:240]
+        if not objective:
+            warnings.append(f"op {index} has no objective")
+            continue
+        stages, stage_warnings = _normalize_plan_stages(
+            cid, scene, ctx.turn.frame_id, ctx, actor,
+            raw.get("stages") or [], elapsed)
+        warnings.extend(f"op {index}: {w}" for w in stage_warnings)
+        if not stages:
+            warnings.append(f"op {index} has no valid stages")
+            continue
+        plan = {
+            "plan_id": plan_id, "actor_id": actor["id"],
+            "actor_display": actor["display"], "char_id": actor["char_id"],
+            "objective": objective, "status": "active", "stage_index": 0,
+            "stages": stages, "created_turn": int(ctx.turn.idx),
+            "updated_turn": int(ctx.turn.idx),
+            "history": [{"event": "opened", "turn": int(ctx.turn.idx),
+                         "basis": basis}],
+        }
+        plans.append(plan)
+        by_id[plan_id] = plan
+        applied += 1
+
+    if applied:
+        wset(cid, PLAN_KEY, plans[-PLAN_CAP:])
+    for warning in warnings:
+        ctx.add_warning(f"off-screen plan refused: {warning}")
+    return {"offered": len(raw_ops), "applied": applied,
+            "active": sum(p.get("status") == "active" for p in plans),
+            "warnings": len(warnings), "enabled": True}
+
+
+def _reactive_triggered(stage, elapsed, fired_events):
+    trigger = stage.get("trigger") if isinstance(stage, dict) else None
+    if not isinstance(trigger, dict):
+        return False
+    if "due_at" in trigger:
+        try:
+            return float(elapsed) >= float(trigger["due_at"])
+        except (TypeError, ValueError):
+            return False
+    kind = str(trigger.get("event_kind") or "")
+    location = str(trigger.get("location_id") or "")
+    return any(
+        isinstance(event, dict)
+        and str(event.get("kind") or "") == kind
+        and (not location or str(event.get("location_id") or "") == location)
+        for event in fired_events or []
+    )
+
+
+def _reactive_due_crossed(plans, previous_clock, clock):
+    """Whether an active time stage creates an epoch edge this beat.
+
+    A plan due in five minutes must not wait for the next whole-hour bucket.
+    The strict lower bound also prevents an invalid/temporarily unmintable
+    effect from manufacturing a new epoch on every later dialogue turn: it is
+    retried at the next natural epoch, not spun as a cadence loop.
+    """
+    before = _as_seconds(previous_clock)
+    after = _as_seconds(clock)
+    if after <= before:
+        return False
+    for plan in plans or []:
+        if not isinstance(plan, dict) or plan.get("status") != "active":
+            continue
+        stages = plan.get("stages") or []
+        try:
+            index = int(plan.get("stage_index") or 0)
+            stage = stages[index]
+            due_at = float((stage.get("trigger") or {})["due_at"])
+        except (IndexError, KeyError, TypeError, ValueError):
+            continue
+        if before < due_at <= after:
+            return True
+    return False
+
+
+def advance_reactive_plans(ctx, scene, clock, transit_result, epoch_id):
+    """Fire already-authored plan stages. No deliberation, no invention."""
+    from db import qtx, wget, wset
+    from gaps import LAST_SEEN_KEY
+    from living_world import (living_world_allows, living_world_config,
+                              mint_consequences)
+    from mechanics import stable_event_key
+
+    cid = ctx.chat.id
+    if not living_world_allows(
+            living_world_config(cid), "antagonist_ladder", "floor"):
+        return {"reactive_considered": 0, "reactive_fired": 0,
+                "reactive_effect_opportunities": 0,
+                "reactive_effects_minted": 0}
+    plans = wget(cid, PLAN_KEY, []) or []
+    if not isinstance(plans, list):
+        plans = []
+    fired_events = ((transit_result or {}).get("fired_events") or [])
+    elapsed = _as_seconds(clock)
+    last_seen = wget(cid, LAST_SEEN_KEY, {}) or {}
+    considered = fired = effect_opportunities = minted = 0
+    changed = False
+
+    for plan in plans:
+        if fired >= REACTIVE_FIRE_CAP or not isinstance(plan, dict) \
+                or plan.get("status") != "active":
+            continue
+        stages = plan.get("stages") or []
+        try:
+            index = int(plan.get("stage_index") or 0)
+        except (TypeError, ValueError):
+            index = 0
+        if index >= len(stages):
+            plan["status"] = "completed"
+            changed = True
+            continue
+        stage = stages[index]
+        considered += 1
+        if not _reactive_triggered(stage, elapsed, fired_events):
+            continue
+        effect = stage.get("effect") if isinstance(stage, dict) else None
+        rows, warnings = [], []
+        if effect:
+            effect_opportunities += 1
+            origin_room = str(
+                (last_seen.get(plan.get("actor_id")) or {}).get("room") or "")
+            rows, warnings = mint_consequences(
+                cid, scene, ctx.turn.frame_id, ctx.turn.id, ctx.turn.idx,
+                elapsed, [effect], player_room=origin_room)
+            if rows:
+                row = rows[0]
+                row["event_id"] = stable_event_key(
+                    "reactive_plan", cid, ctx.turn.frame_id,
+                    plan.get("plan_id"), stage.get("stage_id"), ctx.turn.id)
+                row["seed"] = epoch_id
+                qtx(
+                    "INSERT OR REPLACE INTO scheduled_events"
+                    "(event_id,chat_id,due_at,kind,location_id,payload,seed,status) "
+                    "VALUES(?,?,?,?,?,?,?,?)",
+                    (row["event_id"], row["chat_id"], row["due_at"], row["kind"],
+                     row["location_id"], row["payload"], row["seed"], row["status"]),
+                )
+                minted += 1
+        if effect and not rows:
+            for warning in warnings:
+                ctx.add_warning(
+                    f"reactive plan {plan.get('plan_id')} held: {warning}")
+            continue
+        plan["stage_index"] = index + 1
+        plan["updated_turn"] = int(ctx.turn.idx)
+        plan.setdefault("history", []).append({
+            "event": "stage_fired", "stage_id": stage.get("stage_id"),
+            "turn": int(ctx.turn.idx), "epoch_id": epoch_id,
+            **({"effect_event_id": rows[0]["event_id"]} if rows else {}),
+        })
+        plan["history"] = plan["history"][-20:]
+        if plan["stage_index"] >= len(stages):
+            plan["status"] = "completed"
+        fired += 1
+        changed = True
+    if changed:
+        wset(cid, PLAN_KEY, plans)
+    return {"reactive_considered": considered, "reactive_fired": fired,
+            "reactive_effect_opportunities": effect_opportunities,
+            "reactive_effects_minted": minted}
+
+
+def advance_epoch(ctx, prepared_scene, transit_result):
+    """Commit this beat's frame-scoped off-screen epoch and free tick draw.
+
+    This function is a commit domain: it performs no provider call and runs
+    under `commit_all`'s outer transaction. Its world-KV state and log are
+    therefore captured by the ordinary pre-turn checkpoint, branch key remap,
+    and portable archive paths without a new table-specific serializer.
+    """
+    from db import wget, wset
+    from scene import dialogue_config, offscreen_life_allows
+
+    cid = ctx.chat.id
+    frame_id = ctx.turn.frame_id
+    turn_idx = ctx.turn.idx
+    prepared = prepared_scene if isinstance(prepared_scene, dict) else {}
+    scene = prepared.get("scene") or {}
+    previous_scene = prepared.get("prev_scene") or {}
+    previous_clock = prepared.get("prev_clock") or {}
+    clock = prepared.get("clock") or wget(cid, "simulation_clock", {}) or {}
+    elapsed = _as_seconds(clock)
+    location = str(scene.get("location") or "").strip()
+    reasons = epoch_reasons(
+        turn_idx=turn_idx, previous_scene=previous_scene, scene=scene,
+        previous_clock=previous_clock, clock=clock,
+        transit_result=transit_result,
+    )
+    plans = wget(cid, PLAN_KEY, []) or []
+    if _reactive_due_crossed(plans, previous_clock, clock):
+        reasons.append("reactive_due")
+
+    old = wget(cid, EPOCH_KEY, {}) or {}
+    # Upgrade baseline: an old story has no epoch record. Do not invent one
+    # retroactive tick merely because new code first saw it, but do preserve a
+    # real boundary crossed by this very beat.
+    bootstrapped = not isinstance(old, dict) or not old
+    if bootstrapped and int(turn_idx) > 0 and not reasons:
+        state = {
+            "sequence": 0, "epoch_id": "", "turn": int(turn_idx),
+            "elapsed_seconds": elapsed,
+            "time_bucket": int(elapsed // EPOCH_SECONDS),
+            "location": location, "reasons": ["baseline"],
+        }
+        wset(cid, EPOCH_KEY, state)
+        return {
+            "opportunity": False, "eligible": False,
+            "bootstrapped": True, "reasons": ["baseline"],
+            "actors_considered": 0, "stochastic_fired": 0,
+            **state,
+        }
+
+    if not reasons:
+        return {
+            "opportunity": False, "eligible": False,
+            "bootstrapped": bootstrapped, "reasons": [],
+            "epoch_id": "", "actors_considered": 0,
+            "stochastic_fired": 0,
+        }
+
+    try:
+        previous_sequence = max(0, int((old or {}).get("sequence") or 0))
+    except (TypeError, ValueError):
+        # A hand-edited/legacy world key must not make the whole turn
+        # uncommittable. The stable epoch id still supplies idempotence.
+        previous_sequence = 0
+    sequence = previous_sequence + 1
+    epoch_id = _epoch_id(
+        cid, frame_id, turn_idx, elapsed, location, reasons)
+    state = {
+        "sequence": sequence, "epoch_id": epoch_id, "turn": int(turn_idx),
+        "elapsed_seconds": elapsed,
+        "time_bucket": int(elapsed // EPOCH_SECONDS),
+        "location": location, "reasons": reasons,
+    }
+    wset(cid, EPOCH_KEY, state)
+
+    reactive = advance_reactive_plans(
+        ctx, scene, clock, transit_result, epoch_id)
+
+    cfg = dialogue_config(cid) or {}
+    cap = max(0, int(cfg.get("max_offscreen_actors", 3) or 0))
+    actors = dormant_subjects(cid, frame_id)
+    eligible = (
+        offscreen_life_allows(cfg.get("offscreen_life"), "stochastic")
+        and cap > 0
+    )
+    written = []
+    if eligible and actors:
+        ticks = stochastic_ticks(
+            epoch_id, actors, wget(cid, "standing_intentions", []) or [], cap)
+        written = append_offscreen_log(
+            cid, turn_idx, epoch_id, ticks, rung="stochastic")
+    return {
+        "opportunity": True, "eligible": eligible,
+        "bootstrapped": bootstrapped, **state,
+        "actors_considered": len(actors),
+        "stochastic_fired": len(written),
+        **reactive,
+    }
+
+
 def _adjudicated_event_ids(cid):
     """Every event id something already minted: the citable set.
 
-    ``scheduled_events`` is the only id-bearing event ledger with a runtime
-    writer (``world_events`` has none, anywhere -- do not build one here; the
-    finding is on the record in gaps.py and the proposal). A provisional
-    record may CITE these; it may not mint its own.
+    A provisional record may cite either the scheduled cause or its promoted
+    objective world event; it may not mint an identity of its own.
     """
     from db import q
 
-    return {str(r["event_id"]) for r in q(
-        "SELECT event_id FROM scheduled_events WHERE chat_id=?", (cid,))}
+    return {
+        str(r["event_id"])
+        for table in ("scheduled_events", "world_events")
+        for r in q(f"SELECT event_id FROM {table} WHERE chat_id=?", (cid,))
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -599,23 +1189,9 @@ def profile_summary_record(cid, scene, subject, sheet, since_turn, until_turn,
 
 
 # ---------------------------------------------------------------------------
-# The producer: cadenced, out of band, parallel with turns, never cancelled.
+# The model-priced producer: epoch-triggered, out of band, parallel with turns,
+# never cancelled merely because a new turn starts.
 # ---------------------------------------------------------------------------
-
-#: Produce every ~3 turns (section 1.0.2: production bounds cost and gives
-#: the world a heartbeat; DELIVERY still happens at re-contact). A pure
-#: function of the turn index -- no wall clock, no unseeded RNG -- so rerun
-#: and reroll cannot silently change whether the world was alive.
-TICK_CADENCE_TURNS = 3
-
-
-def tick_due(turn_idx):
-    """Pure cadence gate."""
-    try:
-        idx = int(turn_idx)
-    except (TypeError, ValueError):
-        return False
-    return idx > 0 and idx % TICK_CADENCE_TURNS == 0
 
 
 def dormant_subjects(cid, frame_id=None):
@@ -629,23 +1205,87 @@ def dormant_subjects(cid, frame_id=None):
 
     out = []
     for row in q(
-        "SELECT cc.char_id AS char_id, COALESCE(cc.sheet,ch.sheet) AS sheet "
+        "SELECT cc.char_id AS char_id, COALESCE(cc.sheet,ch.sheet) AS sheet, "
+        "COALESCE(ccf.state,cc.state) AS cstate "
         "FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
         "LEFT JOIN chat_char_frames ccf "
         "  ON ccf.chat_id=cc.chat_id AND ccf.char_id=cc.char_id AND ccf.frame_id IS ? "
-        "WHERE cc.chat_id=? AND COALESCE(ccf.status, cc.status)='dormant'",
+        "WHERE cc.chat_id=? AND COALESCE(ccf.status, cc.status)='dormant' "
+        "ORDER BY cc.char_id",
         (frame_id, cid),
     ):
         try:
             sheet = json.loads(row["sheet"] or "{}")
         except Exception:
             sheet = {}
+        try:
+            state = json.loads(row["cstate"] or "{}")
+        except Exception:
+            state = {}
         out.append({
             "id": cast_entity_id(sheet, row["char_id"]),
             "display": character_name_from_text(row["sheet"] or "{}"),
             "sheet": sheet,
             "char_id": row["char_id"],
+            "state": state if isinstance(state, dict) else {},
         })
+    return out
+
+
+def full_agent_candidates(cid, *, frame_id=None, cap=1):
+    """Opted-in dormant minds with a concrete reason to spend a paid tick.
+
+    Selection is deterministic and content-firewalled. It sees only whether a
+    character owns an active authored plan and whether their own carried-report
+    state contains evidence newer than their last paid tick; it never reads the
+    objective scene/player feed. The producer remains a separate step.
+    """
+    from character_schema import character_offscreen_agent
+    from db import wget, wget_for_frame
+
+    try:
+        cap = max(0, int(cap))
+    except (TypeError, ValueError):
+        cap = 0
+    plans = (wget_for_frame(cid, PLAN_KEY, frame_id, [])
+             if frame_id is not None else wget(cid, PLAN_KEY, [])) or []
+    active_by_actor = {
+        str(plan.get("actor_id"))
+        for plan in plans if isinstance(plan, dict)
+        and plan.get("status") == "active" and plan.get("actor_id")
+    }
+    out = []
+    for entry in dormant_subjects(cid, frame_id):
+        if not character_offscreen_agent(entry.get("sheet") or {}):
+            continue
+        state = entry.get("state") if isinstance(entry.get("state"), dict) else {}
+        agent_state = state.get("offscreen_agent") \
+            if isinstance(state.get("offscreen_agent"), dict) else {}
+        try:
+            last_tick = int(agent_state.get("last_turn") or -1)
+        except (TypeError, ValueError):
+            last_tick = -1
+        reports = [r for r in state.get("carried_reports") or []
+                   if isinstance(r, dict)]
+        new_reports = []
+        for report in reports:
+            try:
+                acquired_turn = int(report.get("acquired_turn") or -1)
+            except (TypeError, ValueError):
+                continue
+            if acquired_turn > last_tick:
+                new_reports.append(report)
+        reasons = []
+        if entry["id"] in active_by_actor:
+            reasons.append("active_plan")
+        if new_reports:
+            reasons.append("new_carried_report")
+        if not reasons:
+            continue
+        out.append({**entry, "reasons": reasons,
+                    "new_report_count": len(new_reports)})
+        if len(out) >= cap:
+            break
     return out
 
 
@@ -710,8 +1350,8 @@ def profile_candidates(cid, scene, player_room, intentions, *, frame_id=None,
     return out
 
 
-def schedule_profile_ticks(ctx):
-    """Queue this turn's out-of-band profile ticks. Returns the Job or None.
+def schedule_profile_ticks(ctx, epoch=None):
+    """Queue this epoch's out-of-band profile ticks. Returns Job or None.
 
     Called from the commit tail, AFTER the turn's facts are durable; a
     failure is a warning, never a rollback. The job runs in parallel with
@@ -728,12 +1368,20 @@ def schedule_profile_ticks(ctx):
     cid = ctx.chat.id
     turn_idx = ctx.turn.idx
     frame_id = ctx.turn.frame_id
-    if not tick_due(turn_idx):
+    epoch = epoch if isinstance(epoch, dict) else {}
+    if not epoch.get("opportunity"):
+        return None
+    epoch_id = str(epoch.get("epoch_id") or "").strip()
+    if not epoch_id:
+        epoch["profile_skip"] = "missing_epoch_id"
         return None
     cfg = dialogue_config(cid) or {}
     cap = int(cfg.get("max_offscreen_actors", 3) or 0)
     if not offscreen_life_allows(cfg.get("offscreen_life"), "stochastic") or cap <= 0:
+        epoch["profile_opportunity"] = False
+        epoch["profile_skip"] = "ceiling_or_cap"
         return None
+    epoch["profile_opportunity"] = True
 
     from character_schema import persona_name
     from db import wget, wget_for_frame
@@ -747,11 +1395,15 @@ def schedule_profile_ticks(ctx):
         # Without the player's room the distance axis has no anchor, and the
         # medium rung is the one that spends -- so nothing is scheduled,
         # rather than every distance being guessed at.
+        epoch["profile_candidates"] = 0
+        epoch["profile_skip"] = "no_player_room"
         return None
     intents = wget(cid, "standing_intentions", []) or []
     candidates = profile_candidates(
         cid, scene, player_room, intents, frame_id=frame_id, cap=cap)
+    epoch["profile_candidates"] = len(candidates)
     if not candidates:
+        epoch["profile_skip"] = "no_medium_candidates"
         return None
 
     since_by_subject = {}
@@ -764,7 +1416,10 @@ def schedule_profile_ticks(ctx):
             since_by_subject[cand["id"]] = int(
                 (ledger.get(cand["id"]) or {}).get("turn"))
         except (TypeError, ValueError):
-            since_by_subject[cand["id"]] = max(0, turn_idx - TICK_CADENCE_TURNS)
+            # A real medium candidate normally has a last-seen anchor. Fail
+            # closed to the story origin if a legacy/custom candidate lacks
+            # one; a made-up recent cadence would erase legitimate absence.
+            since_by_subject[cand["id"]] = 0
 
     def _produce(job):
         # The job thread starts with a FRESH contextvars context --
@@ -799,15 +1454,18 @@ def schedule_profile_ticks(ctx):
                                "actor_display": cand.get("display", ""),
                                "tick": compose_tick(
                                    cand.get("display") or cand["id"], state)})
-            return land_profile_ticks(cid, turn_idx, events)
+            return land_profile_ticks(
+                cid, turn_idx, events, epoch_id=epoch_id)
         finally:
             active_frame_id.reset(token)
 
-    return jobs.submit(cid, f"offscreen_profile:{turn_idx}", _produce,
-                       base_turn=turn_idx)
+    job = jobs.submit(cid, f"offscreen_profile:{epoch_id}", _produce,
+                      base_turn=turn_idx)
+    epoch["profile_scheduled"] = True
+    return job
 
 
-def land_profile_ticks(cid, base_turn, events):
+def land_profile_ticks(cid, base_turn, events, *, epoch_id=None):
     """Write produced ticks, unless the world rolled back underneath them.
 
     The rollback guard (section 1.0.2 hazard 2): a tick computed against
@@ -817,10 +1475,20 @@ def land_profile_ticks(cid, base_turn, events):
     precedent is the checkpoint restore that silently undid a completed
     embedding rebuild.
     """
-    from db import q
+    from db import q, wget
 
     if not events:
         return {"written": 0}
+    if epoch_id:
+        current_epoch = wget(cid, EPOCH_KEY, {}) or {}
+        if str(current_epoch.get("epoch_id") or "") != str(epoch_id):
+            logger.info(
+                "profile ticks discarded: chat=%s base_turn=%s epoch=%s "
+                "current_epoch=%s (checkpoint/frame changed)",
+                cid, base_turn, epoch_id,
+                current_epoch.get("epoch_id"),
+            )
+            return {"written": 0, "discarded": len(events)}
     row = q("SELECT MAX(idx) AS idx FROM turns WHERE chat_id=?", (cid,),
             one=True)
     current = row["idx"] if row and row["idx"] is not None else None
@@ -830,5 +1498,6 @@ def land_profile_ticks(cid, base_turn, events):
             "(rolled back)", cid, base_turn, current)
         return {"written": 0, "discarded": len(events)}
     written = append_offscreen_log(
-        cid, base_turn, f"tick:{cid}:{base_turn}", events, rung="profile")
+        cid, base_turn, epoch_id or f"tick:{cid}:{base_turn}", events,
+        rung="profile")
     return {"written": len(written)}

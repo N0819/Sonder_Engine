@@ -1565,6 +1565,49 @@ class BackdropPromptOutput(LenientModel):
 class BlurbMintOutput(LenientModel):
     blurbs: list[BlurbMintEntry] = Field(default_factory=list)
 
+
+class OffscreenPlanTrigger(LenientModel):
+    """One deterministic condition for an authored off-screen plan stage.
+
+    Exactly one trigger kind survives commit normalization: relative story
+    time, or a fired mechanical event kind optionally narrowed to a location.
+    Open strings here are intentional input tolerance; `offscreen.py` owns the
+    closed write vocabulary and refuses ambiguity before persistence.
+    """
+    after_seconds: Optional[float] = None
+    event_kind: str = ""
+    location: str = ""
+
+
+class OffscreenPlanEffect(LenientModel):
+    """A consequence adjudicated now and fired later without invention."""
+    what: str = ""
+    where: str = ""
+    due_seconds: Optional[float] = None
+    witnessed: str = ""
+    originator: str = ""
+
+
+class OffscreenPlanStage(LenientModel):
+    stage_id: str = ""
+    trigger: OffscreenPlanTrigger = Field(default_factory=OffscreenPlanTrigger)
+    effect: Optional[OffscreenPlanEffect] = None
+
+
+class OffscreenPlanOp(LenientModel):
+    """Director encoding of a character-owned declaration.
+
+    `basis` must quote/paraphrase that actor's declaration from this beat;
+    commit validates the attribution before a plan can exist. The Director
+    adjudicates stages/effects but cannot invent an absent mind's objective.
+    """
+    op: str = "open"
+    plan_id: str = ""
+    actor: str = ""
+    objective: str = ""
+    basis: str = ""
+    stages: list[OffscreenPlanStage] = Field(default_factory=list)
+
 class StateDiff(LenientModel):
     positions: dict[str, str] = Field(default_factory=dict)
     rooms: dict[str, RoomDef] = Field(default_factory=dict)
@@ -1651,6 +1694,12 @@ class StateDiff(LenientModel):
     # per turn, and the whole lane is inert unless the chat's living-world
     # setting turned it on.
     consequences: list[dict] = Field(default_factory=list)
+    # Living world E, reactive floor. These are plans explicitly declared by
+    # a character THIS beat and adjudicated into bounded deterministic stages
+    # by the Director. Commit requires a grounded `basis`, a registered actor,
+    # the antagonist-ladder floor setting, and typed time/event triggers.
+    # `open` creates; `cancel` ends an existing plan owned by that actor.
+    offscreen_plan_ops: list[OffscreenPlanOp] = Field(default_factory=list)
     # Destruction declaration (DestructionEffect shape -- see its
     # docstring). Declared here so model_dump() keeps it through
     # validation (the zone-field precedent above); commit.py validates it
@@ -3251,6 +3300,8 @@ OUTPUT_EXAMPLES = {
                      "end_seconds": 60, "mode": "action",
                      "explicit": False, "display_advance": ""},
             "claim_dispositions": [],
+            "consequences": [],
+            "offscreen_plan_ops": [],
         },
         "changes_asserted": [
             {"category": "adjacency", "subject": "vault_door",

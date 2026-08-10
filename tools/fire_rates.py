@@ -269,6 +269,93 @@ def pipeline_rows(con, turn_ids):
     return rows
 
 
+def offscreen_rows(con, turn_ids):
+    """World-epoch opportunities and the work selected from them.
+
+    Commit results are the denominator record: old turns that predate the
+    `offscreen_epoch` domain are not chances, while a present false/empty field
+    is an observed decline. This keeps a new mechanism from reading as dead
+    merely because the corpus is mostly older than it.
+    """
+    if not turn_ids:
+        return []
+    sql = (
+        "SELECT v.content FROM variants v JOIN steps s ON s.id=v.step_id "
+        f"WHERE v.active=1 AND s.turn_id IN {_in(turn_ids)} "
+        "AND s.key='commit'"
+    )
+    epochs = []
+    plan_commits = []
+    carrier_commits = []
+    for row in con.execute(sql):
+        try:
+            blob = json.loads(row["content"])
+        except (TypeError, ValueError):
+            continue
+        result = ((blob.get("results") or {}).get("offscreen_epoch")
+                  if isinstance(blob, dict) else None)
+        if isinstance(result, dict) and "opportunity" in result:
+            epochs.append(result)
+        plans = ((blob.get("results") or {}).get("offscreen_plans")
+                 if isinstance(blob, dict) else None)
+        if isinstance(plans, dict) and "offered" in plans:
+            plan_commits.append(plans)
+        carriers = ((blob.get("results") or {}).get("information_carriers")
+                    if isinstance(blob, dict) else None)
+        if isinstance(carriers, dict) and "events_offered" in carriers:
+            carrier_commits.append(carriers)
+
+    opportunities = [e for e in epochs if e.get("opportunity")]
+    actor_chances = [
+        e for e in opportunities
+        if e.get("eligible") and int(e.get("actors_considered") or 0) > 0
+    ]
+    profile_chances = [
+        e for e in opportunities if e.get("profile_opportunity") is True
+    ]
+    return [
+        Row("off-screen life", "world epoch opportunity",
+            len(opportunities), len(epochs),
+            "canonical location/time/due-event edge; older commits excluded"),
+        Row("off-screen life", "seeded tick batch wrote events",
+            sum(int(e.get("stochastic_fired") or 0) > 0 for e in actor_chances),
+            len(actor_chances),
+            "eligible epochs that had at least one dormant actor"),
+        Row("off-screen life", "profile candidate selected",
+            sum(int(e.get("profile_candidates") or 0) > 0
+                for e in profile_chances),
+            len(profile_chances),
+            "model spend considered only on a world epoch"),
+        Row("off-screen life", "profile job scheduled",
+            sum(bool(e.get("profile_scheduled")) for e in profile_chances),
+            len(profile_chances),
+            "bounded, out of band; candidate selection is the preceding row"),
+        Row("off-screen life", "reactive plan op accepted",
+            sum(int(p.get("applied") or 0) for p in plan_commits),
+            sum(int(p.get("offered") or 0) for p in plan_commits),
+            "Director encoding grounded in that actor's declaration"),
+        Row("off-screen life", "reactive stage fired",
+            sum(int(e.get("reactive_fired") or 0) for e in opportunities),
+            sum(int(e.get("reactive_considered") or 0) for e in opportunities),
+            "one typed active stage considered per plan per world epoch"),
+        Row("off-screen life", "reactive effect minted",
+            sum(int(e.get("reactive_effects_minted") or 0)
+                for e in opportunities),
+            sum(int(e.get("reactive_effect_opportunities") or 0)
+                for e in opportunities),
+            "pre-adjudicated effect; no model call at firing"),
+        Row("off-screen life", "public event surface emitted",
+            sum(int(c.get("public_surfaces") or 0) for c in carrier_commits),
+            sum(int(c.get("events_offered") or 0) for c in carrier_commits),
+            "fired objective events; empty witnessed surfaces are real declines"),
+        Row("off-screen life", "character acquired carried report",
+            sum(int(c.get("acquired") or 0) for c in carrier_commits),
+            sum(int(c.get("carrier_opportunities") or 0)
+                for c in carrier_commits),
+            "registered holder physically co-located with a public surface"),
+    ]
+
+
 # ------------------------------------------------------------------ capacity
 
 def capacity_rows(con, chat_ids):
@@ -336,6 +423,7 @@ def collect(con, chat=None, last=None):
     rows = (memory_rows(con, turn_ids, chat_ids)
             + output_rows(results)
             + pipeline_rows(con, turn_ids)
+            + offscreen_rows(con, turn_ids)
             + capacity_rows(con, chat_ids))
     return {
         "scope": {"chats": len(chat_ids), "turns": len(turn_ids),
