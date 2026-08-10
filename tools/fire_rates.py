@@ -318,6 +318,9 @@ def offscreen_rows(con, turn_ids):
     profile_chances = [
         e for e in opportunities if e.get("profile_opportunity") is True
     ]
+    agent_chances = [
+        e for e in opportunities if e.get("agent_opportunity") is True
+    ]
     return [
         Row("off-screen life", "world epoch opportunity",
             len(opportunities), len(epochs),
@@ -335,6 +338,15 @@ def offscreen_rows(con, turn_ids):
             sum(bool(e.get("profile_scheduled")) for e in profile_chances),
             len(profile_chances),
             "bounded, out of band; candidate selection is the preceding row"),
+        Row("off-screen life", "full-agent candidate selected",
+            sum(int(e.get("agent_candidates") or 0) > 0
+                for e in agent_chances),
+            len(agent_chances),
+            "opted-in dormant mind with a private reason, on a world epoch"),
+        Row("off-screen life", "full-agent job scheduled",
+            sum(bool(e.get("agent_scheduled")) for e in agent_chances),
+            len(agent_chances),
+            "one reduced turn per candidate; landing is epoch-guarded"),
         Row("off-screen life", "reactive plan op accepted",
             sum(int(p.get("applied") or 0) for p in plan_commits),
             sum(int(p.get("offered") or 0) for p in plan_commits),

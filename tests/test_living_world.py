@@ -70,11 +70,15 @@ class TestTheLadder:
             assert LIVING_WORLD_BUILT[approach] <= set(LIVING_WORLD_DEPTHS)
             assert "off" not in LIVING_WORLD_BUILT[approach]
 
-    def test_c_and_es_safe_floors_are_built(self):
-        """C exposes only a holder's witnessed surfaces; E fires only
-        already-authored stages. Their adaptive/artifact ceilings stay off."""
+    def test_c_and_es_built_depths_stay_honest(self):
+        """C exposes only a holder's witnessed surfaces and its artifact
+        ceiling stays off. E's adaptive ceiling is now built — the full
+        `character_agent` tick (`offscreen.schedule_agent_ticks`) — and a
+        built-set that still called it unbuilt would clamp every story that
+        asked for it back to the floor, silently."""
         assert LIVING_WORLD_BUILT["rumor_ledger"] == frozenset({"floor"})
-        assert LIVING_WORLD_BUILT["antagonist_ladder"] == frozenset({"floor"})
+        assert LIVING_WORLD_BUILT["antagonist_ladder"] == frozenset(
+            {"floor", "ceiling"})
 
     def test_the_default_is_off_for_everything(self):
         """The engine never did any of this before the setting existed; a

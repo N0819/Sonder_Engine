@@ -82,16 +82,18 @@ LIVING_WORLD_APPROACHES = (
 #: Which depths actually DO something today. Kept beside the ladder, like
 #: ``scene.OFFSCREEN_LIFE_BUILT``, so an unbuilt tier cannot quietly start
 #: reading as built when it ships and nobody updates a menu. C's physical
-#: carrier floor and E's deterministic/reactive floor are built. E advances
-#: only Director-adjudicated stages authored from a character's own on-screen
-#: declaration. Its adaptive ceiling still waits on C (a loss caused by
-#: information the antagonist never received is a gotcha, not a tragedy).
+#: carrier floor and E's deterministic/reactive floor are built. E's floor
+#: advances only Director-adjudicated stages authored from a character's own
+#: on-screen declaration; its adaptive ceiling is now built on top of C
+#: (``offscreen.schedule_agent_ticks``): an opted-in dormant mind with a
+#: private reason gets one reduced turn — fail-closed private context, one
+#: character call, one Director adjudication, one atomic landing.
 LIVING_WORLD_BUILT = {
     "routine_residue": frozenset({"floor"}),
     "scheduled_consequence": frozenset({"floor"}),
     "rumor_ledger": frozenset({"floor"}),
     "place_obligations": frozenset({"floor"}),
-    "antagonist_ladder": frozenset({"floor"}),
+    "antagonist_ladder": frozenset({"floor", "ceiling"}),
 }
 
 #: What each approach and depth buys, and what it costs — served to the UI

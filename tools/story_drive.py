@@ -109,17 +109,26 @@ def build_story(db):
         return char_id
 
     cast("Mora", "mora_uid", "active")
-    cast("Kestrel", "kestrel_uid", "active")
+    # Opted in, and the only cast member who acquires a REASON during the
+    # story: he is told something on turn 11, declares a plan on turn 12, and
+    # walks out on turn 15. `full_agent_candidates` wants exactly that -- an
+    # active plan of his own, or evidence newer than his last tick. A mind
+    # with neither is declined with `no_private_reason`, which is the rung
+    # refusing to pay for a character who has nothing to think about.
+    cast("Kestrel", "kestrel_uid", "active", agent=True)
     # Left behind and opted in: the only shape that can reach the paid rung.
     cast("Otto", "otto_uid", "dormant", agent=True)
 
     db.wset(cid, "scene", scene())
     db.wset(cid, "simulation_clock", {"elapsed_seconds": 0.0})
+    # The CEILING, not the floor. `character_agent` is the top rung and the
+    # only one that pays for an absent mind to think; a story left at
+    # `stochastic` can never reach it however many epochs fire.
     db.wset(cid, "dialogue_config",
-            {"offscreen_life": "stochastic", "max_offscreen_actors": 3})
+            {"offscreen_life": "character_agent", "max_offscreen_actors": 3})
     db.wset(cid, "living_world", {
         "routine_residue": "floor", "scheduled_consequence": "floor",
-        "place_obligations": "floor", "antagonist_ladder": "floor",
+        "place_obligations": "floor", "antagonist_ladder": "ceiling",
         "rumor_ledger": "floor",
     })
     return cid

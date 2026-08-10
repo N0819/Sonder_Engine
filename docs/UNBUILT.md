@@ -2000,7 +2000,11 @@ Build order, first three landed (bg-life work, 2026-08):
 4. ~~**Typed `reactive` plan stages.**~~ Grounded same-beat declarations,
    frame-scoped stages, typed time/event triggers, and pre-adjudicated effects
    now execute without a model call.
-5. **`character_agent` ticks** — villain, count cap, knowledge firewall.
+5. ~~**`character_agent` ticks** — villain, count cap, knowledge firewall.~~ — landed as `offscreen.schedule_agent_ticks`: one
+   reduced Director-adjudicated turn per opted-in candidate on the
+   world epoch, capped by `max_offscreen_actors`, contexted only by
+   the fail-closed `agent_context`, landing atomically under
+   epoch/base-turn/per-subject guards.
 6. **Reactivation proposal.**
 7. **Negotiation** — refusal budgets, tagging, stalemate-eats-canon.
 
@@ -2080,18 +2084,22 @@ an epoch, and checkpoint restore rewinds the plan stage/history with the world.
 
 Still open:
 
-- **`character_agent` is permission, not the built villain rung.** The
-  Director-adjudicated full-agent tick (the only rung that may CHANGE the
-  world) is unbuilt, and it is where the knowledge firewall and the
-  per-character opt-in with a bounded count must land.
-
-The first half of that sentence has now landed: cards expose an explicit
-`simulation.offscreen_agent` opt-in (default false), and deterministic
-`full_agent_candidates` selects only dormant opted-in minds with their own
-active authored plan or carried evidence newer than their last paid tick. It is
-bounded and reads no player/omniscient content. The reduced character call,
-Director adjudication, atomic landing, memory, and last-tick write remain
-unbuilt, so `character_agent` correctly remains marked unavailable in the UI.
+The full `character_agent` rung has now landed
+(`offscreen.schedule_agent_ticks`, scheduled from the commit tail beside the
+profile producer). Cards expose an explicit `simulation.offscreen_agent`
+opt-in (default false); deterministic `full_agent_candidates` selects only
+dormant opted-in minds with their own active authored plan or carried evidence
+newer than their last paid tick, capped by `max_offscreen_actors`. Each
+candidate gets one reduced turn out of band: the fail-closed `agent_context`
+(allowlist; no scene parameter to forget to leave out), ONE character call
+proposing a bounded attempt or plan abandonment, ONE Director adjudication
+that alone may declare a consequence — validated by `mint_consequences` into
+`scheduled_events` under a stable id and promoted to `world_events` by the
+ordinary spine when it fires — and one atomic landing (own-trail movement,
+plan advance, provisional log record, event-keyed autobiographical memory)
+guarded inside a single transaction by the current epoch, the base turn, and
+a per-subject `last_epoch_id` stamp, so a reroll or restore replays rather
+than double-lands. `character_agent` is now marked built in the UI.
 - **The stored `offscreen_log` history is still mixed** across the four legacy
   shapes plus the new record shape; readers coerce, nothing migrates.
 
@@ -2978,12 +2986,15 @@ which starts when the epistemic-leak audit branch merges:
   load-bearing test), and invented gossip entering through
   `background_claims` + the provisional tier as its first real producer
   (the lane measured 0-of-29).
-- **E, the antagonist ladder** — rungs 1 and 3 per §5; waits on C because a
-  race lost without an information trail reads as the engine cheating.
+- ~~**E, the antagonist ladder** — rungs 1 and 3 per §5; waits on C because a
+  race lost without an information trail reads as the engine cheating.~~ —
+  landed: the reactive floor fires authored stages, and the adaptive ceiling
+  (`offscreen.schedule_agent_ticks`) adapts only from character-owned carrier
+  evidence, C's trail having landed first.
 - **The ceilings of A, B, D** — ensemble tick, consequence chaining
   (needs a significance flag *computed from event properties*, never the
   subject — §9.3), obligation-aware pre-generation. All documented as
-  extension points only; `LIVING_WORLD_BUILT` marks them unbuilt and
+  extension points only; `LIVING_WORLD_BUILT` marks these three unbuilt and
   `effective_depth` runs a requested ceiling as the floor. When one lands,
   it lands behind the rung `LIVING_WORLD_REQUIRES` already declares
   (`stochastic` for the A-D ceilings, `character_agent` for both depths of
