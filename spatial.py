@@ -2518,11 +2518,19 @@ CONTACT_MANNERS = (
 # the act, so a standing contact can never be mistaken for a fresh one. The act
 # itself reaches perceivers through the beat's declared sequence, which is the
 # representation that carries WHEN.
+#
+# The fluid verbs are here for the same reason kiss is: a spray or a gush is an
+# EVENT, and the matter it moved persists in the substance ledger, not in the
+# contact that delivered it. Measured live: a climax recorded `spray` stood as
+# a moving contact into the resting beat that followed and was still in the
+# saved scene, so the aftercare view reported gushing as current.
 CONTACT_MOMENTARY_MANNERS = (
     "kiss", "bite", "strike", "pinch", "squeeze", "flick", "lick", "trail",
     "slap", "tap", "stroke", "brush", "nudge", "poke", "punch", "kick",
     "scratch", "swat", "shove", "rub", "caress", "graze", "nip", "suck",
     "nuzzle", "prod", "thrust", "jab", "smack", "tickle", "bump",
+    "spray", "spraying", "spurt", "spurting", "squirt", "squirting",
+    "gush", "gushing", "splash", "splashing", "drip", "dripping",
 )
 _MOMENTARY_SET = frozenset(CONTACT_MOMENTARY_MANNERS)
 
@@ -2550,8 +2558,12 @@ _CONTACT_RESIDUE_VERB = ("is against", "are against")
 
 # Parts that end in `s` while naming one thing. Everything else ending in `s`
 # is taken as plural, which is right far more often than not for anatomy.
+# The intimate anatomy is here on live evidence, not completeness: a folded
+# envelopment rendered "Elyra's glans move within", and this story's ledger
+# names glans and penis on most beats it names anything.
 _SINGULAR_S_PARTS = frozenset({"abs", "iris", "solar plexus", "biceps",
-                               "triceps", "forceps"})
+                               "triceps", "forceps", "glans", "penis",
+                               "anus", "clitoris", "uterus"})
 
 
 def _part_is_plural(part: str) -> bool:
@@ -2645,10 +2657,20 @@ _CONTACT_MOMENTARY_STALE_BEATS = 1
 
 
 def contact_is_momentary(contact) -> bool:
-    """True when this contact's manner names an ACT rather than a state."""
+    """True when this contact's manner names an ACT rather than a state.
+
+    The head word decides when the whole phrase does not match, following the
+    `contact_manner_kind` precedent: a live ledger held `dripping fluid`, which
+    is the act `dripping` with its object narrated into the slot, and an exact
+    match read it as a durable hold.
+    """
     if not isinstance(contact, dict):
         return False
-    return str(contact.get("manner") or "").strip().casefold() in _MOMENTARY_SET
+    word = str(contact.get("manner") or "").strip().casefold()
+    if word in _MOMENTARY_SET:
+        return True
+    head = re.split(r"[^\w]+", word, maxsplit=1)[0]
+    return head in _MOMENTARY_SET
 
 
 def _contact_text(value, limit=_MAX_CONTACT_PART):
@@ -2686,6 +2708,52 @@ def _flip(contact):
     }
 
 
+# Envelopment verbs: the ACTOR is the enclosing side, so the enclosed part
+# lives on the OTHER body. The ledger's interior direction is fixed the other
+# way round -- `actor_part` is the part that is inside; the target encloses it
+# (see contact_sensation/contact_phrase) -- so a record written from the
+# enclosing side must be FOLDED onto that direction at write time, in the one
+# place every contact passes through, rather than asking each reader to guess
+# which side encloses. Measured live: a penetration stood for eight beats as
+# `vagina -> cock, relation surface` and both parties were told "against"
+# about a body sheathed to the hilt; the mirror spelling `mouth -> glans,
+# engulfing, surface` stood two beats more.
+_ENVELOPMENT_MANNERS = frozenset({
+    "engulf", "engulfs", "engulfed", "engulfing",
+    "envelop", "envelops", "enveloped", "enveloping",
+    "swallow", "swallows", "swallowed", "swallowing",
+})
+
+# The cavity an enclosing part implies, keyed by `_part_identity` kind. Used to
+# fill `target_interior` after the fold; a part with no entry supplies its own
+# name, which is right for invented anatomy ("within the sheath"). Only true
+# cavities belong here: a tongue or a finger ENTERS things far more often than
+# it encloses them, and listing one would flip records that were already
+# stated from the entering side (a live ledger's `tongue -> outer labia,
+# interior` is correctly directed as written).
+_ENCLOSING_PART_CAVITY = {
+    "mouth": "mouth", "lip": "mouth", "throat": "throat",
+    "vagina": "vagina", "pussy": "vagina",
+    "anus": "anus", "rectum": "rectum",
+}
+
+# The cavities that cannot GRIP another body's part without enclosing it. A
+# mouth or lips press against skin all the time -- a kiss on a neck is a
+# surface fact -- so they fold only on an envelopment manner or an explicit
+# interior relation. The same live penetration that stood as `engulf, surface`
+# also stood a beat as `vagina -> cock, clench, surface`: a grasping manner,
+# an enclosing organ, and the wrong topology.
+_STRICT_CAVITY_KINDS = frozenset({"vagina", "pussy", "anus", "rectum",
+                                  "throat"})
+_CAVITY_GRIP_MANNERS = frozenset({
+    "clench", "clenches", "clenched", "clenching",
+    "clamp", "clamps", "clamped", "clamping",
+    "squeeze", "squeezes", "squeezed", "squeezing",
+    "grip", "grips", "gripped", "gripping",
+    "milk", "milks", "milked", "milking",
+})
+
+
 def _clean_contact(raw):
     """A contact record, or None if it names nobody on one side."""
     if not isinstance(raw, dict):
@@ -2696,6 +2764,16 @@ def _clean_contact(raw):
         return None
     if actor.casefold() == target.casefold():
         return None  # a body is always in contact with itself; not a fact
+    if not (_is_anatomical_part(raw.get("actor_part"))
+            and _is_anatomical_part(raw.get("target_part"))):
+        # A part slot holding matter, a sound, or a state is wrong where it is
+        # written, and every downstream floor was built to survive it rather
+        # than stop it (see _NON_ANATOMICAL_PART_WORDS). Refuse it here, in
+        # the one place every contact passes through: matter that moved
+        # between bodies is a substance record, and a reaction is not a
+        # contact. Measured live: `juices -> balls, coat` stood two beats as a
+        # contact between a fluid and a body.
+        return None
     manner = _contact_text(raw.get("manner")).casefold() or "touch"
     detail = re.sub(r"[_\s]+", " ",
                     _contact_text(raw.get("detail"), _MAX_CONTACT_DETAIL)).strip()
@@ -2710,13 +2788,45 @@ def _clean_contact(raw):
         unasserted = max(0, int(raw.get("unasserted") or 0))
     except (TypeError, ValueError):
         unasserted = 0
+    actor_part = _contact_text(raw.get("actor_part"))
+    target_part = _contact_text(raw.get("target_part"))
     target_interior = _contact_text(raw.get("target_interior")) \
         if relation == "interior" else ""
+
+    # The envelopment fold (see _ENVELOPMENT_MANNERS above). Two spellings
+    # arrive from the enclosing side: an envelopment verb in `manner`, or
+    # `relation: interior` with the enclosing organ in the ACTOR slot ("lips
+    # seal glans, interior" -- which, read under the fixed direction, puts
+    # lips inside a glans). Both fold to the enclosed part as actor_part.
+    head = re.split(r"[^\w]+", manner, maxsplit=1)[0]
+    actor_kind = _part_identity(actor_part)[0]
+    enveloping = manner in _ENVELOPMENT_MANNERS or head in _ENVELOPMENT_MANNERS
+    if not enveloping and relation == "interior":
+        enveloping = (
+            actor_kind in _ENCLOSING_PART_CAVITY
+            and _part_identity(target_part)[0] not in _ENCLOSING_PART_CAVITY
+            and bool(target_part))
+    if not enveloping and actor_kind in _STRICT_CAVITY_KINDS:
+        enveloping = (manner in _CAVITY_GRIP_MANNERS
+                      or head in _CAVITY_GRIP_MANNERS)
+    if enveloping and actor_part and target_part:
+        actor, target = target, actor
+        actor_part, target_part = target_part, actor_part
+        relation = "interior"
+        if not target_interior:
+            target_interior = _ENCLOSING_PART_CAVITY.get(
+                _part_identity(target_part)[0], target_part)
+        if target_part.casefold() == target_interior.casefold():
+            # The enclosing organ IS the enclosure; naming it again as the
+            # contact endpoint renders "within her vagina, maintaining
+            # contact at her vagina".
+            target_part = ""
+
     return {
         "actor": actor,
-        "actor_part": _contact_text(raw.get("actor_part")),
+        "actor_part": actor_part,
         "target": target,
-        "target_part": _contact_text(raw.get("target_part")),
+        "target_part": target_part,
         # For interior topology, this is the passage/chamber/material that
         # currently encloses actor_part. `target_part` stays the exact boundary
         # or endpoint being touched. Keeping the two facts separate prevents a
@@ -3676,6 +3786,37 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
             op = "add"
         else:
             contact = _clean_contact(raw)
+            raw_actor = _contact_text(raw.get("actor"), 120)
+            if contact is None and report is not None and raw_actor \
+                    and _contact_text(raw.get("target"), 120):
+                bad = [str(raw.get(slot)) for slot in
+                       ("actor_part", "target_part")
+                       if not _is_anatomical_part(raw.get(slot))]
+                if bad:
+                    # The refusal itself is silent (see _clean_contact); a
+                    # rename collapsed in silence teaches the model nothing,
+                    # and neither does a dropped op.
+                    report.append(
+                        "contact: dropped " + ", ".join(repr(b) for b in bad)
+                        + " -- not a body part. Matter that moved between "
+                        "bodies is a substance_ops record; a sound or a "
+                        "reaction is not a contact.")
+            elif contact is not None and report is not None and raw_actor \
+                    and contact["actor"].casefold() != raw_actor.casefold():
+                # The envelopment fold (see _clean_contact) reversed this
+                # record onto the enclosed side. Say so, in the same voice as
+                # the displacement notices, so the Director learns the
+                # direction rather than re-asserting the folded spelling
+                # every beat.
+                report.append(
+                    f"contact: read {raw_actor}'s "
+                    f"{_contact_text(raw.get('actor_part')) or 'body'} "
+                    f"enveloping {contact['actor']}'s "
+                    f"{contact['actor_part'] or 'body'} as "
+                    f"{contact['actor']}'s {contact['actor_part'] or 'body'} "
+                    f"inside {contact['target']}'s "
+                    f"{contact['target_interior'] or 'body'} -- the actor of "
+                    "an interior contact is the enclosed side.")
 
         if contact is not None:
             key = _contact_key(contact)
@@ -3721,6 +3862,20 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
             # Re-asserting from the other side updates the contact already on
             # record rather than creating its twin.
             if mirror in current and key not in current:
+                if contact.get("relation") == "interior" \
+                        and current[mirror].get("relation") != "interior":
+                    # Interior direction has meaning: the actor's part is the
+                    # enclosed one. A surface hold re-asserted as interior
+                    # from the other side must adopt the interior record's
+                    # OWN direction -- grafting `interior` onto the reversed
+                    # pair puts the enclosing organ inside the part it
+                    # encloses (measured: `vagina -> cock, surface` updated
+                    # in place by `cock -> vagina, interior` would have read
+                    # as a vagina moving within a cock).
+                    current.pop(mirror, None)
+                    current[key] = contact
+                    asserted.add(key)
+                    continue
                 # Re-assertion from the other side is still re-assertion: the
                 # manner updates AND the staleness clock resets.
                 current[mirror] = {**current[mirror],
@@ -3778,6 +3933,69 @@ def contacts_of(scene: dict, name: str) -> list:
 # liquid in a vessel, residue on a surface, gas in a chamber, powder in a wound
 # or any fictional equivalent is matter located relative to a target.
 _SUBSTANCE_PLACEMENTS = frozenset({"surface", "interior", "contained", "room"})
+
+
+# Part kinds (per `_part_identity`) whose engagement obstructs speech, split
+# by HOW they obstruct. Deliberately narrow: lips resting ON something (a
+# hair-kiss residue, a shoulder) leave the mouth free to turn and speak, so a
+# surface contact only counts when the OTHER body is pressed against the
+# speaker's mouth -- direction decides, not the part alone. Measured live: a
+# character delivered full sentences at `normal` volume across eight beats
+# while the ledger held her tongue mid-act and a groin sealed against her
+# lips; and in the same story, lips resting on a scalp for six beats
+# accompanied perfectly ordinary conversation that a broader rule would have
+# wrongly flagged.
+_SPEECH_MOUTH_KINDS = frozenset({"mouth", "lip", "tongue"})
+_SPEECH_CAVITY_INTERIORS = frozenset({"mouth", "throat"})
+
+
+def speech_obstructed_by_contact(scene: dict, speaker: str) -> str:
+    """Why this speaker's mouth cannot deliver ordinary dialogue, or ''.
+
+    Reads only the standing contact ledger. Three occasions, in the order a
+    listener would notice them:
+
+      - something is INSIDE the speaker's mouth or throat (they enclose it);
+      - the speaker's own mouth-part is inside another body;
+      - another body is pressed against the speaker's mouth from outside.
+
+    Returns a clause naming the obstruction, for a notice or a prompt; the
+    caller decides what to do about it. Deterministic and advisory only: the
+    ledger can hold a stale contact (that is its own defect class), so a hard
+    gate here would silence legitimate lines on corrupted input.
+    """
+    name = str(speaker or "").strip()
+    if not name:
+        return ""
+    for contact in (scene or {}).get("contacts") or []:
+        if not isinstance(contact, dict):
+            continue
+        actor = str(contact.get("actor") or "")
+        target = str(contact.get("target") or "")
+        speaker_is_actor = same_subject(scene, actor, name)
+        speaker_is_target = same_subject(scene, target, name)
+        if not speaker_is_actor and not speaker_is_target:
+            continue
+        relation = contact_relation(contact)
+        actor_kind = _part_identity(contact.get("actor_part"))[0]
+        target_kind = _part_identity(contact.get("target_part"))[0]
+        interior = _part_identity(contact.get("target_interior"))[0]
+        if speaker_is_target and relation == "interior" \
+                and interior in _SPEECH_CAVITY_INTERIORS:
+            return (f"{actor}'s {contact.get('actor_part') or 'body'} is "
+                    f"inside {name}'s {contact.get('target_interior')}")
+        if speaker_is_actor and relation == "interior" \
+                and actor_kind in _SPEECH_MOUTH_KINDS:
+            return (f"{name}'s {contact.get('actor_part')} is inside "
+                    f"{target}'s "
+                    f"{contact.get('target_interior') or 'body'}")
+        if speaker_is_target and relation == "surface" \
+                and target_kind in _SPEECH_MOUTH_KINDS \
+                and actor_kind not in _SPEECH_MOUTH_KINDS:
+            return (f"{actor}'s {contact.get('actor_part') or 'body'} is "
+                    f"pressed against {name}'s "
+                    f"{contact.get('target_part')}")
+    return ""
 
 
 def _substance_text(value, limit=160):
@@ -3973,6 +4191,34 @@ def resolve_substance_ops(scene: dict, ops, report=None) -> list[dict]:
     return resolved
 
 
+def _same_deposit_blurred(a, b) -> bool:
+    """One deposit written twice at two levels of part-precision?
+
+    A Director narrating one release routinely emits it twice in a beat --
+    once as `add` with the endpoint part, once as `deposit` without it -- and
+    `_substance_id` hashes the part slots, so the pair minted two standing
+    records. Measured live: a single climax stood in the saved scene as two
+    verbatim-identical rows differing only in an empty `target_part`.
+
+    Deliberately strict everywhere else: same source, substance, target,
+    placement and enclosure, same amount, same detail. Two deposits that
+    genuinely happened twice describe themselves differently; two rows that
+    agree on every word and differ only in one side's silence about a part
+    are one event.
+    """
+    for field in ("source", "substance", "target", "placement",
+                  "target_interior", "amount", "detail"):
+        if _substance_text(a.get(field), 240).casefold() \
+                != _substance_text(b.get(field), 240).casefold():
+            return False
+    for field in ("source_part", "target_part"):
+        left = _substance_text(a.get(field), 120).casefold()
+        right = _substance_text(b.get(field), 120).casefold()
+        if left and right and left != right:
+            return False
+    return True
+
+
 def apply_substance_ops(scene: dict, ops, report=None) -> dict:
     """Apply add/remove/clear operations to ``scene.substances``."""
     current = {}
@@ -3982,11 +4228,33 @@ def apply_substance_ops(scene: dict, ops, report=None) -> dict:
             continue
         record = dict(raw_record)
         record["substance_id"] = _substance_id(record)
+        twin_id = next((sid for sid, standing in current.items()
+                        if _same_deposit_blurred(standing, record)), None)
+        if twin_id is not None:
+            # A scene saved before the add-time dedupe below can already carry
+            # the blurred twin pair; fold it on read so the ledger heals on
+            # the next merge rather than carrying both rows forever.
+            for field in ("source_part", "target_part"):
+                if not _substance_text(current[twin_id].get(field), 120):
+                    current[twin_id][field] = record.get(field, "")
+            continue
         current[record["substance_id"]] = record
     for raw in resolve_substance_ops(scene, ops, report=report):
         op = raw.get("op")
         if op == "add":
             record = {k: v for k, v in raw.items() if k != "op"}
+            twin_id = next(
+                (sid for sid, standing in current.items()
+                 if _same_deposit_blurred(standing, record)), None)
+            if twin_id is not None:
+                # Keep the more precise part slots on the standing record and
+                # its original id, so a later removal by either id's selector
+                # still finds one row, not half of two.
+                standing = current[twin_id]
+                for field in ("source_part", "target_part"):
+                    if not _substance_text(standing.get(field), 120):
+                        standing[field] = record.get(field, "")
+                continue
             current[record["substance_id"]] = record
             continue
 
@@ -4203,10 +4471,12 @@ def _contact_motion_from_text(manner, detail="") -> str:
 # reaction registers her laughter against it", which is not a sensation and not
 # a sentence anybody should read.
 #
-# This is a FLOOR, not a validator: the record is wrong where it is written,
-# and the right fix is that `contacts` never accepts a non-part in the first
-# place. Until then, a contact this cannot render is left to `contact_phrase`,
-# which states it as a third-party fact and does not claim anyone felt it.
+# `_clean_contact` now refuses a non-part at write time, which is the fix the
+# paragraph above asked for; this remains the render floor for records written
+# before that refusal existed. The substance words are in the same list for
+# the same reason: matter is not a place on a body, and a fluid recorded as a
+# contact's part (`juices -> balls, coat`, live for two beats) belongs in the
+# substance ledger, which is built to carry exactly that.
 _NON_ANATOMICAL_PART_WORDS = frozenset({
     "reaction", "reactions", "response", "responses", "behaviour", "behavior",
     "laughter", "laugh", "moan", "moans", "cry", "cries", "sound", "sounds",
@@ -4215,6 +4485,9 @@ _NON_ANATOMICAL_PART_WORDS = frozenset({
     "attention", "gaze", "stare", "glance", "state", "status", "posture",
     "pleasure", "arousal", "climax", "orgasm", "movement", "motion", "action",
     "act", "acts", "self", "body language", "attitude", "intent", "intention",
+    "juice", "juices", "fluid", "fluids", "cum", "semen", "seed", "ejaculate",
+    "saliva", "sweat", "slick", "wetness", "precum", "pre-cum", "milk",
+    "blood",
 })
 
 
@@ -4343,6 +4616,22 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None) -> str:
 
     relation_kind = contact_relation(contact)
     motion_kind = contact_motion(contact)
+    if relation_kind != "interior" and contact_is_momentary(contact):
+        # A momentary manner names the ACT that made the touch, and the act's
+        # own `motion` field says how the act moved -- a kiss is recorded
+        # `moving`. The standing record outlives the act, so rendering that
+        # stored motion delivered "movement and friction" for a kiss four
+        # beats gone (measured: a head-kiss from turn 42 was still felt as a
+        # live, moving kiss at turn 47, while its owner held a conversation).
+        # What a momentary SURFACE contact continuously delivers is its
+        # RESIDUE -- lips resting where the kiss landed -- exactly as
+        # `contact_phrase` already renders it; the act itself reaches
+        # perceivers through the beat's declared sequence, the representation
+        # that carries WHEN. An INTERIOR contact is different: its enclosure
+        # persists by definition, so `moving` there describes standing
+        # kinematics (a blade working in a wound, a thrust not yet stilled),
+        # not the echo of a finished act.
+        motion_kind = "settled"
     if relation_kind == "interior":
         # `actor` is the party whose part goes in; the TARGET encloses it.
         # `target_part` names the endpoint/contact site. It does not mean that

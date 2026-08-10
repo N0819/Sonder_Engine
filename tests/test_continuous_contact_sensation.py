@@ -407,3 +407,65 @@ class TestTheChannelItArrivesOn:
 
         assert felt
         assert all(a["directed_at_self"] for a in felt)
+
+
+class TestMomentaryResidue:
+    """A momentary act's standing record delivers its residue, not the act.
+
+    Live (chat 69 "Horny Story. ⎇49"): a head-kiss recorded at turn 42 with
+    motion `moving` stood unaged through five quiet beats -- ageing is
+    evidence-gated, correctly -- and `contact_sensation` rendered its stored
+    motion every beat, so both parties were told "movement and friction" of a
+    kiss four beats gone, while its owner held an ordinary conversation. The
+    vocabulary's own contract (CONTACT_MOMENTARY_MANNERS) already promised
+    residue rendering; only `contact_phrase` honoured it.
+    """
+
+    KISS = {"actor": "Reya", "actor_part": "lips", "target": "Bram",
+            "target_part": "forehead", "manner": "kiss",
+            "relation": "surface", "motion": "moving", "unasserted": 0}
+
+    def test_a_standing_kiss_is_felt_as_lips_at_rest(self):
+        felt = contact_sensation(self.KISS, you="Bram")
+
+        assert "steady pressure" in felt
+        assert "movement and friction" not in felt
+
+    def test_both_sides_get_the_residue(self):
+        felt = contact_sensation(self.KISS, you="Reya")
+
+        assert "steady pressure" in felt
+        assert "movement and friction" not in felt
+
+    def test_an_interior_act_keeps_its_standing_kinematics(self):
+        """The boundary, drawn on purpose: an interior contact's enclosure
+        persists by definition, so `moving` there is standing kinematics (a
+        blade still working in a wound), not the echo of a finished act."""
+        blade = {"actor": "Reya", "actor_part": "blade", "target": "Bram",
+                 "target_interior": "wound channel", "target_part": "shoulder",
+                 "manner": "thrust", "relation": "interior", "motion": "moving"}
+        felt = contact_sensation(blade, you="Reya")
+
+        assert "friction along its length" in felt
+
+    def test_a_fluid_event_manner_is_momentary(self):
+        """A climax recorded `spray` stood as a moving contact into the
+        resting beat that followed and was saved with the scene, so the
+        aftercare view reported gushing as current. A spray is an event; the
+        matter it moved persists in the substance ledger."""
+        from spatial import contact_is_momentary
+        spray = {"actor": "Reya", "actor_part": "hand", "target": "Bram",
+                 "target_part": "shoulder", "manner": "spray",
+                 "relation": "surface", "motion": "moving"}
+
+        assert contact_is_momentary(spray)
+        assert "steady pressure" in contact_sensation(spray, you="Bram")
+
+    def test_the_head_word_carries_the_manner(self):
+        """A live ledger held manner `dripping fluid` -- the act with its
+        object narrated into the slot -- and the exact-match read it as a
+        durable hold."""
+        from spatial import contact_is_momentary
+
+        assert contact_is_momentary({"manner": "dripping fluid"})
+        assert not contact_is_momentary({"manner": "press"})

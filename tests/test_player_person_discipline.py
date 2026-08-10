@@ -276,3 +276,47 @@ def test_narrator_fidelity_silent_without_person_context():
     warnings = _check_narrator_fidelity(out, view="Hinami steps into the lobby.")
     assert not [w for w in warnings
                 if w.startswith("Player named in third person")]
+
+
+# --- floor 1 for CHARACTERS: the forms handed to the rewrite ----------------
+# The rewrite only fires on the forms it is handed, and characters were handed
+# their scene keys -- full display name, uid, authored aliases -- while the
+# Director's clauses reach for a bare first name. Live (chat 69 "Horny Story.
+# ⎇49"): "…the base of Elyra's <part>" stood in Elyra Voss's OWN view on
+# fifteen turns, because none of 'Elyra Voss' / 'elyra_voss_imp' / 'Madame
+# Elyra' matched "Elyra's". The player never carried the defect because
+# _player_name_forms already tokenizes the player's name.
+
+from agents.common import self_name_forms
+
+
+def test_a_first_name_token_becomes_a_form():
+    forms = self_name_forms("Elyra Voss", ["Elyra Voss", "elyra_voss_imp"])
+    assert "Elyra" in forms
+    assert "elyra_voss_imp" in forms
+
+
+def test_the_token_makes_the_rewrite_fire_on_the_live_clause():
+    clause = "wraps a hand around the base of Elyra's tail"
+    forms = self_name_forms("Elyra Voss", ["Elyra Voss", "elyra_voss_imp"])
+    out = _self_second_person(clause, forms)
+    assert "Elyra's" not in out
+    assert "your tail" in out
+
+
+def test_alias_words_are_not_tokenized():
+    """An alias like 'The Succu-Masseuse' must not contribute 'The'; tokens
+    come from the primary name only."""
+    forms = self_name_forms("Elyra Voss", ["The Silent One", "Madame Elyra"])
+    assert "The" not in forms
+    assert "Silent" not in forms
+
+
+def test_an_ordinary_word_name_stays_case_sensitive_downstream():
+    """'Rose' as a first name is in _COMMON_WORD_NAMES: the token may join the
+    forms because the rewrite itself already refuses to touch lowercase
+    prose."""
+    forms = self_name_forms("Rose Winters", ["Rose Winters"])
+    assert "Rose" in forms
+    out = _self_second_person("a rose lies on the table", forms)
+    assert out == "a rose lies on the table"

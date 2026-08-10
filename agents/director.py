@@ -64,6 +64,7 @@ from spatial import (
     room_of,
     same_subject,
     spatial_rel,
+    speech_obstructed_by_contact,
     sprint_reach,
 )
 
@@ -3249,6 +3250,49 @@ def _deep_audit_omissions(ctx, out, sd, scene_slice, dlog_compact,
 def _public_omission(omission):
     return {k: v for k, v in omission.items() if not k.startswith("_")}
 
+
+def _sealed_mouth_speech_notices(sc, sd, dialogue_log):
+    """One notice per speaker who spoke normally through a sealed mouth.
+
+    A speaker whose mouth the LEDGER says is sealed or filled cannot deliver
+    ordinary dialogue. Advisory, never a rewrite: dialogue_log is the account
+    under reconciliation, and the ledger itself can be stale (a momentary
+    contact awaiting its ageing clock), so silencing or muffling the line on
+    the ledger's word would corrupt legitimate speech -- in the story that
+    surfaced this, the same speaker ALSO held five beats of ordinary
+    conversation while a stale kiss record sat on her lips, and a hard gate
+    would have garbled the legitimate half while fixing the impossible one.
+    Measured live: full sentences at `normal` volume across eight beats with
+    a tongue mid-act and a groin sealed against the speaker's lips, and
+    nothing pushed back.
+
+    Checked against the POST-op ledger so a beat that ends the contact
+    before the line is not scolded for it. Muttered lines pass: a muffled
+    word or two is exactly what a blocked mouth can do.
+    """
+    preview = dict(sc or {})
+    preview["contacts"] = copy.deepcopy((sc or {}).get("contacts") or [])
+    apply_contact_ops(preview, (sd or {}).get("contact_ops") or [])
+    notices, noticed = [], set()
+    for entry in dialogue_log or []:
+        if not isinstance(entry, dict):
+            continue
+        speaker = str(entry.get("speaker") or "").strip()
+        volume = str(entry.get("volume") or "normal").strip().casefold()
+        if not speaker or speaker.casefold() in noticed \
+                or volume not in ("normal", "loud", "shout"):
+            continue
+        blocked = speech_obstructed_by_contact(preview, speaker)
+        if blocked:
+            noticed.add(speaker.casefold())
+            notices.append(
+                f"speech: {speaker} spoke at volume '{volume}' while "
+                f"{blocked}. Either end that contact in contact_ops before "
+                "the line, or keep the line to a word or two at volume "
+                "'mutter' -- muffled against what blocks it.")
+    return notices
+
+
 def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
                           tracked_names):
     """The resolve-reconciliation seam (see the block comment above).
@@ -3274,6 +3318,9 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
                 "attire: read explicitly shed clothing entity "
                 f"{recovered['entity_id']!r} as removing "
                 f"{recovered['garment']!r} from {recovered['owner']!r}.")
+
+    for notice in _sealed_mouth_speech_notices(sc, sd, dialogue_log):
+        ctx.tell_director(notice)
 
     # ---- Tier 0: deterministic floor -------------------------------------
     # Runs BEFORE the omission scans below so they read the corrected diff. The
