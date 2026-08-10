@@ -176,3 +176,48 @@ class TestACrowdIsVisibleWithoutCostingASlot:
         """It must not appear in the presence ledger the manager budget counts."""
         cid, _scene = self._story(temp_db)
         assert not (temp_db.wget(cid, "background_presences", {}) or {})
+
+
+# --- fixtures: the rule that separates them from emergences ------------------
+
+class TestAFixtureMayBeReMet:
+    """PROPOSAL_CROWDS.md §3a: "a fixture may be re-met; an emergence may not."
+
+    `station_room` already existed and was used only to gate what a presence
+    PERCEIVES. Nothing re-offered one when the player walked back into their
+    room, so a tavern whose barkeep is only voiced when the Director happens to
+    mention him is a tavern with nobody behind the bar on every quiet visit.
+    Measured: 8 of 52 live presences carry a station_room and nothing re-met
+    any of them.
+
+    Being at your post is the WEAKEST qualifying signal — far weaker than being
+    addressed — and `cap` still bounds the picks, so a busy room does not
+    become a chorus.
+    """
+
+    def test_the_at_post_signal_exists_and_is_room_scoped(self):
+        import inspect
+
+        import commit
+        body = inspect.getsource(commit.pick_background_reactors)
+        assert "at_post" in body
+        assert "station_room) == str(player_room" in body
+
+    def test_it_qualifies_a_presence_that_nothing_else_would(self):
+        """The whole point: no address, no mention, no owed reply, no history
+        — just standing where they work."""
+        import inspect
+
+        import commit
+        body = inspect.getsource(commit.pick_background_reactors)
+        gate = body[body.index("if not (flow_addressed"):]
+        assert "or at_post)" in gate.split("continue")[0]
+
+    def test_standing_at_your_post_ranks_below_being_addressed(self):
+        """A fixture must not outrank someone the player just spoke to."""
+        import inspect
+
+        import commit
+        body = inspect.getsource(commit.pick_background_reactors)
+        priority = body[body.index("priority = ("):body.index("candidates.append")]
+        assert "at_post" not in priority.split("bool(addressed)")[0]

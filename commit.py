@@ -36,7 +36,7 @@ from scene import (set_char_state, set_char_status, seed_initial_attire,
                    get_scene)
 from mechanics import mechanics_sweep, news_latency_seconds, stable_event_key
 from weather import advance_weather, normalize_weather
-from spatial import (merge_scene_with_diff, _merge_entity,
+from spatial import (merge_scene_with_diff, _merge_entity, room_of,
                      normalize_room_id, spatial_rel, hear_level,
                      normalize_barrier, normalize_bearing, opposite_bearing,
                      passable_path, rooms_adjacent, visible_adjacent_rooms)
@@ -3797,6 +3797,9 @@ def pick_background_reactors(ctx, dr_output, cap=1):
 
     addressed_refs = _flow_addressed_refs(ctx)
 
+    # Where the player is standing, for the at-post test below.
+    _pname = _player_name_or_none(ctx)
+    player_room = room_of(sc, _pname) if _pname else ""
     candidates = []
     forced = 0
     for name, record in presences.items():
@@ -3824,8 +3827,22 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         owed = _valid_pending_reply(record, turn_idx)
         mentioned = _background_name_mentioned(name, resolved_event)
         dialogue_turns = record.get("dialogue_turns") or []
+        # AT THEIR POST. The rule that separates a FIXTURE from an emergence:
+        # a fixture may be re-met, an emergence may not. A presence whose
+        # station room is the room the player is standing in is at their post
+        # -- the barkeep behind the bar, the vendor at the stall -- and a
+        # tavern whose barkeep is only offered when the Director happens to
+        # mention him is a tavern with nobody behind the bar on every quiet
+        # visit. Measured: 8 of 52 live presences carry a station_room, and
+        # nothing re-offered any of them on return.
+        #
+        # Ranked LAST of the qualifying signals on purpose. Standing where you
+        # work is the weakest possible claim on a beat -- far weaker than being
+        # addressed -- and `cap` still bounds how many are picked, so a busy
+        # room does not become a chorus.
+        at_post = bool(station_room) and str(station_room) == str(player_room or "")
         if not (flow_addressed or routed or addressed or char_addr or owed
-                or mentioned or dialogue_turns):
+                or mentioned or dialogue_turns or at_post):
             continue
         if flow_addressed or routed:
             forced += 1
