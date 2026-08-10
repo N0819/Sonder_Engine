@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 
+import crowds as crowds_model
 import degradation
 from character_schema import normalize_character_data
 from db import q
@@ -225,6 +226,22 @@ def _cast_index(cid, frame_id, scene):
     return index
 
 
+def _crowd_index(cid, scene, frame_id):
+    """Crowds standing in rooms, by uid -- the anonymous carriers.
+
+    A crowd is exactly the carrier approach C asks for and needs no new travel
+    machinery at all: `crowds.advance_crowds` already walks it along the same
+    spatial graph everyone else uses, so talk moves because the market moves.
+    """
+    from db import wget
+
+    index = {}
+    for crowd in wget(cid, crowds_model.CROWDS_WORLD_KEY, []) or []:
+        if isinstance(crowd, dict) and crowd.get("uid"):
+            index[str(crowd["uid"]).casefold()] = dict(crowd)
+    return index
+
+
 def apply_tellings(ctx, scene, ops, *, names=(), places=()):
     """Copy reports from speaker to listener, one retelling fainter.
 
@@ -260,6 +277,26 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
     cid = ctx.chat.id
     frame_id = ctx.turn.frame_id
     index = _cast_index(cid, frame_id, scene)
+    crowd_index = _crowd_index(cid, scene, frame_id)
+    crowds_dirty = {}
+
+    def party(key):
+        """A speaker or listener: a registered character, or a crowd.
+
+        A crowd answers only to its uid. It has no display name by
+        construction, and letting one be addressed by its composition would
+        put a crowd into the name key space that five ledgers already got
+        wrong.
+        """
+        who = index.get(key)
+        if who is not None:
+            return who
+        crowd = crowds_dirty.get(key) or crowd_index.get(key)
+        if crowd is None:
+            return None
+        return {"crowd": crowd, "name": crowds_model.crowd_voice(crowd),
+                "room": str(crowd.get("room_uid") or ""),
+                "state": None, "row": None}
     spoke = {str(line.get("speaker") or "").strip().casefold()
              for line in ((ctx.director_resolve or ctx.director_establish or {})
                           .get("dialogue_log") or [])
@@ -271,8 +308,8 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
         speaker_key = str(op.get("speaker") or "").strip().casefold()
         listener_key = str(op.get("listener") or "").strip().casefold()
         event_id = str(op.get("world_event_id") or "").strip()
-        speaker = index.get(speaker_key)
-        listener = index.get(listener_key)
+        speaker = party(speaker_key)
+        listener = party(listener_key)
 
         if not speaker or not listener:
             rejected.append("telling names someone unregistered: %r -> %r"
@@ -281,11 +318,18 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
         if speaker is listener:
             rejected.append("%s cannot tell themselves" % speaker["name"])
             continue
-        if speaker_key not in spoke:
+        if speaker.get("crowd") is None and speaker_key not in spoke:
             rejected.append(
                 "%s said nothing this beat; knowledge does not cross a room "
                 "because two bodies were in it" % speaker["name"])
             continue
+        # A crowd is exempt from the dialogue-log check and from nothing else.
+        # It murmurs continuously -- that IS its speech, and it is the one
+        # thing a crowd is allowed to do, so there is no line to point at. The
+        # declaration is still explicit: the Director says somebody caught the
+        # talk, and co-location, holding and fan-out all still apply. Catching
+        # a rumor in a market is not knowledge by proximity; it is knowledge by
+        # a beat that said so.
         if not speaker["room"] or speaker["room"] != listener["room"]:
             rejected.append("%s and %s are not in the same room"
                             % (speaker["name"], listener["name"]))
@@ -295,9 +339,13 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
                             % (speaker["name"], TELL_FANOUT_CAP))
             continue
 
+        if speaker.get("crowd") is not None:
+            speaker_reports = crowds_model.crowd_hearsay(speaker["crowd"])
+        else:
+            speaker_reports = (dirty.get(speaker_key)
+                               or speaker["state"]).get(STATE_KEY) or []
         held = None
-        for report in (dirty.get(speaker_key) or speaker["state"]
-                       ).get(STATE_KEY) or []:
+        for report in speaker_reports:
             if isinstance(report, dict) \
                     and str(report.get("world_event_id")) == event_id:
                 held = report
@@ -314,15 +362,19 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
                 "stops here")
             continue
 
-        listener_state = dirty.get(listener_key) or listener["state"]
-        listener_reports = [dict(r) for r in listener_state.get(STATE_KEY) or []
-                            if isinstance(r, dict)]
+        if listener.get("crowd") is not None:
+            listener_state, listener_reports = None, crowds_model.crowd_hearsay(
+                crowds_dirty.get(listener_key) or listener["crowd"])
+        else:
+            listener_state = dirty.get(listener_key) or listener["state"]
+            listener_reports = [dict(r) for r in listener_state.get(STATE_KEY) or []
+                                if isinstance(r, dict)]
         if any(str(r.get("world_event_id")) == event_id
                for r in listener_reports):
             rejected.append("%s has already heard that" % listener["name"])
             continue
 
-        listener_reports.append({
+        copy = {
             "world_event_id": event_id,
             "source_event_id": str(held.get("source_event_id") or ""),
             # What they HEARD, not what happened. Stepwise degradation lands
@@ -340,9 +392,14 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
             "retellings": retellings,
             "told_by": speaker["name"],
             "provenance": "told",
-        })
-        listener_state[STATE_KEY] = listener_reports[-REPORT_CAP:]
-        dirty[listener_key] = listener_state
+        }
+        if listener.get("crowd") is not None:
+            crowds_dirty[listener_key] = crowds_model.add_hearsay(
+                crowds_dirty.get(listener_key) or listener["crowd"], copy)
+        else:
+            listener_reports.append(copy)
+            listener_state[STATE_KEY] = listener_reports[-REPORT_CAP:]
+            dirty[listener_key] = listener_state
         per_speaker[speaker_key] = per_speaker.get(speaker_key, 0) + 1
         applied += 1
 
@@ -351,4 +408,14 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
         set_char_state(cid, entry["row"]["id"],
                        json.dumps(state, ensure_ascii=False),
                        frame_id=frame_id)
+    if crowds_dirty:
+        from db import wget, wset
+
+        standing = [dict(c) for c in wget(cid, crowds_model.CROWDS_WORLD_KEY, [])
+                    or [] if isinstance(c, dict)]
+        for i, crowd in enumerate(standing):
+            replacement = crowds_dirty.get(str(crowd.get("uid") or "").casefold())
+            if replacement is not None:
+                standing[i] = replacement
+        wset(cid, crowds_model.CROWDS_WORLD_KEY, standing)
     return applied, rejected

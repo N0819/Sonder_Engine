@@ -396,6 +396,76 @@ def tell_a_report(db, cid, cast, report):
         "chain": chain,
         "unreached_holds": [r["claim"] for r in held_by("Kestrel")],
     }
+    rumor_rides_a_crowd(db, cid, cast, report, event_id, held_by)
+
+
+def rumor_rides_a_crowd(db, cid, cast, report, event_id, held_by):
+    """A crowd is the anonymous carrier, and it needs no new travel machinery.
+
+    This is the line item 2 left open -- "crowds should also become possible
+    information carriers" -- and item 3's first anonymous carrier, closed by
+    the same object. Talk goes into a market, the market walks to the next
+    room, and somebody standing there catches it. Nothing new moves it:
+    `advance_crowds` already walks the one graph everybody walks.
+
+    A crowd is exempt from the dialogue-log grounding and from NOTHING else. It
+    murmurs continuously -- that is the one thing a crowd is allowed to do, so
+    there is no line to point at -- but the telling is still an explicit
+    declaration, and co-location, holding and fan-out all still apply. Catching
+    a rumor in a market is knowledge by a beat that said so, not by proximity.
+    """
+    from commit import commit_crowds, commit_information_carriers
+
+    def crowd_beat(turn_idx, crowd_ops, telling_ops=(), scene=None,
+                   dialogue=()):
+        ctx = make_ctx(cid, cast, turn_idx, db, resolve={
+            "state_diff": {"crowd_ops": list(crowd_ops),
+                           "telling_ops": list(telling_ops)},
+            "dialogue_log": list(dialogue),
+        })
+        with db.transaction():
+            crowd_out = commit_crowds(ctx, {"scene": scene}) or {}
+            told = commit_information_carriers(ctx, {"scene": scene}, {}) or {}
+        return crowd_out, told, list(ctx.warnings)
+
+    hall = _two_rooms({"Mora": "hall", "Beako": "yard"})
+    steps = []
+
+    # A market in the hall, and Mora says it where they can hear.
+    crowd_out, _, _ = crowd_beat(20, [{
+        "op": "set", "room": "hall", "band": "a throng",
+        "composition": "market traders", "mood": "busy"}], scene=hall)
+    uid = (db.wget(cid, "crowds", []) or [{}])[0].get("uid", "")
+    _, told, warns = crowd_beat(
+        21, [], [{"speaker": "Mora", "listener": uid,
+                  "world_event_id": event_id}], scene=hall,
+        dialogue=[{"speaker": "Mora", "text": "The gate was barred."}])
+    steps.append({"step": "Mora says it where the market can hear",
+                  "told": told.get("told"), "warnings": warns})
+
+    # The market moves to the yard, carrying what it heard.
+    crowd_out, _, _ = crowd_beat(
+        22, [{"op": "set", "crowd_id": uid, "heading": "yard"}], scene=hall)
+    crowd_out, _, _ = crowd_beat(23, [], scene=hall)
+    standing = db.wget(cid, "crowds", []) or [{}]
+    steps.append({"step": "the market walks through to the yard",
+                  "crowd_room": standing[0].get("room_uid"),
+                  "carrying": [r.get("claim")
+                               for r in standing[0].get("reports") or []]})
+
+    # Beako has been in the yard the whole time and heard nothing until now.
+    yard = _two_rooms({"Mora": "hall", "Beako": "yard"})
+    _, told, warns = crowd_beat(
+        24, [], [{"speaker": uid, "listener": "Beako",
+                  "world_event_id": event_id}], scene=yard)
+    steps.append({"step": "Beako catches the talk in the yard",
+                  "told": told.get("told"), "warnings": warns})
+
+    report["crowd_carrier"] = {
+        "steps": steps,
+        "beako_holds": [(r["claim"], r["retellings"], r.get("told_by"))
+                        for r in held_by("Beako")],
+    }
 
 
 def drive(db):

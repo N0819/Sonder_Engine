@@ -530,3 +530,48 @@ def describe(crowd, room_size):
     if mood:
         phrase += " (%s)" % mood
     return phrase
+
+
+#: What a crowd may carry. A crowd is the anonymous carrier approach C asks
+#: for -- talk in a market that moves because the market moves -- and it needs
+#: no new travel machinery at all, because `advance_crowds` already walks the
+#: same graph everyone else walks.
+REPORTS_KEY = "reports"
+
+#: How many reports one crowd holds. A crowd is not an archive; it is what
+#: people are saying right now, and the oldest talk stops being repeated.
+CROWD_REPORT_CAP = 4
+
+
+def crowd_hearsay(crowd):
+    """What is being said in this crowd, oldest first."""
+    if not isinstance(crowd, dict):
+        return []
+    return [r for r in (crowd.get(REPORTS_KEY) or []) if isinstance(r, dict)]
+
+
+def crowd_voice(crowd):
+    """How a report from a crowd is attributed. NEVER a name.
+
+    "talk among the dockworkers" is a source a mind can weigh -- it is
+    obviously hearsay, and obviously not a person who could be asked. Naming
+    someone would invent a stranger nobody interacted with, which §7 lists as
+    one of the things that would falsify the whole crowd feature.
+    """
+    if not isinstance(crowd, dict):
+        return "talk going round"
+    composition = str(crowd.get("composition") or "").strip()
+    return "talk among the %s" % composition if composition else "talk going round"
+
+
+def add_hearsay(crowd, report):
+    """Put a report into a crowd, under the cap. Returns the new crowd."""
+    if not isinstance(crowd, dict) or not isinstance(report, dict):
+        return crowd
+    held = crowd_hearsay(crowd)
+    event_id = str(report.get("world_event_id") or "")
+    if any(str(r.get("world_event_id") or "") == event_id for r in held):
+        return crowd
+    out = dict(crowd)
+    out[REPORTS_KEY] = (held + [report])[-CROWD_REPORT_CAP:]
+    return out
