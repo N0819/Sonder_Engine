@@ -1626,8 +1626,11 @@ class CrowdOp(LenientModel):
     display name and never model-invented. Leaving it empty on `set` is how a
     NEW crowd is asked for -- commit mints the id, the model never does.
     """
-    op: str = "set"           # set | move | split | disperse
+    op: str = "set"           # set | move | split | disperse | emerge | absorb
     crowd_id: str = ""
+    # Who stepped out of it, or who is going back in. Never a cast member: a
+    # crowd produces strangers, and someone the story already knows ARRIVES.
+    who: str = ""
     room: str = ""
     band: str = ""            # a handful | a dozen or so | a few dozen | a throng
     composition: str = ""

@@ -6429,11 +6429,20 @@ def commit_crowds(ctx, prepared_scene):
 
     cid = ctx.chat.id
     scene = prepared_scene.get("scene") or {}
-    raw_ops = ((ctx.director_resolve or ctx.director_establish or {})
-               .get("state_diff") or {}).get("crowd_ops") or []
+    resolved = ctx.director_resolve or ctx.director_establish or {}
+    raw_ops = (resolved.get("state_diff") or {}).get("crowd_ops") or []
     if not isinstance(raw_ops, list):
         raw_ops = []
     ops = [op.dict() if hasattr(op, "dict") else op for op in raw_ops]
+
+    # The two facts emergence is adjudicated against, both deterministic. Who
+    # the story already knows -- a crowd produces strangers, never cast -- and
+    # who has spoken this beat, because a line attributed to someone is the
+    # durable record that makes their emergence one-way.
+    roster = _registered_name_roster(ctx.chat, ctx.cast)
+    spoken = {str(line.get("speaker") or "")
+              for line in (resolved.get("dialogue_log") or [])
+              if isinstance(line, dict)}
 
     before = wget(cid, crowds_model.CROWDS_WORLD_KEY, []) or []
     rooms = list((scene.get("rooms") or {}).keys())
@@ -6442,7 +6451,8 @@ def commit_crowds(ctx, prepared_scene):
     standing, moves = crowds_model.advance_crowds(
         before, passable_neighbors(scene))
     standing, rejected = crowds_model.apply_ops(
-        standing, ops, chat_id=cid, turn=turn, known_rooms=rooms)
+        standing, ops, chat_id=cid, turn=turn, known_rooms=rooms,
+        roster=roster, spoken=spoken)
 
     for reason in rejected:
         ctx.add_warning("crowd op rejected: %s" % reason)

@@ -58,33 +58,49 @@ def scene():
 
 
 def build_story(db):
-    """A story with nothing switched on.
+    """A story with nothing switched on, and one registered character.
 
-    Deliberately bare. Crowds are on-screen atmosphere rather than off-screen
-    simulation, so they are NOT gated behind a living-world setting -- and a
-    harness that quietly configured one would hide it if they were.
+    Deliberately bare otherwise. Crowds are on-screen atmosphere rather than
+    off-screen simulation, so they are NOT gated behind a living-world setting,
+    and a harness that quietly configured one would hide it if they were.
+
+    Mora is a REAL cast row rather than a name passed to the harness, because
+    `_registered_name_roster` reads `extant_cast` out of the database and
+    parses the sheet. A hand-built cast list produces an empty roster, the
+    named-character guard then refuses nobody, and the drive reports a rule
+    holding that is not running -- which is the failure mode every tool in
+    this directory exists to catch.
     """
-    return db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
-                 ("Crowd drive", "", time.time()))
+    cid = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                ("Crowd drive", "", time.time()))
+    sheet = json.dumps({"identity": {"name": "Mora", "uid": "mora_uid"}})
+    char_id = db.qi(
+        "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
+        ("Mora", sheet, "{}", time.time()))
+    db.qi("INSERT INTO chat_chars(chat_id,char_id,status,state,sheet) "
+          "VALUES(?,?,'active','{}',NULL)", (cid, char_id))
+    return cid
 
 
-def make_ctx(db, cid, turn_idx, ops):
+def make_ctx(db, cid, turn_idx, ops, cast=(), dialogue=()):
     turn_id = db.qi(
         "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
         (cid, turn_idx, "", time.time()))
     return _Ctx(
-        chat=_Chat(id=cid),
+        chat=_Chat(id=cid, name="Crowd drive"),
         turn=types.SimpleNamespace(id=turn_id, idx=turn_idx, frame_id=None),
-        cast=[], character_results={}, warnings=[],
-        director_resolve={"state_diff": {"crowd_ops": ops}},
+        cast=list(cast),
+        character_results={}, warnings=[], extra_players=[],
+        director_resolve={"state_diff": {"crowd_ops": ops},
+                          "dialogue_log": list(dialogue)},
     )
 
 
-def beat(db, cid, turn_idx, ops):
+def beat(db, cid, turn_idx, ops, cast=(), dialogue=()):
     """One Director declaration through the real commit domain."""
     from commit import commit_crowds
 
-    ctx = make_ctx(db, cid, turn_idx, ops)
+    ctx = make_ctx(db, cid, turn_idx, ops, cast=cast, dialogue=dialogue)
     with db.transaction():
         result = commit_crowds(ctx, {"scene": scene()}) or {}
     return result, list(ctx.warnings)
@@ -189,6 +205,50 @@ def drive(report):
         "commit": result, "warnings": warnings,
         "square": [c["what"] for c in observed(cid, SQUARE)],
         "gate": [c["what"] for c in observed(cid, GATE)],
+    })
+
+    # 8. Someone steps out. Two of them, and one is a cast member the crowd
+    #    must refuse to produce.
+    #    The uid is read AFTER the peeled half has spent its heading and gone,
+    #    or the emergence lands on a crowd that is no longer in this room --
+    #    which is what the first run of this step actually did.
+    beat(db, cid, 5, [])
+    square_uid = observed(cid, SQUARE)[0]["uid"]
+    result, warnings = beat(db, cid, 6, [
+        {"op": "emerge", "crowd_id": square_uid, "who": "a rope-seller"},
+        {"op": "emerge", "crowd_id": square_uid, "who": "Mora"},
+    ])
+    steps.append({
+        "step": "a stranger steps out, and a cast member may not",
+        "commit": result, "warnings": warnings,
+        "standing_out_of_it": observed(cid, SQUARE)[0]["emerged"],
+        "band_unchanged": observed(cid, SQUARE)[0]["what"],
+    })
+
+    # 9. The one-way rule, adjudicated against what the beat actually recorded
+    #    rather than against what the Director says about it.
+    result, warnings = beat(
+        db, cid, 7,
+        [{"op": "absorb", "who": "a rope-seller"}],
+        dialogue=[{"speaker": "a rope-seller",
+                                  "text": "Two coppers the fathom."}])
+    steps.append({
+        "step": "someone who spoke tries to go back into the crowd",
+        "commit": result, "warnings": warnings,
+        "still_standing_out": observed(cid, SQUARE)[0]["emerged"],
+    })
+
+    # 10. And someone who only moved.
+    beat(db, cid, 8, [
+        {"op": "emerge", "crowd_id": square_uid, "who": "a man with a basket"},
+    ])
+    result, warnings = beat(
+        db, cid, 9, [{"op": "absorb", "who": "a man with a basket"}],
+        dialogue=[{"speaker": "Mora", "text": "Let me past."}])
+    steps.append({
+        "step": "someone who only stepped aside goes back",
+        "commit": result, "warnings": warnings,
+        "still_standing_out": observed(cid, SQUARE)[0]["emerged"],
     })
 
     report["steps"] = steps

@@ -680,6 +680,11 @@ def crowds_for_room(cid, sc, room_id):
             # Director decides whether it lands, and if it does it is an
             # arrival that goes through the commit path like any other move.
             "drift": crowds_model.drift(crowd, size),
+            # Who is already standing out of it. Delivered so the Director
+            # voices the rope-seller it emerged last beat instead of emerging
+            # a second one, and so the crowd is not asked to produce a person
+            # who is already in front of the player.
+            "emerged": list(crowd.get("emerged") or []),
         })
     return out
 
