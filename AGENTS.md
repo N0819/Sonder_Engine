@@ -6,12 +6,14 @@ This file is the operational map for changing Sonder Engine safely. It is writte
 
 Before editing behavior:
 
-1. Read `docs/PIPELINE.md` for execution order and ownership boundaries.
-2. Search `docs/CODE_MAP.md` for the handler or function involved.
-3. Read `docs/DATABASE.md` before changing persistent state, archives, or restore paths.
-4. Read the relevant schema in `schemas.py` before changing any model output.
-5. Read the corresponding commit function before adding fields that should persist.
-6. Read `docs/TESTING.md`, find the nearest regression test, and run the narrow test first.
+1. Read `Design.md` § Genre-agnostic substrate, world-specific law before adding
+   or specializing a mechanic.
+2. Read `docs/PIPELINE.md` for execution order and ownership boundaries.
+3. Search `docs/CODE_MAP.md` for the handler or function involved.
+4. Read `docs/DATABASE.md` before changing persistent state, archives, or restore paths.
+5. Read the relevant schema in `schemas.py` before changing any model output.
+6. Read the corresponding commit function before adding fields that should persist.
+7. Read `docs/TESTING.md`, find the nearest regression test, and run the narrow test first.
 
 `docs/CODE_MAP.md` is generated; never hand-edit it. Regenerate and verify it
 after moving or adding functions:
@@ -81,6 +83,26 @@ their claims against source and the maintained guides before acting on them.
 ## Core invariants
 
 These are architectural guarantees, not stylistic preferences.
+
+### Genre boundary and quality bar
+
+- The engine core owns universal representation and enforcement: identity,
+  space, time, contact, motion, containment, visibility, perception, knowledge,
+  authority, conditions, causality and persistence.
+- Genre-specific mechanics and interpretations belong in lorebooks. Where canon
+  is silent, the Director may infer a local rule from the fiction model,
+  established story facts and current circumstances. The priority is explicit
+  canon, then established facts, then inference; inference never overrides
+  lorebook canon.
+- Do not hard-code one story's meaning of a wound, spell, transformation,
+  technology, anatomy, social custom or supernatural effect into the shared
+  substrate merely because that story exposed a missing representation. Model
+  the reusable physical/causal fact and leave its world-specific consequence to
+  lore and Director adjudication.
+- The benchmark is higher-quality long-form fiction than a raw LLM call, not
+  feature count. A new layer must justify its seams through measurable gains in
+  continuity, causality, agency, epistemic integrity, memory or world-specific
+  coherence; plausible prose alone is not evidence that orchestration helped.
 
 ### Information boundaries
 
