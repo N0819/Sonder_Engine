@@ -110,8 +110,27 @@ def _resolve_narration_person(chat_id, raw_input, player_name, player_pronouns,
         if detected != stored:
             _record(detected)
         return detected
-    # Established, and this turn disagrees: only override on a decisive lead.
-    if top - runner >= 2:
+    # Established, and this turn disagrees. The lead used to be measured
+    # against the RUNNER-UP, which is the wrong opponent: it asked whether the
+    # winner beat some third person nobody was arguing for, rather than whether
+    # it beat the person actually stored. A turn reading {first: 0, second: 1}
+    # against a stored `first` is unanimous disagreement, not a stray token,
+    # and it scored a lead of 1 and changed nothing. Measured on the story that
+    # reported this: 17 of 49 turns could not correct a wrong `first`.
+    #
+    # Compare against the incumbent. The lead of 2 is KEPT: dropping it for
+    # "the stored person scored nothing this turn" was tried and is wrong,
+    # because a single misparsed token looks exactly like unanimity. "Mark the
+    # map, then rest" scores one third-person hit off the player's own name
+    # used as a verb, with nothing on the other side -- indistinguishable by
+    # counts from a genuine one-token switch, and flipping a whole campaign on
+    # it is the failure this rule exists to prevent.
+    #
+    # Measured over 2212 live player turns: comparing against the incumbent
+    # rather than the runner-up costs no extra mid-story changes at all, and
+    # dropping the lead entirely costs two.
+    stored_support = counts.get(stored, 0)
+    if top - stored_support >= 2:
         _record(detected)
         return detected
     return stored

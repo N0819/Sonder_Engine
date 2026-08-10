@@ -448,7 +448,16 @@ PRESERVED_SETTING_KEYS = (
     "dialogue_config",     # NPC autonomy, prose pacing, line budgets
     "background_config",   # background life / scene-manager dials
     "style_guide",         # genre, tone, register
-    "narration_person",    # first/second/third person
+    # `narration_person` WAS on this list and does not belong on it. Every
+    # other key here is a dial the reader can reach; that one is DETECTED from
+    # how the player writes, and has no endpoint and no control in `static/`.
+    # Preserving it meant one misdetection outlived the turn that caused it,
+    # the restore meant to undo it, and every reroll after -- the single repair
+    # available to the player was the one thing that could not touch it.
+    # Observed live: a checkpoint holding "second" restored into a world still
+    # holding "first", and the story stayed stuck in the wrong person. It is
+    # story state and now rolls back with the story. If it ever gains a UI dial
+    # it belongs back here, with a flag separating set-by-hand from detected.
     "paradox_policy",
     # The fixed points themselves, not just the policy for handling them. They
     # are declared and deleted through the UI -- an author's standing
