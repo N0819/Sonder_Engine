@@ -28,7 +28,8 @@ def _scene():
         "entities": {},
         "contacts": [{
             "actor": "Elyra Voss", "actor_part": "cock",
-            "target": "Hinami", "target_part": "groin",
+            "target": "Hinami", "target_interior": "vaginal canal",
+            "target_part": "groin",
             "manner": "insert", "detail": "standing interior contact",
         }],
     }
@@ -37,7 +38,8 @@ def _scene():
 def _assertion(target_part="cervix"):
     return {
         "actor": "Elyra Voss", "actor_part": "cock",
-        "target": "Hinami", "target_part": target_part,
+        "target": "Hinami", "target_interior": "vaginal canal",
+        "target_part": target_part,
         "manner": "insert", "detail": "head pressing firmly",
     }
 
@@ -53,6 +55,8 @@ def test_interpret_schema_and_prompt_carry_exact_contact_assertions():
     assert "'cervix', not the coarse visibility region 'groin'" in prompt
     assert "relation is surface|interior" in prompt
     assert "motion is settled|moving" in prompt
+    assert "target_interior names the passage, chamber, material" in prompt
+    assert "use op:'cross'" in prompt
 
 
 def test_felt_contact_can_refine_standing_relation_but_not_mint_npc_act():
@@ -92,6 +96,36 @@ def test_resolve_cannot_silently_coarsen_asserted_contact_endpoint():
         coarse,
     ])
     assert moved[-1]["target_part"] == "groin"
+
+
+def test_explicit_crossing_can_advance_a_player_declared_endpoint():
+    assertion = {"op": "add", **_assertion()}
+    crossing = {
+        "op": "cross", "actor": "Elyra Voss", "actor_part": "cock",
+        "target": "Hinami", "crossed_target_part": "cervix",
+        "target_interior": "downstream chamber", "target_part": "far wall",
+        "manner": "push", "relation": "interior", "motion": "moving",
+    }
+
+    validated = _validated_player_contact_assertions(
+        {**_scene(), "contacts": [assertion]}, [crossing], "Hinami")
+    merged = _merge_player_contact_assertions([assertion], validated)
+
+    assert validated[0]["op"] == "cross"
+    assert validated[0]["crossed_target_part"] == "cervix"
+    assert merged[-1]["op"] == "cross"
+
+
+def test_crossing_cannot_bypass_a_different_declared_endpoint():
+    invalid = {
+        "op": "cross", **_assertion("far wall"),
+        "crossed_target_part": "groin",
+        "target_interior": "downstream chamber",
+    }
+
+    assert _validated_player_contact_assertions(
+        {**_scene(), "contacts": [{"op": "add", **_assertion()}]},
+        [invalid], "Hinami") == []
 
 
 def _ctx(temp_db):
@@ -155,5 +189,6 @@ def test_other_participant_feels_exact_contact_in_perception_pass_one(
     view = perception.perception_act(ctx, nonce=0)["views"][str(char_id)]
 
     assert seen["contact"]["target_part"] == "cervix"
-    assert "your cock registers hinami's cervix closed around it" in view.casefold()
+    assert "your cock registers hinami's vaginal canal enclosing it" in view.casefold()
+    assert "contact at hinami's cervix" in view.casefold()
     assert "hinami's groin" not in view.casefold()

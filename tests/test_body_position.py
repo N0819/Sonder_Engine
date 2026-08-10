@@ -442,7 +442,8 @@ class TestLiftingContactOutOfEntityState:
         assert len(scene["contacts"]) == 1
         assert scene["contacts"][0] == {
             "actor": "Hinami", "actor_part": "", "target": "Tamamo",
-            "target_part": "", "manner": "lean", "relation": "surface",
+            "target_part": "", "target_interior": "", "manner": "lean",
+            "relation": "surface",
             "motion": "settled", "detail": "", "unasserted": 0}
 
     def test_the_key_name_yields_the_body_part(self):
@@ -788,6 +789,20 @@ class TestStandingContactIsWrittenForItsReader:
             "Bramwell's fingers are against Hinami's waist")
         assert contact_phrase(_hold(actor_part="thighs", manner="rest")) == (
             "Bramwell's thighs rest against Hinami's waist")
+
+    def test_interior_and_endpoint_render_as_separate_facts(self):
+        contact = {
+            **_hold(actor_part="probe", target_part="inner stop", manner="insert"),
+            "target_interior": "service conduit", "relation": "interior",
+            "motion": "moving",
+        }
+
+        assert contact_phrase(contact, you="Bramwell") == (
+            "your probe moves within Hinami's service conduit, maintaining "
+            "contact at Hinami's inner stop")
+        assert contact_phrase(contact, you="Hinami") == (
+            "Bramwell's probe moves within your service conduit, maintaining "
+            "contact at your inner stop")
 
     def test_a_singular_part_ending_in_s_is_not_mistaken_for_plural(self):
         assert contact_phrase(_hold(actor_part="solar plexus",

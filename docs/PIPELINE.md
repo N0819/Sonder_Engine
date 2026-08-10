@@ -187,6 +187,11 @@ is its actor; an NPC-to-player assertion must refine a matching contact that
 already stands, preventing first-person wording from authoring a new NPC act.
 Contact points remain open anatomical strings and do not collapse onto attire's
 visibility regions: `cervix` remains `cervix`, rather than becoming `groin`.
+For interior topology, `target_interior` separately records the passage,
+chamber, material, or other structure enclosing the acting part. `target_part`
+is only the exact boundary or endpoint currently touched; an endpoint is never
+assumed to be the container. Both are open, genre-agnostic strings inferred by
+the model from established fiction.
 The contact's geometry is likewise not folded into its prose verb:
 `relation: surface|interior` records topology and `motion: settled|moving`
 records kinematics. These axes are independent, so an interior contact may be
@@ -195,7 +200,12 @@ Resolve receives the previewed relation and commit receives it through
 `contact_ops`; a later change must explicitly end it before moving the same part
 to a different endpoint, so a coarse re-description cannot overwrite it. An
 interior relation also requires an explicit end before the same endpoints can
-become surface contact; changing `manner` alone cannot erase topology.
+become surface contact; changing `manner` alone cannot erase topology. An
+explicit push past a standing endpoint instead uses `op: cross`, naming the
+exact `crossed_target_part`, downstream `target_interior`, and optional new
+`target_part`. The operation is rejected unless it matches exactly one standing
+interior endpoint. The crossed boundary is transition evidence; only the
+downstream interior and current endpoint persist as state.
 
 The model supplies ambient observer-specific sensory prose, but it does not own
 the chronology of an already structured player declaration. Model-rendered

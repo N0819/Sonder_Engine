@@ -1620,8 +1620,11 @@ class StateDiff(LenientModel):
     # Body position tracking. Contact is a RELATION, so it is not stored on
     # either body: these ops maintain the scene-level `contacts` list
     # (spatial.apply_contact_ops), and spatial.normalize_scene_contacts prunes
-    # whatever positions no longer permit. {op: add|remove|clear, actor,
-    # actor_part, target, target_part, manner, relation, motion}. Contact
+    # whatever positions no longer permit. {op: add|remove|clear|cross, actor,
+    # actor_part, target, target_interior, target_part, crossed_target_part,
+    # manner, relation, motion}. `target_interior` is the enclosing structure;
+    # `target_part` is the current endpoint. `crossed_target_part` is transient
+    # evidence used only by a validated cross transition. Contact
     # topology (`surface|interior`) and kinematics (`settled|moving`) are
     # independent: an interior contact may be moving.
     contact_ops: list[dict] = Field(default_factory=list)

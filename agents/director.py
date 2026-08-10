@@ -144,6 +144,10 @@ def _validated_player_contact_assertions(sc, raw, player_name, report=None):
         target = _canonical_scene_subject(sc, item.get("target"))
         actor_part = str(item.get("actor_part") or "").strip()
         target_part = str(item.get("target_part") or "").strip()
+        requested_op = str(item.get("op") or "add").strip().casefold()
+        requested_op = requested_op if requested_op in ("add", "cross") else "add"
+        crossed_target_part = str(
+            item.get("crossed_target_part") or "").strip()
         if not actor or not target or same_subject(sc, actor, target):
             continue
         actor_is_player = same_subject(sc, actor, player_name)
@@ -196,6 +200,8 @@ def _validated_player_contact_assertions(sc, raw, player_name, report=None):
         manner = str(item.get("manner") or (
             standing or {}).get("manner") or "touch").strip()
         detail = str(item.get("detail") or "").strip()
+        target_interior = str(item.get("target_interior") or (
+            standing or {}).get("target_interior") or "").strip()
         semantics = {
             "manner": manner,
             "detail": detail,
@@ -208,13 +214,29 @@ def _validated_player_contact_assertions(sc, raw, player_name, report=None):
         if standing is not None and contact_relation(standing) == "interior" \
                 and relation != "interior":
             relation = "interior"
+        if requested_op == "cross":
+            if (standing is None or contact_relation(standing) != "interior"
+                    or not crossed_target_part or not target_interior
+                    or crossed_target_part.casefold() != str(
+                        standing.get("target_part") or "").strip().casefold()):
+                if report:
+                    report(
+                        "discarded a contact crossing that did not match the "
+                        "standing interior endpoint and downstream interior")
+                continue
+            relation = "interior"
         assertion = {
-            "op": "add", "actor": actor, "actor_part": actor_part,
+            "op": requested_op, "actor": actor, "actor_part": actor_part,
             "target": target, "target_part": target_part,
             "manner": manner or "touch",
             "relation": relation,
             "motion": contact_motion(semantics),
         }
+        if target_interior:
+            assertion["target_interior"] = target_interior
+        if requested_op == "cross":
+            assertion["crossed_target_part"] = crossed_target_part
+            assertion["motion"] = "moving"
         if detail:
             assertion["detail"] = detail
         if assertion not in out:
@@ -260,6 +282,32 @@ def _merge_player_contact_assertions(assertions, resolved_ops, report=None):
             if raw not in result:
                 result.append(raw)
             continue
+
+        if op == "cross":
+            crossed = str(raw.get("crossed_target_part") or "").casefold()
+            duplicate = False
+            for index, assertion in enumerate(assertions):
+                if not same_pair(assertion, raw):
+                    continue
+                if (str(assertion.get("actor_part") or "").casefold()
+                        != str(raw.get("actor_part") or "").casefold()):
+                    continue
+                assertion_op = str(
+                    assertion.get("op") or "add").strip().casefold()
+                if assertion_op == "cross" and crossed == str(
+                        assertion.get("crossed_target_part") or "").casefold():
+                    # Commit already begins with the player's crossing. A
+                    # second rendering of that same transition cannot start
+                    # from the now-crossed boundary, so keep the authoritative
+                    # assertion and discard the duplicate.
+                    duplicate = True
+                    break
+                if crossed == str(assertion.get("target_part") or "").casefold():
+                    # Crossing is the explicit transition that authorizes an
+                    # endpoint change; it is not re-description drift.
+                    released.add(index)
+            if duplicate:
+                continue
 
         blocked = False
         for index, assertion in enumerate(assertions):

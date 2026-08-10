@@ -2587,11 +2587,18 @@ def _clean_contact(raw):
         unasserted = max(0, int(raw.get("unasserted") or 0))
     except (TypeError, ValueError):
         unasserted = 0
+    target_interior = _contact_text(raw.get("target_interior")) \
+        if relation == "interior" else ""
     return {
         "actor": actor,
         "actor_part": _contact_text(raw.get("actor_part")),
         "target": target,
         "target_part": _contact_text(raw.get("target_part")),
+        # For interior topology, this is the passage/chamber/material that
+        # currently encloses actor_part. `target_part` stays the exact boundary
+        # or endpoint being touched. Keeping the two facts separate prevents a
+        # terminal surface from being rendered as though it were a container.
+        "target_interior": target_interior,
         "manner": manner,
         # Contact topology and kinematics are independent. A part can be
         # inside another body while either still or moving; `manner` cannot
@@ -3354,6 +3361,10 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
     add     -- upsert by (actor, actor_part, target, target_part). `relation`
                is surface|interior and `motion` is settled|moving; old ops
                derive both from manner/detail.
+    cross   -- advance an established interior contact past its exact current
+               `crossed_target_part`, recording the downstream
+               `target_interior` and optional new `target_part`. The crossed
+               boundary is transition evidence, not standing state.
     remove  -- drop matching contacts; parts omitted means "any contact
                between these two", so ending a hold does not require the
                Director to recall exactly which parts it recorded
@@ -3400,6 +3411,10 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
 
     # Age BEFORE applying, so this beat's own assertions land fresh on top and
     # a re-asserted hold never ages at all.
+    # A cross depends on the contact it advances. Keep the pre-age snapshot so
+    # the transition itself can refresh a contact that would otherwise retire
+    # on this evidence beat.
+    before_age = dict(current)
     if _age and _contact_ops_are_evidence(ops):
         aged = {}
         for key, contact in current.items():
@@ -3412,6 +3427,9 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
                 continue  # unmentioned too long: it is over
             aged[key] = {**contact, "unasserted": stale}
         current = aged
+    cross_sources = {
+        key: contact for key, contact in before_age.items() if key not in current
+    }
 
     for raw in ops:
         if not isinstance(raw, dict):
@@ -3422,9 +3440,14 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
             who = _contact_text(raw.get("actor"), 120).casefold()
             if not who:
                 current = {}
+                cross_sources = {}
                 continue
             current = {
                 key: c for key, c in current.items()
+                if who not in (c["actor"].casefold(), c["target"].casefold())
+            }
+            cross_sources = {
+                key: c for key, c in cross_sources.items()
                 if who not in (c["actor"].casefold(), c["target"].casefold())
             }
             continue
@@ -3436,24 +3459,81 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
             target_part = _contact_text(raw.get("target_part")).casefold()
             if not actor or not target:
                 continue
-            survivors = {}
-            for key, c in current.items():
+            def _survives_removal(c):
                 pair = {c["actor"].casefold(), c["target"].casefold()}
                 # Contact is physically symmetric, so a removal naming the two
                 # in either order ends it.
                 if pair != {actor, target}:
-                    survivors[key] = c
-                    continue
+                    return True
                 if actor_part and c["actor_part"].casefold() != actor_part:
-                    survivors[key] = c
-                    continue
+                    return True
                 if target_part and c["target_part"].casefold() != target_part:
-                    survivors[key] = c
-                    continue
-            current = survivors
+                    return True
+                return False
+
+            current = {key: c for key, c in current.items()
+                       if _survives_removal(c)}
+            cross_sources = {key: c for key, c in cross_sources.items()
+                             if _survives_removal(c)}
             continue
 
-        contact = _clean_contact(raw)
+        if op == "cross":
+            actor = _contact_text(raw.get("actor"), 120).casefold()
+            target = _contact_text(raw.get("target"), 120).casefold()
+            actor_part = _contact_text(raw.get("actor_part")).casefold()
+            crossed = _contact_text(raw.get("crossed_target_part")).casefold()
+            downstream = _contact_text(raw.get("target_interior"))
+            candidates = []
+            available = {**cross_sources, **current}
+            for old_key, standing in available.items():
+                if standing.get("relation") != "interior":
+                    continue
+                if standing.get("actor", "").casefold() != actor \
+                        or standing.get("target", "").casefold() != target:
+                    continue
+                if actor_part and standing.get("actor_part", "").casefold() \
+                        != actor_part:
+                    continue
+                if standing.get("target_part", "").casefold() != crossed:
+                    continue
+                candidates.append((old_key, standing))
+            if not actor or not target or not crossed or not downstream \
+                    or len(candidates) != 1:
+                if report is not None:
+                    report.append(
+                        "ignored contact crossing: it must match exactly one "
+                        "standing interior endpoint and name the downstream "
+                        "target_interior")
+                continue
+            old_key, standing = candidates[0]
+            advanced = {
+                **standing,
+                **raw,
+                "op": "add",
+                "actor": standing["actor"],
+                "actor_part": standing["actor_part"],
+                "target": standing["target"],
+                "target_interior": downstream,
+                # Omitting the new endpoint means no downstream point is
+                # currently touched; never carry the crossed boundary forward.
+                "target_part": _contact_text(raw.get("target_part")),
+                "relation": "interior",
+                "motion": "moving",
+                "unasserted": 0,
+            }
+            contact = _clean_contact(advanced)
+            if contact is None:
+                continue
+            current.pop(old_key, None)
+            cross_sources.pop(old_key, None)
+            # Continue through ordinary add/upsert logic with the validated
+            # downstream standing contact. `crossed_target_part` is omitted by
+            # _clean_contact and therefore never becomes persistent state.
+            raw = advanced
+            op = "add"
+        else:
+            contact = _clean_contact(raw)
+
         if contact is not None:
             key = _contact_key(contact)
             mirror = _mirror_key(key)
@@ -3472,6 +3552,13 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
                         f"{contact['actor_part']} and {contact['target']}'s "
                         f"{contact['target_part']}; end it explicitly before "
                         "changing it to surface contact")
+            if existing and contact.get("relation") == "interior" \
+                    and not contact.get("target_interior"):
+                # An omitted enclosure is silence, not evidence that a durable
+                # interior ceased to exist. This also lets old saves acquire
+                # the field without losing it on the next concise reassertion.
+                contact["target_interior"] = existing.get(
+                    "target_interior", "")
             # A part that was somewhere else has MOVED, not multiplied. The
             # Director re-describes a standing hold rather than repeating it --
             # measured live, `thumb->ear` became `thumb->ear_base` and
@@ -3497,6 +3584,12 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
                                    "manner": contact["manner"],
                                    "relation": contact["relation"],
                                    "motion": contact["motion"],
+                                   # Interior direction has meaning. A mirror
+                                   # reassertion may update motion/manner, but
+                                   # its target-side enclosure is not the
+                                   # stored relation's target-side enclosure.
+                                   "target_interior": current[mirror].get(
+                                       "target_interior", ""),
                                    "detail": contact["detail"] or current[mirror].get("detail", ""),
                                    "unasserted": 0}
                 asserted.add(mirror)
@@ -3568,6 +3661,7 @@ def contact_phrase(contact: dict, *, subject_first=True, you=None) -> str:
     manner = str(contact.get("manner") or "touch").strip() or "touch"
     actor_part = str(contact.get("actor_part") or "").strip()
     target_part = str(contact.get("target_part") or "").strip()
+    target_interior = str(contact.get("target_interior") or "").strip()
 
     observer = str(you or "").strip().casefold()
     actor_is_you = bool(observer) and actor.casefold() == observer
@@ -3580,6 +3674,29 @@ def contact_phrase(contact: dict, *, subject_first=True, you=None) -> str:
 
     left = _side(actor, actor_part, actor_is_you)
     right = _side(target, target_part, target_is_you)
+    relation_kind = contact_relation(contact)
+    motion_kind = contact_motion(contact)
+    if relation_kind == "interior":
+        # Interior topology says the ACTOR PART is within the TARGET. The
+        # target_part is the precise endpoint/contact site, not necessarily the
+        # structure doing the enclosing. Treating it as the container turned a
+        # blade at a shoulder into "inside the shoulder" and a contact at a
+        # terminal boundary into "inside the boundary".
+        if target_interior:
+            container = (f"your {target_interior}" if target_is_you else
+                         f"{target}'s {target_interior}")
+        else:
+            container = "you" if target_is_you else target
+        plural = _part_is_plural(actor_part) if actor_part else actor_is_you
+        verb = ("move" if plural else "moves") if motion_kind == "moving" \
+            else ("remain" if plural else "remains")
+        phrase = f"{left} {verb} within {container}"
+        if target_part:
+            endpoint = f"your {target_part}" if target_is_you \
+                else f"{target}'s {target_part}"
+            phrase += f", maintaining contact at {endpoint}"
+        detail = str(contact.get("detail") or "").strip()
+        return f"{phrase}, {detail}" if detail else phrase
     if not subject_first:
         return f"{right} is under {left} ({manner})"
     # "You" always takes the plural verb form ("you are", "you hold"), and a
@@ -3690,10 +3807,6 @@ def _is_anatomical_part(part) -> bool:
 
 
 _SENSATION_FORMS = {
-    ("interior", "enclosing"): ("within it",
-                                "pressure, fullness and movement"),
-    ("interior", "entering"): ("closed around it",
-                               "pressure, heat and movement along its length"),
     ("moving", "either"): ("against it",
                            "shifting pressure, movement and friction"),
     ("settled", "either"): ("against it",
@@ -3787,7 +3900,8 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None) -> str:
             return same_subject(scene, name, observer)
         return str(name or "").strip().casefold() == observer.casefold()
 
-    if _is_observer(actor):
+    actor_is_observer = _is_observer(actor)
+    if actor_is_observer:
         mine, theirs = contact.get("actor_part"), contact.get("target_part")
         other = target
     elif _is_observer(target):
@@ -3804,24 +3918,49 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None) -> str:
     relation_kind = contact_relation(contact)
     motion_kind = contact_motion(contact)
     if relation_kind == "interior":
-        # `actor` is the party whose part goes in; the target encloses it.
-        side = "entering" if _is_observer(actor) else "enclosing"
+        # `actor` is the party whose part goes in; the TARGET encloses it.
+        # `target_part` names the endpoint/contact site. It does not mean that
+        # endpoint is itself a cavity, so interior rendering must keep the
+        # target entity and endpoint as two separate facts.
+        side = "entering" if actor_is_observer else "enclosing"
         tail = "continuous while it stays there"
     else:
         side, tail = "either", "continuous while the contact holds"
-    if relation_kind == "interior" and motion_kind == "moving":
-        if side == "entering":
-            relation, quality = ("closed around it",
-                                 "changing pressure, heat and friction along its length")
-        else:
-            relation, quality = ("within it",
-                                 "fullness, stretch, shifting pressure and movement")
-    else:
-        sensation_kind = relation_kind if relation_kind == "interior" else (
-            "moving" if motion_kind == "moving" else "settled")
-        relation, quality = _SENSATION_FORMS[(sensation_kind, side)]
     mine = str(mine or "").strip().replace("_", " ")
     theirs = str(theirs or "").strip().replace("_", " ")
+    target_interior = str(
+        contact.get("target_interior") or "").strip().replace("_", " ")
+    if relation_kind == "interior":
+        if motion_kind == "moving":
+            quality = ("changing pressure, heat and friction along its length"
+                       if side == "entering" else
+                       "fullness, stretch, shifting pressure and movement")
+        else:
+            quality = ("pressure, heat and movement along its length"
+                       if side == "entering" else
+                       "pressure, fullness and movement")
+        if side == "entering":
+            site = f"your {mine}" if mine else "your body"
+            plural = _part_is_plural(mine) if mine else False
+            verb = "register" if plural else "registers"
+            pronoun = "them" if plural else "it"
+            enclosure = (f"{other}'s {target_interior}"
+                         if target_interior else other)
+            relation = f"{enclosure} enclosing {pronoun}"
+            if theirs:
+                relation += f", with contact at {other}'s {theirs}"
+        else:
+            site = "your body"
+            source = f"{other}'s {theirs}" if theirs else other
+            enclosure = f"your {target_interior}" if target_interior else "you"
+            relation = f"{source} within {enclosure}"
+            if mine:
+                relation += f", with contact at your {mine}"
+            verb = "registers"
+        return f"{site} {verb} {relation}: {quality}, {tail}"
+
+    sensation_kind = "moving" if motion_kind == "moving" else "settled"
+    relation, quality = _SENSATION_FORMS[(sensation_kind, side)]
     site = f"your {mine}" if mine else "your body"
     source = f"{other}'s {theirs}" if theirs else other
     # Body parts are routinely plural, and the subject here is the PART, not
