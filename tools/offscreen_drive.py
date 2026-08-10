@@ -200,6 +200,54 @@ def accept_plan(db, cid, cast, report):
     }
 
 
+def carry_a_report(db, cid, cast, report):
+    """A fired consequence with a PUBLIC witnessed surface, and a witness there.
+
+    The last two legs of roadmap item 1. `commit_world_event_spine` promotes a
+    fired mechanics row into objective history; `advance_carriers` then offers
+    that surface to every ACTIVE cast member standing in the room it happened
+    in. Both halves are required and both are gated:
+
+      - the payload must carry a non-empty `witnessed` string and the row a
+        `location_id`, or it is not a public surface at all;
+      - the holder must be ACTIVE and co-located -- a dormant character is not
+        a witness, and `rumor_ledger` must be at `floor` or `advance_carriers`
+        declines before it looks at anything.
+    """
+    from commit import commit_information_carriers, commit_world_event_spine
+
+    ctx = make_ctx(cid, cast, 6, db)
+    scene = scene_at("Priestella", "hall", "Mora")
+    transit = {"fired_events": [{
+        "event_id": "gate-sealed-1",
+        "kind": "consequence",
+        "location_id": "hall",
+        "occurred_at": float(EPOCH_HOUR + 400),
+        "seed": "drive",
+        "payload": json.dumps({
+            "what": "the western gate stands shut and barred",
+            # The public surface. Without this the event is real but nobody
+            # can carry it -- which is the correct distinction between a thing
+            # that happened and a thing that was seen to happen.
+            "witnessed": "the gate was barred from the inside",
+            "originator": "Kestrel",
+        }),
+    }]}
+    with db.transaction():
+        spine = commit_world_event_spine(ctx, transit) or {}
+        carried = commit_information_carriers(
+            ctx, {"scene": scene}, spine) or {}
+    report["world_events"] = {
+        "offered": spine.get("offered"), "written": spine.get("written")}
+    report["carriers"] = {
+        "enabled": carried.get("enabled", True),
+        "public_surfaces": carried.get("public_surfaces"),
+        "opportunities": carried.get("carrier_opportunities"),
+        "acquired": carried.get("acquired"),
+        "warnings": list(ctx.warnings),
+    }
+
+
 def drive(db):
     from offscreen import advance_epoch
 
@@ -255,6 +303,8 @@ def drive(db):
     beat("a consequence fires", turn_idx=5, prev_location="Priestella",
          location="Priestella", prev_seconds=EPOCH_HOUR + 300,
          seconds=EPOCH_HOUR + 400, transit={"fired": 1})
+
+    carry_a_report(db, cid, cast, report)
     return report
 
 
@@ -289,6 +339,14 @@ def main():
               f"{str(b['reactive_considered']):>9}"
               f"{str(b['reactive_fired']):>10}"
               f"{str(b['reactive_effects_minted']):>8}")
+    we, ca = report.get("world_events") or {}, report.get("carriers") or {}
+    print(f"\n  world events written: {we.get('written')} of {we.get('offered')} fired")
+    print(f"  public surfaces     : {ca.get('public_surfaces')}")
+    print(f"  carrier chances     : {ca.get('opportunities')}")
+    print(f"  reports acquired    : {ca.get('acquired')}")
+    for w in ca.get("warnings") or []:
+        print(f"    ! {w}")
+
     warned = [w for b in report["beats"] for w in b["warnings"]]
     if warned:
         print("\n  warnings:")
