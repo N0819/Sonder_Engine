@@ -3829,9 +3829,13 @@ def perception_outcome(ctx, nonce):
             # bystander is unaffected: not the addressed party, so they fall
             # through to ordinary spatial hearing.
             level = _dialogue_hear_level(d, rel, p["name"])
+            # Articulation was stamped at the source (director reconcile):
+            # formation, not transmission, so it is the SAME for every
+            # perceiver and rides alongside volume rather than the level.
             view = _inject_dialogue(view, display, d.get("exact_quote"),
                                     level, d.get("volume", "normal"), can_see,
-                                    conducted=bool(rel.get("inside_source")))
+                                    conducted=bool(rel.get("inside_source")),
+                                    articulation=d.get("articulation", ""))
             # Only `full` is recorded for the floor below. A `fragment` is
             # rendered as a muffled paraphrase rather than the body, so it has
             # no verbatim form to check for, and re-injecting it every pass
@@ -3839,7 +3843,8 @@ def perception_outcome(ctx, nonce):
             if level == "full":
                 delivered_lines.append(
                     (display, d.get("exact_quote"), d.get("volume", "normal"),
-                     can_see, bool(rel.get("inside_source"))))
+                     can_see, bool(rel.get("inside_source")),
+                     d.get("articulation", "")))
         for act in last_overt_by_actor.values():
             if act["actor"] == p["name"]:
                 continue
@@ -3930,12 +3935,14 @@ def perception_outcome(ctx, nonce):
         # Director's dialogue_log and passed this perceiver's own hearing gate
         # a few lines above. That is exactly what the scrubs are FOR -- they
         # exist to remove dialogue with no such provenance.
-        for display, quote, volume, can_see, conducted in delivered_lines:
+        for display, quote, volume, can_see, conducted, articulation \
+                in delivered_lines:
             body = _quote_body(quote)
             if not body or _contains_quote(view, body):
                 continue
             view = _inject_dialogue(view, display, quote, "full", volume,
-                                    can_see, conducted=conducted)
+                                    can_see, conducted=conducted,
+                                    articulation=articulation)
             ctx.warnings.append(
                 f"perception_outcome: restored a heard line dropped by the "
                 f"scrub chain from view '{pid}': \"{body[:80]}\"")

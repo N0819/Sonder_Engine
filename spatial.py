@@ -3935,38 +3935,51 @@ def contacts_of(scene: dict, name: str) -> list:
 _SUBSTANCE_PLACEMENTS = frozenset({"surface", "interior", "contained", "room"})
 
 
-# Part kinds (per `_part_identity`) whose engagement obstructs speech, split
-# by HOW they obstruct. Deliberately narrow: lips resting ON something (a
-# hair-kiss residue, a shoulder) leave the mouth free to turn and speak, so a
-# surface contact only counts when the OTHER body is pressed against the
-# speaker's mouth -- direction decides, not the part alone. Measured live: a
-# character delivered full sentences at `normal` volume across eight beats
-# while the ledger held her tongue mid-act and a groin sealed against her
-# lips; and in the same story, lips resting on a scalp for six beats
-# accompanied perfectly ordinary conversation that a broader rule would have
-# wrongly flagged.
+# Part kinds (per `_part_identity`) whose engagement mis-forms speech, split
+# by HOW. Deliberately narrow: lips resting ON something (a hair-kiss residue,
+# a shoulder) leave the mouth free to turn and speak -- measured live, lips on
+# a scalp for six beats accompanied perfectly ordinary conversation that a
+# broader rule would have wrongly flagged -- so on the speaker's own side only
+# the TONGUE counts at surface relation: it is the articulator, and a tongue
+# extended onto another body cannot also shape words. Direction decides the
+# rest, as elsewhere: another body pressed against the speaker's mouth blocks
+# it; a hand resting on the speaker's cheek does not.
 _SPEECH_MOUTH_KINDS = frozenset({"mouth", "lip", "tongue"})
 _SPEECH_CAVITY_INTERIORS = frozenset({"mouth", "throat"})
 
+# How an impediment mis-forms the utterance. This is FORMATION, not
+# transmission: the sound leaves the mouth already malformed and then travels
+# normally, so it is identical for every listener and does not vary with
+# distance or barriers -- which is exactly why it is not a hear_level. It sits
+# beside `volume`, the other fact about how a sound was MADE.
+ARTICULATION_STIFLED = "stifled"   # the mouth is filled, sealed, or covered
+ARTICULATION_SLURRED = "slurred"   # the tongue is engaged on a surface
 
-def speech_obstructed_by_contact(scene: dict, speaker: str) -> str:
-    """Why this speaker's mouth cannot deliver ordinary dialogue, or ''.
 
-    Reads only the standing contact ledger. Three occasions, in the order a
-    listener would notice them:
+def speech_articulation_impediment(scene: dict, speaker: str) -> tuple:
+    """(kind, reason) for how this speaker's mouth mis-forms speech now.
 
-      - something is INSIDE the speaker's mouth or throat (they enclose it);
-      - the speaker's own mouth-part is inside another body;
-      - another body is pressed against the speaker's mouth from outside.
+    Reads only the standing contact ledger. Kinds, by severity:
 
-    Returns a clause naming the obstruction, for a notice or a prompt; the
-    caller decides what to do about it. Deterministic and advisory only: the
-    ledger can hold a stale contact (that is its own defect class), so a hard
-    gate here would silence legitimate lines on corrupted input.
+      - "stifled": something is INSIDE the speaker's mouth or throat; the
+        speaker's own mouth-part is inside another body; or another body is
+        pressed against the speaker's mouth from outside. Words can barely
+        be shaped at all.
+      - "slurred": the speaker's own TONGUE is engaged on another body's
+        surface. Measured live (chat 69, turns 74-75): full clean sentences
+        at `normal` volume while the beat's own ops re-asserted her tongue
+        mid-lick -- you cannot articulate cleanly with your tongue on
+        someone.
+
+    Returns ("", "") when nothing impedes. The reason is a clause naming the
+    impediment, for a notice; the KIND is what deterministic delivery keys
+    on. The ledger can hold a stale contact, so callers that act on this
+    (rather than merely reporting) should prefer the mildest true rendering.
     """
     name = str(speaker or "").strip()
     if not name:
-        return ""
+        return "", ""
+    slurred = None
     for contact in (scene or {}).get("contacts") or []:
         if not isinstance(contact, dict):
             continue
@@ -3982,20 +3995,30 @@ def speech_obstructed_by_contact(scene: dict, speaker: str) -> str:
         interior = _part_identity(contact.get("target_interior"))[0]
         if speaker_is_target and relation == "interior" \
                 and interior in _SPEECH_CAVITY_INTERIORS:
-            return (f"{actor}'s {contact.get('actor_part') or 'body'} is "
+            return (ARTICULATION_STIFLED,
+                    f"{actor}'s {contact.get('actor_part') or 'body'} is "
                     f"inside {name}'s {contact.get('target_interior')}")
         if speaker_is_actor and relation == "interior" \
                 and actor_kind in _SPEECH_MOUTH_KINDS:
-            return (f"{name}'s {contact.get('actor_part')} is inside "
+            return (ARTICULATION_STIFLED,
+                    f"{name}'s {contact.get('actor_part')} is inside "
                     f"{target}'s "
                     f"{contact.get('target_interior') or 'body'}")
         if speaker_is_target and relation == "surface" \
                 and target_kind in _SPEECH_MOUTH_KINDS \
                 and actor_kind not in _SPEECH_MOUTH_KINDS:
-            return (f"{actor}'s {contact.get('actor_part') or 'body'} is "
+            return (ARTICULATION_STIFLED,
+                    f"{actor}'s {contact.get('actor_part') or 'body'} is "
                     f"pressed against {name}'s "
                     f"{contact.get('target_part')}")
-    return ""
+        if slurred is None and speaker_is_actor and relation == "surface" \
+                and actor_kind == "tongue":
+            # Held rather than returned: a stifled impediment elsewhere in
+            # the ledger outranks a slur, whatever the list order.
+            slurred = (ARTICULATION_SLURRED,
+                       f"{name}'s tongue is against {target}'s "
+                       f"{contact.get('target_part') or 'body'}")
+    return slurred or ("", "")
 
 
 def _substance_text(value, limit=160):
