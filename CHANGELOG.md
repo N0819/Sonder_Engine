@@ -38,6 +38,19 @@ generic positional overlap (`inner`, `thighs`) could falsely satisfy the
 semantic check while every authored trait was still absent; those terms no
 longer count as evidence of preservation.
 
+Turn 15 exposed the same physical fact at the persistence boundary. Resolve
+correctly gave each participant their side of a deeper interior contact, and
+listed both that contact and a hand tightening on a hip in `changes_asserted`,
+but emitted only the hand's `contact_ops` entry. Reconciliation matched by
+participant name, so the hand falsely proved the separate cervix contact was
+encoded. Contact manifests now carry and verify both bodies and both endpoints;
+the legacy endpoint-free fallback also requires an op-specific part or manner.
+`contact_ops` is normalized as the contact category, so the omission triggers
+the bounded repair. The additive repair merge now also retains `contact_ops`
+(the repair contract previously admitted the field and then silently discarded
+it), allowing the committed relation to continuously deliver the appropriate
+sensation to each participant.
+
 This lands on the repaired observer path: perception previews commit's exact
 attire result on copies, region visibility is now a production-derived
 function, shed clothing is atomic with canonical removal and placement, and

@@ -276,6 +276,16 @@ Combines the player declaration, character declarations, reaction declarations, 
 
 The Director owns objective causality but does not own character private psychology or narration.
 
+Every persistent physical change asserted by the resolved event is repeated in
+`changes_asserted` and checked against its own structured diff category before
+commit. Contact entries carry the same actor, actor part, target, and target part
+as their `contact_ops` relation. Matching only a participant is insufficient:
+one hand-on-hip operation cannot prove a separately asserted interior contact
+was encoded. Legacy endpoint-free contact manifests use an op-specific
+part/manner match and fail toward one idempotent repair when underspecified.
+The additive repair merge retains `contact_ops`; detection without that merge
+would report the divergence while still committing the stale relation.
+
 ### `background_react`
 
 Unconditionally present in the plan but internally self-gating, with two paths chosen by the per-chat `background_config` (`scene.py`) key `scene_life`:

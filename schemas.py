@@ -1658,9 +1658,20 @@ class AssertedChange(LenientModel):
     persistent physical change its resolved_event asserts as completed,
     beyond the player's supplied authority_claims. Reconciled against the
     state_diff deterministically (see agents/director.py's seam)."""
-    category: str = "other"   # rooms|adjacency|positions|entities|conditions|attire|inventory|cast_changes|time|transit|other
+    # rooms|adjacency|positions|entities|conditions|attire|contact|inventory|
+    # cast_changes|time|transit|other
+    category: str = "other"
     subject: str = ""         # room id / entity id / character name concerned
     change: str = ""          # one short sentence stating the persistent change
+    # Contact manifests need the relation's endpoints, not merely one person.
+    # Without them, two simultaneous contacts involving the same actor are
+    # indistinguishable: a correctly encoded hand-on-hip could falsely prove a
+    # separately asserted cock-to-cervix contact was also encoded. Optional for
+    # every non-contact category and for compatibility with saved variants.
+    actor: str = ""
+    actor_part: str = ""
+    target: str = ""
+    target_part: str = ""
 
 class DirectorResolve(LenientModel):
     resolved_event: str = ""
