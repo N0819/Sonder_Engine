@@ -3,7 +3,15 @@
 import json
 import re
 
-from providers import chat_complete, role_candidate_count, LLMError, Aborted
+from providers import (
+    chat_complete,
+    escalated_max_tokens,
+    generation_notice,
+    response_truncated,
+    role_candidate_count,
+    LLMError,
+    Aborted,
+)
 from schemas import (
     output_example,
     validate_llm_output_strict,
@@ -58,16 +66,75 @@ def _extract_balanced_object(text: str):
     return None
 
 
-def strict_json_parse(text: str) -> dict:
-    raw = str(text or "").strip()
+def _strip_fences(text: str) -> str:
+    """The model's JSON with any Markdown fence taken off.
 
+    One function because two callers need the SAME string: the parser, and the
+    check that asks whether the parse failed at the end of the text. A second
+    spelling of the fence rule would put the two out of step by exactly the
+    length of a fence, and the check is a comparison against that length.
+    """
+    raw = str(text or "").strip()
     raw = re.sub(
         r"^```(?:json)?\s*",
         "",
         raw,
         flags=re.I,
     )
-    raw = re.sub(r"\s*```$", "", raw)
+    return re.sub(r"\s*```$", "", raw)
+
+
+def output_ran_out_of_room(raw: str) -> bool:
+    """Did this response stop mid-object, rather than say something wrong?
+
+    The two are the same event downstream -- a JSON parse error -- and they
+    need opposite responses. A cut-off object is a LENGTH problem: the model
+    knew what it was writing and had nowhere to put it, so one more call with
+    more room recovers the beat. Malformed JSON is a CONTENT problem, and more
+    room changes nothing about it.
+
+    Two witnesses, in order of authority:
+
+    1. The provider's own finish reason (`length` / `max_tokens`). It says so
+       outright, and it is also the only witness that survives the case where
+       a truncated response happens to parse -- a cut-off outer object whose
+       first complete inner object gets recovered by _extract_balanced_object
+       parses cleanly and then fails validation on the fields that never
+       arrived.
+    2. Where the parse died. `Unterminated string` is raised only when the
+       scanner runs off the end of the document, so it is EOF by construction.
+       Every other message is positional, and the distinction is whether
+       anything follows: a truncation fails at the last character (`{"a": 1`
+       -> `Expecting ',' delimiter` at the end), while a genuinely malformed
+       object fails with its remainder still ahead of it (`{"a": "he said
+       "hi""}` -> the same message, a third of the way in). Both real cases
+       from the playthrough that prompted this -- position 5042 and position
+       10054 -- were end-of-text.
+    """
+    if response_truncated():
+        return True
+
+    text = _strip_fences(raw)
+    if not text:
+        # Nothing at all is its own diagnosis (a reasoning model that spent
+        # the whole budget thinking), but it is not evidence of truncation --
+        # a provider returning an empty body looks identical, and the finish
+        # reason above is what tells them apart.
+        return False
+
+    try:
+        json.loads(text)
+    except json.JSONDecodeError as exc:
+        if exc.msg.startswith("Unterminated string"):
+            return True
+        return exc.pos >= len(text.rstrip())
+    except Exception:
+        return False
+    return False
+
+
+def strict_json_parse(text: str) -> dict:
+    raw = _strip_fences(text)
 
     try:
         value = json.loads(raw)
@@ -109,6 +176,12 @@ def complete_validated_json(
     user = json.dumps(payload, ensure_ascii=False)
     provider_errored = False
     last_provider_error = None
+    # Raised once, by the length-escalation below, and then inherited by every
+    # later attempt in this call -- a repair or a fallback candidate rebuilding
+    # the same object needs the same room. None until then, which is the
+    # ordinary configured ceiling.
+    token_ceiling = None
+    ran_out_of_room = False
 
     try:
         raw = chat_complete(
@@ -154,6 +227,88 @@ def complete_validated_json(
     previous_raw = raw
     previous_parsed = parsed
 
+    # A response that was cut off for want of output budget is the one failure
+    # here that the repair ladder below cannot touch, and until this existed it
+    # was the ladder that ran anyway: repair re-asks the SAME model for the
+    # SAME object on the SAME budget, with the truncated 5k-character attempt
+    # added to the prompt. It cannot succeed, and it burns the fallback
+    # candidates on its way to losing the beat. Measured live -- two of
+    # fourteen beats of one playthrough died exactly this way (mapping_stage
+    # mid-`why_relevant`, and a character step at position 10054), each raising
+    # a validation error that named a delimiter and read as a model writing
+    # nonsense.
+    #
+    # So: ask again, once, with room. Same request, not a repair prompt -- the
+    # model had the right answer and nowhere to put it, and handing back its
+    # own truncated output only makes the input larger. Bounded by
+    # construction rather than by a counter: `escalated_max_tokens` adds one
+    # stage's worth of headroom against the absolute cap and returns 0 when
+    # there is none left, and this block is straight-line code that cannot
+    # re-enter -- so the worst case is exactly one extra call, at exactly one
+    # size above the ceiling, however many times the model truncates.
+    if not provider_errored and output_ran_out_of_room(raw):
+        ran_out_of_room = True
+        token_ceiling = escalated_max_tokens(max_tokens)
+
+        if token_ceiling:
+            # Visibly, in the live turn view: `generation_reset` is what the
+            # browser already understands, and it also clears the truncated
+            # half-sentence still sitting in the stream pane. A silent retry
+            # would make a model that never fits its budget look like a slow
+            # one.
+            generation_notice({
+                "type": "generation_reset",
+                "attempt": 2,
+                "candidate": 0,
+                "reason": (
+                    "output truncated; retrying with "
+                    f"{token_ceiling} tokens"
+                ),
+            })
+
+            try:
+                raw = chat_complete(
+                    role,
+                    system,
+                    user,
+                    temperature=temperature,
+                    max_tokens=token_ceiling,
+                    sampler=sampler,
+                    candidate_offset=0,
+                    token_ceiling=token_ceiling,
+                )
+            except Aborted:
+                raise
+            except LLMError as exc:
+                raw = ""
+                provider_errored = True
+                last_provider_error = exc
+            else:
+                max_tokens = token_ceiling
+                try:
+                    parsed = strict_json_parse(raw)
+                    parse_error = None
+                except Exception as exc:
+                    parsed = {}
+                    parse_error = str(exc)
+
+                report = validate_llm_output_strict(
+                    step_key,
+                    parsed,
+                    source_payload=payload,
+                )
+
+                if parse_error:
+                    report.valid = False
+                    report.errors.insert(0, parse_error)
+
+                if report.valid:
+                    return report.output
+
+                ran_out_of_room = output_ran_out_of_room(raw)
+                previous_raw = raw
+                previous_parsed = parsed
+
     # Skip same-provider repair when the primary provider itself errored --
     # repairing against a down provider just wastes attempts; go to fallbacks.
     for _ in range(0 if provider_errored else max(0, repair_attempts)):
@@ -180,12 +335,15 @@ def complete_validated_json(
                 temperature=0.0,
                 max_tokens=max_tokens,
                 candidate_offset=0,
+                token_ceiling=token_ceiling,
             )
         except Aborted:
             raise
         except LLMError as exc:
             last_provider_error = exc
             break  # provider now failing; move on to fallback candidates
+
+        ran_out_of_room = output_ran_out_of_room(previous_raw)
 
         try:
             previous_parsed = strict_json_parse(
@@ -234,12 +392,15 @@ def complete_validated_json(
                 max_tokens=max_tokens,
                 sampler=sampler,
                 candidate_offset=candidate_offset,
+                token_ceiling=token_ceiling,
             )
         except Aborted:
             raise
         except LLMError as exc:
             last_provider_error = exc
             continue  # this fallback provider errored; try the next candidate
+
+        ran_out_of_room = output_ran_out_of_room(fallback_raw)
 
         try:
             fallback_parsed = strict_json_parse(
@@ -280,6 +441,26 @@ def complete_validated_json(
             _sent += f" | reasoning: …{_think[-400:]}"
     except Exception:
         pass
+    # Name the cause, not the symptom. A truncation surfaces as a delimiter
+    # error at a five-thousandth character, which reads as a model that cannot
+    # write JSON -- and sent the last investigation of this looking at the
+    # schema instead of at the budget. Say which it was, and say whether the
+    # escalation had anywhere left to go.
+    if ran_out_of_room:
+        if token_ceiling:
+            _why = (f"; retried at {token_ceiling} tokens and it truncated "
+                    "again. Raise 'Max output tokens' in Settings, or point "
+                    "this role at a model that spends less of its budget "
+                    "thinking")
+        elif token_ceiling == 0:
+            _why = ("; the budget was already at the absolute cap, so there "
+                    "was no larger retry to make")
+        else:
+            _why = ". Raise 'Max output tokens' in Settings"
+        _sent = (
+            " | RESPONSE TRUNCATED: the model ran out of output budget"
+            + _why + _sent
+        )
     if last_provider_error is not None:
         raise RuntimeError(
             f"{step_key}: all providers failed "
