@@ -4978,27 +4978,34 @@ def _carried_reports_view(ctx):
     than what is true. It is an index for writing `telling_ops`, not evidence:
     the Director already owns objective causality and this adds nothing it did
     not have -- while a character reading it would be reading other minds.
+
+    Read through `active_cast` and `cstate`, which is how `carriers` itself
+    reads them. The first version walked `ctx.cast` asking for `state`; that
+    key does not hold the carrier ledger, so the view came back empty while
+    two reports sat in the database -- and the Director, told to name a
+    `world_event_id`, again had nothing to name. Two spellings of one thing,
+    which is the defect this repo's rules single out by name.
     """
     import json
 
     from carriers import STATE_KEY
     from character_schema import normalize_character_data
+    from scene import active_cast
 
     out = []
-    for member in (getattr(ctx, "cast", None) or []):
+    for row in active_cast(ctx.chat.id, ctx.turn.frame_id) or []:
         try:
-            sheet = member.get("sheet") if isinstance(member, dict) else None
-            sheet = json.loads(sheet) if isinstance(sheet, str) else (sheet or {})
+            sheet = json.loads(row["sheet"] or "{}")
         except (TypeError, ValueError):
             sheet = {}
         name = ((normalize_character_data(sheet or {}).get("identity") or {})
                 .get("name") or "")
-        state = (member.get("state") if isinstance(member, dict) else None) or {}
-        if isinstance(state, str):
-            try:
-                state = json.loads(state)
-            except (TypeError, ValueError):
-                state = {}
+        try:
+            state = json.loads(row["cstate"] or "{}")
+        except (TypeError, ValueError):
+            state = {}
+        if not isinstance(state, dict):
+            continue
         for report in (state.get(STATE_KEY) or [])[-4:]:
             if not isinstance(report, dict) or not report.get("world_event_id"):
                 continue
