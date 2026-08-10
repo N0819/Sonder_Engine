@@ -1614,6 +1614,26 @@ class OffscreenPlanOp(LenientModel):
     basis: str = ""
     stages: list[OffscreenPlanStage] = Field(default_factory=list)
 
+class CrowdOp(LenientModel):
+    """Director declaration about a crowd blob.
+
+    A DECLARED field for every op, because a field that is only promised in the
+    prompt is a field that silently does nothing: `character.project_ops` is
+    asked for by name and dropped by validation, and "has ever held a project:
+    0 of 26" is what that costs.
+
+    `crowd_id` is a uid the engine minted and perception showed; it is never a
+    display name and never model-invented. Leaving it empty on `set` is how a
+    NEW crowd is asked for -- commit mints the id, the model never does.
+    """
+    op: str = "set"           # set | move | split | disperse
+    crowd_id: str = ""
+    room: str = ""
+    band: str = ""            # a handful | a dozen or so | a few dozen | a throng
+    composition: str = ""
+    mood: str = ""
+    heading: str = ""         # adjacent room it is flowing toward, or ""
+
 class StateDiff(LenientModel):
     positions: dict[str, str] = Field(default_factory=dict)
     rooms: dict[str, RoomDef] = Field(default_factory=dict)
@@ -1720,6 +1740,15 @@ class StateDiff(LenientModel):
     # the antagonist-ladder floor setting, and typed time/event triggers.
     # `open` creates; `cancel` ends an existing plan owned by that actor.
     offscreen_plan_ops: list[OffscreenPlanOp] = Field(default_factory=list)
+    # Crowd blobs: one object with many people in it. A populous place cannot
+    # be represented by managed presences -- `max_managed` is hard-capped at 8
+    # and chat 57 spent three of six slots on ONE Dalek -- so a crowd is a
+    # single row that costs the same whatever it holds and NEVER takes a
+    # managed slot. Commit validates deterministically (crowds.apply_ops):
+    # rooms must exist, a `crowd_id` the engine did not mint is refused rather
+    # than created, and the count is a band rather than an integer so two
+    # sources can never disagree about whether 37 became 34.
+    crowd_ops: list[CrowdOp] = Field(default_factory=list)
     # Destruction declaration (DestructionEffect shape -- see its
     # docstring). Declared here so model_dump() keeps it through
     # validation (the zone-field precedent above); commit.py validates it
@@ -3341,6 +3370,7 @@ OUTPUT_EXAMPLES = {
             "claim_dispositions": [],
             "consequences": [],
             "offscreen_plan_ops": [],
+            "crowd_ops": [],
         },
         "changes_asserted": [
             {"category": "adjacency", "subject": "vault_door",

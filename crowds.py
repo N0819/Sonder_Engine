@@ -39,6 +39,11 @@ from __future__ import annotations
 
 import hashlib
 
+#: The world-KV key crowds live under, spelled once. It is frame-scoped in
+#: `db.FRAME_SCOPED_WORLD_KEYS`: a branch that never went to the market must
+#: not inherit the market's throng.
+CROWDS_WORLD_KEY = "crowds"
+
 #: How many, coarsely. Ordered; the index is the rank.
 BANDS = ("a handful", "a dozen or so", "a few dozen", "a throng")
 
@@ -101,6 +106,70 @@ def density(band, room_size):
     return LOOSE
 
 
+#: What a crowd presents to the spatial layer, in the barrier vocabulary
+#: `spatial.py` already folds words into. Nothing new is invented here on
+#: purpose: `membrane` is ALREADY passable and already absent from
+#: `_SIGHT_BARRIERS` -- you push through it and you cannot see across it --
+#: and its own comment in spatial glosses it as "a curtain, a tent flap, a
+#: body's soft wall". The vocabulary anticipated bodies.
+_TERRAIN = {LOOSE: "open", PACKED: "membrane", CRUSH: "membrane"}
+
+#: What the press does to someone who does nothing. `pull` is a tendency the
+#: Director may honour or override; `carry` is the press winning by default.
+#: Both are OFFERS -- see `drift`.
+PULL = "pull"
+CARRY = "carry"
+
+
+def terrain(band, room_size):
+    """The barrier a crowd of this density is, for passage and for sight.
+
+    Loose is open ground with people on it. Packed and a crush are both a
+    membrane, and they differ in the CURRENT rather than in the wall -- see
+    `drift`. This is the deterministic half of §5a and it belongs here rather
+    than in `spatial.py` because a crowd is world state, not scene geometry:
+    the room does not know it is full.
+    """
+    return _TERRAIN[density(band, room_size)]
+
+
+def drift(crowd, room_size):
+    """What the press OFFERS to do to a body standing in it: None, or
+    {toward, strength}.
+
+    Every barrier in this engine is inert -- it permits or it refuses. A crowd
+    imposes its own movement on whoever is inside it, and that is the one
+    genuinely new concept, which is why it is named rather than smuggled in as
+    a special case of passability. Passability answers "may I"; drift answers
+    "what happens if I do nothing".
+
+    **This function never moves anybody.** It returns an offer, and the
+    Director resolves it. `_guard_approach_is_not_arrival` exists because a
+    beat describing approach and a beat placing a body somewhere are different
+    things, and conflating them wrote positions nobody declared. A crowd
+    carrying someone is exactly an arrival the player did not declare, so it
+    goes through the commit path and shows up in the state diff like any other
+    move. A crowd that moved someone quietly would be that same defect with a
+    worse cause -- the player would have reason to believe they had moved
+    themselves.
+
+    A crowd with nowhere to go has no current. A stationary crush is a wall
+    with good prose, and pretending otherwise would push bodies around a room
+    for no reason anyone could point at.
+    """
+    if not isinstance(crowd, dict):
+        return None
+    toward = str(crowd.get("heading") or "").strip()
+    if not toward:
+        return None
+    packed = density(crowd.get("band"), room_size)
+    if packed == CRUSH:
+        return {"toward": toward, "strength": CARRY}
+    if packed == PACKED:
+        return {"toward": toward, "strength": PULL}
+    return None
+
+
 def split_band(band):
     """The band each half gets when a crowd divides.
 
@@ -139,6 +208,204 @@ def new_crowd(chat_id, room_uid, *, band, composition, since_turn,
         "mood": " ".join(str(mood or "").split())[:24],
         "since_turn": int(since_turn),
     }
+
+
+#: The ops a Director may write. `emerge` is deliberately absent: emergence
+#: writes a durable row that outlives the scene and lands last, after the cheap
+#: half has earned it.
+OP_SET = "set"
+OP_MOVE = "move"
+OP_SPLIT = "split"
+OP_DISPERSE = "disperse"
+_OPS = (OP_SET, OP_MOVE, OP_SPLIT, OP_DISPERSE)
+
+#: How many crowds one era may hold at once. Not a cost limit -- a crowd is one
+#: row and costs nothing to carry. It is a coherence limit: past this the
+#: Director is populating rooms nobody is standing in, and the perception
+#: surface only ever shows the observer's own room anyway.
+MAX_CROWDS = 8
+
+
+def _op_word(value):
+    word = " ".join(str(value or "").split()).casefold()
+    return word if word in _OPS else ""
+
+
+def apply_ops(crowds, ops, *, chat_id, turn, known_rooms):
+    """Fold Director crowd ops into the crowd list. Pure; returns
+    ``(crowds, rejected)``.
+
+    Deterministic validation lives HERE rather than at the commit seam so it
+    can be tested without a database, and so there is one place that decides
+    what a crowd may be -- the alternative is a guard every caller must
+    remember, which this project's history says is a guard that gets forgotten.
+
+    Two rules do the real work:
+
+    **A `crowd_id` the engine did not mint is refused, never created.** The
+    model may only name a uid it was shown, and it is shown them by
+    `agents.common.crowds_for_room`. Minting under a model-authored key is how
+    five ledgers ended up keyed by display name, and a crowd is a new writer:
+    the wrong key space at birth is exactly what subject identity exists to
+    stop.
+
+    **A room nobody authored is refused.** A crowd in an unknown room would be
+    invisible to every observer (perception is room-scoped) while still
+    occupying a slot -- a silent no-op, which is worse than a rejection nobody
+    can see.
+
+    A bad `heading` does NOT sink the op it rides on. Where the crowd IS was
+    declared; where it is drifting is a flourish, and losing the flourish is
+    cheaper than losing the crowd.
+    """
+    out = [dict(c) for c in (crowds or []) if isinstance(c, dict)]
+    rooms = {str(r) for r in (known_rooms or ()) if str(r or "")}
+    rejected = []
+    by_uid = {str(c.get("uid") or ""): c for c in out}
+
+    for raw in (ops or []):
+        if not isinstance(raw, dict):
+            rejected.append("crowd op was not an object")
+            continue
+        op = _op_word(raw.get("op") or OP_SET)
+        if not op:
+            rejected.append("unknown crowd op %r" % (raw.get("op"),))
+            continue
+
+        uid = str(raw.get("crowd_id") or "").strip()
+        room = str(raw.get("room") or "").strip()
+        heading = str(raw.get("heading") or "").strip()
+        if heading and heading not in rooms:
+            rejected.append("dropped heading %r: no such room" % heading)
+            heading = ""
+
+        target = by_uid.get(uid) if uid else None
+        if uid and target is None:
+            rejected.append("no crowd %r; refusing to mint one under it" % uid)
+            continue
+
+        if op == OP_SET and target is None:
+            if room not in rooms:
+                rejected.append("crowd in unknown room %r" % room)
+                continue
+            composition = " ".join(str(raw.get("composition") or "").split())
+            if not composition:
+                rejected.append("crowd in %r has no composition" % room)
+                continue
+            if len(out) >= MAX_CROWDS:
+                rejected.append("at the %d-crowd ceiling; %r not minted"
+                                % (MAX_CROWDS, composition))
+                continue
+            crowd = new_crowd(chat_id, room, band=raw.get("band"),
+                              composition=composition, since_turn=turn,
+                              mood=raw.get("mood"), heading=heading or None)
+            if crowd["uid"] in by_uid:
+                rejected.append("crowd %r already stands in %r"
+                                % (composition, room))
+                continue
+            out.append(crowd)
+            by_uid[crowd["uid"]] = crowd
+            continue
+
+        if target is None:
+            rejected.append("crowd op %r names no crowd" % op)
+            continue
+
+        if op == OP_DISPERSE:
+            out = [c for c in out if c is not target]
+            by_uid.pop(uid, None)
+            continue
+
+        if op == OP_SPLIT:
+            half = split_band(target.get("band"))
+            if half is None:
+                rejected.append("a handful does not divide")
+                continue
+            if not heading:
+                rejected.append("a split needs somewhere for the half to go")
+                continue
+            if len(out) >= MAX_CROWDS:
+                rejected.append("at the %d-crowd ceiling; no split"
+                                % MAX_CROWDS)
+                continue
+            target["band"] = half
+            peeled = new_crowd(chat_id, target.get("room_uid"), band=half,
+                               composition=target.get("composition"),
+                               since_turn=turn, mood=target.get("mood"),
+                               heading=heading)
+            # Band-preserving splitting gives both halves the same band and the
+            # same composition in the same room, so the uid material is
+            # identical to its parent's but for the turn -- and a split on the
+            # turn the parent was minted collides. Recorded origin doubles as
+            # the disambiguator.
+            peeled["uid"] = crowd_uid(chat_id, target.get("room_uid"), turn,
+                                      "%s|from:%s"
+                                      % (target.get("composition"),
+                                         target.get("uid")))
+            peeled["from_uid"] = str(target.get("uid") or "")
+            out.append(peeled)
+            by_uid[peeled["uid"]] = peeled
+            continue
+
+        if op == OP_MOVE:
+            if room not in rooms:
+                rejected.append("crowd moved to unknown room %r" % room)
+                continue
+            target["room_uid"] = room
+            target["heading"] = None if heading == room else (heading or None)
+            continue
+
+        # op == OP_SET on a crowd that already exists: an edit in place.
+        if room:
+            if room not in rooms:
+                rejected.append("crowd set into unknown room %r" % room)
+                continue
+            target["room_uid"] = room
+        if raw.get("band"):
+            target["band"] = normalize_band(raw.get("band"))
+        if raw.get("composition"):
+            target["composition"] = \
+                " ".join(str(raw.get("composition")).split())[:120]
+        if raw.get("mood") is not None:
+            target["mood"] = " ".join(str(raw.get("mood") or "").split())[:24]
+        if heading:
+            target["heading"] = heading
+
+    return out, rejected
+
+
+def advance_crowds(crowds, neighbors):
+    """Move every crowd that has somewhere to be one room along. Pure;
+    returns ``(crowds, moves)``.
+
+    A crowd's `heading` is an ADJACENT room rather than a destination across
+    the map, and it moves on the same graph everyone else walks -- no second
+    pathfinder, which is the one thing §5 asks for. A market thins toward the
+    gate because the Director said the gate; it does not compute a route to
+    the harbour.
+
+    A heading into a room that is no longer adjacent is dropped rather than
+    honoured. The scene is edited between beats and a crowd should not walk
+    through a wall that appeared while it was deciding.
+    """
+    out = []
+    moves = []
+    for crowd in (crowds or []):
+        if not isinstance(crowd, dict):
+            continue
+        crowd = dict(crowd)
+        here = str(crowd.get("room_uid") or "")
+        toward = str(crowd.get("heading") or "")
+        if toward and toward != here:
+            if toward in (neighbors.get(here) or ()):
+                crowd["room_uid"] = toward
+                moves.append({"uid": crowd.get("uid"), "from": here,
+                              "to": toward})
+            crowd["heading"] = None
+        elif toward == here:
+            crowd["heading"] = None
+        out.append(crowd)
+    return out, moves
 
 
 def crowds_in_room(crowds, room_uid):
