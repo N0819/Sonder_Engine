@@ -49,8 +49,25 @@ THE RUNGS, and what each costs after this module:
                                  a summary sentence -- offscreen events are
                                  never narrated, and the earlier prose
                                  shape violated exactly that rule.
-  * full agent                -- NOT BUILT. Director-adjudicated; the only
-                                 rung that may ever change the world.
+  * full agent                -- BUILT (``schedule_agent_ticks``):
+                                 Director-adjudicated, and the only rung
+                                 that may change the world. Two calls, two
+                                 authorities -- the character proposes an
+                                 attempt over ``agent_context``'s allowlist
+                                 alone, and only the Director half may
+                                 declare a consequence, which still passes
+                                 ``living_world.mint_consequences`` into
+                                 ``scheduled_events`` under a stable id, so
+                                 no second writer of ``world_events`` grows
+                                 here. ``land_agent_tick`` lands the fuse,
+                                 the plan change, the subject's own trail,
+                                 the log record and the memory in ONE
+                                 transaction or lands none of them, guarded
+                                 inside it on the epoch, on the base turn,
+                                 and on the subject's own ``last_epoch_id``
+                                 -- so a reroll re-deriving the same epoch
+                                 finds the first landing's stamp and
+                                 discards itself.
 
 THE FIREWALL HOLDS IN BOTH DIRECTIONS. Nothing here hands an absent
 character the player's location or recent acts: the profile rung reads the
