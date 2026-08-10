@@ -360,3 +360,91 @@ def test_the_archive_carries_the_road(temp_db):
     _run(ctx, scene, [_send()])
     blob = ChatArchiveService.export_chat(None, cid)
     assert any("couriers" in key for key in (blob.get("world") or {}))
+
+
+class _Chat(dict):
+    """A chat with both `.id` and `.get`, as the real one has.
+
+    The bare `SimpleNamespace(id=cid)` every other test here uses has no
+    `.get`, so `persona_of` cannot resolve a persona from it and the player
+    stays out of the index -- which is the safe default and the reason those
+    tests are untouched by this.
+    """
+
+    @property
+    def id(self):
+        return self["id"]
+
+
+class TestThePlayerCanSendNews:
+    """The player was the one participant who structurally could not.
+
+    `_cast_index` reads cast rows; a persona has none, so every carrier verb
+    refused the player by construction -- "courier sender 'Corin' is not a
+    registered character". Two independent models, given a beat where the
+    player pays a rider to carry word east, both wrote a well-formed
+    `courier_ops` send and both were refused for this reason. One of them also
+    wrote an artifact op when the player nailed a notice to a board, refused
+    the same way.
+
+    The deeper half was that a persona had nowhere to HOLD a report:
+    `chat_chars.cstate` is a cast row's column. Player carrier state now lives
+    in a world key, which is the right shape because there is exactly one
+    persona per chat.
+    """
+
+    def _world_with_persona(self, db):
+        persona_id = db.qi(
+            "INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
+            ("Corin", json.dumps({"name": "Corin"}), "{}"))
+        cid = db.qi(
+            "INSERT INTO chats(name,scenario,created,persona_id) "
+            "VALUES(?,?,?,?)", ("Player sends", "", time.time(), persona_id))
+        for name, uid in (("Sera", "sera_uid"),):
+            sheet = json.dumps({"identity": {"name": name, "uid": uid}})
+            char_id = db.qi(
+                "INSERT INTO characters(name,sheet,source,created) "
+                "VALUES(?,?,?,?)", (name, sheet, "{}", time.time()))
+            db.qi("INSERT INTO chat_chars(chat_id,char_id,status,state) "
+                  "VALUES(?,?,?,'{}')", (cid, char_id, "active"))
+        db.wset(cid, "simulation_clock", {"elapsed_seconds": 0.0})
+        ctx = types.SimpleNamespace(
+            chat=_Chat(id=cid, persona_id=persona_id),
+            turn=types.SimpleNamespace(id=1, idx=4, frame_id=None),
+        )
+        return cid, _scene(), ctx
+
+    def _paid_a_rider(self):
+        """The op both models actually wrote, claim and all."""
+        return {"op": "send", "sender": "Corin", "to_room": SQUARE,
+                "world_event_id": "", "method": "word", "pace": "riding",
+                "claim": "the wells of the Vale market are sealed",
+                "description": "a lean man on a short-coupled bay pony"}
+
+    def test_the_players_rider_leaves(self, temp_db):
+        cid, scene, ctx = self._world_with_persona(temp_db)
+        metrics, rejected = _run(ctx, scene, [self._paid_a_rider()])
+        assert rejected == []
+        assert metrics["dispatched"] == 1
+
+    def test_what_the_player_invented_is_held_where_a_persona_can_hold_it(
+            self, temp_db):
+        """A claim with no event behind it lands on its author's own row, so
+        the player needs a row-shaped place to keep it."""
+        from carriers import PERSONA_STATE_KEY, STATE_KEY
+
+        cid, scene, ctx = self._world_with_persona(temp_db)
+        _run(ctx, scene, [self._paid_a_rider()])
+        held = (temp_db.wget(cid, PERSONA_STATE_KEY, {}) or {}).get(STATE_KEY)
+        assert [r["claim"] for r in held] == [
+            "the wells of the Vale market are sealed"]
+
+    def test_a_chat_with_no_resolvable_persona_still_refuses(self, temp_db):
+        """Failing toward fewer carriers is the safe direction, and keeps
+        every existing story behaving exactly as it did. `_world` builds its
+        chat with no persona at all, so a sender nobody has registered stays
+        refused."""
+        cid, chars, scene, ctx = _world(temp_db)
+        op = dict(self._paid_a_rider(), sender="Nobody At All")
+        _metrics, rejected = _run(ctx, scene, [op])
+        assert any("not a registered character" in r for r in rejected)
