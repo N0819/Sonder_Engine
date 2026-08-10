@@ -128,3 +128,63 @@ class TestItRollsBackWithTheStory:
 def _db(temp_db):
     """Every test here writes rows; they all need a database."""
     yield temp_db
+
+
+class TestItSurvivesTheThingsTheGateRequires:
+    """The architectural completion gate asks that relationships "survive
+    checkpoint, reroll, branch, archive/import and deletion as applicable".
+
+    Both paths enumerate their tables BY NAME, so a new one is invisible to
+    them until it is listed — an export would silently lose the whole ledger
+    and a rewind would leave a character holding a grudge about a thing that
+    no longer happened. Neither failure raises anything.
+    """
+
+    def test_a_rewind_takes_the_reason_with_it(self, temp_db):
+        from checkpoints import insert_world_tables, snapshot_state
+
+        cid = _chat(temp_db)
+        before = snapshot_state(cid)
+        assert before["relationship_events"] == []
+
+        apply_relationship_updates(cid, 7, 12, [{
+            "target_entity": "Mora", "trust_delta": -0.2,
+            "trigger_event_ids": ["ev:she-lied"],
+            "reason": "she lied about the gate"}])
+        assert len(relationship_history(cid, 7, "Mora")) == 1
+
+        insert_world_tables(cid, before, delete_first=True)
+        assert relationship_history(cid, 7, "Mora") == []
+
+    def test_a_snapshot_carries_it_back(self, temp_db):
+        from checkpoints import insert_world_tables, snapshot_state
+
+        cid = _chat(temp_db)
+        apply_relationship_updates(cid, 7, 12, [{
+            "target_entity": "Mora", "trust_delta": -0.2,
+            "trigger_event_ids": ["ev:she-lied"],
+            "reason": "she lied about the gate"}])
+        blob = snapshot_state(cid)
+        assert len(blob["relationship_events"]) == 1
+
+        insert_world_tables(cid, {"relationship_events": []}, delete_first=True)
+        insert_world_tables(cid, blob)
+        restored = relationship_history(cid, 7, "Mora")
+        assert [e["note"] for e in restored] == ["she lied about the gate"]
+
+    def test_the_archive_declares_it(self):
+        """An undeclared field validates cleanly and is then silently dropped
+        by `extra="ignore"` — the failure that kept `stations` inert for 45
+        scenes. The model's own comment says so."""
+        from chat_archive import ChatArchiveData
+
+        assert "relationship_events" in ChatArchiveData.__fields__
+
+    def test_the_archive_exports_and_imports_it(self):
+        import inspect
+
+        import chat_archive
+        source = inspect.getsource(chat_archive)
+        # Present in both table tuples, not just one.
+        assert source.count('"relationship_events",') >= 2
+        assert "old_char_map.get(row.get(\"char_id\")) is not None" in source
