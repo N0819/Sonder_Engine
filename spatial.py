@@ -2574,6 +2574,15 @@ def _clean_contact(raw):
     if actor.casefold() == target.casefold():
         return None  # a body is always in contact with itself; not a fact
     manner = _contact_text(raw.get("manner")).casefold() or "touch"
+    detail = re.sub(r"[_\s]+", " ",
+                    _contact_text(raw.get("detail"), _MAX_CONTACT_DETAIL)).strip()
+    relation = _normalize_contact_relation(raw.get("relation"))
+    if not relation:
+        relation = "interior" if contact_manner_kind(manner) == "interior" \
+            else "surface"
+    motion = _normalize_contact_motion(raw.get("motion"))
+    if not motion:
+        motion = _contact_motion_from_text(manner, detail)
     try:
         unasserted = max(0, int(raw.get("unasserted") or 0))
     except (TypeError, ValueError):
@@ -2584,6 +2593,11 @@ def _clean_contact(raw):
         "target": target,
         "target_part": _contact_text(raw.get("target_part")),
         "manner": manner,
+        # Contact topology and kinematics are independent. A part can be
+        # inside another body while either still or moving; `manner` cannot
+        # carry both facts without losing one of them.
+        "relation": relation,
+        "motion": motion,
         # What the parts alone cannot say: pressure, temperature, over or under
         # clothing. Excluded from the identity key exactly as `manner` is -- a
         # grip that becomes feather-light is the same contact changing.
@@ -2593,8 +2607,7 @@ def _clean_contact(raw):
         # light", the Director wrote them into the entity's own `state`, where
         # nothing ages them and nothing prunes them, and they stood
         # contradicting the ledger for the rest of the story.
-        "detail": re.sub(r"[_\s]+", " ",
-                         _contact_text(raw.get("detail"), _MAX_CONTACT_DETAIL)).strip(),
+        "detail": detail,
         # Beats of contact talk since this was last asserted. Absent on an
         # incoming op (an assertion is by definition fresh) and on a scene
         # saved before ageing existed, both of which read as 0.
@@ -3338,7 +3351,9 @@ def _contact_ops_are_evidence(ops) -> bool:
 def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
     """Apply state_diff.contact_ops to scene.contacts.
 
-    add     -- upsert by (actor, actor_part, target, target_part)
+    add     -- upsert by (actor, actor_part, target, target_part). `relation`
+               is surface|interior and `motion` is settled|moving; old ops
+               derive both from manner/detail.
     remove  -- drop matching contacts; parts omitted means "any contact
                between these two", so ending a hold does not require the
                Director to recall exactly which parts it recorded
@@ -3442,6 +3457,21 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
         if contact is not None:
             key = _contact_key(contact)
             mirror = _mirror_key(key)
+            existing_key = key if key in current else (
+                mirror if mirror in current else None)
+            existing = current.get(existing_key) if existing_key else None
+            # Interior topology cannot disappear through a bare re-description
+            # of the same endpoints. A real withdrawal must remove the
+            # interior relation before adding whatever surface contact remains.
+            if existing and existing.get("relation") == "interior" \
+                    and contact.get("relation") != "interior":
+                contact["relation"] = "interior"
+                if report is not None:
+                    report.append(
+                        f"preserved interior contact for {contact['actor']}'s "
+                        f"{contact['actor_part']} and {contact['target']}'s "
+                        f"{contact['target_part']}; end it explicitly before "
+                        "changing it to surface contact")
             # A part that was somewhere else has MOVED, not multiplied. The
             # Director re-describes a standing hold rather than repeating it --
             # measured live, `thumb->ear` became `thumb->ear_base` and
@@ -3465,6 +3495,8 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
                 # manner updates AND the staleness clock resets.
                 current[mirror] = {**current[mirror],
                                    "manner": contact["manner"],
+                                   "relation": contact["relation"],
+                                   "motion": contact["motion"],
                                    "detail": contact["detail"] or current[mirror].get("detail", ""),
                                    "unasserted": 0}
                 asserted.add(mirror)
@@ -3589,9 +3621,35 @@ CONTACT_MOVING_MANNERS = frozenset({
     "rolling", "pump", "pumping", "caress", "caressing", "brush", "brushing",
     "graze", "grazing", "knead", "kneading", "ghost", "ghosting",
     "digging", "scratch", "scratching", "tickle", "flick",
+    "withdraw", "withdrawing", "withdrawn", "rock", "rocking",
 })
 
-# (relation, qualities) per manner kind. An interior contact is NOT symmetric:
+_INTERIOR_MOVING_MANNERS = frozenset({
+    "penetrate", "penetrating", "inserting", "insertion", "impale",
+    "sheathe", "sheathing", "embed", "embedding", "burrow", "burrowing",
+    "pierce", "piercing", "enter", "entering",
+})
+
+
+def _normalize_contact_relation(value) -> str:
+    word = str(value or "").strip().casefold()
+    return word if word in ("surface", "interior") else ""
+
+
+def _normalize_contact_motion(value) -> str:
+    word = str(value or "").strip().casefold()
+    return word if word in ("settled", "moving") else ""
+
+
+def _contact_motion_from_text(manner, detail="") -> str:
+    """Backward-compatible kinematics for contacts saved before `motion`."""
+    words = set(re.findall(
+        r"[a-z]+", f"{str(manner or '').casefold()} {str(detail or '').casefold()}"))
+    if words & (CONTACT_MOVING_MANNERS | _INTERIOR_MOVING_MANNERS):
+        return "moving"
+    return "settled"
+
+# (relation phrase, qualities) per legacy manner kind. An interior contact is NOT symmetric:
 # the enclosing party feels something within them, the entering party feels
 # something closed around them, and rendering either side with the other's
 # phrasing describes a body the perceiver does not have.
@@ -3663,6 +3721,28 @@ def contact_manner_kind(manner) -> str:
     return "settled"
 
 
+def contact_relation(contact) -> str:
+    """Surface or interior topology, with legacy `manner` fallback."""
+    if not isinstance(contact, dict):
+        contact = {"manner": contact}
+    explicit = _normalize_contact_relation(contact.get("relation"))
+    if explicit:
+        return explicit
+    return "interior" if contact_manner_kind(contact.get("manner")) == "interior" \
+        else "surface"
+
+
+def contact_motion(contact) -> str:
+    """Settled or moving kinematics, independent of contact topology."""
+    if not isinstance(contact, dict):
+        contact = {"manner": contact}
+    explicit = _normalize_contact_motion(contact.get("motion"))
+    if explicit:
+        return explicit
+    return _contact_motion_from_text(
+        contact.get("manner"), contact.get("detail"))
+
+
 def contact_sensation(contact: dict, *, you: str, scene: dict = None) -> str:
     """What one STANDING contact continuously delivers to ONE party's body.
 
@@ -3721,14 +3801,25 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None) -> str:
     if not (_is_anatomical_part(mine) and _is_anatomical_part(theirs)):
         return ""
 
-    kind = contact_manner_kind(contact.get("manner"))
-    if kind == "interior":
+    relation_kind = contact_relation(contact)
+    motion_kind = contact_motion(contact)
+    if relation_kind == "interior":
         # `actor` is the party whose part goes in; the target encloses it.
         side = "entering" if _is_observer(actor) else "enclosing"
         tail = "continuous while it stays there"
     else:
         side, tail = "either", "continuous while the contact holds"
-    relation, quality = _SENSATION_FORMS[(kind, side)]
+    if relation_kind == "interior" and motion_kind == "moving":
+        if side == "entering":
+            relation, quality = ("closed around it",
+                                 "changing pressure, heat and friction along its length")
+        else:
+            relation, quality = ("within it",
+                                 "fullness, stretch, shifting pressure and movement")
+    else:
+        sensation_kind = relation_kind if relation_kind == "interior" else (
+            "moving" if motion_kind == "moving" else "settled")
+        relation, quality = _SENSATION_FORMS[(sensation_kind, side)]
     mine = str(mine or "").strip().replace("_", " ")
     theirs = str(theirs or "").strip().replace("_", " ")
     site = f"your {mine}" if mine else "your body"

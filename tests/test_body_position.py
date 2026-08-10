@@ -442,7 +442,8 @@ class TestLiftingContactOutOfEntityState:
         assert len(scene["contacts"]) == 1
         assert scene["contacts"][0] == {
             "actor": "Hinami", "actor_part": "", "target": "Tamamo",
-            "target_part": "", "manner": "lean", "detail": "", "unasserted": 0}
+            "target_part": "", "manner": "lean", "relation": "surface",
+            "motion": "settled", "detail": "", "unasserted": 0}
 
     def test_the_key_name_yields_the_body_part(self):
         scene = self._lift({"hinami": {

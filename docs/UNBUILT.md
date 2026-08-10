@@ -1724,15 +1724,15 @@ investigation found and did not close.
   into the scene commit. A permissive check is the only kind available: anatomy
   is open-ended and every story invents some, so the test can only reject what
   is affirmatively not a part.
-- **`manner` is still free text with no engine semantics.**
-  `contact_manner_kind` now reads it three ways (`interior` / `moving` /
-  `settled`) for sensation rendering, which is the first code anywhere to
-  interpret the field, but nothing else does — a contact recorded
-  `penetrating` still does not populate `contained`, so the §1.24
-  enclosure-direction work does not fire on it. Whether it should is a design
-  question: partial containment is not the same as being sealed inside
-  something, and the two are currently unrelated code paths describing
-  overlapping physical situations.
+- **Partial interior contact still does not populate full containment.**
+  Contact sensation no longer asks free-text `manner` to carry two axes:
+  `relation: surface|interior` and `motion: settled|moving` now independently
+  drive rendering, with backward-compatible derivation for old rows. That
+  closes the perception ambiguity, but an interior contact still does not
+  populate `contained`, so the §1.24 enclosure-direction work does not fire on
+  it. Whether it should remains a design question: partial containment is not
+  the same as being sealed inside something, and the two remain separate code
+  paths describing overlapping physical situations.
 - **Observation metadata is computed and consumed by nothing.** `intensity`,
   `suddenness`, `ambiguity` and `directed_at_self` are re-derived from the
   scrubbed view for every atom, cost tokens on every character payload, and

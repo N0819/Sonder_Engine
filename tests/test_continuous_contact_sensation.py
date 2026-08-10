@@ -30,7 +30,9 @@ from __future__ import annotations
 from agents.perception import (_deliver_standing_sensations,
                                _observations_from_clean_views,
                                _standing_contacts_for)
-from spatial import contact_manner_kind, contact_sensation
+from prompts import DEFAULT_PROMPTS
+from spatial import (apply_contact_ops, contact_manner_kind, contact_motion,
+                     contact_relation, contact_sensation)
 
 # Two bodies, two contacts: one across a surface, one interior. Both stand at
 # the top of the beat; neither is news.
@@ -70,6 +72,29 @@ class TestTheMannerReading:
         assert contact_manner_kind("") == "settled"
         assert contact_manner_kind(None) == "settled"
 
+    def test_topology_and_motion_are_independent(self):
+        contact = {
+            "manner": "thrust", "relation": "interior", "motion": "moving",
+        }
+
+        assert contact_relation(contact) == "interior"
+        assert contact_motion(contact) == "moving"
+
+    def test_legacy_detail_can_supply_motion_without_erasing_interiority(self):
+        contact = {
+            "manner": "insert",
+            "detail": "withdrawing and thrusting rhythmically",
+        }
+
+        assert contact_relation(contact) == "interior"
+        assert contact_motion(contact) == "moving"
+
+    def test_resolve_prompt_requires_both_contact_axes(self):
+        prompt = DEFAULT_PROMPTS["director_resolve"]
+
+        assert "relation is surface|interior and motion is settled|moving" in prompt
+        assert "ALWAYS emit both" in prompt
+
 
 class TestWhatEachPartyFeels:
 
@@ -91,6 +116,21 @@ class TestWhatEachPartyFeels:
         assert "within it" in enclosing
         assert "within it" not in entering
         assert "closed around it" not in enclosing
+
+    def test_a_moving_interior_contact_carries_both_facts(self):
+        contact = {
+            "actor": "Reya", "actor_part": "blade", "target": "Bram",
+            "target_part": "shoulder", "manner": "thrust",
+            "relation": "interior", "motion": "moving",
+        }
+
+        entering = contact_sensation(contact, you="Reya")
+        enclosing = contact_sensation(contact, you="Bram")
+
+        assert "closed around it" in entering
+        assert "friction along its length" in entering
+        assert "within it" in enclosing
+        assert "fullness, stretch, shifting pressure and movement" in enclosing
 
     def test_a_bystander_is_a_party_to_nothing(self):
         """Someone watching two other people touch feels nothing, and this
@@ -145,6 +185,50 @@ class TestWhatEachPartyFeels:
         felt = contact_sensation(scene["contacts"][0], you="Bram", scene=scene)
 
         assert felt.startswith("your sternum registers")
+
+
+class TestContactSemanticPersistence:
+
+    @staticmethod
+    def _scene(contact):
+        return {
+            "positions": {"Reya": "cell", "Bram": "cell"},
+            "contacts": [contact],
+        }
+
+    @staticmethod
+    def _contact(**changes):
+        contact = {
+            "actor": "Reya", "actor_part": "blade", "target": "Bram",
+            "target_part": "shoulder", "manner": "insert",
+            "detail": "fully inserted",
+        }
+        contact.update(changes)
+        return contact
+
+    def test_live_press_rewording_cannot_flatten_interior_motion(self):
+        """Chat 68 turn 17 described motion but stored settled `press`."""
+        scene = apply_contact_ops(self._scene(self._contact()), [{
+            **self._contact(manner="press"),
+            "detail": "withdrawing and thrusting rhythmically",
+        }])
+
+        contact = scene["contacts"][0]
+        assert contact["relation"] == "interior"
+        assert contact["motion"] == "moving"
+
+    def test_interior_to_surface_requires_an_explicit_end(self):
+        scene = self._scene(self._contact())
+        flattened = apply_contact_ops(scene, [self._contact(
+            manner="press", relation="surface", motion="settled")])
+        assert flattened["contacts"][0]["relation"] == "interior"
+
+        moved = apply_contact_ops(flattened, [
+            {"op": "remove", **self._contact()},
+            {"op": "add", **self._contact(
+                manner="press", relation="surface", motion="settled")},
+        ])
+        assert moved["contacts"][0]["relation"] == "surface"
 
 
 class TestTheDeterministicFloor:
