@@ -1143,6 +1143,90 @@ class TestEnvelopmentFold:
         assert (contact["actor"], contact["actor_part"]) == ("Bramwell", "finger")
         assert contact["relation"] == "interior"
 
+    def test_a_contained_body_cannot_be_the_enclosure_of_its_own_holder(self):
+        """The tongue carve-out above has no way to see containment, and live
+        (chat 69 ⎇49, turns 78-80) that gap put a whole body's cavity on the
+        wrong person: Hinami stood at scale 0.1 inside Elyra Voss per
+        `contained`, while the ledger carried `Elyra Voss's tongue ->
+        Hinami/body, target_interior mouth`. Both minds were then told the
+        mouth was Hinami's -- she was gagged by her own cavity and Elyra was
+        told her tongue was inside the body she was holding in her mouth."""
+        scene = _scene(
+            positions={"Elyra Voss": "bedroom", "Hinami": "bedroom"},
+            contained={"Hinami": {"in": "Elyra Voss", "mode": "inside"}})
+        apply_contact_ops(scene, [{
+            "op": "add", "actor": "Elyra Voss", "actor_part": "tongue",
+            "target": "Hinami", "target_part": "body",
+            "target_interior": "mouth", "manner": "press",
+            "relation": "interior", "motion": "moving"}])
+        [contact] = scene["contacts"]
+
+        assert (contact["actor"], contact["actor_part"]) == ("Hinami", "body")
+        assert contact["target"] == "Elyra Voss"
+        assert contact["target_interior"] == "mouth"
+        assert contact["relation"] == "interior"
+
+    def test_the_containment_inversion_is_reported(self):
+        """A direction corrected in silence teaches the Director nothing, and
+        it re-asserted this same inverted record on three consecutive beats."""
+        report = []
+        scene = _scene(
+            positions={"Elyra Voss": "bedroom", "Hinami": "bedroom"},
+            contained={"Hinami": {"in": "Elyra Voss", "mode": "inside"}})
+        apply_contact_ops(scene, [{
+            "op": "add", "actor": "Elyra Voss", "actor_part": "tongue",
+            "target": "Hinami", "target_part": "body",
+            "target_interior": "mouth", "manner": "press",
+            "relation": "interior", "motion": "moving"}], report=report)
+
+        assert any("encloses" in note for note in report)
+
+    def test_a_saved_inverted_record_heals_on_normalization(self):
+        """The live scene already carries the inverted record; a fix that only
+        catches new ops leaves the stored one wrong forever."""
+        scene = _scene(
+            positions={"Elyra Voss": "bedroom", "Hinami": "bedroom"},
+            contained={"Hinami": {"in": "Elyra Voss", "mode": "inside"}},
+            contacts=[{
+                "actor": "Elyra Voss", "actor_part": "tongue",
+                "target": "Hinami", "target_part": "body",
+                "target_interior": "mouth", "manner": "press",
+                "relation": "interior", "motion": "moving"}])
+        [contact] = normalize_scene_contacts(scene)["contacts"]
+
+        assert contact["actor"] == "Hinami"
+        assert contact["target"] == "Elyra Voss"
+
+    def test_an_interior_contact_with_no_containment_is_left_alone(self):
+        """The carve-out this must not eat: a tongue in an ear is correctly
+        directed as written, and nobody is inside anybody."""
+        scene = _scene()
+        apply_contact_ops(scene, [{
+            "op": "add", "actor": "Bramwell", "actor_part": "tongue",
+            "target": "Hinami", "target_part": "ear",
+            "target_interior": "ear canal", "manner": "press",
+            "relation": "interior", "motion": "moving"}])
+        [contact] = scene["contacts"]
+
+        assert (contact["actor"], contact["actor_part"]) == ("Bramwell", "tongue")
+
+    def test_the_holder_reaching_into_its_own_content_is_left_alone(self):
+        """The inverse arrangement is physically ordinary and must survive: a
+        body inside a holder can be reached into. Only the claim that the
+        CONTAINED body's cavity encloses its own holder is impossible."""
+        scene = _scene(
+            positions={"Elyra Voss": "bedroom", "Hinami": "bedroom"},
+            contained={"Hinami": {"in": "Elyra Voss", "mode": "inside"}})
+        apply_contact_ops(scene, [{
+            "op": "add", "actor": "Hinami", "actor_part": "arm",
+            "target": "Elyra Voss", "target_part": "cheek",
+            "target_interior": "mouth", "manner": "press",
+            "relation": "interior", "motion": "settled"}])
+        [contact] = scene["contacts"]
+
+        assert (contact["actor"], contact["actor_part"]) == ("Hinami", "arm")
+        assert contact["target"] == "Elyra Voss"
+
 
 class TestMatterIsNotAContact:
     """A part slot holding matter is refused at write time, with a notice.

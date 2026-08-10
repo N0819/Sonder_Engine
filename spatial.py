@@ -1778,7 +1778,7 @@ def derive_scene_stations(scene: dict, explicit=None, fresh_ops=None) -> dict:
             continue
         if str(raw.get("op") or "add").strip().casefold() != "add":
             continue
-        contact = _clean_contact(raw)
+        contact = _clean_contact(raw, scene)
         if contact is not None:
             fresh.add(_contact_key(contact))
 
@@ -1789,7 +1789,7 @@ def derive_scene_stations(scene: dict, explicit=None, fresh_ops=None) -> dict:
     for contact in (scene.get("contacts") or []):
         if not isinstance(contact, dict):
             continue
-        recent = _contact_key(_clean_contact(contact) or {}) in fresh
+        recent = _contact_key(_clean_contact(contact, scene) or {}) in fresh
         pair = (contact.get("actor"), contact.get("target"))
         for me, other in (pair, tuple(reversed(pair))):
             me, other = str(me or "").strip(), str(other or "").strip()
@@ -2630,6 +2630,61 @@ def _same_appendage(left: str, right: str) -> bool:
     return " " not in short and short in long.split()
 
 
+def canonical_region(part) -> str:
+    """One spelling for one place on a body, for COMPARISON only.
+
+    Every region comparison in the substance ledger was raw casefolded text,
+    so `Intake_Ports` and `intake port` were two places and a re-spelling
+    minted a second row on a body that has one. This is the single fold point
+    those comparisons now share: fold on the way in, in one place, rather than
+    asking every reader to remember a normalizer.
+
+    It returns a comparison TOKEN and is never written back over what the
+    Director wrote. Two reasons, and both matter: the fiction's own wording is
+    better prose than a canonical stand-in ("oral cavity" is not an
+    improvement on itself), and `_substance_id` hashes the region slots, so
+    rewriting the stored text would re-key standing records and break the
+    `{op:'remove', substance_id}` selectors the Director holds from earlier
+    payloads.
+
+    Deliberately built out of `_part_identity` and `_same_appendage` alone --
+    the structural rule, no vocabulary. A synonym table for body parts is
+    forbidden here for a measured reason (see AGENTS.md): `tail_spade` is a
+    nameable place on a tail rather than `tail` blurred, and a table that
+    folded the one would fold the other. That leaves purely lexical pairs
+    unfolded; see `_same_region`.
+    """
+    kind, instance = _part_identity(part)
+    if not kind:
+        return ""
+    return f"{instance} {kind}".strip() if instance else kind
+
+
+def _same_region(left, right) -> bool:
+    """Do two region names name the same place on one body?
+
+    Canonical equality, then the structural refinement rule -- a refinement
+    repeats the region's own word ('holding reservoir' is that reservoir), so
+    two places the fiction really distinguished stay two.
+
+    What this deliberately does NOT catch is a purely lexical synonym pair
+    with no shared word: measured live (chat 69 ⎇49, turns 61-62), one cavity
+    written `mouth` and then `oral cavity` stands as two rows and still will.
+    Folding that needs a vocabulary, and the vocabulary is the thing that
+    cannot tell a synonym from a sub-part.
+    """
+    left_canon, right_canon = canonical_region(left), canonical_region(right)
+    if not left_canon or not right_canon:
+        return False
+    if left_canon == right_canon:
+        return True
+    left_kind, left_instance = _part_identity(left)
+    right_kind, right_instance = _part_identity(right)
+    if left_instance != right_instance:
+        return False
+    return _same_appendage(left_kind, right_kind)
+
+
 def _displaces(standing: dict, incoming: dict) -> bool:
     """Does `incoming` say the SAME part moved, rather than a second one?
 
@@ -2754,7 +2809,38 @@ _CAVITY_GRIP_MANNERS = frozenset({
 })
 
 
-def _clean_contact(raw):
+def _contained_inversion(scene, actor, target) -> bool:
+    """Does `target` sit INSIDE `actor`, making an interior contact backwards?
+
+    The part vocabularies above decide direction from the part noun alone, and
+    a tongue is deliberately absent from `_ENCLOSING_PART_CAVITY` because it
+    enters things far more often than it encloses them. That carve-out is
+    right and has no way to see the one fact that settles the case anyway:
+    a body cannot enclose the body it is itself inside.
+
+    Measured live (chat 69 ⎇49, turns 78-80): `contained` recorded Hinami at
+    scale 0.1 inside Elyra Voss while the contact ledger carried `Elyra Voss's
+    tongue -> Hinami/body, target_interior mouth`. Both minds were then told
+    the mouth was Hinami's -- she was gagged by a cavity that was not hers,
+    and Elyra was told her tongue was inside the body she was holding in her
+    mouth. The scene knew better in a ledger nothing here was reading.
+
+    Read through `hiding_holders_of`, never `scene['contained']`: containment
+    has two forms and the parented-interior-room form is invisible to a direct
+    read. Deliberately asymmetric -- the inverse arrangement (a holder
+    reaching into what it contains) is physically ordinary and must survive.
+    """
+    if not isinstance(scene, dict):
+        return False
+    actor = str(actor or "").strip()
+    target = str(target or "").strip()
+    if not actor or not target or same_subject(scene, actor, target):
+        return False
+    return any(same_subject(scene, holder, actor)
+               for holder in hiding_holders_of(scene, target))
+
+
+def _clean_contact(raw, scene=None):
     """A contact record, or None if it names nobody on one side."""
     if not isinstance(raw, dict):
         return None
@@ -2809,7 +2895,16 @@ def _clean_contact(raw):
     if not enveloping and actor_kind in _STRICT_CAVITY_KINDS:
         enveloping = (manner in _CAVITY_GRIP_MANNERS
                       or head in _CAVITY_GRIP_MANNERS)
-    if enveloping and actor_part and target_part:
+    # Containment outranks every part vocabulary above, because it is a fact
+    # the scene already holds rather than an inference from a noun. It also
+    # folds when the enclosed side named no part: the direction is known wrong
+    # whatever the slots say, and a bare name renders correctly ("Hinami
+    # remains within Elyra Voss's mouth") where the inversion never could.
+    contained_inversion = (relation == "interior"
+                           and _contained_inversion(scene, actor, target))
+    if contained_inversion:
+        enveloping = True
+    if enveloping and actor_part and (target_part or contained_inversion):
         actor, target = target, actor
         actor_part, target_part = target_part, actor_part
         relation = "interior"
@@ -3564,7 +3659,7 @@ def normalize_scene_contacts(scene: dict) -> dict:
     positions = scene.get("positions") or {}
     kept = {}
     for raw in contacts:
-        contact = _clean_contact(raw)
+        contact = _clean_contact(raw, scene)
         if contact is None:
             continue
         actor_room = _ci_get(positions, contact["actor"])
@@ -3654,7 +3749,7 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
     if not isinstance(contacts, list):
         contacts = []
     current = {_contact_key(c): c for c in
-               (_clean_contact(r) for r in contacts) if c is not None}
+               (_clean_contact(r, scene) for r in contacts) if c is not None}
     # Keys this beat has already spoken for. A displacement may never eat one
     # of them: the Director naming two spots in one breath means two spots.
     asserted = set()
@@ -3774,7 +3869,7 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
                 "motion": "moving",
                 "unasserted": 0,
             }
-            contact = _clean_contact(advanced)
+            contact = _clean_contact(advanced, scene)
             if contact is None:
                 continue
             current.pop(old_key, None)
@@ -3785,7 +3880,7 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
             raw = advanced
             op = "add"
         else:
-            contact = _clean_contact(raw)
+            contact = _clean_contact(raw, scene)
             raw_actor = _contact_text(raw.get("actor"), 120)
             if contact is None and report is not None and raw_actor \
                     and _contact_text(raw.get("target"), 120):
@@ -3808,15 +3903,34 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
                 # the displacement notices, so the Director learns the
                 # direction rather than re-asserting the folded spelling
                 # every beat.
-                report.append(
-                    f"contact: read {raw_actor}'s "
-                    f"{_contact_text(raw.get('actor_part')) or 'body'} "
-                    f"enveloping {contact['actor']}'s "
-                    f"{contact['actor_part'] or 'body'} as "
-                    f"{contact['actor']}'s {contact['actor_part'] or 'body'} "
-                    f"inside {contact['target']}'s "
-                    f"{contact['target_interior'] or 'body'} -- the actor of "
-                    "an interior contact is the enclosed side.")
+                #
+                # Ask containment the same question `_clean_contact` asked,
+                # rather than having it hand back a marker: a private field on
+                # the record would ride into the stored scene, and the two
+                # folds need different explanations. Only the containment one
+                # can name a reason the Director can check against a ledger it
+                # already has, so it does not borrow the envelopment wording.
+                raw_target = _contact_text(raw.get("target"), 120)
+                if _contained_inversion(scene, raw_actor, raw_target):
+                    report.append(
+                        f"contact: read {raw_actor}'s "
+                        f"{_contact_text(raw.get('actor_part')) or 'body'} "
+                        f"inside {raw_target} as {contact['actor']} inside "
+                        f"{contact['target']}'s "
+                        f"{contact['target_interior'] or 'body'} -- "
+                        f"{contact['target']} encloses {contact['actor']}, so "
+                        f"{raw_target} cannot be the enclosure here. End the "
+                        "containment first if that is what changed.")
+                else:
+                    report.append(
+                        f"contact: read {raw_actor}'s "
+                        f"{_contact_text(raw.get('actor_part')) or 'body'} "
+                        f"enveloping {contact['actor']}'s "
+                        f"{contact['actor_part'] or 'body'} as "
+                        f"{contact['actor']}'s {contact['actor_part'] or 'body'} "
+                        f"inside {contact['target']}'s "
+                        f"{contact['target_interior'] or 'body'} -- the actor of "
+                        "an interior contact is the enclosed side.")
 
         if contact is not None:
             key = _contact_key(contact)
@@ -4060,6 +4174,72 @@ def _interior_destination_for_release(scene, source, source_part):
     return matches[0] if len(matches) == 1 else None
 
 
+def _recorded_region_owners(scene) -> list:
+    """(subject, region) pairs the scene's standing ledgers already assert.
+
+    The engine has no anatomy registry and should not grow one -- anatomy is
+    open-ended and every story invents some. But it does not need one to catch
+    a part slot filled with somebody else's body: the contact and substance
+    ledgers have been recording, all along, which regions belong to whom.
+    That is derived evidence, not a vocabulary, so it costs nothing to keep
+    and cannot be wrong about a story it has not seen.
+
+    Read from the PRE-BEAT scene, exactly as `_interior_destination_for_release`
+    reads topology: this beat's own claim is the thing being checked.
+    """
+    pairs = []
+    seen = set()
+
+    def note(who, part):
+        subject = canonical_subject(scene, _substance_text(who, 120))
+        region = canonical_region(part)
+        if not subject or not region:
+            return
+        key = (subject.casefold(), region)
+        if key in seen:
+            return
+        seen.add(key)
+        pairs.append((subject, _substance_text(part, 120)))
+
+    for contact in ((scene or {}).get("contacts") or []):
+        if not isinstance(contact, dict):
+            continue
+        note(contact.get("actor"), contact.get("actor_part"))
+        note(contact.get("target"), contact.get("target_part"))
+        note(contact.get("target"), contact.get("target_interior"))
+    for record in ((scene or {}).get("substances") or []):
+        if not isinstance(record, dict):
+            continue
+        note(record.get("source"), record.get("source_part"))
+        note(record.get("target"), record.get("target_part"))
+        note(record.get("target"), record.get("target_interior"))
+    return pairs
+
+
+def _region_belongs_elsewhere(scene, subject, part) -> bool:
+    """Has the scene recorded this region on other bodies and never on this one?
+
+    The discriminator that makes the check safe without any anatomy knowledge.
+    Two bodies both having a mouth is the ordinary case and must never fire;
+    a region the ledgers own for somebody else and have never once seen on
+    THIS body is the measured failure -- `glans` recorded three times as Elyra
+    Voss's, then written into a record targeting Hinami.
+
+    Silence is not evidence: a region no ledger has ever mentioned stands as
+    written, because most anatomy is never recorded at all.
+    """
+    if not canonical_region(part):
+        return False
+    owned_by_others = False
+    for owner, recorded in _recorded_region_owners(scene):
+        if not _same_region(recorded, part):
+            continue
+        if same_subject(scene, owner, subject):
+            return False
+        owned_by_others = True
+    return owned_by_others
+
+
 def _substance_id(record):
     supplied = _substance_text(record.get("substance_id") or record.get("id"), 120)
     if supplied:
@@ -4126,11 +4306,17 @@ def _resolved_substance_add(scene, raw, report=None):
             if report:
                 report("discarded substance add whose placement contradicted standing interior topology")
             return None
-        if target_interior and target_interior.casefold() != derived_interior.casefold():
+        # Region slots compare through `_same_region`, not as raw text: this
+        # check DISCARDS the whole op on disagreement, so a re-spelling of the
+        # same cavity used to cost a release outright. Measured live (chat 69
+        # ⎇49, turn 66) that is exactly what happened -- a deposit declared
+        # into one cavity was thrown away against a differently worded
+        # standing one, leaving only a warning behind.
+        if target_interior and not _same_region(target_interior, derived_interior):
             if report:
                 report("discarded substance add whose target_interior contradicted standing interior topology")
             return None
-        if target_part and target_part.casefold() != derived_part.casefold():
+        if target_part and not _same_region(target_part, derived_part):
             if report:
                 report("discarded substance add whose target_part contradicted standing interior topology")
             return None
@@ -4141,6 +4327,22 @@ def _resolved_substance_add(scene, raw, report=None):
 
     if not placement:
         placement = "interior" if target_interior else "surface"
+    if placement != "interior" and target_interior:
+        # An enclosure named beside a non-interior placement is a cavity the
+        # record has no room for, and every consumer reads `target_interior`
+        # as a structure of the TARGET. Live (chat 69 ⎇49, turn 78): saliva
+        # stored `target: Hinami, placement: surface, target_interior: mouth`
+        # while Hinami was inside Elyra Voss -- the mouth was Elyra's, and the
+        # recipient's own payload handed it back to her as hers. Drop the
+        # slot rather than promoting the placement: the Director said the
+        # matter landed on a SURFACE, and inferring an enclosure it did not
+        # claim would invent topology from a stray field.
+        if report:
+            report(f"dropped enclosure {target_interior!r} from a "
+                   f"{placement} deposit -- target_interior is a structure of "
+                   "the target's own body and belongs only to an interior "
+                   "placement")
+        target_interior = ""
     if not target:
         if report:
             report("discarded substance add without a target or unique interior destination")
@@ -4153,6 +4355,24 @@ def _resolved_substance_add(scene, raw, report=None):
         if report:
             report("discarded interior substance add without an enclosing target_interior")
         return None
+
+    # A part slot holding a region of somebody else's body. Re-attribute
+    # rather than discard: the deposit itself happened, and turn 66 of the
+    # same story is the standing lesson in what silent discarding costs. The
+    # matter's location survives as target + placement (+ enclosure); only the
+    # endpoint precision is lost, and a wrong endpoint was never precision.
+    #
+    # `target_interior` is deliberately NOT checked here. It is load-bearing
+    # for an interior placement -- clearing it would fall straight through the
+    # rejection above and destroy the record -- and the one measured case of a
+    # mis-owned enclosure arrived on a SURFACE placement, where the clear
+    # immediately above already removes it.
+    if target_part and _region_belongs_elsewhere(scene, target, target_part):
+        if report:
+            report(f"dropped {target_part!r} from a deposit on {target} -- the "
+                   "scene records that region on another body and never on "
+                   "this one; target_part is a place on the target's own body")
+        target_part = ""
 
     record = {
         "source": source,
@@ -4214,32 +4434,122 @@ def resolve_substance_ops(scene: dict, ops, report=None) -> list[dict]:
     return resolved
 
 
-def _same_deposit_blurred(a, b) -> bool:
-    """One deposit written twice at two levels of part-precision?
+def _same_pool(a, b) -> bool:
+    """Are these two rows one pool of matter, rather than two deposits?
 
-    A Director narrating one release routinely emits it twice in a beat --
-    once as `add` with the endpoint part, once as `deposit` without it -- and
-    `_substance_id` hashes the part slots, so the pair minted two standing
-    records. Measured live: a single climax stood in the saved scene as two
-    verbatim-identical rows differing only in an empty `target_part`.
+    The substance ledger's answer to the rule the contact ledger has had all
+    along (`_displaces`): the same material, from the same source, on the same
+    region of the same body is ONE pool that a later release re-describes --
+    not a second puddle beside the first.
 
-    Deliberately strict everywhere else: same source, substance, target,
-    placement and enclosure, same amount, same detail. Two deposits that
-    genuinely happened twice describe themselves differently; two rows that
-    agree on every word and differ only in one side's silence about a part
-    are one event.
+    Measured live (chat 69 ⎇49): three saliva rows on one region of one body
+    across turns 74/78/80, held apart only by which part of the source
+    delivered them, all three delivered to her every beat thereafter.
+
+    Identity deliberately excludes `source_part` (saliva delivered by a tongue
+    and then by a mouth is the same saliva), `amount` and `detail` (how much
+    is there now, and what it is like now, are what a re-description UPDATES).
+    It keeps `source`, because perception strips provenance per observer and
+    two bodies' matter in one place is two facts about who was there.
+
+    This subsumes the older blurred-twin fold and replaces it. That one caught
+    the narrower measured case -- a Director narrating one release emits it
+    twice in a beat, once as `add` carrying the endpoint part and once as
+    `deposit` without it, and `_substance_id` hashes the part slots, so a
+    single climax stood in the saved scene as two verbatim-identical rows
+    differing only in an empty `target_part`. Every such pair is also one
+    pool, so keeping both predicates would leave two answers to one question,
+    free to drift.
+
+    A record inside an enclosure pools on the ENCLOSURE (see `_record_region`):
+    matter at the inlet and matter at the outlet of one reservoir is one
+    reservoir of matter. With no enclosure named, the part is the place.
     """
-    for field in ("source", "substance", "target", "placement",
-                  "target_interior", "amount", "detail"):
+    for field in ("source", "substance", "target", "placement"):
         if _substance_text(a.get(field), 240).casefold() \
                 != _substance_text(b.get(field), 240).casefold():
             return False
-    for field in ("source_part", "target_part"):
-        left = _substance_text(a.get(field), 120).casefold()
-        right = _substance_text(b.get(field), 120).casefold()
-        if left and right and left != right:
-            return False
-    return True
+    left, right = _record_region(a), _record_region(b)
+    if bool(left) != bool(right):
+        return False
+    return not left or _same_region(left, right)
+
+
+def _record_region(record) -> str:
+    """Where on its target a standing record sits: the enclosure, else the part."""
+    return _substance_text(record.get("target_interior"), 160) \
+        or _substance_text(record.get("target_part"), 120)
+
+
+def _absorb_into_pool(standing: dict, arriving: dict) -> dict:
+    """Fold a later release into the pool already standing there.
+
+    The arriving row is the current account of that pool, so `amount` and
+    `detail` replace what was there -- a re-description says how much is there
+    NOW. The part slots only ever gain precision: a release that named an
+    endpoint fills a slot the earlier one left silent, and never blanks one.
+    The standing record keeps its own `substance_id`, which is what makes a
+    `{op:'remove', substance_id}` selector minted from an earlier payload
+    still find the row.
+    """
+    for field in ("amount", "detail"):
+        value = _substance_text(arriving.get(field), 240)
+        if value:
+            standing[field] = arriving.get(field, "")
+    for field in ("source_part", "target_part", "target_interior"):
+        if not _substance_text(standing.get(field), 160):
+            standing[field] = arriving.get(field, "")
+    return standing
+
+
+def _stock_consumed_by(scene, record, current) -> list:
+    """Standing record ids this add's SOURCE region gives up to it.
+
+    Matter arriving somewhere never left where it came from, and the op
+    vocabulary has no way to say so: `add` states a destination and nothing
+    else, `remove` is a separate op the Director has to remember, and measured
+    across the whole stored corpus it remembered 5 times against 38 deposits.
+    So the departure is derived here instead, where both ends are already in
+    hand -- the deterministic floor must not depend on a model cooperating.
+
+    Two conditions, and both are structural:
+
+    * the standing record sits on the body this add names as its SOURCE, at
+      the region this add names as `source_part` (compared through
+      `_same_region`, so a re-spelling still matches);
+    * that matter is FOREIGN to the body holding it -- its own `source` is
+      somebody else. Matter a body produces at one of its own regions is a
+      source, not a stock: a gland does not stop existing because some of what
+      it made was moved, and the same rule would otherwise empty it.
+
+    Substance NAMES are deliberately never compared. The Director renamed one
+    material three times across turns 61/66/70 of the measured story ("cum",
+    "seed", "Elyra Voss seed"), so a name-matched rule would have fired on
+    none of them.
+
+    Known limit, and it is the honest one: this retires the whole standing
+    record, because `amount` is free text and nothing can yet order "a small
+    spill" against "the remainder". A partial transfer therefore clears its
+    origin early. That is the recoverable direction of the two -- the Director
+    can deposit again, whereas the failure this replaces stood for 19 turns
+    and was still being delivered to the recipient after she had left the room.
+    """
+    source = _substance_text(record.get("source"), 120)
+    source_part = _substance_text(record.get("source_part"), 120)
+    if not source or not source_part:
+        return []
+    consumed = []
+    for sid, standing in current.items():
+        if sid == record.get("substance_id"):
+            continue  # never let an add eat itself
+        if not same_subject(scene, standing.get("target"), source):
+            continue
+        if same_subject(scene, standing.get("source"), standing.get("target")):
+            continue
+        region = _record_region(standing)
+        if region and _same_region(region, source_part):
+            consumed.append(sid)
+    return consumed
 
 
 def apply_substance_ops(scene: dict, ops, report=None) -> dict:
@@ -4250,33 +4560,58 @@ def apply_substance_ops(scene: dict, ops, report=None) -> dict:
                 or not raw_record.get("substance") or not raw_record.get("target"):
             continue
         record = dict(raw_record)
+        # An enclosure stored beside a non-interior placement is somebody
+        # else's cavity (see `_resolved_substance_add`). Shed it on read as
+        # well as on write, or the stored rows never heal -- and while it
+        # stands it also keeps the row out of its own pool, because
+        # `_record_region` prefers the enclosure and would file one coating
+        # under a cavity and its twin under the body it is actually on.
+        if _substance_placement(record.get("placement")) != "interior" \
+                and _substance_text(record.get("target_interior"), 160):
+            record["target_interior"] = ""
         record["substance_id"] = _substance_id(record)
-        twin_id = next((sid for sid, standing in current.items()
-                        if _same_deposit_blurred(standing, record)), None)
-        if twin_id is not None:
-            # A scene saved before the add-time dedupe below can already carry
-            # the blurred twin pair; fold it on read so the ledger heals on
-            # the next merge rather than carrying both rows forever.
-            for field in ("source_part", "target_part"):
-                if not _substance_text(current[twin_id].get(field), 120):
-                    current[twin_id][field] = record.get(field, "")
+        pooled_id = next((sid for sid, standing in current.items()
+                          if _same_pool(standing, record)), None)
+        if pooled_id is not None:
+            # A scene saved before the fold below can already carry the stack;
+            # pool it on read so the ledger heals on the next merge rather
+            # than carrying every row forever. Rows arrive in the order they
+            # were written, so the later one is the current account.
+            _absorb_into_pool(current[pooled_id], record)
             continue
         current[record["substance_id"]] = record
     for raw in resolve_substance_ops(scene, ops, report=report):
         op = raw.get("op")
         if op == "add":
             record = {k: v for k, v in raw.items() if k != "op"}
-            twin_id = next(
+            pooled_id = next(
                 (sid for sid, standing in current.items()
-                 if _same_deposit_blurred(standing, record)), None)
-            if twin_id is not None:
-                # Keep the more precise part slots on the standing record and
-                # its original id, so a later removal by either id's selector
-                # still finds one row, not half of two.
-                standing = current[twin_id]
-                for field in ("source_part", "target_part"):
-                    if not _substance_text(standing.get(field), 120):
-                        standing[field] = record.get(field, "")
+                 if _same_pool(standing, record)), None)
+            # Conservation runs against the ledger as it stood BEFORE this add
+            # lands, and BEFORE pooling, so a deposit can never consume itself
+            # and a destination that already held some does not excuse the
+            # origin. It runs per add rather than once per beat, so two
+            # releases in one beat each empty their own origin.
+            #
+            # Found by replaying the live ledger: pooling used to return here
+            # first, and the measured swallow deposited into a stomach that
+            # already had a row -- so the mouth was never emptied at all.
+            for sid in _stock_consumed_by(scene, record, current):
+                if sid == pooled_id:
+                    continue  # the destination is not its own origin
+                if report:
+                    gone = current[sid]
+                    report(
+                        f"{_substance_text(gone.get('substance'), 160)!r} left "
+                        f"{_substance_text(gone.get('target'), 120)}'s "
+                        f"{_record_region(gone)} -- "
+                        f"{_substance_text(record.get('source'), 120)} moved "
+                        f"matter out of that region this beat")
+                current.pop(sid, None)
+            if pooled_id is not None:
+                # The standing record keeps its own id, so a removal by either
+                # id's selector still finds one row rather than half of two.
+                _absorb_into_pool(current[pooled_id], record)
                 continue
             current[record["substance_id"]] = record
             continue
