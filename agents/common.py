@@ -7,6 +7,7 @@ import json
 import re
 
 import attire as attire_model
+import crowds as crowds_model
 from character_schema import (
     character_appearance,
     character_knowledge_config,
@@ -636,6 +637,42 @@ def observer_body_regions(sc, observer, body_labels=None):
             results.append({"body": str(label or "someone"),
                             "regions": delivered})
     return results
+
+
+CROWDS_KEY = "crowds"
+
+
+def crowds_for_room(cid, sc, room_id):
+    """What crowds an observer in this room registers, already described.
+
+    A crowd is a thing in a room, so it is delivered per observer and scoped to
+    the room they are standing in -- never as a scene-wide list, which would
+    hand someone in a back office the state of the square outside.
+
+    It deliberately does NOT go through the managed-presence path. A crowd that
+    consumed one of the six `max_managed` slots would have solved nothing,
+    which is the whole reason the object exists.
+
+    Density is computed here rather than read, because it is a function of the
+    band and the ROOM and the crowd may have walked into a different one since
+    it was minted.
+    """
+    from db import wget
+
+    if not room_id:
+        return []
+    room = ((sc or {}).get("rooms") or {}).get(room_id) or {}
+    size = room.get("size")
+    out = []
+    for crowd in crowds_model.crowds_in_room(wget(cid, CROWDS_KEY, []) or [],
+                                             room_id):
+        out.append({
+            "uid": crowd.get("uid"),
+            "what": crowds_model.describe(crowd, size),
+            "density": crowds_model.density(crowd.get("band"), size),
+            "heading": crowd.get("heading") or None,
+        })
+    return out
 
 
 def _perceptible_entities(sc, perceiver_names=None):
