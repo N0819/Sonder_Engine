@@ -95,11 +95,29 @@ def authored_establish(author):
 ROLES = ("default", "director", "character_bg", "character_mid", "narrator",
          "mapping", "utility", "backdrop_prompt", "ambience_prompt")
 MAIN_MODEL = "minimax/minimax-m3"
-PERCEPTION_MODEL = "inclusionai/ling-3.0-flash"
+PERCEPTION_MODEL = "mistral-code-agent-latest"
 EMBEDDING_MODEL = "perplexity/pplx-embed-v1-4b"
 
+#: `--fast`. Free and very quick, and everything sent to it is used to TRAIN.
+#:
+#: That is fine for exactly what this harness does and for nothing else. The
+#: only things it transmits are the engine's own system prompts -- already
+#: public, this repository is open -- and a wholly invented story about a
+#: smith's apprentice in a valley that does not exist. No user story, no
+#: private chat, no credential, no personal data.
+#:
+#: Never point this preset at a real story.
+#:
+#: It takes perception too, rather than leaving that role on a code model.
+#: Measured: `mistral-code-agent-latest` was slower here than its headline
+#: throughput suggests, and since wall-clock on this pipeline is generation-
+#: bound, the fastest generator wins the role that runs once per perceiver.
+FAST_MAIN_MODEL = "meta/muse-spark-1.2-contributor"
+FAST_PERCEPTION_MODEL = "meta/muse-spark-1.2-contributor"
 
-def seed_providers(db):
+
+def seed_providers(db, main_model=MAIN_MODEL,
+                   perception_model=PERCEPTION_MODEL):
     """Register the two providers this run needs, from the environment.
 
     Credentials are read from `NANOGPT_API_KEY` and `OPENROUTER_API_KEY` and
@@ -122,8 +140,8 @@ def seed_providers(db):
         "INSERT INTO providers(name,kind,base_url,api_key,enabled) "
         "VALUES(?,?,?,?,1)",
         ("nanogpt", "nanogpt", "https://nano-gpt.com/api/v1", nano_key))
-    models = {role: {"provider": nano, "model": MAIN_MODEL} for role in ROLES}
-    models["perception"] = {"provider": nano, "model": PERCEPTION_MODEL}
+    models = {role: {"provider": nano, "model": main_model} for role in ROLES}
+    models["perception"] = {"provider": nano, "model": perception_model}
 
     router_key = os.environ.get("OPENROUTER_API_KEY", "")
     if router_key:
@@ -248,15 +266,26 @@ def main():
     ap.add_argument("--capture", default="", help="dump stage payloads")
     ap.add_argument("--beats", type=int, default=0,
                     help="play only the first N beats (0 = all)")
+    ap.add_argument("--fast", action="store_true",
+                    help="free, very fast, and TRAINS ON WHAT IT IS SENT; "
+                         "only ever for this synthetic world")
     args = ap.parse_args()
 
     _require_scratch()
     import db as db_module
 
     db_module.init()
-    models = seed_providers(db_module)
+    main_model = FAST_MAIN_MODEL if args.fast else MAIN_MODEL
+    perception_model = (FAST_PERCEPTION_MODEL if args.fast
+                        else PERCEPTION_MODEL)
+    if args.fast:
+        print("--fast: %s is free and TRAINS ON ITS INPUT. Only the engine's\n"
+              "        own prompts and an invented valley are sent."
+              % FAST_MAIN_MODEL, flush=True)
+    models = seed_providers(db_module, main_model=main_model,
+                            perception_model=perception_model)
     print("models: %s | perception: %s | embeddings: %s" % (
-        MAIN_MODEL, PERCEPTION_MODEL,
+        main_model, perception_model,
         (models.get("embeddings") or {}).get("model") or "off"), flush=True)
     author = QuestAuthor()
     author.capture_dir = args.capture
