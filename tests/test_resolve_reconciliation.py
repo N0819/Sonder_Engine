@@ -30,7 +30,7 @@ import time
 
 from character_schema import default_character_data
 from pipeline_context import ChatData, PipelineContext, TurnData
-from spatial import merge_scene_with_diff, spatial_rel
+from spatial import contact_sensation, merge_scene_with_diff, spatial_rel
 
 import agents.director as director
 from agents.director import (
@@ -193,6 +193,103 @@ def test_contact_manifest_checks_contact_ops_in_the_right_dimension():
         "category": "contact", "subject": "contacts",
         "change": "The standing contact changes.",
     })
+
+
+def test_contact_manifest_cannot_be_satisfied_by_another_contact_same_actor():
+    """Live chat 68 turn 15: the hand op made the actor present in contact_ops,
+    and that shallow match falsely covered the separately manifested cervix
+    contact. Both the model's ``contact_ops`` category spelling and the legacy
+    endpoint-free manifest shape are reproduced here."""
+    hand_only = _normalize_diff_shape({"contact_ops": [{
+        "op": "add", "actor": "Elyra Voss", "actor_part": "left hand",
+        "target": "Hinami", "target_part": "hip", "manner": "hold",
+        "detail": "firm grip",
+    }]})
+
+    assert not _evidence_present(hand_only, {
+        "category": "contact_ops", "subject": "Elyra Voss",
+        "change": "Cock presses deeper against Hinami's cervix.",
+    })
+    assert _evidence_present(hand_only, {
+        "category": "contact_ops", "subject": "Elyra Voss",
+        "change": "Left hand tightens its grip on Hinami's hip.",
+    })
+
+
+def test_contact_manifest_structured_endpoints_match_exact_relation():
+    sd = _normalize_diff_shape({"contact_ops": [{
+        "op": "add", "actor": "Elyra Voss", "actor_part": "cock",
+        "target": "Hinami", "target_part": "cervix", "manner": "insert",
+    }]})
+    manifest = {
+        "category": "contact", "subject": "Elyra Voss",
+        "change": "The interior contact moves deeper.",
+        "actor": "Elyra Voss", "actor_part": "cock",
+        "target": "Hinami", "target_part": "cervix",
+    }
+
+    assert _evidence_present(sd, manifest)
+    assert not _evidence_present(sd, {**manifest, "target_part": "groin"})
+
+
+def test_live_two_contact_omission_fires_bounded_repair(temp_db, monkeypatch):
+    """End-to-end reproduction of chat 68 turn 15. The hand relation remains,
+    and the separately asserted interior relation is added by the one repair
+    call instead of being hidden by their shared actor."""
+    ctx = _make_ctx(temp_db, "I squirm at the depth.", _action_interp())
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
+        "director_resolve": {
+            "resolved_event": (
+                "Elyra's left hand tightens on Hinami's hip as her cock "
+                "presses deeper against Hinami's cervix."
+            ),
+            "summary": "Both contacts deepen.",
+            "dialogue_log": [],
+            "changes_asserted": [
+                {"category": "contact_ops", "subject": "Elyra Voss",
+                 "change": "Left hand tightens grip on Hinami's hip."},
+                {"category": "contact_ops", "subject": "Elyra Voss",
+                 "change": "Cock presses deeper against Hinami's cervix."},
+            ],
+            "state_diff": {"contact_ops": [{
+                "op": "add", "actor": "Elyra Voss",
+                "actor_part": "left hand", "target": "Hinami",
+                "target_part": "hip", "manner": "hold",
+                "detail": "firm grip",
+            }]},
+        },
+        "resolve_repair": {
+            "state_diff": {"contact_ops": [{
+                "op": "add", "actor": "Elyra Voss", "actor_part": "cock",
+                "target": "Hinami", "target_part": "cervix",
+                "manner": "insert", "detail": "fully inserted",
+            }]},
+            "dispositions": [{"subject": "Elyra Voss", "status": "encoded",
+                              "reason": "Added the omitted relation."}],
+        },
+    }, calls))
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert [key for key, _ in calls] == ["director_resolve", "resolve_repair"]
+    assert {(op["actor_part"], op["target_part"])
+            for op in out["state_diff"]["contact_ops"]} == {
+                ("left hand", "hip"), ("cock", "cervix")}
+    assert out["reconciliation"]["repaired"] is True
+    assert out["reconciliation"]["unresolved"] == []
+
+    scene = merge_scene_with_diff({
+        "rooms": {"room": {"name": "Room", "desc": "", "adjacent": []}},
+        "positions": {"Elyra Voss": "room", "Hinami": "room"},
+        "entities": {}, "contacts": [],
+    }, out["state_diff"])
+    interior = next(c for c in scene["contacts"]
+                    if c["target_part"] == "cervix")
+    assert contact_sensation(interior, you="Hinami", scene=scene).startswith(
+        "your cervix registers Elyra Voss's cock within it")
+    assert contact_sensation(interior, you="Elyra Voss", scene=scene).startswith(
+        "your cock registers Hinami's cervix closed around it")
 
 
 def _dialogue_interp():

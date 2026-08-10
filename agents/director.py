@@ -2333,7 +2333,7 @@ def _merge_repair_into_diff(sd, patch):
     for key, room in (patch.get("positions") or {}).items():
         sd["positions"].setdefault(key, room)
     for field in ("remove_entities", "remove_rooms", "remove_adjacent",
-                  "inventory_ops", "cast_changes", "world_facts",
+                  "inventory_ops", "contact_ops", "cast_changes", "world_facts",
                   "introductions"):
         for item in (patch.get(field) or []):
             if item not in sd[field]:
@@ -2451,7 +2451,8 @@ _OMISSION_CATEGORY_ALIASES = {
     "entity": "entities", "object": "entities",
     "condition": "conditions", "status_effect": "conditions",
     "clothing": "attire", "outfit": "attire",
-    "contact": "contacts", "body_position": "contacts",
+    "contact": "contacts", "contacts": "contacts",
+    "contact_ops": "contacts", "body_position": "contacts",
     "item": "inventory", "inventory_ops": "inventory",
     "cast": "cast_changes", "arrival": "cast_changes",
     "departure": "cast_changes",
@@ -2551,12 +2552,54 @@ def _evidence_present(sd, omission, forms=None):
     if category == "attire":
         return any(hits(k) for k in (sd.get("attire") or {}))
     if category == "contacts":
+        manifest_actor = str(omission.get("actor") or "").strip()
+        manifest_actor_part = str(omission.get("actor_part") or "").strip()
+        manifest_target = str(omission.get("target") or "").strip()
+        manifest_target_part = str(omission.get("target_part") or "").strip()
+        has_manifest_endpoints = bool(manifest_actor and manifest_target)
+        change = str(omission.get("change") or "").casefold()
+        subject_is_ledger = _norm_subject(subject) in ("contact", "contacts")
+
+        def endpoint_matches(op):
+            """Does this op encode this exact manifested contact relation?
+
+            New outputs carry structured endpoints. Saved/weak outputs may not;
+            for those, require at least one op-specific part/manner phrase in the
+            manifest prose whenever the op supplies one. That conservative
+            fallback may request an idempotent repair for an underspecified
+            manifest, but it cannot let an unrelated contact silently stand in
+            for the asserted one.
+            """
+            if has_manifest_endpoints:
+                if not (_make_subject_hit(manifest_actor)(op.get("actor"))
+                        and _make_subject_hit(manifest_target)(op.get("target"))):
+                    return False
+                if manifest_actor_part and _norm_subject(
+                        manifest_actor_part) != _norm_subject(op.get("actor_part")):
+                    return False
+                if manifest_target_part and _norm_subject(
+                        manifest_target_part) != _norm_subject(op.get("target_part")):
+                    return False
+                return True
+
+            if subject_is_ledger:
+                return True
+            discriminators = [
+                str(op.get(field) or "").strip().casefold()
+                for field in ("actor_part", "target_part", "manner")
+                if str(op.get(field) or "").strip()
+            ]
+            if not discriminators:
+                return True
+            return any(re.search(r"\b%s\b" % re.escape(term), change)
+                       for term in discriminators)
+
         for op in (sd.get("contact_ops") or []):
             if not isinstance(op, dict):
                 continue
-            if hits(op.get("actor")) or hits(op.get("target")):
-                return True
-            if _norm_subject(subject) in ("contact", "contacts"):
+            if (subject_is_ledger or hits(op.get("actor"))
+                    or hits(op.get("target"))) \
+                    and endpoint_matches(op):
                 return True
         return False
     if category == "inventory":
@@ -2603,11 +2646,19 @@ def _manifest_items(out):
         change = str(item.get("change") or "").strip()
         if not change:
             continue
-        items.append({
+        normalized = {
             "category": _normalize_omission_category(item.get("category")),
             "subject": str(item.get("subject") or "").strip(),
             "change": change, "evidence": "", "source": "manifest",
-        })
+        }
+        # Preserve the historical public manifest shape for every non-contact
+        # change; endpoint keys exist only when the model actually supplied
+        # them, rather than four empty strings appearing on every item.
+        for field in ("actor", "actor_part", "target", "target_part"):
+            value = str(item.get(field) or "").strip()
+            if value:
+                normalized[field] = value
+        items.append(normalized)
     return items[:_RECONCILE_MAX_MANIFEST_ITEMS]
 
 def _player_claim_findings(out, sd, interp, cast, sc):
