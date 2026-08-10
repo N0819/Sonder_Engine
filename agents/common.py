@@ -639,7 +639,7 @@ def observer_body_regions(sc, observer, body_labels=None):
     return results
 
 
-CROWDS_KEY = "crowds"
+CROWDS_KEY = crowds_model.CROWDS_WORLD_KEY
 
 
 def crowds_for_room(cid, sc, room_id):
@@ -671,6 +671,15 @@ def crowds_for_room(cid, sc, room_id):
             "what": crowds_model.describe(crowd, size),
             "density": crowds_model.density(crowd.get("band"), size),
             "heading": crowd.get("heading") or None,
+            # A crowd is terrain, so the observer is told what kind. `open`
+            # is ground with people on it; `membrane` is the barrier word
+            # spatial.py already uses for a thing you push through and cannot
+            # see across, which is what standing in a packed crowd is.
+            "terrain": crowds_model.terrain(crowd.get("band"), size),
+            # The press's OFFER, never its verdict: {toward, strength}. The
+            # Director decides whether it lands, and if it does it is an
+            # arrival that goes through the commit path like any other move.
+            "drift": crowds_model.drift(crowd, size),
         })
     return out
 

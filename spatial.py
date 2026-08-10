@@ -865,6 +865,32 @@ def spatial_rel(
 
 _PASSABLE_BARRIERS = {"open", "open_door", "membrane"}
 
+def passable_neighbors(scene: dict) -> dict:
+    """{room_id: {rooms reachable in one step}} over passable edges only.
+
+    Undirected, following the `nearby_rooms` precedent: an open doorway
+    declared from either side can be walked through either way. Lifted out of
+    `passable_route_exists` when crowds needed the same graph -- a crowd moves
+    on the one graph everyone else walks, and §5 of the crowd proposal asks for
+    exactly no second pathfinder.
+    """
+    neighbors: dict[str, set] = {}
+    for room_id, room in (scene.get("rooms") or {}).items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict):
+                continue
+            target = edge.get("to")
+            if not target:
+                continue
+            if normalize_barrier(edge.get("barrier")) not in _PASSABLE_BARRIERS:
+                continue
+            neighbors.setdefault(room_id, set()).add(target)
+            neighbors.setdefault(target, set()).add(room_id)
+    return neighbors
+
+
 def passable_route_exists(
     scene: dict,
     from_room: Optional[str],
@@ -891,21 +917,7 @@ def passable_route_exists(
     if from_room == to_room:
         return True
 
-    rooms = scene.get("rooms") or {}
-    neighbors: dict[str, set] = {}
-    for room_id, room in rooms.items():
-        if not isinstance(room, dict):
-            continue
-        for edge in room.get("adjacent") or []:
-            if not isinstance(edge, dict):
-                continue
-            target = edge.get("to")
-            if not target:
-                continue
-            if normalize_barrier(edge.get("barrier")) not in _PASSABLE_BARRIERS:
-                continue
-            neighbors.setdefault(room_id, set()).add(target)
-            neighbors.setdefault(target, set()).add(room_id)
+    neighbors = passable_neighbors(scene)
 
     seen = {from_room}
     frontier = [from_room]

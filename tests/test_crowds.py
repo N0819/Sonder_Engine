@@ -221,3 +221,286 @@ class TestAFixtureMayBeReMet:
         body = inspect.getsource(commit.pick_background_reactors)
         priority = body[body.index("priority = ("):body.index("candidates.append")]
         assert "at_post" not in priority.split("bool(addressed)")[0]
+
+
+class TestDensityIsTerrain:
+    """§5a. A crowd you can be caught in is not set dressing, it is terrain.
+
+    Both halves of the split are pinned here: the spatial layer answers
+    "may I" deterministically, and the Director answers "what happened".
+    """
+
+    def test_a_loose_crowd_is_ground_with_people_on_it(self):
+        """Forty across a market square is walkable. Treating every crowd as
+        an obstacle would make a busy street impassable, which is not what a
+        busy street is."""
+        assert crowds.terrain("a dozen or so", "large") == "open"
+
+    def test_a_crush_is_the_barrier_word_spatial_already_has(self):
+        """No new passability class. `membrane` is already passable and
+        already absent from `_SIGHT_BARRIERS` — push through, cannot see
+        across — and its own comment glosses it as "a body's soft wall"."""
+        import spatial
+
+        assert crowds.terrain("a few dozen", "small") == "membrane"
+        assert crowds.terrain("a throng", "large") == "membrane"
+        assert "membrane" in spatial._VALID_BARRIERS
+        assert "membrane" not in spatial._SIGHT_BARRIERS
+
+    def test_the_room_releases_you_rather_than_the_crowd_deciding_to(self):
+        """The property worth having: a crush that reaches open ground thins
+        because the geometry changed and nothing else did."""
+        gateway = crowds.terrain("a few dozen", "small")
+        square = crowds.terrain("a few dozen", "huge")
+        assert gateway == "membrane" and square == "open"
+
+
+class TestDriftIsAnOfferAndNotAnArrival:
+    def test_a_crowd_going_nowhere_has_no_current(self):
+        """A stationary crush is a wall with good prose. Pushing bodies
+        around a room for no reason anyone could point at is worse than
+        nothing."""
+        still = crowds.new_crowd(1, "gate", band="a throng",
+                                 composition="pilgrims", since_turn=1)
+        assert crowds.drift(still, "small") is None
+
+    def test_a_crush_carries_and_a_packed_crowd_only_pulls(self):
+        """The difference between packed and a crush is the current, not the
+        wall — both are a membrane."""
+        moving = crowds.new_crowd(1, "gate", band="a few dozen",
+                                  composition="pilgrims", since_turn=1,
+                                  heading="yard")
+        assert crowds.drift(moving, "small")["strength"] == crowds.CARRY
+        assert crowds.drift(moving, "medium")["strength"] == crowds.PULL
+
+    def test_a_loose_crowd_does_not_move_anyone(self):
+        """You can walk against a thin stream of people."""
+        moving = crowds.new_crowd(1, "square", band="a handful",
+                                  composition="idlers", since_turn=1,
+                                  heading="gate")
+        assert crowds.drift(moving, "large") is None
+
+    def test_drift_names_where_and_never_puts_anyone_there(self):
+        """`_guard_approach_is_not_arrival` exists because conflating approach
+        with placement wrote positions nobody declared. A crowd carrying
+        someone is exactly an undeclared arrival, so this returns an offer the
+        Director resolves — it never edits a position."""
+        import inspect
+
+        moving = crowds.new_crowd(1, "gate", band="a throng",
+                                  composition="pilgrims", since_turn=1,
+                                  heading="yard")
+        before = dict(moving)
+        assert crowds.drift(moving, "small")["toward"] == "yard"
+        assert moving == before, "drift moved a crowd it was only asked about"
+        assert "room_uid" not in inspect.getsource(crowds.drift)
+
+
+class TestOnlyTheEngineMintsAnId:
+    def test_an_unknown_crowd_id_is_refused_rather_than_created(self):
+        """Five ledgers already key beings by display name and it is one
+        defect, not five. A crowd is a new writer, and minting under a
+        model-authored key is that defect acquiring a sixth."""
+        standing, rejected = crowds.apply_ops(
+            [], [{"op": "set", "crowd_id": "the market crowd", "room": "square",
+                  "composition": "traders"}],
+            chat_id=1, turn=3, known_rooms=["square"])
+        assert standing == []
+        assert any("refusing to mint" in r for r in rejected)
+
+    def test_an_empty_crowd_id_is_how_a_new_crowd_is_asked_for(self):
+        standing, rejected = crowds.apply_ops(
+            [], [{"op": "set", "room": "square", "band": "a throng",
+                  "composition": "traders and hawkers"}],
+            chat_id=1, turn=3, known_rooms=["square"])
+        assert len(standing) == 1 and rejected == []
+        assert standing[0]["uid"].startswith("crowd:")
+        assert "traders" not in standing[0]["uid"]
+
+
+class TestOpsRefuseWhatWouldBeInvisible:
+    def test_a_crowd_in_an_unauthored_room_is_refused(self):
+        """Perception is room-scoped, so a crowd in a room nobody authored
+        would occupy a slot and be seen by no one — a silent no-op, which is
+        worse than a rejection somebody can read."""
+        standing, rejected = crowds.apply_ops(
+            [], [{"op": "set", "room": "the docks", "composition": "sailors"}],
+            chat_id=1, turn=1, known_rooms=["square"])
+        assert standing == [] and rejected
+
+    def test_a_crowd_with_no_composition_is_refused(self):
+        """Composition is the whole atmospheric payload. A crowd of nobody in
+        particular is a sentence of prose that cost a row."""
+        standing, _ = crowds.apply_ops(
+            [], [{"op": "set", "room": "square"}],
+            chat_id=1, turn=1, known_rooms=["square"])
+        assert standing == []
+
+    def test_a_bad_heading_does_not_sink_the_crowd_riding_on_it(self):
+        """Where the crowd IS was declared; where it is drifting is a
+        flourish. Losing the flourish is cheaper than losing the crowd."""
+        standing, rejected = crowds.apply_ops(
+            [], [{"op": "set", "room": "square", "composition": "traders",
+                  "heading": "the moon"}],
+            chat_id=1, turn=1, known_rooms=["square"])
+        assert len(standing) == 1
+        assert standing[0]["heading"] is None
+        assert any("heading" in r for r in rejected)
+
+    def test_the_ceiling_stops_at_a_countable_number(self):
+        ops = [{"op": "set", "room": "square", "composition": "group %d" % i}
+               for i in range(crowds.MAX_CROWDS + 3)]
+        standing, rejected = crowds.apply_ops(
+            [], ops, chat_id=1, turn=1, known_rooms=["square"])
+        assert len(standing) == crowds.MAX_CROWDS
+        assert len(rejected) == 3
+
+
+class TestSplittingKeepsTwoCrowdsApart:
+    def _throng(self):
+        return crowds.apply_ops(
+            [], [{"op": "set", "room": "square", "band": "a few dozen",
+                  "composition": "market traders"}],
+            chat_id=1, turn=1, known_rooms=["square", "gate"])[0]
+
+    def test_a_split_gives_both_halves_the_same_band(self):
+        """Band-preserving, not count-preserving. No arithmetic, no
+        conservation bookkeeping, and therefore no drift."""
+        before = self._throng()
+        standing, _ = crowds.apply_ops(
+            before, [{"op": "split", "crowd_id": before[0]["uid"],
+                      "heading": "gate"}],
+            chat_id=1, turn=2, known_rooms=["square", "gate"])
+        assert len(standing) == 2
+        assert [c["band"] for c in standing] == ["a dozen or so"] * 2
+
+    def test_the_two_halves_do_not_share_one_id(self):
+        """Two crowds where there was one. Identical band, composition and
+        room make the uid material identical but for the recorded origin —
+        which is exactly the collision this guards."""
+        before = self._throng()
+        standing, _ = crowds.apply_ops(
+            before, [{"op": "split", "crowd_id": before[0]["uid"],
+                      "heading": "gate"}],
+            chat_id=1, turn=1, known_rooms=["square", "gate"])
+        assert standing[0]["uid"] != standing[1]["uid"]
+        assert standing[1]["from_uid"] == standing[0]["uid"]
+
+    def test_a_handful_stays_whole(self):
+        """Two smaller things the story has no word for. It stays whole and
+        the Director may move it instead."""
+        before = crowds.apply_ops(
+            [], [{"op": "set", "room": "square", "band": "a handful",
+                  "composition": "idlers"}],
+            chat_id=1, turn=1, known_rooms=["square", "gate"])[0]
+        standing, rejected = crowds.apply_ops(
+            before, [{"op": "split", "crowd_id": before[0]["uid"],
+                      "heading": "gate"}],
+            chat_id=1, turn=2, known_rooms=["square", "gate"])
+        assert len(standing) == 1 and rejected
+
+
+class TestACrowdWalksTheGraphEveryoneElseWalks:
+    def test_it_moves_one_room_along_and_spends_its_heading(self):
+        """A heading that survived the beat would move the crowd twice for
+        one declaration."""
+        standing = [crowds.new_crowd(1, "square", band="a throng",
+                                     composition="traders", since_turn=1,
+                                     heading="gate")]
+        moved, log = crowds.advance_crowds(standing, {"square": {"gate"}})
+        assert moved[0]["room_uid"] == "gate"
+        assert moved[0]["heading"] is None
+        assert log == [{"uid": standing[0]["uid"], "from": "square",
+                        "to": "gate"}]
+
+    def test_it_does_not_walk_through_a_wall_that_appeared(self):
+        """The scene is edited between beats. A crowd should not honour a
+        heading into a room that is no longer next door."""
+        standing = [crowds.new_crowd(1, "square", band="a throng",
+                                     composition="traders", since_turn=1,
+                                     heading="vault")]
+        moved, log = crowds.advance_crowds(standing, {"square": {"gate"}})
+        assert moved[0]["room_uid"] == "square"
+        assert moved[0]["heading"] is None and log == []
+
+    def test_there_is_no_second_pathfinder(self):
+        """§5 asks for exactly one graph. `spatial.passable_neighbors` is it,
+        and `passable_route_exists` was refactored onto the same function so
+        the two can never disagree about what is adjacent."""
+        import inspect
+
+        import spatial
+        assert "passable_neighbors(scene)" in \
+            inspect.getsource(spatial.passable_route_exists)
+
+
+class TestTheDirectorCanActuallySayIt:
+    """The `project_ops` scar: a field the prompt asks for by name, that
+    validation silently drops, fires zero times forever and looks like a model
+    problem. Every link in the chain is asserted here rather than assumed."""
+
+    def test_crowd_ops_survive_state_diff_validation(self):
+        """Pydantic drops what the model has no field for. `project_ops` is
+        promised in the character prompt, absent from `CharacterOutput`, and
+        has been held by 0 of 26 characters ever."""
+        from schemas import StateDiff
+
+        diff = StateDiff(**{"crowd_ops": [
+            {"op": "set", "room": "square", "band": "a throng",
+             "composition": "market traders", "mood": "restless",
+             "heading": "gate"}]})
+        kept = diff.dict()["crowd_ops"]
+        assert len(kept) == 1
+        assert kept[0]["composition"] == "market traders"
+        assert kept[0]["heading"] == "gate"
+
+    def test_the_shape_the_prompt_shows_is_the_shape_the_reader_opens(self):
+        """The lore generator shipped `entry_ops` in the prompt and `entries`
+        in the reader, and alpha 7.2 users got "no usable entries". The same
+        drift is checked here on the field this feature depends on."""
+        import prompts
+
+        text = prompts.DEFAULT_PROMPTS["director_resolve"]
+        assert "crowd_ops" in text
+        assert "state_diff.crowd_ops" in text
+
+    def test_the_normalizer_knows_crowd_ops_is_a_list(self):
+        """A model returning a string where a list belongs kills the beat.
+        Every other ops field is in this tuple; one that is not is a beat
+        waiting to die."""
+        from agents.director import _normalize_diff_shape
+
+        assert _normalize_diff_shape({"crowd_ops": "a throng"})["crowd_ops"] == []
+        assert _normalize_diff_shape({})["crowd_ops"] == []
+
+    def test_the_example_the_repair_attempt_is_shown_carries_the_field(self):
+        """The `required_json_example` is handed to the repair attempt too. A
+        field described in prose and absent from the example is one a repair
+        can never converge on — `state_diff.time` died that way."""
+        import schemas
+
+        example = schemas.OUTPUT_EXAMPLES["director_resolve"]
+        assert "crowd_ops" in example["state_diff"]
+
+    def test_commit_writes_them_under_the_one_key_perception_reads(self):
+        """Two spellings of one world key is the whole `wearing`/`state` scar
+        in miniature. There is one constant and both sides import it."""
+        import inspect
+
+        import commit
+        from agents.common import CROWDS_KEY
+
+        assert CROWDS_KEY == crowds.CROWDS_WORLD_KEY
+        body = inspect.getsource(commit.commit_crowds)
+        assert "CROWDS_WORLD_KEY" in body
+        assert "advance_crowds" in body
+
+    def test_a_crowd_never_takes_a_managed_presence_slot(self):
+        """If it does it has solved nothing — that is the entire reason the
+        object exists."""
+        import inspect
+
+        import commit
+        body = inspect.getsource(commit.commit_crowds)
+        assert "background_presences" not in body
+        assert "max_managed" not in body

@@ -6395,6 +6395,49 @@ def commit_offscreen_plans(ctx, prepared_scene):
     return apply_plan_ops(ctx, prepared_scene.get("scene") or {}, clock)
 
 
+def commit_crowds(ctx, prepared_scene):
+    """Apply Director crowd ops, then move every crowd that has somewhere to be.
+
+    Deliberately NOT gated behind a living-world setting. A crowd is on-screen
+    atmosphere in the room the player is standing in, not off-screen
+    simulation, and it only ever exists because the Director declared it this
+    beat -- the off switch is a model that writes no ops. Gating it would make
+    the feature invisible in most chats, which is the failure mode this
+    project keeps rediscovering: a mechanism assumed live that has never run.
+
+    Two steps in one domain because they must not be separable. Ops decide
+    where a crowd IS and where it is flowing; the advance spends the flow. A
+    heading that survived to the next turn would move the crowd twice for one
+    declaration.
+    """
+    import crowds as crowds_model
+    from spatial import passable_neighbors
+
+    cid = ctx.chat.id
+    scene = prepared_scene.get("scene") or {}
+    raw_ops = ((ctx.director_resolve or ctx.director_establish or {})
+               .get("state_diff") or {}).get("crowd_ops") or []
+    if not isinstance(raw_ops, list):
+        raw_ops = []
+    ops = [op.dict() if hasattr(op, "dict") else op for op in raw_ops]
+
+    before = wget(cid, crowds_model.CROWDS_WORLD_KEY, []) or []
+    rooms = list((scene.get("rooms") or {}).keys())
+    turn = int(getattr(ctx.turn, "id", 0) or 0)
+
+    standing, rejected = crowds_model.apply_ops(
+        before, ops, chat_id=cid, turn=turn, known_rooms=rooms)
+    standing, moves = crowds_model.advance_crowds(
+        standing, passable_neighbors(scene))
+
+    for reason in rejected:
+        ctx.add_warning("crowd op rejected: %s" % reason)
+    if standing != before:
+        wset(cid, crowds_model.CROWDS_WORLD_KEY, standing)
+    return {"offered": len(ops), "standing": len(standing),
+            "moved": len(moves), "rejected": len(rejected)}
+
+
 def commit_all(ctx, nonce):
     """Commit one turn exactly once and atomically.
 
@@ -6480,6 +6523,13 @@ def _commit_all_locked(ctx, nonce):
             _commit_domain(
                 ctx, results, "offscreen_plans",
                 lambda: commit_offscreen_plans(ctx, prepared["scene"]),
+            )
+            # After the scene domain, because a crowd op naming a room the
+            # same beat created must find that room in the projected world
+            # rather than the one the turn started in.
+            _commit_domain(
+                ctx, results, "crowds",
+                lambda: commit_crowds(ctx, prepared["scene"]),
             )
             # A first-class frame-scoped epoch, after mapping so a freshly
             # validated standing intention can participate, but independent of
