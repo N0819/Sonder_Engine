@@ -353,10 +353,11 @@ def quest(author, cid):
                      "the cistern lid was fused shut from the inside"),
                # A working that finishes where MAELOR is standing. This is the
                # only legitimate way a remote antagonist enters the agent rung
-               # today: he cannot own a plan (plans must be declared on-page,
-               # and he has never been on-page) and nobody travels to the Keep
-               # to tell him anything, because couriers are the unbuilt half of
-               # the carrier network. He learns by witnessing his own work
+               # in this script: he cannot own a plan (plans must be declared
+               # on-page, and he has never been on-page) and nobody in this
+               # story pays to send a rider to the Keep (couriers exist now --
+               # see tools/courier_drive.py -- but a courier must still be
+               # SENT by someone). He learns by witnessing his own work
                # complete -- which is honest, and is exactly the design's rule
                # that a mind adapts only after evidence reaches it.
                curse("the ward over the keep door has finished setting",

@@ -115,9 +115,20 @@ reports; anonymous crowd carriers that move because the crowd moves; and
 malicious or invented claims entering through the same physics, keyed `claim:`
 so they never reach `world_events`.
 
-Still unbuilt: courier, caravan, letter and artifact carriers; positions and
-movement over routes rather than endpoints; route fan-out across the place
-graph rather than within a room.
+Couriers landed (2026-08-10): `couriers.py` puts a held report on an anonymous
+body with a POSITION on a route computed over `spatial.passable_path` (the one
+graph everyone walks), advanced on the simulation clock inside the
+`information_carriers` commit domain — never a `due_seconds` fuse wearing a
+courier's name. `StateDiff.courier_ops` is how a Director says it (`send`,
+`question`, `silence`); perception's `couriers_for_room` shows a rider to a
+body in his room, which is what makes intercept/follow/outrun real; silencing
+him stops the delivery outright; a sealed `letter` crosses verbatim because it
+is not retold, while `word` degrades one mouth at dispatch and one at
+delivery. `tools/courier_drive.py` plays the same road twice — delivered
+degraded in one run, silenced into nothing in the other.
+
+Still unbuilt: caravan and artifact carriers (a minted physical notice/bill a
+room contains), and multi-stop trader routes.
 
 The original text of this item follows.
 

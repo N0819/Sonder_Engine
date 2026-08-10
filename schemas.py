@@ -1665,6 +1665,31 @@ class TellingOp(LenientModel):
     claim: str = ""
 
 
+class CourierOp(LenientModel):
+    """Director declaration about a courier -- a message with a body.
+
+    `send` puts a report a registered SENDER actually holds onto a rider who
+    departs from the room the sender's body is in, along a passable route the
+    engine computes; the model never invents the route and never names the
+    courier -- `courier_id` is an engine-minted uid perception showed, exactly
+    like a crowd's. `question` and `silence` are the interception seam: both
+    are refused unless the named body is in the room the courier is actually
+    in, because a route is cut where the rider rides.
+    """
+    op: str = "send"          # send | question | silence
+    courier_id: str = ""      # engine-minted uid; required for question/silence
+    sender: str = ""          # registered character whose hands it starts in
+    to_room: str = ""         # destination room id (send)
+    addressee: str = ""       # optional: deliver only to this character, in person
+    world_event_id: str = ""  # a report the sender holds...
+    claim: str = ""           # ...or a claim no event backs (a lie rides too)
+    method: str = "word"      # word (retold, degrades) | letter (sealed, verbatim)
+    pace: str = "riding"      # riding | walking
+    description: str = ""     # what an observer sees: "a rider", "a boy with a satchel"
+    listener: str = ""        # question: who hears it; silence: who takes what he carried
+    by: str = ""              # silence: whose body stops him
+
+
 class StateDiff(LenientModel):
     positions: dict[str, str] = Field(default_factory=dict)
     rooms: dict[str, RoomDef] = Field(default_factory=dict)
@@ -1786,6 +1811,12 @@ class StateDiff(LenientModel):
     # copy degrades by subtraction so a rumor can be vaguer but never
     # different -- distortion that cannot invent cannot contradict.
     telling_ops: list[TellingOp] = Field(default_factory=list)
+    # Couriers: a carried report put on a body with a position and a route,
+    # so distance costs time and the player can intercept, follow, question,
+    # outrun or silence the road. Commit validates deterministically
+    # (couriers.run_couriers): the sender must hold the report, the route
+    # must be walkable, and nobody interferes from a room they are not in.
+    courier_ops: list[CourierOp] = Field(default_factory=list)
     # Destruction declaration (DestructionEffect shape -- see its
     # docstring). Declared here so model_dump() keeps it through
     # validation (the zone-field precedent above); commit.py validates it
@@ -3429,6 +3460,7 @@ OUTPUT_EXAMPLES = {
             "offscreen_plan_ops": [],
             "crowd_ops": [],
             "telling_ops": [],
+            "courier_ops": [],
         },
         "changes_asserted": [
             {"category": "adjacency", "subject": "vault_door",

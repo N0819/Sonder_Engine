@@ -4106,6 +4106,11 @@ def director_resolve(ctx, nonce):
         # payload as the model, which is the only way to find it -- the schema
         # check cannot see a field that exists and is never delivered.
         "crowds": _crowds_view(chat["id"], sc),
+        # The couriers on the road, WITH their uids -- same defect class as
+        # the crowd uid: `question` and `silence` require a courier_id the
+        # Director could otherwise never have seen, and `send` needs to know
+        # the road is not already full.
+        "couriers": _couriers_view(chat["id"], sc),
         # The reports this beat's characters are carrying, as ids the Director
         # can name in `telling_ops`. Same defect, same cause: the prompt asks
         # for a `world_event_id` and the Director never saw one, so a
@@ -4986,6 +4991,40 @@ def _crowds_view(chat_id, scene):
             # not carry that report". Found the same way -- by reading the
             # captured payload as the model.
             "talk": crowds_model.talk_view(crowd, cap=4),
+        })
+    return out
+
+
+def _couriers_view(chat_id, scene):
+    """Live couriers the resolve could act on, with the id ops require.
+
+    Bounded to the current scene's rooms like `_crowds_view`, and for the
+    same reason. The Director owns objective causality, so it may see where
+    a rider is and where he is bound -- but NOT what he carries: the ops
+    never need the claim text, and a payload field nothing needs is a leak
+    waiting for a prompt to quote it.
+    """
+    import couriers as couriers_model
+    from db import wget
+
+    rooms = (scene or {}).get("rooms") or {}
+    out = []
+    for courier in couriers_model.live_couriers(
+            wget(chat_id, couriers_model.COURIERS_WORLD_KEY, []) or []):
+        at = str(courier.get("at") or "")
+        if at not in rooms:
+            continue
+        route = [str(r) for r in courier.get("route") or []]
+        leg = max(0, int(courier.get("leg") or 0))
+        out.append({
+            "courier_id": courier.get("uid"),
+            "what": couriers_model.courier_voice(courier),
+            "at": at,
+            "heading": route[leg + 1] if leg + 1 < len(route) else None,
+            "destination": str(courier.get("destination") or ""),
+            "addressee": str(courier.get("addressee") or ""),
+            "sealed": bool(courier.get("sealed")),
+            "status": str(courier.get("status") or ""),
         })
     return out
 

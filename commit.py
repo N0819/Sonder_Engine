@@ -2571,11 +2571,18 @@ def commit_information_carriers(ctx, prepared_scene, world_event_result):
     ops = (resolved.get("state_diff") or {}).get("telling_ops") or []
     if not isinstance(ops, list):
         ops = []
+    courier_ops = (resolved.get("state_diff") or {}).get("courier_ops") or []
+    if not isinstance(courier_ops, list):
+        courier_ops = []
     if not result.get("enabled"):
         if ops:
             ctx.add_warning(
                 "discarded %d telling(s): the rumor-ledger floor is off"
                 % len(ops))
+        if courier_ops:
+            ctx.add_warning(
+                "discarded %d courier op(s): the rumor-ledger floor is off"
+                % len(courier_ops))
         result["told"] = 0
         return result
 
@@ -2597,6 +2604,18 @@ def commit_information_carriers(ctx, prepared_scene, world_event_result):
     result["told"] = told
     result["tellings_offered"] = len(ops)
     result["tellings_refused"] = len(rejected)
+
+    # Couriers ride in the same domain and transaction: a dispatch copies a
+    # report a mind holds NOW, so it must roll back with the acquisition it
+    # copied from, exactly as tellings must. The sweep runs even on beats
+    # with no ops -- the road moves whether or not anyone declares anything.
+    from couriers import run_couriers
+
+    courier_metrics, courier_rejected = run_couriers(
+        ctx, scene, courier_ops, names=names, places=places)
+    for reason in courier_rejected:
+        ctx.add_warning("courier op refused: %s" % reason)
+    result.update(courier_metrics)
     return result
 
 # ---- Cast changes ----
