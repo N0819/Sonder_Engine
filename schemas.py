@@ -1431,6 +1431,29 @@ class InitialEntityState(LenientModel):
     held_items: list[str] = Field(default_factory=list)
     visible_conditions: list[str] = Field(default_factory=list)
 
+class CrowdOp(LenientModel):
+    """Director declaration about a crowd blob.
+
+    A DECLARED field for every op, because a field that is only promised in the
+    prompt is a field that silently does nothing: `character.project_ops` is
+    asked for by name and dropped by validation, and "has ever held a project:
+    0 of 26" is what that costs.
+
+    `crowd_id` is a uid the engine minted and perception showed; it is never a
+    display name and never model-invented. Leaving it empty on `set` is how a
+    NEW crowd is asked for -- commit mints the id, the model never does.
+    """
+    op: str = "set"           # set | move | split | disperse | emerge | absorb
+    crowd_id: str = ""
+    # Who stepped out of it, or who is going back in. Never a cast member: a
+    # crowd produces strangers, and someone the story already knows ARRIVES.
+    who: str = ""
+    room: str = ""
+    band: str = ""            # a handful | a dozen or so | a few dozen | a throng
+    composition: str = ""
+    mood: str = ""
+    heading: str = ""         # adjacent room it is flowing toward, or ""
+
 class DirectorEstablish(LenientModel):
     location: str = ""
     time: str = "now"
@@ -1442,6 +1465,12 @@ class DirectorEstablish(LenientModel):
     rooms: dict[str, RoomDef] = Field(default_factory=dict)
     entities: dict[str, SceneEntityDef] = Field(default_factory=dict)
     positions: dict[str, str] = Field(default_factory=dict)
+    # A populous opening. The establish stage AUTHORS the first scene, and
+    # "the square is packed" is part of what that scene is -- but establish
+    # carries no `state_diff`, so a crowd could not be declared until the
+    # second beat. A story that opens in a market had to open in an empty one.
+    # Found by playing turns rather than by reading code.
+    crowd_ops: list[CrowdOp] = Field(default_factory=list)
     attire: dict[str, AttireState] = Field(default_factory=dict)
     entity_states: dict[str, InitialEntityState] = Field(default_factory=dict)
     # Where in each room the opening puts people: {name: {at, near:[]}}.
@@ -1635,29 +1664,6 @@ class TellingOp(LenientModel):
     # made it up; nothing a listener can reach ever says so.
     claim: str = ""
 
-
-class CrowdOp(LenientModel):
-    """Director declaration about a crowd blob.
-
-    A DECLARED field for every op, because a field that is only promised in the
-    prompt is a field that silently does nothing: `character.project_ops` is
-    asked for by name and dropped by validation, and "has ever held a project:
-    0 of 26" is what that costs.
-
-    `crowd_id` is a uid the engine minted and perception showed; it is never a
-    display name and never model-invented. Leaving it empty on `set` is how a
-    NEW crowd is asked for -- commit mints the id, the model never does.
-    """
-    op: str = "set"           # set | move | split | disperse | emerge | absorb
-    crowd_id: str = ""
-    # Who stepped out of it, or who is going back in. Never a cast member: a
-    # crowd produces strangers, and someone the story already knows ARRIVES.
-    who: str = ""
-    room: str = ""
-    band: str = ""            # a handful | a dozen or so | a few dozen | a throng
-    composition: str = ""
-    mood: str = ""
-    heading: str = ""         # adjacent room it is flowing toward, or ""
 
 class StateDiff(LenientModel):
     positions: dict[str, str] = Field(default_factory=dict)

@@ -31,7 +31,7 @@
 | `chat_archive.py` | 1110 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1132 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 6753 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 6757 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `crowds.py` | 577 |  | — |
 | `db.py` | 1648 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `degradation.py` | 171 |  | — |
@@ -59,7 +59,7 @@
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1424 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
-| `schemas.py` | 3992 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `schemas.py` | 3998 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 6370 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 975 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
@@ -375,7 +375,7 @@
 | `commit_transit_sweep()` | 2291 | 169 lines |
 | `_prepare_destruction()` | 699 | 158 lines |
 | `update_place_graph()` | 74 | 153 lines |
-| `_commit_all_locked()` | 6544 | 151 lines |
+| `_commit_all_locked()` | 6548 | 151 lines |
 
 ### `crowds.py`
 
@@ -681,14 +681,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 3047 | 245 lines |
+| `preprocess_llm_output()` | 3053 | 245 lines |
 | `_lenient_coerce()` | 517 | 159 lines |
-| `semantic_output_errors()` | 3716 | 113 lines |
-| `validate_llm_output_strict()` | 3891 | 102 lines |
-| `_coerce_conditions()` | 2818 | 50 lines |
+| `semantic_output_errors()` | 3722 | 113 lines |
+| `validate_llm_output_strict()` | 3897 | 102 lines |
+| `_coerce_conditions()` | 2824 | 50 lines |
 | `_declared()` | 357 | 48 lines |
 | `_coerce_station_table()` | 49 | 41 lines |
-| `_coerce_evidence_refs()` | 1912 | 41 lines |
+| `_coerce_evidence_refs()` | 1918 | 41 lines |
 
 ### `spatial.py`
 
