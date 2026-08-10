@@ -287,6 +287,7 @@ def offscreen_rows(con, turn_ids):
     epochs = []
     plan_commits = []
     carrier_commits = []
+    crowd_commits = []
     for row in con.execute(sql):
         try:
             blob = json.loads(row["content"])
@@ -304,6 +305,10 @@ def offscreen_rows(con, turn_ids):
                     if isinstance(blob, dict) else None)
         if isinstance(carriers, dict) and "events_offered" in carriers:
             carrier_commits.append(carriers)
+        crowd = ((blob.get("results") or {}).get("crowds")
+                 if isinstance(blob, dict) else None)
+        if isinstance(crowd, dict) and "offered" in crowd:
+            crowd_commits.append(crowd)
 
     opportunities = [e for e in epochs if e.get("opportunity")]
     actor_chances = [
@@ -353,6 +358,24 @@ def offscreen_rows(con, turn_ids):
             sum(int(c.get("carrier_opportunities") or 0)
                 for c in carrier_commits),
             "registered holder physically co-located with a public surface"),
+        # Telling is the layer that makes the ledger epistemics rather than
+        # bookkeeping. The denominator is ops the Director actually wrote, so
+        # a refusal reads as a refusal and silence reads as `no chances` --
+        # the distinction that cost four separate diagnoses to establish.
+        Row("off-screen life", "a report was passed on",
+            sum(int(c.get("told") or 0) for c in carrier_commits),
+            sum(int(c.get("tellings_offered") or 0) for c in carrier_commits),
+            "declared on-page; holding, speaking and co-location all checked"),
+        Row("off-screen life", "a crowd op was accepted",
+            sum(max(0, int(c.get("offered") or 0) - int(c.get("rejected") or 0))
+                for c in crowd_commits),
+            sum(int(c.get("offered") or 0) for c in crowd_commits),
+            "a populous place declared as one object rather than as extras"),
+        Row("off-screen life", "a crowd moved on the graph",
+            sum(int(c.get("moved") or 0) for c in crowd_commits),
+            sum(int(c.get("standing") or 0) for c in crowd_commits),
+            "crowds standing anywhere; a heading is spent one beat after it "
+            "is declared"),
     ]
 
 
