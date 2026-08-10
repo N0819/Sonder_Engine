@@ -351,11 +351,21 @@ Its stable id covers source, material, destination, placement, and topology;
 reasserting the same relation updates it, while bounded remove/clear operations
 retire it. Interior placement may derive from a unique standing contact, but
 the ledgers never collapse into one another.
+Actor-owned creation enters through `CharacterOutput.material_effects`: the
+character model names only matter established by its private self-capabilities,
+while deterministic projection canonicalizes the source, rejects destructive
+ops, resolves destination topology, and fills a Director omission. This keeps
+private `active_state` out of the Director without losing its completed physical
+consequence.
 Body pose is another single-copy relation in `scene.poses`, replacing the old
 assumption that an entity's free-text state could carry every character's
 arrangement. A touched body gets one complete snapshot: own posture, support,
 relative body/relation, constraint, and detail. Separation invalidates the
 relative axes without erasing a still-valid own posture.
+Observer projections additionally carry `pose_unknown` for legacy bodies with
+no snapshot. This is uncertainty metadata, never persisted pose; action-onset
+scrubs unsupported static claims against it and later re-injects structured
+declared actions.
 
 **Frames** (`frames.py`, `spatial_frames.py`) give a chat concurrent
 timelines — separate scenes, separate memory visibility — sharing one global

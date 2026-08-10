@@ -2,6 +2,34 @@
 
 ## Unreleased — Development
 
+### Character-owned material outputs now cross the resolution boundary
+
+A live climax completed inside the character model—its hedonic state explicitly
+said `released:true` and zeroed the accumulated charge—but its public sequence
+began with the aftershocks. The Director intentionally receives conduct rather
+than private psychology, so it could not see that completion marker. It rendered
+the aftermath while emitting `substance_ops:[]`; this was correct under the
+material ledger's rule that an event label alone may not invent genre-specific
+matter, but physically incomplete when the character's authored embodiment
+established an output.
+
+Character decisions now receive their own latent/conditional embodiment
+capabilities as private self-knowledge and may declare completed additive
+`material_effects`. Code locks the source to that character, refuses
+remove/clear authority, validates the destination through the existing
+substance topology, de-duplicates an equivalent Director op, and projects a
+valid omitted effect into `state_diff.substance_ops`. The Director still owns
+causal resolution and prose; it no longer has to infer actor-owned matter from
+a private somatic flag. `target_interior` remains the enclosing passage/chamber
+and an endpoint remains only `target_part`.
+
+Legacy scenes without pose snapshots now tell each observer exactly which
+bodies have unknown pose instead of presenting silence that a model can fill
+with generic standing. Action-onset perception strips subject-led static pose
+claims for those bodies before deterministically restoring genuine declared
+actions, so a real stand/sit/lie action survives while an invented “stands
+before you” introduction does not.
+
 ### Perception now receives durable body pose without familiar-card roll calls
 
 The live Horny Story memory defect was downstream rather than mnemonic: Elyra's

@@ -27,6 +27,10 @@ def test_character_payload_includes_own_public_history(temp_db, monkeypatch):
     sheet["knowledge"]["public_history"] = (
         "Resident psychiatrist at Blackwood Sanatorium for eleven years."
     )
+    sheet["embodiment"]["latent"] = [{
+        "capability": "An implanted condenser vents coolant after overload.",
+        "visible_when": "during venting", "limits": "one measured dose",
+    }]
     char_id = temp_db.qi(
         "INSERT INTO characters(name,sheet,source,created,resource_uid) "
         "VALUES(?,?,?,?,?)",
@@ -85,6 +89,10 @@ def test_character_payload_includes_own_public_history(temp_db, monkeypatch):
     assert captured["payload"]["self"]["public_history"] == (
         "Resident psychiatrist at Blackwood Sanatorium for eleven years."
     )
+    assert captured["payload"]["self"]["embodiment_capabilities"] == [{
+        "capability": "An implanted condenser vents coolant after overload.",
+        "visible_when": "during venting", "limits": "one measured dose",
+    }]
 
 
 def test_character_payload_never_includes_another_bodys_vitals(temp_db, monkeypatch):

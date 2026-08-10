@@ -7,12 +7,18 @@ keeps the resulting residue until an explicit bounded removal.
 
 from __future__ import annotations
 
-from agents.director import (_evidence_present, _manifest_items,
+import json
+from types import SimpleNamespace
+
+from agents.director import (_character_material_effects, _evidence_present,
+                             _manifest_items,
+                             _merge_character_material_effects,
                              _normalize_diff_shape)
 from agents.perception import (_deliver_substance_events,
                                _observer_scene_payload)
+from character_schema import character_embodiment_capabilities
 from prompts import DEFAULT_PROMPTS
-from schemas import StateDiff, validate_llm_output_strict
+from schemas import CharacterOutput, StateDiff, validate_llm_output_strict
 from spatial import (apply_substance_ops, merge_scene_with_diff,
                      resolve_substance_ops, substance_event_clause,
                      substances_for)
@@ -62,6 +68,14 @@ class TestSchemaAndPromptContract:
         assert report.valid, report.errors
         assert report.output["state_diff"]["substance_ops"] == [op]
 
+    def test_character_keeps_completed_actor_owned_material_effects(self):
+        effect = {
+            "op": "release", "source_part": "nozzle",
+            "substance": "coolant", "amount": "a measured dose",
+        }
+        assert CharacterOutput(
+            material_effects=[effect]).dict()["material_effects"] == [effect]
+
     def test_contract_is_material_generic_and_keeps_it_out_of_contact(self):
         resolve = DEFAULT_PROMPTS["director_resolve"]
         perception = DEFAULT_PROMPTS["perception"]
@@ -70,6 +84,19 @@ class TestSchemaAndPromptContract:
         assert "exactly one standing relation:'interior' contact" in resolve
         assert "scene.substances lists distinct non-discrete matter" in perception
         assert "STANDING STATE" in perception
+        character = DEFAULT_PROMPTS["character"]
+        assert "MATERIAL EFFECTS YOU COMPLETE" in character
+        assert "active_state.hedonic.released" in character
+        assert "character_material_effects" in resolve
+
+    def test_embodiment_capabilities_are_available_to_their_owner(self):
+        capability = {
+            "capability": "A condenser releases coolant when its cycle completes.",
+            "visible_when": "during venting", "limits": "one dose",
+        }
+        sheet = {"identity": {"name": "Emitter"},
+                 "embodiment": {"latent": [capability]}}
+        assert character_embodiment_capabilities(sheet) == [capability]
 
     def test_diff_normalization_and_manifest_evidence_include_material(self):
         normalized = _normalize_diff_shape({"substance_ops": "bad"})
@@ -165,6 +192,64 @@ class TestTopologyAndPersistence:
         scene = apply_substance_ops(scene, [_release()])
         merged = merge_scene_with_diff(scene, {"remove_entities": ["vessel"]})
         assert merged["substances"] == []
+
+
+class TestActorOwnedMaterialProjection:
+    @staticmethod
+    def _ctx(effect, *, result_map="reaction_results"):
+        ctx = SimpleNamespace(
+            cast=[{"id": 7, "sheet": json.dumps({
+                "identity": {"name": "Emitter"},
+            })}],
+            reaction_results={}, character_results={},
+        )
+        getattr(ctx, result_map)[7] = {"material_effects": [effect]}
+        return ctx
+
+    def test_character_source_is_canonical_and_cannot_be_forged(self):
+        effects = _character_material_effects(self._ctx({
+            "op": "release", "source": "Someone Else",
+            "source_part": "nozzle", "substance": "coolant",
+        }))
+        assert effects == [{
+            "op": "release", "source": "Emitter",
+            "source_part": "nozzle", "substance": "coolant",
+        }]
+
+    def test_completed_effect_survives_director_omission(self):
+        effects = _character_material_effects(self._ctx({
+            "op": "release", "source_part": "nozzle",
+            "substance": "coolant", "amount": "a measured dose",
+        }))
+        ops = _merge_character_material_effects(_scene(), [], effects)
+        merged = merge_scene_with_diff(_scene(), {"substance_ops": ops})
+        assert merged["substances"][0]["target"] == "Vessel"
+        assert merged["substances"][0]["target_interior"] == "reservoir"
+
+    def test_explicit_destination_works_without_interior_contact(self):
+        scene = _scene()
+        scene["contacts"] = []
+        effects = _character_material_effects(self._ctx({
+            "op": "release", "source_part": "nozzle",
+            "substance": "coolant", "target": "Vessel",
+            "placement": "interior", "target_interior": "reservoir",
+        }))
+        ops = _merge_character_material_effects(scene, [], effects)
+        assert resolve_substance_ops(scene, ops)[0]["target"] == "Vessel"
+
+    def test_matching_director_op_is_not_duplicated(self):
+        effect = _release()
+        ops = _merge_character_material_effects(
+            _scene(), [effect], [effect])
+        assert ops == [effect]
+
+    def test_character_cannot_clear_or_remove_world_material(self):
+        warnings = []
+        effects = _character_material_effects(self._ctx({
+            "op": "clear", "source_part": "nozzle", "substance": "coolant",
+        }), report=warnings.append)
+        assert effects == []
+        assert "non-additive" in warnings[0]
 
 
 class TestPerceptionBoundary:

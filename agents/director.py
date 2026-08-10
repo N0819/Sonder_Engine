@@ -60,6 +60,7 @@ from spatial import (
     merge_scene_with_diff,
     normalize_bearing,
     passable_route_exists,
+    resolve_substance_ops,
     room_of,
     same_subject,
     spatial_rel,
@@ -384,6 +385,103 @@ def _validated_character_contact_endings(ctx, sc, report=None):
             if ending not in out:
                 out.append(ending)
     return out
+
+
+_ACTOR_MATERIAL_FIELDS = (
+    "source_part", "substance", "target", "placement", "target_interior",
+    "target_part", "amount", "detail",
+)
+
+
+def _character_material_effects(ctx, report=None):
+    """Completed actor-owned material outputs from character decisions.
+
+    A character may declare only matter leaving its own body/device.  The
+    model supplies the fiction-specific material; code supplies the canonical
+    source identity and refuses removal/clear operations.  Reaction and later
+    interaction results are both included and exact duplicates collapse.
+    """
+    names = {}
+    for row in ctx.cast:
+        try:
+            names[int(row["id"])] = character_name_from_text(row["sheet"])
+        except (TypeError, ValueError, KeyError, json.JSONDecodeError):
+            continue
+    effects = []
+    for results in (ctx.reaction_results or {}, ctx.character_results or {}):
+        for raw_id, result in results.items():
+            try:
+                cid = int(raw_id)
+            except (TypeError, ValueError):
+                continue
+            actor = names.get(cid)
+            if not actor or not isinstance(result, dict):
+                continue
+            for raw in (result.get("material_effects") or []):
+                if not isinstance(raw, dict):
+                    continue
+                op = str(raw.get("op") or "release").strip().casefold()
+                if op not in ("add", "release", "deposit"):
+                    if report:
+                        report(f"{actor}: discarded non-additive material effect")
+                    continue
+                source_part = str(raw.get("source_part") or "").strip()
+                substance = str(raw.get("substance") or "").strip()
+                if not source_part or not substance:
+                    if report:
+                        report(f"{actor}: discarded material effect without source_part/substance")
+                    continue
+                effect = {"op": op, "source": actor}
+                for field in _ACTOR_MATERIAL_FIELDS:
+                    value = raw.get(field)
+                    if value not in (None, "", [], {}):
+                        effect[field] = (str(value).strip()
+                                         if not isinstance(value, (dict, list))
+                                         else copy.deepcopy(value))
+                effect["source_part"] = source_part
+                effect["substance"] = substance
+                if str(effect.get("target") or "").casefold() in ("self", "you"):
+                    effect["target"] = actor
+                if effect not in effects:
+                    effects.append(effect)
+    return effects
+
+
+def _merge_character_material_effects(scene, resolved_ops, actor_effects,
+                                      report=None):
+    """Make valid actor-owned outputs survive Director omission.
+
+    The existing substance resolver remains the topology authority.  A richer
+    Director op wins only when it resolves to the same source/material and
+    destination; otherwise the independently valid actor declaration is kept.
+    """
+    merged = [copy.deepcopy(op) for op in (resolved_ops or [])
+              if isinstance(op, dict)]
+
+    def event_key(event):
+        return tuple(str(event.get(field) or "").strip().casefold() for field in (
+            "source", "source_part", "substance", "target", "placement",
+            "target_interior", "target_part",
+        ))
+
+    existing_keys = set()
+    for op in merged:
+        for event in resolve_substance_ops(scene, [op]):
+            existing_keys.add(event_key(event))
+    for effect in (actor_effects or []):
+        warnings = []
+        events = resolve_substance_ops(scene, [effect], report=warnings.append)
+        if not events:
+            if report:
+                report((warnings[0] if warnings else
+                        "discarded unresolved character material effect"))
+            continue
+        keys = {event_key(event) for event in events}
+        if keys <= existing_keys:
+            continue
+        merged.append(copy.deepcopy(effect))
+        existing_keys.update(keys)
+    return merged
 
 
 def _merge_character_contact_endings(endings, resolved_ops, report=None):
@@ -3521,7 +3619,7 @@ def _resolve_movement_mover(sc, sd, mv, p_name):
 # did. That is what ordering a beat needs, and it is what `dialogue_order` and
 # the speech-authority guards are checked against.
 _ROUND_CONDUCT_KEYS = ("sequence", "speech", "speech_volume", "action",
-                       "actions", "interaction", "name")
+                       "actions", "material_effects", "interaction", "name")
 
 
 def _round_conduct(rounds):
@@ -3710,6 +3808,8 @@ def director_resolve(ctx, nonce):
             "char_id": rid, "name": rname, "sequence": rseq,
             "is_reaction": True,
             "follow_op": (r_round.get("result") or {}).get("follow_op"),
+            "material_effects": (
+                (r_round.get("result") or {}).get("material_effects") or []),
             "speech": next((e.get("text") for e in rseq if e.get("type") == "speech"), None),
             "action": next((e for e in rseq if e.get("type") == "action"), None),
         })
@@ -3739,6 +3839,7 @@ def director_resolve(ctx, nonce):
             "char_id": char_id, "name": name, "sequence": sequence,
             "is_reaction": declaration.get("is_reaction", False),
             "follow_op": declaration.get("follow_op"),
+            "material_effects": declaration.get("material_effects") or [],
             "speech": next((e.get("text") for e in sequence
                             if e.get("type") == "speech"), None),
             "action": next((e for e in sequence
@@ -3768,6 +3869,7 @@ def director_resolve(ctx, nonce):
                 "sequence": dk.get("sequence") or [],
                 "speech": dk.get("speech"), "action": dk.get("action"),
                 "follow_op": dk.get("follow_op"),
+                "material_effects": dk.get("material_effects") or [],
             })
             speeches = []
             for e in (dk.get("sequence") or []):
@@ -3806,6 +3908,9 @@ def director_resolve(ctx, nonce):
     character_contact_endings = _validated_character_contact_endings(
         ctx, sc, report=lambda note: ctx.add_warning(
             f"character contact: {note}"))
+    character_material_effects = _character_material_effects(
+        ctx, report=lambda note: ctx.add_warning(
+            f"character material: {note}"))
     # The assertion is already true at action onset: show it to the resolving
     # Director as the standing relation reactions were based on. Copy-only;
     # durable state is composed into the final diff below.
@@ -3959,6 +4064,10 @@ def director_resolve(ctx, nonce):
         # the commit seam below; resolve should narrate their consequences and
         # must not echo the ended contact as current state.
         "character_contact_endings": character_contact_endings,
+        # Completed actor-owned physical outputs. The Director renders these;
+        # the projection below also commits valid ones if prose/diff omits
+        # them, just as character-owned contact endings survive omission.
+        "character_material_effects": character_material_effects,
         "character_abilities": {
             character_name_from_text(c["sheet"]): character_abilities(json.loads(c["sheet"]))
             for c in ctx.cast
@@ -4304,6 +4413,10 @@ def director_resolve(ctx, nonce):
     sd["contact_ops"] = _merge_player_contact_assertions(
         onset_contacts, resolved_contact_ops,
         report=lambda note: ctx.add_warning(f"player contact: {note}"),
+    )
+    sd["substance_ops"] = _merge_character_material_effects(
+        resolve_sc, sd.get("substance_ops"), character_material_effects,
+        report=lambda note: ctx.add_warning(f"character material: {note}"),
     )
     out["state_diff"] = sd
     out["dice"] = dice if isinstance(dice, list) else []

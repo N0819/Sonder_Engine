@@ -921,6 +921,8 @@ def interaction_loop(ctx, nonce):
                     or []
                 ),
                 "follow_op": round_data["result"].get("follow_op"),
+                "material_effects": (
+                    round_data["result"].get("material_effects") or []),
             }
             for round_data in rounds
         ],

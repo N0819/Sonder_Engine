@@ -95,13 +95,18 @@ legitimately perceive, learn, remember or infer.
 - **Bodies keep their actual arrangement** — Standing, sitting, lying,
   supported, above/beneath another body, or physically constrained persist as
   objective pose instead of being regenerated from generic visual prose.
+  Older scenes with no snapshot expose explicit uncertainty, and unsupported
+  generic posture is discarded without discarding a declared posture-changing
+  action.
 - **Familiar people are not reintroduced every beat** — Stable age, beauty,
   species traits, tails and card clothing stay established; full description
   returns for discovery, disguise, transformation or a visible change.
 - **Material consequences persist** — Fluids, powders, gases, residue and other
   story-defined matter remain on or within their destination until something
   removes them; an interior recipient experiences the consequence without
-  automatically learning its cause.
+  automatically learning its cause. A character can declare an output
+  established by its own body/equipment when the process completes; that
+  consequence survives even if the Director's diff forgets to repeat it.
 - **Concealed acts are cut sentence by sentence** — A hidden action is removed
   from the version each person who should not see it receives, while the overt
   parts of the same beat survive.
