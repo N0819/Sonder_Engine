@@ -50,7 +50,8 @@ from providers import Aborted
 from schemas import validate_llm_output
 from spatial import (
     apply_contact_ops,
-    contact_manner_kind,
+    contact_motion,
+    contact_relation,
     _merge_entity,
     _merge_room,
     egocentric_frame,
@@ -178,8 +179,7 @@ def _validated_player_contact_assertions(sc, raw, player_name, report=None):
         if standing is None and not actor_is_player:
             same_kind = [
                 contact for contact in pair_contacts
-                if contact_manner_kind(contact.get("manner"))
-                == contact_manner_kind(item.get("manner"))
+                if contact_relation(contact) == contact_relation(item)
             ]
             if len(same_kind) == 1:
                 standing = same_kind[0]
@@ -196,10 +196,24 @@ def _validated_player_contact_assertions(sc, raw, player_name, report=None):
         manner = str(item.get("manner") or (
             standing or {}).get("manner") or "touch").strip()
         detail = str(item.get("detail") or "").strip()
+        semantics = {
+            "manner": manner,
+            "detail": detail,
+            "relation": item.get("relation"),
+            "motion": item.get("motion"),
+        }
+        relation = contact_relation(semantics)
+        # A first-person refinement of an already-interior relation must not
+        # flatten it merely because the interpret model chose `press`.
+        if standing is not None and contact_relation(standing) == "interior" \
+                and relation != "interior":
+            relation = "interior"
         assertion = {
             "op": "add", "actor": actor, "actor_part": actor_part,
             "target": target, "target_part": target_part,
             "manner": manner or "touch",
+            "relation": relation,
+            "motion": contact_motion(semantics),
         }
         if detail:
             assertion["detail"] = detail

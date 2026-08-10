@@ -1020,7 +1020,8 @@ class DirectorInterpret(LenientModel):
     # their own conduct or first-person sensation. These are guarded against
     # the standing scene ledger before pass 1; they are not a license to author
     # a new NPC action. Contact points are open anatomical strings, independent
-    # of attire/visibility regions.
+    # of attire/visibility regions. Each assertion may also carry independent
+    # relation (surface|interior) and motion (settled|moving) axes.
     contact_assertions: list[dict] = Field(default_factory=list)
     # Voluntary durable travel relation for the player. {op:start,target} or
     # {op:stop,reason}; absence means keep the current relation unchanged.
@@ -1577,7 +1578,9 @@ class StateDiff(LenientModel):
     # either body: these ops maintain the scene-level `contacts` list
     # (spatial.apply_contact_ops), and spatial.normalize_scene_contacts prunes
     # whatever positions no longer permit. {op: add|remove|clear, actor,
-    # actor_part, target, target_part, manner}.
+    # actor_part, target, target_part, manner, relation, motion}. Contact
+    # topology (`surface|interior`) and kinematics (`settled|moving`) are
+    # independent: an interior contact may be moving.
     contact_ops: list[dict] = Field(default_factory=list)
     # Actor-owned following changes, projected deterministically from the
     # player interpretation and character decisions. The resolve model does

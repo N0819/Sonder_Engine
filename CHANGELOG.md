@@ -65,6 +65,17 @@ bound to attire's visibility regions: an authored `cervix` remains the contact
 point rather than being generalized to `groin`. Resolve can move that protected
 endpoint only by explicitly ending it first.
 
+Turn 17 exposed a second collapse inside the contact row itself. Resolve
+described an interior relation moving rhythmically but committed
+`manner: press`; perception therefore rendered steady surface pressure because
+one free-text field was being asked to encode both topology and motion.
+Contacts now carry independent `relation: surface|interior` and
+`motion: settled|moving` axes. Legacy rows derive them from `manner` and
+`detail`, while new resolve and repair payloads state both explicitly. A moving
+interior relation now gives each participant the appropriate interior
+sensation, and a bare re-description cannot turn an interior relation into
+surface contact; resolve must end it explicitly first.
+
 This lands on the repaired observer path: perception previews commit's exact
 attire result on copies, region visibility is now a production-derived
 function, shed clothing is atomic with canonical removal and placement, and

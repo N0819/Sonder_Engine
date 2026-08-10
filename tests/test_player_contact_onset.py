@@ -51,6 +51,8 @@ def test_interpret_schema_and_prompt_carry_exact_contact_assertions():
     prompt = DEFAULT_PROMPTS["director_interpret"]
     assert "contact_assertions" in prompt
     assert "'cervix', not the coarse visibility region 'groin'" in prompt
+    assert "relation is surface|interior" in prompt
+    assert "motion is settled|moving" in prompt
 
 
 def test_felt_contact_can_refine_standing_relation_but_not_mint_npc_act():
@@ -64,6 +66,8 @@ def test_felt_contact_can_refine_standing_relation_but_not_mint_npc_act():
     }], "Hinami")
 
     assert kept[0]["target_part"] == "cervix"
+    assert kept[0]["relation"] == "interior"
+    assert kept[0]["motion"] == "settled"
     assert rejected == []
 
     subpart = _validated_player_contact_assertions(scene, [{

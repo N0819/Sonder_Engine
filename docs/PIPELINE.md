@@ -160,9 +160,15 @@ is its actor; an NPC-to-player assertion must refine a matching contact that
 already stands, preventing first-person wording from authoring a new NPC act.
 Contact points remain open anatomical strings and do not collapse onto attire's
 visibility regions: `cervix` remains `cervix`, rather than becoming `groin`.
+The contact's geometry is likewise not folded into its prose verb:
+`relation: surface|interior` records topology and `motion: settled|moving`
+records kinematics. These axes are independent, so an interior contact may be
+moving. Saves predating the fields derive both from `manner` and `detail`.
 Resolve receives the previewed relation and commit receives it through
 `contact_ops`; a later change must explicitly end it before moving the same part
-to a different endpoint, so a coarse re-description cannot overwrite it.
+to a different endpoint, so a coarse re-description cannot overwrite it. An
+interior relation also requires an explicit end before the same endpoints can
+become surface contact; changing `manner` alone cannot erase topology.
 
 The model supplies ambient observer-specific sensory prose, but it does not own
 the chronology of an already structured player declaration. Model-rendered
