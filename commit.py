@@ -2147,7 +2147,33 @@ def prepare_scene_commit(ctx):
         td = diff["time"]
         if isinstance(td, dict):
             clock = copy.deepcopy(prev_clock)
-            clock["elapsed_seconds"] = float(td.get("end_seconds", clock.get("elapsed_seconds", 0.0)))
+            was = float(clock.get("elapsed_seconds", 0.0) or 0.0)
+            claimed = float(td.get("end_seconds", was))
+            # TIME DOES NOT RUN BACKWARDS. `end_seconds` is an absolute
+            # position on the story clock, and a model that emits
+            # `start_seconds: 0` every beat -- an easy and entirely natural
+            # reading of a field named "start" -- resets the world to the
+            # length of its own beat, over and over.
+            #
+            # Measured on a fifty-beat quest with several explicit hour-long
+            # skips: the clock finished at 30.0 seconds while its own display
+            # read "an hour and a half". Everything downstream that windows on
+            # seconds went quiet with it -- routine residue never fired once,
+            # because the gap between a room's last sighting and now was
+            # always zero.
+            #
+            # The duration is still honoured when the absolute position is
+            # nonsense: a beat that took an hour advances the clock by an hour
+            # rather than being discarded, because the elapsed time is the
+            # part the fiction actually asserted.
+            if claimed < was:
+                duration = max(0.0, float(td.get("duration_seconds", 0.0) or 0.0))
+                claimed = was + duration
+                ctx.add_warning(
+                    "state_diff.time.end_seconds ran backwards (%.0f < %.0f); "
+                    "advanced by its own duration instead" % (
+                        float(td.get("end_seconds", was)), was))
+            clock["elapsed_seconds"] = claimed
             if td.get("display_advance"):
                 clock["display"] = td["display_advance"]
             sc["time"] = td.get("display_advance", sc.get("time"))

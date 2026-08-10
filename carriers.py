@@ -41,7 +41,7 @@ import degradation
 from character_schema import normalize_character_data
 from db import q
 from living_world import living_world_allows, living_world_config
-from scene import active_cast, set_char_state
+from scene import active_cast, extant_cast, set_char_state
 from spatial import room_of
 
 
@@ -158,7 +158,19 @@ def advance_carriers(ctx, scene, world_event_result):
 
     public_surfaces = len(event_rows)
     carrier_opportunities = acquired = moved = 0
-    for cast_row in active_cast(cid, ctx.turn.frame_id):
+    # EXTANT, not active. Acquisition is about a body being somewhere; being
+    # dormant is a decision about what the engine spends on a character, not a
+    # claim that they have left the world. Reading only the active cast made
+    # the whole "an absent mind learns something" route unreachable by
+    # construction: `full_agent_candidates` admits a dormant subject who has
+    # carried reports newer than their last tick, and a dormant subject could
+    # never acquire one. Measured on a fifty-beat quest -- the villain stood in
+    # the room where his own working completed, and learned nothing until the
+    # hero walked in and made him active.
+    #
+    # An antagonist who has always been off-screen is exactly the character
+    # this tier exists for, and was the one character it could not reach.
+    for cast_row in extant_cast(cid, ctx.turn.frame_id):
         try:
             sheet = json.loads(cast_row["sheet"] or "{}")
         except (TypeError, ValueError):

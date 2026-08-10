@@ -317,3 +317,38 @@ class TestAftermathIsMetOnArrival:
         body = inspect.getsource(carriers.advance_carriers)
         gathered = body[body.index("standing_rows = []"):body.index("public_surfaces =")]
         assert "if witnessed:" in gathered
+
+
+class TestTimeDoesNotRunBackwards:
+    """`end_seconds` is an ABSOLUTE position on the story clock.
+
+    A model emitting `start_seconds: 0` on every beat — an entirely natural
+    reading of a field called "start" — reset world time to the length of its
+    own beat, over and over. Measured on a fifty-beat quest with several
+    explicit hour-long skips: the clock finished at 30.0 seconds while its own
+    `display` read "an hour and a half".
+
+    Everything windowed on seconds went silent with it. Routine residue never
+    fired once, because the gap between a room's last sighting and now was
+    always zero — so the mechanism that tells a returning player how a place
+    changed while they were away could not run at all.
+    """
+
+    def test_the_clock_never_moves_backward(self):
+        import inspect
+
+        import commit
+        body = inspect.getsource(commit)
+        assert "if claimed < was:" in body
+        assert "ran backwards" in body
+
+    def test_a_backward_beat_still_gets_its_duration(self):
+        """The elapsed time is the part the fiction actually asserted. A beat
+        that took an hour advances the clock by an hour, rather than being
+        discarded for disagreeing about where it started."""
+        import inspect
+
+        import commit
+        body = inspect.getsource(commit)
+        guard = body[body.index("if claimed < was:"):]
+        assert "duration_seconds" in guard.split("clock[")[0]

@@ -26,12 +26,12 @@
 | `backdrops.py` | 1258 |  | `db`, `logging_utils`, `outofband`, `spatial`, `weather` |
 | `background_claims.py` | 466 |  | `db` |
 | `canon_provenance.py` | 360 |  | — |
-| `carriers.py` | 515 |  | `character_schema`, `crowds`, `db`, `degradation`, `living_world`, `scene`, `spatial` |
+| `carriers.py` | 527 |  | `character_schema`, `crowds`, `db`, `degradation`, `living_world`, `scene`, `spatial` |
 | `character_schema.py` | 1383 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `attire`, `schemas` |
 | `chat_archive.py` | 1110 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1132 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 6770 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 6796 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `crowds.py` | 577 |  | — |
 | `db.py` | 1648 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `degradation.py` | 171 |  | — |
@@ -310,12 +310,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_tellings()` | 314 | 202 lines |
-| `advance_carriers()` | 101 | 133 lines |
-| `_invented_claim()` | 262 | 34 lines |
-| `_cast_index()` | 236 | 24 lines |
+| `apply_tellings()` | 326 | 202 lines |
+| `advance_carriers()` | 101 | 145 lines |
+| `_invented_claim()` | 274 | 34 lines |
+| `_cast_index()` | 248 | 24 lines |
 | `reports_for_state()` | 78 | 21 lines |
-| `_crowd_index()` | 298 | 14 lines |
+| `_crowd_index()` | 310 | 14 lines |
 | `_character_room()` | 66 | 10 lines |
 
 ### `character_schema.py`
@@ -368,12 +368,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 5094 | 1144 lines |
-| `prepare_scene_commit()` | 1849 | 393 lines |
-| `commit_world_entities()` | 2660 | 283 lines |
-| `track_background_presences()` | 3460 | 231 lines |
-| `commit_transit_sweep()` | 2291 | 169 lines |
-| `_commit_all_locked()` | 6548 | 164 lines |
+| `prepare_memory_commit()` | 5120 | 1144 lines |
+| `prepare_scene_commit()` | 1849 | 419 lines |
+| `commit_world_entities()` | 2686 | 283 lines |
+| `track_background_presences()` | 3486 | 231 lines |
+| `commit_transit_sweep()` | 2317 | 169 lines |
+| `_commit_all_locked()` | 6574 | 164 lines |
 | `_prepare_destruction()` | 699 | 158 lines |
 | `update_place_graph()` | 74 | 153 lines |
 
