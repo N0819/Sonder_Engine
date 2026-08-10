@@ -1226,3 +1226,32 @@ class TestCavityGripFolds:
 
         assert (contact["actor"], contact["actor_part"]) == ("Bramwell", "hand")
         assert contact["relation"] == "surface"
+
+
+def test_a_contact_report_does_not_kill_the_turn():
+    """Reported live as an intermittent "Commit preparation failed: too many
+    values to unpack (expected 2)" that rerolling director_resolve cleared.
+
+    `apply_contact_ops` composes each report as a finished sentence, and
+    `prepare_scene_commit` still destructured them as `(was, now)` pairs. Any
+    report whose length was not exactly two raised out of `_prepare_turn_commit`
+    and killed the whole beat; a two-character one would have unpacked silently
+    into its own letters. It only fired on beats whose contact ops produced a
+    report at all, which is why it looked random.
+    """
+    import inspect
+
+    import commit
+    body = inspect.getsource(commit.prepare_scene_commit)
+    assert "for _was, _now in _contact_report" not in body
+    assert "for _note in _contact_report" in body
+
+
+def test_every_contact_report_is_a_sentence():
+    """The consumer above is only safe while this holds. A tuple appended here
+    would restore the old crash from the other side."""
+    import inspect
+
+    import spatial
+    source = inspect.getsource(spatial.apply_contact_ops)
+    assert "report.append((" not in source
