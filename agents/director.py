@@ -4158,6 +4158,13 @@ def director_resolve(ctx, nonce):
         # Director could otherwise never have seen, and `send` needs to know
         # the road is not already full.
         "couriers": _couriers_view(chat["id"], sc),
+        # The notices standing in scene rooms, WITH their uids and their
+        # claims: `read` and `remove` require an artifact_id, and resolving
+        # "she reads the bill" requires the Director -- who owns objective
+        # causality and is entitled to omniscience -- to know what the bill
+        # says. Perception deliberately shows every other mind only that
+        # paper hangs there.
+        "notices": _artifacts_view(chat["id"], sc),
         # The reports this beat's characters are carrying, as ids the Director
         # can name in `telling_ops`. Same defect, same cause: the prompt asks
         # for a `world_event_id` and the Director never saw one, so a
@@ -5072,6 +5079,37 @@ def _couriers_view(chat_id, scene):
             "addressee": str(courier.get("addressee") or ""),
             "sealed": bool(courier.get("sealed")),
             "status": str(courier.get("status") or ""),
+        })
+    return out
+
+
+def _artifacts_view(chat_id, scene):
+    """Posted notices the resolve could act on, with the id ops require.
+
+    Bounded to the current scene's rooms like `_couriers_view`. Unlike a
+    courier's satchel, the CLAIM rides here on purpose: a posted bill is
+    legible in place, and the Director cannot resolve a beat where somebody
+    reads it -- or narrate its wording into the prose -- without knowing
+    what it says. The minted `text`, when the ceiling has worded it, is
+    what the prose may quote; the claim is what a reader acquires.
+    """
+    import artifacts as artifacts_model
+
+    rooms = (scene or {}).get("rooms") or {}
+    out = []
+    for artifact in artifacts_model.standing_artifacts(chat_id):
+        if artifact.get("status") != artifacts_model.POSTED:
+            continue
+        room = str(artifact.get("room") or "")
+        if room not in rooms:
+            continue
+        held = artifact.get("report") or {}
+        out.append({
+            "artifact_id": artifact.get("uid"),
+            "what": artifacts_model.artifact_voice(artifact),
+            "room": room,
+            "claim": str(held.get("claim") or ""),
+            "text": str(artifact.get("text") or ""),
         })
     return out
 

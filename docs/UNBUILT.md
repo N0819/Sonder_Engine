@@ -2075,8 +2075,13 @@ it. Crowd carriers, explicit copy events, subtractive degradation at copies,
 bounded fan-out, and couriers/letters (`couriers.py`: position on a
 `passable_path` route, clock-driven movement, perception surface, and
 question/silence interception — a silenced rider's message never arrives)
-have since landed. Still open inside C: caravan/artifact carriers and
-multi-stop trader routes.
+have since landed, and the last two C legs landed in unreleased
+development: caravans (a `stops` list on the courier object — dwelling
+charged on the clock, two-way news exchange with the standing crowd,
+surfaces and notices at each stop) and artifact carriers (`artifacts.py`:
+a claim posted where the poster stands, acquired only by reading,
+stopped by tearing down, with the authored-wording ceiling minted out of
+band and landed only while the bill still stands). C is closed.
 
 Landed next in unreleased development: **`reactive` is now behavior, not merely
 permission.** A Director resolve may encode `offscreen_plan_ops`, but commit

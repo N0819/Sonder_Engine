@@ -2574,6 +2574,9 @@ def commit_information_carriers(ctx, prepared_scene, world_event_result):
     courier_ops = (resolved.get("state_diff") or {}).get("courier_ops") or []
     if not isinstance(courier_ops, list):
         courier_ops = []
+    artifact_ops = (resolved.get("state_diff") or {}).get("artifact_ops") or []
+    if not isinstance(artifact_ops, list):
+        artifact_ops = []
     if not result.get("enabled"):
         if ops:
             ctx.add_warning(
@@ -2583,6 +2586,10 @@ def commit_information_carriers(ctx, prepared_scene, world_event_result):
             ctx.add_warning(
                 "discarded %d courier op(s): the rumor-ledger floor is off"
                 % len(courier_ops))
+        if artifact_ops:
+            ctx.add_warning(
+                "discarded %d artifact op(s): the rumor-ledger floor is off"
+                % len(artifact_ops))
         result["told"] = 0
         return result
 
@@ -2616,6 +2623,19 @@ def commit_information_carriers(ctx, prepared_scene, world_event_result):
     for reason in courier_rejected:
         ctx.add_warning("courier op refused: %s" % reason)
     result.update(courier_metrics)
+
+    # Artifacts last, in the same domain and transaction: a bill posted from
+    # a report acquired this beat must roll back with the acquisition it
+    # copied, exactly as a dispatch must -- and running after the courier
+    # sweep means a caravan reads the wall as it stood when the beat began,
+    # never a bill nailed up later in the same instant.
+    from artifacts import run_artifacts
+
+    artifact_metrics, artifact_rejected = run_artifacts(
+        ctx, scene, artifact_ops)
+    for reason in artifact_rejected:
+        ctx.add_warning("artifact op refused: %s" % reason)
+    result.update(artifact_metrics)
     return result
 
 # ---- Cast changes ----
@@ -6766,6 +6786,20 @@ def _commit_all_locked(ctx, nonce):
     except Exception as exc:
         ctx.add_warning(f"offscreen agent scheduling failed: {exc}")
         results["offscreen_agent"] = {"error": str(exc)}
+
+    # The rumor ledger's ceiling: authored wording for freshly posted
+    # notices, on the same terms as every other out-of-band spend -- after
+    # the turn's facts are durable, gated on the ceiling setting, and landed
+    # only if the bill still stands when the job returns. The floor never
+    # waits on this and never needs it.
+    try:
+        import artifacts as _artifacts
+
+        job = _artifacts.schedule_artifact_wording(ctx)
+        results["artifact_wording"] = job.as_dict() if job else None
+    except Exception as exc:
+        ctx.add_warning(f"artifact wording scheduling failed: {exc}")
+        results["artifact_wording"] = {"error": str(exc)}
 
     # Approach A's floor is computed on the Director payload path, which no
     # commit domain ever sees -- so without this echo the one mechanism whose

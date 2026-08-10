@@ -749,6 +749,31 @@ def couriers_for_room(cid, sc, room_id):
     return out
 
 
+def artifacts_for_room(cid, sc, room_id):
+    """What posted notices an observer in this room registers.
+
+    The perception half of the reading seam, `couriers_for_room`'s twin: a
+    bill nobody can see is a bill nobody can read OR tear down, and both of
+    those are commit-validated ops that need the `artifact_id` shown here.
+
+    What crosses is what a glance takes in: that a notice hangs there, and
+    what kind of thing it looks like. NEVER the claim and never the wording
+    -- from across a square a bill is paper, and its content moves only
+    through the explicit `read`, which is what keeps walking past a wall
+    from broadcasting it into every mind in the room. A torn-down bill
+    shows nothing at all; that silence is the feature.
+    """
+    import artifacts as artifacts_model
+
+    if not room_id:
+        return []
+    return [{
+        "artifact_id": artifact.get("uid"),
+        "what": artifacts_model.artifact_voice(artifact),
+    } for artifact in artifacts_model.posted_in_room(
+        artifacts_model.standing_artifacts(cid), room_id)]
+
+
 def _perceptible_entities(sc, perceiver_names=None):
     """The entities dict to serialize into a PERCEPTION payload.
 

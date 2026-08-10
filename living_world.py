@@ -91,7 +91,11 @@ LIVING_WORLD_APPROACHES = (
 LIVING_WORLD_BUILT = {
     "routine_residue": frozenset({"floor"}),
     "scheduled_consequence": frozenset({"floor"}),
-    "rumor_ledger": frozenset({"floor"}),
+    # C's ceiling is the artifact wording mint (`artifacts.
+    # schedule_artifact_wording`): one small out-of-band call per posted
+    # notice, landed only if the bill still stands. The floor — posting,
+    # reading, tearing down, caravans — never spends and never waits on it.
+    "rumor_ledger": frozenset({"floor", "ceiling"}),
     "place_obligations": frozenset({"floor"}),
     "antagonist_ladder": frozenset({"floor", "ceiling"}),
 }
