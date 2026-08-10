@@ -1764,10 +1764,26 @@ def _normalize_entry_ops(parsed, default_book_id):
     still produces a usable plan.
     """
     ops = [
-        op for op in (parsed.get("entry_ops") or [])
+        dict(op) for op in (parsed.get("entry_ops") or [])
         if isinstance(op, dict) and str(op.get("content") or "").strip()
     ]
     if ops:
+        for op in ops:
+            # `apply_lorebook_plan` dispatches on this key, so an op that omits
+            # it -- or claims an update it cannot address, having no id -- is
+            # dropped after a generation the author watched succeed. The
+            # prompt documents "op", which is not the same as the model
+            # always sending it.
+            if op.get("op") != "update" or not op.get("id"):
+                op["op"] = "create"
+                op.pop("id", None)
+            # `importance` reaches float() inside add_lore. One model
+            # answering "high" would otherwise abort a whole approved plan
+            # inside its transaction, losing every other entry with it.
+            try:
+                op["importance"] = float(op.get("importance", 0.5))
+            except (TypeError, ValueError):
+                op["importance"] = 0.5
         return ops
 
     return [
@@ -2445,29 +2461,43 @@ def generate_lore_entries(lorebook_id, brief):
         )
 
     parsed = _jparse(raw)
-    entries = parsed.get("entries") or []
+    # `generator_lorebook` documents entry_ops and nothing else, and instructs
+    # a model given no "stage" key -- which is every call made from here -- to
+    # return complete entry_ops in one response. Reading only the legacy
+    # `entries` key therefore rejected every compliant answer. Fold both
+    # shapes through the same normalizer the staged tree generator applies to
+    # this prompt's output, so the two callers of one prompt agree about its
+    # contract instead of one of them quietly defining a second one.
+    entries = _normalize_entry_ops(parsed, lorebook_id)
     if not entries:
         raise RuntimeError(
             "Lore generator returned no entries.\n"
-            f"Raw output:\n{raw[:800]}"
+            f"Raw output:\n{(raw or '')[:800]}"
         )
 
     entry_ids = []
     for e in entries:
-        if not e.get("content"):
-            continue
+        # Every op reaching here belongs to this book: the payload shows the
+        # model no entry ids and no second book, so an "update" op cannot be
+        # addressing anything real. Write it as a new entry -- misfiling one
+        # entry is fixable by hand, silently discarding a generated one is not.
         cat = e.get("category")
         if cat not in LORE_CATEGORIES:
-            cat = guess_category(e.get("keys", ""), e["content"])
+            cat = guess_category(e.get("keys", ""), e.get("content", ""))
         eid = add_lore(
             lorebook_id,
             e.get("keys", ""),
-            e["content"],
+            e.get("content", ""),
             category=cat,
             title=e.get("title"),
             knowledge_tag=e.get("knowledge_tag"),
             knowledge_range=e.get("knowledge_range"),
             knowledge_locations=e.get("knowledge_locations"),
+            importance=e.get("importance", 0.5),
+            aliases=e.get("aliases", []),
+            scope=e.get("scope", {}),
+            relations=e.get("relations", {}),
+            source_notes=e.get("source_notes", ""),
         )
         entry_ids.append(eid)
 
