@@ -99,6 +99,7 @@ class ChatArchiveData(LenientModel):
     memory_vectors: list[dict[str, Any]] = Field(default_factory=list)
     events: list[dict[str, Any]] = Field(default_factory=list)
     world_events: list[dict[str, Any]] = Field(default_factory=list)
+    relationship_events: list[dict[str, Any]] = Field(default_factory=list)
     checkpoints: list[dict[str, Any]] = Field(default_factory=list)
     lorebook: dict[str, Any] | None = None
     lorebooks: list[dict[str, Any]] = Field(default_factory=list)
@@ -257,6 +258,7 @@ class ChatArchiveService:
         # with actual rows on the first post-import commit.
         for table in (
             "world_events",
+            "relationship_events",
             "world_entities",
             "world_placements",
             "world_conditions",
@@ -905,6 +907,7 @@ class ChatArchiveService:
                 table: [dict(row) for row in data.get(table) or []]
                 for table in (
                     "world_events",
+                    "relationship_events",
                     "world_entities",
                     "world_placements",
                     "world_conditions",
@@ -924,6 +927,17 @@ class ChatArchiveService:
             for event in world_tables["world_events"]:
                 event["turn_id"] = turn_idmap.get(event.get("turn_id"))
                 event["frame_id"] = frame_idmap.get(event.get("frame_id"))
+            # A stance's history follows the character it belongs to. An id
+            # that does not remap is DROPPED rather than carried across: the
+            # same integer means a different person in the new chat, and
+            # reattaching a grudge to whoever inherited the number is worse
+            # than losing it.
+            world_tables["relationship_events"] = [
+                dict(row, char_id=old_char_map.get(row.get("char_id")),
+                     frame_id=frame_idmap.get(row.get("frame_id")))
+                for row in world_tables["relationship_events"]
+                if old_char_map.get(row.get("char_id")) is not None
+            ]
             for room in world_tables["room_registry"]:
                 room["created_turn_id"] = turn_idmap.get(
                     room.get("created_turn_id")

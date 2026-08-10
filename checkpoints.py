@@ -127,6 +127,19 @@ def snapshot_state(chat_id):
          "seed": r["seed"], "committed": r["committed"]}
         for r in q("SELECT * FROM world_events WHERE chat_id=?", (chat_id,))
     ]
+    # Why a stance is where it is. Snapshotted with the story because it IS
+    # the story: a rewind past the argument must take the reason for it too,
+    # or a character goes on holding a grudge about a thing that no longer
+    # happened.
+    relationship_events = [
+        {"frame_id": r["frame_id"], "char_id": r["char_id"],
+         "target": r["target"], "axis": r["axis"], "delta": r["delta"],
+         "triggers": r["triggers"], "note": r["note"],
+         "provenance": r["provenance"], "turn_idx": r["turn_idx"],
+         "created": r["created"]}
+        for r in q("SELECT * FROM relationship_events WHERE chat_id=?",
+                   (chat_id,))
+    ]
     room_registry = [
         {"room_uid": r["room_uid"], "owning_book_id": r["owning_book_id"],
          "parent_entity": r["parent_entity"], "name": r["name"],
@@ -163,6 +176,7 @@ def snapshot_state(chat_id):
         "world_conditions": world_conditions,
         "scheduled_events": scheduled,
         "world_events": world_events,
+        "relationship_events": relationship_events,
         "room_registry": room_registry,
         "fiction_worlds": fiction_worlds,
         "fiction_locations": fiction_locations,
@@ -403,6 +417,19 @@ def insert_world_tables(chat_id, b, delete_first=False):
             ev["occurred_at"], ev.get("duration_seconds", 0.0), ev["kind"],
             ev.get("location_id"), ev.get("payload", "{}"), ev.get("seed"),
             ev.get("committed", time.time())))
+
+    if delete_first:
+        qi("DELETE FROM relationship_events WHERE chat_id=?", (chat_id,))
+    for re_ in b.get("relationship_events") or []:
+        qi("""INSERT INTO relationship_events(chat_id,frame_id,char_id,target,
+            axis,delta,triggers,note,provenance,turn_idx,created)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+           (chat_id, re_.get("frame_id"), re_.get("char_id"),
+            re_.get("target", ""), re_.get("axis", ""),
+            float(re_.get("delta") or 0.0), re_.get("triggers", ""),
+            re_.get("note", ""), re_.get("provenance", ""),
+            int(re_.get("turn_idx") or 0),
+            re_.get("created", time.time())))
 
     if delete_first:
         qi("DELETE FROM room_registry WHERE chat_id=?", (chat_id,))

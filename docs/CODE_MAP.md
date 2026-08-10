@@ -28,8 +28,8 @@
 | `canon_provenance.py` | 360 |  | — |
 | `carriers.py` | 482 |  | `character_schema`, `crowds`, `db`, `degradation`, `living_world`, `scene`, `spatial` |
 | `character_schema.py` | 1383 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `attire`, `schemas` |
-| `chat_archive.py` | 1096 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
-| `checkpoints.py` | 1105 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
+| `chat_archive.py` | 1110 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
+| `checkpoints.py` | 1132 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
 | `commit.py` | 6753 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `crowds.py` | 577 |  | — |
@@ -342,14 +342,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `snapshot_state()` | 15 | 155 lines |
-| `_restore_checkpoint_body()` | 519 | 141 lines |
-| `compact_checkpoints()` | 769 | 118 lines |
-| `_restore_books()` | 171 | 104 lines |
-| `insert_world_tables()` | 350 | 92 lines |
-| `ensure_checkpoint()` | 953 | 53 lines |
-| `propagate_memory_summaries_to_checkpoints()` | 1008 | 53 lines |
-| `_verify_no_loss()` | 717 | 50 lines |
+| `snapshot_state()` | 15 | 169 lines |
+| `_restore_checkpoint_body()` | 546 | 141 lines |
+| `compact_checkpoints()` | 796 | 118 lines |
+| `insert_world_tables()` | 364 | 105 lines |
+| `_restore_books()` | 185 | 104 lines |
+| `ensure_checkpoint()` | 980 | 53 lines |
+| `propagate_memory_summaries_to_checkpoints()` | 1035 | 53 lines |
+| `_verify_no_loss()` | 744 | 50 lines |
 
 ### `comfort.py`
 
@@ -825,7 +825,7 @@
 | POST | `/api/characters/{cid}/recover_greetings` | `char_recover_greetings()` | `app.py:1732` |
 | POST | `/api/characters/{cid}/start` | `character_start_story()` | `app.py:1714` |
 | POST | `/api/chats` | `chat_new()` | `app.py:2154` |
-| POST | `/api/chats/import` | `import_chat()` | `chat_archive.py:174` |
+| POST | `/api/chats/import` | `import_chat()` | `chat_archive.py:175` |
 | DELETE | `/api/chats/{cid}` | `chat_del()` | `app.py:2256` |
 | GET | `/api/chats/{cid}` | `chat_get()` | `app.py:2286` |
 | PUT | `/api/chats/{cid}` | `chat_edit()` | `app.py:2160` |
@@ -859,7 +859,7 @@
 | GET | `/api/chats/{cid}/dialogue_config` | `dlg_get()` | `app.py:3213` |
 | PUT | `/api/chats/{cid}/dialogue_config` | `dlg_put()` | `app.py:3230` |
 | GET | `/api/chats/{cid}/dramatic_irony` | `get_dramatic_irony_feed()` | `app.py:2511` |
-| GET | `/api/chats/{cid}/export` | `export_chat()` | `chat_archive.py:168` |
+| GET | `/api/chats/{cid}/export` | `export_chat()` | `chat_archive.py:169` |
 | GET | `/api/chats/{cid}/fixed_points` | `fixed_points_list()` | `app.py:3388` |
 | POST | `/api/chats/{cid}/fixed_points` | `fixed_points_create()` | `app.py:3398` |
 | DELETE | `/api/chats/{cid}/fixed_points/{anchor_id}` | `fixed_points_delete()` | `app.py:3420` |
