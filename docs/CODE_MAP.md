@@ -37,7 +37,7 @@
 | `gaps.py` | 548 |  | `canon_provenance`, `db`, `logging_utils`, `providers`, `spatial`, `subjects` |
 | `greetings.py` | 375 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
 | `guest_access.py` | 355 |  | `db` |
-| `importers.py` | 2621 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `logging_utils`, `memory`, `prompts`, `providers` |
+| `importers.py` | 2651 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `logging_utils`, `memory`, `prompts`, `providers` |
 | `jobs.py` | 183 |  | `logging_utils` |
 | `living_world.py` | 602 |  | `logging_utils`, `mechanics` |
 | `llm_quality.py` | 292 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
@@ -52,7 +52,7 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 4117 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 4135 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 2025 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
@@ -440,12 +440,12 @@
 |---|---:|---:|
 | `import_lorebook()` | 1329 | 212 lines |
 | `_reinterpret_entries()` | 1202 | 126 lines |
-| `apply_lorebook_plan()` | 2433 | 124 lines |
-| `_lore_gen_entry_batch()` | 2085 | 118 lines |
-| `_run_lore_gen_job()` | 2207 | 112 lines |
+| `apply_lorebook_plan()` | 2449 | 124 lines |
+| `_lore_gen_entry_batch()` | 2101 | 118 lines |
+| `_run_lore_gen_job()` | 2223 | 112 lines |
 | `fill_appearance()` | 999 | 93 lines |
 | `import_character()` | 536 | 91 lines |
-| `_lore_gen_structure()` | 2015 | 66 lines |
+| `generate_lore_entries()` | 2573 | 79 lines |
 
 ### `jobs.py`
 
@@ -594,10 +594,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 4108 | 10 lines |
-| `presets()` | 4099 | 2 lines |
-| `active_preset()` | 4102 | 2 lines |
-| `nsfw_enabled()` | 4105 | 2 lines |
+| `get_prompt()` | 4126 | 10 lines |
+| `presets()` | 4117 | 2 lines |
+| `active_preset()` | 4120 | 2 lines |
+| `nsfw_enabled()` | 4123 | 2 lines |
 
 ### `providers.py`
 
