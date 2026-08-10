@@ -210,6 +210,17 @@ interior relation now gives each participant the appropriate interior
 sensation, and a bare re-description cannot turn an interior relation into
 surface contact; resolve must end it explicitly first.
 
+The remaining Turn 17 wording defect was a topology error rather than an
+anatomy special case: the exact `target_part` endpoint was also being rendered
+as the space enclosing the inserted part. Interior contacts now optionally
+persist a separate, open-string `target_interior`; deterministic standing and
+sensation renderers name that enclosure while keeping `target_part` as the
+current boundary/contact point. Player interpretation and resolve infer the
+interior from established fiction. A declared push past the point uses the new
+validated `cross` contact operation, which must match the standing
+`crossed_target_part` and records the downstream interior and optional new
+endpoint. Ordinary rephrasing still cannot move a protected endpoint.
+
 This lands on the repaired observer path: perception previews commit's exact
 attire result on copies, region visibility is now a production-derived
 function, shed clothing is atomic with canonical removal and placement, and

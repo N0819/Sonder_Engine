@@ -262,7 +262,8 @@ def test_live_two_contact_omission_fires_bounded_repair(temp_db, monkeypatch):
         "resolve_repair": {
             "state_diff": {"contact_ops": [{
                 "op": "add", "actor": "Elyra Voss", "actor_part": "cock",
-                "target": "Hinami", "target_part": "cervix",
+                "target": "Hinami", "target_interior": "vaginal canal",
+                "target_part": "cervix",
                 "manner": "insert", "detail": "fully inserted",
             }]},
             "dispositions": [{"subject": "Elyra Voss", "status": "encoded",
@@ -287,9 +288,11 @@ def test_live_two_contact_omission_fires_bounded_repair(temp_db, monkeypatch):
     interior = next(c for c in scene["contacts"]
                     if c["target_part"] == "cervix")
     assert contact_sensation(interior, you="Hinami", scene=scene).startswith(
-        "your cervix registers Elyra Voss's cock within it")
+        "your body registers Elyra Voss's cock within your vaginal canal, "
+        "with contact at your cervix")
     assert contact_sensation(interior, you="Elyra Voss", scene=scene).startswith(
-        "your cock registers Hinami's cervix closed around it")
+        "your cock registers Hinami's vaginal canal enclosing it, with "
+        "contact at Hinami's cervix")
 
 
 def _dialogue_interp():

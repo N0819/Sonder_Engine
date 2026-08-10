@@ -43,7 +43,8 @@ SCENE = {
         {"actor": "Reya", "actor_part": "palm", "target": "Bram",
          "target_part": "sternum", "manner": "press"},
         {"actor": "Reya", "actor_part": "blade", "target": "Bram",
-         "target_part": "shoulder", "manner": "penetrating"},
+         "target_interior": "wound channel", "target_part": "shoulder",
+         "manner": "penetrating"},
     ],
 }
 
@@ -94,6 +95,8 @@ class TestTheMannerReading:
 
         assert "relation is surface|interior and motion is settled|moving" in prompt
         assert "ALWAYS emit both" in prompt
+        assert "target_interior names what currently encloses actor_part" in prompt
+        assert "CROSSING AN ENDPOINT IS AN EXPLICIT TRANSITION" in prompt
 
 
 class TestWhatEachPartyFeels:
@@ -112,24 +115,25 @@ class TestWhatEachPartyFeels:
         entering = contact_sensation(SCENE["contacts"][1], you="Reya")
         enclosing = contact_sensation(SCENE["contacts"][1], you="Bram")
 
-        assert "closed around it" in entering
-        assert "within it" in enclosing
-        assert "within it" not in entering
-        assert "closed around it" not in enclosing
+        assert "Bram's wound channel enclosing it" in entering
+        assert "within your wound channel" in enclosing
+        assert "within your shoulder" not in enclosing
+        assert "shoulder enclosing" not in entering
 
     def test_a_moving_interior_contact_carries_both_facts(self):
         contact = {
             "actor": "Reya", "actor_part": "blade", "target": "Bram",
-            "target_part": "shoulder", "manner": "thrust",
+            "target_interior": "wound channel", "target_part": "shoulder",
+            "manner": "thrust",
             "relation": "interior", "motion": "moving",
         }
 
         entering = contact_sensation(contact, you="Reya")
         enclosing = contact_sensation(contact, you="Bram")
 
-        assert "closed around it" in entering
+        assert "Bram's wound channel enclosing it" in entering
         assert "friction along its length" in entering
-        assert "within it" in enclosing
+        assert "within your wound channel" in enclosing
         assert "fullness, stretch, shifting pressure and movement" in enclosing
 
     def test_a_bystander_is_a_party_to_nothing(self):
@@ -200,7 +204,8 @@ class TestContactSemanticPersistence:
     def _contact(**changes):
         contact = {
             "actor": "Reya", "actor_part": "blade", "target": "Bram",
-            "target_part": "shoulder", "manner": "insert",
+            "target_interior": "wound channel", "target_part": "shoulder",
+            "manner": "insert",
             "detail": "fully inserted",
         }
         contact.update(changes)
@@ -217,6 +222,15 @@ class TestContactSemanticPersistence:
         assert contact["relation"] == "interior"
         assert contact["motion"] == "moving"
 
+    def test_concise_reassertion_does_not_erase_known_interior(self):
+        scene = self._scene(self._contact(target_interior="wound channel"))
+        reassertion = self._contact()
+        reassertion.pop("target_interior")
+
+        updated = apply_contact_ops(scene, [reassertion])
+
+        assert updated["contacts"][0]["target_interior"] == "wound channel"
+
     def test_interior_to_surface_requires_an_explicit_end(self):
         scene = self._scene(self._contact())
         flattened = apply_contact_ops(scene, [self._contact(
@@ -230,6 +244,65 @@ class TestContactSemanticPersistence:
         ])
         assert moved["contacts"][0]["relation"] == "surface"
 
+    def test_crossing_replaces_the_boundary_with_downstream_state(self):
+        scene = self._scene(self._contact(
+            target_interior="outer channel", target_part="inner seal"))
+
+        advanced = apply_contact_ops(scene, [{
+            "op": "cross", "actor": "Reya", "actor_part": "blade",
+            "target": "Bram", "crossed_target_part": "inner seal",
+            "target_interior": "downstream chamber", "target_part": "far wall",
+            "manner": "push",
+        }])
+
+        assert len(advanced["contacts"]) == 1
+        contact = advanced["contacts"][0]
+        assert contact["target_interior"] == "downstream chamber"
+        assert contact["target_part"] == "far wall"
+        assert contact["relation"] == "interior"
+        assert contact["motion"] == "moving"
+        assert "crossed_target_part" not in contact
+
+    def test_crossing_the_wrong_boundary_fails_closed(self):
+        original = self._contact(
+            target_interior="outer channel", target_part="inner seal")
+        reports = []
+
+        unchanged = apply_contact_ops(self._scene(original), [{
+            "op": "cross", "actor": "Reya", "actor_part": "blade",
+            "target": "Bram", "crossed_target_part": "other seal",
+            "target_interior": "downstream chamber", "target_part": "far wall",
+        }], report=reports)
+
+        assert unchanged["contacts"][0]["target_part"] == "inner seal"
+        assert reports and "ignored contact crossing" in reports[0]
+
+    def test_crossing_without_a_new_endpoint_does_not_keep_the_old_one(self):
+        original = self._contact(
+            target_interior="outer channel", target_part="inner seal")
+
+        advanced = apply_contact_ops(self._scene(original), [{
+            "op": "cross", "actor": "Reya", "actor_part": "blade",
+            "target": "Bram", "crossed_target_part": "inner seal",
+            "target_interior": "downstream chamber",
+        }])
+
+        assert advanced["contacts"][0]["target_part"] == ""
+
+    def test_cross_cannot_resurrect_an_endpoint_removed_earlier_in_the_beat(self):
+        original = self._contact(
+            target_interior="outer channel", target_part="inner seal")
+
+        ended = apply_contact_ops(self._scene(original), [
+            {"op": "remove", "actor": "Reya", "actor_part": "blade",
+             "target": "Bram", "target_part": "inner seal"},
+            {"op": "cross", "actor": "Reya", "actor_part": "blade",
+             "target": "Bram", "crossed_target_part": "inner seal",
+             "target_interior": "downstream chamber", "target_part": "far wall"},
+        ])
+
+        assert ended["contacts"] == []
+
 
 class TestTheDeterministicFloor:
 
@@ -240,7 +313,7 @@ class TestTheDeterministicFloor:
 
         assert view.startswith(LIT_VIEW)
         assert "Your sternum registers Reya's palm against it" in view
-        assert "Your shoulder registers Reya's blade within it" in view
+        assert "Your body registers Reya's blade within your wound channel" in view
 
     def test_it_subtracts_nothing(self):
         assert LIT_VIEW in _deliver(LIT_VIEW, "Bram")
@@ -283,7 +356,7 @@ class TestTheDeterministicFloor:
         view = _deliver(partial, "Bram")
 
         assert view.count("registers") == 1
-        assert "shoulder registers" in view
+        assert "within your wound channel" in view
 
     def test_a_contact_with_no_parts_is_never_appended(self):
         """`your body registers X against it` on every beat of an ordinary
@@ -321,7 +394,7 @@ class TestTheChannelItArrivesOn:
         -- pain, nausea, wounds. Interior sensation is interoception whatever
         its valence."""
         interior = [a for a in self._atoms("Bram")
-                    if "shoulder registers" in a["observed"]["text"]]
+                    if "wound channel" in a["observed"]["text"]]
 
         assert interior and interior[0]["channel"] == "interoception"
 
