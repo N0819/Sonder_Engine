@@ -1614,6 +1614,21 @@ class OffscreenPlanOp(LenientModel):
     basis: str = ""
     stages: list[OffscreenPlanStage] = Field(default_factory=list)
 
+class TellingOp(LenientModel):
+    """One character passing a carried report to another, on-page.
+
+    An explicit COPY. Standing beside someone who knows a thing teaches you
+    nothing -- if the engine let proximity transfer knowledge it would have
+    rebuilt the omniscience the whole perception layer exists to prevent.
+    Commit refuses the op unless the speaker actually holds that report, spoke
+    this beat, and shares a room with the listener; the copy then arrives one
+    retelling fainter through `degradation`.
+    """
+    speaker: str = ""
+    listener: str = ""
+    world_event_id: str = ""
+
+
 class CrowdOp(LenientModel):
     """Director declaration about a crowd blob.
 
@@ -1752,6 +1767,12 @@ class StateDiff(LenientModel):
     # than created, and the count is a band rather than an integer so two
     # sources can never disagree about whether 37 became 34.
     crowd_ops: list[CrowdOp] = Field(default_factory=list)
+    # Who passed a carried report to whom, this beat, on-page. The only way a
+    # report reaches a second mind: `carriers.apply_tellings` validates the
+    # holding, the speaking and the shared room deterministically, and the
+    # copy degrades by subtraction so a rumor can be vaguer but never
+    # different -- distortion that cannot invent cannot contradict.
+    telling_ops: list[TellingOp] = Field(default_factory=list)
     # Destruction declaration (DestructionEffect shape -- see its
     # docstring). Declared here so model_dump() keeps it through
     # validation (the zone-field precedent above); commit.py validates it
@@ -3394,6 +3415,7 @@ OUTPUT_EXAMPLES = {
             "consequences": [],
             "offscreen_plan_ops": [],
             "crowd_ops": [],
+            "telling_ops": [],
         },
         "changes_asserted": [
             {"category": "adjacency", "subject": "vault_door",

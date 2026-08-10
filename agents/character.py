@@ -2998,13 +2998,21 @@ def character_step(ctx, cid, nonce):
     _cprompt = get_prompt("character").replace("{name}", character_name(sh))
     if _carried_reports:
         _cprompt += (
-            "\n\nCARRIED REPORTS: carried_reports contains public event surfaces "
-            "YOU personally witnessed and have physically carried from their "
-            "acquired location. They may be stale. You may act on or mention "
-            "them naturally, but do not sharpen, complete, or infer hidden "
-            "details beyond the stored claim. Nobody else knows one merely "
-            "because you carry it; they learn only if it is communicated "
-            "on-page."
+            "\n\nCARRIED REPORTS: carried_reports contains what you know about "
+            "events elsewhere, and each one records how you came by it. "
+            "`provenance:'witnessed_surface'` is something you saw yourself and "
+            "have carried from where you saw it. `provenance:'told'` is "
+            "something SOMEONE SAID TO YOU — `told_by` names them, and "
+            "`retellings` counts how many mouths it passed through before "
+            "yours. A told claim is already vaguer than the truth and gets "
+            "vaguer the further it has come: treat it as what a person told "
+            "you rather than as what happened, and let how much you trust that "
+            "person decide how far you act on it. Any of them may be stale. Do "
+            "not sharpen, complete, or infer details beyond the stored claim — "
+            "what is missing is missing from the story you were given, and "
+            "filling it back in would be knowing something nobody told you. "
+            "Nobody else knows one merely because you carry it; they learn only "
+            "if you say it on-page."
         )
     if _window_open:
         # The base contract never documents drive_shift; the instruction to emit

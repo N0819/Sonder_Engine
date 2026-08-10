@@ -2508,11 +2508,51 @@ def commit_world_event_spine(ctx, transit_result):
 
 
 def commit_information_carriers(ctx, prepared_scene, world_event_result):
-    """Acquire/move character-owned public reports after memory state lands."""
-    from carriers import advance_carriers
+    """Acquire/move character-owned public reports after memory state lands,
+    then copy any that were actually passed on this beat.
 
-    return advance_carriers(
-        ctx, (prepared_scene or {}).get("scene") or {}, world_event_result)
+    Tellings run AFTER acquisition, so a witness can pass on what they saw in
+    the same beat they saw it -- which is what someone running in to say what
+    just happened actually is. They run inside the same domain because a
+    telling that landed while the acquisition it copied from rolled back would
+    be a mind holding a report of an event that never happened.
+    """
+    from carriers import advance_carriers, apply_tellings
+
+    scene = (prepared_scene or {}).get("scene") or {}
+    result = advance_carriers(ctx, scene, world_event_result)
+
+    resolved = ctx.director_resolve or ctx.director_establish or {}
+    ops = (resolved.get("state_diff") or {}).get("telling_ops") or []
+    if not isinstance(ops, list):
+        ops = []
+    if not result.get("enabled"):
+        if ops:
+            ctx.add_warning(
+                "discarded %d telling(s): the rumor-ledger floor is off"
+                % len(ops))
+        result["told"] = 0
+        return result
+
+    # What degradation is allowed to redact. The engine names its own cast and
+    # rooms rather than letting a detector guess which words are people: a
+    # wrong guess silently rewrites a claim into something false, and this is
+    # the one module whose entire correctness argument is that it cannot
+    # invent.
+    names = list(_registered_name_roster(ctx.chat, ctx.cast))
+    places = [str(r.get("name") or rid)
+              for rid, r in (scene.get("rooms") or {}).items()
+              if isinstance(r, dict)]
+    places += list((scene.get("rooms") or {}).keys())
+
+    told, rejected = apply_tellings(ctx, scene, ops, names=names,
+                                    places=places)
+    for reason in rejected:
+        ctx.add_warning("telling refused: %s" % reason)
+    result["told"] = told
+    result["tellings_offered"] = len(ops)
+    result["tellings_refused"] = len(rejected)
+    return result
 
 # ---- Cast changes ----
 
