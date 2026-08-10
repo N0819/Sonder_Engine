@@ -156,6 +156,53 @@ class TestTopologyAndPersistence:
         assert result["substances"][0]["placement"] == "surface"
         assert result["substances"][0]["target_part"] == "casing"
 
+    def test_a_surface_deposit_cannot_carry_an_enclosure(self):
+        """An enclosure named beside a SURFACE placement is a cavity on some
+        other body. Live (chat 69 ⎇49, turn 78): saliva recorded
+        `target: Hinami, placement: surface, target_interior: mouth` while
+        Hinami was inside Elyra Voss -- the mouth was Elyra's, and every
+        consumer reads target_interior as a structure of the TARGET, so the
+        recipient was handed her own mouth as the place it landed."""
+        scene = _scene()
+        scene["contacts"] = []
+        warnings = []
+        result = apply_substance_ops(scene, [_release(
+            source_part="vent", target="Vessel", placement="surface",
+            target_part="casing", target_interior="reservoir")],
+            report=warnings.append)
+
+        [record] = result["substances"]
+        assert record["placement"] == "surface"
+        assert record["target_interior"] == ""
+        assert any("enclosure" in warning for warning in warnings)
+
+    def test_a_saved_surface_record_sheds_its_enclosure_on_the_next_apply(self):
+        """The live scene already carries the stray enclosure, and a fix that
+        only catches new ops leaves it standing forever. Worse, it keeps the
+        row out of the pool it belongs to: `_record_region` prefers the
+        enclosure, so one coating of saliva filed under someone else's mouth
+        never meets the identical coating filed under the body it is on."""
+        scene = _scene()
+        scene["contacts"] = []
+        apply_substance_ops(scene, [_release(
+            source_part="vent", target="Vessel", placement="surface",
+            target_part="casing")])
+        scene["substances"][0]["target_interior"] = "reservoir"
+        apply_substance_ops(scene, [])
+
+        assert scene["substances"][0]["target_interior"] == ""
+
+    def test_an_interior_deposit_still_keeps_its_enclosure(self):
+        """The carve-out the clear must not eat: target_interior is required
+        for an interior placement and is the only thing locating it."""
+        scene = _scene()
+        scene["contacts"] = []
+        result = apply_substance_ops(scene, [_release(
+            source_part="vent", target="Vessel", placement="interior",
+            target_interior="reservoir", target_part="inlet")])
+
+        assert result["substances"][0]["target_interior"] == "reservoir"
+
     def test_no_contact_and_no_target_is_not_inferred_from_prose(self):
         scene = _scene()
         scene["contacts"] = []
@@ -379,6 +426,52 @@ class TestOneReleaseIsOneRecord:
         [record] = scene["substances"]
         assert record["detail"] == "a later, larger release"
 
+    def test_one_cavity_spelled_two_ways_is_one_place(self):
+        """Live (chat 69 ⎇49, turns 61-62): two deposits into one cavity, one
+        writing `mouth` and the next `oral cavity`, stood as two rows for the
+        rest of the story. Every region comparison in this ledger was raw
+        casefolded text, so a re-spelling minted a second place on a body that
+        has one."""
+        first = _release(op="add", target="Vessel", placement="interior",
+                         target_interior="reservoir", detail="one release")
+        respelled = _release(op="add", target="Vessel", placement="interior",
+                             target_interior="holding reservoir",
+                             detail="one release")
+        scene = _scene()
+        # No standing interior contact: the topology check would otherwise
+        # reject the second spelling outright and prove nothing about folding.
+        scene["contacts"] = []
+        apply_substance_ops(scene, [first, respelled])
+
+        assert len(scene["substances"]) == 1
+
+    def test_spelling_noise_alone_does_not_make_a_second_place(self):
+        """Underscores, case and plurals are how the same slot arrives from
+        two stages, not two places on a body."""
+        first = _release(op="add", target="Vessel", placement="surface",
+                         target_part="Intake_Ports", detail="one release")
+        noisy = _release(op="add", target="Vessel", placement="surface",
+                         target_part="intake port", detail="one release")
+        scene = _scene()
+        scene["contacts"] = []
+        apply_substance_ops(scene, [first, noisy])
+
+        assert len(scene["substances"]) == 1
+
+    def test_two_genuinely_different_places_stay_two(self):
+        """The boundary: folding spellings must never blur two places a body
+        really has, which is why this reuses the structural refinement rule
+        rather than a synonym vocabulary."""
+        first = _release(op="add", target="Vessel", placement="surface",
+                         target_part="casing", detail="one release")
+        other = _release(op="add", target="Vessel", placement="surface",
+                         target_part="inlet", detail="one release")
+        scene = _scene()
+        scene["contacts"] = []
+        apply_substance_ops(scene, [first, other])
+
+        assert len(scene["substances"]) == 2
+
     def test_the_contract_names_the_wrong_body_part_failure(self):
         """Live (turn 63 of the same story): matter recorded on the TARGET
         with the SOURCE's own part in target_part -- a part the target's body
@@ -386,3 +479,285 @@ class TestOneReleaseIsOneRecord:
         resolve = DEFAULT_PROMPTS["director_resolve"]
         assert "places on the TARGET's own body" in resolve
         assert "One release is ONE op" in resolve
+
+
+class TestOneSubstanceOnOneRegionIsOneDeposit:
+    """The same matter re-applied to the same place stacked instead of pooling.
+
+    Live (chat 69 ⎇49): nine saliva rows targeting Hinami, three of them on
+    the region `body` -- turns 74, 78 and 80 -- kept apart only by which part
+    of the source delivered them (`tongue`, then `mouth`) and by their wording.
+    Saliva on her body is saliva on her body; `_substance_id` hashing
+    `source_part` made it three puddles, and every one of them was read back
+    to her every beat.
+
+    The contact ledger has had this rule since it was built (`_displaces`: an
+    unqualified part noun is a definite description, so re-asserting it MOVES
+    the limb). The substance ledger never grew the equivalent.
+    """
+
+    def _coat(self, **over):
+        op = {"op": "add", "source": "Emitter", "source_part": "nozzle",
+              "substance": "coolant", "target": "Vessel",
+              "placement": "surface", "target_part": "casing",
+              "amount": "a film", "detail": "thin"}
+        op.update(over)
+        return op
+
+    def test_the_same_matter_on_one_region_pools_rather_than_stacks(self):
+        scene = _scene()
+        scene["contacts"] = []
+        apply_substance_ops(scene, [
+            self._coat(),
+            self._coat(source_part="vent", amount="a layer", detail="thick")])
+
+        assert len(scene["substances"]) == 1
+
+    def test_the_later_account_of_the_pool_wins(self):
+        """Same boundary the route update already held: a later release
+        describes the pool as it now is, so its amount and detail replace the
+        earlier ones rather than being discarded."""
+        scene = _scene()
+        scene["contacts"] = []
+        apply_substance_ops(scene, [
+            self._coat(),
+            self._coat(source_part="vent", amount="a layer", detail="thick")])
+
+        [record] = scene["substances"]
+        assert record["amount"] == "a layer"
+        assert record["detail"] == "thick"
+
+    def test_a_different_substance_on_the_same_region_stays_separate(self):
+        scene = _scene()
+        scene["contacts"] = []
+        apply_substance_ops(scene, [
+            self._coat(), self._coat(substance="lubricant")])
+
+        assert len(scene["substances"]) == 2
+
+    def test_a_different_source_stays_separate(self):
+        """Provenance is not decoration: perception strips `source` per
+        observer, so two bodies' matter in one place is two facts about who
+        was there."""
+        scene = _scene()
+        scene["contacts"] = []
+        apply_substance_ops(scene, [
+            self._coat(), self._coat(source="Witness")])
+
+        assert len(scene["substances"]) == 2
+
+    def test_a_different_region_stays_separate(self):
+        scene = _scene()
+        scene["contacts"] = []
+        apply_substance_ops(scene, [
+            self._coat(), self._coat(target_part="inlet")])
+
+        assert len(scene["substances"]) == 2
+
+    def test_a_saved_scene_of_stacked_rows_heals_on_the_next_apply(self):
+        """The live scene already carries the stack; a fix that only catches
+        new ops leaves nine rows standing forever."""
+        scene = _scene()
+        scene["contacts"] = []
+        apply_substance_ops(scene, [self._coat()])
+        stale = dict(scene["substances"][0], source_part="vent",
+                     detail="thick", substance_id="substance:legacystack")
+        scene["substances"].append(stale)
+        apply_substance_ops(scene, [])
+
+        assert len(scene["substances"]) == 1
+
+
+class TestMatterMovedLeavesWhereItWas:
+    """Matter arriving somewhere never left where it came from.
+
+    Live (chat 69 ⎇49, turn 70): "You gulp the remainder of her seed still in
+    her mouth" produced exactly one op -- an `add` into the stomach -- and no
+    removal, because the vocabulary has no way to say where matter LEFT. Ten
+    turns later the mouth deposits were still standing and still being fed to
+    the recipient every beat, by which point she was elsewhere entirely. The
+    same shape swallowed twice more at turns 67 and 68.
+
+    The floor cannot depend on the Director emitting the paired removal: it
+    emitted 5 removals against 38 deposits across the whole stored corpus, and
+    none at all after turn 38.
+    """
+
+    def _holding(self, **over):
+        # Foreign matter standing in Vessel's reservoir, put there by Emitter.
+        scene = _scene()
+        apply_substance_ops(scene, [_release(
+            target="Vessel", placement="interior",
+            target_interior="reservoir", **over)])
+        return scene
+
+    def _move(self, **over):
+        op = {"op": "add", "source": "Vessel", "source_part": "reservoir",
+              # Deliberately a DIFFERENT name for the same matter: the
+              # Director renamed one substance three times across turns
+              # 61/66/70 ("cum", "seed", "Elyra Voss seed"), so a rule keyed
+              # on the substance name would never once have fired.
+              "substance": "settled coolant", "target": "Vessel",
+              "placement": "interior", "target_interior": "sump",
+              "amount": "the remainder"}
+        op.update(over)
+        return op
+
+    def test_moving_matter_out_of_a_region_empties_it(self):
+        scene = self._holding()
+        apply_substance_ops(scene, [self._move()])
+
+        interiors = {record["target_interior"]
+                     for record in scene["substances"]}
+        assert interiors == {"sump"}
+
+    def test_the_destination_still_receives_it(self):
+        scene = self._holding()
+        apply_substance_ops(scene, [self._move()])
+
+        [record] = scene["substances"]
+        assert record["substance"] == "settled coolant"
+        assert record["target_interior"] == "sump"
+
+    def test_the_consumption_is_reported(self):
+        scene = self._holding()
+        warnings = []
+        apply_substance_ops(scene, [self._move()], report=warnings.append)
+
+        assert any("reservoir" in warning for warning in warnings)
+
+    def test_a_body_own_product_at_that_region_is_not_consumed(self):
+        """The discriminator that keeps this from eating a gland: matter a
+        body produced AT that region is a source, not a stock, and it does not
+        stop existing because some of it was moved. Only foreign matter --
+        deposited there by something else -- is a quantity that can be used
+        up."""
+        scene = self._holding(source="Vessel")
+        apply_substance_ops(scene, [self._move()])
+
+        interiors = {record["target_interior"]
+                     for record in scene["substances"]}
+        assert interiors == {"reservoir", "sump"}
+
+    def test_matter_in_a_different_region_is_untouched(self):
+        scene = self._holding()
+        apply_substance_ops(scene, [self._move(source_part="intake")])
+
+        interiors = {record["target_interior"]
+                     for record in scene["substances"]}
+        assert interiors == {"reservoir", "sump"}
+
+    def test_another_body_matter_is_untouched(self):
+        """Conservation is per body. Emitter releasing from its own nozzle
+        must not empty the reservoir of whoever it last filled."""
+        scene = self._holding()
+        apply_substance_ops(scene, [{
+            "op": "add", "source": "Emitter", "source_part": "reservoir",
+            "substance": "settled coolant", "target": "Witness",
+            "placement": "surface", "target_part": "shell"}])
+
+        interiors = {record.get("target_interior")
+                     for record in scene["substances"]}
+        assert "reservoir" in interiors
+
+    def test_matter_still_leaves_when_the_destination_already_holds_a_pool(self):
+        """Found by replaying the live ledger: pooling ran first and returned
+        early, so a swallow into a stomach that had already received some
+        never emptied the mouth. Matter moved is matter moved -- whether the
+        destination is a fresh row or one already standing there says nothing
+        about the origin."""
+        scene = self._holding()
+        apply_substance_ops(scene, [self._move()])
+        apply_substance_ops(scene, [_release(
+            target="Vessel", placement="interior",
+            target_interior="reservoir")])
+        apply_substance_ops(scene, [self._move()])
+
+        interiors = {record["target_interior"]
+                     for record in scene["substances"]}
+        assert interiors == {"sump"}
+
+    def test_an_ordinary_release_still_deposits_normally(self):
+        """The common case has no standing stock at the source region at all,
+        and must not become a special case."""
+        scene = _scene()
+        apply_substance_ops(scene, [_release()])
+
+        assert len(scene["substances"]) == 1
+
+
+class TestARegionBelongsToOneBody:
+    """A part slot filled with a region of the OTHER body.
+
+    The prompt has forbidden this in words since turn 63, and the only test
+    guarding it asserted that the sentence is still in the prompt. Live (chat
+    69 ⎇49, turn 62), the very next beat stored `target: Hinami, target_part:
+    glans` -- while the contact ledger recorded `glans` three times over as
+    Elyra Voss's. A bare prohibition is not a floor; the scene already knew
+    whose part it was.
+    """
+
+    def _scene_with_owned_parts(self):
+        # The standing ledgers ARE the evidence: Emitter has a nozzle,
+        # Vessel has an inlet and a reservoir.
+        scene = _scene()
+        scene["substances"] = []
+        return scene
+
+    def test_a_part_the_scene_owns_for_another_body_is_not_stored_on_this_one(self):
+        scene = self._scene_with_owned_parts()
+        warnings = []
+        result = apply_substance_ops(scene, [_release(
+            source_part="vent", target="Vessel", placement="surface",
+            target_part="nozzle")], report=warnings.append)
+
+        [record] = result["substances"]
+        assert record["target"] == "Vessel"
+        assert record["target_part"] == ""
+        assert any("nozzle" in warning for warning in warnings)
+
+    def test_the_record_survives_the_repair(self):
+        """Re-attribute, never drop: the deposit itself happened, and turn
+        66 of the same story showed what silent discarding costs -- a whole
+        release lost to a topology check with only a warning behind it."""
+        scene = self._scene_with_owned_parts()
+        result = apply_substance_ops(scene, [_release(
+            source_part="vent", target="Vessel", placement="surface",
+            target_part="nozzle")])
+
+        assert len(result["substances"]) == 1
+        assert result["substances"][0]["substance"] == "coolant"
+
+    def test_a_region_both_bodies_have_is_left_alone(self):
+        """The discriminator that makes this safe without an anatomy
+        vocabulary: two bodies both having a casing is the ordinary case, and
+        only a region the scene has recorded on others and never on THIS body
+        is evidence of a mis-slotted part."""
+        scene = self._scene_with_owned_parts()
+        scene["contacts"] = scene["contacts"] + [{
+            "actor": "Emitter", "actor_part": "casing",
+            "target": "Vessel", "target_part": "casing",
+            "manner": "press", "relation": "surface", "motion": "settled"}]
+        result = apply_substance_ops(scene, [_release(
+            source_part="vent", target="Vessel", placement="surface",
+            target_part="casing")])
+
+        assert result["substances"][0]["target_part"] == "casing"
+
+    def test_an_unrecorded_part_is_left_alone(self):
+        """Anatomy is open-ended and mostly unrecorded. Silence is not
+        evidence of anything, so a part the ledgers have never seen stands."""
+        scene = self._scene_with_owned_parts()
+        result = apply_substance_ops(scene, [_release(
+            source_part="vent", target="Vessel", placement="surface",
+            target_part="flange")])
+
+        assert result["substances"][0]["target_part"] == "flange"
+
+    def test_the_target_own_part_is_left_alone(self):
+        scene = self._scene_with_owned_parts()
+        result = apply_substance_ops(scene, [_release(
+            source_part="vent", target="Vessel", placement="surface",
+            target_part="inlet")])
+
+        assert result["substances"][0]["target_part"] == "inlet"
