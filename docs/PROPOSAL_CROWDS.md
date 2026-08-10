@@ -257,6 +257,45 @@ through the same provisional-claim path as anything else offscreen invents.
   crowd members because it is cheaper, the feature is eating the thing it was
   meant to support. Watch for a fall in named presences after it lands.
 
+## 7a. Built, 2026-08-10 — and what the building changed
+
+All five steps are in the tree. `crowds.py` is the pure module (bands, derived
+density, terrain, drift, splitting, emergence); `StateDiff.crowd_ops` is how a
+Director says it; `commit.commit_crowds` is the one persistence boundary;
+`agents.common.crowds_for_room` is the per-observer surface; and
+`tools/crowd_drive.py` walks the whole chain against a scratch database.
+
+Three things the argument above got wrong, found by building it:
+
+**`spatial._ROOM_COST` is not a size rank.** §5a says it is. It collapses tiny,
+small, `""` and medium all to 1, because it prices WALKING rather than
+describing extent — reusing it would have made a crush in a broom cupboard read
+the same as one in a hall. `crowds.ROOM_SIZES` is a real rank, and a test
+asserts the two differ.
+
+**A heading spent in the beat that declared it makes drift unreachable.** The
+obvious order — apply the Director's ops, then advance — moves the crowd inside
+the same commit, so `crowds_for_room` reports `drift: null` on every turn that
+will ever be perceived. The whole of §5a becomes machinery the Director is
+asked to resolve and can never be shown. The order is inverted: last beat's
+flow is spent first. A heading therefore lives for exactly one beat of
+perception, which is also the honest reading of "a market thins toward the
+gate" — you watch it happen.
+
+**Emergence needed almost no new machinery.** §4 reads as though a person must
+be minted. `commit.track_background_presences` already discovers anyone given a
+dialogue line or an entity def, so emergence records only what that path cannot
+know: that they came out of the crowd. Building a second writer would have been
+building a second identity space, which is what §3's `uid` rule exists to stop.
+
+Splitting needed one extra disambiguator. Band-preserving means both halves
+share band, composition and room, so their uid material was identical to the
+parent's but for the turn — and a split on the minting turn collided. The
+recorded origin breaks the tie.
+
+§7's falsifiers are all still unrun: they need a playthrough, and
+`tools/fire_rates.py` is where emergences-per-crowd-turn should be read.
+
 ## 8. Build order
 
 1. **A crowd that exists.** Sits in a room, visible to perception as one body,
