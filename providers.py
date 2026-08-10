@@ -49,6 +49,79 @@ cancel_event = contextvars.ContextVar("cancel_event", default=None)
 # reasoning to another.
 last_reasoning = contextvars.ContextVar("last_reasoning", default=None)
 
+# WHY the model stopped, per context. Every provider says so on the response --
+# OpenAI-compatible `finish_reason`, Anthropic `stop_reason` -- and this module
+# used to drop all of it at the response boundary, which made a recoverable
+# failure indistinguishable from an unrecoverable one.
+#
+# It matters because "the model ran out of output budget" and "the model wrote
+# nonsense" arrive downstream as the same thing: a JSON parse error. The first
+# is a LENGTH problem and one more call with more room fixes it; the second is
+# a content problem and more room changes nothing. Two beats of a 14-beat
+# real-model playthrough died on a cut-off object (`Expecting ',' delimiter at
+# position 5042`), and the repair ladder that was supposed to save them re-asked
+# the same model for the same object on the same budget.
+#
+# A ContextVar for the same reason `last_reasoning` is one: the pipeline fans
+# out across a thread pool with contextvars.copy_context(), and a plain global
+# would report one stage's truncation against another's response.
+last_finish_reason = contextvars.ContextVar(
+    "last_finish_reason",
+    default=None,
+)
+
+# Every spelling of "I hit the output ceiling" seen across the dialects:
+# OpenAI/aggregators `length`, Anthropic `max_tokens`, and the variants some
+# OpenRouter upstreams pass through in `native_finish_reason`.
+_LENGTH_STOPS = frozenset({
+    "length",
+    "max_tokens",
+    "max_output_tokens",
+    "model_length",
+    "max_length",
+})
+
+
+def _capture_finish_reason(value):
+    """Stash why the last completion stopped, under whichever key it arrived by.
+
+    Called with None at the start of every completion: a stale `length` left
+    standing from an earlier call on this thread would report the NEXT
+    response as truncated, and a false truncation spends a whole escalated
+    retry on an output that was merely wrong.
+    """
+    try:
+        text = str(value or "").strip().lower()
+        last_finish_reason.set(text or None)
+    except Exception:
+        pass
+
+
+def response_truncated():
+    """Did the last completion on this context stop because it ran out of room?
+
+    Authoritative where it answers True -- the provider is stating it. False
+    covers both "stopped normally" and "the provider said nothing", so a
+    caller must not read False as proof the response is whole; the JSON's own
+    shape is the second witness (llm_quality.output_ran_out_of_room).
+    """
+    return (last_finish_reason.get() or "") in _LENGTH_STOPS
+
+
+def _capture_choice_finish(parsed):
+    """The finish reason off an OpenAI-compatible response body."""
+    choice = (parsed.get("choices") or [{}])[0] if isinstance(parsed, dict) else {}
+    if not isinstance(choice, dict):
+        return
+    # OpenRouter reports its own normalized `finish_reason` and the upstream's
+    # verbatim `native_finish_reason`; either one saying length is length.
+    for key in ("finish_reason", "native_finish_reason"):
+        value = choice.get(key)
+        if value:
+            _capture_finish_reason(value)
+            if response_truncated():
+                return
+
 
 def _capture_reasoning(message):
     """Stash a thinking model's trace, under whichever key it arrived by."""
@@ -253,7 +326,15 @@ def _guarded_sink(sink):
 
     return guarded
 
-def _generation_notice(event: dict):
+def generation_notice(event: dict):
+    """Tell the live turn view that this step is being generated again.
+
+    Public rather than private because the reasons a step gets regenerated are
+    not all inside this module: `llm_quality` re-asks for a response that came
+    back truncated, and a retry nobody can see is the failure mode this repo
+    keeps rediscovering. `agents/runtime` tags the event with the step key on
+    its way to the browser, so no caller has to know which step it is in.
+    """
     sink = generation_event_sink.get()
 
     if sink:
@@ -682,16 +763,65 @@ def _apply_reasoning_effort(body, prov, role):
     return body
 
 
-def _clamp_max_tokens(max_tokens):
+def _clamp_max_tokens(max_tokens, ceiling=None):
     """Cap a requested output budget at the configured ceiling. Only ever
     lowers -- a caller asking for less (a 1000-token utility call) keeps its
-    own smaller budget."""
-    ceiling = max_output_tokens()
+    own smaller budget.
+
+    `ceiling` is the one documented way past that, and it only ever RAISES: it
+    is what a caller recovering from a length-truncated response passes so the
+    retry can ask for the room the first call did not have. Without it the
+    clamp made the recovery impossible to express -- the configured ceiling is
+    exactly the wall the response hit, so re-requesting it re-hits it. Still
+    hard-capped at MAX_OUTPUT_TOKENS_MAX, because the reason the clamp exists
+    (an unreachable ceiling locks callers out of models entirely) does not stop
+    applying during a retry.
+    """
+    ceiling_value = max_output_tokens()
+    try:
+        raised = int(ceiling)
+    except (TypeError, ValueError):
+        raised = 0
+    if raised > ceiling_value:
+        ceiling_value = min(raised, MAX_OUTPUT_TOKENS_MAX)
     try:
         requested = int(max_tokens)
     except (TypeError, ValueError):
-        return ceiling
-    return max(1, min(requested, ceiling))
+        return ceiling_value
+    return max(1, min(requested, ceiling_value))
+
+
+# A FIXED addition, not a multiplier, because the shortfall is fixed. A
+# reasoning model bills its thinking as output (maze arm A11: 11-13k tokens of
+# deliberation, then nothing left for the answer), and what got squeezed out is
+# the answer -- which by the note above is never more than one stage's worth.
+# So one stage's worth is exactly what a retry needs, whatever the ceiling was.
+#
+# Doubling would be the obvious rule and is the wrong one: it scales the retry
+# with the setting rather than with the miss, so a host who has already raised
+# the ceiling to 40000 gets an 80000-token request, and an unreachable
+# max_tokens is precisely what the ceiling above exists to prevent -- providers
+# reject a model outright when input + max_tokens exceeds its context window.
+_ESCALATION_HEADROOM = MAX_OUTPUT_TOKENS_DEFAULT
+
+
+def escalated_max_tokens(requested):
+    """The budget for ONE retry after a length-truncated response, or 0.
+
+    0 means "no headroom left" -- the failed call was already at the absolute
+    cap -- and the caller must then stop rather than retry at the same size,
+    which is the loop this function exists to avoid.
+
+    The configured ceiling is only overshot by a call that was already sitting
+    on it. A 1000-token utility call that truncates escalates up to the host's
+    ceiling and stops there: it asked for less deliberately, and "lower it to
+    hard-cap spend per call" has to keep meaning that.
+    """
+    current = _clamp_max_tokens(requested)
+    configured = max_output_tokens()
+    cap = MAX_OUTPUT_TOKENS_MAX if current >= configured else configured
+    raised = min(current + _ESCALATION_HEADROOM, cap)
+    return raised if raised > current else 0
 
 ROLES = [
     "default",
@@ -1180,6 +1310,13 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
                 raise LLMError(f"provider stream error: {msg}", 0, True)
             if j.get("usage"):
                 usage = j["usage"]
+            # The finish reason rides the LAST chunk of a stream, usually one
+            # carrying an empty delta. This is the branch the pipeline
+            # actually runs (the sink is set for the live UI), so capturing
+            # only in the non-streaming branch would leave the signal dead
+            # exactly where it is needed -- the same way reasoning capture was
+            # dead here for a release.
+            _capture_choice_finish(j)
             _delta = (j.get("choices") or [{}])[0].get("delta", {})
             # Reasoning arrives on its OWN delta key, never in `content`, and
             # it is the pipeline's real path -- the sink is set for the live
@@ -1238,6 +1375,10 @@ def _sse_anthropic(base, headers, body, sink, role=None, model=None):
                     usage, (j.get("message") or {}).get("usage"))
             elif j.get("type") == "message_delta":
                 usage = _merge_usage(usage, j.get("usage"))
+                # Anthropic reports `max_tokens` here rather than on a choice.
+                stop = (j.get("delta") or {}).get("stop_reason")
+                if stop:
+                    _capture_finish_reason(stop)
             if j.get("type") == "content_block_delta":
                 d = j.get("delta", {}).get("text")
                 if d:
@@ -1257,10 +1398,11 @@ def chat_complete(
     sampler=None,
     retry_config=None,
     candidate_offset=0,
+    token_ceiling=None,
 ):
     _check_cancel()
     retry_config = retry_config or DEFAULT_RETRY
-    max_tokens = _clamp_max_tokens(max_tokens)
+    max_tokens = _clamp_max_tokens(max_tokens, ceiling=token_ceiling)
 
     candidates = resolve_role_candidates(role)
 
@@ -1282,7 +1424,7 @@ def chat_complete(
         _check_cancel()
 
         if attempt > 0:
-            _generation_notice({
+            generation_notice({
                 "type": "generation_reset",
                 "attempt": attempt + 1,
                 "candidate": candidate_offset,
@@ -1412,6 +1554,10 @@ def _chat_complete_once(
     resolved=None,
 ):
     _check_cancel()
+    # Clear before the request, not after: every path below either records a
+    # reason or records nothing, and "nothing" must read as unknown rather
+    # than as the previous call's answer.
+    _capture_finish_reason(None)
 
     prov, model, cfg = resolved or resolve_role(role)
     t, merged = _merge_samplers(cfg, sampler, temperature)
@@ -1473,6 +1619,7 @@ def _chat_complete_once(
 
         parsed = response.json()
         _log_usage(role, model, _t0, parsed.get("usage"))
+        _capture_finish_reason(parsed.get("stop_reason"))
         return "".join(
             block.get("text", "")
             for block in parsed.get("content", [])
@@ -1590,6 +1737,7 @@ def _chat_complete_once(
             True,
         )
     _capture_reasoning(parsed["choices"][0].get("message"))
+    _capture_choice_finish(parsed)
     content = parsed["choices"][0]["message"]["content"]
     # Some models (nemotron:thinking observed) honour response_format=json_object
     # by returning a syntactically-valid SKELETON with every string value set to
@@ -1604,6 +1752,7 @@ def _chat_complete_once(
         if alt.status_code < 400:
             parsed = alt.json()
             _capture_reasoning(parsed["choices"][0].get("message"))
+            _capture_choice_finish(parsed)
             content = parsed["choices"][0]["message"]["content"]
     _log_usage(role, model, _t0, parsed.get("usage"))
     return content
@@ -1642,7 +1791,7 @@ async def chat_complete_async(
             _check_cancel()
 
             if not first_attempt:
-                _generation_notice({
+                generation_notice({
                     "type": "generation_reset",
                     "attempt": attempt + 1,
                     "candidate": (
@@ -1708,6 +1857,7 @@ async def _chat_complete_async_once(
     resolved=None,
 ):
     _check_cancel()
+    _capture_finish_reason(None)
     prov, model, cfg = resolved or resolve_role(role)
     t, merged = _merge_samplers(cfg, sampler, temperature)
     base = prov["base_url"].rstrip("/")
@@ -1730,6 +1880,7 @@ async def _chat_complete_async_once(
                 raise LLMError(f"{prov['name']}: HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
             parsed = r.json()
             _log_usage(role, model, _t0, parsed.get("usage"))
+            _capture_finish_reason(parsed.get("stop_reason"))
             return "".join(b.get("text", "") for b in parsed.get("content", []))
 
     body = {"model": model, "temperature": t, "max_tokens": max_tokens, "messages": [_openai_system_message(system, prov, model), {"role": "user", "content": user}]}
@@ -1774,6 +1925,7 @@ async def _chat_complete_async_once(
         parsed = r.json()
         _log_usage(role, model, _t0, parsed.get("usage"))
         _capture_reasoning((parsed.get("choices") or [{}])[0].get("message"))
+        _capture_choice_finish(parsed)
         return parsed["choices"][0]["message"]["content"]
 
 async def _sse_openai_async(url, headers, body, sink, client, role=None, model=None):
@@ -1813,6 +1965,7 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
                 raise LLMError(f"provider stream error: {msg}", 0, True)
             if j.get("usage"):
                 usage = j["usage"]
+            _capture_choice_finish(j)
             _delta = (j.get("choices") or [{}])[0].get("delta", {})
             _r = _delta.get("reasoning") or _delta.get("reasoning_content")
             if isinstance(_r, str) and _r:
@@ -1862,6 +2015,9 @@ async def _sse_anthropic_async(base, headers, body, sink, client, role=None, mod
                 usage = _merge_usage(usage, (j.get("message") or {}).get("usage"))
             elif j.get("type") == "message_delta":
                 usage = _merge_usage(usage, j.get("usage"))
+                stop = (j.get("delta") or {}).get("stop_reason")
+                if stop:
+                    _capture_finish_reason(stop)
             if j.get("type") == "content_block_delta":
                 d = j.get("delta", {}).get("text")
                 if d:
