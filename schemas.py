@@ -2350,6 +2350,26 @@ class CharacterOutput(LenientModel):
     # Interior depth (all optional; the deterministic floors in affect.py apply
     # at commit). Kept as permissive dicts/lists -- affect.py validates/normalizes.
     intent_ops: list[dict] = Field(default_factory=list)
+    # Boundary-only updates to this character's one or two held projects:
+    # {op:'adopt|displace|satisfy', id, project, about, satisfied_when, why}.
+    # Validated by affect.apply_project_ops, which has always been complete.
+    #
+    # THIS FIELD DID NOT EXIST, and the whole tier died on that. The character
+    # prompt asks for `project_ops` by name in three places and prints its
+    # shape in the required JSON; commit.py reads
+    # `own_result.get("project_ops")`; affect.py implements adopt/displace/
+    # satisfy with a cap, a legibility floor and a required reason for giving
+    # one up. Pydantic dropped every op in between, silently, because the model
+    # had no field to put them in -- so a character could be asked for a
+    # project, answer, and be heard saying nothing.
+    #
+    # Somebody had already gone hunting for the silence and got close: the
+    # `project_review` invitation used to be gated on already holding a
+    # project, which made the occasion require the thing it would create. That
+    # was found and fixed. The measurement it left behind -- "0 of 14 live
+    # banks have ever held a project" -- did not move, because the gate was
+    # never the only thing shut.
+    project_ops: list[dict] = Field(default_factory=list)
     # A voluntary decision by this character to begin or cease following a
     # target. Omit to preserve the current relation.
     follow_op: Optional[dict] = None

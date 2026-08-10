@@ -134,3 +134,62 @@ def test_the_engine_still_never_adopts_anything_itself():
     for verb in ("append(", "projects.append", "adopt"):
         assert "projects.append" not in src
     assert src.count("return") <= 2
+
+
+class TestTheAnswerCouldNotBeHeardEither:
+    """The gate above was real and was not the only one shut.
+
+    The occasion was reopened and the measurement did not move, because
+    `CharacterOutput` had no `project_ops` field at all. The character prompt
+    asks for it by name in three places and prints its shape in the required
+    JSON; `commit.py` reads `own_result.get("project_ops")`;
+    `affect.apply_project_ops` implements adopt, displace and satisfy with a
+    cap, a legibility floor and a reason required for giving one up. Pydantic
+    dropped every op in the gap between, silently, because there was nowhere
+    to put them -- so a character could be asked for a project, answer, and be
+    heard saying nothing.
+
+    Both halves are pinned here. Reopening one occasion and leaving the other
+    shut is how a tier gets fixed twice and stays dead.
+    """
+
+    def test_a_declared_project_survives_validation(self):
+        from schemas import CharacterOutput
+
+        out = CharacterOutput(**{"project_ops": [
+            {"op": "adopt", "project": "find who emptied the ledger",
+             "about": "world", "satisfied_when": "the name is known"}]})
+        kept = out.dict()["project_ops"]
+        assert len(kept) == 1
+        assert kept[0]["satisfied_when"] == "the name is known"
+
+    def test_the_field_the_prompt_names_is_the_field_the_model_has(self):
+        """Prompt and schema disagreeing about a field name is the alpha 7.2
+        lore-generator bug. This one cost a whole tier of psychology."""
+        import prompts
+        from schemas import CharacterOutput
+
+        assert "project_ops" in prompts.DEFAULT_PROMPTS["character"]
+        assert "project_ops" in CharacterOutput().dict()
+
+    def test_what_commit_reads_is_what_validation_keeps(self):
+        """The reader was always correct about a key that was always absent."""
+        import inspect
+
+        import commit
+        assert 'own_result.get("project_ops")' in inspect.getsource(commit)
+
+    def test_an_adopted_project_reaches_the_ledger(self):
+        """End to end through the real applier, since every link in this chain
+        has now been wrong at least once."""
+        import affect
+        from schemas import CharacterOutput
+
+        ops = CharacterOutput(**{"project_ops": [
+            {"op": "adopt", "project": "find who emptied the ledger",
+             "about": "world", "satisfied_when": "the name is known"}]
+        }).dict()["project_ops"]
+        projects, former, warnings = affect.apply_project_ops([], [], ops, 3)
+        assert [p["project"] for p in projects] == \
+            ["find who emptied the ledger"]
+        assert former == [] and not warnings
