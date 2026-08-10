@@ -916,6 +916,7 @@ def _observer_scene_payload(scene, perceiver, body_labels=None):
         entry["sensation"] = contact_sensation(contact, you=name, scene=scene)
         contacts.append(entry)
     poses = {}
+    posed_subjects = []
     for subject, raw_pose in (scene.get("poses") or {}).items():
         if not isinstance(raw_pose, dict):
             continue
@@ -940,6 +941,25 @@ def _observer_scene_payload(scene, perceiver, body_labels=None):
                 entry.pop("relative_to", None)
                 entry.pop("relation", None)
         poses[key] = entry
+        posed_subjects.append(str(subject))
+    # Legacy scenes can predate the pose ledger. Absence used to be left as
+    # an implicit blank, which models routinely completed as a generic
+    # standing/in-front arrangement. Make the uncertainty explicit in the
+    # observer payload without fabricating a world-state pose. Restrict the
+    # roster to known body labels so room objects are not called unposed.
+    pose_unknown = []
+    body_subjects = [name] + [
+        str(subject) for subject in (body_labels or {})
+        if str(subject) in visible_names
+    ]
+    for subject in body_subjects:
+        if any(same_subject(scene, subject, posed)
+               for posed in posed_subjects):
+            continue
+        label = ("you" if same_subject(scene, subject, name) else
+                 (body_labels or {}).get(subject, subject))
+        if label not in pose_unknown:
+            pose_unknown.append(label)
     substances = []
     for record in (scene.get("substances") or []):
         if not isinstance(record, dict):
@@ -1008,6 +1028,7 @@ def _observer_scene_payload(scene, perceiver, body_labels=None):
         "entities": _perceptible_entities(scene, [name]),
         "contacts": contacts,
         "poses": poses,
+        "pose_unknown": pose_unknown,
         "substances": substances,
         "scales": scales,
         "contained": contained,
@@ -1064,6 +1085,51 @@ def _novel_visible_appearances(scene, appearances, visual_channels, *,
         and (not _recognizes(name, set(recognized or []))
              or any(same_subject(scene, name, item) for item in changed))
     }
+
+
+_UNKNOWN_POSE_PREDICATE = re.compile(
+    r"^(?:is|are)\s+(?:(?:currently|directly)\s+)?(?:standing|sitting|seated|"
+    r"lying|reclining|kneeling|crouching|hovering|floating|hanging|perched|"
+    r"leaning|above|below|beneath|under|over|before|behind|beside|astride|"
+    r"against|in\s+front\s+of)\b|^(?:stands?|sits?|lies?|reclines?|kneels?|"
+    r"crouches?|hovers?|floats?|hangs?|perches?|straddles?|leans?)\b",
+    re.I,
+)
+
+
+def _strip_unknown_pose_claims(view, pose_unknown):
+    """Remove static pose assertions for bodies with no pose authority.
+
+    Action-onset subsequently re-injects every declared action from structured
+    sequence data, so a genuine stand/sit/lie action survives. What is removed
+    here is only the model-authored ambient default that preceded it. The
+    syntax is deliberately subject-led: "Mara's voice stands out" is not a
+    claim about Mara's body and must remain.
+    """
+    text = str(view or "")
+    if not text.strip() or not pose_unknown:
+        return view, []
+    parts = re.split(r"(?<=[.!?])\s+|\n+", text)
+    kept, dropped = [], []
+    for sentence in parts:
+        raw = sentence.strip()
+        remove = False
+        for label in pose_unknown:
+            subject = str(label or "").strip()
+            if not subject:
+                continue
+            match = re.match(
+                rf"^{re.escape(subject)}(?:['’]s body)?"
+                rf"(?:\s*,[^.!?]{{0,220}},)?\s+(.+)$",
+                raw, re.I)
+            if match and _UNKNOWN_POSE_PREDICATE.search(match.group(1)):
+                remove = True
+                break
+        if remove:
+            dropped.append(raw)
+        elif raw:
+            kept.append(raw)
+    return " ".join(kept).strip(), dropped
 
 
 # Concurrency for the per-observer perception fan-out. Capped rather than
@@ -2839,6 +2905,20 @@ def perception_act(ctx, nonce):
                 ctx.warnings.append(
                     f"perception_act: scrubbed unearned identity {leaked} "
                     f"from the view of {p['name']}")
+        # Missing legacy pose is explicit uncertainty, not a blank for the
+        # model to complete. Strip any subject-led ambient posture it invented;
+        # the authoritative declared sequence is injected later, so a real
+        # stand/sit/lie action on this beat is restored in canonical order.
+        pose_labels = _observer_body_labels(
+            p, known, {p_name: p_visible}, include=[p.get("name")])
+        pose_unknown = _observer_scene_payload(
+            sc, p, body_labels=pose_labels).get("pose_unknown") or []
+        view, unsupported_poses = _strip_unknown_pose_claims(
+            view, pose_unknown)
+        for sentence in unsupported_poses:
+            ctx.warnings.append(
+                "perception_act: dropped unsupported pose from view "
+                f"'{pid}': {sentence[:120]!r}")
         # Pass 1 applies the identity floor directly rather than through
         # `_scrub_view_for`, so it needs this explicitly -- and it is the pass
         # that most needs it. The act view is written closest to the Director's

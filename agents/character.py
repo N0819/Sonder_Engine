@@ -14,6 +14,7 @@ from character_schema import (
     cast_entity_id,
     character_name_from_text,
     character_abilities,
+    character_embodiment_capabilities,
     character_curiosity,
     character_interoception,
     character_name,
@@ -2644,6 +2645,10 @@ def character_step(ctx, cid, nonce):
         "sense_profile": character_senses(sh),
         "interoception": character_interoception(sh),
         "abilities": character_abilities(sh),
+        # Hidden from observers does not mean hidden from the body itself.
+        # This is the actor-side authority for conditional physiological,
+        # mechanical, magical, or otherwise embodied material outputs.
+        "embodiment_capabilities": character_embodiment_capabilities(sh),
         # Its own clothing, by region. A character knows what it is wearing
         # and what of itself is uncovered -- that is interoception, not
         # observation -- so this is the one place the region view is of the

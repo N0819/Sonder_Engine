@@ -10,7 +10,8 @@ from __future__ import annotations
 from agents.director import (_evidence_present, _normalize_diff_shape,
                              _opening_pose_snapshots)
 from agents.perception import (_novel_visible_appearances,
-                               _observer_scene_payload)
+                               _observer_scene_payload,
+                               _strip_unknown_pose_claims)
 from prompts import DEFAULT_PROMPTS
 from schemas import DirectorEstablish, StateDiff, validate_llm_output_strict
 from spatial import merge_scene_with_diff, pose_facts
@@ -141,6 +142,30 @@ class TestObserverProjection:
             "relative_to": "you",
         }
         assert "standing" not in str(payload["poses"]["Ivo"]).casefold()
+        assert payload["pose_unknown"] == ["Witness"]
+
+    def test_legacy_missing_pose_is_explicit_uncertainty_not_a_default(self):
+        scene = _scene()
+        scene["poses"] = {}
+        payload = _observer_scene_payload(
+            scene,
+            {"name": "Mara", "room": "lab", "visible_rooms": []},
+            {"Mara": "you", "Ivo": "Ivo"},
+        )
+        assert payload["poses"] == {}
+        assert payload["pose_unknown"] == ["you", "Ivo"]
+
+    def test_unsupported_static_pose_is_removed_but_other_detail_survives(self):
+        view, dropped = _strip_unknown_pose_claims(
+            "Ivo, a traveler in a red coat, stands before you. "
+            "His sleeve is wet. Mara's voice stands out clearly.",
+            ["Ivo", "Mara"],
+        )
+        assert "stands before" not in view
+        assert "His sleeve is wet." in view
+        assert "Mara's voice stands out clearly." in view
+        assert dropped == [
+            "Ivo, a traveler in a red coat, stands before you."]
 
     def test_unseen_relative_identity_is_not_leaked(self):
         scene = _scene()
@@ -173,6 +198,7 @@ class TestObserverProjection:
         perception = DEFAULT_PROMPTS["perception"]
         resolve = DEFAULT_PROMPTS["director_resolve"]
         assert "Presence and visibility do not imply standing" in perception
+        assert "scene.pose_unknown" in perception
         assert "fresh roll-call of age, beauty, species traits" in perception
         assert "BODY POSE AND RELATIVE ARRANGEMENT" in resolve
         assert "Never default an unspecified pose to standing" in resolve

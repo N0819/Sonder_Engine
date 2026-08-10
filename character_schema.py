@@ -1127,6 +1127,19 @@ def character_interoception(sheet: dict) -> dict:
         normalize_character_data(sheet).get("embodiment", {}).get("interoception", {})
     )
 
+
+def character_embodiment_capabilities(sheet: dict) -> list[dict]:
+    """Latent/conditional facts a character necessarily knows about itself.
+
+    These are hidden from ordinary observers, not from the body that owns
+    them.  Keeping the accessor separate from visible appearance prevents a
+    private capability from leaking merely because another character can see
+    its owner.
+    """
+    return copy.deepcopy(
+        normalize_character_data(sheet).get("embodiment", {}).get("latent", [])
+    )
+
 def character_abilities(sheet: dict) -> list[dict]:
     return copy.deepcopy(normalize_character_data(sheet).get("competence", {}).get("abilities", []))
 

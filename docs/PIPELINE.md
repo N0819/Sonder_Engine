@@ -216,6 +216,15 @@ Resolve maps each ref back to the exact ledger direction and parts, projects
 those removals before its own contact diff, and rejects a stale re-add of the
 same contact. Other simultaneous contacts survive unless separately named.
 
+A completed material output has the same actor-ownership guarantee. The
+character sees its own conditional embodiment capabilities and can return an
+additive `material_effects` record with the exit part, established material,
+and known destination. The host canonicalizes `source` to that character and
+accepts only add/release/deposit operations. Resolve receives the declaration
+for prose and state projection; if it omits the op, code validates it through
+the same topology and appends it. A hedonic `released` flag alone never creates
+matter—the character must connect completion to an authored capability.
+
 Non-discrete matter uses a sibling relation rather than abusing contact or
 inventory. `state_diff.substance_ops` records an established material's source,
 destination, placement (`surface|interior|contained|room`), amount, and optional
@@ -319,6 +328,12 @@ its next character turn without replacing normal recall. Pain and pleasure are
 independent and do not require survival mode. Multiple independent character
 steps may run in parallel.
 
+`self.embodiment_capabilities` contains conditional facts hidden from ordinary
+observers but necessarily known by their owner. When a chosen completed process
+has an established non-discrete output, `material_effects` carries that
+actor-owned physical consequence beside the public sequence instead of leaving
+it trapped in private appraisal/hedonic state.
+
 Recent memory reaches this step in epistemically separate lanes. The
 chronological `recent_episodes` stream contains first-hand experience only,
 with at most one episode formed per beat; durable received lines travel in
@@ -370,6 +385,9 @@ would report the divergence while still committing the stale relation.
 Substance entries likewise carry their material, target, placement, and
 enclosing interior. Reconciliation treats a completed deposit/removal as its
 own evidence category and retains `substance_ops` through additive repair.
+Completed `character_material_effects` are separately source-locked and
+topology-validated after resolve, so Director omission cannot erase an output
+the acting body itself declared.
 Body arrangement is the third spatial grain: positions choose the room,
 stations choose the anchor/nearness, and `poses` records posture, support,
 relative arrangement, and physical constraint. A touched pose is a complete
@@ -401,7 +419,10 @@ deterministic delivery site.
 
 Observer scene projections include only visible bodies' pose snapshots plus the
 observer's own. These are authoritative: visibility alone never licenses a
-default standing or “before you” relation. Full authored appearance is scoped
+default standing or “before you” relation. A legacy/current body without a
+snapshot appears in `pose_unknown`; action-onset removes model-authored static
+pose claims for that roster before restoring any genuine structured action.
+Full authored appearance is scoped
 to discovery or a structural visible change; familiar stable card description
 is withheld while dynamic clothing and exposed body regions remain available.
 This matters at the memory boundary because witnessed episodic memory is formed

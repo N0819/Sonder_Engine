@@ -2330,6 +2330,11 @@ class CharacterOutput(LenientModel):
     # object-part spelling, and cannot accidentally clear a different contact
     # between the same bodies.  Only op=remove is accepted downstream.
     contact_ops: list[dict] = Field(default_factory=list)
+    # Completed, self-owned production/deposit of non-discrete matter.  The
+    # character names only matter established by its own embodiment,
+    # equipment, ontology, or current state; the host supplies `source` and
+    # projects these through the objective substance ledger.
+    material_effects: list[dict] = Field(default_factory=list)
     manifest: dict = Field(default_factory=dict)
     # A drive rupture proposal -- only valid inside an engine-opened window;
     # commit (validate_drive_shift) decides whether it counts.
@@ -3362,6 +3367,7 @@ OUTPUT_EXAMPLES = {
         "response_candidates": [],
         "sequence": [],
         "contact_ops": [],
+        "material_effects": [],
         "active_state": {},
         "belief_updates": [],
         "association_updates": [],
