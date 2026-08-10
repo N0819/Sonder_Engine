@@ -76,9 +76,22 @@ def build_story(db):
     was one of four independent reasons nothing had ever fired, and a harness
     that inherited the defaults would faithfully reproduce that silence.
     """
-    cid = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+    # A REAL persona. Without one `persona_of` falls back to "The Stranger",
+    # who then appears in `positions` as a body nobody authored -- and, worse,
+    # the player has no room, so `schedule_profile_ticks` skips every epoch
+    # with `no_player_room` and the distance axis has no anchor at all. The
+    # medium rung cannot be reached by a story with no player in it.
+    persona_id = db.qi(
+        "INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
+        ("Nathan", json.dumps({
+            "name": "Nathan",
+            "appearance": "A traveller in a dust-coloured coat.",
+            "senses": "ordinary senses", "abilities": [],
+            "public_history": "", "private_history": ""}), "{}"))
+    cid = db.qi("INSERT INTO chats(name,scenario,created,persona_id) "
+                "VALUES(?,?,?,?)",
                 ("Story drive", "A gate town on the day the riders come.",
-                 time.time()))
+                 time.time(), persona_id))
 
     def cast(name, uid, status, agent=False):
         sheet = {
@@ -286,8 +299,12 @@ class Author:
 # ------------------------------------------------------------------ the play
 
 #: What a character says out loud on a given beat, by turn index.
+#: Keyed by TURN INDEX, which means inserting a beat silently re-aims every
+#: line after it -- and a plan whose speaker did not speak is refused, so the
+#: whole antagonist ladder went quiet the first time a beat was added here.
 SPEECH = {9: "I saw it barred from the inside.",
-          10: "They barred it against forty riders."}
+          11: "They barred it against forty riders.",
+          12: "I'll bar the west gate before dusk."}
 
 
 def standing_uid(cid):
@@ -368,12 +385,30 @@ def turns(author, cid):
         ("I ask Mora if she saw who did it.", resolve(
             resolved_event="Mora says what she saw.")),
         # Mora passes on what she is carrying. The Director now has the ids.
+        ("We walk back to the hall.",
+         resolve(resolved_event="The hall is where Kestrel waited.",
+                 diff={"positions": {"Nathan": HALL, "Mora": HALL}})),
         ("I ask her to tell Kestrel.", lambda payload: resolve(
             resolved_event="Mora tells Kestrel.",
             diff={"telling_ops": [
                 {"speaker": "Mora", "listener": "Kestrel",
                  "world_event_id": _first_report_id(payload)}]}
             if _first_report_id(payload) else {})),
+        ("I ask Kestrel what he means to do.",
+         resolve(resolved_event="Kestrel says what he intends.",
+                 diff={"offscreen_plan_ops": [{
+                     "op": "open", "plan_id": "bar-the-west-gate",
+                     "actor": "Kestrel",
+                     "objective": "Bar the west gate before dusk",
+                     "basis": "I'll bar the west gate before dusk",
+                     "stages": [{
+                         "stage_id": "bar-it",
+                         "trigger": {"after_seconds": 1800},
+                         "effect": {
+                             "what": "the west gate stands barred",
+                             "where": YARD, "due_seconds": 0,
+                             "witnessed": "the west gate was barred",
+                             "originator": "Kestrel"}}]}]})),
         ("I check the market again.",
          resolve(resolved_event="Fewer of them now.",
                  diff={"positions": {"Nathan": MARKET}})),
@@ -382,6 +417,16 @@ def turns(author, cid):
         ("I follow the ones going to the yard.",
          resolve(resolved_event="They spill through.",
                  diff={"positions": {"Nathan": YARD}})),
+        # Kestrel walks out. He has been beside the player for fifteen beats,
+        # so `subject_last_seen` anchors him NEAR rather than nowhere -- which
+        # is what lets the medium rung consider him at all. A dormant mind who
+        # was never co-present reads `elsewhere`, and major+elsewhere is `low`
+        # by design: "a major antagonist three continents away does not need
+        # medium".
+        ("I watch Kestrel go.",
+         resolve(resolved_event="Kestrel goes back through the gate.",
+                 diff={"cast_changes": [{"who": "Kestrel", "status": "dormant",
+                                         "reason": "walked out to the wall"}]})),
         ("I sit down and wait.", skip(3600, "an hour")),
         ("I sleep until dawn.", skip(28800, "the night")),
         ("I walk the wall.", resolve(resolved_event="The wall is cold.")),
