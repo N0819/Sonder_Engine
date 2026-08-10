@@ -521,6 +521,21 @@ class TestTheDirectorCanActuallySayIt:
         body = inspect.getsource(commit.commit_crowds)
         assert body.index("advance_crowds") < body.index("apply_ops")
 
+    def test_the_commit_counts_the_crowds_that_had_somewhere_to_be(self):
+        """`fire_rates` read "a crowd moved on the graph" as moves over every
+        standing crowd, so a fifty-one beat story where nobody ever declared a
+        heading reported 0/78 -- a healthy mechanism looking stuck, which is
+        this project's most expensive recurring discovery with its sign
+        flipped. A crowd with no heading was never a chance to move. The count
+        has to be taken from the state BEFORE `advance_crowds` spends them.
+        """
+        import inspect
+
+        import commit
+        body = inspect.getsource(commit.commit_crowds)
+        assert '"headed":' in body
+        assert body.index("headed = ") < body.index("advance_crowds(")
+
     def test_a_heading_lives_exactly_one_beat_of_perception(self):
         """Long enough to be seen and resolved, short enough that one
         declaration moves the crowd once."""

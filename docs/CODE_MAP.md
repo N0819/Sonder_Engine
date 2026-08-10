@@ -28,11 +28,11 @@
 | `background_claims.py` | 466 |  | `db` |
 | `canon_provenance.py` | 360 |  | — |
 | `carriers.py` | 602 |  | `character_schema`, `crowds`, `db`, `degradation`, `living_world`, `scene`, `spatial` |
-| `character_schema.py` | 1383 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `attire`, `schemas` |
+| `character_schema.py` | 1421 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `attire`, `schemas` |
 | `chat_archive.py` | 1110 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1132 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 6895 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 6908 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `couriers.py` | 1095 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
 | `db.py` | 1657 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
@@ -338,14 +338,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_character_data()` | 829 | 156 lines |
-| `default_character_data()` | 411 | 93 lines |
-| `_normalize_psychology()` | 258 | 80 lines |
-| `repair_character_shape()` | 770 | 57 lines |
-| `character_initial_active_state()` | 1184 | 48 lines |
-| `normalize_persona_data()` | 986 | 47 lines |
-| `_coerce_appearance()` | 691 | 45 lines |
-| `_as_profile_list()` | 38 | 36 lines |
+| `normalize_character_data()` | 867 | 156 lines |
+| `default_character_data()` | 449 | 93 lines |
+| `_normalize_psychology()` | 293 | 83 lines |
+| `repair_character_shape()` | 808 | 57 lines |
+| `_as_profile_list()` | 38 | 50 lines |
+| `character_initial_active_state()` | 1222 | 48 lines |
+| `normalize_persona_data()` | 1024 | 47 lines |
+| `_coerce_appearance()` | 729 | 45 lines |
 
 ### `chat_archive.py`
 
@@ -388,7 +388,7 @@
 | `prepare_scene_commit()` | 1889 | 411 lines |
 | `commit_world_entities()` | 2757 | 283 lines |
 | `track_background_presences()` | 3557 | 231 lines |
-| `_commit_all_locked()` | 6648 | 189 lines |
+| `_commit_all_locked()` | 6661 | 189 lines |
 | `commit_transit_sweep()` | 2349 | 169 lines |
 | `_prepare_destruction()` | 699 | 158 lines |
 | `update_place_graph()` | 74 | 153 lines |

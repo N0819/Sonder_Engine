@@ -351,6 +351,46 @@ class TestAProfileMapKeepsBothItsKeyAndItsContents:
         belief = psych["self_model"]["beliefs"][0]
         assert (belief["belief"], belief["confidence"]) == ("the door was open", 0.7)
 
+    def test_a_map_of_traits_to_bare_strengths_keeps_its_names(self):
+        """`{"wary": 0.7}` is the shortest way to write a named trait and the
+        one spelling that lost the name: the map expansion only fired when
+        EVERY value was a dict, so a name-to-strength map fell through to the
+        single-profile branch and became one anonymous trait carrying `wary`
+        as a stray key. Caught by reading a captured character payload, where
+        the sheet read as populated -- traits was non-empty -- and named
+        nobody.
+        """
+        from character_schema import normalize_character_data, character_psychology
+        psych = character_psychology(normalize_character_data({"psychology": {
+            "traits": {"wary": 0.7, "patient": 0.3}}}))
+        assert [(t["name"], t["strength"]) for t in psych["traits"]] == [
+            ("wary", 0.7), ("patient", 0.3)]
+
+    def test_a_map_mixing_bare_strengths_and_objects_keeps_every_name(self):
+        from character_schema import normalize_character_data, character_psychology
+        psych = character_psychology(normalize_character_data({"psychology": {
+            "traits": {"wary": 0.7, "patient": {"strength": 0.3,
+                                                "expression": "waits"}}}}))
+        assert [(t["name"], t["strength"], t["expression"]) for t in psych["traits"]] == [
+            ("wary", 0.7, ""), ("patient", 0.3, "waits")]
+
+    def test_a_map_of_values_to_bare_priorities_keeps_its_names(self):
+        from character_schema import normalize_character_data, character_psychology
+        psych = character_psychology(normalize_character_data({"psychology": {
+            "values": {"honesty": 0.9}}}))
+        assert [(v["name"], v["priority"]) for v in psych["values"]] == [
+            ("honesty", 0.9)]
+
+    def test_a_profile_object_whose_numbers_are_bare_is_still_one_profile(self):
+        """The discriminator is whether the KEYS are the profile's own fields,
+        not whether the values are scalars -- otherwise every ordinary sheet
+        entry would be read as a map of two traits named `name` and `strength`.
+        """
+        from character_schema import normalize_character_data, character_psychology
+        psych = character_psychology(normalize_character_data({"psychology": {
+            "traits": {"name": "wary", "strength": 0.7}}}))
+        assert [(t["name"], t["strength"]) for t in psych["traits"]] == [("wary", 0.7)]
+
     def test_one_profile_written_as_an_object_is_not_mistaken_for_a_map(self):
         from character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
