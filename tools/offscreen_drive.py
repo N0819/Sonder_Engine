@@ -113,6 +113,18 @@ def build_story(db):
     # Measured live: 12 of 91 cast rows are dormant across 8 of 47 chats, so
     # the rung is reachable -- it has simply never co-occurred with an epoch.
     away_id, away_sheet = cast_member("Kestrel", "kestrel_uid", "dormant")
+    # A listener standing in the same room, and a mind in the next room who is
+    # never told. The second one is the FALSIFIER: approach C's strongest test
+    # is an ordinary event that does NOT spread, so the drive has to contain
+    # somebody who stays ignorant while the news moves past them.
+    heard_id, heard_sheet = cast_member("Rem", "rem_uid", "active")
+    unreached_id, unreached_sheet = cast_member("Otto", "otto_uid", "active")
+    # A fourth mouth, so the drive can walk a claim all the way to the hop
+    # where it has nothing left and the engine stops passing it on.
+    fourth_id, fourth_sheet = cast_member("Ram", "ram_uid", "active")
+    # A fifth, who never hears it -- because by the time the story reaches him
+    # it has lost its count, its place and its name, and stops.
+    fifth_id, fifth_sheet = cast_member("Beako", "beako_uid", "active")
 
     db.wset(cid, "subject_last_seen",
             {"Kestrel": {"room": "hall", "turn": 0, "elapsed_seconds": 0.0}})
@@ -135,7 +147,11 @@ def build_story(db):
         "rumor_ledger": "floor",
     })
     return cid, [{"id": here_id, "sheet": here_sheet},
-                 {"id": away_id, "sheet": away_sheet}]
+                 {"id": away_id, "sheet": away_sheet},
+                 {"id": heard_id, "sheet": heard_sheet},
+                 {"id": unreached_id, "sheet": unreached_sheet},
+                 {"id": fourth_id, "sheet": fourth_sheet},
+                 {"id": fifth_id, "sheet": fifth_sheet}]
 
 
 def make_ctx(cid, cast, turn_idx, db, *, resolve=None):
@@ -146,6 +162,10 @@ def make_ctx(cid, cast, turn_idx, db, *, resolve=None):
         chat=_Chat(id=cid),
         turn=types.SimpleNamespace(id=turn_id, idx=turn_idx, frame_id=None),
         cast=cast, character_results={}, director_resolve=resolve or {},
+        # The real ctx carries both, and commit falls back to the establish
+        # payload on an opening turn. A harness missing the attribute fails
+        # with an AttributeError that looks like an engine bug and is not.
+        director_establish={}, extra_players=[],
         warnings=[],
     )
 
@@ -181,7 +201,11 @@ def accept_plan(db, cid, cast, report):
                 "effect": {
                     "what": "the western gate stands shut and barred",
                     "where": "hall", "due_seconds": 0,
-                    "witnessed": "the gate was barred from the inside",
+                    # Carries a COUNT, a PLACE and a NAME on purpose: those are the
+            # three things degradation subtracts, in that order, and a surface
+            # without them would fade invisibly and prove nothing.
+            "witnessed": "Kestrel barred the gate against forty riders "
+                         "in the Hall",
                     "originator": "Kestrel",
                 },
             }],
@@ -198,6 +222,43 @@ def accept_plan(db, cid, cast, report):
         "offered": result.get("offered"), "applied": result.get("applied"),
         "warnings": list(ctx.warnings),
     }
+
+
+def carrier_scene():
+    """Two rooms. Mora and Rem in the hall, Otto through the door.
+
+    Otto is deliberately reachable on foot and deliberately not told. A world
+    where being one room away is enough to learn something has rebuilt the
+    omniscience the perception layer exists to prevent.
+    """
+    return _two_rooms({"Mora": "hall", "Rem": "yard", "Otto": "yard",
+                       "Ram": "yard", "Beako": "yard"})
+
+
+def _two_rooms(positions):
+    return {
+        "location": "Priestella",
+        "rooms": {
+            "hall": {"name": "Hall",
+                     "adjacent": [{"to": "yard", "barrier": "open"}]},
+            "yard": {"name": "Yard",
+                     "adjacent": [{"to": "hall", "barrier": "open"}]},
+        },
+        "positions": dict(positions),
+        "entities": {},
+    }
+
+
+def telling_scene():
+    """Rem has come in from the yard. Otto has not.
+
+    Rem must NOT be in the hall when the gate is barred, or he witnesses it
+    and there is nothing left to tell him -- which is exactly what the first
+    run of this leg did, and it reported a telling refused for a reason that
+    was true and beside the point.
+    """
+    return _two_rooms({"Mora": "hall", "Rem": "hall", "Otto": "yard",
+                       "Ram": "yard", "Beako": "yard"})
 
 
 def carry_a_report(db, cid, cast, report):
@@ -217,7 +278,7 @@ def carry_a_report(db, cid, cast, report):
     from commit import commit_information_carriers, commit_world_event_spine
 
     ctx = make_ctx(cid, cast, 6, db)
-    scene = scene_at("Priestella", "hall", "Mora")
+    scene = carrier_scene()
     transit = {"fired_events": [{
         "event_id": "gate-sealed-1",
         "kind": "consequence",
@@ -229,7 +290,11 @@ def carry_a_report(db, cid, cast, report):
             # The public surface. Without this the event is real but nobody
             # can carry it -- which is the correct distinction between a thing
             # that happened and a thing that was seen to happen.
-            "witnessed": "the gate was barred from the inside",
+            # Carries a COUNT, a PLACE and a NAME on purpose: those are the
+            # three things degradation subtracts, in that order, and a surface
+            # without them would fade invisibly and prove nothing.
+            "witnessed": "Kestrel barred the gate against forty riders "
+                         "in the Hall",
             "originator": "Kestrel",
         }),
     }]}
@@ -239,12 +304,97 @@ def carry_a_report(db, cid, cast, report):
             ctx, {"scene": scene}, spine) or {}
     report["world_events"] = {
         "offered": spine.get("offered"), "written": spine.get("written")}
+    # `commit_world_event_spine` assigns the canonical `event_id`; the one in
+    # `fired_events` is only the SOURCE id. Reading it back rather than
+    # assuming it is how the telling leg finds the report at all.
+    report["event_id"] = ((spine.get("events") or [{}])[0]).get("event_id")
     report["carriers"] = {
         "enabled": carried.get("enabled", True),
         "public_surfaces": carried.get("public_surfaces"),
         "opportunities": carried.get("carrier_opportunities"),
         "acquired": carried.get("acquired"),
         "warnings": list(ctx.warnings),
+    }
+
+
+def tell_a_report(db, cid, cast, report):
+    """The copy leg: a witness says it out loud, and one mind learns.
+
+    This is where approach C stops being a ledger and starts being epistemics.
+    Four refusals are exercised beside the one acceptance, because every one of
+    them is a firewall rather than tidiness -- a telling the engine waves
+    through is a mind knowing something nobody delivered.
+    """
+    from carriers import STATE_KEY, reports_for_state
+    from commit import commit_information_carriers
+    from scene import active_cast
+
+    scene = telling_scene()
+    event_id = report.get("event_id") or ""
+
+    def held_by(name):
+        for row in active_cast(cid, None):
+            sheet = json.loads(row["sheet"] or "{}")
+            if (sheet.get("identity") or {}).get("name") != name:
+                continue
+            state = json.loads(row["cstate"] or "{}")
+            return reports_for_state(state if isinstance(state, dict) else {})
+        return []
+
+    def attempt(label, ops, dialogue, turn_idx):
+        ctx = make_ctx(cid, cast, turn_idx, db, resolve={
+            "state_diff": {"telling_ops": ops},
+            "dialogue_log": list(dialogue),
+        })
+        with db.transaction():
+            out = commit_information_carriers(ctx, {"scene": scene}, {}) or {}
+        return {"attempt": label, "told": out.get("told"),
+                "refused": out.get("tellings_refused"),
+                "warnings": list(ctx.warnings)}
+
+    said = [{"speaker": "Mora", "text": "The gate was barred from inside."}]
+    attempts = [
+        # Nobody spoke. Proximity is not transmission.
+        attempt("nobody said anything", [
+            {"speaker": "Mora", "listener": "Rem",
+             "world_event_id": event_id}], [], 7),
+        # A room away, with the speaking done. Distance still refuses.
+        attempt("the listener is in the next room", [
+            {"speaker": "Mora", "listener": "Otto",
+             "world_event_id": event_id}], said, 8),
+        # A report the speaker does not hold.
+        attempt("passing on something never witnessed", [
+            {"speaker": "Mora", "listener": "Rem",
+             "world_event_id": "never-happened"}], said, 9),
+        # The real thing.
+        attempt("Mora tells Rem, out loud, in the hall", [
+            {"speaker": "Mora", "listener": "Rem",
+             "world_event_id": event_id}], said, 10),
+    ]
+
+    # Now walk it down the chain. Everyone gathers in the hall so the only
+    # thing under test is how many mouths the story has been through.
+    scene = _two_rooms({"Mora": "hall", "Rem": "hall", "Otto": "hall",
+                        "Ram": "hall", "Beako": "hall"})
+    chain = []
+    for turn, (teller, hearer) in enumerate(
+            [("Rem", "Otto"), ("Otto", "Ram"), ("Ram", "Beako")], start=11):
+        attempts.append(attempt(
+            "%s passes it to %s" % (teller, hearer),
+            [{"speaker": teller, "listener": hearer,
+              "world_event_id": event_id}],
+            [{"speaker": teller, "text": "They say the gate was barred."}],
+            turn))
+    for who in ("Mora", "Rem", "Otto", "Ram", "Beako"):
+        for r in held_by(who):
+            chain.append({"who": who, "retellings": r["retellings"],
+                          "from": r.get("told_by") or "(saw it)",
+                          "heard": r["claim"]})
+
+    report["tellings"] = {
+        "attempts": attempts,
+        "chain": chain,
+        "unreached_holds": [r["claim"] for r in held_by("Kestrel")],
     }
 
 
@@ -305,6 +455,7 @@ def drive(db):
          seconds=EPOCH_HOUR + 400, transit={"fired": 1})
 
     carry_a_report(db, cid, cast, report)
+    tell_a_report(db, cid, cast, report)
     return report
 
 
