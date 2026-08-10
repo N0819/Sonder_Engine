@@ -64,7 +64,8 @@ from spatial import (
     room_of,
     same_subject,
     spatial_rel,
-    speech_obstructed_by_contact,
+    speech_articulation_impediment,
+    ARTICULATION_STIFLED,
     sprint_reach,
 )
 
@@ -3251,43 +3252,55 @@ def _public_omission(omission):
     return {k: v for k, v in omission.items() if not k.startswith("_")}
 
 
-def _sealed_mouth_speech_notices(sc, sd, dialogue_log):
-    """One notice per speaker who spoke normally through a sealed mouth.
+def _stamp_dialogue_articulation(sc, sd, dialogue_log):
+    """Stamp each line with how it was FORMED; notice the impossible ones.
 
-    A speaker whose mouth the LEDGER says is sealed or filled cannot deliver
-    ordinary dialogue. Advisory, never a rewrite: dialogue_log is the account
-    under reconciliation, and the ledger itself can be stale (a momentary
-    contact awaiting its ageing clock), so silencing or muffling the line on
-    the ledger's word would corrupt legitimate speech -- in the story that
-    surfaced this, the same speaker ALSO held five beats of ordinary
-    conversation while a stale kiss record sat on her lips, and a hard gate
-    would have garbled the legitimate half while fixing the impossible one.
-    Measured live: full sentences at `normal` volume across eight beats with
-    a tongue mid-act and a groin sealed against the speaker's lips, and
-    nothing pushed back.
+    Articulation is a property of the utterance at the moment it is produced
+    -- the sibling of `volume`, which nobody considers a rewrite -- so it is
+    stamped HERE, where the post-op ledger and the log meet, and rendered
+    identically for every listener downstream. It is deliberately not a
+    hearing level: a wall degrades sound in transit, differently per
+    listener; an engaged tongue malforms the sound at the source, the same
+    for everyone in the room, and a listener close by hears the slur BETTER,
+    not less of it.
 
-    Checked against the POST-op ledger so a beat that ends the contact
-    before the line is not scolded for it. Muttered lines pass: a muffled
-    word or two is exactly what a blocked mouth can do.
+    The stamp is authoritative in both directions -- it sets and it CLEARS --
+    so a model-invented value never survives and the field always reflects
+    the ledger. The quotes themselves are never touched: `exact_quote` stays
+    verbatim (the reconciliation contract), and the fidelity scrubs keep
+    matching it.
+
+    Notices go out only for the STIFLED kind at spoken volume: a full
+    sentence with a filled mouth remains a fiction problem the Director
+    should resolve (end the contact, or a word or two at 'mutter'), while a
+    slurred line is now simply rendered as what it is. Checked against the
+    POST-op ledger so a beat that ends the contact before the line is not
+    scolded for it.
     """
     preview = dict(sc or {})
     preview["contacts"] = copy.deepcopy((sc or {}).get("contacts") or [])
     apply_contact_ops(preview, (sd or {}).get("contact_ops") or [])
     notices, noticed = [], set()
+    impediments = {}
     for entry in dialogue_log or []:
         if not isinstance(entry, dict):
             continue
         speaker = str(entry.get("speaker") or "").strip()
-        volume = str(entry.get("volume") or "normal").strip().casefold()
-        if not speaker or speaker.casefold() in noticed \
-                or volume not in ("normal", "loud", "shout"):
+        if not speaker:
             continue
-        blocked = speech_obstructed_by_contact(preview, speaker)
-        if blocked:
-            noticed.add(speaker.casefold())
+        key = speaker.casefold()
+        if key not in impediments:
+            impediments[key] = speech_articulation_impediment(
+                preview, speaker)
+        kind, reason = impediments[key]
+        entry["articulation"] = kind
+        volume = str(entry.get("volume") or "normal").strip().casefold()
+        if kind == ARTICULATION_STIFLED and key not in noticed \
+                and volume in ("normal", "loud", "shout"):
+            noticed.add(key)
             notices.append(
                 f"speech: {speaker} spoke at volume '{volume}' while "
-                f"{blocked}. Either end that contact in contact_ops before "
+                f"{reason}. Either end that contact in contact_ops before "
                 "the line, or keep the line to a word or two at volume "
                 "'mutter' -- muffled against what blocks it.")
     return notices
@@ -3298,9 +3311,13 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
     """The resolve-reconciliation seam (see the block comment above).
     Mutates out['state_diff'] in place (strip + merged repair delta only),
     records inspection metadata on out['reconciliation'], and appends to
-    ctx.warnings for anything that remains unencoded. resolved_event and
-    dialogue_log are never modified -- the prose is the account being
-    reconciled against, not the thing under repair."""
+    ctx.warnings for anything that remains unencoded. resolved_event and the
+    WORDS of dialogue_log are never modified -- the prose is the account
+    being reconciled against, not the thing under repair. The one exception
+    is deliberate and additive: `articulation` is stamped onto each dialogue
+    entry (see _stamp_dialogue_articulation) because how a sound was formed
+    is derived delivery metadata in the same class as `volume`, not part of
+    the account; every `exact_quote` and `speaker` stays verbatim."""
     sd = _normalize_diff_shape(out.get("state_diff"))
     out["state_diff"] = sd
     resolved_event = out.get("resolved_event", "")
@@ -3319,7 +3336,7 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
                 f"{recovered['entity_id']!r} as removing "
                 f"{recovered['garment']!r} from {recovered['owner']!r}.")
 
-    for notice in _sealed_mouth_speech_notices(sc, sd, dialogue_log):
+    for notice in _stamp_dialogue_articulation(sc, sd, dialogue_log):
         ctx.tell_director(notice)
 
     # ---- Tier 0: deterministic floor -------------------------------------

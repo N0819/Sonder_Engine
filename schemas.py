@@ -1563,6 +1563,16 @@ class DialogueLogEntry(LenientModel):
     tone: str = ""
     visibility: ActionVisibility = ActionVisibility.overt
     conceal_from: list[str] = Field(default_factory=list)
+    # How the sound was FORMED -- the sibling of volume, which is how loud it
+    # was made. NOT a model-authored field: the reconciliation seam stamps it
+    # deterministically from the contact ledger (and clears it), so a value
+    # the model invents never survives. It lives in the schema so that any
+    # re-validation of a stamped log cannot silently strip it.
+    articulation: str = ""
+
+    _norm_articulation = validator(
+        "articulation", pre=True, allow_reuse=True)(
+        lambda cls, v: v if v in ("slurred", "stifled") else "")
 
 class BackgroundReactOutput(LenientModel):
     reacts: bool = False
