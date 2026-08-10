@@ -34,7 +34,7 @@
 | `frames.py` | 220 |  | `db` |
 | `greetings.py` | 375 |  | `agents.runtime`, `agents.storage`, `character_schema`, `db`, `llm_quality`, `memory`, `prompts` |
 | `guest_access.py` | 328 |  | `db` |
-| `importers.py` | 2474 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `memory`, `prompts`, `providers` |
+| `importers.py` | 2504 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `memory`, `prompts`, `providers` |
 | `llm_quality.py` | 292 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `mechanics.py` | 274 |  | `spatial`, `spatial_frames` |
@@ -394,13 +394,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `import_lorebook()` | 1248 | 146 lines |
-| `apply_lorebook_plan()` | 2286 | 124 lines |
-| `_lore_gen_entry_batch()` | 1938 | 118 lines |
-| `_run_lore_gen_job()` | 2060 | 112 lines |
+| `apply_lorebook_plan()` | 2302 | 124 lines |
+| `_lore_gen_entry_batch()` | 1954 | 118 lines |
+| `_run_lore_gen_job()` | 2076 | 112 lines |
 | `fill_appearance()` | 998 | 92 lines |
 | `import_character()` | 535 | 91 lines |
-| `_lore_gen_structure()` | 1868 | 66 lines |
-| `_lore_gen_context()` | 1691 | 65 lines |
+| `generate_lore_entries()` | 2426 | 79 lines |
+| `_lore_gen_structure()` | 1884 | 66 lines |
 
 ### `llm_quality.py`
 
