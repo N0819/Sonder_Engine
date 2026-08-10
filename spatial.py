@@ -2,6 +2,7 @@
 """Spatial reasoning with entity-aware scene merging and containment validation."""
 
 import copy
+import hashlib
 import re
 from collections import defaultdict
 from typing import Optional
@@ -3037,6 +3038,12 @@ def _live_subject_spellings(scene: dict) -> set:
             if isinstance(contact, dict):
                 add(contact.get("actor"))
                 add(contact.get("target"))
+    substances = (scene or {}).get("substances")
+    if isinstance(substances, list):
+        for record in substances:
+            if isinstance(record, dict):
+                add(record.get("source"))
+                add(record.get("target"))
     return out
 
 
@@ -3128,7 +3135,7 @@ def normalize_scene_subjects(scene: dict) -> list:
     So the data is made single-spelled instead. Run at merge, before position
     derivation, this leaves exactly one key per being in `positions`, `scales`,
     `attire`, `stations`, `contained` (keys and `in`), `contacts`
-    (actor/target) and `following` -- after which `==` is correct again because
+    (actor/target), `substances` (source/target) and `following` -- after which `==` is correct again because
     there is nothing left for it to be wrong about.
 
     Two entries that fold together are a genuine conflict: the same being
@@ -3187,6 +3194,11 @@ def normalize_scene_subjects(scene: dict) -> list:
         for contact in contacts:
             for field in ("actor", "target"):
                 fold_field(contact, field, f"contacts.{field}")
+    substances = scene.get("substances")
+    if isinstance(substances, list):
+        for record in substances:
+            for field in ("source", "target"):
+                fold_field(record, field, f"substances.{field}")
     return folded
 
 
@@ -3628,6 +3640,289 @@ def contacts_of(scene: dict, name: str) -> list:
                       str(contact.get("target") or "").strip().casefold()):
             out.append(contact)
     return out
+
+
+# Non-discrete matter which remains somewhere after a beat.  This is distinct
+# from contact (a relation between bodies) and inventory (discrete objects): a
+# liquid in a vessel, residue on a surface, gas in a chamber, powder in a wound
+# or any fictional equivalent is matter located relative to a target.
+_SUBSTANCE_PLACEMENTS = frozenset({"surface", "interior", "contained", "room"})
+
+
+def _substance_text(value, limit=160):
+    return " ".join(str(value or "").split())[:limit]
+
+
+def _substance_placement(value):
+    raw = _substance_text(value, 32).casefold().replace("_", " ")
+    aliases = {
+        "on": "surface", "coating": "surface", "coat": "surface",
+        "inside": "interior", "internal": "interior", "within": "interior",
+        "container": "contained", "in container": "contained",
+        "environment": "room", "ambient": "room",
+    }
+    raw = aliases.get(raw, raw)
+    return raw if raw in _SUBSTANCE_PLACEMENTS else ""
+
+
+def _interior_destination_for_release(scene, source, source_part):
+    """Unique standing interior that encloses ``source_part``, or None.
+
+    This is the content-agnostic causal hardening: a nozzle in a tank, needle
+    in a vein, pipe in a chamber, fang in tissue, or any invented equivalent
+    supplies the destination of matter released by that inserted part.  The
+    code knows topology, never what the matter ought to be.
+    """
+    source_part = _substance_text(source_part, 120).casefold()
+    if not source_part:
+        return None
+    matches = []
+    for contact in (scene or {}).get("contacts") or []:
+        if not isinstance(contact, dict) or contact_relation(contact) != "interior":
+            continue
+        if not same_subject(scene, contact.get("actor"), source):
+            continue
+        if _substance_text(contact.get("actor_part"), 120).casefold() != source_part:
+            continue
+        matches.append(contact)
+    return matches[0] if len(matches) == 1 else None
+
+
+def _substance_id(record):
+    supplied = _substance_text(record.get("substance_id") or record.get("id"), 120)
+    if supplied:
+        return supplied
+    identity = "\x1f".join(_substance_text(record.get(field), 160).casefold()
+                            for field in (
+                                "source", "source_part", "substance", "target",
+                                "placement", "target_interior", "target_part"))
+    return "substance:" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
+
+
+def _substance_target_exists(scene, target):
+    """Whether a material destination is a live room, body, or entity."""
+    label = str(target or "").strip()
+    if not label:
+        return False
+    folded = label.casefold()
+    if any(str(room_id).strip().casefold() == folded
+           for room_id in ((scene or {}).get("rooms") or {})):
+        return True
+    if any(same_subject(scene, key, label)
+           for key in ((scene or {}).get("positions") or {})):
+        return True
+    for entity_id, entity in ((scene or {}).get("entities") or {}).items():
+        if same_subject(scene, entity_id, label):
+            return True
+        if not isinstance(entity, dict):
+            continue
+        if same_subject(scene, entity.get("name"), label):
+            return True
+        if any(same_subject(scene, alias, label)
+               for alias in (entity.get("aliases") or [])):
+            return True
+    return False
+
+
+def _resolved_substance_add(scene, raw, report=None):
+    if not isinstance(raw, dict):
+        return None
+    source = canonical_subject(scene, _substance_text(raw.get("source"), 120))
+    source_part = _substance_text(raw.get("source_part"), 120)
+    substance = _substance_text(raw.get("substance"), 160)
+    target = canonical_subject(scene, _substance_text(raw.get("target"), 120))
+    placement = _substance_placement(raw.get("placement"))
+    target_interior = _substance_text(raw.get("target_interior"), 160)
+    target_part = _substance_text(raw.get("target_part"), 120)
+    if not source or not substance:
+        if report:
+            report("discarded substance add without both source and substance")
+        return None
+
+    interior = _interior_destination_for_release(scene, source, source_part)
+    if interior is not None:
+        derived_target = canonical_subject(
+            scene, _substance_text(interior.get("target"), 120))
+        derived_interior = _substance_text(
+            interior.get("target_interior"), 160)
+        derived_part = _substance_text(interior.get("target_part"), 120)
+        if target and not same_subject(scene, target, derived_target):
+            if report:
+                report("discarded substance add whose target contradicted standing interior topology")
+            return None
+        if placement and placement != "interior":
+            if report:
+                report("discarded substance add whose placement contradicted standing interior topology")
+            return None
+        if target_interior and target_interior.casefold() != derived_interior.casefold():
+            if report:
+                report("discarded substance add whose target_interior contradicted standing interior topology")
+            return None
+        if target_part and target_part.casefold() != derived_part.casefold():
+            if report:
+                report("discarded substance add whose target_part contradicted standing interior topology")
+            return None
+        target = target or derived_target
+        target_interior = target_interior or derived_interior
+        target_part = target_part or derived_part
+        placement = placement or "interior"
+
+    if not placement:
+        placement = "interior" if target_interior else "surface"
+    if not target:
+        if report:
+            report("discarded substance add without a target or unique interior destination")
+        return None
+    if not _substance_target_exists(scene, target):
+        if report:
+            report("discarded substance add whose target is not present in the scene")
+        return None
+    if placement == "interior" and not target_interior:
+        if report:
+            report("discarded interior substance add without an enclosing target_interior")
+        return None
+
+    record = {
+        "source": source,
+        "source_part": source_part,
+        "substance": substance,
+        "target": target,
+        "placement": placement,
+        "target_interior": target_interior,
+        "target_part": target_part,
+        "amount": _substance_text(raw.get("amount"), 80),
+        "detail": _substance_text(raw.get("detail"), 240),
+    }
+    # Adds derive identity from physical semantics. A model-supplied id could
+    # otherwise overwrite an unrelated standing record; ids are selectors for
+    # removal, not authority to choose an add's storage key.
+    record["substance_id"] = _substance_id(record)
+    return record
+
+
+def resolve_substance_ops(scene: dict, ops, report=None) -> list[dict]:
+    """Normalize substance operations against the PRE-BEAT contact topology.
+
+    The returned add records are also the exact event deltas perception may
+    deliver this beat.  Remove/clear operations remain selectors and never
+    become sensory events themselves.
+    """
+    resolved = []
+    for raw in (ops if isinstance(ops, list) else []):
+        if not isinstance(raw, dict):
+            continue
+        op = _substance_text(raw.get("op") or "add", 32).casefold()
+        if op in ("add", "release", "deposit"):
+            record = _resolved_substance_add(scene, raw, report=report)
+            if record is not None:
+                resolved.append({"op": "add", **record})
+            continue
+        if op not in ("remove", "clear"):
+            if report:
+                report(f"discarded unknown substance op {op!r}")
+            continue
+        selector = {
+            "op": op,
+            "substance_id": _substance_text(
+                raw.get("substance_id") or raw.get("id"), 120),
+            "source": canonical_subject(
+                scene, _substance_text(raw.get("source"), 120)),
+            "substance": _substance_text(raw.get("substance"), 160),
+            "target": canonical_subject(
+                scene, _substance_text(raw.get("target"), 120)),
+            "placement": _substance_placement(raw.get("placement")),
+            "target_interior": _substance_text(raw.get("target_interior"), 160),
+            "target_part": _substance_text(raw.get("target_part"), 120),
+        }
+        if not any(selector[field] for field in selector if field != "op"):
+            if report:
+                report("discarded unbounded substance removal")
+            continue
+        resolved.append(selector)
+    return resolved
+
+
+def apply_substance_ops(scene: dict, ops, report=None) -> dict:
+    """Apply add/remove/clear operations to ``scene.substances``."""
+    current = {}
+    for raw_record in ((scene or {}).get("substances") or []):
+        if not isinstance(raw_record, dict) or not raw_record.get("source") \
+                or not raw_record.get("substance") or not raw_record.get("target"):
+            continue
+        record = dict(raw_record)
+        record["substance_id"] = _substance_id(record)
+        current[record["substance_id"]] = record
+    for raw in resolve_substance_ops(scene, ops, report=report):
+        op = raw.get("op")
+        if op == "add":
+            record = {k: v for k, v in raw.items() if k != "op"}
+            current[record["substance_id"]] = record
+            continue
+
+        def matches(record):
+            sid = raw.get("substance_id")
+            if sid and str(record.get("substance_id")) != sid:
+                return False
+            for field in ("source", "target"):
+                if raw.get(field) and not same_subject(
+                        scene, record.get(field), raw[field]):
+                    return False
+            for field in ("substance", "placement", "target_interior", "target_part"):
+                if raw.get(field) and _substance_text(
+                        record.get(field), 160).casefold() != raw[field].casefold():
+                    return False
+            return True
+
+        current = {sid: record for sid, record in current.items()
+                   if not matches(record)}
+    scene["substances"] = list(current.values())
+    return scene
+
+
+def substances_for(scene: dict, name: str) -> list[dict]:
+    """Every persistent substance record for which ``name`` is source/target."""
+    return [record for record in ((scene or {}).get("substances") or [])
+            if isinstance(record, dict)
+            and (same_subject(scene, record.get("source"), name)
+                 or same_subject(scene, record.get("target"), name))]
+
+
+def substance_event_clause(event: dict, *, you: str, scene: dict) -> str:
+    """First-person immediate percept for a newly added substance record.
+
+    Cause-blind for the recipient: an internal target legitimately knows the
+    material consequence reached them, not necessarily who caused it.  Hidden
+    interior deposition never returns a bystander clause.
+    """
+    if not isinstance(event, dict) or str(event.get("op") or "add") != "add":
+        return ""
+    substance = _substance_text(event.get("substance"), 160)
+    amount = _substance_text(event.get("amount"), 80)
+    detail = _substance_text(event.get("detail"), 240)
+    if not substance:
+        return ""
+    target_is_you = same_subject(scene, event.get("target"), you)
+    source_is_you = same_subject(scene, event.get("source"), you)
+    placement = _substance_placement(event.get("placement"))
+    material = f"{amount} of {substance}" if amount else substance
+    if target_is_you:
+        if placement == "interior":
+            interior = _substance_text(event.get("target_interior"), 160)
+            clause = f"Your {interior or 'interior'} registers {material} being deposited within it"
+        elif placement == "surface":
+            part = _substance_text(event.get("target_part"), 120)
+            clause = f"Your {part or 'surface'} registers {material} being deposited on it"
+        else:
+            clause = f"You register {material} entering what you contain"
+    elif source_is_you:
+        part = _substance_text(event.get("source_part"), 120)
+        clause = f"You register releasing {material} from your {part or 'body'}"
+    else:
+        return ""
+    if detail and (source_is_you or same_subject(
+            scene, event.get("source"), event.get("target"))):
+        clause += f", {detail}"
+    return clause
 
 
 def contact_phrase(contact: dict, *, subject_first=True, you=None) -> str:
@@ -5605,6 +5900,7 @@ def merge_scene_with_diff(
     diff: dict | None,
     *,
     contact_report=None,
+    substance_report=None,
 ) -> dict:
     diff = diff or {}
     # A scene is a nested mutable structure.  A shallow copy allowed
@@ -5709,6 +6005,13 @@ def merge_scene_with_diff(
         for name in names:
             if name:
                 merged["positions"].pop(name, None)
+        folded_names = {str(name).strip().casefold() for name in names if name}
+        merged["substances"] = [
+            record for record in (merged.get("substances") or [])
+            if not isinstance(record, dict)
+            or str(record.get("target") or "").strip().casefold()
+            not in folded_names
+        ]
 
     occupied_rooms = set(merged["positions"].values())
 
@@ -5716,6 +6019,11 @@ def merge_scene_with_diff(
         if room_id in occupied_rooms:
             continue
         merged["rooms"].pop(room_id, None)
+        merged["substances"] = [
+            record for record in (merged.get("substances") or [])
+            if not isinstance(record, dict)
+            or str(record.get("target") or "") != str(room_id)
+        ]
 
     # A body's interior is opaque whether or not anyone declared it so. Runs
     # BEFORE the dock-edge rewrite, which reads `enclosure` to pick the
@@ -5832,6 +6140,13 @@ def merge_scene_with_diff(
     # position follow-through already ran at Director resolution so perception
     # and commit merge the exact same destinations.
     apply_following_ops(merged, diff.get("following_ops"))
+
+    # Non-discrete matter is located while onset contact still stands.  That
+    # ordering is causal: a release can occur through an interior relation and
+    # the bodies can withdraw later in the same beat.  Deriving after contact
+    # removals would erase the route that established the destination.
+    apply_substance_ops(merged, diff.get("substance_ops"),
+                        report=substance_report)
 
     apply_contact_ops(merged, diff.get("contact_ops"),
                       report=contact_report)

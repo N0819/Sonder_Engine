@@ -57,12 +57,14 @@ from spatial import (
     merge_scene_with_diff,
     normalize_barrier,
     proximity_rel,
+    resolve_substance_ops,
     room_layout,
     room_of,
     same_subject,
     scent_level,
     spatial_facts,
     spatial_rel,
+    substance_event_clause,
     visible_adjacent_rooms,
 )
 
@@ -571,6 +573,30 @@ def _standing_contacts_for(scene, observer_name):
     return out
 
 
+def _deliver_substance_events(view, observer_name, scene, events):
+    """Append newly transferred matter to the source/recipient's own view.
+
+    Persistent substances are scene state; only this beat's ADD delta is an
+    event.  This prevents a deposit replaying every turn while ensuring the
+    physical consequence cannot disappear merely because free perception
+    prose chose a euphemism or omitted it under token pressure.
+    """
+    additions = []
+    folded = str(view or "").casefold()
+    for event in events or []:
+        if not isinstance(event, dict) or event.get("op") != "add":
+            continue
+        substance = " ".join(str(event.get("substance") or "").split())
+        if substance and substance.casefold() in folded:
+            continue
+        clause = substance_event_clause(
+            event, you=observer_name, scene=scene)
+        if clause:
+            additions.append(clause[0].upper() + clause[1:] + ".")
+    return (_append_once(str(view or ""), " ".join(additions))
+            if additions else view)
+
+
 _BODY_DETAIL_GENERIC = frozenset({
     "above", "bare", "below", "between", "body", "exposed", "full", "inner",
     "outer", "skin", "soft", "their", "there", "these", "they", "thigh",
@@ -889,6 +915,45 @@ def _observer_scene_payload(scene, perceiver, body_labels=None):
         # felt. Empty for a contact this perceiver is only watching.
         entry["sensation"] = contact_sensation(contact, you=name, scene=scene)
         contacts.append(entry)
+    substances = []
+    for record in (scene.get("substances") or []):
+        if not isinstance(record, dict):
+            continue
+        source = str(record.get("source") or "")
+        target = str(record.get("target") or "")
+        source_is_self = same_subject(scene, source, name)
+        target_is_self = same_subject(scene, target, name)
+        placement = str(record.get("placement") or "").casefold()
+        # Persistent hidden matter belongs to the recipient's present bodily
+        # state.  The source receives the ADD event this beat, but does not get
+        # a remote state feed on every later beat merely because it caused it.
+        if placement in ("interior", "contained") and not target_is_self:
+            continue
+        target_is_visible = target_is_self or target in visible_names \
+            or (placement == "room" and target in allowed_rooms)
+        if not target_is_visible:
+            continue
+        entry = copy.deepcopy(record)
+        # A recipient has direct access to the material and its location, not
+        # automatically to its cause.  The ordinary scene/action channels may
+        # independently identify the source; this ledger never grants it.
+        if target_is_self and not source_is_self:
+            entry.pop("source", None)
+            entry.pop("source_part", None)
+            entry.pop("detail", None)
+        elif not source_is_self and source not in visible_names:
+            entry.pop("source", None)
+            entry.pop("source_part", None)
+        for field, is_self in (("source", source_is_self),
+                               ("target", target_is_self)):
+            value = str(entry.get(field) or "")
+            if not value:
+                continue
+            if is_self:
+                entry[field] = "you"
+            elif body_labels and value in body_labels:
+                entry[field] = body_labels[value]
+        substances.append(entry)
     scales = {
         key: value for key, value in (scene.get("scales") or {}).items()
         if str(key) == name or str(key) in visible_names
@@ -917,6 +982,7 @@ def _observer_scene_payload(scene, perceiver, body_labels=None):
         "rooms": rooms,
         "entities": _perceptible_entities(scene, [name]),
         "contacts": contacts,
+        "substances": substances,
         "scales": scales,
         "contained": contained,
         "light": {
@@ -2992,6 +3058,8 @@ def perception_outcome(ctx, nonce):
     diff = copy.deepcopy(res.get("state_diff") or {})
     dedup_minted_rooms(chat["id"], sc, diff)
     prev_scene = sc
+    substance_events = resolve_substance_ops(
+        prev_scene, diff.get("substance_ops"))
     sc = merge_scene_with_diff(sc, diff)
     # Attire is commit-owned and intentionally absent from spatial's generic
     # merge. Preview the exact same canonicalized/region-derived result commit
@@ -3706,6 +3774,8 @@ def perception_outcome(ctx, nonce):
             ctx.warnings.append(
                 f"perception_outcome: restored a heard line dropped by the "
                 f"scrub chain from view '{pid}': \"{body[:80]}\"")
+        view = _deliver_substance_events(
+            view, p["name"], sc, substance_events)
         view = _deliver_standing_sensations(
             view, p["name"], sc, _standing_contacts_for(sc, p["name"]))
         # Same floor as action-onset, now against commit's previewed attire.

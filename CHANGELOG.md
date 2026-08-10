@@ -2,6 +2,31 @@
 
 ## Unreleased — Development
 
+### Material transfer is now objective state rather than fake body contact
+
+The scene gains a genre-neutral `substances` ledger, written through
+`state_diff.substance_ops`, for fluid, powder, gas, residue, payload, and other
+non-discrete matter that remains on or within a body, object, container, or
+room. Material is no longer encoded as a contact whose `actor_part` is the
+substance. Adds persist until a bounded remove/clear operation; their stable
+identity makes reassertion an update rather than an accumulating duplicate.
+
+A release from the acting part of exactly one standing interior contact derives
+its target, enclosing interior, and current endpoint from that topology. The
+derivation runs against the onset ledger before same-turn contact removals, so
+matter can reach its established destination and the source can then withdraw.
+Explicit destinations that contradict the standing topology are rejected. Code
+never invents a substance from an event label: anatomy, equipment, ontology,
+prior state, or an explicit declaration must establish the material output.
+
+Perception receives only the newly added transfer as an event; the stored
+record is standing state and is not replayed as another release on later beats.
+New interior transfers are scoped to source and recipient; persistent hidden
+state projects only to its recipient, and strips source identity so direct
+awareness of matter does not become omniscient awareness of its cause. Director manifests, reconciliation repair,
+opening establishment, schema examples, commit warnings, checkpoints, branches,
+and portable scene storage all use the same ledger.
+
 ### Memory formation is chronological and contact endings are actor-owned
 
 A witnessed beat now forms one coherent first-hand episode. The character's

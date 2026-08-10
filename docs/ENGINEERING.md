@@ -332,8 +332,10 @@ commit path and the restore path before adding one.
 **Merging is where hygiene lives.** `spatial.merge_scene_with_diff` deep-copies
 the scene and applies a beat's `state_diff` through a fixed order: rooms and
 adjacency, barriers, bearings, stations, scale (and the contacts scale
-invalidates), containment, derived contained positions, contact ops, contact
-hygiene, then vitals. Order is load-bearing. A size change cancels holds
+invalidates), containment, derived contained positions, substance ops, contact
+ops, contact hygiene, then vitals. Order is load-bearing. Substance transfer
+resolves while onset contact still stands, so a transfer and withdrawal can
+occur in one beat. A size change cancels holds
 *before* the beat's own contact ops, so a hold re-established at the new size
 survives.
 
@@ -344,6 +346,11 @@ ends a hold with nothing for the Director to remember) and by age: a contact
 nobody re-asserts across successive beats of contact talk retires, with
 momentary acts (`kiss`, `pinch`) retiring a beat sooner than durable states
 (`rest`, `press`) and rendering as the touch they left rather than as the act.
+Non-discrete matter is a different relation, kept once in `scene.substances`.
+Its stable id covers source, material, destination, placement, and topology;
+reasserting the same relation updates it, while bounded remove/clear operations
+retire it. Interior placement may derive from a unique standing contact, but
+the ledgers never collapse into one another.
 
 **Frames** (`frames.py`, `spatial_frames.py`) give a chat concurrent
 timelines — separate scenes, separate memory visibility — sharing one global
@@ -364,11 +371,12 @@ flowchart LR
         M1["rooms, adjacency, barriers, bearings"] --> M2["stations"]
         M2 --> M3["scale — and the contacts it cancels"]
         M3 --> M4["containment, derived positions"]
-        M4 --> M5["contact ops, then contact hygiene"]
-        M5 --> M6["vitals"]
+        M4 --> M5["substance ops against onset contact"]
+        M5 --> M6["contact ops, then contact hygiene"]
+        M6 --> M7["vitals"]
     end
 
-    MERGE --> SC[("<b>world.scene</b><br/>per frame — the authority<br/>rooms · positions · entities<br/>contacts · contained · scales<br/>attire · vitals")]
+    MERGE --> SC[("<b>world.scene</b><br/>per frame — the authority<br/>rooms · positions · entities<br/>contacts · substances · contained · scales<br/>attire · vitals")]
 
     SC --> WE["world_entities<br/><i>derived projection</i>"]
     SC --> RR["room_registry<br/><i>cross-frame identity</i>"]

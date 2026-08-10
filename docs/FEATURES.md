@@ -92,6 +92,10 @@ legitimately perceive, learn, remember or infer.
   not a full line, and a whisper does not cross a hall.
 - **Felt but not seen** — Someone you can touch but not see registers as motion
   and pressure; you never learn what act is producing it.
+- **Material consequences persist** — Fluids, powders, gases, residue and other
+  story-defined matter remain on or within their destination until something
+  removes them; an interior recipient experiences the consequence without
+  automatically learning its cause.
 - **Concealed acts are cut sentence by sentence** — A hidden action is removed
   from the version each person who should not see it receives, while the overt
   parts of the same beat survive.

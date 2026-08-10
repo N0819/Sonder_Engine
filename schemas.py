@@ -1458,6 +1458,9 @@ class DirectorEstablish(LenientModel):
     # else. Prose is not state; if the hold is still true when play begins it
     # has to arrive as an op.
     contact_ops: list[dict] = Field(default_factory=list)
+    # Non-discrete matter the opening leaves located on/within something.
+    # Separate from contact (bodies touching) and inventory (discrete objects).
+    substance_ops: list[dict] = Field(default_factory=list)
     sensory_events: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
     opening: str = ""
@@ -1628,6 +1631,13 @@ class StateDiff(LenientModel):
     # topology (`surface|interior`) and kinematics (`settled|moving`) are
     # independent: an interior contact may be moving.
     contact_ops: list[dict] = Field(default_factory=list)
+    # Physical matter transferred and left somewhere after the beat.
+    # {op:add|release|deposit|remove|clear, source, source_part, substance,
+    # target, placement:surface|interior|contained|room, target_interior,
+    # target_part, amount, detail, substance_id?}.  A release from the acting
+    # part of a unique standing interior contact derives its destination from
+    # that topology; the model names the matter, never the code.
+    substance_ops: list[dict] = Field(default_factory=list)
     # Actor-owned following changes, projected deterministically from the
     # player interpretation and character decisions. The resolve model does
     # not author these. {op:start|stop,follower,target?,reason?,turn?}.
@@ -1719,7 +1729,7 @@ class AssertedChange(LenientModel):
     persistent physical change its resolved_event asserts as completed,
     beyond the player's supplied authority_claims. Reconciled against the
     state_diff deterministically (see agents/director.py's seam)."""
-    # rooms|adjacency|positions|entities|conditions|attire|contact|inventory|
+    # rooms|adjacency|positions|entities|conditions|attire|contact|substance|inventory|
     # cast_changes|time|transit|other
     category: str = "other"
     subject: str = ""         # room id / entity id / character name concerned
@@ -1727,12 +1737,15 @@ class AssertedChange(LenientModel):
     # Contact manifests need the relation's endpoints, not merely one person.
     # Without them, two simultaneous contacts involving the same actor are
     # indistinguishable: a correctly encoded hand-on-hip could falsely prove a
-    # separately asserted cock-to-cervix contact was also encoded. Optional for
+    # separately asserted nozzle-to-valve contact was also encoded. Optional for
     # every non-contact category and for compatibility with saved variants.
     actor: str = ""
     actor_part: str = ""
     target: str = ""
     target_part: str = ""
+    substance: str = ""
+    placement: str = ""
+    target_interior: str = ""
 
 class DirectorResolve(LenientModel):
     resolved_event: str = ""
@@ -2767,7 +2780,7 @@ _STATE_DIFF_DICT_FIELDS = (
 
 _STATE_DIFF_SIBLING_FIELDS = (
     "remove_entities", "remove_rooms", "remove_adjacent", "conditions",
-    "inventory_ops", "contact_ops", "stations", "scales", "containment",
+    "inventory_ops", "contact_ops", "substance_ops", "stations", "scales", "containment",
     "vitals", "overlays",
     "attire", "cast_changes",
     "world_facts", "introductions", "time", "claim_dispositions",
@@ -3259,6 +3272,7 @@ OUTPUT_EXAMPLES = {
         "positions": {},
         "stations": {},
         "contact_ops": [],
+        "substance_ops": [],
         "attire": {},
         "entity_states": {},
         "sensory_events": [],
@@ -3286,6 +3300,7 @@ OUTPUT_EXAMPLES = {
             "conditions": {},
             "inventory_ops": [],
             "contact_ops": [],
+            "substance_ops": [],
             "overlays": {},
             "attire": {},
             "cast_changes": [],

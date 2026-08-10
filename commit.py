@@ -1921,7 +1921,10 @@ def prepare_scene_commit(ctx):
                     _stations.setdefault(_who, _st)
 
     _contact_report = []
-    sc = merge_scene_with_diff(prev_scene, diff, contact_report=_contact_report)
+    _substance_report = []
+    sc = merge_scene_with_diff(
+        prev_scene, diff, contact_report=_contact_report,
+        substance_report=_substance_report.append)
     # Tell the Director what its re-descriptions were read AS. A hold it wrote
     # under a new part noun was taken as the same limb MOVING; if it meant a
     # second limb it can qualify the part next beat ("her other hand"), which
@@ -1930,6 +1933,8 @@ def prepare_scene_commit(ctx):
         ctx.tell_director(
             f"contact: read {_now} as {_was} moving, not as a second contact. "
             "Qualify the part (left/right/other) if you meant a different limb.")
+    for _note in _substance_report:
+        ctx.add_warning(f"substance: {_note}")
     if destruction:
         # Guard-approved departures (cast_changes) left stale positions
         # that merge's occupied-room refusal honored; vacate them and
