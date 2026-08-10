@@ -28,6 +28,11 @@ FRAME_SCOPED_WORLD_KEYS = {
     # Crowd blobs. Per-era like the scene they stand in: a branch that never
     # went to the market must not inherit the market's throng.
     "crowds",
+    # Couriers on the road. Per-era for the same reason, and frame-scoping is
+    # also the whole rewind/branch/archive story: checkpoints snapshot the
+    # world table verbatim, so a restore puts the rider back where he was,
+    # and a branch that never dispatched him has no rider.
+    "couriers",
     "pending_obligations",
     "shadow_profile", "lore_cache", "active_books",
     # {subject_id: {turn, room, elapsed_seconds}} -- who was co-present with

@@ -698,6 +698,57 @@ def crowds_for_room(cid, sc, room_id):
     return out
 
 
+def couriers_for_room(cid, sc, room_id):
+    """What couriers an observer in this room registers, already described.
+
+    The perception half of the interception seam: a courier the player could
+    never SEE is a courier the player could never stop, and the design's
+    verbs -- intercept, follow, question, outrun, silence -- all begin with a
+    body in a room noticing another body in it. Scoped to the observer's own
+    room like `crowds_for_room`, and for the same reason.
+
+    What crosses is what a bystander could take in: the figure, which door he
+    makes for, whether he is waiting. NEVER the message -- a satchel does not
+    broadcast its contents, and the report itself moves only through delivery,
+    questioning, or seizure, all of which are commit-validated ops.
+    """
+    import couriers as couriers_model
+    from db import wget
+
+    if not room_id:
+        return []
+    standing = wget(cid, couriers_model.COURIERS_WORLD_KEY, []) or []
+    out = []
+    for courier in couriers_model.couriers_in_room(standing, room_id):
+        route = [str(r) for r in courier.get("route") or []]
+        leg = max(0, int(courier.get("leg") or 0))
+        heading = route[leg + 1] if leg + 1 < len(route) else None
+        out.append({
+            "courier_id": courier.get("uid"),
+            "what": couriers_model.courier_voice(courier),
+            "heading": heading,
+            # Standing at his destination with the message undelivered: a
+            # man waiting at a gate, which a beat may greet, rob or watch.
+            "waiting": courier.get("status") == couriers_model.ARRIVED,
+        })
+    for courier in couriers_model.passed_through(standing, room_id):
+        route = [str(r) for r in courier.get("route") or []]
+        # The door he went out by: the room after THIS one on his route,
+        # which is what an observer who watched him cross actually saw.
+        try:
+            heading = route[route.index(str(room_id)) + 1]
+        except (ValueError, IndexError):
+            heading = None
+        out.append({
+            "courier_id": courier.get("uid"),
+            "what": "%s, passing through without stopping"
+                    % couriers_model.courier_voice(courier),
+            "heading": heading,
+            "waiting": False,
+        })
+    return out
+
+
 def _perceptible_entities(sc, perceiver_names=None):
     """The entities dict to serialize into a PERCEPTION payload.
 

@@ -2071,8 +2071,12 @@ The first carrier delivery slice is now built: a non-empty public witnessed
 surface is acquired only by a registered character physically at the event,
 stored in that holder's frame-specific state, moved with their actual position,
 and exposed only to their private character agent. Co-location never broadcasts
-it. Still open inside C: anonymous crowd/message/artifact carriers, explicit
-copy events, subtractive degradation at copies, and bounded route fan-out.
+it. Crowd carriers, explicit copy events, subtractive degradation at copies,
+bounded fan-out, and couriers/letters (`couriers.py`: position on a
+`passable_path` route, clock-driven movement, perception surface, and
+question/silence interception — a silenced rider's message never arrives)
+have since landed. Still open inside C: caravan/artifact carriers and
+multi-stop trader routes.
 
 Landed next in unreleased development: **`reactive` is now behavior, not merely
 permission.** A Director resolve may encode `offscreen_plan_ops`, but commit
@@ -2985,7 +2989,10 @@ which starts when the epistemic-leak audit branch merges:
   event, reputation downstream of delivery, the null result as the
   load-bearing test), and invented gossip entering through
   `background_claims` + the provisional tier as its first real producer
-  (the lane measured 0-of-29).
+  (the lane measured 0-of-29). *Carriers with positions and routes have
+  since landed as `couriers.py` (positions on `passable_path` routes,
+  clock-driven movement, interception/silencing that stops delivery); the
+  claims-lane producer and reputation rules remain as stated.*
 - ~~**E, the antagonist ladder** — rungs 1 and 3 per §5; waits on C because a
   race lost without an information trail reads as the engine cheating.~~ —
   landed: the reactive floor fires authored stages, and the adaptive ceiling
