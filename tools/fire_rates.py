@@ -416,11 +416,21 @@ def offscreen_rows(con, turn_ids):
                 for c in crowd_commits),
             sum(int(c.get("offered") or 0) for c in crowd_commits),
             "a populous place declared as one object rather than as extras"),
+        # Denominator is crowds that were CARRYING a heading at the top of the
+        # beat, not every crowd standing anywhere: a crowd with nowhere to be
+        # was never a chance to move. The wider denominator reported 0/78 for
+        # a story in which no heading was ever declared -- which reads as a
+        # stuck gate and is really the design declining to move people nobody
+        # sent anywhere. Commit blobs written before `headed` existed are
+        # excluded rather than borrowing `standing`, so an old bank reads as
+        # no chances instead of as a failure.
         Row("off-screen life", "a crowd moved on the graph",
-            sum(int(c.get("moved") or 0) for c in crowd_commits),
-            sum(int(c.get("standing") or 0) for c in crowd_commits),
-            "crowds standing anywhere; a heading is spent one beat after it "
-            "is declared"),
+            sum(int(c.get("moved") or 0) for c in crowd_commits
+                if c.get("headed") is not None),
+            sum(int(c.get("headed") or 0) for c in crowd_commits
+                if c.get("headed") is not None),
+            "crowds that were carrying a heading; one is spent one beat "
+            "after it is declared"),
         # A crowd is many witnesses; standing where a public surface lands is
         # its acquisition channel, exactly as a walking body's.
         Row("off-screen life", "a crowd took up public talk",

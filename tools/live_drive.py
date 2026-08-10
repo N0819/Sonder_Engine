@@ -85,19 +85,32 @@ def beats(author, cid):
     return [
         ("I come up the road into the market.",
          R("Corin comes into the square.",
-           diff={"positions": {"Corin": MARKET},
-                 "crowd_ops": [{"op": "set", "room": MARKET,
+           diff={"positions": {"Corin": MARKET}})),
+        # The crowd is declared on the SECOND beat. The first turn of a story
+        # runs `director_establish`, not `director_resolve`, so crowd ops
+        # written into the opening beat's `state_diff` go to a stage that
+        # never runs -- they are not rejected, they are never offered, and
+        # every later beat here then had no crowd to steer and no way to say
+        # so. `tools/quest_drive.py` declares its crowd on beat six for the
+        # same reason.
+        ("I stand still and listen to them.",
+         R("The talk goes on around him.",
+           diff={"crowd_ops": [{"op": "set", "room": MARKET,
                                 "band": "a throng",
                                 "composition": "villagers with empty pails",
                                 "mood": "frightened"}]})),
-        ("I stand still and listen to them.",
-         R("The talk goes on around him.")),
         ("I look at the well.",
          R("The cover is grey stone and will not shift.")),
+        # The heading has to name the crowd_id the payload showed. A `set`
+        # carrying only a room and a heading does not steer the crowd standing
+        # there -- it tries to MINT one and is refused for having no
+        # composition, so this beat used to declare a drift that never
+        # happened and said nothing about it.
         ("I push through toward the far side.",
-         R("The press gives, slowly.",
-           diff={"crowd_ops": [{"op": "set", "room": MARKET,
-                                "heading": ROAD}]})),
+         lambda p: R("The press gives, slowly.", diff={"crowd_ops": [
+             {"op": "set", "crowd_id": c["crowd_id"], "heading": ROAD}
+             for c in ((p or {}).get("crowds") or [])[:1] if c.get("crowd_id")
+         ]})),
         ("I ask the nearest woman what happened here.",
          R("She tells him what she saw.",
            dialogue_log=[{"speaker": "Sera",
@@ -123,14 +136,21 @@ def play(db, cid, author, script, capture_dir=""):
     played = []
     for idx, (player_input, payload) in enumerate(script):
         author.script(idx, "director_resolve", payload)
-        for line in (payload.get("dialogue_log") or []):
+        # A beat whose payload depends on what the engine SHOWED that turn --
+        # a crowd_id, a world_event_id -- has to be a callable, because those
+        # ids do not exist when the script is written. Its speech and movement
+        # are read off attributes instead, exactly as `tools/quest_drive.py`
+        # does it.
+        static = payload if isinstance(payload, dict) else {}
+        for line in (static.get("dialogue_log")
+                     or getattr(payload, "dialogue_log", None) or []):
             if isinstance(line, dict) and line.get("text"):
                 spoken = dict(author.default("character"))
                 spoken["sequence"] = [{"type": "speech", "text": line["text"]}]
                 author.script(idx, "character", spoken)
                 break
-        moved = ((payload.get("state_diff") or {}).get("positions") or {}
-                 ).get("Corin")
+        moved = ((static.get("state_diff") or {}).get("positions") or {}
+                 ).get("Corin") or getattr(payload, "moves_to", None)
         if moved:
             interp = author.default("director_interpret")
             if callable(interp):

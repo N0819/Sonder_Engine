@@ -166,10 +166,13 @@ class Author:
     """
 
     def __init__(self):
+        import threading
         self.turn_script = {}
         self.calls = []
         self.rejected = []
         self.capture_dir = ""
+        self._capture_lock = threading.Lock()
+        self._capture_seen = {}
 
     def _capture(self, step_key, system, payload):
         """Write out exactly what a model would be handed.
@@ -177,10 +180,23 @@ class Author:
         For reading BY a model, cold, to find out what the prompt actually
         communicates as opposed to what it was meant to. No test can ask that
         question; it is the one thing only a reader can answer.
+
+        One file per CALL, not per turn-and-stage. The off-screen rungs run on
+        daemon threads and reach this seam while the foreground turn is still
+        in it, so two writers shared a filename: the shorter document landed
+        inside the longer one and five captures in a fifty-one beat run were
+        not parseable at all. A scan cannot tell that apart from the engine
+        emitting malformed context, which is the wrong thing to go looking
+        for. Same-name calls get `.2`, `.3`, in the order they arrived.
         """
         import os
         os.makedirs(self.capture_dir, exist_ok=True)
         name = "t%02d_%s" % (getattr(self, "_turn", -1), step_key.replace(":", "_"))
+        with self._capture_lock:
+            self._capture_seen[name] = self._capture_seen.get(name, 0) + 1
+            nth = self._capture_seen[name]
+        if nth > 1:
+            name = "%s.%d" % (name, nth)
         base = os.path.join(self.capture_dir, name)
         with open(base + ".system.txt", "w") as fh:
             fh.write(str(system or ""))

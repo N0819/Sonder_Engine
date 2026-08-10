@@ -35,7 +35,7 @@ def _profile_str_list(value):
     return [str(item).strip() for item in value if str(item or "").strip()]
 
 
-def _as_profile_list(value, key_slot=None):
+def _as_profile_list(value, key_slot=None, model=None, value_slot=""):
     """A list of profiles, whatever spelling arrived.
 
     One entry is accepted as itself. A MAP keyed by the profile's own name
@@ -55,14 +55,28 @@ def _as_profile_list(value, key_slot=None):
     everything under them. It also iterated a bare STRING, so a single
     strategy spelled `"freeze"` became six strategies named `f`, `r`, `e`,
     `e`, `z`, `e`.
+
+    A map to BARE NUMBERS -- `{"wary": 0.7}` -- is the same map written the
+    shortest way, and it used to be the one spelling that lost the name:
+    expansion required every value to be a dict, so this fell through to the
+    single-profile branch and became one anonymous profile carrying `wary`
+    as a stray key. The sheet then read as populated and named nobody, which
+    is why it survived so long. The discriminator is whether the map's KEYS
+    are the profile's own fields, taken from `model`, rather than whether its
+    values happen to be scalars -- `{"name": "wary", "strength": 0.7}` is one
+    trait, not two traits called `name` and `strength`. The number lands in
+    `value_slot`, the profile's one magnitude.
     """
     if isinstance(value, str):
         return [value]
     if isinstance(value, dict):
-        if value and all(isinstance(v, dict) for v in value.values()):
+        if value and _is_profile_map(value, model):
             expanded = []
             for key, item in value.items():
-                item = dict(item)
+                if not isinstance(item, dict):
+                    item = {value_slot: item} if value_slot else {}
+                else:
+                    item = dict(item)
                 if key_slot and not item.get(key_slot):
                     item[key_slot] = key
                 expanded.append(item)
@@ -71,6 +85,27 @@ def _as_profile_list(value, key_slot=None):
     if isinstance(value, (list, tuple)):
         return list(value)
     return []
+
+
+def _is_profile_map(value, model=None):
+    """True when this dict is keyed by profile NAMES rather than field names.
+
+    Every value being a dict settles it on its own -- no profile has a field
+    whose value is a profile. Otherwise the keys decide: a map that names
+    none of the model's fields is not a profile written out, so its keys are
+    names. Without a `model` only the all-dict case is recognised, which is
+    exactly the behaviour that shipped.
+    """
+    if all(isinstance(item, dict) for item in value.values()):
+        return True
+    if model is None:
+        return False
+    from schemas import _fields
+    if set(value) & set(_fields(model) or ()):
+        return False
+    return all(isinstance(item, (int, float)) and not isinstance(item, bool)
+               or isinstance(item, dict)
+               for item in value.values())
 
 
 def _profile_float(value, default=0.5, low=0.0, high=1.0):
@@ -219,7 +254,7 @@ class PsychologyProfile(_PsychologyModel):
 
     @validator("traits", pre=True)
     def _traits(cls, value):
-        value = _as_profile_list(value, "name")
+        value = _as_profile_list(value, "name", TraitProfile, "strength")
         return [
             {"name": item} if isinstance(item, str) else item
             for item in (value or [])
@@ -228,7 +263,7 @@ class PsychologyProfile(_PsychologyModel):
 
     @validator("values", pre=True)
     def _values(cls, value):
-        value = _as_profile_list(value, "name")
+        value = _as_profile_list(value, "name", ValueProfile, "priority")
         return [
             {"name": item} if isinstance(item, str) else item
             for item in (value or [])
@@ -283,7 +318,8 @@ def _normalize_psychology(value: Any) -> dict:
             BeliefProfile,
             {"belief": item} if isinstance(item, str) else item,
         )
-        for item in _as_profile_list(self_model.get("beliefs"), "belief")
+        for item in _as_profile_list(self_model.get("beliefs"), "belief",
+                                     BeliefProfile, "confidence")
         if isinstance(item, (str, dict))
     ]
     result["self_model"] = self_model
@@ -303,7 +339,8 @@ def _normalize_psychology(value: Any) -> dict:
             CopingStrategyProfile,
             {"name": item, "response": item} if isinstance(item, str) else item,
         )
-        for item in _as_profile_list(coping.get("strategies"), "name")
+        for item in _as_profile_list(coping.get("strategies"), "name",
+                                     CopingStrategyProfile, "effectiveness")
         if isinstance(item, (str, dict))
     ]
     result["coping"] = coping
@@ -330,7 +367,8 @@ def _normalize_psychology(value: Any) -> dict:
         learning = {}
     learning["associations"] = [
         _profile(AssociationProfile, item)
-        for item in _as_profile_list(learning.get("associations"), "cue")
+        for item in _as_profile_list(learning.get("associations"), "cue",
+                                     AssociationProfile, "strength")
         if isinstance(item, dict)
     ]
     result["learning"] = learning

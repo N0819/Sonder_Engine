@@ -6595,6 +6595,18 @@ def commit_crowds(ctx, prepared_scene):
     rooms = list((scene.get("rooms") or {}).keys())
     turn = int(getattr(ctx.turn, "id", 0) or 0)
 
+    # Counted before `advance_crowds`, which spends every heading it honours
+    # and leaves nothing to count afterwards. This is the denominator for "a
+    # crowd moved on the graph": a crowd standing still with nowhere to be was
+    # never a chance to move, and measuring moves against every standing crowd
+    # made a working mechanism read as stuck -- 0/78 over a fifty-one beat
+    # story in which no heading was ever declared. Measuring against every row
+    # in the table rather than against the opportunities a mechanism had is
+    # the exact mistake that has cost this project the most.
+    headed = sum(1 for crowd in before
+                 if isinstance(crowd, dict) and crowd.get("heading")
+                 and str(crowd.get("heading")) != str(crowd.get("room_uid")))
+
     standing, moves = crowds_model.advance_crowds(
         before, passable_neighbors(scene))
     standing, rejected = crowds_model.apply_ops(
@@ -6606,6 +6618,7 @@ def commit_crowds(ctx, prepared_scene):
     if standing != before:
         wset(cid, crowds_model.CROWDS_WORLD_KEY, standing)
     return {"offered": len(ops), "standing": len(standing),
+            "headed": headed,
             "moved": len(moves), "rejected": len(rejected)}
 
 

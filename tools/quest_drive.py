@@ -373,12 +373,38 @@ def quest(author, cid):
                           "text": "I'll go ahead and watch the gate until dusk."}])),
     ]
 
+    # The town's cistern is sealed, so the town starts leaving -- declared as
+    # a HEADING rather than a `move`, which is the difference between a crowd
+    # walking the graph everyone else walks and a crowd teleporting across it.
+    # A heading is spent one beat after it is declared, so the press stands in
+    # the town for exactly one beat of perception before it is at the gate.
+    #
+    # It has to name the `crowd_id` the payload showed. A `set` carrying only
+    # a room and a heading does not steer the crowd standing there -- it tries
+    # to MINT one, and is refused for having no composition. That refusal is
+    # the design working (a crowd may only be named by a uid the engine
+    # minted), and an earlier draft of this beat was rejected by it. It is
+    # also the only beat in this story that gives "a crowd moved on the graph"
+    # a denominator at all: every other crowd here stands still, and a crowd
+    # with nowhere to be was never a chance to move.
+    def let_sera_go(p):
+        diff = {"cast_changes": [{"who": "Sera", "status": "dormant",
+                                  "reason": "gone ahead to the gate"}]}
+        for crowd in (p or {}).get("crowds") or []:
+            if str(crowd.get("room")) == TOWN and crowd.get("crowd_id"):
+                diff["crowd_ops"] = [{"op": "set",
+                                      "crowd_id": crowd["crowd_id"],
+                                      "heading": GATE}]
+                break
+        return R("Sera goes out through the culvert, and the town starts "
+                 "moving toward the gate behind her.", diff=diff)
+
+    let_sera_go.prose = ("Sera goes out through the culvert. Behind her the "
+                         "square begins to drain toward the gate road.")
+
     # --- V. Separation: the party splits, and knowledge splits with it --
     B += [
-        ("I let Sera go ahead.",
-         R("Sera goes out through the culvert.",
-           diff={"cast_changes": [{"who": "Sera", "status": "dormant",
-                                   "reason": "gone ahead to the gate"}]})),
+        ("I let Sera go ahead.", let_sera_go),
         ("We move to the gate road.",
          go(GATE, "The Citadel Gate is a slot in the rock, and it is cold.")),
         ("I look for Sera.",
