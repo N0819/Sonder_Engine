@@ -17,6 +17,23 @@ there is no vector index.
 
 ---
 
+## 0. What this layer has already demonstrated
+
+Long-term character memory is already more durable than raw model context. Its
+rows live outside any one provider request or context window, remain owned by
+the same character, survive process restarts, checkpoints, rerolls, branches
+and portable archives, and return older experience through bounded retrieval
+rather than requiring the whole transcript to remain in every prompt.
+
+This is an achieved orchestration advantage, not a claim that recall is solved.
+The measurements below show relevant old evidence and earlier life windows
+returning after they have left the recent-turn buffer; they also document real
+failures in ranking, consolidation, embedding compatibility and belief
+provenance. Durability is proven. Selecting the right memory, preserving what
+it meant, and using it well remain measurable engineering problems.
+
+---
+
 ## 1. The shape of a memory
 
 One row in `memories` (`db.py`). The fields that do work:
