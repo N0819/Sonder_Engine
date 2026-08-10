@@ -1501,3 +1501,93 @@ def land_profile_ticks(cid, base_turn, events, *, epoch_id=None):
         cid, base_turn, epoch_id or f"tick:{cid}:{base_turn}", events,
         rung="profile")
     return {"written": len(written)}
+
+
+#: Everything a paid off-screen tick may know. An ALLOWLIST, because
+#: "fail-closed" means a field nobody thought about is absent rather than
+#: present: a denylist grows a hole every time the payload gains a key, and the
+#: hole is silent. The roadmap names the exclusions -- no player position, no
+#: recent action, no private perception, no objective event this mind did not
+#: witness, no other mind's state -- and the way to honour a list of
+#: exclusions is to never build the thing they would have to be removed from.
+AGENT_CONTEXT_KEYS = (
+    "identity",        # who they are, from their own sheet
+    "psychology",      # their own interior
+    "drive",           # their own, singular
+    "memories",        # their own autobiographical rows
+    "beliefs",         # what they think is true, including wrongly
+    "plans",           # authored plans they own
+    "carried_reports", # what reached them, already degraded
+    "last_known",      # where they were and when, by their own reckoning
+    "elapsed_seconds", # how long they have been on their own
+)
+
+
+def agent_context(cid, entry, *, frame_id=None, clock=None):
+    """The private context for one paid off-screen tick. Fail-closed.
+
+    This is the firewall the whole `character_agent` rung rests on, and the
+    failure it exists to prevent has a name in the design: "how did he know
+    that". An absent mind that receives the player's position, or an event it
+    did not witness, produces a villain who reacts before evidence arrives --
+    and the prose will sound completely plausible while doing it, which is why
+    this is built as a structure rather than as an instruction.
+
+    Distance and importance may decide WHETHER this runs and how much is spent
+    on it. They must never become content: a character who could tell how
+    important they were would be reading the engine, not the world.
+
+    Everything here is drawn from the character's own rows. Nothing is passed
+    in from the turn, and there is deliberately no `scene` parameter to forget
+    to leave out.
+    """
+    from db import q
+
+    sheet = entry.get("sheet") or {}
+    state = entry.get("state") if isinstance(entry.get("state"), dict) else {}
+    identity = (sheet.get("identity") or {})
+    psychology = (sheet.get("psychology") or {})
+    char_id = entry.get("char_id")
+
+    memories = []
+    if char_id is not None:
+        memories = [
+            {"summary": r["summary"], "turn_idx": r["turn_idx"]}
+            for r in q("SELECT summary, turn_idx FROM memories "
+                       "WHERE chat_id=? AND char_id=? "
+                       "ORDER BY turn_idx DESC LIMIT 12",
+                       (cid, char_id)) or []
+        ]
+
+    plans = [p for p in (_plans_for(cid, frame_id) or [])
+             if isinstance(p, dict)
+             and str(p.get("actor_id")) == str(entry.get("id"))
+             and p.get("status") == "active"]
+
+    context = {
+        "identity": {"name": identity.get("name") or "",
+                     "uid": identity.get("uid") or ""},
+        "psychology": psychology.get("traits") or {},
+        "drive": psychology.get("drive") or {},
+        "memories": memories,
+        "beliefs": state.get("beliefs") or {},
+        "plans": plans,
+        # Already degraded by `degradation` at the moment each was heard, so
+        # this hands over what they believe rather than what is true.
+        "carried_reports": [r for r in state.get("carried_reports") or []
+                            if isinstance(r, dict)],
+        "last_known": (state.get("offscreen_agent") or {}).get("last_known")
+        or state.get("last_known") or {},
+        "elapsed_seconds": float((clock or {}).get("elapsed_seconds") or 0.0),
+    }
+    # The allowlist is enforced here rather than trusted above, so a key added
+    # to the dict later without being added to the list cannot ride out.
+    return {k: v for k, v in context.items() if k in AGENT_CONTEXT_KEYS}
+
+
+def _plans_for(cid, frame_id):
+    from db import wget, wget_for_frame
+
+    if frame_id is not None:
+        return wget_for_frame(cid, PLAN_KEY, frame_id, []) or []
+    return wget(cid, PLAN_KEY, []) or []
