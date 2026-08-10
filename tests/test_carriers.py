@@ -7,6 +7,8 @@ import json
 import time
 import types
 
+import crowds
+
 
 def _world(db, *, enabled=True):
     cid = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -136,3 +138,71 @@ def test_carrier_floor_has_no_model_or_provider_call():
     character_source = inspect.getsource(character.character_step)
     assert 'payload["carried_reports"]' in character_source
     assert "reports_for_state(stored_state)" in character_source
+
+
+# ---- crowds as anonymous carriers --------------------------------------
+#
+# Item 2 of the completion roadmap left one line open — "crowds should also
+# become possible information carriers" — and item 3 asks for anonymous
+# carriers. The same object closes both, and needs no new travel machinery:
+# `crowds.advance_crowds` already walks the one graph everybody walks, so talk
+# moves because the market moves.
+
+
+class TestACrowdCarriesTalk:
+    def _crowd(self):
+        return crowds.new_crowd(1, "square", band="a throng",
+                                composition="market traders", since_turn=1)
+
+    def test_a_crowd_is_never_quoted_by_name(self):
+        """Five ledgers already key beings by display name. A crowd has no
+        name by construction, and "talk among the market traders" is a source
+        a mind can weigh — obviously hearsay, and obviously not a person who
+        could be asked."""
+        voice = crowds.crowd_voice(self._crowd())
+        assert voice == "talk among the market traders"
+        assert "crowd:" not in voice
+
+    def test_an_unnamed_crowd_still_has_a_voice(self):
+        assert crowds.crowd_voice({}) == "talk going round"
+
+    def test_a_crowd_holds_what_it_was_told(self):
+        crowd = crowds.add_hearsay(
+            self._crowd(), {"world_event_id": "e1", "claim": "the gate fell"})
+        assert [r["claim"] for r in crowds.crowd_hearsay(crowd)] == \
+            ["the gate fell"]
+
+    def test_it_does_not_hear_the_same_thing_twice(self):
+        crowd = self._crowd()
+        for _ in range(3):
+            crowd = crowds.add_hearsay(
+                crowd, {"world_event_id": "e1", "claim": "the gate fell"})
+        assert len(crowds.crowd_hearsay(crowd)) == 1
+
+    def test_a_crowd_is_not_an_archive(self):
+        """It is what people are saying right now. The oldest talk stops
+        being repeated rather than accumulating forever."""
+        crowd = self._crowd()
+        for i in range(crowds.CROWD_REPORT_CAP + 3):
+            crowd = crowds.add_hearsay(
+                crowd, {"world_event_id": "e%d" % i, "claim": "story %d" % i})
+        assert len(crowds.crowd_hearsay(crowd)) == crowds.CROWD_REPORT_CAP
+
+    def test_a_crowd_is_exempt_from_the_dialogue_check_and_nothing_else(self):
+        """A crowd murmurs continuously — that IS its speech, so there is no
+        line in `dialogue_log` to point at. Every other refusal still applies,
+        because catching a rumor in a market has to stay knowledge by a beat
+        that said so rather than knowledge by proximity."""
+        import inspect
+
+        import carriers
+        body = inspect.getsource(carriers.apply_tellings)
+        gate = body[body.index("said nothing this beat")]
+        assert 'speaker.get("crowd") is None and speaker_key not in spoke' \
+            in body
+        # The co-location, holding and fan-out guards are not conditioned on
+        # being a person.
+        for guard in ("not in the same room", "cannot pass it on",
+                      "has told %d people"):
+            after = body[body.index("said nothing this beat"):]
+            assert guard in after

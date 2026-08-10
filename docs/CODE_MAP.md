@@ -26,13 +26,13 @@
 | `backdrops.py` | 1258 |  | `db`, `logging_utils`, `outofband`, `spatial`, `weather` |
 | `background_claims.py` | 466 |  | `db` |
 | `canon_provenance.py` | 360 |  | — |
-| `carriers.py` | 354 |  | `character_schema`, `db`, `degradation`, `living_world`, `scene`, `spatial` |
+| `carriers.py` | 421 |  | `character_schema`, `crowds`, `db`, `degradation`, `living_world`, `scene`, `spatial` |
 | `character_schema.py` | 1383 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `attire`, `schemas` |
 | `chat_archive.py` | 1096 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1105 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
 | `commit.py` | 6750 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
-| `crowds.py` | 532 |  | — |
+| `crowds.py` | 577 |  | — |
 | `db.py` | 1603 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `degradation.py` | 171 |  | — |
 | `frames.py` | 220 |  | `db` |
@@ -310,11 +310,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_tellings()` | 228 | 127 lines |
-| `advance_carriers()` | 94 | 106 lines |
-| `_cast_index()` | 202 | 24 lines |
-| `reports_for_state()` | 71 | 21 lines |
-| `_character_room()` | 59 | 10 lines |
+| `apply_tellings()` | 245 | 177 lines |
+| `advance_carriers()` | 95 | 106 lines |
+| `_cast_index()` | 203 | 24 lines |
+| `reports_for_state()` | 72 | 21 lines |
+| `_crowd_index()` | 229 | 14 lines |
+| `_character_room()` | 60 | 10 lines |
 
 ### `character_schema.py`
 
