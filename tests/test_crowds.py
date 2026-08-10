@@ -531,3 +531,94 @@ class TestTheDirectorCanActuallySayIt:
         assert moves and first[0]["heading"] is None
         second, again = crowds.advance_crowds(first, {"square": {"gate"}})
         assert again == [], "one declaration moved the crowd twice"
+
+
+class TestEmergenceProducesStrangers:
+    """§4. The part that writes rows outliving the scene, which is why it
+    landed last."""
+
+    def _square(self):
+        return crowds.apply_ops(
+            [], [{"op": "set", "room": "square", "band": "a throng",
+                  "composition": "market traders"}],
+            chat_id=1, turn=1, known_rooms=["square"])[0]
+
+    def test_a_crowd_may_never_emerge_a_named_character(self):
+        """A cast member coming out of the extras is indistinguishable in the
+        record from one who was always there — a canon write nobody authored.
+        If the Director wants Wilhelm in the square, he arrives."""
+        before = self._square()
+        standing, rejected = crowds.apply_ops(
+            before, [{"op": "emerge", "crowd_id": before[0]["uid"],
+                      "who": "Wilhelm van Astrea"}],
+            chat_id=1, turn=2, known_rooms=["square"],
+            roster=["Wilhelm van Astrea", "Mora"])
+        assert standing[0].get("emerged") in (None, [])
+        assert any("stranger" in r for r in rejected)
+
+    def test_a_stranger_steps_out_and_the_crowd_remembers_it(self):
+        before = self._square()
+        standing, rejected = crowds.apply_ops(
+            before, [{"op": "emerge", "crowd_id": before[0]["uid"],
+                      "who": "a rope-seller"}],
+            chat_id=1, turn=2, known_rooms=["square"], roster=["Mora"])
+        assert standing[0]["emerged"] == ["a rope-seller"]
+        assert rejected == []
+
+    def test_the_band_does_not_move(self):
+        """A throng minus one is a throng. Bands are coarse precisely so that
+        nothing has to do arithmetic on them."""
+        before = self._square()
+        standing, _ = crowds.apply_ops(
+            before, [{"op": "emerge", "crowd_id": before[0]["uid"],
+                      "who": "a rope-seller"}],
+            chat_id=1, turn=2, known_rooms=["square"])
+        assert standing[0]["band"] == "a throng"
+
+    def test_someone_who_only_moved_may_go_back(self):
+        """Stepped aside, looked up, made room. Nothing durable names them."""
+        before = self._square()
+        out, _ = crowds.apply_ops(
+            before, [{"op": "emerge", "crowd_id": before[0]["uid"],
+                      "who": "a man with a basket"}],
+            chat_id=1, turn=2, known_rooms=["square"])
+        standing, rejected = crowds.apply_ops(
+            out, [{"op": "absorb", "who": "a man with a basket"}],
+            chat_id=1, turn=2, known_rooms=["square"], spoken=["Mora"])
+        assert standing[0]["emerged"] == [] and rejected == []
+
+    def test_emergence_is_one_way_for_anyone_who_speaks(self):
+        """`dialogue_log` outlives the scene, mentions are already being
+        counted, and an owed reply may be keyed to the name. Re-absorbing them
+        would delete a person the record still points at."""
+        before = self._square()
+        out, _ = crowds.apply_ops(
+            before, [{"op": "emerge", "crowd_id": before[0]["uid"],
+                      "who": "a rope-seller"}],
+            chat_id=1, turn=2, known_rooms=["square"])
+        standing, rejected = crowds.apply_ops(
+            out, [{"op": "absorb", "who": "a rope-seller"}],
+            chat_id=1, turn=2, known_rooms=["square"],
+            spoken=["Mora", "a rope-seller"])
+        assert standing[0]["emerged"] == ["a rope-seller"]
+        assert any("cannot go back" in r for r in rejected)
+
+    def test_commit_decides_who_spoke_rather_than_asking(self):
+        """The test is "does anything durable now name them", which is a
+        question deterministic code can answer and a model cannot be trusted
+        to answer about itself."""
+        import inspect
+
+        import commit
+        body = inspect.getsource(commit.commit_crowds)
+        assert "dialogue_log" in body
+        assert "_registered_name_roster" in body
+
+    def test_the_person_is_not_given_a_second_identity_space(self):
+        """`track_background_presences` already discovers anyone the Director
+        gives a line or an entity def to. A second writer for the same person
+        would be a sixth ledger keyed by display name."""
+        import inspect
+
+        assert "characters" not in inspect.getsource(crowds.emerge)
+        assert "chat_chars" not in inspect.getsource(crowds.emerge)

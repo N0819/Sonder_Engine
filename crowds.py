@@ -210,14 +210,16 @@ def new_crowd(chat_id, room_uid, *, band, composition, since_turn,
     }
 
 
-#: The ops a Director may write. `emerge` is deliberately absent: emergence
-#: writes a durable row that outlives the scene and lands last, after the cheap
-#: half has earned it.
+#: The ops a Director may write. `emerge` and `absorb` land LAST by design:
+#: they are the pair that touches what the story will still be able to say
+#: about a person after the scene ends, and the cheap half had to earn them.
 OP_SET = "set"
 OP_MOVE = "move"
 OP_SPLIT = "split"
 OP_DISPERSE = "disperse"
-_OPS = (OP_SET, OP_MOVE, OP_SPLIT, OP_DISPERSE)
+OP_EMERGE = "emerge"
+OP_ABSORB = "absorb"
+_OPS = (OP_SET, OP_MOVE, OP_SPLIT, OP_DISPERSE, OP_EMERGE, OP_ABSORB)
 
 #: How many crowds one era may hold at once. Not a cost limit -- a crowd is one
 #: row and costs nothing to carry. It is a coherence limit: past this the
@@ -231,7 +233,7 @@ def _op_word(value):
     return word if word in _OPS else ""
 
 
-def apply_ops(crowds, ops, *, chat_id, turn, known_rooms):
+def apply_ops(crowds, ops, *, chat_id, turn, known_rooms, roster=(), spoken=()):
     """Fold Director crowd ops into the crowd list. Pure; returns
     ``(crowds, rejected)``.
 
@@ -272,6 +274,15 @@ def apply_ops(crowds, ops, *, chat_id, turn, known_rooms):
             rejected.append("unknown crowd op %r" % (raw.get("op"),))
             continue
 
+        # `absorb` names a person rather than a crowd -- whoever they came out
+        # of is the engine's to remember, not the model's to re-state.
+        if op == OP_ABSORB:
+            out, reason = absorb(out, raw.get("who"), spoken=spoken)
+            by_uid = {str(c.get("uid") or ""): c for c in out}
+            if reason:
+                rejected.append(reason)
+            continue
+
         uid = str(raw.get("crowd_id") or "").strip()
         room = str(raw.get("room") or "").strip()
         heading = str(raw.get("heading") or "").strip()
@@ -309,6 +320,14 @@ def apply_ops(crowds, ops, *, chat_id, turn, known_rooms):
 
         if target is None:
             rejected.append("crowd op %r names no crowd" % op)
+            continue
+
+        if op == OP_EMERGE:
+            out, reason = emerge(out, uid, raw.get("who"), roster=roster)
+            by_uid = {str(c.get("uid") or ""): c for c in out}
+            target = by_uid.get(uid)
+            if reason:
+                rejected.append(reason)
             continue
 
         if op == OP_DISPERSE:
@@ -372,6 +391,77 @@ def apply_ops(crowds, ops, *, chat_id, turn, known_rooms):
             target["heading"] = heading
 
     return out, rejected
+
+
+def emerge(crowds, uid, who, *, roster=()):
+    """Someone steps out of the crowd. Pure; returns ``(crowds, reason)``.
+
+    Emergence needs far less new machinery than it looks like, because
+    `commit.track_background_presences` ALREADY discovers anyone the Director
+    gives a dialogue line or an entity def to. Building a second writer for the
+    person would be building a second identity space for them, which is the
+    defect this whole module is written around. So what this records is the one
+    thing that path cannot know: that the stranger came OUT of the crowd rather
+    than having been standing there all along.
+
+    **A crowd may never emerge a named character.** It produces strangers. If
+    the Director wants a cast member in the square, they ARRIVE -- a cast
+    member emerging from the extras is indistinguishable in the record from one
+    who was always there, and that is a canon write nobody authored.
+
+    **The band does not move.** A throng minus one is a throng; a handful minus
+    one is still a handful. Bands are coarse precisely so that nothing has to
+    do arithmetic on them, and subtracting a person from a word is the
+    conservation bookkeeping the band exists to refuse.
+    """
+    out = [dict(c) for c in (crowds or []) if isinstance(c, dict)]
+    name = " ".join(str(who or "").split())
+    if not name:
+        return out, "an emergence with no one in it"
+    known = {str(n or "").casefold() for n in (roster or ())}
+    if name.casefold() in known:
+        return out, ("%s is a named character; a crowd produces strangers, "
+                     "and someone the story already knows arrives" % name)
+    for crowd in out:
+        if str(crowd.get("uid") or "") != str(uid or ""):
+            continue
+        emerged = [str(n) for n in (crowd.get("emerged") or [])]
+        if name.casefold() in {n.casefold() for n in emerged}:
+            return out, "%s has already stepped out of that crowd" % name
+        crowd["emerged"] = emerged + [name]
+        return out, ""
+    return out, "no crowd %r for anyone to step out of" % uid
+
+
+def absorb(crowds, who, *, spoken=()):
+    """Someone who only acted goes back into the crowd. Pure; returns
+    ``(crowds, reason)``.
+
+    **Emergence is one-way for anyone who speaks.** Once a line is attributed
+    to someone the story has a record of them: `dialogue_log` outlives the
+    scene, `track_background_presences` is already counting their mentions, and
+    an owed reply may be keyed to their name. Re-absorbing them would delete a
+    person the record still points at. Someone who merely stepped aside or
+    looked up left nothing behind and may go back.
+
+    The test is not "did they matter" but "does anything durable now name
+    them", which is a question deterministic code can answer and a model
+    cannot be trusted to.
+    """
+    out = [dict(c) for c in (crowds or []) if isinstance(c, dict)]
+    name = " ".join(str(who or "").split())
+    if not name:
+        return out, "an absorption with no one in it"
+    if name.casefold() in {str(n or "").casefold() for n in (spoken or ())}:
+        return out, ("%s has spoken; the story has a record of them and they "
+                     "cannot go back into the crowd" % name)
+    for crowd in out:
+        emerged = [str(n) for n in (crowd.get("emerged") or [])]
+        kept = [n for n in emerged if n.casefold() != name.casefold()]
+        if len(kept) != len(emerged):
+            crowd["emerged"] = kept
+            return out, ""
+    return out, "%s did not come out of any crowd" % name
 
 
 def advance_crowds(crowds, neighbors):
