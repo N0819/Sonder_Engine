@@ -216,6 +216,16 @@ Resolve maps each ref back to the exact ledger direction and parts, projects
 those removals before its own contact diff, and rejects a stale re-add of the
 same contact. Other simultaneous contacts survive unless separately named.
 
+Non-discrete matter uses a sibling relation rather than abusing contact or
+inventory. `state_diff.substance_ops` records an established material's source,
+destination, placement (`surface|interior|contained|room`), amount, and optional
+interior/endpoint. If `source_part` is the actor part of exactly one standing
+interior contact, resolve may omit the destination: merge derives the target and
+enclosing structure from that onset topology before applying same-turn contact
+removals. A contradictory explicit destination is refused. The resulting
+`scene.substances` entry persists until a bounded remove/clear operation; code
+tracks the material the fiction names but never infers one from an event label.
+
 The model supplies ambient observer-specific sensory prose, but it does not own
 the chronology of an already structured player declaration. Model-rendered
 copies of declared speech/action are removed; ambient clauses sharing a
@@ -357,6 +367,9 @@ was encoded. Legacy endpoint-free contact manifests use an op-specific
 part/manner match and fail toward one idempotent repair when underspecified.
 The additive repair merge retains `contact_ops`; detection without that merge
 would report the divergence while still committing the stale relation.
+Substance entries likewise carry their material, target, placement, and
+enclosing interior. Reconciliation treats a completed deposit/removal as its
+own evidence category and retains `substance_ops` through additive repair.
 
 ### `background_react`
 

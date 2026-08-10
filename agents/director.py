@@ -566,6 +566,8 @@ def director_establish(ctx, nonce):
         # unrepresentable at establishment and the scene opened with contacts:[].
         "contact_ops": (out.get("contact_ops")
                         if isinstance(out.get("contact_ops"), list) else []),
+        "substance_ops": (out.get("substance_ops")
+                          if isinstance(out.get("substance_ops"), list) else []),
         "attire": out.get("attire") if isinstance(out.get("attire"), dict) else {},
         "world_facts": out.get("world_facts") if isinstance(out.get("world_facts"), list) else [],
         "time": None,
@@ -2091,7 +2093,7 @@ def _normalize_diff_shape(sd):
             sd[k] = {}
     for k in ("cast_changes", "world_facts", "introductions", "following_ops",
               "remove_entities", "remove_rooms", "remove_adjacent",
-              "inventory_ops", "contact_ops", "claim_dispositions",
+              "inventory_ops", "contact_ops", "substance_ops", "claim_dispositions",
               "consequences", "offscreen_plan_ops"):
         if not isinstance(sd.get(k), list):
             sd[k] = []
@@ -2571,7 +2573,8 @@ def _diff_is_substantive(sd):
     """True when the diff asserts any physical change at all (post-strip)."""
     for key in ("rooms", "entities", "conditions", "attire", "overlays",
                 "positions", "remove_entities", "remove_rooms",
-                "remove_adjacent", "inventory_ops", "cast_changes"):
+                "remove_adjacent", "inventory_ops", "contact_ops",
+                "substance_ops", "cast_changes"):
         if sd.get(key):
             return True
     return False
@@ -2605,6 +2608,7 @@ def _reconcile_scene_slice(sc, cast, p_room, sd):
         "rooms": _contextual_rooms(sc, cast, *extra),
         "positions": sc.get("positions") or {},
         "entities": sc.get("entities") or {},
+        "substances": sc.get("substances") or [],
     }
 
 def _merge_repair_into_diff(sd, patch):
@@ -2648,7 +2652,7 @@ def _merge_repair_into_diff(sd, patch):
     for key, room in (patch.get("positions") or {}).items():
         sd["positions"].setdefault(key, room)
     for field in ("remove_entities", "remove_rooms", "remove_adjacent",
-                  "inventory_ops", "contact_ops", "cast_changes", "world_facts",
+                  "inventory_ops", "contact_ops", "substance_ops", "cast_changes", "world_facts",
                   "introductions"):
         for item in (patch.get(field) or []):
             if item not in sd[field]:
@@ -2753,6 +2757,14 @@ def _omission_subject_encoded(sd, subject, forms=None):
             return True
         if _norm_subject(subject) in ("contact", "contacts"):
             return True
+    for op in (sd.get("substance_ops") or []):
+        if not isinstance(op, dict):
+            continue
+        if (hits(op.get("source")) or hits(op.get("target"))
+                or hits(op.get("substance"))):
+            return True
+        if _norm_subject(subject) in ("substance", "substances", "material"):
+            return True
     return False
 
 # Category synonyms a model may plausibly write in a manifest entry, folded
@@ -2768,6 +2780,9 @@ _OMISSION_CATEGORY_ALIASES = {
     "clothing": "attire", "outfit": "attire",
     "contact": "contacts", "contacts": "contacts",
     "contact_ops": "contacts", "body_position": "contacts",
+    "substance": "substances", "substances": "substances",
+    "substance_ops": "substances", "material": "substances",
+    "material_transfer": "substances", "residue": "substances",
     "item": "inventory", "inventory_ops": "inventory",
     "cast": "cast_changes", "arrival": "cast_changes",
     "departure": "cast_changes",
@@ -2917,6 +2932,35 @@ def _evidence_present(sd, omission, forms=None):
                     and endpoint_matches(op):
                 return True
         return False
+    if category == "substances":
+        manifested_substance = str(omission.get("substance") or "").strip()
+        manifested_placement = str(omission.get("placement") or "").strip()
+        manifested_target = str(omission.get("target") or "").strip()
+        manifested_interior = str(
+            omission.get("target_interior") or "").strip()
+        subject_is_ledger = _norm_subject(subject) in (
+            "substance", "substances", "material")
+        for op in (sd.get("substance_ops") or []):
+            if not isinstance(op, dict):
+                continue
+            if not (subject_is_ledger or hits(op.get("source"))
+                    or hits(op.get("target")) or hits(op.get("substance"))):
+                continue
+            if manifested_substance and _norm_subject(
+                    manifested_substance) != _norm_subject(op.get("substance")):
+                continue
+            if manifested_target and not _make_subject_hit(
+                    manifested_target)(op.get("target")):
+                continue
+            if manifested_placement and _norm_subject(
+                    manifested_placement) != _norm_subject(op.get("placement")):
+                continue
+            if manifested_interior and _norm_subject(
+                    manifested_interior) != _norm_subject(
+                        op.get("target_interior")):
+                continue
+            return True
+        return False
     if category == "inventory":
         return any(
             isinstance(op, dict) and (hits(op.get("object_id"))
@@ -2969,7 +3013,8 @@ def _manifest_items(out):
         # Preserve the historical public manifest shape for every non-contact
         # change; endpoint keys exist only when the model actually supplied
         # them, rather than four empty strings appearing on every item.
-        for field in ("actor", "actor_part", "target", "target_part"):
+        for field in ("actor", "actor_part", "target", "target_part",
+                      "substance", "placement", "target_interior"):
             value = str(item.get(field) or "").strip()
             if value:
                 normalized[field] = value
