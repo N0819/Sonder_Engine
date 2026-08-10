@@ -3688,7 +3688,22 @@ _ROUND_CONDUCT_KEYS = ("sequence", "speech", "speech_volume", "action",
 
 
 def _round_conduct(rounds):
-    """Interaction/reaction rounds reduced to what was said and done."""
+    """Interaction/reaction rounds reduced to what was said and done.
+
+    The two loops spell the actor differently -- the interaction loop records
+    `speaker` (agents/loops.py), the reaction loop records `reactor` -- and
+    reading only `speaker` delivered every reaction round here as
+    `speaker: null`: speech and actions with nobody attached to them. Found by
+    reading the payloads of a real-model playthrough, where three reactions in
+    one resolve carried a full sequence and an `event_id` naming the
+    character, and no name. This stage adjudicates contested physical
+    reactions off exactly this list, so it was being asked to decide who did
+    what to whom with the who removed.
+
+    Folded here because this is the one place the two spellings meet. A guard
+    each loop had to remember is the guard this project's history says gets
+    forgotten.
+    """
     out = []
     for entry in rounds or []:
         if not isinstance(entry, dict):
@@ -3698,7 +3713,7 @@ def _round_conduct(rounds):
         conduct = {k: result[k] for k in _ROUND_CONDUCT_KEYS
                    if result.get(k) not in (None, "", [], {})}
         out.append({"round": entry.get("round"),
-                    "speaker": entry.get("speaker"),
+                    "speaker": entry.get("speaker") or entry.get("reactor"),
                     "result": conduct})
     return out
 

@@ -50,6 +50,39 @@ class TestWhatSurvives:
         assert out["result"]["sequence"]
 
 
+class TestAReactionRoundNamesItsReactor:
+    """The reaction loop records `reactor`; the interaction loop records
+    `speaker`. `_round_conduct` read only `speaker`, so every reaction round
+    reached the Director as `speaker: null` -- speech and actions with nobody
+    attached to them.
+
+    Caught by scanning the payloads of a real-model playthrough: three
+    reactions in one resolve carried a full sequence and an `event_id` naming
+    character 1, and no name. The Director adjudicates contested physical
+    reactions off this list, so it was being asked to decide who did what to
+    whom with the who removed. Two spellings of one thing -- the scar
+    `wearing`/`state` left, and the reason the house rule is to fold on the
+    way in rather than to remember a helper.
+    """
+
+    def _reaction(self):
+        return {"round": 0, "reactor_id": 1, "reactor": "Sera",
+                "result": {"speech": "Sera. I'm listening."}}
+
+    def test_a_reaction_round_carries_the_reactors_name(self):
+        assert _round_conduct([self._reaction()])[0]["speaker"] == "Sera"
+
+    def test_an_interaction_rounds_speaker_still_wins(self):
+        entry = self._reaction()
+        entry["speaker"] = "Veronica"
+        assert _round_conduct([entry])[0]["speaker"] == "Veronica"
+
+    def test_a_round_naming_nobody_keeps_the_shape(self):
+        """Absent rather than a lie: an unattributed round keeps the key, so
+        the payload shape does not shift beat to beat and stop caching."""
+        assert _round_conduct([{"round": 0, "result": {}}])[0]["speaker"] is None
+
+
 class TestWhatMustNotSurvive:
     def test_options_a_character_rejected_do_not_reach_the_adjudicator(self):
         """The one that is not about tokens. A stage deciding what HAPPENED
