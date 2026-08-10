@@ -4321,7 +4321,59 @@ def get_relationships(chat_id: int, char_id: int) -> RelationshipGraph:
 def save_relationships(chat_id: int, char_id: int, graph: RelationshipGraph):
     wset(chat_id, f"relationships:{char_id}", graph.to_dict())
 
-def apply_relationship_updates(chat_id, char_id, turn_idx, updates):
+#: The three axes a stance moves along. Named here so the ledger and the
+#: scalar graph cannot disagree about what they are called.
+RELATIONSHIP_AXES = (("trust_delta", "trust"),
+                     ("warmth_delta", "warmth"),
+                     ("fear_delta", "fear"))
+
+
+def record_relationship_event(chat_id, char_id, target, axis, delta, *,
+                              triggers=(), note="", provenance="character",
+                              turn_idx=0, frame_id=None):
+    """Append one reason a stance moved. Never updated, never deleted.
+
+    The scalar graph answers WHERE a relationship stands and cannot answer why
+    it got there: it keeps a single `salient_event` string and overwrites it
+    whenever the character's feelings move at all, so the reason somebody
+    stopped trusting you survives until the next time they feel anything.
+
+    Measured before this was built, because the interesting question was
+    whether the reasons existed at all: 98.8% of the 5,704 stance movements in
+    the live corpus already carried `trigger_event_ids`. The model had been
+    saying why the entire time. This keeps what it said.
+    """
+    from db import qi
+
+    if not target or not axis or not float(delta or 0.0):
+        return None
+    return qi(
+        "INSERT INTO relationship_events(chat_id,frame_id,char_id,target,axis,"
+        "delta,triggers,note,provenance,turn_idx,created) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        (int(chat_id), frame_id, int(char_id), str(target), str(axis),
+         float(delta), ",".join(str(t) for t in (triggers or []) if t),
+         str(note or "")[:300], str(provenance or ""), int(turn_idx or 0),
+         time.time()))
+
+
+def relationship_history(chat_id, char_id, target, limit=20):
+    """Why this stance is where it is, oldest first.
+
+    The question the scalar graph could never answer, and the reason item 4 of
+    the off-screen roadmap exists.
+    """
+    from db import q
+
+    rows = q("SELECT axis,delta,triggers,note,provenance,turn_idx "
+             "FROM relationship_events WHERE chat_id=? AND char_id=? "
+             "AND target=? ORDER BY id DESC LIMIT ?",
+             (int(chat_id), int(char_id), str(target), int(limit))) or []
+    return [dict(r) for r in reversed(rows)]
+
+
+def apply_relationship_updates(chat_id, char_id, turn_idx, updates,
+                               frame_id=None):
     graph = get_relationships(chat_id, char_id)
     for update in updates or []:
         target = str(update.get("target_entity") or "").strip()
@@ -4334,7 +4386,21 @@ def apply_relationship_updates(chat_id, char_id, turn_idx, updates):
         trust_delta = _clamp_signed(update.get("trust_delta", 0.0), -0.2, 0.2)
         warmth_delta = _clamp_signed(update.get("warmth_delta", 0.0), -0.2, 0.2)
         fear_delta = _clamp_signed(update.get("fear_delta", 0.0), -0.2, 0.2)
-        triggers = ", ".join(update.get("trigger_event_ids") or [])
+        trigger_ids = [t for t in (update.get("trigger_event_ids") or []) if t]
+        triggers = ", ".join(trigger_ids)
+        # The ledger takes one row per axis that actually moved. Axes are kept
+        # apart because "trust fell and fear rose" and "trust fell" are
+        # different events with different causes, and a single blended row
+        # could never be read back into either.
+        for field, axis in RELATIONSHIP_AXES:
+            moved = {"trust_delta": trust_delta, "warmth_delta": warmth_delta,
+                     "fear_delta": fear_delta}[field]
+            if moved:
+                record_relationship_event(
+                    chat_id, char_id, target, axis, moved,
+                    triggers=trigger_ids, note=update.get("reason") or "",
+                    provenance="character" if trigger_ids else "unevidenced",
+                    turn_idx=turn_idx, frame_id=frame_id)
         graph.update(target,
             trust=_clamp_signed(current.trust + trust_delta, -1.0, 1.0),
             emotional_valence=_clamp_signed(current.emotional_valence + warmth_delta, -1.0, 1.0),

@@ -6298,7 +6298,10 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
         )
         for kind, char_id, updates in prepared["relationship_ops"]:
             if kind == "explicit":
-                apply_relationship_updates(cid, char_id, turn.idx, updates)
+                # The frame goes with it: a branch that never had the argument
+                # must not inherit the reason it happened.
+                apply_relationship_updates(cid, char_id, turn.idx, updates,
+                                           frame_id=ctx.turn.frame_id)
             else:
                 update_relationships_from_inference(
                     cid, char_id, turn.idx, updates,

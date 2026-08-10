@@ -31,9 +31,9 @@
 | `chat_archive.py` | 1096 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1105 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 6750 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 6753 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `crowds.py` | 577 |  | — |
-| `db.py` | 1603 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
+| `db.py` | 1648 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `degradation.py` | 171 |  | — |
 | `frames.py` | 220 |  | `db` |
 | `gaps.py` | 548 |  | `canon_provenance`, `db`, `logging_utils`, `providers`, `spatial`, `subjects` |
@@ -46,7 +46,7 @@
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `lore_structure.py` | 242 |  | — |
 | `mechanics.py` | 310 |  | `spatial`, `spatial_frames` |
-| `memory.py` | 5086 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
+| `memory.py` | 5152 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
 | `offscreen.py` | 1503 |  | `logging_utils` |
 | `outofband.py` | 276 |  | `logging_utils` |
 | `paradox.py` | 489 |  | `character_schema`, `db`, `frames` |
@@ -375,7 +375,7 @@
 | `commit_transit_sweep()` | 2291 | 169 lines |
 | `_prepare_destruction()` | 699 | 158 lines |
 | `update_place_graph()` | 74 | 153 lines |
-| `_commit_all_locked()` | 6541 | 151 lines |
+| `_commit_all_locked()` | 6544 | 151 lines |
 
 ### `crowds.py`
 
@@ -394,14 +394,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `init()` | 1510 | 50 lines |
-| `conn()` | 1357 | 38 lines |
-| `transaction()` | 1397 | 36 lines |
-| `_backfill_resource_uids()` | 1492 | 17 lines |
-| `qi()` | 1455 | 16 lines |
-| `data_version()` | 1434 | 14 lines |
+| `init()` | 1555 | 50 lines |
+| `conn()` | 1402 | 38 lines |
+| `transaction()` | 1442 | 36 lines |
+| `_backfill_resource_uids()` | 1537 | 17 lines |
+| `qi()` | 1500 | 16 lines |
+| `data_version()` | 1479 | 14 lines |
 | `parse_scoped_world_key()` | 62 | 13 lines |
-| `_execute_retry()` | 1326 | 13 lines |
+| `_execute_retry()` | 1371 | 13 lines |
 
 ### `degradation.py`
 
@@ -546,8 +546,8 @@
 |---|---:|---:|
 | `build_character_memory_context()` | 2659 | 274 lines |
 | `search_memories()` | 1719 | 228 lines |
-| `rebuild_embeddings()` | 4482 | 195 lines |
-| `rebuild_checkpoint_embeddings()` | 4716 | 124 lines |
+| `rebuild_embeddings()` | 4548 | 195 lines |
+| `rebuild_checkpoint_embeddings()` | 4782 | 124 lines |
 | `contrast_memory()` | 1982 | 117 lines |
 | `_origin_on_drift()` | 2560 | 97 lines |
 | `backfill_memory_summary_windows()` | 3064 | 89 lines |
@@ -1005,6 +1005,7 @@
 | `world` | `chat_id`, `key`, `value` |
 | `checkpoints` | `id`, `chat_id`, `turn_idx`, `blob`, `created` |
 | `world_events` | `event_id`, `chat_id`, `turn_id`, `frame_id`, `occurred_at`, `duration_seconds`, `kind`, `location_id`, `payload`, `seed`, `committed` |
+| `relationship_events` | `id`, `chat_id`, `frame_id`, `char_id`, `target`, `axis`, `delta`, `triggers`, `note`, `provenance`, `turn_idx`, `created` |
 | `world_entities` | `entity_id`, `chat_id`, `kind`, `subtype`, `name`, `payload`, `created_turn_id`, `retired_turn_id` |
 | `world_placements` | `chat_id`, `subject_id`, `relation`, `container_id`, `detail` |
 | `world_conditions` | `condition_id`, `chat_id`, `subject_id`, `kind`, `started_at`, `expires_at`, `next_tick`, `payload`, `active` |
