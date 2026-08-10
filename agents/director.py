@@ -51,6 +51,7 @@ from schemas import validate_llm_output
 from spatial import (
     apply_contact_ops,
     contact_motion,
+    contacts_of,
     contact_relation,
     _merge_entity,
     _merge_room,
@@ -327,6 +328,93 @@ def _merge_player_contact_assertions(assertions, resolved_ops, report=None):
                         "the standing relation")
                 break
         if not blocked and raw not in result:
+            result.append(raw)
+    return result
+
+
+def _validated_character_contact_endings(ctx, sc, report=None):
+    """Resolve character-owned contact refs against the onset ledger.
+
+    A character may end only an exact contact that involved their own body and
+    was supplied to their decision payload as ``contact:N``.  Returning the
+    ledger's original direction and parts is intentional: removals therefore
+    cannot widen from "this kiss" to "everything between these people".
+    """
+    out = []
+    for row in ctx.cast:
+        try:
+            cid = int(row["id"])
+            sheet = json.loads(row["sheet"])
+        except (TypeError, ValueError, KeyError, json.JSONDecodeError):
+            continue
+        result = (ctx.character_results.get(cid)
+                  or ctx.character_results.get(str(cid)) or {})
+        if not isinstance(result, dict):
+            continue
+        cname = character_name(sheet)
+        options = contacts_of(sc, cname)
+        for raw in (result.get("contact_ops") or []):
+            if not isinstance(raw, dict) or str(
+                    raw.get("op") or "").strip().casefold() != "remove":
+                if report:
+                    report(f"{cname}: discarded non-removal character contact op")
+                continue
+            match = re.fullmatch(r"contact:(\d+)", str(
+                raw.get("contact_ref") or "").strip().casefold())
+            if not match:
+                if report:
+                    report(f"{cname}: discarded unknown character contact ref")
+                continue
+            index = int(match.group(1))
+            if index >= len(options):
+                if report:
+                    report(f"{cname}: discarded stale character contact ref")
+                continue
+            contact = options[index]
+            ending = {
+                "op": "remove",
+                "actor": contact.get("actor"),
+                "actor_part": contact.get("actor_part") or "",
+                "target": contact.get("target"),
+                "target_part": contact.get("target_part") or "",
+                "source": "character_declaration",
+                "declared_by": cname,
+            }
+            if ending not in out:
+                out.append(ending)
+    return out
+
+
+def _merge_character_contact_endings(endings, resolved_ops, report=None):
+    """Project completed endings and reject a stale same-contact re-add.
+
+    ``contact_ops`` describes the state at the end of the character's own
+    declaration.  If that declaration explicitly ended contact:N, a Director
+    echoing the onset contact is stale, not a later transition.  A genuinely
+    resumed contact should remain standing in the character declaration and
+    therefore must not emit the removal ref.
+    """
+    endings = [dict(op) for op in (endings or []) if isinstance(op, dict)]
+
+    def key(op):
+        return tuple(str(op.get(field) or "").strip().casefold()
+                     for field in ("actor", "actor_part", "target", "target_part"))
+
+    ended = set()
+    for ending in endings:
+        actor, actor_part, target, target_part = key(ending)
+        ended.add((actor, actor_part, target, target_part))
+        ended.add((target, target_part, actor, actor_part))
+    result = list(endings)
+    for raw in (resolved_ops if isinstance(resolved_ops, list) else []):
+        if not isinstance(raw, dict):
+            continue
+        op = str(raw.get("op") or "add").strip().casefold()
+        if op in ("add", "cross") and key(raw) in ended:
+            if report:
+                report("discarded Director re-add of character-ended contact")
+            continue
+        if raw not in result:
             result.append(raw)
     return result
 
@@ -3642,6 +3730,9 @@ def director_resolve(ctx, nonce):
 
     sc = get_scene(chat["id"], chat)
     onset_contacts = interp.get("contact_assertions") or []
+    character_contact_endings = _validated_character_contact_endings(
+        ctx, sc, report=lambda note: ctx.add_warning(
+            f"character contact: {note}"))
     # The assertion is already true at action onset: show it to the resolving
     # Director as the standing relation reactions were based on. Copy-only;
     # durable state is composed into the final diff below.
@@ -3790,6 +3881,11 @@ def director_resolve(ctx, nonce):
             for extra in ctx.extra_players
         ],
         "character_declarations": decls,
+        # Completed, self-owned contact endings declared structurally by the
+        # character stage.  These exact onset-ledger removals are projected at
+        # the commit seam below; resolve should narrate their consequences and
+        # must not echo the ended contact as current state.
+        "character_contact_endings": character_contact_endings,
         "character_abilities": {
             character_name_from_text(c["sheet"]): character_abilities(json.loads(c["sheet"]))
             for c in ctx.cast
@@ -4128,8 +4224,12 @@ def director_resolve(ctx, nonce):
     # it: project only the player's interpreted decision and each NPC's own
     # character result into the objective diff.
     sd["following_ops"] = _collect_following_ops(ctx, sc, interp, p_name)
+    resolved_contact_ops = _merge_character_contact_endings(
+        character_contact_endings, sd.get("contact_ops"),
+        report=lambda note: ctx.add_warning(f"character contact: {note}"),
+    )
     sd["contact_ops"] = _merge_player_contact_assertions(
-        onset_contacts, sd.get("contact_ops"),
+        onset_contacts, resolved_contact_ops,
         report=lambda note: ctx.add_warning(f"player contact: {note}"),
     )
     out["state_diff"] = sd

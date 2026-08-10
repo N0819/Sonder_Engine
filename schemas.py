@@ -2304,6 +2304,12 @@ class CharacterOutput(LenientModel):
     # A voluntary decision by this character to begin or cease following a
     # target. Omit to preserve the current relation.
     follow_op: Optional[dict] = None
+    # Completed contact endings this character owns, expressed by opaque refs
+    # supplied in self.standing_contacts.  The host resolves each ref back to
+    # the exact onset contact; the model never has to recreate anatomical or
+    # object-part spelling, and cannot accidentally clear a different contact
+    # between the same bodies.  Only op=remove is accepted downstream.
+    contact_ops: list[dict] = Field(default_factory=list)
     manifest: dict = Field(default_factory=dict)
     # A drive rupture proposal -- only valid inside an engine-opened window;
     # commit (validate_drive_shift) decides whether it counts.
@@ -3330,6 +3336,7 @@ OUTPUT_EXAMPLES = {
         "considered_responses": [],
         "response_candidates": [],
         "sequence": [],
+        "contact_ops": [],
         "active_state": {},
         "belief_updates": [],
         "association_updates": [],

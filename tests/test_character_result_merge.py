@@ -22,6 +22,7 @@ def _round0():
         "mind_model_updates": [{"about_entity": "Kael", "kind": "goal", "claim": "flee"}],
         "relationship_updates": [{"target": "Kael", "trust": -0.1}],
         "intent_ops": [{"op": "add", "id": "escape"}],
+        "contact_ops": [{"op": "remove", "contact_ref": "contact:0"}],
         "active_state": {"mood": "tense"},
     }
 
@@ -52,6 +53,8 @@ def test_merge_preserves_round0_sequence_and_updates():
 
     intent_ids = {op["id"] for op in merged["intent_ops"]}
     assert intent_ids == {"escape", "warn"}
+    assert merged["contact_ops"] == [
+        {"op": "remove", "contact_ref": "contact:0"}]
 
     # Latest active_state wins.
     assert merged["active_state"] == {"mood": "resolved"}

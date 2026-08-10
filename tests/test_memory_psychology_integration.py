@@ -175,6 +175,31 @@ def test_ponder_adds_labelled_recall_without_replacing_normal_recall(temp_db):
     assert "deliberate_ponder" in delivered["event:violet"]["retrieval_origin"]
 
 
+def test_recent_memory_keeps_episode_dialogue_and_conclusion_in_separate_lanes(
+        temp_db):
+    chat_id, char_id = _chat_and_char(temp_db)
+    memory.add_memory(
+        chat_id, char_id, None, "episode", "witnessed", .8,
+        "You step away and the contact ends.", turn_idx=8,
+        event_key="event:episode")
+    memory.add_memory(
+        chat_id, char_id, None, "dialogue", "heard", .8,
+        "Mara said 'wait'", turn_idx=8, event_key="event:line")
+    memory.add_memory(
+        chat_id, char_id, None, "inference", "inferred", .6,
+        "Mara expected pursuit.", turn_idx=8, event_key="event:inference")
+
+    context = memory.build_character_memory_context(
+        chat_id, char_id, 9, "The room is still.", {})
+
+    assert [m["memory_ref"] for m in context["recent_episodes"]] == [
+        "event:episode"]
+    assert [m["memory_ref"] for m in
+            context["recent_received_information"]] == ["event:line"]
+    assert [m["memory_ref"] for m in context["recent_conclusions"]] == [
+        "event:inference"]
+
+
 def test_encoding_affect_round_trips_through_snapshot_restore(temp_db):
     chat_id, char_id = _chat_and_char(temp_db)
     memory.add_memory(

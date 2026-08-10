@@ -50,8 +50,8 @@ from scene import (
     sheet_state,
 )
 from schemas import validate_llm_output
-from spatial import (corridor_sightlines, room_of, spatial_digest,
-                     sprint_reach, visible_adjacent_rooms)
+from spatial import (contact_phrase, contacts_of, corridor_sightlines, room_of,
+                     spatial_digest, sprint_reach, visible_adjacent_rooms)
 from survival import vitals_of
 from place_purpose import (affords_here, felt_needs, here_affords,
                            place_options)
@@ -844,7 +844,8 @@ def _ground_observation_citations(out, observations, memory_context,
     row_ids = dict((memory_internal or {}).get("row_ids") or {})
     summaries = set()
     if isinstance(memory_context, dict):
-        for field in ("recent_episodes", "recalled_old_memories"):
+        for field in ("recent_episodes", "recent_received_information",
+                      "recent_conclusions", "recalled_old_memories"):
             for mem in memory_context.get(field) or []:
                 if not isinstance(mem, dict):
                     continue
@@ -2703,6 +2704,25 @@ def character_step(ctx, cid, nonce):
         "learned_beliefs": _interior.get("beliefs") or [],
         "learned_associations": _interior.get("associations") or [],
     }
+    # Exact handles for contacts this body can deliberately end.  The prose
+    # view already tells the character what they feel; these opaque refs make
+    # a completed pull-away structurally expressible without asking the model
+    # to recreate the ledger's part spelling.  Names in the description pass
+    # through the same recognition gate as every other structured character
+    # payload field.
+    _contact_label = observer_label_fn(chat, character_name(sh), ctx.cast)
+    _standing_contacts = []
+    for _index, _contact in enumerate(contacts_of(sc, character_name(sh))):
+        _visible_contact = dict(_contact)
+        for _side in ("actor", "target"):
+            _visible_contact[_side] = _contact_label(_contact.get(_side))
+        _standing_contacts.append({
+            "contact_ref": f"contact:{_index}",
+            "description": contact_phrase(
+                _visible_contact, you=_contact_label(character_name(sh))),
+        })
+    if _standing_contacts:
+        _self["standing_contacts"] = _standing_contacts
     # Following is a voluntary, durable decision this mind owns. Surface its
     # own relation as self-knowledge even after a fast target has pulled ahead;
     # separation does not silently decide whether it keeps chasing or stops.

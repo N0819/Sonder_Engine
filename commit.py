@@ -4998,6 +4998,37 @@ def _salience_of(text):
             s += 0.08
     return round(min(s, 0.95), 3)
 
+
+def _own_sequence_memory(seq):
+    """Render a no-view fallback as grammatical, chronological first person.
+
+    The witnessed perception view is the normal episode and already contains
+    the resolved conduct.  This formatter is only for a character who acted
+    but received no usable view; it must preserve order without the old
+    ``I chose to attempted`` construction or a gist cut midway through an act.
+    """
+    clauses = []
+    for event in (seq or []):
+        if not isinstance(event, dict):
+            continue
+        if event.get("type") == "speech" and str(event.get("text") or "").strip():
+            spoken = str(event["text"]).strip()
+            clauses.append(
+                f"I said {spoken!r}" + ("" if spoken[-1] in ".!?" else "."))
+        elif event.get("type") == "action" and str(event.get("attempt") or "").strip():
+            clauses.append(f"I tried to {str(event['attempt']).strip().rstrip('.')}.")
+    if not clauses:
+        return "", ""
+    content = " Then ".join(clauses)
+    gist_parts = []
+    for clause in clauses:
+        candidate = " Then ".join(gist_parts + [clause])
+        if len(candidate) > 240:
+            break
+        gist_parts.append(clause)
+    gist = " Then ".join(gist_parts) if gist_parts else clauses[0][:239].rstrip() + "…"
+    return content, gist
+
 def prepare_memory_commit(ctx, *, scene=None):
     """Build and embed all per-character memory mutations without writes."""
     chat = ctx.chat
@@ -5064,6 +5095,10 @@ def prepare_memory_commit(ctx, *, scene=None):
         st = json.loads(char_row["cstate"] or "{}")
         v = views.get(str(ccid))
         episode_content = ""
+        # Side records (durable quotes) are emitted after the coherent episode
+        # row so storage order mirrors their role: event first, annotations
+        # second.  They remain separately retrievable by provenance.
+        side_memories = []
         cname = character_name(sh)
         char_room = _room_of(sc, cname)
         room_data = (sc.get("rooms") or {}).get(char_room, {})
@@ -5287,7 +5322,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                     if not category and memory_mark:
                         category = "dialogue"
                     if category:
-                        pending_memories.append({
+                        side_memories.append({
                             "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
                             "turn_idx": turn.idx, "kind": "dialogue", "category": category,
                             "provenance": "heard",
@@ -5338,6 +5373,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                 "valence": _mem_valence, "arousal": _mem_arousal,
                 "event_key": _stable_event_key(turn.id, ccid, "episode"),
             })
+        pending_memories.extend(side_memories)
         if own_result:
             # Ponder is a private, deliberate retrieval request for the NEXT
             # character turn. The character stage removed it from the public
@@ -5375,18 +5411,19 @@ def prepare_memory_commit(ctx, *, scene=None):
                 own_salience >= 0.7
                 or any(event.get("type") == "speech" for event in seq)
             )
-            if should_store_own_acts:
-                desc = "; ".join(
-                    f"said {e.get('text')!r}" if e.get("type") == "speech"
-                    else f"attempted {e.get('attempt')!r}"
-                    for e in seq
-                )
+            # The observer-specific view is already the coherent, resolved
+            # first-person episode.  Storing the declaration again beside it
+            # split one beat into competing fragments (and often replayed an
+            # attempted act as though it were a second event).  Keep a self
+            # row only as the no-view fallback.
+            if should_store_own_acts and not episode_content:
+                self_content, self_gist = _own_sequence_memory(seq)
                 pending_memories.append({
                     "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
                     "turn_idx": turn.idx, "kind": "episodic", "category": "self",
                     "provenance": "remembered", "salience": max(0.5, own_salience),
-                    "content": f"I chose to {desc}",
-                    "gist": f"I chose to {desc}"[:240],
+                    "content": self_content,
+                    "gist": self_gist,
                     "location": room_name, "emotional_context": mood,
                     "valence": _mem_valence, "arousal": _mem_arousal,
                     "event_key": _stable_event_key(turn.id, ccid, "own_acts"),
@@ -5397,21 +5434,26 @@ def prepare_memory_commit(ctx, *, scene=None):
             for update in _mm_updates:
                 confidence = _clamp(update.get("confidence", 0.5))
                 evidence = "; ".join(
-                    str(item.get("fact") or "")
+                    str(item.get("fact") or "").strip()
                     for item in update.get("evidence") or []
                     if isinstance(item, dict)
+                    and str(item.get("fact") or "").strip()
                 )
+                about = str(update.get("about_entity") or "").strip()
+                claim = str(update.get("claim") or "").strip().rstrip(".")
+                prefix = "" if claim.casefold().startswith(
+                    about.casefold() + " ") else (f"About {about}: " if about else "")
+                inference_content = f"{prefix}{claim}."
+                if evidence:
+                    inference_content += f" Evidence: {evidence}"
                 pending_memories.append({
                     "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
                     "turn_idx": turn.idx, "kind": "inference", "category": "inference",
                     "provenance": "inferred", "salience": 0.45 + 0.3 * confidence,
                     "confidence": confidence,
-                    "content": (
-                        f"About {update.get('about_entity')}: "
-                        f"{update.get('claim')}. Evidence: {evidence}"
-                    ),
-                    "gist": str(update.get("claim") or "")[:240],
-                    "entities": [str(update.get("about_entity") or "")],
+                    "content": inference_content,
+                    "gist": claim if len(claim) <= 240 else claim[:239].rsplit(" ", 1)[0] + "…",
+                    "entities": [about] if about else [],
                     "location": room_name, "emotional_context": mood,
                     "event_key": _stable_event_key(
                         turn.id, ccid, "mind_model", update.get("about_entity"),

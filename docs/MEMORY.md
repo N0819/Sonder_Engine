@@ -108,9 +108,12 @@ third of one story's — were that single sentence at salience 0.47, all
 identical, all eligible to be handed to a character instead of something that
 happened.
 
-**Own acts** — `category: self`, `provenance: remembered`, content `"I chose to
-…"`. Written only when the character's declaration had salience ≥ 0.7 or
-contained speech.
+**Own acts fallback** — `category: self`, `provenance: remembered`. The normal
+episode already contains this character's resolved action and speech in the
+correct order, so a second self row is not written when a usable view exists.
+Only a character who acted but received no usable view gets this fallback. It
+is rendered as grammatical chronological first person (`"I said … Then I tried
+to …"`), never the former `"I chose to attempted …"` fragment.
 
 **Dialogue** — `provenance: heard`, salience 0.82, or 0.9 for a promise. Gated
 hard by `_durable_dialogue_category`: only quotes containing a promise marker
@@ -129,7 +132,9 @@ dropped in that case too, since it names the speaker.
 **Inference** — one row per mind-model update. `provenance: inferred`,
 `salience: 0.45 + 0.3 * confidence`. That formula is load-bearing: it is how
 `_mint_confidence_of` recovers the original confidence later without a second
-column (§7).
+column (§7). Empty evidence facts are omitted rather than producing
+`Evidence: ; ;`, and a claim that already begins with its subject is not
+prefixed with `About <subject>:` a second time.
 
 ### Encoding-time affect
 
@@ -185,7 +190,9 @@ called once per character per beat from `agents/character.py`. It returns:
 
 ```
 unresolved_from_past:      remembered concerns/threads only (≤6)
-recent_episodes:           recent_memory_buffer — last 4 turns, ≤12 rows
+recent_episodes:           first-hand chronological episodes, last 4 turns
+recent_received_information: durable heard/told/read side records, if any
+recent_conclusions:        inferred side records, if any
 recalled_old_memories:     search_memories, k=16, minus anything already recent
 autobiographical_summary:  first-hand only — the LATEST window (§8)
 summary_key_phrases, unresolved_threads
@@ -206,14 +213,17 @@ live under `perception`; current affect and goals live under
 collapse onto one evidence id. Legacy present spellings are normalized only at
 the schema boundary.
 
-Every row in `recent_episodes` and `recalled_old_memories` is projected with
+Every row in those three recent lanes and `recalled_old_memories` is projected with
 its durable `event_key` as `memory_ref`, `temporal_status: remembered_past`, a
 relative `when`, `memory_form`, and `epistemic_origin`. The model projection is
 an allow-list: numeric/database ids, access counters, archive state, embedding
 metadata and retrieval scores remain host-only. Legacy rows without an event key are assigned a deterministic
 portable key before retrieval. This duplication is deliberate: temporal status must be
 visible in the row itself, not inferred from a parent list whose meaning a
-model can flatten. At the output boundary,
+model can flatten. Splitting recent rows is also chronological hardening: a
+single turn is one experienced episode, while a durable quote and a conclusion
+from that turn remain annotations rather than looking like two more events.
+At the output boundary,
 `agents.character._ground_observation_citations` permits only present, memory
 and summary ids actually delivered to that mind across evidence, belief
 updates, association updates and mind-model updates. It drops invented/stale

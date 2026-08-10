@@ -207,6 +207,15 @@ exact `crossed_target_part`, downstream `target_interior`, and optional new
 interior endpoint. The crossed boundary is transition evidence; only the
 downstream interior and current endpoint persist as state.
 
+A character can also end a contact without trusting the resolve model to infer
+that state transition from prose. Its private payload lists every onset contact
+involving its body under `self.standing_contacts` using opaque `contact:N`
+handles. A completed, self-owned release or withdrawal returns exact
+`contact_ops:[{op:"remove",contact_ref}]`; contested attempts return no op.
+Resolve maps each ref back to the exact ledger direction and parts, projects
+those removals before its own contact diff, and rejects a stale re-add of the
+same contact. Other simultaneous contacts survive unless separately named.
+
 The model supplies ambient observer-specific sensory prose, but it does not own
 the chronology of an already structured player declaration. Model-rendered
 copies of declared speech/action are removed; ambient clauses sharing a
@@ -299,6 +308,13 @@ stored for that mind, and adds a labelled four-item deliberate-recall lane on
 its next character turn without replacing normal recall. Pain and pleasure are
 independent and do not require survival mode. Multiple independent character
 steps may run in parallel.
+
+Recent memory reaches this step in epistemically separate lanes. The
+chronological `recent_episodes` stream contains first-hand experience only,
+with at most one episode formed per beat; durable received lines travel in
+`recent_received_information`, and fallible conclusions in
+`recent_conclusions`. The latter two annotate a beat without becoming extra
+events in the character's remembered chronology.
 
 Dialogue continuity is tracked at two levels. `recent_self_lines` retains a
 short verbatim window for exact reissues and repeated sentence shapes;

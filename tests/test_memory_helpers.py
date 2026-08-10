@@ -33,12 +33,23 @@ def test_kind_to_category():
 
 def test_entity_extraction():
     entities = _extract_entities(
-        "Alice met Bob at the Old Bridge",
+        "Yesterday, Alice met Bob at the Old Bridge",
     )
 
     assert "Alice" in entities
     assert "Bob" in entities
     assert "Old Bridge" in entities
+
+
+def test_entity_and_key_phrase_extraction_drop_formatting_noise():
+    text = (
+        "She broke the kiss. Sharp pressure left her mouth, and the room went "
+        "quiet. Break follows. Pet waits. Hhah escapes.")
+    entities = _extract_entities(text)
+    phrases = _extract_key_phrases(text, entities)
+
+    assert not ({"She", "Sharp", "Break", "Pet", "Hhah"} & set(entities))
+    assert not ({"the", "and", "her", "she"} & set(phrases))
 
 def test_gist_truncation():
     long_text = "This is a sentence. " * 50
