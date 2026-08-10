@@ -51,6 +51,20 @@ the bounded repair. The additive repair merge now also retains `contact_ops`
 it), allowing the committed relation to continuously deliver the appropriate
 sensation to each participant.
 
+The next reroll showed that persistence was still too late. Interpret reduced
+the player's already-present full-depth contact declaration to visible squirming,
+so perception pass 1 gave the other participant only the older coarse
+`cock -> groin` record; the exact relation appeared, if at all, after that
+participant had already decided. Interpret now carries guarded
+`contact_assertions` into a copy-only onset scene before pass 1. A player may
+establish contact through their own completed conduct; when the other body is
+the actor, the assertion may only refine a matching standing relation, so this
+does not grant authority over a new NPC act. Each participant receives the same
+relation rendered from their own endpoint. Contact sites are deliberately not
+bound to attire's visibility regions: an authored `cervix` remains the contact
+point rather than being generalized to `groin`. Resolve can move that protected
+endpoint only by explicitly ending it first.
+
 This lands on the repaired observer path: perception previews commit's exact
 attire result on copies, region visibility is now a production-derived
 function, shed clothing is atomic with canonical removal and placement, and

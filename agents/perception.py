@@ -38,6 +38,7 @@ import os
 
 import affect
 from spatial import (
+    apply_contact_ops,
     corridor_sightlines,
     hiding_holders_of,
     _body_interior_holder,
@@ -2284,6 +2285,13 @@ def perception_act(ctx, nonce):
     chat = ctx.chat
     interp = ctx.director_interpret
     sc = get_scene(chat["id"], chat)
+    # Player-authored standing contact is true before reactors decide. Preview
+    # it on a copy so pass 1 carries each participant's bodily endpoint while
+    # leaving persistence solely to director_resolve/commit. No ageing here:
+    # the durable merge will apply this beat exactly once.
+    if interp.get("contact_assertions"):
+        sc = apply_contact_ops(
+            copy.deepcopy(sc), interp.get("contact_assertions"), _age=False)
     pers = persona_of(chat)
     known = wget(chat["id"], "known", {})
     action = interp.get("action")

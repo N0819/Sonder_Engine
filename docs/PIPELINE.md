@@ -151,6 +151,19 @@ Neither stage should directly decide what a character perceives. Full mapping ma
 
 Produces observer-specific views of the action onset: speech delivery, visible movement, immediate sensory evidence, and deterministic spatial additions. This occurs before objective resolution so characters do not react using future knowledge.
 
+A direct contact the player declares as already present through their own
+conduct or first-person body sense is structured by interpret as
+`contact_assertions`. Pass 1 previews those assertions on a copy of the scene
+before any reactor decides, so both participants receive the same relation from
+their own bodily endpoint. The guard admits a new relation only when the player
+is its actor; an NPC-to-player assertion must refine a matching contact that
+already stands, preventing first-person wording from authoring a new NPC act.
+Contact points remain open anatomical strings and do not collapse onto attire's
+visibility regions: `cervix` remains `cervix`, rather than becoming `groin`.
+Resolve receives the previewed relation and commit receives it through
+`contact_ops`; a later change must explicitly end it before moving the same part
+to a different endpoint, so a coarse re-description cannot overwrite it.
+
 The model supplies ambient observer-specific sensory prose, but it does not own
 the chronology of an already structured player declaration. Model-rendered
 copies of declared speech/action are removed; ambient clauses sharing a

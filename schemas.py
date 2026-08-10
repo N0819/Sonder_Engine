@@ -1016,6 +1016,12 @@ class DirectorInterpret(LenientModel):
     action: Optional[dict] = None
     actions: list[dict] = Field(default_factory=list)
     movement: Optional[MovementDecl] = None
+    # A direct, already-present bodily contact the player declares through
+    # their own conduct or first-person sensation. These are guarded against
+    # the standing scene ledger before pass 1; they are not a license to author
+    # a new NPC action. Contact points are open anatomical strings, independent
+    # of attire/visibility regions.
+    contact_assertions: list[dict] = Field(default_factory=list)
     # Voluntary durable travel relation for the player. {op:start,target} or
     # {op:stop,reason}; absence means keep the current relation unchanged.
     follow_op: Optional[dict] = None
