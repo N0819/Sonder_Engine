@@ -51,6 +51,42 @@ def _fast_tmp_dir():
 _TMP_DIR = _fast_tmp_dir()
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _never_the_real_database():
+    """Point the DEFAULT database at a scratch file for the whole session.
+
+    A test that asks for `temp_db` was always isolated. A test that never asks
+    for one and still reaches `db.q` was not: `db.DB` defaults to `engine.db`,
+    so it read -- and could write -- the developer's live stories, provider
+    rows and API keys.
+
+    This is not hypothetical. Three prompt-cache tests passed or failed
+    depending on whether a checkbox in API Connections happened to be ticked,
+    because they read a real provider row out of the working copy's own
+    database. The failure looked exactly like a code regression and was a
+    setting; the suite is documented as offline with no network and no model,
+    and it was reading live state.
+
+    Session-scoped and initialized once, so a stray write lands somewhere
+    disposable instead of in a story someone is playing. `temp_db` still
+    swaps in its own file per test and restores this one afterwards.
+    """
+    import db
+
+    fd, path = tempfile.mkstemp(suffix=".db", dir=_TMP_DIR)
+    os.close(fd)
+    os.remove(path)
+    db.configure(path)
+    db.init()
+    try:
+        yield path
+    finally:
+        db.close_connection()
+        for leftover in (path, path + "-wal", path + "-shm"):
+            if os.path.exists(leftover):
+                os.remove(leftover)
+
+
 @pytest.fixture
 def temp_db():
     """Create and configure a temporary test database."""
