@@ -71,14 +71,19 @@ class TestTheLadder:
             assert "off" not in LIVING_WORLD_BUILT[approach]
 
     def test_c_and_es_built_depths_stay_honest(self):
-        """C exposes only a holder's witnessed surfaces and its artifact
-        ceiling stays off. E's adaptive ceiling is now built — the full
-        `character_agent` tick (`offscreen.schedule_agent_ticks`) — and a
-        built-set that still called it unbuilt would clamp every story that
-        asked for it back to the floor, silently."""
-        assert LIVING_WORLD_BUILT["rumor_ledger"] == frozenset({"floor"})
+        """C's ceiling (the artifact wording mint, `artifacts.
+        schedule_artifact_wording`) and E's (`offscreen.
+        schedule_agent_ticks`) are built; a built-set that still called
+        either unbuilt would clamp every story that asked for it back to
+        the floor, silently — and one that overclaimed A, B or D would
+        sell a tier that does nothing."""
+        assert LIVING_WORLD_BUILT["rumor_ledger"] == frozenset(
+            {"floor", "ceiling"})
         assert LIVING_WORLD_BUILT["antagonist_ladder"] == frozenset(
             {"floor", "ceiling"})
+        for approach in ("routine_residue", "scheduled_consequence",
+                         "place_obligations"):
+            assert LIVING_WORLD_BUILT[approach] == frozenset({"floor"})
 
     def test_the_default_is_off_for_everything(self):
         """The engine never did any of this before the setting existed; a
@@ -102,8 +107,11 @@ class TestTheLadder:
         already asked rather than a surprise."""
         cfg = {"scheduled_consequence": "ceiling"}
         assert effective_depth(cfg, "scheduled_consequence") == "floor"
+        # C's ceiling is BUILT now (the artifact wording mint), so asking
+        # for it gets it — the clamp releasing is the same honesty as the
+        # clamp holding.
         assert effective_depth({"rumor_ledger": "ceiling"},
-                               "rumor_ledger") == "floor"
+                               "rumor_ledger") == "ceiling"
         assert effective_depth({"antagonist_ladder": "ceiling"},
                                "antagonist_ladder") == "floor"
 

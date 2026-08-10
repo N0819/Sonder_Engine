@@ -103,7 +103,7 @@ Build in this order:
 Crowds should also become possible information carriers, but they must not
 absorb authored cast or create persistent strangers nobody interacted with.
 
-### 3. Complete the information-carrier network — **PARTLY BUILT**
+### 3. Complete the information-carrier network — **BUILT** (2026-08-10)
 
 Built: explicit copying (`state_diff.telling_ops`, refused unless the speaker
 holds the report, spoke this beat and shares the room); deterministic
@@ -127,8 +127,21 @@ is not retold, while `word` degrades one mouth at dispatch and one at
 delivery. `tools/courier_drive.py` plays the same road twice — delivered
 degraded in one run, silenced into nothing in the other.
 
-Still unbuilt: caravan and artifact carriers (a minted physical notice/bill a
-room contains), and multi-stop trader routes.
+Caravans and artifact carriers landed last (2026-08-10), which closes this
+item. A caravan is a `kind` on the courier object plus a stop list — same
+route, clock, perception surface and interception ops — that DWELLS at each
+stop (charged in simulation time) and trades news both ways there: it tells
+the standing crowd what it carries and picks up the crowd's talk, standing
+public surfaces and posted notices, each through the ordinary degradation.
+An artifact (`artifacts.py`, `StateDiff.artifact_ops`) is a claim made
+physical: posted where the poster's body is from what the poster holds (an
+invented claim posts like a spoken lie), acquired ONLY by explicit reading
+(verbatim, provenance `read` — a copy is not a mouth), and destructible —
+a torn-down bill refuses reads, vanishes from perception, and teaches a
+passing caravan nothing. The wording ceiling is one small out-of-band call
+(`schedule_artifact_wording`), landed only while the bill still stands;
+the floor is whole with no model. `tools/caravan_drive.py` plays all three:
+delivery late and garbled, a bill read, a bill torn down first.
 
 The original text of this item follows.
 
@@ -242,15 +255,16 @@ violations; objective adjudicated events cannot be negotiated away.
 
 ### 7. Build and measure the five model-assisted ceilings
 
-All five living-world mechanisms currently expose only their deterministic or
-reactive floor. Their ceilings remain unbuilt:
+Ceilings remaining (C's artifact-wording ceiling and E's adaptive rung are
+built; the rest expose only their deterministic or reactive floor):
 
 - **Routine and residue:** advance the continuing social state of familiar
   places as structured fields.
 - **Scheduled consequences:** let significant fired consequences mint bounded
   second-order consequences.
-- **Rumor ledger:** mint durable authored notices, proclamations, and other
-  physical information artifacts.
+- **Rumor ledger:** — **BUILT** (2026-08-10): `artifacts.schedule_artifact_wording`
+  mints durable authored notice wording out of band, landing only while the
+  bill still stands.
 - **Place obligations:** predict likely-next locations and perform
   obligation-aware generation out of band before arrival.
 - **Antagonist ladder:** run the full adaptive `character_agent` turn described

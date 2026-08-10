@@ -33,6 +33,10 @@ FRAME_SCOPED_WORLD_KEYS = {
     # world table verbatim, so a restore puts the rider back where he was,
     # and a branch that never dispatched him has no rider.
     "couriers",
+    # Notices and bills nailed up in rooms. Per-era exactly like the road:
+    # a rewind takes the bill off the wall, and a branch that never posted
+    # it has a bare post.
+    "artifacts",
     "pending_obligations",
     "shadow_profile", "lore_cache", "active_books",
     # {subject_id: {turn, room, elapsed_seconds}} -- who was co-present with

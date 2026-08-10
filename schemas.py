@@ -1684,10 +1684,44 @@ class CourierOp(LenientModel):
     world_event_id: str = ""  # a report the sender holds...
     claim: str = ""           # ...or a claim no event backs (a lie rides too)
     method: str = "word"      # word (retold, degrades) | letter (sealed, verbatim)
-    pace: str = "riding"      # riding | walking
+    # riding | walking. Empty lets the engine choose the kind's own default
+    # (a rider rides, a caravan walks); a filled-in schema default here would
+    # put every unspecified caravan on horseback.
+    pace: str = ""
     description: str = ""     # what an observer sees: "a rider", "a boy with a satchel"
     listener: str = ""        # question: who hears it; silence: who takes what he carried
     by: str = ""              # silence: whose body stops him
+    # Non-empty stops make the send a CARAVAN: it dwells at each listed room
+    # (charged in simulation time), tells the standing crowd what it carries
+    # and picks up what stands there -- talk, public surfaces, posted bills
+    # -- degrading at each mouth exactly as a telling does. A caravan may
+    # carry nothing at dispatch; then no sender is needed and `from_room`
+    # names the known room it forms in (the crowd-minting precedent).
+    stops: list[str] = Field(default_factory=list)
+    from_room: str = ""       # caravan with no sender and no message: where it forms
+
+
+class ArtifactOp(LenientModel):
+    """Director declaration about a physical notice -- a claim on a wall.
+
+    `post` nails up what a registered POSTER actually holds (or a `claim`
+    they are inventing, which lands on their own row exactly as a spoken lie
+    does), in the room the poster's body is in. `read` is how a mind
+    acquires it -- verbatim, provenance `read`, because a copy is not a
+    mouth -- and `remove` tears it down, after which it informs nobody:
+    the artifact equivalent of silencing a courier. `artifact_id` is an
+    engine-minted uid perception showed, exactly like a courier's.
+    """
+    op: str = "post"          # post | read | remove
+    artifact_id: str = ""     # engine-minted uid; required for read/remove
+    poster: str = ""          # post: registered character whose hands nail it up
+    room: str = ""            # post: optional; must be the poster's own room
+    world_event_id: str = ""  # a report the poster holds...
+    claim: str = ""           # ...or a claim no event backs (a false bill posts too)
+    description: str = ""     # what an observer sees: "a wanted bill nailed to the post"
+    reader: str = ""          # read: whose eyes take it in
+    by: str = ""              # remove: whose hands tear it down
+    manner: str = ""          # remove: optional -- "torn down", "defaced"
 
 
 class StateDiff(LenientModel):
@@ -1816,7 +1850,15 @@ class StateDiff(LenientModel):
     # outrun or silence the road. Commit validates deterministically
     # (couriers.run_couriers): the sender must hold the report, the route
     # must be walkable, and nobody interferes from a room they are not in.
+    # A CourierOp with stops is a caravan -- same body, same road, plus
+    # dwelling and two-way news at each stop.
     courier_ops: list[CourierOp] = Field(default_factory=list)
+    # Artifacts: a claim made physical -- a notice, a proclamation, a wanted
+    # bill standing in a room, acquired by reading and stopped by tearing
+    # down. Commit validates deterministically (artifacts.run_artifacts):
+    # the poster must hold what the bill asserts, the bill goes up where
+    # the poster stands, and reading happens in front of the wall.
+    artifact_ops: list[ArtifactOp] = Field(default_factory=list)
     # Destruction declaration (DestructionEffect shape -- see its
     # docstring). Declared here so model_dump() keeps it through
     # validation (the zone-field precedent above); commit.py validates it
@@ -3461,6 +3503,7 @@ OUTPUT_EXAMPLES = {
             "crowd_ops": [],
             "telling_ops": [],
             "courier_ops": [],
+            "artifact_ops": [],
         },
         "changes_asserted": [
             {"category": "adjacency", "subject": "vault_door",

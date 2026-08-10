@@ -383,6 +383,34 @@ def offscreen_rows(con, turn_ids):
             sum(int(c.get("told") or 0) for c in carrier_commits),
             sum(int(c.get("tellings_offered") or 0) for c in carrier_commits),
             "declared on-page; holding, speaking and co-location all checked"),
+        # The road: bodies with positions. The denominator is ops the
+        # Director wrote, so a refused dispatch reads as a refusal and a
+        # story with no riders reads as `no chances`.
+        Row("off-screen life", "a courier or caravan op was accepted",
+            sum(int(c.get("couriers_offered") or 0)
+                - int(c.get("courier_rejected") or 0)
+                for c in carrier_commits),
+            sum(int(c.get("couriers_offered") or 0)
+                for c in carrier_commits),
+            "declared on-page; holding, routes and co-location all checked"),
+        # A caravan that dwells and trades nothing is a courier with extra
+        # hops -- the exact cheap version the design deferred. Denominator
+        # is stops actually reached, so an empty market reads honestly.
+        Row("off-screen life", "a caravan traded news at a stop",
+            sum(int(c.get("caravan_picked_up") or 0)
+                + int(c.get("caravan_put_down") or 0)
+                for c in carrier_commits),
+            sum(int(c.get("caravan_stops") or 0) for c in carrier_commits),
+            "a caravan dwelt at a stop; something legible or a crowd stood "
+            "there"),
+        Row("off-screen life", "an artifact op was accepted",
+            sum(int(c.get("artifacts_posted") or 0)
+                + int(c.get("artifacts_read") or 0)
+                + int(c.get("artifacts_removed") or 0)
+                for c in carrier_commits),
+            sum(int(c.get("artifact_ops_offered") or 0)
+                for c in carrier_commits),
+            "declared on-page; holding and standing-at-the-wall checked"),
         Row("off-screen life", "a crowd op was accepted",
             sum(max(0, int(c.get("offered") or 0) - int(c.get("rejected") or 0))
                 for c in crowd_commits),

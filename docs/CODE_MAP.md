@@ -10,16 +10,17 @@
 | `agents/__init__.py` | 86 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 889 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/character.py` | 3223 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
-| `agents/common.py` | 5476 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/director.py` | 5124 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
+| `agents/common.py` | 5501 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/director.py` | 5162 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 1010 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 239 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 975 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/perception.py` | 3982 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
+| `agents/perception.py` | 3989 | Opening, action-onset, and outcome observer views. | `affect`, `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `spatial` |
 | `agents/runtime.py` | 1009 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 115 | Step and active-variant persistence helpers. | `db` |
 | `ambience.py` | 2082 |  | `backdrops`, `db`, `outofband`, `weather` |
 | `app.py` | 4808 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `ambience`, `attire`, `auth_routes`, `backdrops`, `character_schema`, `chat_archive`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `survival`, `updates` |
+| `artifacts.py` | 571 |  | — |
 | `attire.py` | 1828 |  | — |
 | `auth_routes.py` | 175 | Typed host-authentication HTTP routes and cookie transport. | `guest_access` |
 | `authored_events.py` | 124 |  | `db` |
@@ -31,10 +32,10 @@
 | `chat_archive.py` | 1110 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1132 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 6848 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
-| `couriers.py` | 677 |  | `carriers`, `crowds`, `degradation` |
+| `commit.py` | 6882 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `couriers.py` | 1095 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
-| `db.py` | 1653 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
+| `db.py` | 1657 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `degradation.py` | 171 |  | — |
 | `frames.py` | 220 |  | `db` |
 | `gaps.py` | 548 |  | `canon_provenance`, `db`, `logging_utils`, `providers`, `spatial`, `subjects` |
@@ -42,7 +43,7 @@
 | `guest_access.py` | 355 |  | `db` |
 | `importers.py` | 2651 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `logging_utils`, `memory`, `prompts`, `providers` |
 | `jobs.py` | 183 |  | `logging_utils` |
-| `living_world.py` | 604 |  | `logging_utils`, `mechanics` |
+| `living_world.py` | 608 |  | `logging_utils`, `mechanics` |
 | `llm_quality.py` | 292 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `lore_structure.py` | 242 |  | — |
@@ -55,12 +56,12 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 4242 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 4270 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 2025 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1431 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
-| `schemas.py` | 4030 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `schemas.py` | 4073 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 6659 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 975 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
@@ -115,20 +116,20 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 1644 | 193 lines |
-| `_scrub_invented_dialogue()` | 4353 | 145 lines |
-| `_check_narrator_fidelity()` | 5290 | 123 lines |
-| `_extract_authority_claims()` | 1174 | 106 lines |
-| `_perceptible_entities()` | 752 | 98 lines |
-| `_check_presence_knowledge_channel()` | 3136 | 95 lines |
+| `norm_sequence()` | 1669 | 193 lines |
+| `_scrub_invented_dialogue()` | 4378 | 145 lines |
+| `_check_narrator_fidelity()` | 5315 | 123 lines |
+| `_extract_authority_claims()` | 1199 | 106 lines |
+| `_perceptible_entities()` | 777 | 98 lines |
+| `_check_presence_knowledge_channel()` | 3161 | 95 lines |
 | `region_visibility()` | 503 | 92 lines |
-| `_check_quote_attribution()` | 5023 | 91 lines |
+| `_check_quote_attribution()` | 5048 | 91 lines |
 
 ### `agents/director.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 3816 | 1185 lines |
+| `director_resolve()` | 3816 | 1192 lines |
 | `director_interpret()` | 750 | 388 lines |
 | `_reconcile_resolution()` | 3296 | 318 lines |
 | `_reconcile_near_group_positions()` | 2244 | 201 lines |
@@ -175,14 +176,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `perception_outcome()` | 3179 | 804 lines |
-| `perception_act()` | 2467 | 523 lines |
-| `_observer_scene_payload()` | 848 | 204 lines |
-| `perception_establish()` | 2289 | 177 lines |
+| `perception_outcome()` | 3183 | 807 lines |
+| `perception_act()` | 2470 | 524 lines |
+| `_observer_scene_payload()` | 849 | 204 lines |
+| `perception_establish()` | 2290 | 179 lines |
 | `_previous_open_group_continuity()` | 155 | 117 lines |
-| `_strip_self_narration()` | 1686 | 107 lines |
-| `_inject_onset_speech()` | 1210 | 96 lines |
-| `_source_channels()` | 1491 | 86 lines |
+| `_strip_self_narration()` | 1687 | 107 lines |
+| `_inject_onset_speech()` | 1211 | 96 lines |
+| `_source_channels()` | 1492 | 86 lines |
 
 ### `agents/runtime.py`
 
@@ -235,6 +236,19 @@
 | `lore_edit()` | 1927 | 68 lines |
 | `_ambience_payload()` | 4590 | 68 lines |
 | `guest_state()` | 2725 | 66 lines |
+
+### `artifacts.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `run_artifacts()` | 182 | 205 lines |
+| `schedule_artifact_wording()` | 394 | 65 lines |
+| `mint_wording()` | 461 | 59 lines |
+| `land_artifact_wording()` | 522 | 50 lines |
+| `reading_copy()` | 149 | 25 lines |
+| `new_artifact()` | 127 | 20 lines |
+| `artifact_voice()` | 94 | 11 lines |
+| `posted_in_room()` | 115 | 10 lines |
 
 ### `attire.py`
 
@@ -370,11 +384,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 5158 | 1147 lines |
+| `prepare_memory_commit()` | 5178 | 1147 lines |
 | `prepare_scene_commit()` | 1889 | 398 lines |
-| `commit_world_entities()` | 2724 | 283 lines |
-| `track_background_presences()` | 3524 | 231 lines |
-| `_commit_all_locked()` | 6615 | 175 lines |
+| `commit_world_entities()` | 2744 | 283 lines |
+| `track_background_presences()` | 3544 | 231 lines |
+| `_commit_all_locked()` | 6635 | 189 lines |
 | `commit_transit_sweep()` | 2336 | 169 lines |
 | `_prepare_destruction()` | 699 | 158 lines |
 | `update_place_graph()` | 74 | 153 lines |
@@ -383,14 +397,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_couriers()` | 416 | 262 lines |
-| `advance_couriers()` | 193 | 59 lines |
-| `_deliver()` | 356 | 58 lines |
-| `_copy_for()` | 254 | 38 lines |
-| `_player_name()` | 328 | 26 lines |
-| `new_courier()` | 167 | 24 lines |
-| `_give_report()` | 310 | 16 lines |
-| `courier_voice()` | 120 | 11 lines |
+| `run_couriers()` | 749 | 347 lines |
+| `_exchange_stops()` | 537 | 210 lines |
+| `advance_couriers()` | 281 | 78 lines |
+| `_deliver()` | 464 | 71 lines |
+| `new_courier()` | 220 | 46 lines |
+| `_copy_of()` | 361 | 39 lines |
+| `_player_name()` | 436 | 26 lines |
+| `_give_report()` | 418 | 16 lines |
 
 ### `crowds.py`
 
@@ -409,14 +423,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `init()` | 1560 | 50 lines |
-| `conn()` | 1407 | 38 lines |
-| `transaction()` | 1447 | 36 lines |
-| `_backfill_resource_uids()` | 1542 | 17 lines |
-| `qi()` | 1505 | 16 lines |
-| `data_version()` | 1484 | 14 lines |
-| `parse_scoped_world_key()` | 67 | 13 lines |
-| `_execute_retry()` | 1376 | 13 lines |
+| `init()` | 1564 | 50 lines |
+| `conn()` | 1411 | 38 lines |
+| `transaction()` | 1451 | 36 lines |
+| `_backfill_resource_uids()` | 1546 | 17 lines |
+| `qi()` | 1509 | 16 lines |
+| `data_version()` | 1488 | 14 lines |
+| `parse_scoped_world_key()` | 71 | 13 lines |
+| `_execute_retry()` | 1380 | 13 lines |
 
 ### `degradation.py`
 
@@ -508,14 +522,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `mint_consequences()` | 350 | 100 lines |
-| `record_obligations()` | 500 | 53 lines |
-| `living_world_levels()` | 286 | 33 lines |
-| `fired_consequences_at()` | 452 | 28 lines |
-| `effective_depth()` | 243 | 27 lines |
-| `owed_history()` | 555 | 24 lines |
-| `attach_owed_history()` | 581 | 24 lines |
-| `normalize_living_world()` | 204 | 20 lines |
+| `mint_consequences()` | 354 | 100 lines |
+| `record_obligations()` | 504 | 53 lines |
+| `living_world_levels()` | 290 | 33 lines |
+| `fired_consequences_at()` | 456 | 28 lines |
+| `effective_depth()` | 247 | 27 lines |
+| `owed_history()` | 559 | 24 lines |
+| `attach_owed_history()` | 585 | 24 lines |
+| `normalize_living_world()` | 208 | 20 lines |
 
 ### `llm_quality.py`
 
@@ -638,10 +652,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 4233 | 10 lines |
-| `presets()` | 4224 | 2 lines |
-| `active_preset()` | 4227 | 2 lines |
-| `nsfw_enabled()` | 4230 | 2 lines |
+| `get_prompt()` | 4261 | 10 lines |
+| `presets()` | 4252 | 2 lines |
+| `active_preset()` | 4255 | 2 lines |
+| `nsfw_enabled()` | 4258 | 2 lines |
 
 ### `providers.py`
 
@@ -696,14 +710,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 3084 | 245 lines |
+| `preprocess_llm_output()` | 3126 | 245 lines |
 | `_lenient_coerce()` | 517 | 159 lines |
-| `semantic_output_errors()` | 3754 | 113 lines |
-| `validate_llm_output_strict()` | 3929 | 102 lines |
-| `_coerce_conditions()` | 2855 | 50 lines |
+| `semantic_output_errors()` | 3797 | 113 lines |
+| `validate_llm_output_strict()` | 3972 | 102 lines |
+| `_coerce_conditions()` | 2897 | 50 lines |
 | `_declared()` | 357 | 48 lines |
 | `_coerce_station_table()` | 49 | 41 lines |
-| `_coerce_evidence_refs()` | 1949 | 41 lines |
+| `_coerce_evidence_refs()` | 1991 | 41 lines |
 
 ### `spatial.py`
 
