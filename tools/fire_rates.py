@@ -288,6 +288,7 @@ def offscreen_rows(con, turn_ids):
     plan_commits = []
     carrier_commits = []
     crowd_commits = []
+    residue_commits = []
     for row in con.execute(sql):
         try:
             blob = json.loads(row["content"])
@@ -309,6 +310,10 @@ def offscreen_rows(con, turn_ids):
                  if isinstance(blob, dict) else None)
         if isinstance(crowd, dict) and "offered" in crowd:
             crowd_commits.append(crowd)
+        residue = ((blob.get("results") or {}).get("routine_residue")
+                   if isinstance(blob, dict) else None)
+        if isinstance(residue, dict) and "delivered" in residue:
+            residue_commits.append(residue)
 
     opportunities = [e for e in epochs if e.get("opportunity")]
     actor_chances = [
@@ -388,6 +393,21 @@ def offscreen_rows(con, turn_ids):
             sum(int(c.get("standing") or 0) for c in crowd_commits),
             "crowds standing anywhere; a heading is spent one beat after it "
             "is declared"),
+        # A crowd is many witnesses; standing where a public surface lands is
+        # its acquisition channel, exactly as a walking body's.
+        Row("off-screen life", "a crowd took up public talk",
+            sum(int(c.get("crowd_acquired") or 0) for c in carrier_commits),
+            sum(int(c.get("crowd_opportunities") or 0)
+                for c in carrier_commits),
+            "crowd co-located with a public witnessed surface"),
+        # Residue is computed on the Director payload path; the commit blob
+        # echoes it (results.routine_residue) precisely so this table can see
+        # it. The denominator is movement-declaring beats with the floor on --
+        # a quiet beat gets no residue to deliver and is not a chance.
+        Row("off-screen life", "destination residue delivered",
+            sum(int(r.get("delivered") or 0) > 0 for r in residue_commits),
+            len(residue_commits),
+            "party moved somewhere; facts only where a ledger held any"),
     ]
 
 

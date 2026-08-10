@@ -41,7 +41,7 @@ import degradation
 from character_schema import normalize_character_data
 from db import q
 from living_world import living_world_allows, living_world_config
-from scene import active_cast, extant_cast, set_char_state
+from scene import extant_cast, set_char_state
 from spatial import room_of
 
 
@@ -239,16 +239,91 @@ def advance_carriers(ctx, scene, world_event_result):
                            json.dumps(state, ensure_ascii=False),
                            frame_id=ctx.turn.frame_id)
 
+    crowd_opportunities, crowd_acquired = _crowds_acquire(
+        ctx, event_rows, standing_rows)
+
     return {"enabled": True, "events_offered": len(event_ids),
             "public_surfaces": public_surfaces,
             "carrier_opportunities": carrier_opportunities,
-            "acquired": acquired, "carriers_moved": moved}
+            "acquired": acquired, "carriers_moved": moved,
+            "crowd_opportunities": crowd_opportunities,
+            "crowd_acquired": crowd_acquired}
+
+
+def _crowds_acquire(ctx, event_rows, standing_rows):
+    """A crowd standing where a public surface lands witnesses it too.
+
+    The design named crowds the first anonymous carrier, and `apply_tellings`
+    could already make one retell -- but nothing ever put anything IN one, so
+    across a fifty-beat quest with two throngs standing in eventful rooms,
+    every crowd finished holding nothing and the whole crowd-carrier layer was
+    unreachable except by an explicit Director telling that never came.
+
+    Acquisition is the same physics as a registered character's: only a
+    non-empty public `witnessed` surface, only for a crowd whose own room it
+    landed in (new fires plus the same bounded arrival window a walking body
+    gets), stored verbatim at the source -- a crowd that watched the well seal
+    contains eyewitnesses, and degrading here would make the whole square
+    wrong about what it saw together. Degradation still happens where it
+    always did: at each retelling.
+
+    Runs after `commit_crowds` in the same turn transaction (the domain order
+    pins this), so it reads the crowd list this beat's ops produced.
+    """
+    from db import wget, wset
+
+    cid = ctx.chat.id
+    opportunities = acquired = 0
+    standing = [dict(c) for c in
+                wget(cid, crowds_model.CROWDS_WORLD_KEY, []) or []
+                if isinstance(c, dict)]
+    dirty = False
+    for i, crowd in enumerate(standing):
+        room = str(crowd.get("room_uid") or "")
+        if not room:
+            continue
+        here = [r for r in standing_rows
+                if str(r[0]["location_id"]) == room][:ARRIVAL_SURFACES]
+        for row, payload, witnessed in event_rows + here:
+            if str(row["location_id"]) != room:
+                continue
+            opportunities += 1
+            updated = crowds_model.add_hearsay(crowd, {
+                "world_event_id": str(row["event_id"]),
+                "source_event_id": str(payload.get("source_event_id") or ""),
+                "claim": witnessed,
+                "kind": str(row["kind"]),
+                "occurred_at": float(row["occurred_at"]),
+                "acquired_turn": int(ctx.turn.idx),
+                "retellings": 0,
+                "told_by": "",
+                "provenance": "witnessed_surface",
+            })
+            if updated is not crowd:
+                standing[i] = crowd = updated
+                acquired += 1
+                dirty = True
+    if dirty:
+        wset(cid, crowds_model.CROWDS_WORLD_KEY, standing)
+    return opportunities, acquired
 
 
 def _cast_index(cid, frame_id, scene):
-    """Registered characters this beat, by every name they answer to."""
+    """Registered characters this beat, by every name they answer to.
+
+    EXTANT, not active, for the same reason acquisition reads extant: being
+    dormant is a decision about engine spend, not a claim that the body left
+    the world. Reading only the active cast made a dormant body in the room
+    unaddressable as a LISTENER -- a messenger could stand in front of the
+    villain, speak, and be refused with "names someone unregistered". Being
+    told is passive; the room check still applies.
+
+    A dormant SPEAKER stays structurally impossible without a line: the
+    spoke-this-beat gate reads the dialogue_log, and a mind the engine did
+    not run said nothing for it to record.
+    """
     index = {}
-    for row in active_cast(cid, frame_id):
+    for row in extant_cast(cid, frame_id):
         try:
             sheet = json.loads(row["sheet"] or "{}")
         except (TypeError, ValueError):

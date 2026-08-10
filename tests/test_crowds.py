@@ -647,3 +647,79 @@ class TestEmergenceProducesStrangers:
         # promised-and-dropped one.
         body = inspect.getsource(commit.commit_crowds)
         assert 'resolved.get("crowd_ops")' in body
+
+
+class TestTheMurmurIsAboutSomething:
+    """A crowd held rumours no payload ever showed.
+
+    `crowd_hearsay` existed, `apply_tellings` could copy it onward — and the
+    player standing in a market whose crowd held a rumour was told nothing,
+    because neither the perception surface nor the Director's crowd view ever
+    delivered what the crowd holds. The Director, told by its prompt to write
+    `telling_ops` from a crowd, was asked for world_event_ids it had never
+    seen — the exact defect the crowd uid and the carried-report id each had
+    in turn: a field that exists and is never delivered.
+    """
+
+    def _crowd_with_talk(self):
+        crowd = crowds.new_crowd(1, "square", band="a throng",
+                                 composition="market traders", since_turn=1)
+        return crowds.add_hearsay(crowd, {
+            "world_event_id": "world_bell",
+            "claim": "the warning bell rang twice", "retellings": 0})
+
+    def test_talk_is_attributed_to_talk_and_never_to_a_name(self):
+        view = crowds.talk_view(self._crowd_with_talk())
+        assert view == [{"source": "talk among the market traders",
+                         "gist": "the warning bell rang twice",
+                         "world_event_id": "world_bell",
+                         "retellings": 0}]
+
+    def test_a_quiet_crowd_has_no_talk_entry(self):
+        assert crowds.talk_view(crowds.new_crowd(
+            1, "square", band="a handful", composition="x", since_turn=1)) == []
+
+    def test_talk_is_now_not_an_archive(self):
+        crowd = self._crowd_with_talk()
+        for i in range(4):
+            crowd = crowds.add_hearsay(crowd, {
+                "world_event_id": "e%d" % i, "claim": "story %d" % i})
+        assert len(crowds.talk_view(crowd)) == 2  # newest first, capped
+
+    def test_an_observer_standing_in_the_room_overhears_the_gist(self, temp_db):
+        """Own-room only by construction: every perception call site passes
+        the observer's own room, so a crowd seen across a doorway stays a
+        shape and a sound — words do not cross a room boundary."""
+        import time
+
+        from agents.common import crowds_for_room
+
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) "
+                         "VALUES(?,?,?)", ("Talk", "", time.time()))
+        scene = {"rooms": {"square": {"name": "Square", "size": "large"}}}
+        crowd = crowds.new_crowd(cid, "square", band="a throng",
+                                 composition="market traders", since_turn=1)
+        crowd = crowds.add_hearsay(crowd, {
+            "world_event_id": "world_bell",
+            "claim": "the warning bell rang twice"})
+        temp_db.wset(cid, "crowds", [crowd])
+        seen = crowds_for_room(cid, scene, "square")
+        assert seen[0]["talk"][0]["gist"] == "the warning bell rang twice"
+        assert seen[0]["talk"][0]["source"] == "talk among the market traders"
+
+    def test_the_director_view_carries_the_ids_telling_ops_need(self, temp_db):
+        import time
+
+        from agents.director import _crowds_view
+
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) "
+                         "VALUES(?,?,?)", ("Talk", "", time.time()))
+        scene = {"rooms": {"square": {"name": "Square", "size": "large"}}}
+        crowd = crowds.new_crowd(cid, "square", band="a throng",
+                                 composition="market traders", since_turn=1)
+        crowd = crowds.add_hearsay(crowd, {
+            "world_event_id": "world_bell",
+            "claim": "the warning bell rang twice"})
+        temp_db.wset(cid, "crowds", [crowd])
+        view = _crowds_view(cid, scene)
+        assert view[0]["talk"][0]["world_event_id"] == "world_bell"

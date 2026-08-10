@@ -151,6 +151,33 @@ def report_id(payload, who=None):
     return ""
 
 
+class QuestAuthor(Author):
+    """The quest's own opening scene.
+
+    `Author` is shared with `tools/story_drive.py`, whose establish default
+    authors a gate hall and an inner yard. Inheriting it silently opened the
+    Vale in somebody else's rooms -- the committed scene carried both worlds,
+    the party moved between rooms it had never been shown, and every mechanism
+    that windows on "a room you have seen before" had nothing to anchor to.
+    """
+
+    def default(self, role):
+        if role == "director_establish":
+            world = scene()
+            out = _base("director_establish")
+            out["location"] = world["location"]
+            out["time"] = world["time"]
+            out["scene_description"] = "The Vale, and its wells going quiet."
+            out["rooms"] = {
+                rid: {"name": r["name"], "adjacent": r["adjacent"],
+                      "size": r["size"]}
+                for rid, r in world["rooms"].items()}
+            out["positions"] = dict(world["positions"])
+            out["entities"] = {}
+            return out
+        return super().default(role)
+
+
 def quest(author, cid):
     """Fifty beats. The hero moves west to east; Maelor acts the whole time."""
 
@@ -287,8 +314,19 @@ def quest(author, cid):
                                  "band": "a few dozen",
                                  "composition": "refugees and townsfolk",
                                  "mood": "watchful"}]})),
+        # He answers being noticed by striking BEHIND the hero -- at the
+        # market the party left hours ago. This is the one working nobody
+        # watches land: it comes due during the wait for dark, in a room the
+        # party is absent from, and the only witnesses are the crowd standing
+        # in it. The return home is what collects it -- as destination
+        # residue for Corin, and as talk the villagers carry with them.
         ("I ask the townsfolk what they know of Maelor.",
-         R("They know a great deal, and most of it disagrees with itself.")),
+         R("They know a great deal, and most of it disagrees with itself.",
+           diff={"consequences": [
+               curse("Maelor's riders have passed through the market and "
+                     "the grain stores stand empty",
+                     MARKET, 3600,
+                     "riders took the grain stores in the night")]})),
         # Bryn passes on what he saw at the village -- degraded by one mouth.
         ("I ask Bryn to tell them what happened to our well.",
          lambda p: R("Bryn tells the room about the well.",
@@ -412,9 +450,73 @@ def quest(author, cid):
             diff={"positions": {"Corin": GATE},
                   "cast_changes": [{"who": "Sera", "status": "active",
                                     "reason": "found at the gate"}]})),
-        ("We go home.",
-         go(WELL, "The Fenwater is running. It is the loudest thing in the Vale.",
-            diff={"positions": {"Corin": WELL, "Sera": WELL}})),
+    ]
+
+    # --- X. The way home runs through the square ------------------------
+    # Deliberately back through a room where something happened DURING the
+    # absence. Roadmap item 1's last requirement is "returns to encounter the
+    # resulting state", and a quest that only ever moves forward gives
+    # `destination_residue` no eligible re-entry at all. Two earlier drafts
+    # of this epilogue were corrected by the engine rather than the other way
+    # round: a residue ask for the well-sealing was refused because the party
+    # WATCHED the well seal (a fuse that fires in front of you is not
+    # absence), and a crowd telling Sera about it was refused because she had
+    # just read the aftermath off the room herself ("already heard that").
+    # Both refusals were the design working. What survives is the honest
+    # shape: the riders' raid landed while nobody was there, so Corin meets
+    # it as residue -- and Sera, who takes the stream path and never enters
+    # the square, can learn of it ONLY from the villagers who walked home
+    # carrying the talk.
+    def through_market(p):
+        diff = {"positions": {"Corin": MARKET, "Sera": WELL}}
+        for crowd in (p or {}).get("crowds") or []:
+            if str(crowd.get("room")) == MARKET and crowd.get("crowd_id") \
+                    and "villagers" in str(crowd.get("composition") or ""):
+                # The villagers give up on the square and walk home, and
+                # their talk walks with them -- the anonymous carrier moving
+                # because the crowd moves, exactly as designed.
+                diff["crowd_ops"] = [{"op": "move",
+                                      "crowd_id": crowd["crowd_id"],
+                                      "room": WELL}]
+                break
+        return R("The square is quieter, and the stalls stand stripped. "
+                 "Sera takes the stream path and does not see it.",
+                 diff=diff)
+    # A callable payload cannot be introspected before the turn runs, so it
+    # declares its movement and its narration for the scripts here.
+    through_market.moves_to = MARKET
+    through_market.prose = ("The square is quieter than the morning they "
+                            "left it, and the grain stalls stand stripped "
+                            "bare.")
+
+    def home_with_the_news(p):
+        # The telling names only what the payload actually showed -- a
+        # crowd_id and a world_event_id from that crowd's own `talk` --
+        # because an id the Director was never shown is this engine's oldest
+        # class of unreachable mechanism. Sera never stood where the raid's
+        # surface stands, so the crowd is the only route it can reach her by.
+        diff = {"positions": {"Corin": WELL}}
+        for crowd in (p or {}).get("crowds") or []:
+            if str(crowd.get("room")) != WELL:
+                continue
+            for talk in crowd.get("talk") or []:
+                if "riders" in str(talk.get("gist") or "") \
+                        and talk.get("world_event_id"):
+                    diff["telling_ops"] = [{
+                        "speaker": crowd.get("crowd_id"),
+                        "listener": "Sera",
+                        "world_event_id": talk["world_event_id"]}]
+                    break
+        return R("The Fenwater is running, and the villagers' talk of the "
+                 "riders reaches Sera before Corin does.", diff=diff)
+    home_with_the_news.moves_to = WELL
+    home_with_the_news.prose = ("The Fenwater is running. It is the loudest "
+                                "thing in the Vale, under the villagers' "
+                                "talk of riders and empty grain stores.")
+
+    B += [
+        ("We come down through the market square.", through_market),
+        ("We go home.", home_with_the_news),
     ]
     return B
 
@@ -457,7 +559,7 @@ def play(db, cid, author, beats):
     for idx, (player_input, payload) in enumerate(beats):
         author.script(idx, "director_resolve", payload)
         prose = (payload.get("resolved_event") if isinstance(payload, dict)
-                 else None)
+                 else getattr(payload, "prose", None))
         if prose:
             author.script(idx, "narrator", {"prose": prose})
         # A beat that moves the player must SAY so at the interpret stage.
@@ -468,7 +570,8 @@ def play(db, cid, author, beats):
         # only in `state_diff.positions` got room residue exactly zero times in
         # fifty beats, and the engine was right every time.
         moved_to = ((payload.get("state_diff") or {}).get("positions") or {}
-                    ).get("Corin") if isinstance(payload, dict) else None
+                    ).get("Corin") if isinstance(payload, dict) \
+            else getattr(payload, "moves_to", None)
         if moved_to:
             interp = author.default("director_interpret")
             if callable(interp):
@@ -524,8 +627,12 @@ def fired_by_turn(db, cid):
             events.append("a public surface")
         if ic.get("acquired"):
             events.append("somebody witnessed it")
+        if ic.get("crowd_acquired"):
+            events.append("the crowd took it up")
         if ic.get("told"):
             events.append("somebody was told")
+        if (results.get("routine_residue") or {}).get("delivered"):
+            events.append("the room remembered the absence")
         if ep.get("reactive_fired"):
             events.append("a plan's stage fired")
         if ep.get("stochastic_fired"):
@@ -640,7 +747,7 @@ def main():
     import providers
 
     db_module.init()
-    author = Author()
+    author = QuestAuthor()
     author.capture_dir = args.capture
     llm_quality.complete_validated_json = author
     for mod in list(sys.modules.values()):

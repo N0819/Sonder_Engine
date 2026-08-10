@@ -564,6 +564,37 @@ def crowd_voice(crowd):
     return "talk among the %s" % composition if composition else "talk going round"
 
 
+def talk_view(crowd, cap=2):
+    """What an observer standing in this crowd overhears, newest first.
+
+    The half of the speech door that was missing: `crowd_hearsay` existed and
+    `apply_tellings` could copy it onward, but no payload ever SHOWED it, so a
+    player standing in a market whose crowd held a rumour was told nothing and
+    a Director asked to write `telling_ops` from a crowd was asked for
+    world_event_ids it had never seen -- the same field-delivered-nowhere
+    defect as the crowd uid and the carried-report id before it.
+
+    Attribution rides `crowd_voice`, never a name: obviously hearsay,
+    obviously not a person who could be asked. The gist is whatever the crowd
+    itself holds -- verbatim where the crowd witnessed it, already degraded
+    where it was told -- because the murmur of a square that WATCHED a thing
+    happen names it plainly. Capped: a crowd is what people are saying right
+    now, not an archive read aloud.
+    """
+    out = []
+    for report in crowd_hearsay(crowd)[-max(0, int(cap)):]:
+        claim = " ".join(str(report.get("claim") or "").split())
+        if not claim:
+            continue
+        out.append({
+            "source": crowd_voice(crowd),
+            "gist": claim,
+            "world_event_id": str(report.get("world_event_id") or ""),
+            "retellings": int(report.get("retellings") or 0),
+        })
+    return out
+
+
 def add_hearsay(crowd, report):
     """Put a report into a crowd, under the cap. Returns the new crowd."""
     if not isinstance(crowd, dict) or not isinstance(report, dict):

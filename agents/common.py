@@ -685,6 +685,15 @@ def crowds_for_room(cid, sc, room_id):
             # a second one, and so the crowd is not asked to produce a person
             # who is already in front of the player.
             "emerged": list(crowd.get("emerged") or []),
+            # What the murmur is ABOUT, when the crowd holds anything --
+            # attributed as talk, never to a name. Own-room only by
+            # construction: every caller passes the observer's own room, so
+            # a crowd seen across an open doorway is a shape and a sound,
+            # never words (the zero-content assertion stays zero-content).
+            # This is perception of ambient speech, the design's first
+            # legitimate door; the durable carried-report copy still moves
+            # only through an explicit telling op.
+            "talk": crowds_model.talk_view(crowd),
         })
     return out
 

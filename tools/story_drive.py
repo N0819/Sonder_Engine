@@ -239,6 +239,14 @@ class Author:
                 out["sequence"] = [{"type": "action", "attempt": said}]
                 return out
             return interpret
+        if role == "interpret_repair":
+            # The SHIPPED example for this stage contains a full worked beat --
+            # "duck into the armory", `movement.to_room: "armory"`. Falling
+            # back to it meant every repaired interpretation declared a move
+            # into a room nobody had authored, and the phantom then anchored
+            # the party's movement for the rest of the story. A repair should
+            # return the interpretation, not a different story's.
+            return self.default("director_interpret")
         if role == "director_establish":
             # Establish OWNS the opening scene, and its shape is NOT the
             # resolve shape: rooms and positions sit at the top level and
