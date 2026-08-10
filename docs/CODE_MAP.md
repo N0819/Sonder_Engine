@@ -31,7 +31,7 @@
 | `chat_archive.py` | 1110 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1132 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 6757 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 6770 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `crowds.py` | 577 |  | — |
 | `db.py` | 1648 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `degradation.py` | 171 |  | — |
@@ -41,13 +41,13 @@
 | `guest_access.py` | 355 |  | `db` |
 | `importers.py` | 2651 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `logging_utils`, `memory`, `prompts`, `providers` |
 | `jobs.py` | 183 |  | `logging_utils` |
-| `living_world.py` | 602 |  | `logging_utils`, `mechanics` |
+| `living_world.py` | 604 |  | `logging_utils`, `mechanics` |
 | `llm_quality.py` | 292 | Strict JSON parsing, schema validation, and model-assisted repair. | `providers`, `schemas` |
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `lore_structure.py` | 242 |  | — |
 | `mechanics.py` | 310 |  | `spatial`, `spatial_frames` |
 | `memory.py` | 5152 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
-| `offscreen.py` | 1593 |  | `logging_utils` |
+| `offscreen.py` | 2141 |  | `logging_utils` |
 | `outofband.py` | 276 |  | `logging_utils` |
 | `paradox.py` | 489 |  | `character_schema`, `db`, `frames` |
 | `pipeline_context.py` | 248 | Typed mutable context passed through a turn pipeline. | `db` |
@@ -58,7 +58,7 @@
 | `providers.py` | 2025 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
-| `scene.py` | 1424 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
+| `scene.py` | 1431 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 3998 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 6370 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 975 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
@@ -373,9 +373,9 @@
 | `commit_world_entities()` | 2660 | 283 lines |
 | `track_background_presences()` | 3460 | 231 lines |
 | `commit_transit_sweep()` | 2291 | 169 lines |
+| `_commit_all_locked()` | 6548 | 164 lines |
 | `_prepare_destruction()` | 699 | 158 lines |
 | `update_place_graph()` | 74 | 153 lines |
-| `_commit_all_locked()` | 6548 | 151 lines |
 
 ### `crowds.py`
 
@@ -493,14 +493,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `mint_consequences()` | 348 | 100 lines |
-| `record_obligations()` | 498 | 53 lines |
-| `living_world_levels()` | 284 | 33 lines |
-| `fired_consequences_at()` | 450 | 28 lines |
-| `effective_depth()` | 241 | 27 lines |
-| `owed_history()` | 553 | 24 lines |
-| `attach_owed_history()` | 579 | 24 lines |
-| `normalize_living_world()` | 202 | 20 lines |
+| `mint_consequences()` | 350 | 100 lines |
+| `record_obligations()` | 500 | 53 lines |
+| `living_world_levels()` | 286 | 33 lines |
+| `fired_consequences_at()` | 452 | 28 lines |
+| `effective_depth()` | 243 | 27 lines |
+| `owed_history()` | 555 | 24 lines |
+| `attach_owed_history()` | 581 | 24 lines |
+| `normalize_living_world()` | 204 | 20 lines |
 
 ### `llm_quality.py`
 
@@ -557,14 +557,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
+| `land_agent_tick()` | 1835 | 187 lines |
+| `schedule_agent_ticks()` | 2024 | 118 lines |
 | `schedule_profile_ticks()` | 1353 | 113 lines |
 | `apply_plan_ops()` | 664 | 110 lines |
 | `profile_summary_record()` | 1090 | 99 lines |
 | `advance_epoch()` | 909 | 98 lines |
 | `advance_reactive_plans()` | 822 | 85 lines |
-| `_normalize_plan_stages()` | 595 | 67 lines |
-| `stochastic_ticks()` | 327 | 64 lines |
-| `agent_context()` | 1526 | 60 lines |
+| `agent_adjudication()` | 1741 | 69 lines |
 
 ### `outofband.py`
 
@@ -671,11 +671,11 @@
 | `recent_events_for_observer()` | 750 | 59 lines |
 | `director_context()` | 810 | 53 lines |
 | `awareness_conditions()` | 471 | 47 lines |
-| `private_knowledge_for()` | 1381 | 44 lines |
+| `private_knowledge_for()` | 1388 | 44 lines |
 | `_seed_scene_initial_attire()` | 85 | 31 lines |
 | `active_cast()` | 161 | 31 lines |
 | `active_disguises()` | 363 | 31 lines |
-| `normalize_style_guide()` | 1289 | 31 lines |
+| `normalize_style_guide()` | 1296 | 31 lines |
 
 ### `schemas.py`
 

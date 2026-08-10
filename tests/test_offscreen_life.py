@@ -218,26 +218,38 @@ class TestTheModelIsOutOfTheTickBusiness:
         assert "advance_epoch" in inspect.getsource(commit.commit_offscreen_epoch)
 
 
-class TestFullIsPermissionNotBehaviour:
-    def test_it_is_documented_as_unbuilt_where_a_reader_will_look(self):
+class TestFullRungDocumentationStaysHonest:
+    def test_the_ladder_comment_carries_the_firewall_where_a_reader_will_look(
+            self):
+        """The rung used to be permission only, and the comment said so; now
+        that it is behaviour, a comment still calling it unbuilt would send
+        the next maintainer to build it a second time — while losing the
+        firewall clause would invite the exact leak the tier is designed
+        against. Both must survive edits to this block."""
+        import inspect
+
         import scene
 
-        source = scene.__doc__ or ""
-        import inspect
         source = inspect.getsource(scene)
         marker = source[source.index("What the cast is allowed to do"):
                         source.index("OFFSCREEN_LIFE_LADDER = (")]
-        assert "Permission, not behaviour" in marker
+        assert "Permission, not behaviour" not in marker
+        assert "schedule_agent_ticks" in marker
+        assert "ITS OWN knowledge" in marker
         assert "OFFSCREEN_LIFE_DESIGN" in marker
 
-    def test_the_ui_says_so_too(self):
+    def test_the_ui_no_longer_calls_the_rung_unbuilt(self):
+        """`OFFSCREEN_LIFE_BUILT` now includes `character_agent`; hand-written
+        settings copy still calling it unbuilt would make the menu disagree
+        with the engine's own declaration — the drift the built-set idiom
+        exists to prevent."""
         from pathlib import Path
 
         js = (Path(__file__).resolve().parents[1]
               / "static/js/settings.js").read_text(encoding="utf-8")
         block = js[js.index('"Off-screen life"'):js.index('"Background life"')]
-        assert block.count("Not built yet") == 1  # character_agent only
-        assert "behaves as stochastic" in block
+        assert "Not built yet" not in block
+        assert "opted in" in block
 
     def test_the_ui_renders_the_engines_own_ladder(self):
         """Listing the rungs in the menu would drift the first time one was

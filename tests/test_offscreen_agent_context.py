@@ -106,6 +106,29 @@ class TestItReceivesWhatItLegitimatelyHas:
         assert ctx["memories"] == [] and ctx["plans"] == []
         assert ctx["carried_reports"] == []
 
+    def test_a_real_char_id_reaches_real_memory_rows(self, temp_db):
+        """The memory read shipped selecting a `summary` column the memories
+        table has never had, and every test exercised it with char_id=None —
+        so the query that crashed on any real candidate looked covered and
+        was not. The paid producer's first live run would have been the
+        crash's first exercise."""
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) "
+                         "VALUES(?,?,?)", ("A", "", time.time()))
+        char_id = temp_db.qi(
+            "INSERT INTO characters(name,sheet,source,created) "
+            "VALUES(?,?,?,?)", ("Kestrel", "{}", "{}", time.time()))
+        temp_db.qi(
+            "INSERT INTO memories(chat_id,char_id,turn_idx,content) "
+            "VALUES(?,?,?,?)", (cid, char_id, 3, "the gate held"))
+        temp_db.qi(
+            "INSERT INTO memories(chat_id,char_id,turn_idx,content,archived) "
+            "VALUES(?,?,?,?,1)", (cid, char_id, 4, "an archived aside"))
+        entry = _subject()
+        entry["char_id"] = char_id
+        ctx = offscreen.agent_context(cid, entry)
+        assert ctx["memories"] == [{"summary": "the gate held",
+                                    "turn_idx": 3}]
+
 
 class TestSelectionStaysSeparateFromContent:
     def test_candidates_are_chosen_without_reading_the_world(self):

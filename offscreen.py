@@ -1551,10 +1551,14 @@ def agent_context(cid, entry, *, frame_id=None, clock=None):
 
     memories = []
     if char_id is not None:
+        # `content` is the memories table's text column; this read shipped
+        # asking for a `summary` column the table has never had, and every
+        # test exercised it with char_id=None -- so the query that crashes
+        # on any real candidate looked measured and was not.
         memories = [
-            {"summary": r["summary"], "turn_idx": r["turn_idx"]}
-            for r in q("SELECT summary, turn_idx FROM memories "
-                       "WHERE chat_id=? AND char_id=? "
+            {"summary": r["content"], "turn_idx": r["turn_idx"]}
+            for r in q("SELECT content, turn_idx FROM memories "
+                       "WHERE chat_id=? AND char_id=? AND archived=0 "
                        "ORDER BY turn_idx DESC LIMIT 12",
                        (cid, char_id)) or []
         ]
@@ -1591,3 +1595,547 @@ def _plans_for(cid, frame_id):
     if frame_id is not None:
         return wget_for_frame(cid, PLAN_KEY, frame_id, []) or []
     return wget(cid, PLAN_KEY, []) or []
+
+
+# ---------------------------------------------------------------------------
+# The full `character_agent` rung: one reduced off-screen turn per selected
+# opted-in mind. Selection (`full_agent_candidates`) and the fail-closed
+# private context (`agent_context`) are above; this section is the paid
+# producer and the atomic landing.
+#
+# TWO CALLS, TWO AUTHORITIES, exactly the on-screen split. The CHARACTER call
+# sees `agent_context` and nothing else — it proposes an attempt or abandons
+# its own plan, and it never decides its own success. The DIRECTOR call owns
+# objective causality: it may see the scene graph, and it alone may declare a
+# consequence — which still goes through `living_world.mint_consequences`,
+# the same deterministic validator every other fuse passes, into
+# `scheduled_events` under a STABLE id. The world's objective history
+# (`world_events`) is never written here: a minted fuse is promoted by the
+# ordinary commit spine when it fires, so this rung cannot grow a second
+# writer of what objectively happened.
+#
+# EVERYTHING LANDS ONCE OR NOT AT ALL. One transaction; inside it, three
+# guards in order — the epoch must still be current, the story must not have
+# rolled back past the base turn, and the subject's own `last_epoch_id` must
+# not already carry this epoch. That last guard is the reroll answer: a
+# rerolled turn re-derives the SAME epoch id (the id is a hash of the same
+# inputs) and resubmits the same job key, so whichever landing runs second
+# finds the first one's stamp and discards itself. Where a restore rolled the
+# stamp back along with everything else, re-landing is REPLAY, not
+# duplication: the memory upserts on a stable `event_key`, the fuse is
+# INSERT OR REPLACE on a stable id, and the log batch dedupes on its seed.
+# ---------------------------------------------------------------------------
+
+AGENT_RUNG = "agent"
+AGENT_ATTEMPT_MAX_WORDS = 12
+AGENT_OUTCOMES = ("success", "partial", "failure")
+#: A tick is the character's own lived act; it matters to them more than a
+#: passing observation and less than a scene they played on screen.
+AGENT_MEMORY_SALIENCE = 0.6
+
+_AGENT_OUTCOME_PHRASES = {
+    "success": "it came off",
+    "partial": "it half came off",
+    "failure": "it did not come off",
+}
+
+#: Invariant text only — the variable half is the user payload, so the whole
+#: system prompt is one cacheable constant.
+_AGENT_ATTEMPT_SYS = (
+    "You decide the next OWN move of one absent character, off screen, from "
+    "only what has actually reached them: their identity, interior, "
+    "memories, beliefs, plans, carried reports (each may be vague, "
+    "second-hand or wrong), where they last were by their own reckoning, "
+    "and how long they have been on their own. Declare the act they BEGIN "
+    "next in service of their own plan or drive -- an attempt, not its "
+    "outcome: whether it works is the world's to say, and someone acting on "
+    "a wrong report acts wrongly with full confidence. Where their active "
+    "plan no longer makes sense to them, abandon it and name it instead of "
+    "pressing on. Output STRICT JSON "
+    '{"attempt": "<the act they begin, %d words max, bare verb phrase>", '
+    '"toward": "<the place they make for, in their own words, or empty to '
+    'stay put>", "plan_op": "<keep|abandon>", '
+    '"plan_id": "<the plan_id abandoned, or empty>"}'
+    % AGENT_ATTEMPT_MAX_WORDS
+)
+
+_AGENT_ADJUDICATE_SYS = (
+    "You are the Director resolving ONE off-screen attempt by an absent "
+    "character. You own objective causality and may see the world as it "
+    "is; the character may not, and nothing you write reaches anyone as "
+    "prose -- your output is structured state. Resolve the attempt against "
+    "the standing world: an attempt built on a stale or wrong report meets "
+    "the world as it actually is, and fails or half-succeeds accordingly. "
+    "If the attempt moves them, put them in one room id from "
+    "rooms_available; an attempt to reach somewhere the world does not "
+    "contain leaves moved_to empty. Declare at most ONE consequence, and "
+    "only when the attempt genuinely changes the world beyond the "
+    "character themself -- an errand, a vigil or a journey mostly just "
+    "moves a body. A consequence needs a concrete what, a where from "
+    "rooms_available, a due_seconds delay before it lands, and a witnessed "
+    "public surface (empty when nobody could have seen it happen). Output "
+    'STRICT JSON {"outcome": "<success|partial|failure>", '
+    '"moved_to": "<room id or empty>", '
+    '"consequence": {"what": "...", "where": "<room id>", '
+    '"due_seconds": <number>, "witnessed": "..."} or null, '
+    '"advance_plan": <true|false>}'
+)
+
+
+def agent_proposal(cid, entry, context):
+    """ONE character call proposing an attempt or plan revision. Fail closed.
+
+    The user payload is `agent_context`'s allowlisted output and NOTHING
+    else — no scene, no rooms list, no importance. The character names where
+    they are headed in their own words; grounding that to a real room is the
+    Director's, because a room roster would hand the mind rooms it never
+    saw. The character's TIER selects which model pays for the call (spend,
+    the one thing importance may decide) and never appears in the prompt.
+
+    On any failure — provider, shape, a field that runs past its word bound
+    — retries once and then returns None: an absent mind that could not be
+    heard from simply stays as it was, which is cheaper and more honest
+    than inventing an attempt for it.
+    """
+    from character_schema import character_tier
+    from providers import chat_complete
+
+    tier = str(character_tier(entry.get("sheet") or {})).strip().casefold()
+    role = f"character_{tier}" if tier in ("bg", "mid", "major") \
+        else "character_mid"
+    user = json.dumps(context, ensure_ascii=False)
+    last_error = "no attempt"
+    for _attempt in range(2):
+        try:
+            out = json.loads(chat_complete(
+                role, _AGENT_ATTEMPT_SYS, user, temperature=0.7,
+                max_tokens=400))
+        except Exception as exc:
+            last_error = f"{type(exc).__name__}: {str(exc)[:200]}"
+            continue
+        if not isinstance(out, dict):
+            last_error = "output was not an object"
+            continue
+        attempt = " ".join(str(out.get("attempt") or "").split()).rstrip(".")
+        if not attempt:
+            last_error = "attempt missing or empty"
+            continue
+        if len(attempt.split()) > AGENT_ATTEMPT_MAX_WORDS:
+            # The same write-path bound as the profile rung: a field long
+            # enough to hold a sentence has been handed one.
+            last_error = (f"attempt runs past {AGENT_ATTEMPT_MAX_WORDS} "
+                          "words: narration is not state")
+            continue
+        plan_op = str(out.get("plan_op") or "keep").strip().casefold()
+        return {
+            "attempt": attempt,
+            "toward": " ".join(str(out.get("toward") or "").split())[:80],
+            "plan_op": plan_op if plan_op in ("keep", "abandon") else "keep",
+            "plan_id": _plan_slug(out.get("plan_id")),
+        }
+    logger.info("agent proposal fell back: chat=%s subject=%s: %s",
+                cid, entry.get("id"), last_error)
+    return None
+
+
+def agent_adjudication(cid, scene, entry, proposal, plan, clock):
+    """ONE Director call resolving success and consequences. Fail closed.
+
+    The Director is entitled to the objective scene — it owns causality and
+    cannot resolve an attempt against a world it may not see. Its payload
+    still carries no player position and no recent player act: resolving an
+    absent character's errand needs the map, not the protagonist. Every
+    field is validated deterministically on the way out; a verdict that
+    cannot be read whole is retried once and then refused entire, because a
+    half-validated adjudication landing is worse than no tick at all.
+    """
+    from providers import chat_complete
+
+    known_rooms = {str(r) for r in (scene or {}).get("rooms") or {}}
+    state = entry.get("state") if isinstance(entry.get("state"), dict) else {}
+    last_known = ((state.get("offscreen_agent") or {}).get("last_known")
+                  or state.get("last_known") or {})
+    active_plan = None
+    if isinstance(plan, dict):
+        active_plan = {
+            "plan_id": plan.get("plan_id"),
+            "objective": plan.get("objective"),
+            "stage_index": plan.get("stage_index"),
+            "stage_count": len(plan.get("stages") or []),
+        }
+    user = json.dumps({
+        "actor": {"id": entry.get("id"),
+                  "display": entry.get("display") or ""},
+        "attempt": proposal.get("attempt"),
+        "toward": proposal.get("toward"),
+        "active_plan": active_plan,
+        "last_known_room": str((last_known or {}).get("room") or ""),
+        "elapsed_seconds": _as_seconds(clock),
+        "rooms_available": sorted(known_rooms)[:40],
+    }, ensure_ascii=False)
+    last_error = "no verdict"
+    for _attempt in range(2):
+        try:
+            out = json.loads(chat_complete(
+                "director", _AGENT_ADJUDICATE_SYS, user, temperature=0.4,
+                max_tokens=600))
+        except Exception as exc:
+            last_error = f"{type(exc).__name__}: {str(exc)[:200]}"
+            continue
+        if not isinstance(out, dict):
+            last_error = "output was not an object"
+            continue
+        outcome = str(out.get("outcome") or "").strip().casefold()
+        if outcome not in AGENT_OUTCOMES:
+            last_error = f"outcome {out.get('outcome')!r} is not a verdict"
+            continue
+        moved_to = str(out.get("moved_to") or "").strip()
+        if moved_to and moved_to not in known_rooms:
+            # The 'quiet office' rule at the earliest stage it can apply.
+            last_error = f"moved_to {moved_to!r} is outside the world"
+            continue
+        consequence = out.get("consequence")
+        if consequence is not None and not isinstance(consequence, dict):
+            last_error = "consequence is not an object"
+            continue
+        return {
+            "outcome": outcome,
+            "moved_to": moved_to,
+            "consequence": dict(consequence) if consequence else None,
+            "advance_plan": bool(out.get("advance_plan")),
+        }
+    logger.info("agent adjudication fell back: chat=%s subject=%s: %s",
+                cid, entry.get("id"), last_error)
+    return None
+
+
+def compose_agent_tick(who, attempt, outcome, moved_to=""):
+    """Deterministic log spelling of one adjudicated tick — composition by
+    CODE from the bounded fields, so the stored string asserts exactly what
+    was adjudicated and nothing more. Prose for the player is minted at
+    contact by the machinery already being paid for."""
+    text = f"{who} — {attempt}: {outcome}"
+    if moved_to:
+        text += f" (at {moved_to})"
+    return text
+
+
+def compose_agent_memory(attempt, outcome):
+    """The character's own autobiographical spelling of their tick.
+
+    Deterministic for the same reason as `compose_agent_tick`: the memory a
+    reroll re-mints must be byte-identical so the `event_key` upsert reads
+    as the same memory, and a stored sentence a model wrote would be
+    narration nothing player-facing ever authorized.
+    """
+    phrase = _AGENT_OUTCOME_PHRASES.get(outcome, "the outcome stayed unclear")
+    return f"I set out to {attempt}; {phrase}."
+
+
+def land_agent_tick(cid, entry, proposal, verdict, *, base_turn, turn_id,
+                    epoch_id, frame_id, scene, clock,
+                    prepared_memories=None):
+    """Atomically land one adjudicated tick, or refuse the whole of it.
+
+    Runs on the job thread with the scheduling turn's frame pinned. All
+    writes — the fuse, the plan change, the last-tick state, the log record
+    and the memory — share ONE transaction, so a failure in any of them
+    lands none of them.
+
+    Reroll safety lives here, in three guards evaluated INSIDE the
+    transaction (the write lock serializes them against both a concurrent
+    turn commit and a duplicate landing):
+
+      * the epoch guard — a checkpoint restore brings back the previous
+        epoch record, so work computed against a discarded epoch cannot
+        land on the restored world;
+      * the rollback guard — a story rewound past `base_turn` no longer
+        contains the turn this tick advanced from;
+      * the subject's own `last_epoch_id` stamp — the double-landing guard.
+        A reroll re-derives the same epoch id and resubmits the same job;
+        whichever landing runs second reads the first one's stamp on the
+        character's fresh state and discards itself.
+    """
+    from db import q, qtx, transaction, wget, wset
+    from living_world import mint_consequences
+    from mechanics import stable_event_key
+    from scene import set_char_state
+
+    sid = str(entry.get("id") or "")
+    display = str(entry.get("display") or "")
+    char_id = entry.get("char_id")
+    elapsed = _as_seconds(clock)
+    with transaction():
+        current_epoch = wget(cid, EPOCH_KEY, {}) or {}
+        if str(current_epoch.get("epoch_id") or "") != str(epoch_id):
+            logger.info(
+                "agent tick discarded: chat=%s subject=%s epoch=%s "
+                "current_epoch=%s (checkpoint/frame changed)",
+                cid, sid, epoch_id, current_epoch.get("epoch_id"))
+            return {"landed": False, "reason": "epoch_changed"}
+        row = q("SELECT MAX(idx) AS idx FROM turns WHERE chat_id=?", (cid,),
+                one=True)
+        current = row["idx"] if row and row["idx"] is not None else None
+        if current is not None and int(current) < int(base_turn):
+            logger.info(
+                "agent tick discarded: chat=%s subject=%s base_turn=%s "
+                "current=%s (rolled back)", cid, sid, base_turn, current)
+            return {"landed": False, "reason": "rolled_back"}
+        # The double-landing guard reads FRESH state, and the write below
+        # merges onto that same read — a landing must never write through a
+        # copy captured at schedule time, or it would resurrect whatever the
+        # intervening turns did to this character.
+        state_row = q(
+            "SELECT COALESCE(ccf.state, cc.state) AS cstate "
+            "FROM chat_chars cc LEFT JOIN chat_char_frames ccf "
+            "  ON ccf.chat_id=cc.chat_id AND ccf.char_id=cc.char_id "
+            "  AND ccf.frame_id IS ? "
+            "WHERE cc.chat_id=? AND cc.char_id=?",
+            (frame_id, cid, char_id), one=True)
+        if not state_row:
+            return {"landed": False, "reason": "no_cast_row"}
+        try:
+            state = json.loads(state_row["cstate"] or "{}")
+        except (TypeError, ValueError):
+            state = {}
+        if not isinstance(state, dict):
+            state = {}
+        agent_state = state.get("offscreen_agent") \
+            if isinstance(state.get("offscreen_agent"), dict) else {}
+        if str(agent_state.get("last_epoch_id") or "") == str(epoch_id):
+            return {"landed": False, "reason": "already_landed"}
+
+        # The Director's consequence — the ONLY channel by which this rung
+        # changes the world — through the same deterministic validator every
+        # other fuse passes, under a stable id so a replay overwrites its own
+        # row instead of minting a sibling.
+        minted_event_id = ""
+        if verdict.get("consequence"):
+            origin_room = verdict.get("moved_to") or str(
+                ((agent_state.get("last_known") or {}) or {}).get("room")
+                or "")
+            rows, warnings = mint_consequences(
+                cid, scene, frame_id, turn_id, base_turn, elapsed,
+                [{**verdict["consequence"], "originator": sid}],
+                player_room=origin_room)
+            if rows:
+                fuse = rows[0]
+                fuse["event_id"] = stable_event_key(
+                    "offscreen_agent", cid, frame_id, epoch_id, sid)
+                fuse["seed"] = str(epoch_id)
+                qtx(
+                    "INSERT OR REPLACE INTO scheduled_events"
+                    "(event_id,chat_id,due_at,kind,location_id,payload,seed,"
+                    "status) VALUES(?,?,?,?,?,?,?,?)",
+                    (fuse["event_id"], fuse["chat_id"], fuse["due_at"],
+                     fuse["kind"], fuse["location_id"], fuse["payload"],
+                     fuse["seed"], fuse["status"]),
+                )
+                minted_event_id = fuse["event_id"]
+            else:
+                for warning in warnings:
+                    logger.info("agent consequence refused: chat=%s "
+                                "subject=%s: %s", cid, sid, warning)
+
+        plans = [dict(p) for p in wget(cid, PLAN_KEY, []) or []
+                 if isinstance(p, dict)]
+        plans_changed = False
+        for plan in plans:
+            if str(plan.get("actor_id")) != sid \
+                    or plan.get("status") != "active":
+                continue
+            history = [h for h in plan.get("history") or []
+                       if isinstance(h, dict)]
+            if any(str(h.get("epoch_id") or "") == str(epoch_id)
+                   for h in history):
+                continue  # belt behind the state stamp: never double-advance
+            if proposal.get("plan_op") == "abandon" and (
+                    not proposal.get("plan_id")
+                    or proposal["plan_id"] == plan.get("plan_id")):
+                plan["status"] = "cancelled"
+                event = "abandoned_offscreen"
+            elif verdict.get("advance_plan"):
+                plan["stage_index"] = int(plan.get("stage_index") or 0) + 1
+                event = "stage_advanced_offscreen"
+                if plan["stage_index"] >= len(plan.get("stages") or []):
+                    plan["status"] = "completed"
+            else:
+                continue
+            plan["updated_turn"] = int(base_turn)
+            history.append({"event": event, "turn": int(base_turn),
+                            "epoch_id": str(epoch_id),
+                            "outcome": verdict.get("outcome")})
+            plan["history"] = history[-20:]
+            plans_changed = True
+        if plans_changed:
+            wset(cid, PLAN_KEY, plans)
+
+        # Movement lands in the character's OWN trail, never in
+        # `scene.positions`: a dormant body holds no live position, and an
+        # off-screen writer of scene positions would be the missing third
+        # warrant the module docstring refuses to build by accident.
+        last_known = dict((agent_state.get("last_known")
+                           or state.get("last_known") or {}) or {})
+        if verdict.get("moved_to"):
+            last_known = {"room": verdict["moved_to"],
+                          "turn": int(base_turn),
+                          "elapsed_seconds": elapsed}
+        state["offscreen_agent"] = {
+            **agent_state,
+            "last_turn": int(base_turn),
+            "last_epoch_id": str(epoch_id),
+            "last_known": last_known,
+        }
+        set_char_state(cid, char_id, json.dumps(state, ensure_ascii=False),
+                       frame_id=frame_id)
+
+        record = {
+            "disposition": "provisional",
+            "subject": {"kind": "character", "id": sid,
+                        **({"display": display} if display and
+                           display.casefold() != sid.casefold() else {})},
+            "basis": "model",
+            "producer": "offscreen.land_agent_tick",
+            "state": {"doing": proposal.get("attempt") or "",
+                      "at": verdict.get("moved_to") or "",
+                      "manner": ""},
+            "outcome": verdict.get("outcome"),
+            "actor": sid,
+            "actor_display": display,
+            "tick": compose_agent_tick(
+                display or sid, proposal.get("attempt") or "",
+                verdict.get("outcome") or "", verdict.get("moved_to") or ""),
+            **({"events": [{"event_id": minted_event_id}]}
+               if minted_event_id else {}),
+        }
+        written = append_offscreen_log(
+            cid, base_turn, f"{epoch_id}:{sid}", [record], rung=AGENT_RUNG)
+
+        if prepared_memories:
+            from memory import add_memories_batch
+
+            add_memories_batch(prepared_batch=prepared_memories)
+
+    return {"landed": True, "event_id": minted_event_id,
+            "moved_to": verdict.get("moved_to") or "",
+            "log_written": len(written)}
+
+
+def schedule_agent_ticks(ctx, epoch=None):
+    """Queue this epoch's paid full-agent ticks. Returns Job or None.
+
+    Called from the commit tail beside `schedule_profile_ticks`, after the
+    turn's facts are durable; a failure is a warning, never a rollback, and
+    a turn starting never cancels the job. Three gates compose before any
+    model is asked, and each fails toward not spending:
+
+      * the shared world epoch — no epoch, no job, so every tick carries
+        one base turn, one frame and one epoch id from birth;
+      * `living_world_allows(..., "antagonist_ladder", "ceiling")` — which
+        itself composes the chat's `offscreen_life=character_agent` ceiling
+        through `LIVING_WORLD_REQUIRES`, so no second copy of that rule
+        exists to drift;
+      * `full_agent_candidates` — the card opt-in and the private reason,
+        capped by `max_offscreen_actors`. A character existing is not a
+        reason; an owned active plan or fresh carried evidence is.
+    """
+    import jobs
+    from living_world import living_world_allows, living_world_config
+    from scene import dialogue_config
+
+    cid = ctx.chat.id
+    turn_idx = ctx.turn.idx
+    turn_id = ctx.turn.id
+    frame_id = ctx.turn.frame_id
+    epoch = epoch if isinstance(epoch, dict) else {}
+    if not epoch.get("opportunity"):
+        return None
+    epoch_id = str(epoch.get("epoch_id") or "").strip()
+    if not epoch_id:
+        epoch["agent_skip"] = "missing_epoch_id"
+        return None
+    if not living_world_allows(
+            living_world_config(cid), "antagonist_ladder", "ceiling"):
+        epoch["agent_opportunity"] = False
+        return None
+    epoch["agent_opportunity"] = True
+    cap = int((dialogue_config(cid) or {}).get("max_offscreen_actors", 3) or 0)
+    if cap <= 0:
+        epoch["agent_skip"] = "cap_zero"
+        return None
+    candidates = full_agent_candidates(cid, frame_id=frame_id, cap=cap)
+    epoch["agent_candidates"] = len(candidates)
+    if not candidates:
+        epoch["agent_skip"] = "no_private_reason"
+        return None
+
+    from db import wget, wget_for_frame
+
+    scene = (wget_for_frame(cid, "scene", frame_id, {})
+             if frame_id is not None else wget(cid, "scene", {})) or {}
+    clock = wget(cid, "simulation_clock", {}) or {}
+
+    def _produce(job):
+        # Same frame pin as the profile producer: the job thread's fresh
+        # contextvars context would otherwise land frame-scoped writes in
+        # the present frame's world.
+        from db import active_frame_id
+        from mechanics import stable_event_key
+
+        token = active_frame_id.set(frame_id)
+        try:
+            landed = skipped = 0
+            for cand in candidates:
+                if job.cancelled.is_set():
+                    break
+                context = agent_context(
+                    cid, cand, frame_id=frame_id, clock=clock)
+                proposal = agent_proposal(cid, cand, context)
+                if not proposal:
+                    skipped += 1
+                    continue
+                plan = next(iter(context.get("plans") or []), None)
+                verdict = agent_adjudication(
+                    cid, scene, cand, proposal, plan, clock)
+                if not verdict:
+                    skipped += 1
+                    continue
+                prepared = None
+                if cand.get("char_id") is not None:
+                    from memory import prepare_memories_batch
+
+                    # Embedding is provider work and stays OUTSIDE the
+                    # landing transaction, per the commit path's own rule.
+                    prepared = prepare_memories_batch([{
+                        "chat_id": cid,
+                        "char_id": cand["char_id"],
+                        "turn_id": turn_id,
+                        "turn_idx": turn_idx,
+                        "kind": "episodic",
+                        "provenance": "witnessed",
+                        "salience": AGENT_MEMORY_SALIENCE,
+                        "content": compose_agent_memory(
+                            proposal["attempt"], verdict["outcome"]),
+                        "location": verdict.get("moved_to") or "",
+                        "event_key": stable_event_key(
+                            "offscreen_agent_memory", cid, frame_id,
+                            epoch_id, cand["id"]),
+                        "frame_id": frame_id,
+                    }])
+                result = land_agent_tick(
+                    cid, cand, proposal, verdict, base_turn=turn_idx,
+                    turn_id=turn_id, epoch_id=epoch_id, frame_id=frame_id,
+                    scene=scene, clock=clock, prepared_memories=prepared)
+                if result.get("landed"):
+                    landed += 1
+                else:
+                    skipped += 1
+            return {"landed": landed, "skipped": skipped,
+                    "candidates": len(candidates)}
+        finally:
+            active_frame_id.reset(token)
+
+    job = jobs.submit(cid, f"offscreen_agent:{epoch_id}", _produce,
+                      base_turn=turn_idx)
+    epoch["agent_scheduled"] = True
+    return job

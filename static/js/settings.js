@@ -288,12 +288,12 @@ $("#b-dlg").onclick = async () => {
           + "characters get a sentence of what they have been up to, kept in a log. "
           + "No plans, no decisions, nothing that moves anyone. This is what the "
           + "engine has always done, which is why it is the default."),
-        el("div", {}, el("b", {}, "character_agent"), " — permission for characters to "
-          + "actually advance their own plans while you are away, and for the "
-          + "consequences to be waiting when you arrive. ",
-          el("b", {}, "Not built yet"), " — setting it now behaves as stochastic and "
-          + "marks this story as one that wants it. It is a real change when it "
-          + "lands: a villain with a clock can beat you to something."),
+        el("div", {}, el("b", {}, "character_agent"), " — characters you have "
+          + "explicitly opted in on their card actually advance their own plans "
+          + "while you are away, acting only on what has genuinely reached them, "
+          + "and the consequences are waiting when you arrive. A villain with a "
+          + "clock can beat you to something. Also requires the antagonist "
+          + "ladder's ceiling under Living world."),
         el("div", { style: "margin-top:4px" },
           el("b", {}, "Max off-screen actors"), " — how many characters may be ticked "
           + "in one beat. 0 means none, whatever the level says."),

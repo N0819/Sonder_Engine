@@ -6687,6 +6687,19 @@ def _commit_all_locked(ctx, nonce):
         ctx.add_warning(f"offscreen tick scheduling failed: {exc}")
         results["offscreen_ticks"] = {"error": str(exc)}
 
+    # The paid `character_agent` rung rides the same epoch, on the same
+    # terms: out of band, epoch/base-turn-guarded at landing, never
+    # cancelled by a turn starting, and a failure is a warning.
+    try:
+        import offscreen as _offscreen
+
+        job = _offscreen.schedule_agent_ticks(
+            ctx, results.get("offscreen_epoch") or {})
+        results["offscreen_agent"] = job.as_dict() if job else None
+    except Exception as exc:
+        ctx.add_warning(f"offscreen agent scheduling failed: {exc}")
+        results["offscreen_agent"] = {"error": str(exc)}
+
     return {
         "summary": (
             f"Committed turn {ctx.turn.idx}: "

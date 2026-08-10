@@ -994,17 +994,21 @@ def is_player_speaker(speaker, chat):
 #                    writing consequences into the world record -- the villain
 #                    with a clock you can fail to beat.
 #
-#                    **Permission, not behaviour.** Nothing ticks a plan today;
-#                    the rung is the gate steps 3-4 of
-#                    `docs/OFFSCREEN_LIFE_DESIGN.md` land behind, so that when
-#                    they do land they are opt-in on a chat that already asked
-#                    rather than a surprise in every running story. It
-#                    currently behaves as `stochastic`. Do not add behaviour to
-#                    it without the knowledge firewall that document's decision
-#                    2 insists on: a ticking character advances on ITS OWN
-#                    knowledge, never the player's location or recent actions,
-#                    or the result is the spookily prescient antagonist this
-#                    architecture exists to avoid.
+#                    Permission AND behaviour, since the full rung landed
+#                    (`offscreen.schedule_agent_ticks`): an explicitly
+#                    opted-in dormant character with a private reason gets
+#                    one reduced turn per world epoch -- ONE character call
+#                    over the fail-closed `offscreen.agent_context`, ONE
+#                    Director adjudication, one atomic landing. The
+#                    knowledge firewall that `docs/OFFSCREEN_LIFE_DESIGN.md`
+#                    decision 2 insists on is structural, not prompted: a
+#                    ticking character advances on ITS OWN knowledge --
+#                    sheet, memories, beliefs, plans, carried reports --
+#                    never the player's location or recent actions, or the
+#                    result is the spookily prescient antagonist this
+#                    architecture exists to avoid. Only the Director half of
+#                    the tick may declare a consequence, and it lands
+#                    through the same validator every other fuse passes.
 #
 # This ladder is the ONE authority ceiling for everything off screen, the
 # living-world mechanisms included: `living_world.LIVING_WORLD_REQUIRES`
@@ -1024,14 +1028,17 @@ OFFSCREEN_LIFE_DESCRIPTIONS = {
     "deterministic": "Scheduled effects only — arrivals, expiry, news latency",
     "reactive": "…plus firing authored plan stages on typed triggers",
     "stochastic": "…plus seeded ticks for dormant actors at world epochs",
-    "character_agent": "…plus characters advancing their own plans (not built yet)",
+    "character_agent": "…plus opted-in characters advancing their own plans",
 }
 
 # Which rungs actually do something today, for the UI to mark. Kept beside the
 # ladder rather than in the UI so an unbuilt rung cannot quietly start reading
-# as built when it ships and nobody updates the menu.
+# as built when it ships and nobody updates the menu. `character_agent` landed
+# with `offscreen.schedule_agent_ticks`: one reduced, Director-adjudicated
+# off-screen turn per world epoch for opted-in dormant minds with a private
+# reason to act.
 OFFSCREEN_LIFE_BUILT = frozenset({
-    "inert", "deterministic", "reactive", "stochastic",
+    "inert", "deterministic", "reactive", "stochastic", "character_agent",
 })
 
 
