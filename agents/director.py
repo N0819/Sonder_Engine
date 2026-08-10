@@ -49,6 +49,8 @@ from scene import (
 from providers import Aborted
 from schemas import validate_llm_output
 from spatial import (
+    apply_contact_ops,
+    contact_manner_kind,
     _merge_entity,
     _merge_room,
     egocentric_frame,
@@ -56,6 +58,7 @@ from spatial import (
     normalize_bearing,
     passable_route_exists,
     room_of,
+    same_subject,
     spatial_rel,
     sprint_reach,
 )
@@ -113,6 +116,157 @@ def _cast_match_forms(cast):
         by_id[row["id"]] = forms
         by_name[name] = forms
     return by_id, by_name
+
+
+def _canonical_scene_subject(sc, value):
+    """The positioned scene spelling for one body/entity reference."""
+    for subject in (sc.get("positions") or {}):
+        if same_subject(sc, str(subject), str(value or "")):
+            return str(subject)
+    return str(value or "").strip()
+
+
+def _validated_player_contact_assertions(sc, raw, player_name, report=None):
+    """Guard pass-1 contact assertions at the player-authority boundary.
+
+    A player may establish contact through their OWN completed conduct. When
+    the other body is the actor, the assertion may only refine a contact that
+    already stands between the same bodies through the same acting part; that
+    lets first-person body sense sharpen ``cock -> groin`` to ``cock -> cervix``
+    without turning "I feel her strike me" into authority over an NPC attack.
+    """
+    out = []
+    for item in (raw if isinstance(raw, list) else []):
+        if not isinstance(item, dict):
+            continue
+        actor = _canonical_scene_subject(sc, item.get("actor"))
+        target = _canonical_scene_subject(sc, item.get("target"))
+        actor_part = str(item.get("actor_part") or "").strip()
+        target_part = str(item.get("target_part") or "").strip()
+        if not actor or not target or same_subject(sc, actor, target):
+            continue
+        actor_is_player = same_subject(sc, actor, player_name)
+        target_is_player = same_subject(sc, target, player_name)
+        if not (actor_is_player or target_is_player):
+            if report:
+                report("discarded a contact assertion that did not involve the player")
+            continue
+        if room_of(sc, actor) != room_of(sc, target) or room_of(sc, actor) is None:
+            if report:
+                report("discarded a contact assertion between non-co-located bodies")
+            continue
+
+        standing = None
+        pair_contacts = []
+        for contact in (sc.get("contacts") or []):
+            if not isinstance(contact, dict):
+                continue
+            if not (same_subject(sc, contact.get("actor"), actor)
+                    and same_subject(sc, contact.get("target"), target)):
+                continue
+            pair_contacts.append(contact)
+            if (str(contact.get("actor_part") or "").strip().casefold()
+                    == actor_part.casefold()):
+                standing = contact
+                break
+
+        # A player may name the touching sub-part ("head") while the ledger
+        # names its owning part ("cock"). When exactly one standing relation
+        # between the pair has the same physical manner kind, it is unambiguous;
+        # bind back to the ledger's canonical part instead of minting a second
+        # anatomical object beside it.
+        if standing is None and not actor_is_player:
+            same_kind = [
+                contact for contact in pair_contacts
+                if contact_manner_kind(contact.get("manner"))
+                == contact_manner_kind(item.get("manner"))
+            ]
+            if len(same_kind) == 1:
+                standing = same_kind[0]
+
+        # Another participant's part may only be reported as already touching
+        # the player when that relation already stands. The player can refine
+        # their own endpoint from direct sensation; they cannot mint an NPC act.
+        if not actor_is_player and standing is None:
+            if report:
+                report("discarded a new NPC-authored contact assertion")
+            continue
+        if standing is not None and not actor_is_player:
+            actor_part = str(standing.get("actor_part") or actor_part).strip()
+        manner = str(item.get("manner") or (
+            standing or {}).get("manner") or "touch").strip()
+        detail = str(item.get("detail") or "").strip()
+        assertion = {
+            "op": "add", "actor": actor, "actor_part": actor_part,
+            "target": target, "target_part": target_part,
+            "manner": manner or "touch",
+        }
+        if detail:
+            assertion["detail"] = detail
+        if assertion not in out:
+            out.append(assertion)
+    return out
+
+
+def _merge_player_contact_assertions(assertions, resolved_ops, report=None):
+    """Place onset truth before resolve ops without allowing silent coarsening.
+
+    Resolve may end/move an asserted contact, but must say so with an explicit
+    remove/clear first. A bare later add for the same acting part at a different
+    endpoint is the common re-description drift (`cervix` -> `groin`), not an
+    authored transition, and is dropped.
+    """
+    assertions = [dict(a) for a in (assertions or []) if isinstance(a, dict)]
+    result = list(assertions)
+    released = set()
+
+    def same_pair(left, right):
+        return (str(left.get("actor") or "").casefold()
+                == str(right.get("actor") or "").casefold()
+                and str(left.get("target") or "").casefold()
+                == str(right.get("target") or "").casefold())
+
+    for raw in (resolved_ops if isinstance(resolved_ops, list) else []):
+        if not isinstance(raw, dict):
+            continue
+        op = str(raw.get("op") or "add").strip().casefold()
+        if op in ("remove", "clear"):
+            for index, assertion in enumerate(assertions):
+                if op == "clear":
+                    who = str(raw.get("actor") or "").casefold()
+                    if not who or who in (str(assertion.get("actor") or "").casefold(),
+                                          str(assertion.get("target") or "").casefold()):
+                        released.add(index)
+                elif same_pair(assertion, raw):
+                    ap = str(raw.get("actor_part") or "").casefold()
+                    tp = str(raw.get("target_part") or "").casefold()
+                    if (not ap or ap == str(assertion.get("actor_part") or "").casefold()) \
+                            and (not tp or tp == str(assertion.get("target_part") or "").casefold()):
+                        released.add(index)
+            if raw not in result:
+                result.append(raw)
+            continue
+
+        blocked = False
+        for index, assertion in enumerate(assertions):
+            if index in released or not same_pair(assertion, raw):
+                continue
+            if (str(assertion.get("actor_part") or "").casefold()
+                    != str(raw.get("actor_part") or "").casefold()):
+                continue
+            if (str(assertion.get("target_part") or "").casefold()
+                    != str(raw.get("target_part") or "").casefold()):
+                blocked = True
+                if report:
+                    report(
+                        "preserved player-declared contact endpoint "
+                        f"{assertion.get('target_part')!r}; resolve attempted to "
+                        f"coarsen it to {raw.get('target_part')!r} without ending "
+                        "the standing relation")
+                break
+        if not blocked and raw not in result:
+            result.append(raw)
+    return result
 
 
 def _route_authorial_npc_beat(ctx, out, actor_forms=()):
@@ -379,6 +533,9 @@ def director_interpret(ctx, nonce):
             # was never allowed to read.
             "stations": sc.get("stations") or {},
             "following": sc.get("following") or {},
+            # Needed to distinguish a genuinely new NPC act (not the player's
+            # authority) from a first-person refinement of contact already felt.
+            "contacts": sc.get("contacts") or [],
         },
         "simulation_clock": clock,
         "paradox": paradox_visible_to(chat["id"], ctx.turn.frame_id),
@@ -478,6 +635,7 @@ def director_interpret(ctx, nonce):
         out["speech_volume"] = "normal"
         out["action"] = None
         out["actions"] = []
+        out["contact_assertions"] = []
     # A speech element that swallowed the raw input's narration is repaired
     # BEFORE anything reads it: perception injects these texts verbatim as
     # dialogue, so narration left here is delivered to every hearer as words
@@ -512,6 +670,12 @@ def director_interpret(ctx, nonce):
         bind_sequence_targets(entry.get("sequence"), target_forms)
         entry["sequence"] = assign_event_ids(
             entry.get("sequence"), f"turn:{ctx.turn.id}:extra:{pid}")
+
+    p_name = pers.get("name") or persona_name(pers)
+    out["contact_assertions"] = _validated_player_contact_assertions(
+        sc, out.get("contact_assertions"), p_name,
+        report=lambda note: ctx.add_warning(f"player contact: {note}"),
+    )
 
     fl = out.get("flow")
     if not isinstance(fl, dict):
@@ -3414,6 +3578,12 @@ def director_resolve(ctx, nonce):
                 char_actions.setdefault(cname, []).extend(acts)
 
     sc = get_scene(chat["id"], chat)
+    onset_contacts = interp.get("contact_assertions") or []
+    # The assertion is already true at action onset: show it to the resolving
+    # Director as the standing relation reactions were based on. Copy-only;
+    # durable state is composed into the final diff below.
+    resolve_sc = apply_contact_ops(
+        json.loads(json.dumps(sc)), onset_contacts, _age=False)
     # Each declaring character's own heading, exactly as the player already
     # gets one in director_interpret. The room graph is undirected, so
     # "steps through the doorway" and "turns west" name a set of doorways
@@ -3503,7 +3673,7 @@ def director_resolve(ctx, nonce):
             # one beat and `hand -> side` the next, not renaming anything but
             # writing fresh each time, blind. Showing the exact part nouns
             # already on record is what lets a re-assertion BE one.
-            "contacts": sc.get("contacts") or [],
+            "contacts": resolve_sc.get("contacts") or [],
             # One line per body instead of the structured view: 3,789 chars
             # to 1,314 on chat 67, ~618 tokens off every resolve call. The
             # names the Director writes back are all still here, and
@@ -3531,6 +3701,7 @@ def director_resolve(ctx, nonce):
             "action": interp.get("action"),
             "movement": interp.get("movement"),
             "follow_op": interp.get("follow_op"),
+            "contact_assertions": onset_contacts,
             "abilities": persona_abilities(pers),
             "authority_claims": (interp.get("flow") or {}).get("authority_claims") or [],
         },
@@ -3883,6 +4054,10 @@ def director_resolve(ctx, nonce):
     # it: project only the player's interpreted decision and each NPC's own
     # character result into the objective diff.
     sd["following_ops"] = _collect_following_ops(ctx, sc, interp, p_name)
+    sd["contact_ops"] = _merge_player_contact_assertions(
+        onset_contacts, sd.get("contact_ops"),
+        report=lambda note: ctx.add_warning(f"player contact: {note}"),
+    )
     out["state_diff"] = sd
     out["dice"] = dice if isinstance(dice, list) else []
 
