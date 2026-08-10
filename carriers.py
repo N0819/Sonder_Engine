@@ -50,6 +50,12 @@ REPORT_CAP = 16
 ROUTE_CAP = 12
 PAYLOAD_CAP = 4
 
+#: How many public surfaces still standing in a room a newcomer may take in on
+#: arrival. Bounded so this is walking into a room and seeing what happened,
+#: not archaeology: a body reads the barred gate in front of it, and does not
+#: inherit every event that room has ever hosted.
+ARRIVAL_SURFACES = 3
+
 #: How many listeners one speaker may reach in a single beat. Bounded route
 #: fan-out, and the deterministic half of the "town of criers" answer: a story
 #: told to a room does not arrive in every mind in it at once, because a beat
@@ -125,6 +131,31 @@ def advance_carriers(ctx, scene, world_event_result):
         if witnessed and row["location_id"]:
             event_rows.append((dict(row), payload, witnessed[:320]))
 
+    # Surfaces that landed HERE EARLIER and are still standing. Without these
+    # the witness path could only ever fire for a body already in the room on
+    # the exact beat an event fired -- and consequences fire off-screen on a
+    # clock, in rooms chosen because nobody is in them. Measured on a 20-beat
+    # drive: one public surface emitted, zero acquisitions, and Mora walked
+    # into that room the next turn and looked directly at the barred gate
+    # while learning nothing, forever.
+    #
+    # The design already said the answer: consequences "are met as state when
+    # someone next stands where they landed". This is that sentence.
+    standing_rows = []
+    for row in q("SELECT * FROM world_events WHERE chat_id=? AND frame_id IS ? "
+                 "AND location_id IS NOT NULL "
+                 "ORDER BY occurred_at DESC LIMIT ?",
+                 (cid, ctx.turn.frame_id, ARRIVAL_SURFACES * 4)) or []:
+        if str(row["event_id"]) in {str(r["event_id"]) for r, _, _ in event_rows}:
+            continue
+        try:
+            payload = json.loads(row["payload"] or "{}")
+        except (TypeError, ValueError):
+            payload = {}
+        witnessed = " ".join(str((payload or {}).get("witnessed") or "").split())
+        if witnessed:
+            standing_rows.append((dict(row), payload, witnessed[:320]))
+
     public_surfaces = len(event_rows)
     carrier_opportunities = acquired = moved = 0
     for cast_row in active_cast(cid, ctx.turn.frame_id):
@@ -160,7 +191,9 @@ def advance_carriers(ctx, scene, world_event_result):
                 changed = True
 
         known = {str(r.get("world_event_id")) for r in reports}
-        for row, payload, witnessed in event_rows:
+        here = [r for r in standing_rows
+                if str(r[0]["location_id"]) == current_room][:ARRIVAL_SURFACES]
+        for row, payload, witnessed in event_rows + here:
             if str(row["location_id"]) != current_room:
                 continue
             carrier_opportunities += 1

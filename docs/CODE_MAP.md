@@ -11,7 +11,7 @@
 | `agents/background.py` | 889 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/character.py` | 3223 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 5372 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/director.py` | 4922 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
+| `agents/director.py` | 5011 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 1010 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 239 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 975 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
@@ -26,7 +26,7 @@
 | `backdrops.py` | 1258 |  | `db`, `logging_utils`, `outofband`, `spatial`, `weather` |
 | `background_claims.py` | 466 |  | `db` |
 | `canon_provenance.py` | 360 |  | — |
-| `carriers.py` | 482 |  | `character_schema`, `crowds`, `db`, `degradation`, `living_world`, `scene`, `spatial` |
+| `carriers.py` | 515 |  | `character_schema`, `crowds`, `db`, `degradation`, `living_world`, `scene`, `spatial` |
 | `character_schema.py` | 1383 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `attire`, `schemas` |
 | `chat_archive.py` | 1110 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1132 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
@@ -127,7 +127,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 3769 | 1154 lines |
+| `director_resolve()` | 3769 | 1168 lines |
 | `director_interpret()` | 749 | 388 lines |
 | `_reconcile_resolution()` | 3252 | 315 lines |
 | `_reconcile_near_group_positions()` | 2243 | 201 lines |
@@ -310,13 +310,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_tellings()` | 281 | 202 lines |
-| `advance_carriers()` | 95 | 106 lines |
-| `_invented_claim()` | 229 | 34 lines |
-| `_cast_index()` | 203 | 24 lines |
-| `reports_for_state()` | 72 | 21 lines |
-| `_crowd_index()` | 265 | 14 lines |
-| `_character_room()` | 60 | 10 lines |
+| `apply_tellings()` | 314 | 202 lines |
+| `advance_carriers()` | 101 | 133 lines |
+| `_invented_claim()` | 262 | 34 lines |
+| `_cast_index()` | 236 | 24 lines |
+| `reports_for_state()` | 78 | 21 lines |
+| `_crowd_index()` | 298 | 14 lines |
+| `_character_room()` | 66 | 10 lines |
 
 ### `character_schema.py`
 

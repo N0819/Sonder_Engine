@@ -4085,6 +4085,20 @@ def director_resolve(ctx, nonce):
         # must-tick retry below plus commit_world_pressure's implicit-hold
         # warnings make silence a recorded choice, never a default.
         "world_pressure": world_pressure_view(chat["id"], turn["idx"]),
+        # The crowds standing in rooms the party can reach, WITH their uids.
+        # Without this the resolve prompt asks the Director to "use the
+        # crowd_id perception showed you" and then shows it nothing: `move`,
+        # `split`, `emerge`, `absorb` and `disperse` all require an id the
+        # Director had no way to learn, so only minting a new crowd was
+        # reachable and every other op refused. Found by reading the captured
+        # payload as the model, which is the only way to find it -- the schema
+        # check cannot see a field that exists and is never delivered.
+        "crowds": _crowds_view(chat["id"], sc),
+        # The reports this beat's characters are carrying, as ids the Director
+        # can name in `telling_ops`. Same defect, same cause: the prompt asks
+        # for a `world_event_id` and the Director never saw one, so a
+        # character could invent a claim and could never pass on a true one.
+        "carried_reports": _carried_reports_view(ctx),
         "social_standing": social_standing,
         # Player-authored future beats scheduled earlier and due NOW: enact them
         # as occurring this beat (see director_interpret). commit re-queues any
@@ -4919,4 +4933,79 @@ def director_resolve(ctx, nonce):
     # which is what it was always documented to have.
     _guard_approach_is_not_arrival(ctx, interp, out["state_diff"], sc, p_name)
 
+    return out
+
+
+def _crowds_view(chat_id, scene):
+    """Crowds the party could act on, by room, with the id ops require.
+
+    Not room-scoped to one observer the way perception is: the Director owns
+    objective causality and moves crowds around the map, so it needs the ones
+    in reach rather than the ones a single body can see. What it must NOT get
+    is anything that would let it narrate them into a room nobody is near --
+    which is why this is bounded to the rooms in the current scene.
+    """
+    import crowds as crowds_model
+    from db import wget
+
+    rooms = (scene or {}).get("rooms") or {}
+    out = []
+    for crowd in wget(chat_id, crowds_model.CROWDS_WORLD_KEY, []) or []:
+        if not isinstance(crowd, dict):
+            continue
+        room = str(crowd.get("room_uid") or "")
+        if room not in rooms:
+            continue
+        size = (rooms.get(room) or {}).get("size")
+        out.append({
+            "crowd_id": crowd.get("uid"),
+            "room": room,
+            "band": crowd.get("band"),
+            "composition": crowd.get("composition"),
+            "mood": crowd.get("mood"),
+            "heading": crowd.get("heading") or None,
+            "density": crowds_model.density(crowd.get("band"), size),
+            "emerged": list(crowd.get("emerged") or []),
+        })
+    return out
+
+
+def _carried_reports_view(ctx):
+    """Who is carrying what, as {who, world_event_id, gist, retellings}.
+
+    The gist is the holder's OWN degraded wording, not the objective event, so
+    handing this to the Director tells it what a character could say rather
+    than what is true. It is an index for writing `telling_ops`, not evidence:
+    the Director already owns objective causality and this adds nothing it did
+    not have -- while a character reading it would be reading other minds.
+    """
+    import json
+
+    from carriers import STATE_KEY
+    from character_schema import normalize_character_data
+
+    out = []
+    for member in (getattr(ctx, "cast", None) or []):
+        try:
+            sheet = member.get("sheet") if isinstance(member, dict) else None
+            sheet = json.loads(sheet) if isinstance(sheet, str) else (sheet or {})
+        except (TypeError, ValueError):
+            sheet = {}
+        name = ((normalize_character_data(sheet or {}).get("identity") or {})
+                .get("name") or "")
+        state = (member.get("state") if isinstance(member, dict) else None) or {}
+        if isinstance(state, str):
+            try:
+                state = json.loads(state)
+            except (TypeError, ValueError):
+                state = {}
+        for report in (state.get(STATE_KEY) or [])[-4:]:
+            if not isinstance(report, dict) or not report.get("world_event_id"):
+                continue
+            out.append({
+                "who": name,
+                "world_event_id": report.get("world_event_id"),
+                "gist": report.get("claim"),
+                "retellings": report.get("retellings", 0),
+            })
     return out
