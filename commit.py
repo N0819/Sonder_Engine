@@ -1965,14 +1965,27 @@ def prepare_scene_commit(ctx):
     sc = merge_scene_with_diff(
         prev_scene, diff, contact_report=_contact_report,
         substance_report=_substance_report.append)
-    # Tell the Director what its re-descriptions were read AS. A hold it wrote
-    # under a new part noun was taken as the same limb MOVING; if it meant a
-    # second limb it can qualify the part next beat ("her other hand"), which
-    # is a correction it can only make if it knows the reading happened.
-    for _was, _now in _contact_report:
-        ctx.tell_director(
-            f"contact: read {_now} as {_was} moving, not as a second contact. "
-            "Qualify the part (left/right/other) if you meant a different limb.")
+    # Tell the Director how its contact ops were read -- a re-description taken
+    # as the same limb moving, a part refused as not being one, an envelopment
+    # folded onto the enclosed side. Corrections it can only make if it knows
+    # the reading happened.
+    #
+    # THESE ARE SENTENCES, AND THIS LOOP USED TO UNPACK THEM AS PAIRS.
+    # `apply_contact_ops` composes each report as a finished string -- it knows
+    # what it re-read and why, and phrasing it there keeps the explanation next
+    # to the decision. This consumer still destructured `(was, now)` and rebuilt
+    # a message from the halves, which had stopped being the shape years of
+    # reports ago.
+    #
+    # It did not fail loudly or always. A report of any length but two raised
+    # "too many values to unpack (expected 2)" out of `_prepare_turn_commit`,
+    # killing the whole beat -- and reported live as an intermittent
+    # "Commit preparation failed" that a reroll of director_resolve cleared,
+    # because a different beat writes different contact ops and most beats
+    # write a report at all. A two-character report would have unpacked
+    # silently into its own letters, which is the worse half of the same bug.
+    for _note in _contact_report:
+        ctx.tell_director(str(_note))
     for _note in _substance_report:
         ctx.add_warning(f"substance: {_note}")
     if destruction:
