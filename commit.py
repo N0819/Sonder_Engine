@@ -6405,10 +6405,24 @@ def commit_crowds(ctx, prepared_scene):
     the feature invisible in most chats, which is the failure mode this
     project keeps rediscovering: a mechanism assumed live that has never run.
 
-    Two steps in one domain because they must not be separable. Ops decide
-    where a crowd IS and where it is flowing; the advance spends the flow. A
-    heading that survived to the next turn would move the crowd twice for one
-    declaration.
+    Two steps in one domain because they must not be separable, and the ORDER
+    is the whole mechanic: last beat's flow is spent FIRST, then this beat's
+    declaration is applied.
+
+    The other order is the obvious one and it is dead. Applying ops and then
+    advancing spends a heading inside the commit that declared it, so the crowd
+    arrives before anyone sees it leave -- and `crowds_for_room` therefore
+    reports `drift: None` on every turn that will ever be perceived. The whole
+    terrain layer is unreachable: the Director is told to resolve a press it
+    can never be shown. Caught by `tools/crowd_drive.py` on its first run, and
+    it is the same shape as every other zero this project has dug up -- a
+    mechanism that reads correct at every line and cannot fire.
+
+    So a heading lives for exactly one beat of perception. The Director
+    declares that the market is flowing toward the gate; the player's next
+    breath is spent inside a crowd that is going somewhere, with a drift offer
+    the Director can honour; and the beat after that, it has gone. `move` stays
+    available for a relocation declared outright.
     """
     import crowds as crowds_model
     from spatial import passable_neighbors
@@ -6425,10 +6439,10 @@ def commit_crowds(ctx, prepared_scene):
     rooms = list((scene.get("rooms") or {}).keys())
     turn = int(getattr(ctx.turn, "id", 0) or 0)
 
-    standing, rejected = crowds_model.apply_ops(
-        before, ops, chat_id=cid, turn=turn, known_rooms=rooms)
     standing, moves = crowds_model.advance_crowds(
-        standing, passable_neighbors(scene))
+        before, passable_neighbors(scene))
+    standing, rejected = crowds_model.apply_ops(
+        standing, ops, chat_id=cid, turn=turn, known_rooms=rooms)
 
     for reason in rejected:
         ctx.add_warning("crowd op rejected: %s" % reason)

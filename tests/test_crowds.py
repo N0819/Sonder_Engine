@@ -504,3 +504,30 @@ class TestTheDirectorCanActuallySayIt:
         body = inspect.getsource(commit.commit_crowds)
         assert "background_presences" not in body
         assert "max_managed" not in body
+
+    def test_last_beats_flow_is_spent_before_this_beats_declaration(self):
+        """The ordering defect `tools/crowd_drive.py` found on its first run.
+
+        Applying ops and THEN advancing spends a heading inside the very
+        commit that declared it, so the crowd arrives before anyone sees it
+        leave — and `crowds_for_room` reports `drift: None` on every turn that
+        will ever be perceived. The Director is told to resolve a press it can
+        never be shown, and the whole terrain layer reads correct at every
+        line and cannot fire.
+        """
+        import inspect
+
+        import commit
+        body = inspect.getsource(commit.commit_crowds)
+        assert body.index("advance_crowds") < body.index("apply_ops")
+
+    def test_a_heading_lives_exactly_one_beat_of_perception(self):
+        """Long enough to be seen and resolved, short enough that one
+        declaration moves the crowd once."""
+        standing = [crowds.new_crowd(1, "square", band="a throng",
+                                     composition="traders", since_turn=1,
+                                     heading="gate")]
+        first, moves = crowds.advance_crowds(standing, {"square": {"gate"}})
+        assert moves and first[0]["heading"] is None
+        second, again = crowds.advance_crowds(first, {"square": {"gate"}})
+        assert again == [], "one declaration moved the crowd twice"
