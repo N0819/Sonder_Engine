@@ -6473,7 +6473,11 @@ def commit_crowds(ctx, prepared_scene):
     cid = ctx.chat.id
     scene = prepared_scene.get("scene") or {}
     resolved = ctx.director_resolve or ctx.director_establish or {}
-    raw_ops = (resolved.get("state_diff") or {}).get("crowd_ops") or []
+    # Establish authors the opening scene and has no `state_diff`, so its
+    # crowd ops sit at the top level. Reading only one of the two shapes made
+    # an opening beat unable to put anybody in the square.
+    raw_ops = ((resolved.get("state_diff") or {}).get("crowd_ops")
+               or resolved.get("crowd_ops") or [])
     if not isinstance(raw_ops, list):
         raw_ops = []
     ops = [op.dict() if hasattr(op, "dict") else op for op in raw_ops]

@@ -622,3 +622,28 @@ class TestEmergenceProducesStrangers:
 
         assert "characters" not in inspect.getsource(crowds.emerge)
         assert "chat_chars" not in inspect.getsource(crowds.emerge)
+
+    def test_an_opening_beat_can_put_people_in_the_square(self):
+        """`director_establish` AUTHORS the first scene, and "the square is
+        packed" is part of what that scene is — but establish carries no
+        `state_diff`, so a crowd could not be declared until the second beat
+        and a story that opened in a market opened in an empty one.
+
+        Found by playing turns (`tools/story_drive.py`), not by reading code:
+        the opening crowd op was silently absent from a shape that has no
+        field for it, and every op afterwards referred to a crowd that was
+        never raised.
+        """
+        import inspect
+
+        import commit
+        from schemas import DirectorEstablish
+
+        kept = DirectorEstablish(**{"crowd_ops": [
+            {"op": "set", "room": "square", "band": "a throng",
+             "composition": "market traders"}]}).dict()["crowd_ops"]
+        assert kept and kept[0]["composition"] == "market traders"
+        # And commit reads BOTH shapes, or the field would be another
+        # promised-and-dropped one.
+        body = inspect.getsource(commit.commit_crowds)
+        assert 'resolved.get("crowd_ops")' in body
