@@ -147,6 +147,23 @@ class Author:
         self.turn_script = {}
         self.calls = []
         self.rejected = []
+        self.capture_dir = ""
+
+    def _capture(self, step_key, system, payload):
+        """Write out exactly what a model would be handed.
+
+        For reading BY a model, cold, to find out what the prompt actually
+        communicates as opposed to what it was meant to. No test can ask that
+        question; it is the one thing only a reader can answer.
+        """
+        import os
+        os.makedirs(self.capture_dir, exist_ok=True)
+        name = "t%02d_%s" % (getattr(self, "_turn", -1), step_key.replace(":", "_"))
+        base = os.path.join(self.capture_dir, name)
+        with open(base + ".system.txt", "w") as fh:
+            fh.write(str(system or ""))
+        with open(base + ".payload.json", "w") as fh:
+            json.dump(payload, fh, indent=1, default=str)
 
     def script(self, turn_idx, role, payload):
         self.turn_script.setdefault(turn_idx, {})[role] = payload
@@ -163,6 +180,8 @@ class Author:
         """
         from schemas import validate_llm_output_strict
 
+        if self.capture_dir:
+            self._capture(step_key, system, payload)
         self.calls.append(step_key)
         authored = self._for(step_key)
         if callable(authored):
@@ -267,7 +286,8 @@ class Author:
 # ------------------------------------------------------------------ the play
 
 #: What a character says out loud on a given beat, by turn index.
-SPEECH = {4: "They barred it against forty riders in the Market Square."}
+SPEECH = {9: "I saw it barred from the inside.",
+          10: "They barred it against forty riders."}
 
 
 def standing_uid(cid):
@@ -286,17 +306,15 @@ def standing_uid(cid):
 
 
 def turns(author, cid):
-    """The beats, and what the Director declares on each.
+    """Twenty beats, written so the WORLD gets chances rather than the player.
 
-    Written to exercise the things the completion doc asks to see, in the order
-    a story would actually produce them: a place fills, someone is caught in
-    it, a consequence is set running, news of it reaches one mind and not
-    another, and the mind that heard it passes it on.
+    The shape matters more than the content. A consequence has to be set
+    running early and left alone, or it can never come due; the clock has to
+    cross real hours, or no epoch fires; somebody has to be left behind, or
+    there is nobody for news to fail to reach. A script where every beat is
+    interesting tests nothing, because the quiet beats are where the off-screen
+    world is supposed to be doing the work.
     """
-    market_crowd = {
-        "op": "set", "room": MARKET, "band": "a throng",
-        "composition": "traders and gate traffic", "mood": "restless"}
-
     def resolve(**over):
         out = author.default("director_resolve")
         diff = out["state_diff"]
@@ -305,61 +323,90 @@ def turns(author, cid):
         out.update(over)
         return out
 
-    script = [
-        # 1. The player walks into the crowd the opening established.
-        ("I walk out to the market.",
-         resolve(resolved_event="The square is packed with traders.",
+    def skip(seconds, label, **over):
+        diff = dict(over.pop("diff", {}))
+        diff["time"] = {"start_seconds": 0, "duration_seconds": seconds,
+                        "end_seconds": seconds, "mode": "time_skip",
+                        "explicit": True, "display_advance": label}
+        return resolve(diff=diff, **over)
+
+    def crowd_op(said, **op):
+        event = op.pop("_event", "The crowd shifts.")
+        return (said, lambda _p: resolve(
+            resolved_event=event,
+            diff={"crowd_ops": [dict(op, crowd_id=standing_uid(cid))]}))
+
+    return [
+        # --- the world is set in motion, then largely left alone -----------
+        ("I walk out into the square.",
+         resolve(resolved_event="The square is packed.",
                  diff={"positions": {"Nathan": MARKET}})),
-        # 2. The press starts moving toward the yard. Declared, not spent yet:
-        #    a heading lives one beat of perception so the Director can be
-        #    shown a drift and asked to resolve it.
-        ("I try to push through toward the yard.",
-         lambda _p: resolve(
-             resolved_event="The crowd begins to move toward the yard.",
-             diff={"crowd_ops": [{"op": "set",
-                                  "crowd_id": standing_uid(cid),
-                                  "heading": YARD}]})),
-        # 3. An hour of work: the clock crosses the epoch bucket that a
-        #    twenty-second beat never reaches.
-        ("I spend the afternoon helping bar the gate.",
-         resolve(resolved_event="The afternoon goes into the gate.",
-                 diff={"time": {"start_seconds": 60,
-                                "duration_seconds": 5400,
-                                "end_seconds": 5460, "mode": "time_skip",
-                                "explicit": True,
-                                "display_advance": "an hour and a half"}})),
-        # 4. A consequence set running offscreen, with a public surface.
-        ("I tell Mora to send word to the yard.",
-         resolve(resolved_event="Mora sets off to carry word.",
-                 dialogue_log=[{"speaker": "Mora",
-                                "text": "I'll tell them myself."}],
+        ("I ask what the riders want.",
+         resolve(resolved_event="Nobody answers straight.")),
+        # A consequence with a PUBLIC surface, due in an hour, in a room the
+        # party is about to leave. This is the whole point: something that
+        # happens where nobody is standing.
+        ("I send word that the yard gate must be barred.",
+         resolve(resolved_event="Word goes to the yard.",
                  diff={"consequences": [{
                      "what": "the yard gate stands barred",
                      "where": YARD, "due_seconds": 3600,
-                     "witnessed": "the gate was barred from inside",
+                     "witnessed": "the gate was barred from the inside",
                      "originator": "Mora"}]})),
-        # 5. Mora passes on what she saw. Kestrel is in the yard; Otto is
-        #    dormant and is told nothing by anybody.
-        ("I ask Mora what she saw out there.",
-         resolve(resolved_event="Mora tells Kestrel about the gate.",
-                 dialogue_log=[{"speaker": "Mora",
-                                "text": "They barred it from the inside."}],
-                 diff={"telling_ops": [{
-                           "speaker": "Mora", "listener": "Kestrel",
-                           # No event backs this one: Mora is repeating what
-                           # she believes, and it enters through the same
-                           # physics as the truth.
-                           "claim": "Kestrel barred the gate against forty "
-                                    "riders in the Market Square"}]})),
-        # 6. A knot peels off toward the yard.
-        ("I watch the crowd break up.",
-         lambda _p: resolve(
-             resolved_event="A knot of them peels away toward the yard.",
-             diff={"crowd_ops": [{"op": "split",
-                                  "crowd_id": standing_uid(cid),
-                                  "heading": YARD}]})),
+        crowd_op("I push toward the yard.", op="set", heading=YARD,
+                 _event="The press turns toward the yard."),
+        ("I let the crowd carry me.", resolve(
+            resolved_event="The press moves.")),
+        ("I wait for it to thin.", skip(1800, "half an hour")),
+        # Now the clock crosses the hour the consequence was due in.
+        ("I spend the afternoon at the gate.", skip(5400, "an hour and a half")),
+        ("I go back through to the yard.",
+         resolve(resolved_event="The yard is quiet.",
+                 diff={"positions": {"Nathan": YARD, "Mora": YARD}})),
+        ("I look at the gate.", resolve(
+            resolved_event="It is barred, from the inside.")),
+        ("I ask Mora if she saw who did it.", resolve(
+            resolved_event="Mora says what she saw.")),
+        # Mora passes on what she is carrying. The Director now has the ids.
+        ("I ask her to tell Kestrel.", lambda payload: resolve(
+            resolved_event="Mora tells Kestrel.",
+            diff={"telling_ops": [
+                {"speaker": "Mora", "listener": "Kestrel",
+                 "world_event_id": _first_report_id(payload)}]}
+            if _first_report_id(payload) else {})),
+        ("I check the market again.",
+         resolve(resolved_event="Fewer of them now.",
+                 diff={"positions": {"Nathan": MARKET}})),
+        crowd_op("I watch them break up.", op="split", heading=YARD,
+                 _event="A knot peels away."),
+        ("I follow the ones going to the yard.",
+         resolve(resolved_event="They spill through.",
+                 diff={"positions": {"Nathan": YARD}})),
+        ("I sit down and wait.", skip(3600, "an hour")),
+        ("I sleep until dawn.", skip(28800, "the night")),
+        ("I walk the wall.", resolve(resolved_event="The wall is cold.")),
+        ("I go back to the square.",
+         resolve(resolved_event="It is filling again.",
+                 diff={"positions": {"Nathan": MARKET}})),
+        crowd_op("I call out to the crowd.", op="emerge",
+                 who="a rope-seller",
+                 _event="A rope-seller steps out of the press."),
+        ("I ask the rope-seller what he heard.", resolve(
+            resolved_event="He says the gate was barred against forty riders.")),
     ]
-    return script
+
+
+def _first_report_id(payload):
+    """A world_event_id the Director can actually see in its own payload.
+
+    Reading it off the payload rather than out of the database is the point:
+    if the Director cannot find one here, no model could either, and the
+    telling should fail exactly as it would in a real game.
+    """
+    for row in ((payload or {}).get("carried_reports") or []):
+        if isinstance(row, dict) and row.get("world_event_id"):
+            return str(row["world_event_id"])
+    return ""
 
 
 def play(db, cid, author):
@@ -423,6 +470,9 @@ def main():
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--capture", default="",
+                    help="directory to write each stage's system prompt and "
+                         "payload into, for reading as the model")
     args = ap.parse_args()
 
     path = _require_scratch()
@@ -431,6 +481,7 @@ def main():
 
     db_module.init()
     author = Author()
+    author.capture_dir = args.capture
     import llm_quality
     llm_quality.complete_validated_json = author
     # Every stage imports it by name at module load, so the already-bound

@@ -277,3 +277,43 @@ class TestALieTravelsLikeTheTruth:
         assert first["world_event_id"] == again["world_event_id"]
         assert first["world_event_id"] != other["world_event_id"]
         assert first["retellings"] == 0 and first["told_by"] == ""
+
+
+class TestAftermathIsMetOnArrival:
+    """A public surface used to be offered ONLY on the beat it fired.
+
+    Consequences fire off-screen on a clock, in rooms chosen precisely because
+    nobody is standing in them — so a witness path that required being present
+    at the exact instant could essentially never fire. Measured on a 20-beat
+    drive: one public surface emitted, zero acquisitions, and a character
+    walked into that room the following turn, looked directly at the barred
+    gate, and learned nothing. Forever.
+
+    The design already had the answer: consequences "are met as state when
+    someone next stands where they landed".
+    """
+
+    def test_a_body_reads_what_is_still_standing_in_the_room(self):
+        import inspect
+
+        import carriers
+        body = inspect.getsource(carriers.advance_carriers)
+        assert "standing_rows" in body
+        assert "event_rows + here" in body
+
+    def test_it_is_arrival_and_not_archaeology(self):
+        """Walking in and seeing the barred gate, not inheriting every event
+        the room has ever hosted."""
+        import carriers
+
+        assert carriers.ARRIVAL_SURFACES <= 3
+
+    def test_only_a_public_surface_is_readable(self):
+        """A concealed act emits no witnessed surface, so arriving later must
+        teach nothing — the firewall is structural, not instructed."""
+        import inspect
+
+        import carriers
+        body = inspect.getsource(carriers.advance_carriers)
+        gathered = body[body.index("standing_rows = []"):body.index("public_surfaces =")]
+        assert "if witnessed:" in gathered
