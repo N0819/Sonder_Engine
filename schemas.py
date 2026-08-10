@@ -1446,6 +1446,9 @@ class DirectorEstablish(LenientModel):
     entity_states: dict[str, InitialEntityState] = Field(default_factory=dict)
     # Where in each room the opening puts people: {name: {at, near:[]}}.
     stations: dict[str, dict] = Field(default_factory=dict)
+    # Complete current body-pose snapshots: posture/support plus optional
+    # relative body arrangement. Separate from room/station and contact.
+    poses: dict[str, dict] = Field(default_factory=dict)
     # Holds the opening passage leaves standing -- same op shape as
     # StateDiff.contact_ops, routed into it by the establish tail so it reaches
     # spatial.apply_contact_ops through the one merge every other beat uses.
@@ -1655,6 +1658,10 @@ class StateDiff(LenientModel):
     # NOT a typed sub-model -- see _coerce_station_table for why the partial
     # merge and the explicit `at: null` both require the plain dict.
     stations: dict[str, dict] = Field(default_factory=dict)
+    # Complete replacement snapshots for touched bodies:
+    # {name:{posture,support,relative_to,relation,constraint,detail}}.
+    # Open strings keep fictional embodiment genre-neutral.
+    poses: dict[str, dict] = Field(default_factory=dict)
     # Scale: {name: factor} relative to that body's own baseline. 1.0 (or
     # omission) is normal size; the engine cancels contacts on a body whose
     # size changed, since a hold is a fact about two bodies at the sizes they
@@ -2776,11 +2783,12 @@ def _coerce_conditions(value):
 
 _STATE_DIFF_DICT_FIELDS = (
     "positions", "rooms", "entities", "overlays", "attire", "entity_states",
+    "poses",
 )
 
 _STATE_DIFF_SIBLING_FIELDS = (
     "remove_entities", "remove_rooms", "remove_adjacent", "conditions",
-    "inventory_ops", "contact_ops", "substance_ops", "stations", "scales", "containment",
+    "inventory_ops", "contact_ops", "substance_ops", "stations", "poses", "scales", "containment",
     "vitals", "overlays",
     "attire", "cast_changes",
     "world_facts", "introductions", "time", "claim_dispositions",
@@ -3271,6 +3279,7 @@ OUTPUT_EXAMPLES = {
         "entities": {},
         "positions": {},
         "stations": {},
+        "poses": {},
         "contact_ops": [],
         "substance_ops": [],
         "attire": {},
@@ -3301,6 +3310,7 @@ OUTPUT_EXAMPLES = {
             "inventory_ops": [],
             "contact_ops": [],
             "substance_ops": [],
+            "poses": {},
             "overlays": {},
             "attire": {},
             "cast_changes": [],

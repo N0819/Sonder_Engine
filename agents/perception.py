@@ -915,6 +915,31 @@ def _observer_scene_payload(scene, perceiver, body_labels=None):
         # felt. Empty for a contact this perceiver is only watching.
         entry["sensation"] = contact_sensation(contact, you=name, scene=scene)
         contacts.append(entry)
+    poses = {}
+    for subject, raw_pose in (scene.get("poses") or {}).items():
+        if not isinstance(raw_pose, dict):
+            continue
+        subject_is_self = same_subject(scene, subject, name)
+        subject_is_visible = str(subject) in visible_names
+        if not subject_is_self and not subject_is_visible:
+            continue
+        entry = copy.deepcopy(raw_pose)
+        key = "you" if subject_is_self else (
+            (body_labels or {}).get(str(subject), str(subject)))
+        relative = str(entry.get("relative_to") or "")
+        if relative:
+            if same_subject(scene, relative, name):
+                entry["relative_to"] = "you"
+            elif relative in visible_names:
+                entry["relative_to"] = (
+                    (body_labels or {}).get(relative, relative))
+            else:
+                # Keep the directly felt constraint but not an unseen body's
+                # identity or a visual above/below relation the observer has
+                # no channel to establish.
+                entry.pop("relative_to", None)
+                entry.pop("relation", None)
+        poses[key] = entry
     substances = []
     for record in (scene.get("substances") or []):
         if not isinstance(record, dict):
@@ -982,6 +1007,7 @@ def _observer_scene_payload(scene, perceiver, body_labels=None):
         "rooms": rooms,
         "entities": _perceptible_entities(scene, [name]),
         "contacts": contacts,
+        "poses": poses,
         "substances": substances,
         "scales": scales,
         "contained": contained,
@@ -1020,6 +1046,24 @@ def _observer_body_labels(perceiver, known, appearances, *, include=()):
         else:
             labels[body] = _unknown_actor_label(body, appearance)
     return labels
+
+
+def _novel_visible_appearances(scene, appearances, visual_channels, *,
+                               observer_name, recognized, changed=()):
+    """Full appearance text only for discovery or a structural change.
+
+    A familiar stable body's authored card is not a new percept every beat.
+    Dynamic region/clothing projection travels separately in scene.body_regions.
+    """
+    changed = [str(name) for name in (changed or []) if str(name or "").strip()]
+    return {
+        name: appearance
+        for name, appearance in (appearances or {}).items()
+        if name != observer_name
+        and (visual_channels or {}).get(name)
+        and (not _recognizes(name, set(recognized or []))
+             or any(same_subject(scene, name, item) for item in changed))
+    }
 
 
 # Concurrency for the per-observer perception fan-out. Capped rather than
@@ -2643,6 +2687,11 @@ def perception_act(ctx, nonce):
         if not perceiver.get("visual_channel_to_actor"):
             declared_for_observer["actor_present_appearance"] = ""
             declared_for_observer["actor_not_visible"] = True
+        elif perceiver.get("knows_identity") and not p_disguise:
+            # Familiar stable appearance is not a new onset percept. The
+            # declared action and observer-scoped body regions still carry
+            # every dynamic visible change this beat.
+            declared_for_observer["actor_present_appearance"] = ""
         authorized = []
         authorized_concealed = []
         for event in _observer_facing_sequence(interp.get("sequence")):
@@ -3418,6 +3467,23 @@ def perception_outcome(ctx, nonce):
         "variant_seed": nonce,
     }
 
+    # Full authored appearance is discovery/change data, not scenery to paste
+    # into every familiar observer's episode. Dynamic body regions remain in
+    # the scoped scene payload. Re-admit the full description only when this
+    # beat structurally changed the body's visible form (or an active player
+    # disguise makes its outward form independently relevant).
+    appearance_changed = set()
+    for field in ("attire", "overlays", "scales"):
+        appearance_changed.update(str(key) for key in (diff.get(field) or {}))
+    for key, entity in (diff.get("entities") or {}).items():
+        if isinstance(entity, dict) and any(
+                field in entity for field in ("description", "appearance")):
+            appearance_changed.add(str(key))
+            if entity.get("name"):
+                appearance_changed.add(str(entity["name"]))
+    if p_disguise:
+        appearance_changed.add(p_name)
+
     def _outcome_payload(perceiver):
         scoped = copy.deepcopy(payload)
         scoped["cast_pronouns"] = _pronouns_for_perceiver(
@@ -3435,12 +3501,11 @@ def perception_outcome(ctx, nonce):
             if source.get("name") == perceiver.get("name")
             or source.get("name") in spatial_channels
         ]
-        scoped["present_appearances"] = {
-            name: appearance
-            for name, appearance in appearances.items()
-            if name != perceiver.get("name")
-            and visual_channels.get(name)
-        }
+        scoped["present_appearances"] = _novel_visible_appearances(
+            sc, appearances, visual_channels,
+            observer_name=perceiver.get("name"),
+            recognized=known.get(perceiver.get("name")) or [],
+            changed=appearance_changed)
         if p_disguise and (
             perceiver.get("name") == p_name
             or str(perceiver.get("name") or "").casefold()

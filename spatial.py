@@ -1578,6 +1578,116 @@ def normalize_scene_stations(scene: dict) -> dict:
     return scene
 
 
+_POSE_FIELDS = ("posture", "support", "relative_to", "relation",
+                "constraint", "detail")
+
+
+def _clean_pose(raw):
+    """One body's complete current pose snapshot, or None when empty.
+
+    Values stay open strings: fictional bodies and supports are unbounded.
+    Structure separates the body's own posture from what supports it and its
+    relation to another body, so "lying", "on the table", "beneath Mara" and
+    "pinned" cannot collapse into one stale prose field.
+    """
+    if not isinstance(raw, dict):
+        return None
+    pose = {
+        field: " ".join(str(raw.get(field) or "").split())[:240]
+        for field in _POSE_FIELDS
+    }
+    return pose if any(pose.values()) else None
+
+
+def normalize_scene_poses(scene: dict) -> dict:
+    """Prune pose relations invalidated by departure or room separation."""
+    poses = scene.get("poses")
+    if not isinstance(poses, dict):
+        scene["poses"] = {}
+        return scene
+    positions = scene.get("positions") or {}
+    stations = scene.get("stations") or {}
+    rooms = scene.get("rooms") or {}
+    for name in list(poses):
+        pose = _clean_pose(poses.get(name))
+        my_room = _ci_get(positions, name)
+        if pose is None or my_room is None:
+            poses.pop(name, None)
+            continue
+        other = pose.get("relative_to")
+        if other and _ci_get(positions, other) != my_room:
+            pose["relative_to"] = ""
+            pose["relation"] = ""
+            pose["constraint"] = ""
+        support = pose.get("support")
+        if support:
+            anchors = (rooms.get(my_room) or {}).get("anchors") or {}
+            support_is_anchor = support in anchors
+            support_room = _ci_get(positions, support)
+            if not support_is_anchor and support_room not in (None, my_room):
+                pose["support"] = ""
+            station = _ci_get(stations, name)
+            if support_is_anchor and isinstance(station, dict) \
+                    and station.get("at") not in (None, support):
+                pose["support"] = ""
+        poses[name] = pose
+    return scene
+
+
+def apply_pose_diff(scene: dict, incoming) -> dict:
+    """Replace touched pose snapshots; null/empty explicitly clears one."""
+    scene.setdefault("poses", {})
+    if not isinstance(scene["poses"], dict):
+        scene["poses"] = {}
+    if not isinstance(incoming, dict):
+        return scene
+    for name, raw in incoming.items():
+        label = str(name or "").strip()
+        if not label:
+            continue
+        for old in [key for key in scene["poses"]
+                    if str(key).strip().casefold() == label.casefold()]:
+            scene["poses"].pop(old, None)
+        pose = _clean_pose(raw)
+        if pose is not None:
+            scene["poses"][label] = pose
+    return scene
+
+
+def pose_facts(scene: dict, observer: str, visible_names=()) -> list[str]:
+    """Authoritative current body arrangements using observer-safe labels."""
+    facts = []
+    allowed = {str(name) for name in (visible_names or [])} | {str(observer)}
+    for name, raw in ((scene or {}).get("poses") or {}).items():
+        if not any(same_subject(scene, name, allowed_name)
+                   for allowed_name in allowed):
+            continue
+        pose = _clean_pose(raw)
+        if pose is None:
+            continue
+        is_self = same_subject(scene, name, observer)
+        parts = []
+        if pose["posture"]:
+            parts.append(f"posture: {pose['posture']}")
+        if pose["support"]:
+            parts.append(f"support: {pose['support']}")
+        if pose["relative_to"]:
+            other = ("you" if same_subject(
+                scene, pose["relative_to"], observer)
+                else pose["relative_to"])
+            relation = f" ({pose['relation']})" if pose["relation"] else ""
+            parts.append(f"relative to {other}{relation}")
+        if pose["constraint"]:
+            parts.append(f"constraint: {pose['constraint']}")
+        if pose["detail"]:
+            parts.append(f"detail: {pose['detail']}")
+        if parts:
+            prefix = "Your current body pose" if is_self \
+                else f"{name}'s current body pose"
+            facts.append(prefix + " — " + "; ".join(parts) + ".")
+    return facts
+
+
 def _anchor_for_entity(scene: dict, room_id: str, name: str):
     """The anchor id of the room feature `name` refers to, or None.
 
@@ -2999,8 +3109,8 @@ def contacts_broken_by_scale_change(scene: dict, previous_scales) -> list:
 # Every scene ledger keyed by WHO rather than by what. `stations[x]["at"]` is
 # deliberately absent: it names an anchor, which is a place in a room, not a
 # subject. `positions` VALUES are rooms for the same reason.
-_SUBJECT_KEYED = ("positions", "scales", "attire", "stations", "contained",
-                  "following")
+_SUBJECT_KEYED = ("positions", "scales", "attire", "stations", "poses",
+                  "contained", "following")
 
 
 def _live_subject_spellings(scene: dict) -> set:
@@ -3032,6 +3142,11 @@ def _live_subject_spellings(scene: dict) -> set:
         for record in following.values():
             if isinstance(record, dict):
                 add(record.get("target"))
+    poses = (scene or {}).get("poses")
+    if isinstance(poses, dict):
+        for record in poses.values():
+            if isinstance(record, dict):
+                add(record.get("relative_to"))
     contacts = (scene or {}).get("contacts")
     if isinstance(contacts, list):
         for contact in contacts:
@@ -3134,7 +3249,7 @@ def normalize_scene_subjects(scene: dict) -> list:
 
     So the data is made single-spelled instead. Run at merge, before position
     derivation, this leaves exactly one key per being in `positions`, `scales`,
-    `attire`, `stations`, `contained` (keys and `in`), `contacts`
+    `attire`, `stations`, `poses`, `contained` (keys and `in`), `contacts`
     (actor/target), `substances` (source/target) and `following` -- after which `==` is correct again because
     there is nothing left for it to be wrong about.
 
@@ -3189,6 +3304,10 @@ def normalize_scene_subjects(scene: dict) -> list:
     if isinstance(following, dict):
         for record in following.values():
             fold_field(record, "target", "following.target")
+    poses = scene.get("poses")
+    if isinstance(poses, dict):
+        for record in poses.values():
+            fold_field(record, "relative_to", "poses.relative_to")
     contacts = scene.get("contacts")
     if isinstance(contacts, list):
         for contact in contacts:
@@ -4338,6 +4457,7 @@ def spatial_facts(scene: dict, observer: str, source_names) -> list:
     # where you are at all, so the narrator is told before it describes anyone
     # walking anywhere.
     facts.extend(containment_facts(scene, observer, source_names))
+    facts.extend(pose_facts(scene, observer, source_names))
 
     visible = {str(n) for n in (source_names or []) if n} | {observer}
     for contact in (scene.get("contacts") or []):
@@ -5925,6 +6045,7 @@ def merge_scene_with_diff(
     incoming_entities = diff.get("entities") or {}
     incoming_positions = diff.get("positions") or {}
     incoming_stations = diff.get("stations") or {}
+    incoming_poses = diff.get("poses") or {}
 
     if isinstance(incoming_rooms, dict):
         for room_id, incoming_room in incoming_rooms.items():
@@ -5977,6 +6098,7 @@ def merge_scene_with_diff(
                 cur = dict(merged["stations"].get(name) or {})
                 cur.update(st)
                 merged["stations"][name] = cur
+    apply_pose_diff(merged, incoming_poses)
 
     for removal in diff.get("remove_adjacent") or []:
         if not isinstance(removal, dict):
@@ -6006,6 +6128,16 @@ def merge_scene_with_diff(
             if name:
                 merged["positions"].pop(name, None)
         folded_names = {str(name).strip().casefold() for name in names if name}
+        merged["poses"] = {
+            name: pose for name, pose in (merged.get("poses") or {}).items()
+            if str(name).strip().casefold() not in folded_names
+        }
+        for pose in (merged.get("poses") or {}).values():
+            if isinstance(pose, dict) and str(
+                    pose.get("relative_to") or "").strip().casefold() in folded_names:
+                pose["relative_to"] = ""
+                pose["relation"] = ""
+                pose["constraint"] = ""
         merged["substances"] = [
             record for record in (merged.get("substances") or [])
             if not isinstance(record, dict)
@@ -6159,6 +6291,7 @@ def merge_scene_with_diff(
     derive_scene_stations(merged, diff.get("stations"), diff.get("contact_ops"))
     merged.setdefault("stations", {})
     normalize_scene_stations(merged)
+    normalize_scene_poses(merged)
 
     # Bodily condition, last: air depends on whether the doorway ended the beat
     # sealed, which the dock-edge rewrite above has only just settled. Entirely

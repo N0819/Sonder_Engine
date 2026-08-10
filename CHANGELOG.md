@@ -2,6 +2,33 @@
 
 ## Unreleased — Development
 
+### Perception now receives durable body pose without familiar-card roll calls
+
+The live Horny Story memory defect was downstream rather than mnemonic: Elyra's
+`perception_outcome` already said a familiar six-tailed Hinami “stands before
+you,” and episodic memory faithfully stored it. Objective state knew only that
+both bodies were at the massage table. It carried neither Hinami's lying pose
+nor her beneath/pinned relation, while the perception call received Hinami's
+entire stable appearance card again; the model supplied a generic standing
+introduction to join those inputs.
+
+Scenes now carry `poses`, a genre-neutral per-body snapshot separating own
+posture, physical support, relative body/relation, constraint, and short detail.
+Touched snapshots replace whole so an ended `beneath` or `pinned` relation
+cannot survive by partial merge. Room separation clears relational/constraint
+fields while retaining the body's own valid posture. Opening `entity_states`
+seed the ledger instead of disappearing after opening perception, and resolve,
+reconciliation repair, observer-scoped scene payloads, and narrator spatial
+ground truth all consume it. Presence never defaults to standing or “before.”
+
+Full authored appearance is now discovery/change data in both perception
+passes. A familiar stable body no longer re-enters every view as an age,
+beauty, species-trait, tail, and clothing roll call; unknown bodies, disguises,
+transformations, and structurally changed appearances still receive it.
+Observer-safe dynamic clothing and exposed body regions remain separately
+available every beat. Memory therefore receives a current episode rather than
+a repeated character-card introduction.
+
 ### Material transfer is now objective state rather than fake body contact
 
 The scene gains a genre-neutral `substances` ledger, written through

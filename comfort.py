@@ -171,11 +171,22 @@ def _station_of(scene, name):
 
 
 def _posture_of(scene, name):
-    """'lying' | 'sitting' | '' from the body's own `state.posture` field.
+    """'lying' | 'sitting' | '' from pose, then legacy entity state.
 
-    A structural state key (perception already renders it back as "You are
-    {posture}"), read by exact token -- never the description paragraph.
+    `scene.poses` is the cross-character authority, including player personas
+    that have no scene entity. Entity state remains a compatibility fallback.
+    Both are read by exact token -- never the description paragraph.
     """
+    poses = (scene or {}).get("poses") or {}
+    pose = next((value for key, value in poses.items()
+                 if _ci_eq(key, name) and isinstance(value, dict)), {}) \
+        if isinstance(poses, dict) else {}
+    pose_tokens = _tokens(pose.get("posture"))
+    if any(t in _LYING_TOKENS for t in pose_tokens):
+        return "lying"
+    if any(t in _SITTING_TOKENS for t in pose_tokens):
+        return "sitting"
+
     _eid, ent = _entity_record(scene, name)
     if not isinstance(ent, dict):
         return ""

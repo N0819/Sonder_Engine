@@ -370,6 +370,11 @@ would report the divergence while still committing the stale relation.
 Substance entries likewise carry their material, target, placement, and
 enclosing interior. Reconciliation treats a completed deposit/removal as its
 own evidence category and retains `substance_ops` through additive repair.
+Body arrangement is the third spatial grain: positions choose the room,
+stations choose the anchor/nearness, and `poses` records posture, support,
+relative arrangement, and physical constraint. A touched pose is a complete
+snapshot rather than a partial merge, so obsolete `beneath`/`pinned` fields do
+not survive a later rise. Pose changes have their own manifest/audit category.
 
 ### `background_react`
 
@@ -393,6 +398,14 @@ withheld; overt sentences survive. The unified delivery gate `_delivery_ok`
 in `agents/common.py` consolidates containment, awareness, sight (including
 rear-arc/`behind_sources`), and hearing (with proximity) checks for every
 deterministic delivery site.
+
+Observer scene projections include only visible bodies' pose snapshots plus the
+observer's own. These are authoritative: visibility alone never licenses a
+default standing or “before you” relation. Full authored appearance is scoped
+to discovery or a structural visible change; familiar stable card description
+is withheld while dynamic clothing and exposed body regions remain available.
+This matters at the memory boundary because witnessed episodic memory is formed
+from this output, not repaired after it.
 
 ### `narrator`
 
