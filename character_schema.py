@@ -446,6 +446,110 @@ def _normalize_initial_outfit(value: Any) -> dict:
     }
 
 
+# ---- Extra body parts (embodiment.extra_parts) ----
+#
+# Tails, wings, horns, extra arms: BODY, so they live on the card beside
+# `visible`, never in the attire ledger (clothing) and never in the scene
+# blob (a card edit must keep fixing the body it describes). The menus are
+# closed and orthogonal; the part noun itself stays free because anatomy is
+# open-ended and the noun doubles as the contact handle
+# (spatial._part_identity already reads it structurally).
+#
+# `at` reuses attire.REGIONS -- the one region vocabulary clothing coverage,
+# region_visibility and the editor already speak, which is what makes "does
+# the skirt cover the tail's root" answerable without a second anatomy.
+#
+# `aspect` is which FACE of that region the part emerges from:
+#   front     -- the ventral/leading face (in front)
+#   back      -- the dorsal face (behind: tails, wings)
+#   top       -- the upper surface (above: horns from the crown)
+#   underside -- the lower surface (below)
+#   left/right - one lateral side
+#   sides     -- bilaterally, spread across both sides (extra arm pairs;
+#                count is the total across both)
+EXTRA_PART_ASPECTS = ("front", "back", "top", "underside", "left", "right",
+                      "sides")
+EXTRA_PART_COUNT_MAX = 12
+
+# Where a part goes when the author did not say: an authoring default in the
+# attire.region_of spirit (a guess visible in the editor, recoverable), NEVER
+# an identity fold -- spatial.py's ban on body-part synonym tables is about
+# comparing parts, and this table never compares anything.
+_EXTRA_PART_PLACEMENTS = {
+    "tail": ("waist", "back"),
+    "wing": ("torso", "back"),
+    "horn": ("head", "top"),
+    "antler": ("head", "top"),
+    "ear": ("head", "top"),
+    "tentacle": ("torso", "back"),
+    "arm": ("torso", "sides"),
+    "eye": ("head", "front"),
+    "halo": ("head", "top"),
+}
+
+
+def _extra_part_placement(kind: str) -> tuple[str, str]:
+    word = str(kind or "").strip().casefold().split()[-1:] or [""]
+    word = word[0]
+    if word.endswith("s") and word[:-1] in _EXTRA_PART_PLACEMENTS:
+        word = word[:-1]
+    return _EXTRA_PART_PLACEMENTS.get(word, ("torso", "back"))
+
+
+def _normalize_extra_parts(value: Any) -> list[dict]:
+    """Authored extra body parts, menus enforced, junk tolerated.
+
+    A bare string ("tail") is a part with everything else defaulted, matching
+    how every sibling list field (senses, latent, traits) reads leniency. An
+    entry with no kind is dropped -- there is nothing to attach. Menu values
+    outside the closed vocabularies fall to the per-kind placement guess so
+    the guess lands somewhere an author can see and move it.
+    """
+    if isinstance(value, dict):
+        # {"tail": {...}} -- the keyed spelling a model plausibly writes.
+        value = [dict(v, kind=k) if isinstance(v, dict) else k
+                 for k, v in value.items()]
+    if not isinstance(value, (list, tuple)):
+        return []
+    out = []
+    for item in value:
+        if isinstance(item, str):
+            item = {"kind": item}
+        if not isinstance(item, dict):
+            continue
+        kind = " ".join(str(item.get("kind") or item.get("part")
+                            or item.get("name") or "").split())
+        if not kind:
+            continue
+        guess_at, guess_aspect = _extra_part_placement(kind)
+        at = str(item.get("at") or item.get("region") or "").strip().casefold()
+        if at not in attire.REGIONS:
+            at = guess_at
+        aspect = str(item.get("aspect") or item.get("orientation")
+                     or "").strip().casefold()
+        if aspect not in EXTRA_PART_ASPECTS:
+            aspect = guess_aspect
+        try:
+            count = int(item.get("count", 1))
+        except (TypeError, ValueError):
+            count = 1
+        count = max(1, min(EXTRA_PART_COUNT_MAX, count))
+        through = item.get("through_clothing")
+        out.append({
+            "kind": kind,
+            "count": count,
+            "at": at,
+            "aspect": aspect,
+            # Default TRUE: the fiction's tail passes through the skirt, and
+            # the wrong default silently deletes the swaying-tail detail
+            # whenever the region is dressed.
+            "through_clothing": True if through is None else bool(through),
+            "description": " ".join(
+                str(item.get("description") or "").split())[:400],
+        })
+    return out
+
+
 def default_character_data(name: str = "Unnamed") -> dict:
     result = {
         "identity": {
@@ -468,6 +572,8 @@ def default_character_data(name: str = "Unnamed") -> dict:
                 "distinctive_features": [],
             },
             "latent": [],
+            # Structured extra body parts -- see _normalize_extra_parts.
+            "extra_parts": [],
             "interoception": {
                 "acuity": 0.5,
                 "pain_sensitivity": 0.5,
@@ -568,6 +674,7 @@ def default_persona_data(name: str = "Player") -> dict:
                 "distinctive_features": [],
             },
             "latent": [],
+            "extra_parts": [],
         },
         "competence": {"abilities": []},
         "knowledge": {"public_history": "", "private_history": []},
@@ -900,6 +1007,8 @@ def normalize_character_data(value: dict) -> dict:
         ):
             interoception[key] = _profile_float(interoception.get(key))
         result["embodiment"]["interoception"] = interoception
+        result["embodiment"]["extra_parts"] = _normalize_extra_parts(
+            result["embodiment"].get("extra_parts"))
         stress = result["initial_state"].get("stress")
         if not isinstance(stress, dict):
             stress = {}
@@ -959,6 +1068,7 @@ def normalize_character_data(value: dict) -> dict:
                 "distinctive_features": [],
             },
             "latent": copy.deepcopy(value.get("latent_capabilities") or []),
+            "extra_parts": _normalize_extra_parts(value.get("extra_parts")),
             "interoception": {
                 "acuity": 0.5, "pain_sensitivity": 0.5,
                 "fatigue_sensitivity": 0.5, "pleasure_sensitivity": 0.5,
@@ -1035,6 +1145,8 @@ def normalize_persona_data(value: dict) -> dict:
         _coerce_appearance(result)
         result["initial_outfit"] = _normalize_initial_outfit(
             result.get("initial_outfit"))
+        result["embodiment"]["extra_parts"] = _normalize_extra_parts(
+            result["embodiment"].get("extra_parts"))
         result["knowledge"]["private_history"] = _legacy_private_history(
             result["knowledge"].get("private_history"))
         return result
@@ -1060,6 +1172,7 @@ def normalize_persona_data(value: dict) -> dict:
                 "distinctive_features": [],
             },
             "latent": copy.deepcopy(value.get("latent_capabilities") or []),
+            "extra_parts": _normalize_extra_parts(value.get("extra_parts")),
         },
         "competence": {"abilities": _legacy_abilities(value.get("abilities"))},
         "knowledge": {
@@ -1177,6 +1290,19 @@ def character_embodiment_capabilities(sheet: dict) -> list[dict]:
     return copy.deepcopy(
         normalize_character_data(sheet).get("embodiment", {}).get("latent", [])
     )
+
+def character_extra_parts(sheet: dict) -> list[dict]:
+    """Authored structured extra body parts (tails, wings, horns...).
+
+    Body configuration read live from the card, like senses -- a sheet edit
+    fixes the body without a migration, and a sheet without any normalizes to
+    [] so the whole feature stays inert by default.
+    """
+    return copy.deepcopy(
+        normalize_character_data(sheet).get("embodiment", {}).get(
+            "extra_parts", [])
+    )
+
 
 def character_abilities(sheet: dict) -> list[dict]:
     return copy.deepcopy(normalize_character_data(sheet).get("competence", {}).get("abilities", []))
@@ -1367,6 +1493,13 @@ def persona_initial_outfit(sheet: dict) -> dict:
 
 def persona_senses(sheet: dict) -> list[dict]:
     return copy.deepcopy(normalize_persona_data(sheet).get("embodiment", {}).get("senses", []))
+
+def persona_extra_parts(sheet: dict) -> list[dict]:
+    """The persona's authored extra body parts -- see character_extra_parts."""
+    return copy.deepcopy(
+        normalize_persona_data(sheet).get("embodiment", {}).get(
+            "extra_parts", [])
+    )
 
 def persona_abilities(sheet: dict) -> list[dict]:
     return copy.deepcopy(normalize_persona_data(sheet).get("competence", {}).get("abilities", []))

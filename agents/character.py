@@ -15,6 +15,7 @@ from character_schema import (
     character_name_from_text,
     character_abilities,
     character_embodiment_capabilities,
+    character_extra_parts,
     character_curiosity,
     character_interoception,
     character_name,
@@ -74,6 +75,7 @@ from .common import (
     assign_event_ids,
     attire_view,
     compact_attire,
+    extra_parts_lines,
     cap_mind_model_updates,
     character_room,
     norm_sequence,
@@ -2659,6 +2661,12 @@ def character_step(ctx, cid, nonce):
         # in -- two shapes for one fact is how `wearing` and `regions` drifted
         # apart in the first place.
         "attire": compact_attire(sc.get("attire", {}).get(character_name(sh))),
+        # Its own authored extra body parts (tail, wings...). A mind knows its
+        # own body whether or not anyone can see it -- same self-knowledge
+        # floor as the interoception and attire lines beside this. Key absent
+        # for the ordinary body, so defaults stay inert.
+        **({"body_parts": extra_parts_lines(character_extra_parts(sh))}
+           if character_extra_parts(sh) else {}),
         "recent_self_lines": _self_lines,
         # One row per turn rather than one row per utterance. This is the
         # semantic continuity ledger: a chatty speaker cannot push the last

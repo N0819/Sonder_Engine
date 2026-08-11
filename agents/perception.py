@@ -852,14 +852,23 @@ from .common import (
     _strip_identity_tokens,
     _unknown_actor_label,
     observer_body_regions,
+    scene_extra_parts,
     cast_room,
     character_room,
     character_scene_keys,
 )
 
 
-def _observer_scene_payload(scene, perceiver, body_labels=None):
+def _observer_scene_payload(scene, perceiver, body_labels=None,
+                            extra_parts=None):
     """Project objective scene state to one observer before any model call.
+
+    NO PRODUCTION CALLER REMAINS. This built the per-observer payload for
+    the perception model, and perception has no model; the composer reads
+    the same underlying projections directly. It is kept because it is a
+    correct, pure, observer-safe projection that several test files use as
+    exactly that, and because deleting it would delete their subject rather
+    than their scaffolding. Do not read its existence as a live path.
 
     This is intentionally stricter than an output scrub: relations that name a
     hidden body never enter another observer's context in the first place.
@@ -3289,6 +3298,24 @@ def _composer_identity_space(ctx, p_name, p_appearance):
     return space
 
 
+def _composer_extra_parts(ctx, p_name):
+    """Authored structured body parts (tails, wings, horns) by display name.
+
+    Card-read, so a cast with none yields {} and nothing downstream changes.
+    The composer's body-region projection is the only consumer now that the
+    model payload is gone: the feature reaches a mind through
+    `observer_body_regions`, exactly the seam it always used.
+
+    Cached per turn -- three orchestrators ask for it and it is a sheet read
+    per cast member.
+    """
+    cached = ctx.get("_composer_extra_parts_cache")
+    if cached is None:
+        cached = scene_extra_parts(ctx.cast, persona_of(ctx.chat), p_name)
+        ctx["_composer_extra_parts_cache"] = cached
+    return cached
+
+
 _MASK_TOKEN = re.compile("\x00Q\\d+\x00")
 
 
@@ -3521,7 +3548,7 @@ def _gated_ambient_percepts(gate, sensory_events, room):
 
 def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
                                 entity_state=None, appearance_changed=(),
-                                gate=None):
+                                gate=None, extra_parts=None):
     """The standing-state half of one observer's IR: environment, presence,
     first-mention/changed appearances, own body state, standing contact
     sensations, bare body regions. Every admission is a subtraction --
@@ -3593,9 +3620,19 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         if body.get("name"):
             region_labels[body["name"]] = display_map.get(
                 body["name"], "someone")
-    rows = observer_body_regions(sc, name, region_labels)
+    rows = observer_body_regions(sc, name, region_labels,
+                                 extra_parts=extra_parts)
     percepts.extend(
         composer.body_region_percepts(_composer_bare_details(rows)))
+    # Authored extra parts ride the same gated projection as bare regions,
+    # in a sibling key. Reading only `regions` -- which is what this did
+    # when the two features merged -- landed the whole extra-parts feature
+    # silently dead on the live path: gated correctly, rendered nowhere.
+    percepts.extend(composer.body_part_percepts([
+        (str(row.get("body") or "someone"), part)
+        for row in rows or [] if isinstance(row, dict)
+        for part in (row.get("part_data") or [])
+    ]))
     return percepts
 
 
@@ -3641,6 +3678,7 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
         })
     roster = _identity_roster(p_name, p_appearance, ctx.cast)
     identity_space = _composer_identity_space(ctx, p_name, p_appearance)
+    cast_parts = _composer_extra_parts(ctx, p_name)
     clean_views, observations, ledger = {}, {}, {}
     for p in perceivers:
         pid = str(p["id"])
@@ -3657,7 +3695,7 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
                 sc, p, name, others, display_map, known,
                 entity_state=p.get("entity_state")
                 or (entity_states or {}).get(name),
-                gate=gate)
+                gate=gate, extra_parts=cast_parts)
             percepts.extend(
                 _gated_ambient_percepts(gate, sensory_events, p.get("room")))
         # A scene opening is the one beat where everything is legitimately
@@ -3697,6 +3735,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
     spoken = player_speech_lines(interp)
     roster = _identity_roster(p_name, p_visible, ctx.cast)
     identity_space = _composer_identity_space(ctx, p_name, p_visible)
+    cast_parts = _composer_extra_parts(ctx, p_name)
     prev_ledger = _composer_prev_ledger(ctx)
     actor_body = {
         "name": p_name, "room": ctx.get("_player_room"),
@@ -3725,7 +3764,8 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
             percepts = _composer_standing_percepts(
                 sc, p, name, others, display_map, known,
                 gate=_authored_prose_gate(
-                    ctx, "perception_act", name, known, identity_space))
+                    ctx, "perception_act", name, known, identity_space),
+                extra_parts=cast_parts)
             rel = p.get("spatial_to_actor") or {}
             vis = p.get("visual_channel_to_actor", False)
             can_see = _in_plain_view(rel, vis)
@@ -3884,6 +3924,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
 
     # The stage roster is who ACTED this beat; the identity space is who
     # this chat could name. Authored prose is gated against the second.
+    cast_parts = _composer_extra_parts(ctx, p_name)
     identity_space = list(ident_roster)
     _space_seen = {str(r["name"]).casefold() for r in identity_space}
     for s in _composer_identity_space(ctx, p_name, appearances.get(p_name)):
@@ -3948,7 +3989,8 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 sc, p, name, others, display_map, known,
                 appearance_changed=appearance_changed,
                 gate=_authored_prose_gate(
-                    ctx, "perception_outcome", name, known, identity_space))
+                    ctx, "perception_outcome", name, known, identity_space),
+                extra_parts=cast_parts)
             spatial = p.get("spatial_to_sources") or {}
             visual = p.get("visual_channel_to_sources") or {}
             recognized, unknown = _composer_unknown_sources(
