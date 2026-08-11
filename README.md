@@ -213,6 +213,21 @@ standard rather than a library:
   The alternative source is a local folder of audio you already own, which
   involves no third party at all.
 
+Two published findings changed what got built rather than what got
+imported, so they are ideas only — no code read, taken, or depended on.
+**Lee, Goel & Ramchandran, [*Quantifying Positional Biases in Text Embedding
+Models*](https://arxiv.org/abs/2412.15241)**: embedding models over-weight a
+text's opening sentence, which is why a minted memory leads with the beat's
+events and puts the room change last. **Li et al., [*On the Sentence
+Embeddings from Pre-trained Language Models*](https://arxiv.org/abs/2011.05864)
+(BERT-flow, EMNLP 2020)**: cosine similarity tracks surface overlap more than
+meaning, so a memory omits unchanged standing state entirely rather than
+appending a delta to a fixed frame. Together they took the verbatim-twin rate
+in the memory bank from 14.6% to 0.4%. [`docs/RESEARCH.md`](docs/RESEARCH.md)
+§1.6 has the detail, and names the leads deliberately *not* used — Angband's
+message aggregation is GPL and was not read, TADS 3 is proprietary and
+prohibits derivatives, Curveship's licence was never verified.
+
 The weather overlay has no third-party dependency at all. It began as
 [tsParticles](https://particles.js.org/) by Matteo Bruni — a good library,
 and thanks are owed for the version that shipped first — but a particle engine
