@@ -94,7 +94,9 @@ def resolve_engine():
             "_quote_body", "_contains_quote", "player_speech_lines",
             "character_scene_keys",
         ],
-        "agents.perception": ["_strip_self_narration", "_dialogue_hear_level"],
+        "agents.perception": ["_strip_self_narration",
+                              "_strip_self_narration_quote_safe",
+                              "_dialogue_hear_level"],
         "spatial": ["spatial_rel", "room_of"],
         "character_schema": ["character_name"],
     }
@@ -478,11 +480,28 @@ def score_view(view, ent, engine):
     elif not ent["ledger_present"]:
         findings["checks_skipped"].append("identity_no_ledger")
 
-    strip_self = engine.get("_strip_self_narration")
+    # THE QUOTE-SAFE VARIANT WHERE THE TREE HAS ONE. The bare stripper
+    # splits on sentence punctuation, sentence punctuation lives inside
+    # quoted speech, and so it counts a FRAGMENT OF A DELIVERED LINE as
+    # self-narration every time a speaker says the perceiver's name to
+    # their face -- which people do constantly.
+    #
+    # Measured on the composed corpus: all 33 floor-era views this flagged
+    # were exactly that, and all 33 were the same views the old repair pass
+    # had been deleting a line from. The metric read 0 because the
+    # destruction had already removed the evidence. A check that scores its
+    # own mis-split as a defect will go on rewarding whatever destroys it.
+    strip_self = (engine.get("_strip_self_narration_quote_safe")
+                  or engine.get("_strip_self_narration"))
     if strip_self:
-        refusals = []
-        _, dropped = strip_self(text, ent["observer"], ent["roster_names"],
-                                refusals=refusals)
+        result = strip_self(text, ent["observer"], ent["roster_names"])
+        if len(result) == 3:
+            _, dropped, refusals = result
+        else:
+            refusals = []
+            _, dropped = strip_self(
+                text, ent["observer"], ent["roster_names"],
+                refusals=refusals)
         findings["self_narration"] = len(dropped)
         findings["self_narration_refused"] = len(refusals)
     else:

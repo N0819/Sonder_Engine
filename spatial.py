@@ -15,7 +15,9 @@ from spatial_orientation import (
     lateral_of,
     normalize_bearing,
     normalize_scene_bearings,
+    normalize_vertical,
     opposite_bearing,
+    opposite_vertical,
     relative_bearing,
     travel_bearing,
 )
@@ -799,15 +801,91 @@ def spatial_rel_between(
     return rel
 
 
+_SIGHT_ORDER = {"none": 0, "shapes": 1, "full": 2}
+
+
+def _weaker_sight(a: str, b: str) -> str:
+    """The dimmer of two sight grades -- caps only ever subtract."""
+    return a if _SIGHT_ORDER.get(a, 2) <= _SIGHT_ORDER.get(b, 2) else b
+
+
+# How many 45-degree steps an egocentric sector sits from dead ahead.
+_SECTOR_STEPS = {"ahead": 0, "ahead_left": 1, "ahead_right": 1,
+                 "left": 2, "right": 2,
+                 "behind_left": 3, "behind_right": 3, "behind": 4}
+
+
+def _opening_view_cap(scene: dict, room_id, body: str, other_room) -> str:
+    """S2a: how much of `body`, standing in `room_id`, the view through this
+    room's opening to/from `other_room` can carry: full | shapes | none.
+
+    Sight through an opening used to be whole-room binary -- a body pressed
+    against the wall beside the doorframe was fully seen from the next room,
+    the one leak-shaped over-grant in the FOV model (330 live cross-room pairs
+    sit across a sight-passing barrier). The cone is derived entirely from
+    data the scene already persists; where nothing supports an answer the cap
+    is `full`, i.e. exactly today's behaviour.
+
+    Geometry, at 8-way room grain: the opening sits on the wall at the edge's
+    bearing from this room's centre, and a viewer on the other side sees the
+    slice of the room on the FAR side of that opening -- the strip from the
+    doorway through the centre to the opposite wall. So a body is in the cone
+    iff its anchor bearing is within one sector of the direction pointing
+    AWAY from the opening (`opposite_bearing` of this room's edge bearing),
+    OR it stands at this very edge's door pseudo-anchor, OR it is still
+    visibly crossing this edge. A body at a bearing NEAR the door wall but at
+    a different anchor is precisely "beside the doorframe" -- the place a
+    doorway does not show -- and caps to `none`. (Design note 07 words the
+    cone as `opposite_bearing(d)` with d taken from the far side, which is
+    this same set; read from this room's own edge the axis is the opposite
+    bearing.)
+
+    Placement unknown: fall back by room size -- tiny/small has no off-axis
+    corner worth modelling (always in cone), medium keeps today's fail-open,
+    large+ caps at `shapes` (through a door you can tell a big room is
+    occupied, not read a face across it). The same test gates the OBSERVER's
+    side, called with both orderings: someone off-axis beside their own
+    doorframe cannot see through the opening either. Pure subtraction: every
+    failure mode of the approximation can only withhold, never grant.
+    """
+    rec = crossing_of(scene, body)
+    if rec and {rec.get("from"), rec.get("to")} == {room_id, other_room}:
+        return "full"
+    at = effective_station(scene, body).get("at")
+    if at and at == door_anchor_id(other_room):
+        return "full"
+    size = effective_room_size(scene, room_id)
+    if size in ("tiny", "small"):
+        return "full"
+    bearing = _anchor_dir(scene, room_id, at) if at else None
+    edge_bearing = travel_bearing(scene, room_id, other_room)
+    if bearing and edge_bearing:
+        away = opposite_bearing(edge_bearing)
+        steps = _SECTOR_STEPS.get(relative_bearing(away, bearing))
+        if steps is not None:
+            return "full" if steps <= 1 else "none"
+    if size in ("large", "huge", "vast"):
+        return "shapes"
+    return "full"
+
+
 def visual_level_between(scene: dict, observer: str, target: str) -> str:
     """Graded sight from one BODY to another, accounting for local light.
 
     The room-level form cannot know that the target is standing in a torch's
     pool while the observer is not -- and that difference is exactly what a
     carried light is for.
+
+    Cross-room sight through an opening is additionally capped by the
+    opening's view-cone (`_opening_view_cap`, S2a) on BOTH sides, and by an
+    authored far/remote edge distance (a figure across a courtyard is
+    `shapes`, not a readable face). Both caps default to today's behaviour
+    exactly where the data is absent.
     """
-    rel = spatial_rel(scene, room_of(scene, observer), room_of(scene, target))
-    crossing = crossing_visible_from(scene, room_of(scene, observer), target)
+    o_room = room_of(scene, observer)
+    t_room = room_of(scene, target)
+    rel = spatial_rel(scene, o_room, t_room)
+    crossing = crossing_visible_from(scene, o_room, target)
     if containment_conceals(scene, observer, target):
         return "shapes" if crossing else "none"
     if not _sight_line(rel):
@@ -816,9 +894,81 @@ def visual_level_between(scene: dict, observer: str, target: str) -> str:
     # You see what is LIT, so the light that matters is the light on the thing
     # being looked at.
     level = _LIGHT_SIGHT.get(light_at(scene, target), "full")
+    if not rel.get("same_room"):
+        cap = _weaker_sight(
+            _opening_view_cap(scene, t_room, target, o_room),
+            _opening_view_cap(scene, o_room, observer, t_room),
+        )
+        if rel.get("distance") in ("far", "remote"):
+            cap = _weaker_sight(cap, "shapes")
+        level = _weaker_sight(level, cap)
     if crossing and level == "none":
         return "shapes"
     return level
+
+
+# Edge `distance` tiers, most intimate first. Measured live (S1d): 86% of
+# edges author a distance, in 29 surface forms -- `3m`, `20m`, `1 step`, bare
+# numbers, `close`, `immediate` -- while the ONLY value any code consumed
+# (`remote`, hear_level's dead-drop branch) appeared zero times. The exact
+# inverse of the stations failure: data everyone writes and nothing can read.
+# This normalizer is the read-side fix, mirroring normalize_barrier: applied
+# at spatial_rel's one edge-read site so every consumer inherits it.
+DISTANCE_TIERS = ("adjacent", "near", "far", "remote")
+
+_DISTANCE_ALIASES = {
+    "adjacent": "adjacent", "close": "adjacent", "immediate": "adjacent",
+    "touching": "adjacent", "beside": "adjacent", "short": "adjacent",
+    "step": "adjacent", "steps": "adjacent", "same": "adjacent",
+    "near": "near", "nearby": "near", "mid": "near", "middle": "near",
+    "moderate": "near", "medium": "near",
+    "far": "far", "long": "far", "distant": "far",
+    "remote": "remote",
+}
+
+# Rough meters-per-unit for the metric/imperial/stride forms the corpus
+# actually writes. A bare number is read as meters -- `10` and `10m` appear
+# side by side live and plainly mean the same thing.
+_DISTANCE_UNIT_METERS = {
+    "m": 1.0, "meter": 1.0, "meters": 1.0, "metre": 1.0, "metres": 1.0,
+    "km": 1000.0, "kilometer": 1000.0, "kilometers": 1000.0,
+    "ft": 0.3048, "foot": 0.3048, "feet": 0.3048,
+    "yd": 0.9144, "yard": 0.9144, "yards": 0.9144,
+    "mi": 1609.0, "mile": 1609.0, "miles": 1609.0,
+    "step": 0.75, "pace": 0.75, "paces": 0.75, "stride": 0.75, "strides": 0.75,
+}
+
+
+def normalize_edge_distance(value) -> str:
+    """Collapse an authored edge `distance` to one of DISTANCE_TIERS.
+
+    Word aliases and numeric/metric parsing (<=5m adjacent, <=20m near,
+    <=75m far, beyond remote -- a `200 m` gallery edge is a genuinely remote
+    edge that used to read as `near` by raw passthrough). Absent or
+    unparseable answers `near`, which is exactly the default every consumer
+    already assumed -- the default can never masquerade as a measurement
+    because only authored values can reach the other three tiers.
+    """
+    raw = str(value if value is not None else "").strip().casefold()
+    if not raw:
+        return "near"
+    if raw in _DISTANCE_ALIASES:
+        return _DISTANCE_ALIASES[raw]
+    matched = re.match(r"^~?\s*(\d+(?:\.\d+)?)\s*([a-z]+)?\.?$", raw)
+    if not matched:
+        return "near"
+    scale = _DISTANCE_UNIT_METERS.get(matched.group(2) or "m")
+    if scale is None:
+        # An unrecognized unit is not evidence of anything; refuse to guess.
+        return "near"
+    meters = float(matched.group(1)) * scale
+    if meters <= 5:
+        return "adjacent"
+    if meters <= 20:
+        return "near"
+    if meters <= 75:
+        return "far"
+    return "remote"
 
 
 def spatial_rel(
@@ -869,7 +1019,7 @@ def spatial_rel(
                 # account for it. Absent means "ordinary", which is the
                 # behaviour every existing scene already had.
                 "material": edge.get("material") or "",
-                "distance": edge.get("distance", "near"),
+                "distance": normalize_edge_distance(edge.get("distance")),
                 # The light in the room being LOOKED AT: seeing into a dark
                 # room from a lit one is still seeing nothing.
                 "light": effective_light(scene, b_room),
@@ -1145,6 +1295,370 @@ def hear_level(
 def can_perceive(rel: dict, volume: str = "normal") -> bool:
     return hear_level(rel, volume) != "none"
 
+
+# ---------------------------------------------------------------------------
+# S3a/S4a/S4b: directional hearing, the bounded loudness walk, and alarm.
+# All derived -- no new fields anywhere.
+# ---------------------------------------------------------------------------
+
+# Barriers a loud sound will WALK through for multi-hop propagation. The
+# passable set plus `bars` -- a grate is an acoustic hole (hear_level's own
+# precedent), even though nobody walks through it.
+_SOUND_WALK_BARRIERS = {"open", "open_door", "membrane", "bars"}
+
+
+def sound_path(scene: dict, from_room, to_room, max_hops: int = 2):
+    """Shortest room path (inclusive list of room ids) between two rooms over
+    sound-passing edges, at most `max_hops` edges long; None when no such
+    path exists. Undirected (an edge declared from either side counts, the
+    nearby_rooms precedent) and deterministic (sorted neighbour order)."""
+    if not from_room or not to_room or from_room == to_room:
+        return None
+    neighbors: dict[str, set] = {}
+    for rid, room in (scene.get("rooms") or {}).items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            if normalize_barrier(edge.get("barrier")) in _SOUND_WALK_BARRIERS:
+                neighbors.setdefault(rid, set()).add(edge["to"])
+                neighbors.setdefault(edge["to"], set()).add(rid)
+    prev = {from_room: None}
+    frontier = [from_room]
+    for _ in range(max(0, int(max_hops))):
+        next_frontier = []
+        for current in frontier:
+            for nb in sorted(neighbors.get(current, ())):
+                if nb in prev:
+                    continue
+                prev[nb] = current
+                if nb == to_room:
+                    path = [nb]
+                    while path[-1] is not None:
+                        path.append(prev[path[-1]])
+                    path.pop()
+                    path.reverse()
+                    return path
+                next_frontier.append(nb)
+        frontier = next_frontier
+    return None
+
+
+def sound_walk_level(scene: dict, observer_room, source_room, volume,
+                     max_hops: int = 2) -> str:
+    """S4a -- DELIBERATE SPEC CHANGE: a bounded multi-hop loudness walk.
+
+    Today non-adjacent is `separated`, so only a shout-fragment survives and
+    a gunshot two rooms down an open corridor arrives as nothing -- which
+    leaves G2's alarm semantics hollow. This walks the open-edge graph from
+    the source, max `max_hops` (default 2), ONLY for raised volumes
+    (loud/shout, and G1's `violent` event loudness); normal speech and below
+    never propagate (unchanged). Grades the worst barrier on the path,
+    shifted one _SOUND_LADDER rung more solid per hop past the first (the
+    `_material_shifted_barrier` mechanism), and the result caps at `fragment`
+    beyond the first hop -- so "the castle hears every shout" stays
+    impossible by construction. Answers "none" for same-room/adjacent pairs:
+    those belong to hear_level.
+    """
+    volume = str(volume or "").strip().casefold()
+    if volume not in ("loud", "shout", "violent"):
+        return "none"
+    if volume == "violent":
+        volume = "shout"
+    path = sound_path(scene, observer_room, source_room, max_hops=max_hops)
+    if not path or len(path) < 3:
+        return "none"
+    worst = 0
+    for a, b in zip(path, path[1:]):
+        barrier = spatial_rel(scene, a, b).get("barrier")
+        if barrier == "membrane":
+            # Not on the ladder by design; acoustically it grades exactly as
+            # a closed door does, so that is what the walk shifts.
+            barrier = "closed_door"
+        if barrier in _SOUND_LADDER:
+            worst = max(worst, _SOUND_LADDER.index(barrier))
+    hops = len(path) - 1
+    shifted = _SOUND_LADDER[min(worst + hops - 1, len(_SOUND_LADDER) - 1)]
+    level = hear_level({"same_room": False, "barrier": shifted,
+                        "distance": "near"}, volume)
+    return "none" if level == "none" else "fragment"
+
+
+def is_alarming(loudness=None, targets=None, perceiver=None) -> bool:
+    """S4b/G2: is this event ALARMING for this perceiver -- derived, never
+    authored. Alarming = raised loudness (loud/shout, or G1's `violent`), or
+    the event targets the perceiver's own body. An alarming event is the one
+    class that bypasses rear-arc/periphery/focus for any perceiver it reaches
+    through any channel, and snaps focus toward the bearing it arrived by
+    (the doorway the bang came through -- which is also all the information
+    the perceiver legitimately has)."""
+    if str(loudness or "").strip().casefold() in ("loud", "shout", "violent"):
+        return True
+    if perceiver and targets:
+        me = str(perceiver).strip().casefold()
+        return any(str(t or "").strip().casefold() == me for t in targets)
+    return False
+
+
+_COMPASS_WORDS = {"n": "north", "ne": "northeast", "e": "east",
+                  "se": "southeast", "s": "south", "sw": "southwest",
+                  "w": "west", "nw": "northwest"}
+
+_SOUND_BARRIER_PHRASES = {
+    "open": "through the opening", "open_door": "through the doorway",
+    "closed_door": "through the door", "window": "through the window",
+    "bars": "through the bars", "membrane": "through the curtain",
+    "wall": "beyond the wall",
+}
+
+_SECTOR_PHRASES = {"ahead": "ahead of you", "behind": "behind you",
+                   "left": "to your left", "right": "to your right"}
+
+
+def _edge_vertical(scene: dict, from_room, to_room) -> Optional[str]:
+    """The normalized up/down of the edge between two rooms, read from
+    `from_room`'s side (reciprocal edges flip, per normalize_scene_bearings)."""
+    rooms = scene.get("rooms") or {}
+    for edge in (rooms.get(from_room) or {}).get("adjacent") or []:
+        if isinstance(edge, dict) and edge.get("to") == to_room:
+            level = normalize_vertical(edge.get("vertical"))
+            if level:
+                return level
+    for edge in (rooms.get(to_room) or {}).get("adjacent") or []:
+        if isinstance(edge, dict) and edge.get("to") == from_room:
+            level = normalize_vertical(edge.get("vertical"))
+            if level:
+                return opposite_vertical(level)
+    return None
+
+
+def sound_bearing(scene: dict, observer: str, source: str):
+    """S3a: where a heard sound comes from, in the OBSERVER's own frame.
+    None when nothing supports an answer -- a bearing is never guessed.
+
+    Same room: the egocentric sector ("behind you", "to your left"), from the
+    derivation layer's facing and stations. Adjacent room: the connecting
+    edge as seen from the observer's room, rendered against its barrier and
+    the observer's facing ("through the doorway to your right"), compass-only
+    without a facing ("through the doorway, from the north"). Non-adjacent:
+    the FIRST edge of the sound path out of the observer's room -- you hear
+    which doorway it came through, not the route.
+
+    Firewall-clean by construction: every field names the observer's OWN
+    room's edges (which already survive blind-edge projection with barrier
+    and dir but no destination) or a relative sector. The returned dict
+    carries no room ids and no room names, so a bearing never names an
+    unseen room and grants no layout knowledge the payload did not already
+    carry.
+    """
+    o_room = room_of(scene, observer)
+    s_room = room_of(scene, source)
+    if not o_room or not s_room:
+        return None
+    if o_room == s_room:
+        label = _sector_label(_relative_sector(scene, observer, source))
+        if not label:
+            return None
+        return {"scope": "same_room", "direction": label,
+                "phrase": _SECTOR_PHRASES[label]}
+    if rooms_adjacent(scene, o_room, s_room):
+        next_room, scope = s_room, "adjacent"
+    else:
+        path = sound_path(scene, o_room, s_room, max_hops=2)
+        if not path:
+            return None
+        next_room, scope = path[1], "beyond"
+    barrier = spatial_rel(scene, o_room, next_room).get("barrier")
+    bearing = travel_bearing(scene, o_room, next_room)
+    vertical = _edge_vertical(scene, o_room, next_room)
+    facing = effective_facing(scene, observer)
+    direction = _sector_label(relative_bearing(facing, bearing)) \
+        if facing and bearing else None
+    out = {"scope": scope, "barrier": barrier}
+    if bearing:
+        out["bearing"] = bearing
+    if direction:
+        out["direction"] = direction
+    if vertical:
+        out["vertical"] = vertical
+    base = _SOUND_BARRIER_PHRASES.get(barrier) or "from the way through"
+    if vertical:
+        out["phrase"] = "from above" if vertical == "up" else "from below"
+    elif direction:
+        out["phrase"] = f"{base} {_SECTOR_PHRASES[direction]}"
+    elif bearing:
+        out["phrase"] = f"{base}, from the {_COMPASS_WORDS[bearing]}"
+    else:
+        out["phrase"] = base
+    return out
+
+
+# ---------------------------------------------------------------------------
+# S3b/G4: the perceiver-senses gate. Cards have carried typed senses
+# {channel, acuity, range, notes} forever (character_schema default data) and
+# no channel function ever read them -- enhanced hearing existed only in the
+# perception prompt. These wrappers describe the PERCEIVER; the grade
+# functions above keep describing the CHANNEL, and mixing them would make the
+# single-sight-authority migration harder, which is why acuity is applied at
+# call sites, never inside hear_level/sight_level/scent_level themselves.
+# ---------------------------------------------------------------------------
+
+# The hearing ladder gains one contentless rung: `trace` -- detected,
+# direction at best, NO content. The perception prompt's ceiling is explicit:
+# "ONLY extraordinary senses explicitly stated may register gross direction
+# and noise character -- NEVER words, NEVER identity, NEVER visual detail."
+# `fragment` carries words, so a rescue from `none` that landed on `fragment`
+# would turn enhanced hearing into a wiretap. Existing callers of hear_level
+# never see this value; it exists only downstream of sense_adjusted, and only
+# for a perceiver whose card explicitly says extraordinary.
+HEARING_LEVELS = ("none", "trace", "fragment", "full")
+SCENT_LEVELS = ("none", "muffled", "full")
+
+_SENSE_LADDERS = {
+    "hearing": HEARING_LEVELS,
+    "sight": SIGHT_LEVELS,
+    "scent": SCENT_LEVELS,
+}
+
+_SENSE_CHANNEL_ALIASES = {
+    "sight": "sight", "vision": "sight", "visual": "sight", "eyes": "sight",
+    "eyesight": "sight", "seeing": "sight",
+    "hearing": "hearing", "audition": "hearing", "auditory": "hearing",
+    "ears": "hearing",
+    "scent": "scent", "smell": "scent", "olfaction": "scent",
+    "olfactory": "scent", "nose": "scent",
+}
+
+# Acuity vocabulary, token-matched so "super enhanced" reads as +2 and
+# "hard of hearing" as -1. Anything unrecognized is 0: free text never adds
+# capability -- only vocabulary this table explicitly knows can.
+_ACUITY_ABSENT = frozenset({
+    "absent", "none", "blind", "deaf", "missing", "gone", "lost", "destroyed",
+})
+_ACUITY_PLUS_TWO = frozenset({
+    "extraordinary", "supernatural", "superhuman", "preternatural",
+    "uncanny", "extreme", "inhuman", "legendary", "super", "perfect",
+})
+_ACUITY_PLUS_ONE = frozenset({
+    "keen", "acute", "sharp", "enhanced", "heightened", "expert", "superior",
+    "exceptional", "excellent", "trained", "practiced", "fine", "high",
+    "master", "hawkeyed",
+})
+_ACUITY_MINUS_ONE = frozenset({
+    "dulled", "dull", "impaired", "poor", "weak", "failing", "dim",
+    "reduced", "damaged", "hard", "muffled",
+})
+
+_RANGE_EXTENDED = frozenset({
+    "extended", "long", "far", "extraordinary", "extreme", "vast",
+    "unlimited", "universal", "great", "superhuman",
+})
+_RANGE_REDUCED = frozenset({
+    "close", "short", "near", "limited", "local", "touch", "contact",
+    "reduced", "adjacent",
+})
+
+
+def _sense_channel(value) -> Optional[str]:
+    """Map a card's free-ish channel name onto an engine channel
+    (sight | hearing | scent), or None for channels the deterministic floor
+    does not model (touch, intuition, ...)."""
+    raw = str(value or "").strip().casefold()
+    if raw in _SENSE_CHANNEL_ALIASES:
+        return _SENSE_CHANNEL_ALIASES[raw]
+    for token in re.split(r"[^a-z]+", raw):
+        if token in _SENSE_CHANNEL_ALIASES:
+            return _SENSE_CHANNEL_ALIASES[token]
+    return None
+
+
+def sense_entry(senses, channel) -> Optional[dict]:
+    """The FIRST card entry for this engine channel (author order wins when a
+    card lists a channel twice); None when the card says nothing about it --
+    which reads as ordinary, byte-identical to today."""
+    if not isinstance(senses, list):
+        return None
+    for sense in senses:
+        if isinstance(sense, dict) and _sense_channel(sense.get("channel")) == channel:
+            return sense
+    return None
+
+
+def sense_acuity_offset(senses, channel) -> Optional[int]:
+    """Integer ladder offset for this perceiver on this channel: -1 dulled,
+    0 ordinary, +1 keen, +2 extraordinary. None means the channel is ABSENT
+    (blind / deaf) -- a full cut, not a shift. An unlisted channel and an
+    empty acuity are both 0: an authoring gap must never blind a body."""
+    entry = sense_entry(senses, channel)
+    if entry is None:
+        return 0
+    tokens = {t for t in re.split(
+        r"[^a-z]+", str(entry.get("acuity") or "").casefold()) if t}
+    if not tokens:
+        return 0
+    if tokens & _ACUITY_ABSENT and not tokens & (_ACUITY_PLUS_TWO | _ACUITY_PLUS_ONE):
+        return None
+    if tokens & _ACUITY_PLUS_TWO:
+        return 2
+    if tokens & _ACUITY_PLUS_ONE:
+        return 1
+    if tokens & _ACUITY_MINUS_ONE:
+        return -1
+    return 0
+
+
+def sense_range_class(senses, channel) -> str:
+    """reduced | ordinary | extended -- the card's `range`, which extends the
+    ENVELOPE (how far: the multi-hop walk's hop budget) separately from
+    acuity (how well). Consumers pass sound_walk_level a bigger max_hops for
+    `extended`; `reduced` is carried for completeness and reads as ordinary
+    until a consumer wants it."""
+    entry = sense_entry(senses, channel)
+    if entry is None:
+        return "ordinary"
+    tokens = {t for t in re.split(
+        r"[^a-z]+", str(entry.get("range") or "").casefold()) if t}
+    if tokens & _RANGE_EXTENDED:
+        return "extended"
+    if tokens & _RANGE_REDUCED:
+        return "reduced"
+    return "ordinary"
+
+
+def sense_adjusted(level: str, channel: str, senses) -> str:
+    """THE senses gate (G4): shift a channel grade by the perceiver's card
+    acuity. Ordinary (offset 0), an unlisted channel, or senses=None return
+    the level UNCHANGED -- byte-identical behaviour for every existing card.
+
+    Downward: a plain ladder shift (dulled hearing turns a fragment into a
+    contentless trace; absent turns everything to none).
+
+    Upward, the one direction that ADDS -- and only when explicitly authored
+    on a card -- is semantically capped: a shift never mints content the
+    channel did not carry. From `none`, hearing rescues at most `trace`
+    (detected, direction at best, no words, no identity) and ONLY at
+    extraordinary (+2); sight and scent never leave `none` (a sight line or
+    an airtight seal is not something acuity penetrates, and `none` cannot
+    say which it was). Above `none`, the shift upgrades clarity of content
+    already flowing (fragment->full is an ear pressed to the door), which is
+    the ladder semantics the card promises.
+    """
+    if senses is None:
+        return level
+    ladder = _SENSE_LADDERS.get(channel)
+    if ladder is None or level not in ladder:
+        return level
+    offset = sense_acuity_offset(senses, channel)
+    if offset is None:
+        return ladder[0]
+    if not offset:
+        return level
+    if offset > 0 and level == "none":
+        return "trace" if (channel == "hearing" and offset >= 2) else "none"
+    index = ladder.index(level) + offset
+    return ladder[max(0, min(index, len(ladder) - 1))]
+
 def nearby_rooms(
     scene: dict,
     center_room_ids,
@@ -1383,12 +1897,270 @@ def _station(scene: dict, name: str) -> dict:
 
 
 def _anchor_dir(scene: dict, room_id: str, anchor_id) -> Optional[str]:
-    """Compass bearing of an anchor within its room, or None."""
+    """Compass bearing of an anchor within its room, or None. Resolves through
+    `effective_anchors`, so an implicit door pseudo-anchor bears too."""
     if not anchor_id:
         return None
-    anchors = ((scene.get("rooms") or {}).get(room_id) or {}).get("anchors") or {}
-    a = anchors.get(anchor_id)
+    a = effective_anchors(scene, room_id).get(anchor_id)
     return normalize_bearing(a.get("dir")) if isinstance(a, dict) else None
+
+
+# ---------------------------------------------------------------------------
+# S1: the read-time derivation layer. Pure functions answering "where in the
+# room is this body, which way does it face" from data the scene ALREADY
+# persists -- edges, contacts, crossings, focus -- falling back to today's
+# behaviour when nothing supports an answer. Nothing here is ever stored: a
+# value that is never written needs no commit path, no restore path, no
+# archive handling, and can never go stale in a checkpoint. Authored data
+# always wins; the derivations are the fallback UNDER it.
+# ---------------------------------------------------------------------------
+
+_DOOR_ANCHOR_PREFIX = "door:"
+
+
+def door_anchor_id(neighbor_room_id) -> str:
+    """The id of the implicit pseudo-anchor a room's edge to `neighbor_room_id`
+    contributes -- a doorway IS a named feature of the room at a known wall."""
+    return f"{_DOOR_ANCHOR_PREFIX}{neighbor_room_id}"
+
+
+_BARRIER_ANCHOR_DESC = {
+    "open": "the opening",
+    "open_door": "the open doorway",
+    "closed_door": "the doorway",
+    "window": "the window",
+    "bars": "the bars",
+    "membrane": "the curtained way",
+    "wall": "the far wall",
+}
+
+
+def effective_anchors(scene: dict, room_id) -> dict:
+    """S1a: the room's authored anchors plus one implicit `door:<to>`
+    pseudo-anchor per adjacency edge (declared from either side), each
+    carrying the edge's bearing when it has one.
+
+    Every beared edge IS an anchor -- a doorway is a feature of the room at a
+    known wall -- so the 54 live multi-occupant rooms with zero authored
+    anchors gain at least one usable anchor wherever they have a beared edge,
+    with zero authoring. Authored anchors always win an id collision; implicit
+    ones are marked `implicit: True` and are never written anywhere.
+    """
+    rooms = scene.get("rooms") or {}
+    room = rooms.get(room_id) or {}
+    out = {}
+    for aid, anchor in (room.get("anchors") or {}).items():
+        if isinstance(anchor, dict):
+            out[aid] = anchor
+
+    def add(neighbor_id, barrier, bearing, vertical):
+        aid = door_anchor_id(neighbor_id)
+        if aid in out:
+            return
+        anchor = {
+            "desc": _BARRIER_ANCHOR_DESC.get(normalize_barrier(barrier))
+            or "the way through",
+            "implicit": True,
+        }
+        if bearing:
+            anchor["dir"] = bearing
+        if vertical:
+            anchor["vertical"] = vertical
+        out[aid] = anchor
+
+    for edge in room.get("adjacent") or []:
+        if isinstance(edge, dict) and edge.get("to"):
+            add(edge["to"], edge.get("barrier"),
+                normalize_bearing(edge.get("dir")),
+                normalize_vertical(edge.get("vertical")))
+    # An edge declared only from the neighbour's side is still a doorway in
+    # THIS room; its bearing and verticality read reciprocally, the same rule
+    # travel_bearing already applies.
+    for other_id, other in rooms.items():
+        if other_id == room_id or not isinstance(other, dict):
+            continue
+        for edge in other.get("adjacent") or []:
+            if isinstance(edge, dict) and edge.get("to") == room_id:
+                add(other_id, edge.get("barrier"),
+                    opposite_bearing(normalize_bearing(edge.get("dir"))),
+                    opposite_vertical(normalize_vertical(edge.get("vertical"))))
+    return out
+
+
+def effective_station(scene: dict, name: str) -> dict:
+    """S1b: the station `name` EFFECTIVELY holds, derived at read time.
+
+    Resolution order, authored first:
+      1. the authored/persisted station (`scene.stations[name]`) -- unchanged,
+         always wins;
+      2. contact-derived placement -- a standing contact is physical touch, so
+         a partner backed by an anchored room feature seats the body there,
+         and a co-located body partner becomes a mutual `near` link (two
+         bodies in sustained contact are within reach by definition; the
+         contacts ledger is one the Director reliably maintains);
+      3. crossing-derived door placement -- a body with a live threshold
+         crossing stands at the implicit door-anchor of the edge it entered
+         through, and falls back to unplaced the moment the crossing record
+         expires, so it can never go stale;
+      4. nothing -> callers keep their current defaults.
+
+    Never stored: this is an accessor, not a writer, so it reruns correctly
+    under restore by construction. Unknown station keys (e.g. a future
+    `cover`) pass through untouched.
+    """
+    authored = _station(scene, name)
+    out = {k: v for k, v in authored.items() if k not in ("at", "near")}
+    at = authored.get("at") or None
+    near = list(authored.get("near") or [])
+    room = room_of(scene, name)
+    if room is None:
+        out["at"] = at
+        out["near"] = near
+        return out
+    me = str(name or "").strip().casefold()
+    positions = scene.get("positions") or {}
+    for contact in (scene.get("contacts") or []):
+        if not isinstance(contact, dict):
+            continue
+        pair = (str(contact.get("actor") or "").strip(),
+                str(contact.get("target") or "").strip())
+        for mine, other in (pair, (pair[1], pair[0])):
+            if not other or mine.casefold() != me:
+                continue
+            anchor = _anchor_for_entity(scene, room, other)
+            if anchor:
+                if not at:
+                    at = anchor
+            elif _ci_get(positions, other) == room and not any(
+                    str(n).strip().casefold() == other.casefold() for n in near):
+                near.append(other)
+    if not at:
+        rec = crossing_of(scene, name)
+        if rec and rec.get("to") == room and rec.get("from") \
+                and door_anchor_id(rec["from"]) in effective_anchors(scene, room):
+            at = door_anchor_id(rec["from"])
+    out["at"] = at
+    out["near"] = near
+    return out
+
+
+def effective_facing(scene: dict, name: str) -> Optional[str]:
+    """S1c: the bearing `name` is facing, derived at read time.
+
+    `orientation.facing` when set (written by spatial_frames.infer_facing at
+    commit -- unchanged, always wins); otherwise the bearing of the current
+    focus target or edge, resolvable NOW through the derived anchors and
+    stations above. This catches the window between a focus change and the
+    next commit, and lifts scenes restored from checkpoints that predate
+    infer_facing. Never guessed: no focus, no beared anchor -> None, and
+    every egocentric consumer keeps asserting no direction.
+    """
+    rec = _ci_get(scene.get("orientation") or {}, name) or {}
+    facing = normalize_bearing(rec.get("facing"))
+    if facing:
+        return facing
+    focus = rec.get("focus") if isinstance(rec.get("focus"), dict) else None
+    ref = focus.get("ref") if focus else None
+    room = room_of(scene, name)
+    if not ref or not room:
+        return None
+    if focus.get("kind") == "edge":
+        return travel_bearing(scene, room, ref)
+    if focus.get("kind") in ("target", "entity"):
+        if room_of(scene, ref) != room:
+            return None
+        t_at = effective_station(scene, ref).get("at")
+        if not t_at or t_at == effective_station(scene, name).get("at"):
+            # Side by side at the same anchor: its room bearing is not the
+            # target's direction from the observer. Never guessed.
+            return None
+        return _anchor_dir(scene, room, t_at)
+    return None
+
+
+# Rooms whose NAME says "big" even when nobody authored `size`. Deliberately
+# blunt and deliberately short: the hint only widens the `near`->`across`
+# distinction, fails toward today's behaviour, and an authored size always
+# wins. Token-matched, so "hallway" never reads as a hall.
+_ROOM_SIZE_HINT_WORDS = frozenset({
+    "hall", "ballroom", "cathedral", "warehouse", "hangar", "plaza",
+    "arena", "atrium", "concourse", "auditorium", "amphitheater",
+    "amphitheatre", "stadium", "gymnasium", "courtyard", "nave", "field",
+})
+
+
+def effective_room_size(scene: dict, room_id) -> str:
+    """S1e: the room's authored `size`, else a keyword hint from its
+    name/desc/notes (hall, warehouse, plaza... -> `large`), else `medium` --
+    the safe default the engine already assumed. Derived-with-default; only
+    proximity-grade consumers should read it."""
+    room = (scene.get("rooms") or {}).get(room_id) or {}
+    size = str(room.get("size") or "").strip().casefold()
+    if size:
+        return size
+    text = " ".join(str(room.get(key) or "") for key in ("name", "desc", "notes"))
+    if set(re.split(r"[^a-z]+", text.casefold())) & _ROOM_SIZE_HINT_WORDS:
+        return "large"
+    return "medium"
+
+
+def _occupancy(scene: dict) -> dict:
+    counts = {}
+    for room_id in ((scene or {}).get("positions") or {}).values():
+        counts[str(room_id)] = counts.get(str(room_id), 0) + 1
+    return counts
+
+
+def guessed_room_sizes(scene: dict, prev_scene: dict = None) -> list[dict]:
+    """G6: a room that just became shared, whose size nobody ever authored.
+
+    Size used to be prose flavour. It is not any more: `proximity_rel` reads
+    it to decide whether two people are `across` a room rather than `near`
+    it, and S2a's placement-unknown fallback caps sight in a large room at
+    `shapes`. An unauthored size is therefore a perception GRADE the engine
+    picked for itself, and it picks silently -- 175 of 392 live rooms carry
+    no `size`, of which the keyword hint rescues 24 and 151 fall to
+    `medium`.
+
+    Two subtractions keep this readable. Only rooms with two or more
+    occupants, because a room with nobody in it has no proximity to grade.
+    And only the beat the room CROSSES into being shared -- pass
+    `prev_scene` and a scene that sits in the same unsized room for two
+    hundred beats says so once, not two hundred times. A standing condition
+    reported every beat is one the reader learns to skip, which is the
+    failure this warning exists to avoid in the first place.
+
+    `derived` says which way the guess went, so "sized `large` by the word
+    'hall'" reads differently from "fell to `medium` because nothing said
+    otherwise".
+
+    Returns rows, not warnings -- the seam that knows whose warning list to
+    write to does the reporting.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    counts = _occupancy(scene)
+    before = _occupancy(prev_scene) if prev_scene is not None else None
+    out = []
+    for room_id, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        if str(room.get("size") or "").strip():
+            continue
+        occupants = counts.get(str(room_id), 0)
+        if occupants < 2:
+            continue
+        if before is not None and before.get(str(room_id), 0) >= 2 \
+                and str(room_id) in ((prev_scene or {}).get("rooms") or {}):
+            continue                    # already shared, already reported
+        derived = effective_room_size(scene, room_id)
+        out.append({
+            "room": str(room_id),
+            "name": str(room.get("name") or room_id),
+            "derived": derived,
+            "occupants": occupants,
+            "by_keyword": derived == "large",
+        })
+    return sorted(out, key=lambda r: (-r["occupants"], r["room"]))
 
 
 def proximity_rel(scene: dict, observer: str, target: str) -> Optional[str]:
@@ -1408,13 +2180,19 @@ def proximity_rel(scene: dict, observer: str, target: str) -> Optional[str]:
     t_room = room_of(scene, target)
     if not o_room or o_room != t_room:
         return None
-    o_st, t_st = _station(scene, observer), _station(scene, target)
+    o_st = effective_station(scene, observer)
+    t_st = effective_station(scene, target)
     o_at, t_at = o_st.get("at"), t_st.get("at")
+
+    def _in_near(near, who):
+        w = str(who or "").strip().casefold()
+        return any(str(n).strip().casefold() == w for n in near or [])
+
     if (o_at and t_at and o_at == t_at) \
-            or target in (o_st.get("near") or []) \
-            or observer in (t_st.get("near") or []):
+            or _in_near(o_st.get("near"), target) \
+            or _in_near(t_st.get("near"), observer):
         return "within_reach"
-    size = str(((scene.get("rooms") or {}).get(o_room) or {}).get("size") or "").lower()
+    size = effective_room_size(scene, o_room)
     if o_at and t_at and o_at != t_at and size in ("large", "huge", "vast"):
         return "across"
     return "near"
@@ -1440,7 +2218,8 @@ def measured_proximity_rel(scene: dict, observer: str, target: str) -> Optional[
     tier = proximity_rel(scene, observer, target)
     if tier != "near":
         return tier
-    if _station(scene, observer).get("at") and _station(scene, target).get("at"):
+    if effective_station(scene, observer).get("at") \
+            and effective_station(scene, target).get("at"):
         return tier
     return None
 
@@ -1534,11 +2313,11 @@ def _relative_sector(scene: dict, observer: str, target: str) -> Optional[str]:
     o_room = room_of(scene, observer)
     if not o_room or o_room != room_of(scene, target):
         return None
-    facing = (_ci_get(scene.get("orientation") or {}, observer) or {}).get("facing")
+    facing = effective_facing(scene, observer)
     if not facing:
         return None
-    o_at = _station(scene, observer).get("at")
-    t_at = _station(scene, target).get("at")
+    o_at = effective_station(scene, observer).get("at")
+    t_at = effective_station(scene, target).get("at")
     if o_at and t_at and o_at == t_at:
         return None
     return relative_bearing(facing, _anchor_dir(scene, o_room, t_at))
@@ -1600,10 +2379,12 @@ def room_layout(scene: dict, observer: str) -> dict:
     digest. This is the DATA a convincing 'you look around' renders from -- the
     features, which way they lie, and where the ways out are."""
     o_room = room_of(scene, observer)
-    room = (scene.get("rooms") or {}).get(o_room) or {}
-    facing = ((scene.get("orientation") or {}).get(observer) or {}).get("facing")
+    facing = effective_facing(scene, observer)
     anchors = []
-    for aid, a in (room.get("anchors") or {}).items():
+    # EFFECTIVE anchors: the look-around map gains its exits as positioned
+    # features -- the doorway to the kitchen is a thing in the room with a
+    # side, not only an entry in the exits digest.
+    for aid, a in effective_anchors(scene, o_room).items():
         if not isinstance(a, dict):
             continue
         side = _sector_label(relative_bearing(facing, normalize_bearing(a.get("dir")))) \
@@ -1617,11 +2398,13 @@ def anchor_bearing_of(scene: dict, name: str) -> Optional[str]:
     """Compass bearing of the anchor the entity is currently stationed at,
     within its room; None if it has no station anchor or that anchor has no
     dir. Lets a character deterministically turn to FACE a co-located person by
-    that person's anchor direction (see spatial_frames.infer_facing)."""
+    that person's anchor direction (see spatial_frames.infer_facing). Reads the
+    EFFECTIVE station, so a body just through a doorway, or in contact with an
+    anchored feature, bears without any authored station."""
     room = room_of(scene, name)
     if not room:
         return None
-    return _anchor_dir(scene, room, _station(scene, name).get("at"))
+    return _anchor_dir(scene, room, effective_station(scene, name).get("at"))
 
 
 def normalize_scene_stations(scene: dict) -> dict:
@@ -1636,7 +2419,6 @@ def normalize_scene_stations(scene: dict) -> dict:
     if not isinstance(stations, dict):
         return scene
     positions = scene.get("positions") or {}
-    rooms = scene.get("rooms") or {}
 
     for name in list(stations.keys()):
         st = stations.get(name)
@@ -1644,7 +2426,11 @@ def normalize_scene_stations(scene: dict) -> dict:
         if not isinstance(st, dict) or my_room is None:
             stations.pop(name, None)   # tolerant: a case-variant of a positioned name survives
             continue
-        anchors = (rooms.get(my_room) or {}).get("anchors") or {}
+        # EFFECTIVE anchors, so a station at an implicit door pseudo-anchor
+        # ("door:<to>") survives the merge instead of being blanked as a
+        # phantom -- a room change still auto-clears it, because the door
+        # anchors of the new room name different neighbours.
+        anchors = effective_anchors(scene, my_room)
         if st.get("at") and st["at"] not in anchors:
             st["at"] = None
         st["near"] = [n for n in (st.get("near") or [])

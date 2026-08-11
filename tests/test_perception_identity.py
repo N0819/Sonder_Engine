@@ -101,14 +101,6 @@ def test_unrecognized_speaker_name_is_masked_in_player_view(temp_db, monkeypatch
     }
     ctx.director_interpret = {}
 
-    def fake_agent_json(role, step_key, system, payload, **kwargs):
-        views = {"player": "You stand in the keeper's room, rain on the shutters."}
-        for p in payload["perceivers"]:
-            views[str(p["id"])] = f"You are in {p['room_name']}."
-        return {"views": views}
-
-    monkeypatch.setattr(perception, "_agent_json", fake_agent_json)
-
     result = perception.perception_outcome(ctx, nonce=0)
     player_view = result["views"]["player"]
 

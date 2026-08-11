@@ -351,20 +351,18 @@ def test_perception_act_does_not_paste_an_enclosed_actor_s_act(
     import agents.perception as perception
 
     ctx, reactor_id = _enclosed_ctx(temp_db)
-    compliant = "A small shifting weight low against your hip, and a faint crackle."
-    monkeypatch.setattr(
-        perception, "_agent_json",
-        lambda role, key, system, payload, **kw: {
-            "views": {str(reactor_id): compliant}})
-
     out = perception.perception_act(ctx, nonce="n")
     view = out["views"][str(reactor_id)] or ""
 
     assert "unfolds" not in view, view
     assert "sheet of paper" not in view, view
     assert "reads" not in view, view
-    # ...and the perceiver still gets what genuinely reached them.
-    assert "shifting weight" in view
+    # The old positive half ("...and the perceiver still gets the weight
+    # against their hip") asserted a sentence the STUBBED MODEL supplied,
+    # not one the engine produced, so it cannot move here. What survives is
+    # the pairing this test exists for: the leak is absent while the view is
+    # still a view, not silence.
+    assert view.strip(), "the enclosing body received nothing at all"
 
 
 def test_perception_act_still_delivers_an_actor_in_the_open(
@@ -376,11 +374,6 @@ def test_perception_act_still_delivers_an_actor_in_the_open(
     sc = temp_db.wget(ctx.chat["id"], "scene", {})
     sc.pop("contained")
     temp_db.wset(ctx.chat["id"], "scene", sc)
-
-    monkeypatch.setattr(
-        perception, "_agent_json",
-        lambda role, key, system, payload, **kw: {
-            "views": {str(reactor_id): "You are in the Hall."}})
 
     out = perception.perception_act(ctx, nonce="n")
     view = out["views"][str(reactor_id)] or ""
@@ -481,11 +474,6 @@ def test_enclosed_player_hears_the_voice_but_gets_no_appearance(
     import agents.perception as perception
 
     ctx = _speaking_enclosure_ctx(temp_db)
-    monkeypatch.setattr(
-        perception, "_agent_json",
-        lambda role, key, system, payload, **kw: {
-            "views": {"player": "Warm dark presses in on every side of you."}})
-
     out = perception.perception_outcome(ctx, nonce="n")
     view = out["views"]["player"] or ""
 
@@ -511,10 +499,6 @@ def test_enclosed_player_gets_a_voice_not_a_visual_label(
     import agents.perception as perception
 
     ctx = _speaking_enclosure_ctx(temp_db)
-    monkeypatch.setattr(
-        perception, "_agent_json",
-        lambda role, key, system, payload, **kw: {
-            "views": {"player": "Warm dark presses in on every side of you."}})
 
     view = perception.perception_outcome(ctx, nonce="n")["views"]["player"] or ""
 
@@ -535,18 +519,14 @@ def test_outcome_payload_withholds_appearances_nobody_can_see(
     import agents.perception as perception
 
     ctx = _speaking_enclosure_ctx(temp_db)
-    seen = {}
+    # `present_appearances` was the payload field the model wrote the leak
+    # from. There is no such field and no such model: the only place an
+    # appearance can now reach a mind is a percept, and an unseen carrier
+    # never becomes one.
+    view = perception.perception_outcome(ctx, nonce="n")["views"]["player"]
 
-    def capture(role, key, system, payload, **kw):
-        seen.update(payload)
-        return {"views": {"player": "Warm dark on every side."}}
-
-    monkeypatch.setattr(perception, "_agent_json", capture)
-    perception.perception_outcome(ctx, nonce="n")
-
-    appearances = seen.get("present_appearances") or {}
-    assert CARRIER not in appearances, appearances
-    assert "grey coat" not in json.dumps(appearances), appearances
+    assert CARRIER not in (view or ""), view
+    assert "grey coat" not in (view or ""), view
 
 
 def test_outcome_payload_keeps_appearances_someone_can_see(
@@ -564,20 +544,12 @@ def test_outcome_payload_keeps_appearances_someone_can_see(
     sc.pop("contained")           # nothing enclosing anyone now
     temp_db.wset(ctx.chat["id"], "scene", sc)
 
-    seen = {}
+    view = perception.perception_outcome(ctx, nonce="n")["views"]["player"] or ""
 
-    def capture(role, key, system, payload, **kw):
-        # With per-observer LLM calls, each call has one perceiver.
-        # Capture the player's perceiver payload specifically.
-        for p in (payload.get("perceivers") or []):
-            if p.get("id") == "player":
-                seen.update(payload)
-        return {"views": {"player": "You are in the Hall."}}
-
-    monkeypatch.setattr(perception, "_agent_json", capture)
-    perception.perception_outcome(ctx, nonce="n")
-
-    assert CARRIER in (seen.get("present_appearances") or {})
+    # The old assertion looked for the carrier's NAME in a payload field.
+    # A view names only what the observer has earned; what it must carry
+    # here is the appearance of a body they can plainly see.
+    assert "grey coat" in view, view
 
 
 # --- 2. the prompt rule that governs the surviving channel ------------------

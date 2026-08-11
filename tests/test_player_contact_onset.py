@@ -250,16 +250,11 @@ def test_other_participant_feels_exact_contact_in_perception_pass_one(
     import agents.perception as perception
 
     ctx, char_id = _ctx(temp_db)
-    seen = {}
-
-    def capture(role, key, system, payload, **kwargs):
-        seen["contact"] = payload["scene"]["contacts"][0]
-        return {"views": {str(char_id): "You are in the Room."}}
-
-    monkeypatch.setattr(perception, "_agent_json", capture)
     view = perception.perception_act(ctx, nonce=0)["views"][str(char_id)]
 
-    assert seen["contact"]["target_part"] == "cervix"
+    # The contact record used to be read out of the payload; the sensation
+    # it produces is now in the view itself, which is the thing that had to
+    # be right all along.
     assert "your cock registers hinami's vaginal canal enclosing it" in view.casefold()
     assert "contact at hinami's cervix" in view.casefold()
     assert "hinami's groin" not in view.casefold()

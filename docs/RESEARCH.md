@@ -180,9 +180,62 @@ The hybrid memory retriever names and implements four standard IR techniques.
   length: it is a genuinely good piece of thinking and it is cited because it
   changed what got built.
 
-Apart from the above, the repo contains no bibliography, arXiv links, DOIs, or
-"inspired by" attributions — including throughout `Design.md`, `AGENTS.md`, and
-`docs/`. Everything in Part 2 is a reconstructed mapping.
+### 1.6 Deterministic perception and the view composer
+
+The composer (`agents/composer.py`) and the spatial derivation layer replace
+a per-observer LLM call with code. Two published findings changed what got
+built; both are **ideas only** — no code was read, taken, or ported, and
+neither project is a dependency.
+
+- **Lee, Goel & Ramchandran, "Quantifying Positional Biases in Text
+  Embedding Models", arXiv:[2412.15241](https://arxiv.org/abs/2412.15241).**
+  Embedding models over-weight a text's opening sentence. This is why
+  `render_episode` leads with the beat's events and puts a room change
+  last: a memory that opens with "I was in the Long Hall" every time
+  embeds as *the Long Hall* and retrieves as a near-duplicate of every
+  other beat there. Cited at the site it governs
+  (`agents/composer.py:1014`). Measured effect on this corpus:
+  verbatim-twin rate within the memory bank 14.6% → 0.4%.
+
+- **Li, Zhou, He, Wang, Yang & Li, "On the Sentence Embeddings from
+  Pre-trained Language Models" (BERT-flow), EMNLP 2020,
+  arXiv:[2011.05864](https://arxiv.org/abs/2011.05864).** Cosine
+  similarity tracks surface overlap more than meaning. So the *varying*
+  content has to dominate a minted memory by length, not merely be present
+  in it — which is why an episode omits unchanged standing state entirely
+  instead of appending a delta to a fixed frame.
+
+Read as leads and **deliberately not used**, recorded because the ideas
+were on the table while this was designed:
+
+- **Angband's message aggregation (`mon-msg.c`) — GPL.** Not read; no code,
+  no code structure, no naming. The engine does count indistinguishable
+  bodies into one line ("Three indistinct figures are close by",
+  `_render_presence_group`), but the rule that decides *when* aggregation
+  is legal comes from Sonder's own firewall principle — merging two
+  percepts must never launder an information boundary, so the group splits
+  by fidelity before anything is joined. That rule stands without reference
+  to any other codebase, and a GPL implementation of a similar idea cannot
+  be borrowed from into an MIT repo regardless.
+- **TADS 3 `displaySchedule` and the adv3 occluder concept — proprietary,
+  derivatives prohibited.** Nothing read, derived, or modelled. Both ideas
+  it was cited for — re-announce on change rather than on presence, and a
+  gating pass that may only remove — were independently specified in
+  `design_notes/03` before the lead existed, and are implemented from
+  scratch. Corroboration only.
+- **Curveship (reported ISC, unverified).** Source not read, licence not
+  checked. Its realiser stays a lead for future work on Layer B; nothing
+  from it is in the current implementation.
+
+Everything else in the deterministic-perception work derives from the
+owner's own design notes, the existing MIT-licensed Sonder code, and
+aggregate vocabulary counts from the owner's own corpus. Python standard
+library only.
+
+Apart from §1.6's single in-code citation at `agents/composer.py:1014`, the
+repo contains no bibliography, arXiv links, DOIs, or "inspired by"
+attributions — including throughout `Design.md`, `AGENTS.md`, and `docs/`.
+Everything in Part 2 is a reconstructed mapping.
 
 ---
 
@@ -305,3 +358,14 @@ domain failure (`commit.py`).
   documentation set dated 2026-05-28 — license terms and §XXII read from the
   document itself. Built in alpha 6.1 as `memory.contrast_memory` — see §1.5
   for what carries over and what deliberately does not.
+- **Verified for §1.6 (deterministic perception):** Lee/Goel/Ramchandran
+  arXiv:2412.15241; Li et al. EMNLP 2020 (BERT-flow). Both re-checked
+  against the papers before adoption.
+
+  Stated plainly because it is the reason that re-check happened: the
+  prior-art survey that produced these two also produced several claims
+  that turned out to be **fabricated** — attributions, figures and quoted
+  passages for work that says no such thing. They were retracted, and only
+  the findings that survived independent verification appear above. Nothing
+  enters this file on the strength of a summary; if a claim here cannot be
+  checked against the source, it should be removed rather than softened.

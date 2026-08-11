@@ -138,28 +138,29 @@ def _make_ctx(temp_db, unconscious_player=False, extra_awake=None):
 
 
 def _stub(monkeypatch, views):
-    """Stub the perception LLM; returns exactly `views` regardless of payload,
-    so any leak in the result is the deterministic backstop's doing."""
+    """Record which perceivers the stage actually composed a view for.
+
+    This used to stub the perception model and read the perceiver list off
+    each payload; there is no model and no payload, so it records the same
+    list where the stage hands its typed inputs to the composer. `views` is
+    accepted and ignored -- the composer writes the views now, which is the
+    point of every assertion below it.
+    """
     import agents.perception as perception
 
-    def fake(role, step_key, system, payload, **kw):
-        # record which perceivers the LLM was actually asked about (accumulates
-        # across per-observer calls)
-        fake.asked.extend(
-            str(p["id"]) for p in payload.get("perceivers", []))
-        # Return the view for whichever perceiver this call is about.
-        asked_ids = [str(p["id"]) for p in payload.get("perceivers", [])]
-        out = {pid: views.get(pid, views.get("player", ""))
-               for pid in asked_ids if pid in views}
-        if not out and asked_ids:
-            # Fall back to whatever was provided so the deterministic path
-            # still has something to scrub.
-            out = {asked_ids[0]: views.get(asked_ids[0], "")}
-        return {"views": dict(out) if out else dict(views)}
+    class _Recorder:
+        asked = []
 
-    fake.asked = []
-    monkeypatch.setattr(perception, "_agent_json", fake)
-    return fake
+    for stage in ("_composer_establish", "_composer_act", "_composer_outcome"):
+        real = getattr(perception, stage)
+
+        def wrapper(*a, _real=real, **kw):
+            out = _real(*a, **kw)
+            _Recorder.asked.extend((out or {}).get("views") or {})
+            return out
+
+        monkeypatch.setattr(perception, stage, wrapper)
+    return _Recorder
 
 
 def _resolve(**kw):
@@ -177,12 +178,12 @@ def test_unconscious_player_gets_residue_not_scene(temp_db, monkeypatch):
     ctx, chat_id, moon_id, _ = _make_ctx(temp_db, unconscious_player=True)
     ctx.director_interpret = {"sequence": [], "flow": {"reactors": [moon_id]}}
     ctx.director_resolve = _resolve()
-    # Even if the model tried to hand back a full player view, it is dropped:
-    fake = _stub(monkeypatch, {"player": "You see the condemned lobby and Dr. Moon."})
-
     view = perception.perception_outcome(ctx, nonce=0)["views"]["player"]
 
-    assert "player" not in fake.asked, "unconscious player must be excluded from the LLM call"
+    # The old assertion was that the unconscious player never reached the
+    # model call. There is no call to be excluded from, and exclusion was
+    # only ever the mechanism: an unconscious mind receives residue and
+    # nothing else, which is what the rest of this test checks directly.
     assert _residue_like(view), f"expected residue, got {view!r}"
     low = view.lower()
     for tok in FORBIDDEN_SCENE_TOKENS:
@@ -210,10 +211,10 @@ def test_fail_open_awake_player_unchanged(temp_db, monkeypatch):
     ctx, chat_id, moon_id, _ = _make_ctx(temp_db, unconscious_player=False)
     ctx.director_interpret = {"sequence": [], "flow": {"reactors": [moon_id]}}
     ctx.director_resolve = _resolve()
-    fake = _stub(monkeypatch, {"player": "You are in the elevator car."})
+    recorder = _stub(monkeypatch, {})
 
     view = perception.perception_outcome(ctx, nonce=0)["views"]["player"]
-    assert "player" in fake.asked
+    assert "player" in recorder.asked
     # the awake player receives Dr. Moon's injected line
     assert "Condemned" in view
 

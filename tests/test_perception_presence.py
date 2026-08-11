@@ -32,6 +32,7 @@ does not arrive at all.
 """
 
 import json
+import re
 import time
 
 import pytest
@@ -121,22 +122,23 @@ def _bystander_ctx(temp_db, *, light=None, known=None):
 
 
 def _capture_payloads(monkeypatch, run):
-    """Run a perception pass against a stub model, keeping each observer's
-    exact payload — the test subject is what the engine DELIVERS, and the
-    stubbed view keeps every deterministic post-pass from having anything
-    of its own to add."""
+    """Run a perception pass and return each observer's composed VIEW.
+
+    This file used to capture the payload each observer's model call was
+    built from, because with a model standing between the engine and the
+    reader, the payload was as close to "what the engine delivers" as a
+    test could get. Perception has no model now — the view IS the delivery
+    — so every assertion below moved onto it. That is closer to the thing
+    that matters, not further: a payload could carry a fact the model then
+    declined to use, and a view cannot.
+
+    What genuinely got weaker, said out loud: the payload distinguished
+    "delivered, marked sight:shapes" from "delivered in full" as a field.
+    Prose says the same thing with a descriptor, so the dim-light test
+    below reads the descriptor instead.
+    """
     import agents.perception as perception
-
-    captured = {}
-
-    def capture(role, key, system, payload, **kw):
-        perceiver = payload["perceivers"][0]
-        captured[str(perceiver["id"])] = payload
-        return {"views": {str(perceiver["id"]): "You are in the Hall."}}
-
-    monkeypatch.setattr(perception, "_agent_json", capture)
-    run(perception)
-    return captured
+    return run(perception)["views"]
 
 
 def _pass1(ctx, monkeypatch):
@@ -155,16 +157,14 @@ def test_pass_one_delivers_a_co_present_recognised_body(temp_db, monkeypatch):
     co-located people (proximity_to_sources / behind_sources), as PRESENCE
     — a tier and a side, stative — never as an act."""
     ctx, char_ids = _bystander_ctx(temp_db)
-    captured = _pass1(ctx, monkeypatch)
+    views = _pass1(ctx, monkeypatch)
 
     for observer, other in ((DOCTOR, TAMAMO), (TAMAMO, DOCTOR)):
-        payload = captured[str(char_ids[observer])]
-        prox = payload["perceivers"][0].get("proximity_to_sources") or {}
-        assert other in prox, (
-            f"{observer}'s pass-1 payload does not deliver co-present "
-            f"{other}: {sorted(prox)}")
-        assert prox[other]["tier"] == "near"
-        assert prox[other]["sight"] == "full"
+        view = views[str(char_ids[observer])] or ""
+        assert other in view, (
+            f"{observer}'s pass-1 view does not deliver co-present "
+            f"{other}: {view!r}")
+        assert f"{other} is close by" in view
 
 
 def test_pass_one_bystander_is_presence_not_an_actor(temp_db, monkeypatch):
@@ -174,11 +174,17 @@ def test_pass_one_bystander_is_presence_not_an_actor(temp_db, monkeypatch):
     as an event and was narrated as one. The roster therefore carries only
     stative placement data — nothing act-shaped for the model to lift."""
     ctx, char_ids = _bystander_ctx(temp_db)
-    captured = _pass1(ctx, monkeypatch)
+    view = _pass1(ctx, monkeypatch)[str(char_ids[DOCTOR])] or ""
 
-    prox = captured[str(char_ids[DOCTOR])]["perceivers"][0][
-        "proximity_to_sources"]
-    assert set(prox[TAMAMO]) <= {"tier", "side", "arc", "sight"}
+    # Every sentence naming her is stative placement. Nothing act-shaped
+    # exists for a reader -- or the character agent reading this view -- to
+    # mistake for something she just did.
+    naming = [s for s in view.split(". ") if TAMAMO in s]
+    assert naming
+    for sentence in naming:
+        assert re.search(
+            rf"{TAMAMO} is (close by|within arm's reach|across the room)",
+            sentence), sentence
 
 
 # --- pass 2 is not this bug and must not absorb the fix ---------------------
@@ -197,14 +203,12 @@ def test_pass_two_source_delivery_is_unchanged(temp_db, monkeypatch):
         ctx.character_results[char_ids[name]] = {
             "speech": "Hm.", "action": "", "sequence": []}
 
-    captured = _capture_payloads(
+    views = _capture_payloads(
         monkeypatch, lambda p: p.perception_outcome(ctx, nonce="n"))
 
     for observer, other in ((DOCTOR, TAMAMO), (TAMAMO, DOCTOR)):
-        payload = captured[str(char_ids[observer])]
-        prox = payload["perceivers"][0].get("proximity_to_sources") or {}
-        assert prox.get(other, {}).get("tier") == "near"
-        assert other in {s.get("name") for s in payload.get("sources") or []}
+        view = views[str(char_ids[observer])] or ""
+        assert f"{other} is close by" in view
 
 
 # --- the roster is a new channel; the firewall applies input-side -----------
@@ -222,13 +226,10 @@ def test_unrecognised_body_arrives_as_descriptor_never_name(
         DOCTOR: [PLAYER],           # has never met Tamamo
         TAMAMO: [PLAYER, DOCTOR],
     })
-    captured = _pass1(ctx, monkeypatch)
+    view = _pass1(ctx, monkeypatch)[str(char_ids[DOCTOR])] or ""
 
-    payload = captured[str(char_ids[DOCTOR])]
-    assert "tamamo" not in json.dumps(payload).casefold()
-    prox = payload["perceivers"][0]["proximity_to_sources"]
-    (label,) = prox.keys()
-    assert "fox" in label.casefold()      # described by what is visibly there
+    assert "tamamo" not in view.casefold()
+    assert "fox" in view.casefold()       # described by what is visibly there
 
 
 def test_a_body_in_the_dark_does_not_arrive_at_all(temp_db, monkeypatch):
@@ -238,16 +239,13 @@ def test_a_body_in_the_dark_does_not_arrive_at_all(temp_db, monkeypatch):
     presence roster that bypassed it would tell an observer who is standing
     in a pitch-dark room with them — sight the room does not grant."""
     ctx, char_ids = _bystander_ctx(temp_db, light="dark")
-    captured = _pass1(ctx, monkeypatch)
+    view = _pass1(ctx, monkeypatch)[str(char_ids[DOCTOR])] or ""
 
-    payload = captured[str(char_ids[DOCTOR])]
-    assert payload["perceivers"][0].get("proximity_to_sources") in ({}, None)
-    # cast_pronouns legitimately carries a RECOGNISED name regardless of
-    # sight (stable pronouns for people you know are knowledge, not
-    # perception); everything else must stay silent about her.
-    dump = json.dumps(
-        {k: v for k, v in payload.items() if k != "cast_pronouns"})
-    assert "tamamo" not in dump.casefold()
+    # The payload version of this test had to carve out `cast_pronouns`,
+    # which carries a recognised name regardless of sight. A view has no
+    # such compartment: either she reached this mind or she did not.
+    assert "tamamo" not in view.casefold()
+    assert "close by" not in view
 
 
 def test_dim_light_names_the_familiar_and_blurs_the_stranger(
@@ -263,19 +261,18 @@ def test_dim_light_names_the_familiar_and_blurs_the_stranger(
         DOCTOR: [PLAYER, TAMAMO],
         TAMAMO: [PLAYER],           # has never met the Doctor
     })
-    captured = _pass1(ctx, monkeypatch)
+    views = _pass1(ctx, monkeypatch)
 
-    doctor = captured[str(char_ids[DOCTOR])]
-    prox = doctor["perceivers"][0]["proximity_to_sources"]
-    assert prox[TAMAMO]["sight"] == "shapes"
-    assert "fox" not in json.dumps(doctor).casefold()
+    doctor = views[str(char_ids[DOCTOR])] or ""
+    assert TAMAMO in doctor, (
+        "dim light takes a face, not an acquaintance: a body this observer "
+        "knows must not become an indistinct figure the moment a lamp dims")
+    assert "fox" not in doctor.casefold()
 
-    tamamo = captured[str(char_ids[TAMAMO])]
-    prox = tamamo["perceivers"][0]["proximity_to_sources"]
-    (label,) = prox.keys()
-    assert label == "an indistinct figure"
-    assert "the doctor" not in json.dumps(tamamo).casefold()
-    assert "frock" not in json.dumps(tamamo).casefold()
+    tamamo = views[str(char_ids[TAMAMO])] or ""
+    assert "an indistinct figure" in tamamo.casefold()
+    assert "the doctor" not in tamamo.casefold()
+    assert "frock" not in tamamo.casefold()
 
 
 def test_a_concealed_body_does_not_arrive_at_all(temp_db, monkeypatch):
@@ -289,14 +286,9 @@ def test_a_concealed_body_does_not_arrive_at_all(temp_db, monkeypatch):
     sc = temp_db.wget(ctx.chat["id"], "scene", {})
     sc["contained"] = {TAMAMO: {"in": PLAYER, "mode": "pocket"}}
     temp_db.wset(ctx.chat["id"], "scene", sc)
-    captured = _pass1(ctx, monkeypatch)
+    view = _pass1(ctx, monkeypatch)[str(char_ids[DOCTOR])] or ""
 
-    payload = captured[str(char_ids[DOCTOR])]
-    # cast_pronouns is recognition-gated knowledge, not sight — see the
-    # dark-room test above.
-    dump = json.dumps(
-        {k: v for k, v in payload.items() if k != "cast_pronouns"})
-    assert "tamamo" not in dump.casefold()
+    assert "tamamo" not in view.casefold()
 
 
 def test_a_disguised_body_arrives_as_its_outward_form(temp_db, monkeypatch):
@@ -321,11 +313,8 @@ def test_a_disguised_body_arrives_as_its_outward_form(temp_db, monkeypatch):
              "concealed_terms": ["fox-eared", "fox"],
              "known_to": [PLAYER],
          })))
-    captured = _pass1(ctx, monkeypatch)
+    view = (_pass1(ctx, monkeypatch)[str(char_ids[DOCTOR])] or "").casefold()
 
-    payload = captured[str(char_ids[DOCTOR])]
-    dump = json.dumps(payload).casefold()
-    assert "tamamo" not in dump
-    assert "fox" not in dump
-    prox = payload["perceivers"][0]["proximity_to_sources"]
-    assert any("pilgrim" in label.casefold() for label in prox)
+    assert "tamamo" not in view
+    assert "fox" not in view
+    assert "pilgrim" in view

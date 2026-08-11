@@ -1,146 +1,126 @@
-"""Binds the widened pass-1 identity scrub in agents/perception.py.
+"""A co-present stranger's canonical name must not reach an observer.
 
-perception_act's pass-1 scrub used to enumerate a ONE-ELEMENT roster holding
-the player persona alone, so no pattern was ever built for a cast name and a
-co-present stranger's canonical name walked straight through the gate. Live,
-chat 63 turn 165: two co-present bodies, one scrub pass, the warning reporting
-``scrubbed unearned identity ['Hinami']`` while "Tamamo" sat untouched in the
-same sentence, delivered to an observer with no ``known`` entry at all.
+Live, chat 63 turn 165: two co-present bodies, one scrub pass, the warning
+reporting ``scrubbed unearned identity ['Hinami']`` while "Tamamo" sat
+untouched in the same sentence, delivered to an observer with no ``known``
+entry at all. The pass-1 scrub had enumerated a one-element roster holding
+the player persona alone, so no pattern was ever built for a cast name.
 
-The widened block builds the roster from every co-present body the observer
-does not recognise. Exercising it end-to-end needs a model call, so these two
-cases execute the REAL block sliced out of the file on disk by its own source
-text: the bytes under test are the bytes that ship, and the live helpers are
-imported rather than reproduced. If the block is refactored the anchors stop
-matching and this fails loudly rather than passing against a stale copy.
+**This file used to slice the fixed block out of `agents/perception.py` by
+its own source text and exec it**, because — in its own words — "exercising
+it end-to-end needs a model call". Perception makes no model call now, so
+the whole apparatus is gone: the anchors, the sha print, the reconstructed
+locals. The same two cases run through the real stage entry point, which is
+what the original wanted and could not have.
 
-The file's sha is PRINTED, not asserted -- a digest assertion would make this
-fail on any unrelated edit to perception.py, which is noise rather than a
-finding.
+Note what changed underneath, too. The old block was a SCRUB: the name
+reached the view and was removed afterwards. On the composer path the name
+is never admitted — an unrecognised body becomes a descriptor at
+percept-build time (`observer_display_map`), and the scrub survives only as
+a tripwire that should never fire. Both tests therefore assert the outcome
+rather than the repair, and the second one asserts no tripwire fired.
 """
 
-import hashlib
-import pathlib
-import textwrap
+import json
+import time
 
-from agents import perception as P
+from character_schema import default_character_data, default_persona_data
+from pipeline_context import ChatData, PipelineContext, TurnData
 
-SRC_PATH = pathlib.Path(P.__file__)
 
-# Copied character for character from perception_act. The first line of the
-# roster build, and the last line of the warning that reports what leaked.
-START = '        recognized = set(known.get(p["name"]) or [])\n'
-END = '                    f"from the view of {p[\'name\']}")'
-
-VIEW = (
-    "Hinami kneels by the offering box, six golden tails furled behind her. "
-    "Tamamo stands at the hearth nearby, one ear pivoting."
-)
-
-CO_PRESENT = [
-    {
-        "name": "Hinami",
-        "room": "shrine_hall",
-        "appearance": (
-            "a beautiful young woman in red and white, "
-            "six golden tails furled behind her"
-        ),
-        "aliases": [],
-        "disguise_known_to": [],
-    },
-    {
-        "name": "Tamamo",
-        "room": "shrine_hall",
-        "appearance": "a striking woman with nine voluminous golden tails",
-        "aliases": [],
-        "disguise_known_to": [],
-    },
-]
-
+PLAYER = "Kestrel"
 OBSERVER = "The Doctor"
-ACTOR = "Hinami"
+HINAMI = "Hinami"
+TAMAMO = "Tamamo"
+
+LOOKS = {
+    OBSERVER: "A lean man in a battered frock coat.",
+    HINAMI: "A fox-eared woman with six golden tails.",
+    TAMAMO: "A white-haired shrine maiden with one pivoting ear.",
+}
 
 
-class _Ctx:
-    """Only the surface the sliced block touches."""
-
-    def __init__(self):
-        self.warnings = []
-
-
-def _pass1_block():
-    src = SRC_PATH.read_text(encoding="utf-8")
-    print(
-        "PERCEPTION_SHA",
-        hashlib.sha256(src.encode("utf-8")).hexdigest()[:16],
-    )
-    assert src.count(START) == 1, (
-        "pass-1 roster anchor is not unique in %s -- the block moved, so this "
-        "test is no longer binding what it claims to bind" % SRC_PATH
-    )
-    assert src.count(END) == 1, (
-        "pass-1 leak-warning anchor is not unique in %s" % SRC_PATH
-    )
-    start = src.index(START)
-    end = src.index(END, start) + len(END)
-    return textwrap.dedent(src[start:end])
-
-
-def _run(known):
-    """Execute the sliced block with the locals perception_act would hold.
-
-    Globals are the real module namespace, so ``_recognizes`` and
-    ``_scrub_unknown_identities`` are the live functions. Assignments land in
-    the locals dict, so the module is not mutated.
-    """
-    ns = {
-        "p": {"name": OBSERVER},
-        "known": known,
-        # Derived exactly as perception_act derives it, rather than hardcoded.
-        "knows_identity": ACTOR in (known.get(OBSERVER) or []),
-        "p_name": ACTOR,
-        "p_visible": CO_PRESENT[0]["appearance"],
-        "co_present": [dict(b) for b in CO_PRESENT],
-        "view": VIEW,
-        "leaked": [],
-        "ctx": _Ctx(),
-    }
-    exec(compile(_pass1_block(), str(SRC_PATH), "exec"), vars(P), ns)
-    return ns
-
-
-def test_observer_with_no_known_key_scrubs_both_co_present_bodies():
-    """The chat 63 t165 condition: the observer has no `known` entry at all.
-
-    Both bodies are strangers, so both names must leave the prose and both
-    must be reported. Under the old one-element roster, 'Tamamo' survived.
-    """
-    ns = _run({})
-
-    assert ns["leaked"] == ["Hinami", "Tamamo"]
-    assert "Hinami" not in ns["view"]
-    assert "Tamamo" not in ns["view"]
-    assert ns["view"] != VIEW
-
-    assert len(ns["ctx"].warnings) == 1
-    warning = ns["ctx"].warnings[0]
-    assert "['Hinami', 'Tamamo']" in warning
-    assert OBSERVER in warning
+def _ctx(temp_db, known):
+    persona_id = temp_db.qi(
+        "INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
+        (PLAYER, json.dumps(default_persona_data(PLAYER)), "{}"))
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created,persona_id) VALUES(?,?,?,?)",
+        ("Roster", "", time.time(), persona_id))
+    ids = {}
+    for i, name in enumerate((OBSERVER, HINAMI, TAMAMO)):
+        sheet = default_character_data(name)
+        sheet["embodiment"]["visible"]["summary"] = LOOKS[name]
+        cid = temp_db.qi(
+            "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+            "VALUES(?,?,?,?,?)",
+            (name, json.dumps(sheet), "{}", time.time(), f"char_{i}"))
+        temp_db.qi(
+            "INSERT INTO chat_chars(chat_id,char_id,status,state) "
+            "VALUES(?,?,?,?)", (chat_id, cid, "active", "{}"))
+        ids[name] = cid
+    temp_db.wset(chat_id, "scene", {
+        "location": "the shrine", "time": "day",
+        "rooms": {"shrine": {"name": "Shrine", "desc": "A shrine.",
+                             "adjacent": []}},
+        "positions": {PLAYER: "shrine", OBSERVER: "shrine",
+                      HINAMI: "shrine", TAMAMO: "shrine"},
+        "entities": {}, "attire": {}, "overlays": {}})
+    temp_db.wset(chat_id, "known", known)
+    cast = temp_db.q(
+        "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
+        (chat_id,))
+    turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (chat_id, 1, "", time.time()))
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Roster", persona_id=persona_id,
+                      lorebook_id=None, scenario="", created=time.time()),
+        turn=TurnData(id=turn_id, chat_id=chat_id, idx=1, player_input="",
+                      created=time.time()),
+        cast=cast, input="")
+    ctx["_player_room"] = "shrine"
+    ctx.director_interpret = {
+        "action": {"attempt": "kneels by the offering box",
+                   "visibility": "overt", "conceal_from": [], "targets": [],
+                   "commitment": "asserted"},
+        "sequence": [{
+            "type": "action", "attempt": "kneels by the offering box",
+            "observable": "kneels by the offering box", "visibility": "overt",
+            "conceal_from": [], "targets": [], "commitment": "asserted",
+            "verb": "kneel", "stage": "immediate",
+            "event_id": "turn:1:player:0:action"}],
+        "speech": None, "speech_volume": "normal",
+        "flow": {"reactors": [ids[OBSERVER]]}}
+    return ctx, ids
 
 
-def test_observer_recognising_tamamo_keeps_tamamo_and_scrubs_hinami():
-    """The negative arm: the widening must not become an over-scrub.
+def test_observer_with_no_known_key_scrubs_both_co_present_bodies(temp_db):
+    """The live defect: one of two names went, the other stayed."""
+    from agents.perception import perception_act
 
-    Recognition is earned per body, so a name the observer has earned stays
-    in the prose while the stranger beside her does not.
-    """
-    ns = _run({OBSERVER: ["Tamamo"]})
+    ctx, ids = _ctx(temp_db, known={})
+    view = perception_act(ctx, nonce="n")["views"][str(ids[OBSERVER])] or ""
 
-    assert ns["leaked"] == ["Hinami"]
-    assert "Hinami" not in ns["view"]
-    assert "Tamamo" in ns["view"]
+    assert HINAMI not in view, view
+    assert TAMAMO not in view, view
+    # ...and both are still delivered, as what the observer can actually see.
+    assert "fox-eared" in view.casefold()
+    assert "shrine maiden" in view.casefold() or "white-haired" in view.casefold()
 
-    assert len(ns["ctx"].warnings) == 1
-    warning = ns["ctx"].warnings[0]
-    assert "['Hinami']" in warning
-    assert OBSERVER in warning
+
+def test_observer_recognising_tamamo_keeps_tamamo_and_scrubs_hinami(temp_db):
+    """Recognition is per-body, not per-view: knowing one of two people in
+    a room must not hand over the other."""
+    from agents.perception import perception_act
+
+    ctx, ids = _ctx(temp_db, known={OBSERVER: [PLAYER, TAMAMO]})
+    view = perception_act(ctx, nonce="n")["views"][str(ids[OBSERVER])] or ""
+
+    assert TAMAMO in view, view
+    assert HINAMI not in view, view
+    assert "fox-eared" in view.casefold()
+    # Nothing was repaired on the way out: the name was never admitted.
+    assert not [w for w in ctx.warnings if "COMPOSER TRIPWIRE" in w], (
+        ctx.warnings)

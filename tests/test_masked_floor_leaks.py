@@ -306,16 +306,14 @@ def _make_ctx(temp_db, scene, npcs=("Dr. Moon",), player="Hinami"):
 
 
 def _stub_empty_views(monkeypatch):
-    """Force the deterministic path: whatever leaks is the floor's doing."""
-    import agents.perception as perception
+    """Kept as a no-op so these tests read as they always did.
 
-    def fake(role, step_key, system, payload, **kw):
-        fake.payloads.append(payload)
-        return {"views": {str(p["id"]): f"You are in {p['room_name']}."
-                          for p in payload.get("perceivers", [])}}
-    fake.payloads = []
-    monkeypatch.setattr(perception, "_agent_json", fake)
-    return fake
+    They were written to force the deterministic path by stubbing the model
+    out, on the principle that whatever leaked was then the floor's doing.
+    That is now the only path there is, so there is nothing to stub — but
+    the intent, and every assertion below it, is unchanged.
+    """
+    return None
 
 
 # --- L3 through perception_outcome ------------------------------------------
@@ -504,12 +502,11 @@ class TestOnsetPayloadSightIsGradedByTheActorsLight:
                           "observable": "feels along the wall",
                           "visibility": "overt", "event_id": "e1"}],
             "flow": {"reactors": [ids["Dr. Moon"]], "resolution_flags": {}}}
-        fake = _stub_empty_views(monkeypatch)
-        perception.perception_act(ctx, nonce=0)
-        pv = [p for pay in fake.payloads
-              for p in pay.get("perceivers", [])
-              if str(p.get("id")) == str(ids["Dr. Moon"])]
-        assert pv, "observer never reached the perception payload"
-        assert not pv[0].get("visual_channel_to_actor"), (
+        view = perception.perception_act(
+            ctx, nonce=0)["views"][str(ids["Dr. Moon"])] or ""
+        # The payload field this used to read (`visual_channel_to_actor`)
+        # was the model's instruction; the view is the consequence. An
+        # actor in a dark room is not seen doing anything.
+        assert "feels along the wall" not in view, (
             "a full visual channel was granted to an actor standing in a "
             "dark room -- sight was graded by the OBSERVER's light")

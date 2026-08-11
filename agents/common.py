@@ -34,6 +34,8 @@ from spatial import (
     normalize_room_id,
     room_of,
     same_subject,
+    sense_adjusted,
+    sight_level,
     visual_level_between,
 )
 from theory_of_mind import _TOM_CONFIDENCE_CAPS, cap_mind_model_updates
@@ -2175,7 +2177,7 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
 
 def _delivery_ok(relation, scene, observer_name, source_name, channel,
                  volume="normal", proximity=None, behind_sources=None,
-                 awareness=None):
+                 awareness=None, senses=None):
     """Can this observer receive this source through this channel?
 
     Cross-seam pattern 3: the deterministic delivery paths each grew their own
@@ -2196,6 +2198,12 @@ def _delivery_ok(relation, scene, observer_name, source_name, channel,
       muttered aside does not carry to an arbitrarily large room.
     - **sight/action** -- `has_visual` plus the rear-arc blind spot. An action
       is visible or it is nothing.
+    - **senses** (optional) -- the observer's card senses (G4). When passed,
+      the channel grade is shifted by `spatial.sense_adjusted`; None or an
+      ordinary card is byte-identical to before. NOTE for callers: with an
+      extraordinary-hearing card this can answer True at hearing level
+      `trace`, which is DETECTION ONLY -- re-grade with sense_adjusted before
+      rendering, and never deliver words or identity on a trace.
     """
     if awareness is not None and awareness in NON_AWAKE_GATED:
         return False
@@ -2205,13 +2213,19 @@ def _delivery_ok(relation, scene, observer_name, source_name, channel,
         return False
 
     if channel == "hearing":
-        return hear_level(relation, volume, proximity=proximity) != "none"
+        level = hear_level(relation, volume, proximity=proximity)
+        if senses is not None:
+            level = sense_adjusted(level, "hearing", senses)
+        return level != "none"
 
     if behind_sources and source_name in behind_sources:
         return False
     if entity_arc(scene, observer_name, source_name) == "rear":
         return False
-    return bool(has_visual(relation))
+    level = sight_level(relation)
+    if senses is not None:
+        level = sense_adjusted(level, "sight", senses)
+    return level != "none"
 
 def _strip_identity_tokens(text, forms):
     """Remove an actor's name/alias forms from engine-supplied prose (an
@@ -3598,6 +3612,53 @@ def _muffled_fragment(body):
     return "..." + "... ".join(kept) + "..."
 
 
+# `tone` is a free-text field and models fill it with two grammatically
+# different things: an abstract NOUN ("warmth", "urgency", "a hint of
+# steel") and an ADJECTIVE or adjective phrase ("bright", "quietly
+# authoritative"). One slot was built for the first and fed both, so every
+# adjectival tone rendered as "says with quietly authoritative in their
+# voice" -- constant, reader-facing, and flagged in the corpus replay's
+# prose sample as one of the two things a reader notices within minutes.
+#
+# The head word decides, and the DEFAULT IS ADJECTIVE: adjectives are what
+# models emit most, and they are the half that was broken. A noun wrongly
+# read as an adjective gives "in a warmth voice" -- bad, so the noun list
+# below is explicit about the irregulars that no suffix catches, and the
+# suffixes cover the productive endings that cannot be adjectives.
+_TONE_NOUN_SUFFIXES = ("ness", "ity", "ment", "ion", "ance", "ence",
+                       "ency", "acy", "ism")
+_TONE_NOUNS = frozenset({
+    "warmth", "worry", "fear", "anger", "hope", "pity", "malice", "awe",
+    "joy", "sorrow", "grief", "scorn", "spite", "venom", "steel", "ice",
+    "iron", "edge", "gravel", "sarcasm", "irony", "apathy", "sympathy",
+    "empathy", "mischief", "wonder", "dread", "relief", "longing",
+    "laughter", "disgust", "envy", "pride", "panic", "care", "love",
+    "hate", "doubt", "regret", "contempt", "humor", "humour", "affection",
+    "concern", "menace", "reverence", "restraint", "command", "resolve",
+})
+
+
+def _tone_clause(tone):
+    """The dialogue tag's manner slot, agreeing with what kind of word the
+    tone actually is. Returns "" or a leading-space clause."""
+    tone = str(tone or "").strip().rstrip(".,;:")
+    if not tone:
+        return ""
+    # An observable BEHAVIOUR, not a vocal quality: "with a smirk".
+    if re.search(r"\b(smirk|smile|grin|expression|look|gesture)\b",
+                 tone, re.I):
+        article = "" if re.match(r"^(?:a|an|the)\b", tone, re.I) else "a "
+        return f" with {article}{tone}"
+    head = [w for w in re.split(r"[^\w]+", tone) if w]
+    head = head[-1].casefold() if head else ""
+    if head in _TONE_NOUNS or head.endswith(_TONE_NOUN_SUFFIXES):
+        return f" with {tone} in their voice"
+    if re.match(r"^(?:a|an|the)\b", tone, re.I):
+        return f" in {tone} voice"
+    article = "an" if tone[:1].casefold() in "aeiou" else "a"
+    return f" in {article} {tone} voice"
+
+
 def _inject_dialogue(view, display, quote, level, volume, can_see,
                     conducted=False, tone="", articulation=""):
     if level == "none":
@@ -3640,14 +3701,7 @@ def _inject_dialogue(view, display, quote, level, volume, can_see,
         artic = ", the words stifled and barely shaped"
     else:
         artic = ""
-    manner = ""
-    tone = str(tone or "").strip()
-    if tone and can_see:
-        if re.search(r"\b(smirk|smile|grin|expression|look|gesture)\b", tone, re.I):
-            article = "" if re.match(r"^(?:a|an|the)\b", tone, re.I) else "a "
-            manner = f" with {article}{tone}"
-        else:
-            manner = f" with {tone} in their voice"
+    manner = _tone_clause(tone) if can_see else ""
     if can_see:
         add = f'{display} {verb}{manner}{artic}: "{body}"'
     else:

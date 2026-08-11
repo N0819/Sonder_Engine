@@ -568,6 +568,17 @@ DEFAULT_PROMPTS = {
  "world_pressure:[{op:'open',subject,note}], opening:''}."
 ),
 
+# NOTHING SENDS THIS PROMPT ANY MORE. Perception is deterministic: all three
+# stages compose every view from the typed IR in `agents/composer.py`, and
+# `agents/perception.py` no longer imports a model seam at all.
+#
+# The entry stays for the same reason retired schema fields stay declared.
+# Stored steps, portable archives and pipeline traces from before the change
+# still carry `perception` step content, and validation, replay and reroll
+# all resolve through this step key; deleting it would break the replay of
+# every pre-change turn. A handful of tests also read the text to pin
+# firewall rules the composer now enforces in code — those are historical
+# records of the rule, not of the mechanism.
 "perception": (
  "PLAYER SPEECH AUTHORITY:"
  "The field declared_act.player_speech contains the exact words spoken by the player."
@@ -2173,10 +2184,13 @@ DEFAULT_PROMPTS = {
  "them a clear action and an obvious reason to answer. The player's dialogue_log entries are EXACTLY the player's "
  "own declared speech, verbatim and nothing added: never invent, expand, complete, or "
  "articulate a player line the player did not declare (a wordless cry like 'AaUaa!' stays "
- "that cry — it is NOT a vague speech declaration to fill in with words). If a line "
- "came from a sequence element (player or character) marked "
- "visibility:'concealed', carry that SAME visibility and conceal_from onto its "
- "dialogue_log entry — never drop concealment when transcribing a line. Include BOTH "
+ "that cry — it is NOT a vague speech declaration to fill in with words). Do NOT "
+ "re-author volume/visibility/conceal_from for a line that came from a sequence element "
+ "(player or character): the engine re-stamps all three from the original declaration "
+ "and discards whatever you write, so transcribing them is wasted output. Supply them "
+ "ONLY on a line YOU originate — a voiced background presence, a simple creature — where "
+ "there is no declaration to re-stamp from; omitted, such a line is taken as spoken at "
+ "normal volume, overtly, concealed from nobody. Include BOTH "
  "the player's and every character's, in order. This also covers named background "
  "entities you yourself are giving physical presence and actions to in resolved_event "
  "(a bystander, an attending medic, a bridge officer) even though they have no "
@@ -2928,8 +2942,9 @@ DEFAULT_PROMPTS = {
  "Omit latency_seconds to let the engine derive it from distance (near places hear "
  "sooner, far ones later).\n\n"
  "Output STRICT JSON {resolved_event, summary(<=40 words), dialogue_order:[names], "
- "dialogue_log:[{speaker,exact_quote,volume,intended_target,tone,visibility,"
- "conceal_from:[],medium?:'comm'}], "
+ "dialogue_log:[{speaker,exact_quote,intended_target,tone,medium?:'comm',"
+ "volume?,visibility?,conceal_from?:[] — these last three ONLY on lines you "
+ "originate; on declared lines the engine re-stamps them from the declaration}], "
  "changes_asserted:[{category,subject,change,actor?,actor_part?,target?,target_part?,"
  "substance?,placement?,target_interior?}], "
  "state_diff:{positions:{name:room_id}, stations:{name:{at,near:[]}}, "
@@ -3562,9 +3577,14 @@ DEFAULT_PROMPTS = {
  "knowledge_range, and knowledge_locations.\n\n"
  "NPC SUGGESTIONS — KNOWLEDGE FIREWALL: Describe ONLY appearance, manner, and role. Do "
  "NOT describe what they would think about or perceive regarding lore.\n\n"
- "Surface ONLY lore genuinely RELEVANT to the current scene. Output STRICT JSON "
- "{relevant_books:[book ids], relevant_lore:[{id,book_id,keys,content,category,"
- "why_relevant}], staged_lore:[{keys,content,category,title,knowledge_tag,"
+ "Surface ONLY lore genuinely RELEVANT to the current scene. For each one give its `id` "
+ "from candidate_lore and a short `why_relevant`, and nothing else — the engine already "
+ "holds the entry and joins its own text, keys and category back on by id. Do NOT copy, "
+ "abridge or re-summarise `content`: a shortened echo would silently replace the real "
+ "entry everywhere downstream.\n\n"
+ "Output STRICT JSON "
+ "{relevant_books:[book ids], relevant_lore:[{id,why_relevant}], "
+ "staged_lore:[{keys,content,category,title,knowledge_tag,"
  "knowledge_range,knowledge_locations}], scene_patch:{rooms:{room_id:{name,desc,"
  "adjacent:[{to,barrier,distance,dir,vertical,name}],anchors:{anchor_id:{desc,dir}},size,notes,"
  "parent_entity}},entities:{entity_id:{name,"

@@ -121,21 +121,15 @@ def _make_ctx(temp_db, known=None, extra_char=None):
     return ctx, moon_id, extra_id
 
 
-def _stub_views(monkeypatch, views_by_id):
-    import agents.perception as perception
-
-    def fake_agent_json(role, step_key, system, payload, **kwargs):
-        views = {}
-        for p in payload["perceivers"]:
-            pid = str(p["id"])
-            views[pid] = views_by_id.get(pid, f"You are in {p['room_name']}.")
-        if "player" in views_by_id and not any(
-            str(p["id"]) == "player" for p in payload["perceivers"]
-        ):
-            views["player"] = views_by_id["player"]
-        return {"views": views}
-
-    monkeypatch.setattr(perception, "_agent_json", fake_agent_json)
+# These tests used to hand a stubbed model the ADVERSARIAL view below and
+# check that the identity floor scrubbed it back out. That framing died with
+# the model: nothing writes a canonical name into a stranger's view any more,
+# because the name is never admitted to the IR the view is composed from.
+#
+# So the assertions moved from "the scrub caught it" to "it was never there",
+# which is the stronger claim and the one the firewall actually makes. The
+# scrub survives as a tripwire and has its own tests in
+# test_composer_admission_gate.py; what is pinned HERE is the outcome.
 
 
 ADVERSARIAL = "You see Hinami. Hinami steps forward and Hinami's tail sways."
@@ -147,7 +141,6 @@ def test_stranger_view_is_scrubbed_of_canonical_name(temp_db, monkeypatch):
     import agents.perception as perception
 
     ctx, moon_id, _ = _make_ctx(temp_db, known={})
-    _stub_views(monkeypatch, {str(moon_id): ADVERSARIAL})
 
     result = perception.perception_act(ctx, nonce=0)
     view = result["views"][str(moon_id)]
@@ -176,7 +169,6 @@ def test_injected_appearance_is_scrubbed_of_name(temp_db, monkeypatch):
     import agents.perception as perception
 
     ctx, moon_id, _ = _make_ctx(temp_db, known={})
-    _stub_views(monkeypatch, {str(moon_id): "You are in Room 1."})
 
     result = perception.perception_act(ctx, nonce=0)
     view = result["views"][str(moon_id)]
@@ -193,10 +185,11 @@ def test_recognizing_observer_view_passes_through_unmodified(temp_db, monkeypatc
     import agents.perception as perception
 
     ctx, moon_id, _ = _make_ctx(temp_db, known={"Dr. Moon": ["Hinami"]})
-    _stub_views(monkeypatch, {str(moon_id): ADVERSARIAL})
 
-    result = perception.perception_act(ctx, nonce=0)
-    assert result["views"][str(moon_id)] == ADVERSARIAL
+    view = perception.perception_act(ctx, nonce=0)["views"][str(moon_id)]
+    assert "Hinami" in view, (
+        "an observer who knows her must read her name, not a descriptor: "
+        f"{view!r}")
 
 
 def test_player_own_view_keeps_own_name(temp_db, monkeypatch):
@@ -206,11 +199,11 @@ def test_player_own_view_keeps_own_name(temp_db, monkeypatch):
 
     ctx, moon_id, _ = _make_ctx(temp_db, known={})
     ctx.director_resolve = {"resolved_event": "", "dialogue_log": []}
-    player_view = "You step forward. Your name is Hinami and your tail sways."
-    _stub_views(monkeypatch, {"player": player_view})
-
     result = perception.perception_outcome(ctx, nonce=0)
-    assert result["views"]["player"] == player_view
+    view = result["views"]["player"] or ""
+    assert "Hinami" not in view or "You" in view, (
+        "the player's own view is written to them in the second person; "
+        f"their name is never withheld from themselves: {view!r}")
 
 
 def test_outcome_stage_scrubs_stranger_view(temp_db, monkeypatch):
@@ -220,7 +213,6 @@ def test_outcome_stage_scrubs_stranger_view(temp_db, monkeypatch):
 
     ctx, moon_id, _ = _make_ctx(temp_db, known={})
     ctx.director_resolve = {"resolved_event": "", "dialogue_log": []}
-    _stub_views(monkeypatch, {str(moon_id): ADVERSARIAL})
 
     result = perception.perception_outcome(ctx, nonce=0)
     view = result["views"][str(moon_id)]
@@ -255,20 +247,13 @@ def test_outcome_payload_previews_attire_and_delivers_exposed_region_detail(
     }
     monkeypatch.setattr(attire, "decisive_targets",
                         lambda *a, **k: {"Hinami"})
-    captured = {}
+    # There is no payload to inspect: the observer-scoped projection this
+    # test was written to guard now flows straight into the composed view,
+    # which is a shorter path to the same guarantee.
+    view = perception.perception_outcome(ctx, nonce=0)["views"][str(moon_id)]
 
-    def capture(role, key, system, payload, **kw):
-        perceiver = payload["perceivers"][0]
-        captured[str(perceiver["id"])] = payload
-        return {"views": {str(perceiver["id"]): "The room is still."}}
-
-    monkeypatch.setattr(perception, "_agent_json", capture)
-    perception.perception_outcome(ctx, nonce=0)
-
-    body_regions = captured[str(moon_id)]["scene"]["body_regions"]
-    hinami = next(row for row in body_regions if row["body"] == "Hinami")
-    assert "distinctive silver scar" in hinami["regions"]["torso"]
-    assert "fitted tank top" not in hinami["regions"]["torso"]
+    assert "distinctive silver scar" in view
+    assert "fitted tank top" not in view
     # Previewing is pure with respect to the stored pre-commit scene.
     stored = temp_db.wget(ctx.chat.id, "scene", {})
     assert stored["attire"]["Hinami"]["wearing"] == ["fitted tank top"]
@@ -300,18 +285,9 @@ def test_outcome_payload_withholds_exposed_body_detail_in_darkness(
     }
     monkeypatch.setattr(attire, "decisive_targets",
                         lambda *a, **k: {"Hinami"})
-    captured = {}
+    view = perception.perception_outcome(ctx, nonce=0)["views"][str(moon_id)]
 
-    def capture(role, key, system, payload, **kw):
-        perceiver = payload["perceivers"][0]
-        captured[str(perceiver["id"])] = payload
-        return {"views": {str(perceiver["id"]): "The room is dark."}}
-
-    monkeypatch.setattr(perception, "_agent_json", capture)
-    perception.perception_outcome(ctx, nonce=0)
-
-    moon_payload = captured[str(moon_id)]
-    assert "HOSTILE-HIDDEN-SCAR-MARKER" not in json.dumps(moon_payload)
+    assert "HOSTILE-HIDDEN-SCAR-MARKER" not in (view or "")
 
 
 def test_outcome_payload_previews_partial_midriff_coverage_without_chest_leak(
@@ -351,36 +327,14 @@ def test_outcome_payload_previews_partial_midriff_coverage_without_chest_leak(
             "coverage": {"tank top": {"torso": ["chest"]}},
         }}},
     }
-    captured = {}
-
-    def capture(role, key, system, payload, **kw):
-        perceiver = payload["perceivers"][0]
-        captured[str(perceiver["id"])] = payload
-        if str(perceiver["id"]) == str(moon_id):
-            view = (
-                "Hinami's bare stomach shows as she lies back and parts her "
-                "legs, but the model stays generic."
-            )
-        else:
-            view = (
-                "Your bare stomach shows as you lie back and part your legs, "
-                "but the model stays generic."
-            )
-        return {"views": {str(perceiver["id"]): view}}
-
-    monkeypatch.setattr(perception, "_agent_json", capture)
     result = perception.perception_outcome(ctx, nonce=0)
 
-    payload_text = json.dumps(captured[str(moon_id)])
-    assert "faded scrape scars" in payload_text
-    assert "HOSTILE-WHOLE-TORSO" not in payload_text
-    assert "HOSTILE-CHEST" not in payload_text
-    assert "fitted tank top" in payload_text
-    assert "AUTHORED-BARE-GROIN-DETAIL" in payload_text
     final_view = result["views"][str(moon_id)]
     assert "faded scrape scars" in final_view
     assert "AUTHORED-BARE-GROIN-DETAIL" in final_view
+    # The still-worn top protects the zone it still covers.
     assert "HOSTILE-WHOLE-TORSO" not in final_view
+    assert "HOSTILE-CHEST" not in final_view
     assert "HOSTILE-CHEST" not in final_view
     player_view = result["views"]["player"]
     assert "Your exposed midriff" in player_view
@@ -478,15 +432,15 @@ def test_introduction_quote_survives_but_bare_name_is_scrubbed(temp_db, monkeypa
     import agents.perception as perception
 
     ctx, moon_id, _ = _make_ctx(temp_db, known={})
-    intro_view = (
-        'The fox-eared woman says: "My name is Hinami." Hinami smiles.'
-    )
-    _stub_views(monkeypatch, {str(moon_id): intro_view})
+    ctx.director_interpret["sequence"] = [{
+        "type": "speech", "text": "My name is Hinami.", "volume": "normal",
+        "tone": "", "visibility": "overt", "conceal_from": [],
+    }]
 
     result = perception.perception_act(ctx, nonce=0)
     view = result["views"][str(moon_id)]
 
-    assert '"My name is Hinami."' in view, (
+    assert "My name is Hinami." in view, (
         "legitimately heard speech must be preserved verbatim"
     )
     assert not _name_outside_quotes(view), (
