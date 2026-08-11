@@ -1910,6 +1910,21 @@ class DirectorResolve(LenientModel):
     dialogue_log: list[DialogueLogEntry] = Field(default_factory=list)
     state_diff: StateDiff = Field(default_factory=StateDiff)
     changes_asserted: list[AssertedChange] = Field(default_factory=list)
+    # DECLARED BUT NO LONGER REQUESTED. The resolve prompt used to ask the
+    # model for both of these and neither answer was ever read: the engine
+    # rolls the dice itself from the interpret flow's DiceSpec under a
+    # deterministic seed and overwrites this field wholesale
+    # (agents/director.py's `out["dice"] = dice`, after validation), and no
+    # reader anywhere touches the resolve-side `fiction_frame` -- the payload
+    # builder reads the INTERPRET flow's copy. So the model was paying tokens
+    # every beat to transcribe one field that is discarded and echo another
+    # that nothing consumes.
+    #
+    # The fields stay DECLARED because LenientModel's round-trip drops
+    # undeclared keys: persisted variants, portable archives and pipeline
+    # traces all carry historical values, and `dice` is still where the engine
+    # writes its own roll. Removing the ASK is free; removing the FIELD would
+    # silently discard that history.
     dice: list[dict] = Field(default_factory=list)
     claim_dispositions: list[dict] = Field(default_factory=list)
     fiction_frame: dict[str, Any] = Field(default_factory=dict)

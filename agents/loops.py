@@ -17,7 +17,7 @@ from scene import (
     reaction_config,
 )
 from spatial import (hear_level, proximity_rel, room_of, spatial_rel,
-                     visual_level_between)
+                     spatial_rel_between, visual_level_between)
 
 from .character import _unanswered_question_note, character_step
 from .common import (
@@ -75,7 +75,16 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
         else:
             display = _unknown_actor_label(actor_name, actor_appearance)
         observer_room = character_room(scene, observer_sheet)
-        relation = spatial_rel(scene, actor_room, observer_room)
+        # THE body-to-body relation builder: it carries concealment, the
+        # crossing grace, and the enclosure directions the bare room-level
+        # form cannot know (register L2). Argument order is (observer, actor):
+        # spatial_rel stamps the light of the room being LOOKED AT, and this
+        # loop used to pass (actor_room, observer_room) -- grading sight OF
+        # the actor by the light where the OBSERVER stood, a full visual
+        # channel to an actor standing in darkness (register L6).
+        relation = spatial_rel_between(scene, observer_name, actor_name,
+                                       observer_room=observer_room,
+                                       target_room=actor_room)
         observer_awareness = awareness_of(amap, observer_name)
         # F4: the micro-loop used to read bare hear_level with no proximity, so
         # a muttered aside landed full-volume on an arbitrarily large room.

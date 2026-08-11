@@ -358,6 +358,37 @@ class TestVisibleAdjacentRooms:
         assert len(visible) == 1
         assert visible[0]["room_id"] == "garden"
 
+    def test_forward_descriptionless_room_still_visible(self):
+        """D3 regression: the forward loop dropped a neighbour with no
+        notes/desc while the reverse loop kept one (see test_reverse_adjacency,
+        whose visible room has no prose at all) -- so whether an open doorway
+        could be seen through depended on which side happened to declare the
+        edge and on whether anyone had written prose yet."""
+        scene = {
+            "rooms": {
+                "kitchen": {"adjacent": [{"to": "garden", "barrier": "open"}]},
+                "garden": {"name": "Garden"},  # no notes, no desc
+            }
+        }
+        visible = visible_adjacent_rooms(scene, "kitchen")
+        assert [v["room_id"] for v in visible] == ["garden"]
+        assert visible[0]["description"] == ""
+
+    def test_forward_and_reverse_agree_on_descriptionless_room(self):
+        """D3: the same descriptionless neighbour must be visible whichever
+        room declared the open edge."""
+        forward = {"rooms": {
+            "kitchen": {"adjacent": [{"to": "garden", "barrier": "open"}]},
+            "garden": {},
+        }}
+        reverse = {"rooms": {
+            "kitchen": {},
+            "garden": {"adjacent": [{"to": "kitchen", "barrier": "open"}]},
+        }}
+        fwd = [v["room_id"] for v in visible_adjacent_rooms(forward, "kitchen")]
+        rev = [v["room_id"] for v in visible_adjacent_rooms(reverse, "kitchen")]
+        assert fwd == rev == ["garden"]
+
     def test_closed_door_not_visible(self):
         scene = {
             "rooms": {
