@@ -11,12 +11,14 @@ import attire as attire_model
 from character_schema import (
     character_abilities,
     character_appearance,
+    character_extra_parts,
     character_initial_outfit,
     character_name,
     character_name_from_text,
     character_public_history,
     persona_abilities,
     persona_appearance,
+    persona_extra_parts,
     persona_initial_outfit,
     persona_name,
     persona_public_history,
@@ -99,8 +101,10 @@ from .common import (
     normalize_character_refs,
     player_speech_lines,
     repair_narrated_speech_elements,
+    extra_parts_lines,
     scene_attire_view,
     scene_compact_attire,
+    scene_extra_parts,
 )
 
 def _cast_match_forms(cast):
@@ -607,6 +611,8 @@ def director_establish(ctx, nonce):
         "player": {
             "name": player_name,
             "appearance": persona_appearance(pers),
+            **({"body_parts": extra_parts_lines(persona_extra_parts(pers))}
+               if persona_extra_parts(pers) else {}),
             "initial_outfit": persona_initial_outfit(pers),
             "senses": senses_of(pers),
             "abilities": persona_abilities(pers),
@@ -772,6 +778,12 @@ def director_interpret(ctx, nonce):
             # "forward" a coin flip for the player.
             "exits": _egocentric_exits(sc, cname),
             "appearance": appearance_of(cname, character_appearance(sh), sc),
+            # Authored structured extra body parts (tail, wings...): shown so
+            # the Director stops re-inventing them from prose each beat. Key
+            # absent for an ordinary body -- defaults stay inert and the
+            # payload prefix stays cacheable.
+            **({"body_parts": extra_parts_lines(character_extra_parts(sh))}
+               if character_extra_parts(sh) else {}),
             "abilities": character_abilities(sh),
         })
 
@@ -820,6 +832,8 @@ def director_interpret(ctx, nonce):
             "appearance": appearance_of(
                 pers.get("name") or persona_name(pers),
                 pers.get("appearance") or persona_appearance(pers), sc),
+            **({"body_parts": extra_parts_lines(persona_extra_parts(pers))}
+               if persona_extra_parts(pers) else {}),
             "abilities": persona_abilities(pers),
             "following": (sc.get("following") or {}).get(
                 pers.get("name") or persona_name(pers)),
@@ -4082,6 +4096,9 @@ def director_resolve(ctx, nonce):
     }
     social_standing[p_name] = (persona_public_history(pers) or "")[:240]
 
+    # Authored structured extra body parts, card-read: {} for ordinary casts.
+    _resolve_parts = scene_extra_parts(ctx.cast, pers, p_name)
+
     payload = {
         # Authored house style, for the prose and any world detail this stage
         # mints. director_interpret deliberately does NOT get it: that stage
@@ -4114,6 +4131,16 @@ def director_resolve(ctx, nonce):
             # `attire.resolve_garment` was already built to bind the loose
             # handles it writes against what the body actually wears.
             "attire": scene_compact_attire(sc),
+            # Authored structured extra body parts, one line list per body
+            # that declared any (see character_schema.EXTRA_PART_ASPECTS).
+            # Their part nouns are valid contact endpoints; clothing over the
+            # attachment region does not remove a through-clothing part. Key
+            # absent when nobody declared one, so the shape -- and therefore
+            # the provider prefix cache -- is unchanged for ordinary casts.
+            **({"body_parts": {
+                    name: extra_parts_lines(parts)
+                    for name, parts in _resolve_parts.items()}}
+               if _resolve_parts else {}),
             "time": sc.get("time"),
         },
         "simulation_clock": clock,

@@ -840,13 +840,15 @@ from .common import (
     _strip_identity_tokens,
     _unknown_actor_label,
     observer_body_regions,
+    scene_extra_parts,
     cast_room,
     character_room,
     character_scene_keys,
 )
 
 
-def _observer_scene_payload(scene, perceiver, body_labels=None):
+def _observer_scene_payload(scene, perceiver, body_labels=None,
+                            extra_parts=None):
     """Project objective scene state to one observer before any model call.
 
     This is intentionally stricter than an output scrub: relations that name a
@@ -1046,7 +1048,7 @@ def _observer_scene_payload(scene, perceiver, body_labels=None):
         "sightlines": corridor_sightlines(scene, room_id) if room_id else [],
     }
     body_regions = observer_body_regions(
-        scene, name, body_labels or {name: "you"})
+        scene, name, body_labels or {name: "you"}, extra_parts=extra_parts)
     if body_regions:
         payload["body_regions"] = body_regions
     return payload
@@ -2310,6 +2312,10 @@ def perception_establish(ctx, nonce):
     p_appearance = _appearance_as_prose(appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc))
 
+    # Authored structured body parts, keyed by display name. Card-read, so a
+    # cast with none yields {} and every downstream key stays absent.
+    cast_parts = scene_extra_parts(ctx.cast, pers, p_name)
+
     p_room = _resolve_player_room(sc, pers, None, ctx.cast, ctx.get("input"))
     ctx["_player_room"] = p_room
     p_rdata = (sc.get("rooms") or {}).get(p_room) if p_room else None
@@ -2415,7 +2421,7 @@ def perception_establish(ctx, nonce):
             perceiver, known, {p_name: p_appearance},
             include=[perceiver.get("name")])
         scoped["scene"] = _observer_scene_payload(
-            sc, perceiver, body_labels=labels)
+            sc, perceiver, body_labels=labels, extra_parts=cast_parts)
         scoped["declared_act"]["player_seed"] = (
             declared["player_seed"]
             if str(perceiver["id"]) == "player"
@@ -2493,6 +2499,9 @@ def perception_act(ctx, nonce):
     p_name = pers.get("name") or persona_name(pers)
     p_appearance = _appearance_as_prose(appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc))
+    # Authored structured body parts, keyed by display name (card-read; {}
+    # for a cast with none, keeping the payload key absent).
+    cast_parts = scene_extra_parts(ctx.cast, pers, p_name)
     # A physical disguise conceals the actor's real appearance from observers:
     # p_visible is what is actually SEEN (disguised form when active), fed to
     # both the LLM and the deterministic injection below so a concealed feature
@@ -2756,7 +2765,7 @@ def perception_act(ctx, nonce):
             perceiver, known, {p_name: p_visible},
             include=[perceiver.get("name")])
         scoped["scene"] = _observer_scene_payload(
-            sc, perceiver, body_labels=labels)
+            sc, perceiver, body_labels=labels, extra_parts=cast_parts)
         declared_for_observer = scoped["declared_act"]
         if not perceiver.get("knows_identity"):
             neutral = _unknown_actor_label(p_name, p_visible)
@@ -2976,7 +2985,8 @@ def perception_act(ctx, nonce):
         body_labels = _observer_body_labels(
             p, known, {p_name: p_visible}, include=[p.get("name")])
         body_projection = _observer_scene_payload(
-            sc, p, body_labels=body_labels).get("body_regions") or []
+            sc, p, body_labels=body_labels,
+            extra_parts=cast_parts).get("body_regions") or []
         view, restored_body_details = _deliver_foreground_body_details(
             view, body_projection)
         for detail in restored_body_details:
@@ -3247,6 +3257,9 @@ def perception_outcome(ctx, nonce):
     p_name = pers.get("name") or persona_name(pers)
     p_appearance_true = _appearance_as_prose(appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc))
+    # Authored structured body parts, keyed by display name (card-read; {}
+    # for a cast with none, keeping the payload key absent).
+    cast_parts = scene_extra_parts(ctx.cast, pers, p_name)
     # Conceal a disguised subject's real appearance in every observer's outcome
     # view: p_appearance becomes the disguised (visible) form, so present_
     # appearances and the deterministic injection below never expose concealed
@@ -3599,7 +3612,7 @@ def perception_outcome(ctx, nonce):
             perceiver, known, appearances,
             include=[perceiver.get("name")])
         scoped["scene"] = _observer_scene_payload(
-            sc, perceiver, body_labels=labels)
+            sc, perceiver, body_labels=labels, extra_parts=cast_parts)
         spatial_channels = perceiver.get("spatial_to_sources") or {}
         visual_channels = perceiver.get("visual_channel_to_sources") or {}
         scoped["sources"] = [
@@ -3964,7 +3977,8 @@ def perception_outcome(ctx, nonce):
         body_labels = _observer_body_labels(
             p, known, appearances, include=[p.get("name")])
         body_projection = _observer_scene_payload(
-            sc, p, body_labels=body_labels).get("body_regions") or []
+            sc, p, body_labels=body_labels,
+            extra_parts=cast_parts).get("body_regions") or []
         view, restored_body_details = _deliver_foreground_body_details(
             view, body_projection)
         for detail in restored_body_details:

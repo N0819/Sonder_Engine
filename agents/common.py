@@ -10,17 +10,19 @@ import attire as attire_model
 import crowds as crowds_model
 from character_schema import (
     character_appearance,
+    character_extra_parts,
     character_knowledge_config,
     character_name,
     character_name_from_text,
     normalize_character_data,
+    persona_extra_parts,
     persona_name,
 )
 from db import get_setting, q, wget
 from llm_quality import complete_validated_json
 from memory import chat_lorebook_ids, chat_lorebook_weights
 from providers import chat_complete
-from scene import get_scene, persona_of, NON_AWAKE_GATED
+from scene import get_scene, persona_of, sheet_state, NON_AWAKE_GATED
 from schemas import normalize_speech_volume
 from spatial import (
     _body_interior_holder,
@@ -500,6 +502,79 @@ def scene_compact_attire(sc, look=ATTIRE_LOOK_CHARS):
     }
 
 
+def extra_part_phrase(part):
+    """One authored extra body part as a deterministic phrase.
+
+    `tail — emerges from the back of the waist; passes through clothing;
+    long and russet-furred`. Same input, same string, every beat: the parts
+    are card configuration, so a body whose anatomy did not change renders
+    byte-identically and a provider's prefix cache can absorb it.
+    """
+    part = part if isinstance(part, dict) else {}
+    kind = " ".join(str(part.get("kind") or "").split())
+    if not kind:
+        return ""
+    try:
+        count = max(1, int(part.get("count", 1)))
+    except (TypeError, ValueError):
+        count = 1
+    at = str(part.get("at") or "torso")
+    aspect = str(part.get("aspect") or "back")
+    if aspect == "sides":
+        where = f"across both sides of the {at}"
+    elif aspect in ("left", "right"):
+        where = f"from the {aspect} side of the {at}"
+    else:
+        where = f"from the {aspect} of the {at}"
+    head = kind if count == 1 else f"{kind} x{count}"
+    bits = [f"emerges {where}" if count == 1 else f"emerge {where}"]
+    if part.get("through_clothing", True):
+        bits.append("passes through clothing worn there"
+                    if count == 1 else "pass through clothing worn there")
+    else:
+        bits.append("worn beneath clothing there")
+    description = " ".join(str(part.get("description") or "").split())
+    if description:
+        bits.append(description)
+    return f"{head} — {'; '.join(bits)}"
+
+
+def extra_parts_lines(parts):
+    """Every declared part as its phrase; [] stays [] so defaults stay inert."""
+    out = []
+    for part in (parts or []):
+        text = extra_part_phrase(part)
+        if text:
+            out.append(text)
+    return out
+
+
+def scene_extra_parts(cast, persona=None, player_name=None):
+    """{display name: authored extra parts} for every body that has any.
+
+    Read live from the cards (the acuity/lexicon pattern): no scene state, no
+    per-beat maintenance, and a sheet edit fixes the body it describes. Only
+    bodies with a non-empty declaration appear, so a cast with none produces
+    {} and every payload key hanging off this stays absent.
+    """
+    out = {}
+    for row in (cast or []):
+        try:
+            sh, _, _ = sheet_state(row)
+        except Exception:
+            continue
+        parts = character_extra_parts(sh)
+        if parts:
+            out[character_name(sh)] = parts
+    if persona is not None:
+        parts = persona_extra_parts(persona)
+        if parts:
+            name = str(player_name or persona.get("name")
+                       or persona_name(persona))
+            out[name] = parts
+    return out
+
+
 def region_visibility(sc, observer, body, entry=None):
     """Which of one body's regions THIS observer can see, and what conceals
     the rest -- concealment, applied to bodies instead of acts.
@@ -594,7 +669,7 @@ def region_visibility(sc, observer, body, entry=None):
     return out
 
 
-def observer_body_regions(sc, observer, body_labels=None):
+def observer_body_regions(sc, observer, body_labels=None, extra_parts=None):
     """Observer-safe attire/body surfaces for a perception payload.
 
     ``body_labels`` maps canonical scene subjects to labels already safe for
@@ -604,24 +679,45 @@ def observer_body_regions(sc, observer, body_labels=None):
     the garment surface, while an overt region may expose its authored
     ``beneath`` description when the host enabled that feature and a garment
     has actually been removed there.
+
+    ``extra_parts`` maps canonical subjects to their authored structured
+    body parts (character_schema.character_extra_parts). A visible part rides
+    the body's row as ``parts``, gated by the SAME region_visibility verdicts
+    the surfaces use: a body-level concealment (vantage, containment,
+    darkness) hides every part; garment concealment at the attachment region
+    hides only a part authored as worn beneath the clothing, because the
+    default part -- a tail through a skirt -- emerges through what covers its
+    root. A body is never concealed from itself: the self row keeps all its
+    own parts, tucked ones annotated, matching the self-knowledge floor.
     """
     sc = sc if isinstance(sc, dict) else {}
     labels = dict(body_labels or {str(observer): "you"})
     ledger = sc.get("attire") or {}
+    parts_map = extra_parts if isinstance(extra_parts, dict) else {}
     results = []
     for body, label in labels.items():
+        folded = str(body or "").strip().casefold()
         entry = ledger.get(body)
         if entry is None:
-            folded = str(body or "").strip().casefold()
             entry = next((value for key, value in ledger.items()
                           if str(key).strip().casefold() == folded), None)
-        if not isinstance(entry, dict):
+        parts = parts_map.get(body)
+        if parts is None:
+            # One being, one name: the map is keyed by display name and the
+            # caller may hold another casing of it.
+            parts = next((value for key, value in parts_map.items()
+                          if str(key).strip().casefold() == folded), None)
+        parts = [p for p in (parts or [])
+                 if isinstance(p, dict) and p.get("kind")]
+        if not isinstance(entry, dict) and not parts:
             continue
-        coherent = attire_model.rederive_entry(entry) or {}
+        coherent = (attire_model.rederive_entry(entry) or {}
+                    if isinstance(entry, dict) else {})
         regions = coherent.get("regions") or {}
         surfaces = attire_model.perceptible_region_surfaces(
             regions, beneath_visible=_beneath_visible())
-        visibility = region_visibility(sc, observer, body, entry=coherent)
+        visibility = region_visibility(
+            sc, observer, body, entry=coherent if coherent else None)
         delivered = {}
         for region in attire_model.REGIONS:
             surface = surfaces.get(region)
@@ -633,9 +729,29 @@ def observer_body_regions(sc, observer, body_labels=None):
                     and "garments" not in cause:
                 continue
             delivered[region] = surface
-        if delivered:
-            results.append({"body": str(label or "someone"),
-                            "regions": delivered})
+        shown_parts = []
+        self_view = same_subject(sc, observer, body)
+        for part in parts:
+            verdict = visibility.get(str(part.get("at") or "torso")) or {}
+            cause = verdict.get("by") or {}
+            concealed = verdict.get("visibility") == "concealed"
+            if concealed and "garments" not in cause and not self_view:
+                continue   # whole body unseen: vantage/containment/darkness
+            tucked = (concealed and "garments" in cause
+                      and not part.get("through_clothing", True))
+            if tucked and not self_view:
+                continue   # worn beneath the clothing that covers its root
+            text = extra_part_phrase(part)
+            if not text:
+                continue
+            if tucked:
+                text += " [currently beneath clothing]"
+            shown_parts.append(text)
+        if delivered or shown_parts:
+            row = {"body": str(label or "someone"), "regions": delivered}
+            if shown_parts:
+                row["parts"] = shown_parts
+            results.append(row)
     return results
 
 

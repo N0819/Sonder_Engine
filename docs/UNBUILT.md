@@ -3232,6 +3232,25 @@ which starts when the epistemic-leak audit branch merges:
   honoured. Harmless while obligations are rare; close it before C makes
   places chatty.
 
+### 6.9 Extra body parts — [`../design_notes/11-extra-body-parts.md`](../design_notes/11-extra-body-parts.md)
+
+The card field (`embodiment.extra_parts`, closed attachment/aspect menus),
+the region_visibility-gated perception delivery, the Director payloads and
+the editor menus are built. Deliberately not built:
+
+- **Director-driven transformation** — growing or losing a part as a beat
+  outcome. Needs a scene-level override ledger with commit/archive/checkpoint/
+  branch work; the per-story card edit covers the authored case today.
+- **Garments that cover a part itself** (a tail sock, a wing binder) — needs
+  part-keyed coverage, i.e. the attire model learning slots outside its
+  closed `REGIONS`. `through_clothing: false` covers the tucked case.
+- **Generator/fill prompts emitting `extra_parts`** — the generators still
+  write appendages into `visible.summary` prose; the import path tolerates
+  but does not extract them.
+- **An import warning for a part described twice** — a declared `kind` whose
+  word also lives in `visible.summary` prose double-describes the body;
+  `importers.character_import_warnings` does not yet flag it.
+
 ---
 
 ## 7. Experiments not yet run
