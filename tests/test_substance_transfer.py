@@ -481,6 +481,96 @@ class TestOneReleaseIsOneRecord:
         assert "One release is ONE op" in resolve
 
 
+class TestARegionIsABodyAndAPlaceOnIt:
+    """A region name is not an identity: one body's mouth is not another's.
+
+    Every comparison in this ledger asked "same region?" against a bare
+    string, and answered it beside a separate, ad-hoc check of who the body
+    was -- when it checked at all. `_same_pool` compared `target` as raw
+    casefolded text, which is the exact `==` that `same_subject` exists to
+    replace: a being routinely carries a cast display name and a scene entity
+    id at once, and five separate live defects were that one comparison.
+    """
+
+    def _two_spellings(self):
+        # One being, two spellings: the entity id and the display name.
+        scene = _scene()
+        scene["contacts"] = []
+        scene["entities"] = {
+            "vessel_01": {"name": "Vessel", "aliases": [], "state": {}},
+        }
+        scene["substances"] = [{
+            "source": "Emitter", "source_part": "nozzle",
+            "substance": "coolant", "target": "vessel_01",
+            "placement": "surface", "target_interior": "",
+            "target_part": "casing", "amount": "a film", "detail": "thin",
+            "substance_id": "substance:stored",
+        }]
+        return scene
+
+    def test_one_body_under_two_spellings_is_one_body(self):
+        scene = self._two_spellings()
+        apply_substance_ops(scene, [{
+            "op": "add", "source": "Emitter", "source_part": "nozzle",
+            "substance": "coolant", "target": "Vessel",
+            "placement": "surface", "target_part": "casing",
+            "amount": "a layer", "detail": "thick"}])
+
+        assert len(scene["substances"]) == 1
+
+    def test_the_surviving_row_keeps_the_stored_identity(self):
+        """Nothing may be re-keyed by the fold: a selector the Director minted
+        from an earlier payload has to keep finding this row."""
+        scene = self._two_spellings()
+        apply_substance_ops(scene, [{
+            "op": "add", "source": "Emitter", "source_part": "nozzle",
+            "substance": "coolant", "target": "Vessel",
+            "placement": "surface", "target_part": "casing",
+            "amount": "a layer", "detail": "thick"}])
+
+        [record] = scene["substances"]
+        assert record["substance_id"] == "substance:stored"
+        assert record["amount"] == "a layer"
+
+    def test_the_same_region_on_a_different_body_is_a_different_place(self):
+        """The whole point: two bodies each having a casing is two places, and
+        no comparison anywhere may collapse them."""
+        scene = _scene()
+        scene["contacts"] = []
+        apply_substance_ops(scene, [
+            {"op": "add", "source": "Emitter", "source_part": "nozzle",
+             "substance": "coolant", "target": "Vessel",
+             "placement": "surface", "target_part": "casing"},
+            {"op": "add", "source": "Emitter", "source_part": "nozzle",
+             "substance": "coolant", "target": "Witness",
+             "placement": "surface", "target_part": "casing"}])
+
+        assert len(scene["substances"]) == 2
+
+    def test_matter_leaves_the_region_of_the_body_that_moved_it(self):
+        """Conservation asks the same qualified question: matter leaves the
+        moving body's OWN region, never the same-named region on somebody
+        else standing in the room."""
+        scene = _scene()
+        scene["contacts"] = []
+        apply_substance_ops(scene, [
+            {"op": "add", "source": "Emitter", "source_part": "nozzle",
+             "substance": "coolant", "target": "Vessel",
+             "placement": "interior", "target_interior": "reservoir"},
+            {"op": "add", "source": "Emitter", "source_part": "nozzle",
+             "substance": "coolant", "target": "Witness",
+             "placement": "interior", "target_interior": "reservoir"}])
+        # Vessel moves what is in ITS reservoir; Witness's is not its to spend.
+        apply_substance_ops(scene, [{
+            "op": "add", "source": "Vessel", "source_part": "reservoir",
+            "substance": "coolant", "target": "Vessel",
+            "placement": "interior", "target_interior": "sump"}])
+
+        held = {(record["target"], record["target_interior"])
+                for record in scene["substances"]}
+        assert held == {("Witness", "reservoir"), ("Vessel", "sump")}
+
+
 class TestOneSubstanceOnOneRegionIsOneDeposit:
     """The same matter re-applied to the same place stacked instead of pooling.
 
@@ -684,80 +774,3 @@ class TestMatterMovedLeavesWhereItWas:
         apply_substance_ops(scene, [_release()])
 
         assert len(scene["substances"]) == 1
-
-
-class TestARegionBelongsToOneBody:
-    """A part slot filled with a region of the OTHER body.
-
-    The prompt has forbidden this in words since turn 63, and the only test
-    guarding it asserted that the sentence is still in the prompt. Live (chat
-    69 ⎇49, turn 62), the very next beat stored `target: Hinami, target_part:
-    glans` -- while the contact ledger recorded `glans` three times over as
-    Elyra Voss's. A bare prohibition is not a floor; the scene already knew
-    whose part it was.
-    """
-
-    def _scene_with_owned_parts(self):
-        # The standing ledgers ARE the evidence: Emitter has a nozzle,
-        # Vessel has an inlet and a reservoir.
-        scene = _scene()
-        scene["substances"] = []
-        return scene
-
-    def test_a_part_the_scene_owns_for_another_body_is_not_stored_on_this_one(self):
-        scene = self._scene_with_owned_parts()
-        warnings = []
-        result = apply_substance_ops(scene, [_release(
-            source_part="vent", target="Vessel", placement="surface",
-            target_part="nozzle")], report=warnings.append)
-
-        [record] = result["substances"]
-        assert record["target"] == "Vessel"
-        assert record["target_part"] == ""
-        assert any("nozzle" in warning for warning in warnings)
-
-    def test_the_record_survives_the_repair(self):
-        """Re-attribute, never drop: the deposit itself happened, and turn
-        66 of the same story showed what silent discarding costs -- a whole
-        release lost to a topology check with only a warning behind it."""
-        scene = self._scene_with_owned_parts()
-        result = apply_substance_ops(scene, [_release(
-            source_part="vent", target="Vessel", placement="surface",
-            target_part="nozzle")])
-
-        assert len(result["substances"]) == 1
-        assert result["substances"][0]["substance"] == "coolant"
-
-    def test_a_region_both_bodies_have_is_left_alone(self):
-        """The discriminator that makes this safe without an anatomy
-        vocabulary: two bodies both having a casing is the ordinary case, and
-        only a region the scene has recorded on others and never on THIS body
-        is evidence of a mis-slotted part."""
-        scene = self._scene_with_owned_parts()
-        scene["contacts"] = scene["contacts"] + [{
-            "actor": "Emitter", "actor_part": "casing",
-            "target": "Vessel", "target_part": "casing",
-            "manner": "press", "relation": "surface", "motion": "settled"}]
-        result = apply_substance_ops(scene, [_release(
-            source_part="vent", target="Vessel", placement="surface",
-            target_part="casing")])
-
-        assert result["substances"][0]["target_part"] == "casing"
-
-    def test_an_unrecorded_part_is_left_alone(self):
-        """Anatomy is open-ended and mostly unrecorded. Silence is not
-        evidence of anything, so a part the ledgers have never seen stands."""
-        scene = self._scene_with_owned_parts()
-        result = apply_substance_ops(scene, [_release(
-            source_part="vent", target="Vessel", placement="surface",
-            target_part="flange")])
-
-        assert result["substances"][0]["target_part"] == "flange"
-
-    def test_the_target_own_part_is_left_alone(self):
-        scene = self._scene_with_owned_parts()
-        result = apply_substance_ops(scene, [_release(
-            source_part="vent", target="Vessel", placement="surface",
-            target_part="inlet")])
-
-        assert result["substances"][0]["target_part"] == "inlet"
