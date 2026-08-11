@@ -38,7 +38,8 @@ from frames import create_frame, get_frame
 from paradox import get_paradox
 from scene import active_cast, persona_of, set_char_state, set_char_status
 from spatial import (THRESHOLD_CROSSING_BEATS, _hiding_holders,
-                     anchor_bearing_of, has_visual, room_of, rooms_adjacent,
+                     anchor_bearing_of, has_visual, hear_level, is_alarming,
+                     room_of, rooms_adjacent, sound_path, sound_walk_level,
                      spatial_rel, travel_bearing)
 
 NOT_A_ZONE = None
@@ -480,8 +481,20 @@ def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names)
       - being addressed by someone -> focus the speaker;
       - otherwise focus PERSISTS unchanged (no time decay), except a focused
         target who is no longer co-located is garbage-collected to None.
-    Reflexive salience-snap (spec B) is intentionally not implemented here; the
-    perception prompt's salient-event zone-exemption stands in for it."""
+
+    Reflexive salience-snap (spec B / G2) is now implemented for the one
+    loudness signal the beat already carries deterministically: a RAISED
+    dialogue volume (spatial.is_alarming). It ranks BELOW addressing/being
+    addressed and below locomotion -- a conversation or a move holds its own
+    focus -- and above bare persistence: a bystander whose attention nothing
+    else claimed this beat spins toward a shout. The snap target is what the
+    perceiver legitimately has: the shouter if co-located, else the edge the
+    sound arrived through (for a multi-hop shout that is the FIRST edge of
+    the sound path out of their own room -- the doorway the bang came
+    through, never the unseen source room). A shout nothing connects them to
+    (no hearing channel, no sound path) snaps nothing. DELIBERATE SPEC CHANGE
+    landed with the S4a bounded loudness walk; richer per-event loudness
+    waits on G1's sound surface."""
     positions = new_scene.get("positions") or {}
     prev_pos = prev_scene.get("positions") or {}
     orientation = new_scene.setdefault("orientation", {})
@@ -508,6 +521,38 @@ def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names)
         room = positions.get(other)
         return {"kind": "edge", "ref": room} if room else None
 
+    shouts = [(str(d.get("speaker") or "").strip(),
+               str(d.get("volume") or "").strip().casefold())
+              for d in dlog
+              if isinstance(d, dict) and is_alarming(loudness=d.get("volume"))]
+
+    def alarm_focus_for(name):
+        """G2: the focus a raised voice snaps this perceiver to, or None."""
+        room = positions.get(name)
+        if not room:
+            return None
+        for speaker, volume in shouts:
+            if not speaker or speaker == name:
+                continue
+            s_room = positions.get(speaker)
+            if not s_room:
+                continue
+            if s_room == room:
+                return {"kind": "target", "ref": speaker}
+            volume = "shout" if volume == "violent" else volume
+            rel = spatial_rel(new_scene, room, s_room)
+            if rel.get("barrier") != "separated" \
+                    and hear_level(rel, volume) != "none":
+                return {"kind": "edge", "ref": s_room}
+            if sound_walk_level(new_scene, room, s_room, volume) != "none":
+                path = sound_path(new_scene, room, s_room)
+                if path and len(path) > 1:
+                    # The first edge out of the perceiver's OWN room: they
+                    # spin toward the doorway the sound came through, which
+                    # is all the information they legitimately have.
+                    return {"kind": "edge", "ref": path[1]}
+        return None
+
     names = set(cast_names or [])
     names.update(positions.keys())
 
@@ -527,10 +572,12 @@ def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names)
         elif addressed_by.get(name):
             new_focus = focus_on(name, addressed_by[name]) or rec.get("focus")
         else:
-            new_focus = rec.get("focus")          # persist (no decay)
-            if isinstance(new_focus, dict) and new_focus.get("kind") == "target" \
-                    and not colocated(name, new_focus.get("ref")):
-                new_focus = None                  # focused target left -> GC
+            new_focus = alarm_focus_for(name)     # G2 salience-snap
+            if new_focus is None:
+                new_focus = rec.get("focus")      # persist (no decay)
+                if isinstance(new_focus, dict) and new_focus.get("kind") == "target" \
+                        and not colocated(name, new_focus.get("ref")):
+                    new_focus = None              # focused target left -> GC
 
         if new_focus != rec.get("focus"):
             rec["focus"] = new_focus

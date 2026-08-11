@@ -68,12 +68,6 @@ def test_outcome_scene_uses_the_canonical_rekeyed_room(temp_db, monkeypatch):
     import commit
 
     ctx = _make_ctx(temp_db)
-    captured = {}
-
-    def fake_agent_json(*args, **kwargs):
-        return {"views": {}}
-
-    monkeypatch.setattr(perception, "_agent_json", fake_agent_json)
     perception.perception_outcome(ctx, nonce=0)
 
     # The player's resolved room is the REKEYED key, exactly what commit's

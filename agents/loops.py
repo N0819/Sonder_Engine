@@ -6,7 +6,7 @@ import json
 import random
 
 from character_schema import (character_appearance, character_name,
-                              character_name_from_text)
+                              character_name_from_text, character_senses)
 from db import wget
 from scene import (
     NON_AWAKE_GATED,
@@ -16,8 +16,9 @@ from scene import (
     get_scene,
     reaction_config,
 )
-from spatial import (hear_level, proximity_rel, room_of, spatial_rel,
-                     spatial_rel_between, visual_level_between)
+from spatial import (hear_level, proximity_rel, room_of, sense_adjusted,
+                     sound_bearing, spatial_rel, spatial_rel_between,
+                     visual_level_between)
 
 from .character import _unanswered_question_note, character_step
 from .common import (
@@ -89,6 +90,10 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
         # F4: the micro-loop used to read bare hear_level with no proximity, so
         # a muttered aside landed full-volume on an arbitrarily large room.
         proximity = proximity_rel(scene, observer_name, actor_name)
+        # G4: the observer's card senses gate what the channels carry. An
+        # ordinary card is byte-identical to before; only explicitly authored
+        # acuity shifts anything.
+        observer_senses = character_senses(observer_sheet)
         additions = []
         for event in actor_result.get("sequence") or []:
             if event.get("type") == "speech":
@@ -115,12 +120,25 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
                 if not _delivery_ok(relation, scene, observer_name, actor_name,
                                     "hearing", volume=volume,
                                     proximity=proximity,
-                                    awareness=observer_awareness):
+                                    awareness=observer_awareness,
+                                    senses=observer_senses):
                     continue
-                level = hear_level(relation, volume, proximity=proximity)
+                level = sense_adjusted(
+                    hear_level(relation, volume, proximity=proximity),
+                    "hearing", observer_senses)
                 quote = str(event.get("text") or "")
                 if level == "full":
                     additions.append(f'{display} says: "{quote}"')
+                elif level == "trace":
+                    # Contentless by contract (G4): detection and direction at
+                    # best -- no words, no identity, not even the gated
+                    # `display` label, which would still say "someone you
+                    # know of is there".
+                    hint = sound_bearing(scene, observer_name, actor_name)
+                    where = f" {hint['phrase']}" if hint else ""
+                    additions.append(
+                        "You register a faint sound" + where
+                        + " -- nothing you can make out.")
                 else:
                     words = quote.split()
                     fragment = " ".join(
@@ -132,7 +150,8 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
                 if event.get("visibility") == "concealed":
                     continue
                 if not _delivery_ok(relation, scene, observer_name, actor_name,
-                                    "action", awareness=observer_awareness):
+                                    "action", awareness=observer_awareness,
+                                    senses=observer_senses):
                     continue
                 # Intent-free `observable` surface only -- never the raw
                 # attempt (which carries the actor's purpose/intent). A mental

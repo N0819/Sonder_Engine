@@ -30,13 +30,15 @@ def test_opening_turn_uses_real_persona_name_and_appearance(
 
     captured = {}
 
-    def fake_agent_json(role, step_key, prompt, payload, **kwargs):
-        captured["payload"] = payload
-        return {"views": {}}
+    # There is no model payload to inspect. The same values are computed in
+    # the same place and handed to the composer, so the capture moved there.
+    def capture(ctx_, sc, perceivers, known, p_name, p_appearance, *a, **kw):
+        captured.update(
+            {"p_name": p_name, "p_appearance": p_appearance,
+             "perceivers": perceivers})
+        return {"views": {}, "observations": {}, "composer_ledger": {}}
 
-    monkeypatch.setattr(
-        "agents.perception._agent_json", fake_agent_json,
-    )
+    monkeypatch.setattr("agents.perception._composer_establish", capture)
 
     ctx = PipelineContext(
         chat=ChatData(
@@ -54,11 +56,10 @@ def test_opening_turn_uses_real_persona_name_and_appearance(
 
     perception_establish(ctx, nonce=0)
 
-    payload = captured["payload"]
-    assert payload["declared_act"]["actor_name"] == "Sarah Chen"
-    assert "gold uniform" in payload["declared_act"]["actor_present_appearance"]
+    assert captured["p_name"] == "Sarah Chen"
+    assert "gold uniform" in captured["p_appearance"]
 
     player_perceiver = next(
-        p for p in payload["perceivers"] if p["id"] == "player"
+        p for p in captured["perceivers"] if p["id"] == "player"
     )
     assert player_perceiver["name"] == "Sarah Chen"

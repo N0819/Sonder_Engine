@@ -168,17 +168,19 @@ def test_perception_act_resolves_uid_keyed_reactor_room(temp_db, monkeypatch):
 
     captured = {}
 
-    def fake_agent_json(role, step_key, system, payload, **kwargs):
-        captured["payload"] = payload
-        return {"views": {str(p["id"]): f"You are in {p['room_name']}."
-                          for p in payload["perceivers"]}}
+    import agents.perception as perception
+    real_act = perception._composer_act
 
-    monkeypatch.setattr("agents.perception._agent_json", fake_agent_json)
+    def capture(ctx_, sc, interp, perceivers, *a, **kw):
+        captured["perceivers"] = perceivers
+        return real_act(ctx_, sc, interp, perceivers, *a, **kw)
+
+    monkeypatch.setattr(perception, "_composer_act", capture)
 
     result = perception_act(ctx, nonce=0)
 
     doctor_perceiver = next(
-        p for p in captured["payload"]["perceivers"] if p["id"] == doctor_id
+        p for p in captured["perceivers"] if p["id"] == doctor_id
     )
     # The core assertion: the reactor's room resolves despite the uid key.
     assert doctor_perceiver["room"] == "exterior_grounds"

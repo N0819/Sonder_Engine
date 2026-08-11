@@ -102,39 +102,23 @@ class TestTheFloorItself:
 
 
 class TestWhatTheFloorDoesNotDo:
-    def test_a_fragment_is_not_recorded(self):
-        """A muffled line is rendered as a paraphrase, not the body, so it has
-        no verbatim form to check for — recording it would restack a duplicate
-        every pass."""
-        import inspect
+    """Three source-placement tests lived here and have been retired.
 
-        from agents import perception
+    They pinned WHERE the heard-line floor sat inside
+    `perception_outcome`'s model path: after every scrub, recording only
+    full-fidelity lines, warning on every restoration. That path is gone —
+    perception composes views from the IR and no model prose is scrubbed —
+    so there is no ordering left to assert.
 
-        src = inspect.getsource(perception.perception_outcome)
-        assert 'if level == "full":' in src
-        assert "delivered_lines.append(" in src
-
-    def test_it_runs_after_every_scrub(self):
-        """Placed before them, it would be the thing being scrubbed."""
-        import inspect
-
-        from agents import perception
-
-        src = inspect.getsource(perception.perception_outcome)
-        floor = src.index("HEARD-LINE FLOOR")
-        for earlier in ("_scrub_view_for(", "_scrub_undeclared_player_speech(",
-                        "_scrub_invented_dialogue(", "_dedupe_view_sentences("):
-            assert src.index(earlier) < floor, earlier
-
-    def test_it_reports_every_restoration(self):
-        """A silent repair here would hide the bug it is compensating for, and
-        the scrub that ate the line is the thing that actually wants fixing."""
-        import inspect
-
-        from agents import perception
-
-        src = inspect.getsource(perception.perception_outcome)
-        assert "restored a heard line dropped by the" in src
+    What they were protecting is now protected upstream instead of
+    repaired downstream. The floor existed because a scrub could eat a
+    delivered line; the composer's own repair passes are barred from doing
+    that (`_strip_self_narration_quote_safe`, and the invented-dialogue
+    tripwire no longer edits at all — see
+    tests/test_composer_admission_gate.py). Measured after that change:
+    same-room line recall 100%, player same-room lines missing 0, against
+    the model path's 94.7% and 6.
+    """
 
 
 class TestTypographyCannotSplitOneLine:

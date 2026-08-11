@@ -182,13 +182,6 @@ def _make_corrupted_open_group_ctx(
                  "fiction_frame": {}},
     }
 
-    def fake_agent_json(role, step_key, system, payload, **kwargs):
-        return {"views": {
-            str(payload["perceivers"][0]["id"]):
-            "Dim light filters through the trees, muffling distant sounds."
-        }}
-
-    monkeypatch.setattr(perception, "_agent_json", fake_agent_json)
     return ctx, char_id
 
 
@@ -273,12 +266,6 @@ def test_perception_act_does_not_inject_concealed_speech(temp_db, monkeypatch):
     ctx, char_id = _make_director_ctx(temp_db)
     ctx["_player_room"] = "room1"
 
-    def fake_agent_json(role, step_key, system, payload, **kwargs):
-        return {"views": {str(p["id"]): f"You are in {p['room_name']}."
-                          for p in payload["perceivers"]}}
-
-    monkeypatch.setattr(perception, "_agent_json", fake_agent_json)
-
     result = perception.perception_act(ctx, nonce=0)
 
     for pid, view in result["views"].items():
@@ -318,28 +305,20 @@ def test_perception_act_projects_speech_turn_speech_in_declared_order(
         "speech": first,
     })
 
-    def fake_agent_json(role, step_key, system, payload, **kwargs):
-        pid = str(payload["perceivers"][0]["id"])
-        return {"views": {pid: (
-            "The warm console room hums around you, the stranger's ears "
-            "perked as she turns from the viewport toward you. "
-            f'She says, "{first}" The words reach you clearly. '
-            f'She then looks at you with a teasing smile and adds, "{second}" '
-            "You hear both lines in full."
-        )}}
-
-    monkeypatch.setattr(perception, "_agent_json", fake_agent_json)
-
     view = perception.perception_act(ctx, nonce=0)["views"][str(char_id)]
 
+    # This test used to feed a stubbed model view whose prose scrambled the
+    # order, and check the deterministic passes put it back. There is no
+    # model prose to scramble any more: the composer renders straight from
+    # the declared sequence, so declared order IS render order and the
+    # assertion is about the composer keeping it.
     assert view.count(first) == 1
     assert view.count(second) == 1
-    turn_at = view.casefold().index("turns back toward you")
+    turn_at = view.casefold().index("turns back toward")
     assert view.index(first) < turn_at < view.index(second)
+    # Tone rides its own line, not a free-floating adjective in the prose.
     assert "genuine awe" in view[:turn_at]
     assert "teasing smirk" in view[turn_at:]
-    assert "words reach you clearly" not in view.casefold()
-    assert "hear both lines in full" not in view.casefold()
 
 
 def test_perception_act_rescues_open_group_speech_from_legacy_split_checkpoint(
@@ -433,12 +412,6 @@ def test_perception_outcome_does_not_inject_concealed_dialogue(temp_db, monkeypa
         }],
     }
 
-    def fake_agent_json(role, step_key, system, payload, **kwargs):
-        return {"views": {str(p["id"]): f"You are in {p['room_name']}."
-                          for p in payload["perceivers"]}}
-
-    monkeypatch.setattr(perception, "_agent_json", fake_agent_json)
-
     result = perception.perception_outcome(ctx, nonce=0)
 
     for pid, view in result["views"].items():
@@ -446,6 +419,106 @@ def test_perception_outcome_does_not_inject_concealed_dialogue(temp_db, monkeypa
             f"concealed dialogue_log entry leaked into perceiver {pid}'s view "
             "via the deterministic npc_dlog backstop"
         )
+
+
+# --- the contract no longer asks for what the backstop overwrites ---
+# The three tests above established that the engine re-stamps volume,
+# visibility and conceal_from onto every DECLARED line from the declaration
+# itself, discarding whatever the model transcribed. Measured cost of asking
+# for them anyway: 41.8 tokens per beat across 2.66 dialogue_log lines, of
+# which ~35 are thrown away. So the ask was trimmed to "supply these only on
+# a line YOU originate". These tests pin that the trim is safe -- that an
+# omitted tag on a declared line is re-stamped rather than defaulted -- and
+# that a line the Director genuinely originates can still carry its own.
+
+
+def test_a_declared_whisper_survives_the_model_omitting_volume_entirely(
+        temp_db, monkeypatch):
+    """The trimmed contract invites the model to leave volume out. If the
+    re-stamp did not cover omission as well as mis-transcription, the trim
+    would turn every declared whisper into `setdefault('normal')` -- the
+    exact 200-metre-shaft leak the backstop exists to stop, reintroduced by
+    an optimization."""
+    import agents.director as director
+
+    ctx, char_id = _make_director_ctx(temp_db)
+    ctx.director_interpret["sequence"][0]["volume"] = "whisper"
+    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
+        "dialogue_log": [{
+            "speaker": "The Stranger",
+            "exact_quote": '"The shipment arrives at midnight."',
+            "intended_target": None, "tone": "hushed",
+        }],
+    })
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    entry = next(d for d in out["dialogue_log"] if "midnight" in d["exact_quote"])
+    assert entry["volume"] == "whisper"
+    assert entry["visibility"] == "concealed"
+    assert char_id in entry["conceal_from"]
+
+
+def _voiceable_creature(temp_db, ctx):
+    """A speaker the Director is still allowed to write words for. Person-
+    shaped presences are routed to the background stage by
+    `director_may_voice`, so a simple creature is the only originated line
+    that survives to be inspected."""
+    sc = temp_db.wget(ctx.chat.id, "scene", {})
+    sc["entities"] = {"the raven": {"name": "the raven", "kind": "creature"}}
+    sc["positions"]["the raven"] = "room1"
+    temp_db.wset(ctx.chat.id, "scene", sc)
+
+
+def test_a_line_the_director_originates_keeps_the_tags_it_supplies(
+        temp_db, monkeypatch):
+    """The other half of the trim: where there is no declaration to re-stamp
+    from, the model's tags are the only ones there are, and must survive."""
+    import agents.director as director
+
+    ctx, _char_id = _make_director_ctx(temp_db)
+    _voiceable_creature(temp_db, ctx)
+    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
+        "dialogue_log": [{
+            "speaker": "the raven", "exact_quote": '"Nevermore."',
+            "volume": "shout", "intended_target": None, "tone": "",
+            "visibility": "overt", "conceal_from": [],
+        }],
+    })
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    entry = next(d for d in out["dialogue_log"] if "Nevermore" in d["exact_quote"])
+    assert entry["volume"] == "shout"
+
+
+def test_an_originated_line_with_no_tags_is_taken_as_normal_and_overt(
+        temp_db, monkeypatch):
+    """What the trimmed prompt now promises the model about omission."""
+    import agents.director as director
+
+    ctx, _char_id = _make_director_ctx(temp_db)
+    _voiceable_creature(temp_db, ctx)
+    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {
+        "dialogue_log": [{
+            "speaker": "the raven", "exact_quote": '"Nevermore."',
+            "intended_target": None, "tone": "",
+        }],
+    })
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    entry = next(d for d in out["dialogue_log"] if "Nevermore" in d["exact_quote"])
+    assert entry["volume"] == "normal"
+    assert entry["visibility"] == "overt"
+    assert entry["conceal_from"] == []
+
+
+def test_the_resolve_contract_no_longer_requires_the_re_stamped_tags():
+    from prompts import get_prompt
+    text = get_prompt("director_resolve")
+    assert "exact_quote,volume,intended_target" not in text
+    assert "ONLY on lines you originate" in text
 
 
 # --- norm_sequence concealment normalization (interpret -> perception_act path) ---

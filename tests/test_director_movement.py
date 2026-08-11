@@ -229,11 +229,6 @@ def test_perception_outcome_reflects_committed_move_not_stale_onset_cache(
         "state_diff": {"positions": {"The Stranger": "lamp_room"}},
     }
 
-    monkeypatch.setattr(
-        perception, "_agent_json",
-        lambda *a, **k: {"views": {"player": "You are in the Lamp Room."}},
-    )
-
     perception.perception_outcome(ctx, nonce=0)
 
     assert ctx["_player_room"] == "lamp_room"
@@ -353,13 +348,6 @@ def test_anchored_near_group_reconciles_positions_and_delivers_every_line(
 
     ctx.director_resolve = resolved
 
-    def bare_views(role, step_key, system, payload, **kwargs):
-        return {"views": {
-            str(p["id"]): f"You are in {p['room_name']}."
-            for p in payload["perceivers"]
-        }}
-
-    monkeypatch.setattr(perception, "_agent_json", bare_views)
     player_view = perception.perception_outcome(ctx, nonce=0)["views"]["player"]
 
     for entry in resolved["dialogue_log"]:

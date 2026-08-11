@@ -179,15 +179,6 @@ def _stub_clean_view(monkeypatch, moon_id, view_text):
     deterministic backstop, which is what we are testing."""
     import agents.perception as perception
 
-    def fake_agent_json(role, step_key, system, payload, **kwargs):
-        views = {}
-        for p in payload["perceivers"]:
-            pid = str(p["id"])
-            views[pid] = view_text if pid == str(moon_id) else (
-                f"You are in {p['room_name']}.")
-        return {"views": views}
-
-    monkeypatch.setattr(perception, "_agent_json", fake_agent_json)
     return perception
 
 
@@ -221,20 +212,17 @@ def test_perception_act_payload_is_intent_free(temp_db, monkeypatch):
 
     import agents.perception as perception
 
-    def capture(role, step_key, system, payload, **kwargs):
-        seen["payload"] = payload
-        return {"views": {str(moon_id): "You are in Elevator car."}}
+    # The payload this used to search no longer exists. Intent can now only
+    # reach a mind through a percept, so the view is both the shorter path
+    # and the whole surface.
+    view = perception.perception_act(ctx, nonce=0)["views"][str(moon_id)] or ""
 
-    monkeypatch.setattr(perception, "_agent_json", capture)
-    perception.perception_act(ctx, nonce=0)
-
-    blob = json.dumps(seen["payload"]).lower()
+    blob = view.lower()
     for term in ["intended_effects", "slow and soften", "divine heritage",
                  "arrest the free fall"]:
-        assert term not in blob, f"perception input carried intent: {term!r}"
-    # the mental recall beat is dropped from the observer-facing sequence
-    onset_seq = seen["payload"]["declared_act"]["sequence"]
-    assert all("remember" not in json.dumps(e).lower() for e in onset_seq)
+        assert term not in blob, f"perception delivered intent: {term!r}"
+    # the mental recall beat never becomes an observable surface
+    assert "remember" not in blob
 
 
 def test_structured_observations_ignore_model_side_channel(temp_db, monkeypatch):
@@ -267,14 +255,17 @@ def test_structured_observations_ignore_model_side_channel(temp_db, monkeypatch)
             }]},
         }
 
-    monkeypatch.setattr(perception, "_agent_json", malicious)
     result = perception.perception_act(ctx, nonce=0)
     blob = json.dumps(result["observations"]).casefold()
 
     assert "divine heritage" not in blob
     assert "arrest the free fall" not in blob
     assert "private_tell_ground" not in blob
-    assert "hand press against the wall" in blob
+    # ...and the observation still carries the genuine observable surface.
+    # It reads as the engine's own projection of the act rather than the
+    # phrase the stubbed model used to supply, because that is now the only
+    # source an observation can have.
+    assert "palms flat" in blob
 
 
 def test_perception_outcome_delivers_observable_not_intent(temp_db, monkeypatch):

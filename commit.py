@@ -39,7 +39,8 @@ from weather import advance_weather, normalize_weather
 from spatial import (merge_scene_with_diff, _merge_entity, room_of,
                      normalize_room_id, spatial_rel, hear_level,
                      normalize_barrier, normalize_bearing, opposite_bearing,
-                     passable_path, rooms_adjacent, visible_adjacent_rooms)
+                     passable_path, rooms_adjacent, visible_adjacent_rooms,
+                     guessed_room_sizes)
 from theory_of_mind import (apply_mind_model_updates, rekey_place_claims,
                             select_active_hypotheses, sheet_capacity)
 from survival import vitals_of
@@ -2275,6 +2276,20 @@ def prepare_scene_commit(ctx):
 
     for _msg in prune_dangling_exits(sc):
         ctx.warnings.append(_msg)
+
+    # G6: size stopped being flavour when perception started reading it.
+    # `proximity_rel` needs it to say two people are `across` a room, and
+    # S2a caps sight at `shapes` in a large room with no placement -- so a
+    # room nobody sized is a perception grade the engine chose for itself.
+    # It chooses silently, on 45% of live rooms. Say so on the beat the room
+    # becomes shared -- once, not every beat the scene stays in it.
+    for _room in guessed_room_sizes(sc, prev_scene):
+        ctx.warnings.append(
+            f"Room {_room['name']!r} holds {_room['occupants']} and has no "
+            f"authored size; perception is grading it {_room['derived']!r} "
+            + ("from a keyword in its own description"
+               if _room["by_keyword"] else "by default")
+            + f". Author scene_patch.rooms.{_room['room']}.size to set it.")
 
     return {
         "scene": sc, "clock": clock,
@@ -5208,6 +5223,19 @@ def prepare_memory_commit(ctx, *, scene=None):
         or (ctx.perception_establish or {}).get("views")
         or {}
     )
+    # IR-minted episodes (deterministic composer, PERCEPTION_NO_LLM): when
+    # perception composed the views, it also minted each character's episode
+    # directly from the percept IR -- first person, event-bearing content
+    # first, typed entities -- instead of the second-person view prose. A
+    # composed "" is a NON-EVENT (all standing state, nothing changed) and
+    # mints nothing; absent keys fall back to the view exactly as before.
+    _composed_episodes = (ctx.perception_outcome or {}).get("episodes")
+    if not isinstance(_composed_episodes, dict):
+        _composed_episodes = None
+    _composed_episode_meta = (
+        (ctx.perception_outcome or {}).get("episode_meta") or {}
+        if _composed_episodes is not None else {}
+    )
     est = ctx.director_establish
     sc = scene if scene is not None else (wget(cid, "scene", {}) or {})
     pending_memories = []
@@ -5257,6 +5285,8 @@ def prepare_memory_commit(ctx, *, scene=None):
         st = json.loads(char_row["cstate"] or "{}")
         v = views.get(str(ccid))
         episode_content = ""
+        _episode_entities = []
+        _episode_gist = ""
         # Side records (durable quotes) are emitted after the coherent episode
         # row so storage order mirrors their role: event first, annotations
         # second.  They remain separately retrievable by provenance.
@@ -5508,6 +5538,18 @@ def prepare_memory_commit(ctx, *, scene=None):
                             ),
                         })
             episode_content = v
+            # IR-minted episode (see the top of this function): the composer
+            # already rendered this mind's episode from the same gated,
+            # fidelity-degraded percepts its view rendered -- never richer --
+            # with typed entities instead of names scraped back out of prose
+            # (memory.py's `_extract_entities` fallback).
+            if _composed_episodes is not None and str(ccid) in _composed_episodes:
+                episode_content = str(_composed_episodes.get(str(ccid)) or "")
+                _meta = _composed_episode_meta.get(str(ccid)) or {}
+                _episode_entities = [
+                    str(e) for e in (_meta.get("entities") or [])
+                    if str(e or "").strip()]
+                _episode_gist = str(_meta.get("gist") or "").strip()
             # A view that says only "you are somewhere unspecified" is the
             # ABSENCE of an event, and an absence is not an episode. Minted
             # anyway, it becomes a retrievable memory carrying no information:
@@ -5522,11 +5564,14 @@ def prepare_memory_commit(ctx, *, scene=None):
             # phrase "leaking a false empty view" from a position it could not
             # resolve). The cause does not change the remedy: either way there
             # is nothing to remember, so nothing is written. The turn still
-            # happened and the turn index still records it.
+            # happened and the turn index still records it. The composer
+            # generalizes this floor upstream: a percept list that is all
+            # unchanged standing state renders an EMPTY episode, so the
+            # marker check below is the backstop, not the mechanism.
             if _is_empty_view(episode_content):
                 episode_content = ""
         if episode_content:
-            pending_memories.append({
+            _episode_row = {
                 "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
                 "turn_idx": turn.idx, "kind": "episodic", "category": "episode",
                 "provenance": "witnessed", "salience": _salience_of(episode_content),
@@ -5534,7 +5579,12 @@ def prepare_memory_commit(ctx, *, scene=None):
                 "emotional_context": mood,
                 "valence": _mem_valence, "arousal": _mem_arousal,
                 "event_key": _stable_event_key(turn.id, ccid, "episode"),
-            })
+            }
+            if _episode_entities:
+                _episode_row["entities"] = _episode_entities
+            if _episode_gist:
+                _episode_row["gist"] = _episode_gist
+            pending_memories.append(_episode_row)
         pending_memories.extend(side_memories)
         if own_result:
             # Ponder is a private, deliberate retrieval request for the NEXT

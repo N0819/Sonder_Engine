@@ -352,15 +352,19 @@ class TestPerceptionOutcomeMultiplayerSources:
         ctx["director_resolve"] = {"resolved_event": "", "dialogue_log": [],
                                    "state_diff": {}}
 
-        seen = {}
         all_perceivers = []
 
-        def fake_agent_json(role, step_key, system, payload, **kw):
-            seen["payload"] = payload
-            all_perceivers.extend(payload.get("perceivers") or [])
-            return {"views": {}}
+        # The perceiver list used to be read off the model payload. It is
+        # still built by the same code in the same place -- the stage
+        # assembles its typed inputs and hands them to the composer -- so
+        # the capture point moved to that handoff.
+        def capture(ctx_, sc, prev_scene, diff, interp, res, known, p_name,
+                    p_appearance, p_disguise, p_disguise_known,
+                    p_disguise_terms, perceivers, *a, **kw):
+            all_perceivers.extend(perceivers or [])
+            return {"views": {}, "observations": {}, "composer_ledger": {}}
 
-        monkeypatch.setattr(perception, "_agent_json", fake_agent_json)
+        monkeypatch.setattr(perception, "_composer_outcome", capture)
 
         perception.perception_outcome(ctx, 0)
 

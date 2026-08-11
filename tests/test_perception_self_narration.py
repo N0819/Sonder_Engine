@@ -83,24 +83,25 @@ def test_missing_inputs_are_noops():
 
 
 def test_every_perception_stage_applies_the_guard():
-    """Pass 1 applies the identity floor DIRECTLY rather than through
-    `_scrub_view_for`, so it needs the guard wired explicitly — and it is the
-    pass that most needs it. The act view is written closest to the Director's
-    resolved_event, which is omniscient by construction, so it is the likeliest
-    place for that omniscience to be copied through intact.
+    """Every composed view passes the self-narration guard before delivery.
 
-    Measured on a fresh 4-turn live run: 1 of 17 views narrated its own
-    perceiver, and it was a pass-1 view.
+    This used to read each stage function's source for the guard's name,
+    because each stage applied it separately. The three stages now share
+    one exit — `_composer_finish_observer` — so the guard is asserted at
+    the seam they all go through, which is a stronger statement than three
+    separate greps: a stage cannot forget to call it without failing the
+    structural test in tests/test_perception_has_no_model.py that every
+    stage ends in the composer.
     """
     import inspect
 
     from agents import perception
-    for stage in (perception.perception_act,
-                  perception.perception_establish,
-                  perception.perception_outcome):
-        src = inspect.getsource(stage)
-        assert ("_strip_self_narration" in src
-                or "_scrub_view_for" in src), stage.__name__
+
+    finish = inspect.getsource(perception._composer_finish_observer)
+    assert "_composer_tripwires" in finish
+
+    tripwires = inspect.getsource(perception._composer_tripwires)
+    assert "_strip_self_narration_quote_safe" in tripwires
 
 
 # --- the same boundary at the last stage ------------------------------------
