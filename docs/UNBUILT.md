@@ -1843,6 +1843,91 @@ without having been in the room for it. And re-measure the fire rate after --
 a lane that has never fired gives `no chances`, not 0%, and the first nonzero
 denominator is the first evidence the mechanism exists.
 
+### 1.31 The Director cannot name what the player is carrying
+
+`agents/director._carried_reports_view` walks `active_cast` and reads `cstate`.
+The player's held reports live in `carriers.PERSONA_STATE_KEY` (a persona has
+no `chat_chars` row), so they are invisible to the one stage that has to name a
+`world_event_id` in a `courier_ops` or telling op.
+
+The mechanism underneath works — a scratch drive shows the player acquiring a
+surface, paying a rider, and the claim arriving two retellings fainter. But in
+a real story the Director is asked to encode "I send word east about the thing
+I just watched" while holding an empty list, so it has nothing to name. The
+carrier half landed in `7b81e8a`; this is what stops it reaching production.
+
+Roughly five lines: route that view through `carriers._carriers` rather than
+`active_cast`. Its own docstring already records this exact defect — an id the
+Director was never shown — having been fixed there once before, which is the
+argument for fixing the enumeration rather than the symptom.
+
+### 1.32 A region assertion has an owner only by slot position
+
+`spatial.owned_region` now makes a region UNAMBIGUOUS: `(who, where)`, so no
+comparison can collapse one body's mouth into another's. It cannot make an
+assertion TRUE. A slot's position is what names its owner, so a mis-slotted
+`{target: Hinami, target_part: glans}` still yields a well-formed token.
+
+A check derived from the scene's own history was built and measured against
+every stored beat, each turn judged against its own pre-beat checkpoint:
+
+    contacts     70 fires / 2,036 assertions
+    substances    2 fires /    30 assertions
+    true positives: 1
+
+The false positives are ordinary anatomy — hand, waist, chest, mouth, lips —
+whose first mention in a story happened to be the other body, and the rule
+deadlocks: a common region asserted first on body A can never afterwards be
+asserted on body B, because every attempt is cleared before it can become
+evidence. It is also self-poisoning. Turn 62 of the reference story flags
+`glans` on the wrong body (the true positive); turn 64 flags it on the RIGHT
+body, because turn 62's own error had by then become the scene's belief. One
+wrong assertion inverts the check for everything after — the exact failure
+mode the investigation started from. Removed in `a851ea0`, numbers recorded in
+place.
+
+**Direction: the owner must be ASSERTED, not derived.** An owner qualifier on
+the region slot, so the Director says whose mouth it is rather than the engine
+inferring it. Schema plus prompt. This is what would actually close turn 62,
+and it is the only route left that does not require an anatomy model.
+
+### 1.33 An interpret that says nothing costs two model calls
+
+Measured on a 51-beat authored playthrough: 42 of 50 final interprets carried
+a degenerate sequence element — `attempt: "waits"`, `observable: "waits"`,
+empty `verb`, no targets, no effects — for inputs as plain as *"I draw the
+sword."* `interpret_repair` fired 25/50, reported `repaired=True` 25/25, and
+left `unresolved` 25/25: its output was a byte-identical `waits` element,
+because the repair sets `repaired` merely on the list being non-empty. The
+deterministic re-check then still failed, which forced `mapping_stage` on all
+25 (correlation exactly 1:1 with the clean turns running `mapping_quick`).
+
+So half those turns paid two sequential model calls that produced nothing, and
+— the part that is not about latency — **the player's declared act was dropped
+from causality on those beats.**
+
+Config-specific: across 1,886 interprets in the live corpus the repair fires
+11.8% overall, 6.0% over the last 100 turns, and genuinely changes output
+54–71% of the time. `"waits"` appears nowhere in engine source, so it is
+model-emitted, plausibly `llm_quality`'s repair minimally satisfying the schema
+after a primary call returned `{}`.
+
+Two additive fixes, neither removing a stage: treat a sequence whose only
+element has an empty `verb` and no targets or effects as a validation failure,
+so the existing same-call repair fixes it before `_reconcile_interpretation`
+runs; and make `recon["repaired"]` require the re-check to actually pass, so
+the metric stops reporting 100% success on a 0% success rate.
+
+### 1.34 Nothing on the live path records how long a stage took
+
+`logging_utils.measure_step` and `TurnMetrics` have no callers outside their
+own module. Every per-stage timing figure this project has comes from
+`tools/turn_bench.py` runs on a retired model configuration, so the
+percentages are usable and the absolute seconds are not. Wiring `measure_step`
+into `agents/runtime`'s step dispatch and parallel-group runner would make
+every latency claim continuously checkable instead of re-measured by hand.
+
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
@@ -2746,6 +2831,56 @@ beyond a trusted local environment.
 
 ---
 
+### 4.7 Matter has no volume, so nothing can wash anything away
+
+The substance ledger accumulates. Coalescing landed (`9a6bc3c`) — same material,
+same source, same region, same body is one pool a later release re-describes —
+and conservation landed, so swallowing empties the mouth. What is missing is
+DISPLACEMENT: a more abundant fluid arriving on a region carrying away what was
+already there.
+
+It was deliberately not built, twice, for reasons that still hold:
+
+- **The amount vocabulary is not a magnitude.** Of 39 stored terms, `trace`,
+  `moderate`, `small` and `copious` order as English, but `coating` is a
+  distribution, `oozing` a rate, `remainder` purely relative with no magnitude
+  at all, `dustpan full` container-relative, and `hot, viscous torrent` buries
+  its magnitude among temperature and viscosity.
+- **The precedent makes it a no-op on the reported case.** Following
+  `affect.CAPACITY_LADDER`, an unreadable term takes the mildest rung — and the
+  reported case is spelled `coating` versus `light coating`, so neither would
+  ever displace the other. Making it fire requires ruling that a distributed
+  film outranks a droplet, which is a physical model of fluids, not a reading
+  of a word.
+- **The reported case is cross-substance** (one fluid washing away a different
+  one). `_same_pool` deliberately keeps different substances apart, and
+  deciding that A dilutes B needs a miscibility model the engine has no
+  representation for and § Genre boundary forbids hard-coding.
+
+Separately and much cheaper: **wiping already works and is almost never used.**
+`op: remove` / `op: clear` exist and the Director can emit them. Measured
+corpus-wide: 38 adds and deposits against 5 removes, and zero removes after
+turn 38 of the reference story. That is prompt efficacy, not a missing
+mechanism, and it is worth trying before any material model is designed.
+
+**Open question this section exists to force: does the engine grow a material
+model at all?** Everything above is blocked on that answer rather than on
+difficulty.
+
+### 4.8 Two regions on one body, spelled differently, are two regions
+
+`mouth` and `oral cavity` mint separate substance rows on the same body.
+`AGENTS.md` forbids a body-part synonym table with a measured reason
+(`tail_spade` is a nameable place on a tail, not `tail` blurred), and that pair
+shares no word, so no structural rule reaches it.
+
+`spatial.canonical_region` is now the single fold point for every region
+comparison in the ledger, so if the substance ledger is judged to warrant an
+exception the contact ledger does not, there is exactly one place to add it.
+Explicitly NOT made moot by `owned_region`: qualifying which body owns a region
+is orthogonal to folding two spellings of one region on one body.
+
+
 ## 5. Deferred backlog
 
 From the erased enterprise_d_v2 40-turn audit backlog. Its P1 (pronoun fidelity)
@@ -3054,13 +3189,44 @@ unrun experiment is unfinished work, not a broken thing.
   with stamina up, `charge` unchanged, absorption below 0.25, and at least one
   departure-capable want intact. If any of the four fails, the anti-attractor
   design is wrong and no amount of constant-tweaking fixes it.
-
----
+- **Prompt efficacy for crowds, tellings and projects.** The first playthrough
+  with the model side unauthored (`tools/model_playthrough.py`; artefacts in
+  `demos/vale-model-played-14-*`) handed every 8.0 mechanism an explicit
+  occasion across 11 Director resolves, on two independent models. Reached for
+  and correctly encoded: `courier_ops` (both), `artifact_ops` (one) — and those
+  were refused for a structural reason since fixed, not a bad encoding, so
+  those two prompts land. Never declared once, by either model, on any
+  occasion: `crowd_ops` (a packed market square, then listening to it),
+  `tell_ops` (telling a named character what the player saw), `project_ops` (a
+  stated multi-stage intention). The gap is now isolated — the same commit path
+  drove all three to 100% acceptance under `demos/ashen-quest-51-*`, where a
+  human wrote the ops. When rewriting those clauses: a bare prohibition
+  inverts, and naming a concrete occasion is what works. Re-run the harness
+  afterwards and compare; the artefacts are checked in.
+- **`make test-browser` for the early-narration render** (`126009c`).
+  Playwright is not installed on the machine it was written on, so it was
+  checked with `node --check` and a stub DOM instead.
+- **Full narrator token streaming.** Only the conservative half landed —
+  render on the narrator `step` event. Streaming the tokens themselves would
+  put the first word at ~75% of a turn instead of 100%, but the narrator
+  re-runs on a fidelity or craft rewrite on roughly a quarter of turns, so it
+  needs a re-stream or a visible "revising" state first.
 
 ## 8. Parked
 
 Not scheduled, not committed to a phase. Kept so they are not lost and not
 accidentally built.
+
+- **`providers.chat_complete_async` is dead.** Defined, imported by `app.py`,
+  and called from nowhere but its own retry loop. The threading model works and
+  the `contextvars` discipline is built around it, so the recommendation is to
+  delete the import rather than build on it.
+- **`prompt_cache.py` is dead** — no importer anywhere — and its
+  `estimate_cacheable_tokens` heuristic is wrong by 5x to 262x on every stage.
+  `AGENTS.md` still names it as the watch-file for cacheability.
+- **`agents/common._agent_json`'s docstring** describes the ladder as "one
+  temperature-0 repair, then per-candidate fallback" and no longer mentions the
+  length escalation added in `c9c1fbe`.
 
 - **A conformance test for `Design.md`.** Its status table is prose. A test
   asserting each "Built" row still resolves to real code — symbol exists, module

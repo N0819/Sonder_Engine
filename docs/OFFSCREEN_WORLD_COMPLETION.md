@@ -353,6 +353,42 @@ carrier, relationship delta, and memory produced an outcome. A user-facing
 resume digest may summarize stored records outside the fiction, but it must
 never become omniscient Narrator context.
 
+## Where the milestone stands — measured 2026-08-10
+
+Against the list below, played by `tools/quest_drive.py` (51 beats, authored)
+and `tools/model_playthrough.py` (14 beats, model-authored). Artefacts:
+`demos/ashen-quest-51-*` and `demos/vale-model-played-14-*`.
+
+Demonstrated: a place changing across an absence with no model call; a
+scheduled and a reactive consequence firing; one witness learning while an
+unreached mind stays ignorant; information arriving late, degraded and
+sometimes not at all; an opted-in character adapting on evidence it legitimately
+received; aftermath met before explanation.
+
+The falsifier the list calls strongest — an ordinary event that does NOT spread
+— holds hard: crowd uptake 6% (5/83), report acquisition 6% (14/233). Most
+deeds go nowhere.
+
+**Two bullets do not yet hold, and they are the release gates:**
+
+- **The returning character remembers its own off-screen experience.** Not
+  demonstrated. § 6 re-contact settlement is unbuilt. The recommendation on
+  file is to defer it to 8.1 and say so in the notes rather than rush it.
+- **Reroll, restore, branch, archive and import preserve or rewind the same
+  history.** Import is verified — `demos/ashen-quest-51-story.json` was
+  re-imported through the production-wired `ChatArchiveService` into an empty
+  database (51 turns, 111 memories, 4 cast, 7 world events). Reroll, restore
+  and branch have never been tested against off-screen state. This is a
+  durability claim, so it wants testing rather than deferring.
+
+Also outstanding for the architectural completion gate: three of the five
+model-assisted ceilings (routine and residue as structured fields, second-order
+consequences, place-obligation pre-generation) and § 4's repeated-reference
+canon locking. And every model-assisted mechanism needs "at least one real-story
+opportunity and observed fire" — see the prompt-efficacy entry in
+`UNBUILT.md` § 7, which is where the three that no model has ever declared are
+recorded.
+
 ## Minimum convincing 8.0 milestone
 
 Before claiming that the illusion works, demonstrate one real story in which:
