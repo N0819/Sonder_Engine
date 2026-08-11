@@ -390,3 +390,47 @@ def test_an_unmentioned_anchors_table_is_absent_rather_than_empty():
     stay silence through the dump, or every room echo carries an eraser."""
     from schemas import RoomDef, _dump
     assert "anchors" not in _dump(RoomDef(**{"name": "Bedroom"}))
+
+
+def test_distinct_anchors_in_huge_and_vast_rooms_are_across():
+    """D2 regression: the 'across' gate tested size == 'large' EXACTLY, so the
+    two sizes BIGGER than large ('huge', 'vast' -- both legitimate scene data,
+    see _ROOM_COST) fell through to 'near'. A mutter that dies across a great
+    hall then arrived as a fragment across a vaster one: more floor produced
+    MORE audibility."""
+    for size in ("huge", "vast", "HUGE"):  # gate must also stay case-tolerant
+        sc = _scene({"P": "taproom", "Drunk": "taproom"},
+                    {"P": {"at": "bar"}, "Drunk": {"at": "hearth"}})
+        sc["rooms"] = {"taproom": dict(TAVERN["taproom"], size=size)}
+        assert proximity_rel(sc, "P", "Drunk") == "across", size
+
+
+def test_whisper_is_attenuated_in_room_like_mutter():
+    """D1 regression: the same-room branch tested volume == 'mutter' exactly,
+    so 'whisper' -- the QUIETEST of the five volumes (prompts.py's
+    whisper|mutter|normal|loud|shout) -- fell through to 'full' at ANY in-room
+    distance while the louder 'mutter' was correctly degraded. The
+    deterministic floor runs hear_level with no model in the loop
+    (deterministic_micro_perception), so whispered content was delivered
+    verbatim across a great hall: an information-boundary leak.
+
+    Whisper is held to mutter's tiers and deliberately NO TIGHTER yet. The
+    spec ('whisper: ONLY same-room perceivers in close proximity') would
+    justify silence beyond reach, but 'near' is overwhelmingly the DEFAULT
+    proximity_rel returns when no station data exists -- measured live, only
+    6.7% of bodies carry an anchored station and 8.6% of multi-occupant rooms
+    have two -- so reading it as a measured distance would silence ~91% of
+    whispers entirely. Tighten when station coverage makes the tier evidence.
+    """
+    same = {"same_room": True}
+    assert hear_level(same, "whisper", proximity="within_reach") == "full"
+    assert hear_level(same, "whisper", proximity="near") == "fragment"
+    assert hear_level(same, "whisper", proximity="across") == "none"
+    # Back-compat: unknown proximity keeps same-room -> full, as mutter does.
+    assert hear_level(same, "whisper") == "full"
+    # The invariant that must survive any future tightening: the quietest
+    # volume is never LOOSER than the next one up, at any tier.
+    _rank = {"none": 0, "fragment": 1, "full": 2}
+    for prox in ("within_reach", "near", "across", None):
+        assert _rank[hear_level(same, "whisper", proximity=prox)] \
+            <= _rank[hear_level(same, "mutter", proximity=prox)]

@@ -49,7 +49,7 @@ from character_schema import (
 from db import wget
 from schemas import validate_llm_output
 from prompts import get_prompt
-from spatial import hear_level, spatial_rel
+from spatial import hear_level, spatial_rel_between
 
 from commit import (
     name_in_roster,
@@ -149,8 +149,12 @@ def _beat_for_presence(dr, sc, station_room, name, beat_room=None):
         sp_room = _room_of(sc, speaker)
         if not sp_room:
             continue
+        # Body-to-body builder, so an enclosure around the speaker muffles the
+        # line for a background ear exactly as it does for the cast (L2).
         level = hear_level(
-            spatial_rel(sc, sp_room, station_room),
+            spatial_rel_between(sc, name, speaker,
+                                observer_room=station_room,
+                                target_room=sp_room),
             d.get("volume") or "normal",
         )
         if level == "none":
@@ -428,9 +432,19 @@ def _audience_map(sc, entry, managed, level):
             audience[name] = "none"
             continue
         if sp_room and room:
-            lvl = hear_level(spatial_rel(sc, sp_room, room), volume)
+            lvl = hear_level(
+                spatial_rel_between(sc, name, speaker,
+                                    observer_room=room, target_room=sp_room),
+                volume)
         else:
-            lvl = "full"  # co-presence assumption, same as _beat_for_presence
+            # FAIL CLOSED. This used to be `"full"` with a comment claiming it
+            # matched `_beat_for_presence` -- which does the opposite: X1
+            # holds that not knowing where a presence stands is a reason to
+            # deliver NOTHING, and drops the line when speaker or station
+            # cannot be placed. Co-presence is not the default; an
+            # unplaceable speaker's line must not become every managed
+            # presence's canon (register L8).
+            lvl = "none"
         audience[name] = lvl
     if not any(v != "none" for v in audience.values()):
         return None

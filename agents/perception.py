@@ -41,7 +41,6 @@ from spatial import (
     apply_contact_ops,
     corridor_sightlines,
     hiding_holders_of,
-    _body_interior_holder,
     ambient_scope,
     contact_phrase,
     contact_sensation,
@@ -54,6 +53,7 @@ from spatial import (
     effective_light,
     visual_level_between,
     hear_level,
+    measured_proximity_rel,
     merge_scene_with_diff,
     normalize_barrier,
     proximity_rel,
@@ -64,6 +64,7 @@ from spatial import (
     scent_level,
     spatial_facts,
     spatial_rel,
+    spatial_rel_between,
     substance_event_clause,
     visible_adjacent_rooms,
 )
@@ -284,15 +285,23 @@ def _addresses(intended_target, observer_name):
     return any(str(t).casefold() == on for t in targets)
 
 
-def _dialogue_hear_level(entry, rel, observer_name):
+def _dialogue_hear_level(entry, rel, observer_name, proximity=None):
     """Audibility of one dialogue entry to an observer.
 
-    Ordinary spatial hearing (hear_level) decides first. It only ever gets
-    OVERRIDDEN in one direction -- a line it would DROP ('none', out of earshot)
-    is rescued to 'full' when the line is a TRANSMISSION addressed to THIS
-    observer: a combadge/radio/intercom carries the voice across the physical
-    barrier that ordinary hearing can't. A line already audible is never
-    altered, so same-room and open-door hearing are untouched.
+    Ordinary spatial hearing (hear_level) decides first -- including the
+    `proximity` downgrade, which the ONSET floor always applied and this
+    helper's outcome-pass caller did not, so a mutter crossed a great hall at
+    full volume on the outcome pass alone (register L3: two floors, one rule,
+    different answers). Pass only a MEASURED tier (see
+    `spatial.measured_proximity_rel`): "near" is mostly a default, and a
+    default must not silence a conversation.
+
+    Hearing only ever gets OVERRIDDEN in one direction -- a line it would DROP
+    ('none', out of earshot) is rescued to 'full' when the line is a
+    TRANSMISSION addressed to THIS observer: a combadge/radio/intercom carries
+    the voice across the physical barrier that ordinary hearing can't. A line
+    already audible is never altered, so same-room and open-door hearing are
+    untouched.
 
     A transmission is recognised by either signal:
       - the director marked it medium:'comm' (explicit), or
@@ -302,15 +311,24 @@ def _dialogue_hear_level(entry, rel, observer_name):
         sound and dropping it is the TR-2 bug. This shape-based floor keeps the
         guarantee from depending on the director remembering to tag every line.
 
+    The shape floor's premise is a BARRIER: a by-name exchange across one
+    implies a device carrying it. An enclosure implies no such thing -- being
+    named by a voice beyond the mass around you creates no channel through
+    it -- so a drop caused by the enclosure directions is never shape-rescued.
+    An explicit medium:'comm' tag still crosses (a radio in a pocket works).
+
     The comm path carries only the VOICE; the caller sets can_see separately (a
     transmission grants no sight)."""
-    base = hear_level(rel, entry.get("volume", "normal"))
+    base = hear_level(rel, entry.get("volume", "normal"), proximity=proximity)
     if base != "none":
         return base
-    if _addresses(entry.get("intended_target"), observer_name) and (
-        str(entry.get("medium") or "").lower() == "comm"
-        or str(entry.get("volume", "normal")).lower() in ("normal", "loud", "shout")
-    ):
+    if not _addresses(entry.get("intended_target"), observer_name):
+        return base
+    if str(entry.get("medium") or "").lower() == "comm":
+        return "full"
+    if rel.get("enclosed_from_source") or rel.get("source_enclosed"):
+        return base
+    if str(entry.get("volume", "normal")).lower() in ("normal", "loud", "shout"):
         return "full"
     return base
 
@@ -1143,6 +1161,34 @@ def _strip_unknown_pose_claims(view, pose_unknown):
 _PERCEPTION_FANOUT_WORKERS = 4
 
 
+def perception_llm_disabled():
+    """True when PERCEPTION_NO_LLM asks the perception passes to skip their
+    model fan-out entirely and build every view deterministically.
+
+    This is the zero-LLM perception path: `_per_observer_model_views` returns
+    no views, and each stage's existing deterministic machinery does the rest
+    -- `perception_establish` and `perception_outcome` fall to
+    `_fallback_perception_views` (whose call sites already pre-filter what it
+    may see, because the fallback itself is not an information gate; see the
+    comment above `fallback_dlog` in `perception_outcome`), and every pass
+    then runs the same per-perceiver backstops, injections and scrubs it runs
+    on model prose. The information floor is therefore unchanged: nothing on
+    this path receives anything the model path did not already gate.
+
+    Deliberately read from the environment at call time, not import time, so
+    a test or benchmark can flip it without re-importing the engine. Default
+    OFF: with the variable unset (or set to anything but an affirmative),
+    behaviour is byte-identical to the model path.
+
+    The views this path produces are minimal room/dialogue composites, NOT
+    the authored composer views -- fiction quality is measurably worse. It
+    exists for latency measurement and as the stepping stone to the
+    deterministic composer.
+    """
+    return os.environ.get("PERCEPTION_NO_LLM", "").strip().lower() in (
+        "1", "true", "yes", "on")
+
+
 def _per_observer_model_views(perceivers, payload_for):
     """Run perception with one physically scoped payload per observer.
 
@@ -1150,6 +1196,9 @@ def _per_observer_model_views(perceivers, payload_for):
     every generated view. Separate calls make the information boundary
     structural; post-hoc scrubs remain defense in depth.
     """
+    if perception_llm_disabled():
+        return {}
+
     def _one(perceiver):
         payload = payload_for(perceiver)
         payload["perceivers"] = [perceiver]
@@ -1545,27 +1594,31 @@ def _source_channels(sc, perceiver_name, perceiver_room, sources, prev_sc=None):
     """
     rels = {}
     for s in sources:
-        rel = spatial_rel(sc, s["room"], perceiver_room)
-        if containment_conceals(sc, perceiver_name, s["name"]):
-            rel = {**rel, "concealed": True}
+        # THE body-to-body relation builder (see spatial_rel_between): it
+        # carries concealment, the threshold-crossing grace, and all three
+        # enclosure directions. It used to be built here by hand -- bare
+        # spatial_rel plus a concealed patch plus a one-way inside_source
+        # check -- which left `enclosed_from_source` and `source_enclosed`
+        # unset on every production rel, so the enclosure guards in
+        # hear_level/scent_level were guards that could not fire: a voice
+        # sealed inside a body reached the whole room at full clarity
+        # (register L2). Argument order also matters: spatial_rel stamps the
+        # light of the room being LOOKED AT, and the hand-built form passed
+        # (source_room, perceiver_room) -- grading sight of the source by the
+        # light where the PERCEIVER stood (register L6).
+        rel = spatial_rel_between(sc, perceiver_name, s["name"],
+                                  observer_room=perceiver_room,
+                                  target_room=s["room"])
         if prev_sc:
-            prev_rel = spatial_rel(
-                prev_sc,
-                room_of(prev_sc, s["name"]) or s["room"],
-                room_of(prev_sc, perceiver_name) or perceiver_room)
-            if containment_conceals(prev_sc, perceiver_name, s["name"]):
-                prev_rel = {**prev_rel, "concealed": True}
+            prev_rel = spatial_rel_between(
+                prev_sc, perceiver_name, s["name"],
+                observer_room=room_of(prev_sc, perceiver_name) or perceiver_room,
+                target_room=room_of(prev_sc, s["name"]) or s["room"])
             # Only ever upgrades. `has_visual` is the room-level question and
             # is the one that goes false when an edge is severed mid-beat --
             # which is exactly the transition this exists to preserve.
             if has_visual(prev_rel) and not has_visual(rel):
                 rel = {**prev_rel, "was_reachable_at_beat_start": True}
-        # One-way: the perceiver is inside THIS source, so the source's voice
-        # is conducted through the mass around them rather than transmitted
-        # through a barrier. hear_level reads it; sight is untouched.
-        holder = _body_interior_holder(sc, perceiver_name)
-        if holder and holder.casefold() == str(s["name"]).strip().casefold():
-            rel = {**rel, "inside_source": True}
         rels[s["name"]] = rel
     return {
         "spatial_to_sources": rels,
@@ -2107,12 +2160,22 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
                  if isinstance(t, dict) and t.get("cue")]
         if not demeanor and not tells:
             continue
-        rel = spatial_rel(scene, s.get("room"), o_room)
+        rel = spatial_rel_between(scene, observer, sname,
+                                  observer_room=o_room,
+                                  target_room=s.get("room"))
         # Per-BODY, so a source standing in a torch's pool is visible while the
         # rest of the dark room is not -- the room-level answer cannot see that.
         visible = (visual_level_between(scene, observer, sname) != "none"
                    and sname not in behind)
-        audible = bool(rel.get("same_room"))
+        # A voice/breath tell needs clean hearing, not mere co-location: an
+        # enclosed body's position derives to its carrier's room, so bare
+        # `same_room` handed a breath tell across a seal that muffles the
+        # voice itself to a fragment (register L2). Conducted hearing
+        # (observer inside the source) stays full, so those tells survive;
+        # a crate stays a thing you can be heard through (no body-mass flag,
+        # unchanged).
+        audible = bool(rel.get("same_room")) \
+            and hear_level(rel, "normal") == "full"
         acuity = _tell_acuity(observer_sheet)
         familiarity = 0.45 if (observer in (known.get(sname) or [])
                                or sname in (known.get(observer) or [])) else 0.15
@@ -2641,21 +2704,19 @@ def perception_act(ctx, nonce):
             continue
         sh, act, _ = sheet_state(c)
         r = character_room(sc, sh)
-        rel = spatial_rel(sc, p_room, r)
+        # THE body-to-body relation builder: concealment, the
+        # threshold-crossing grace, and the three enclosure directions in one
+        # place (register L2 -- built by hand here, the enclosure flags were
+        # never set and hear_level's guards could not fire). Argument order is
+        # (observer, actor): spatial_rel stamps the light of the room being
+        # LOOKED AT, and the hand-built form passed (p_room, r), grading
+        # sight OF the actor by the light where the OBSERVER stood -- a full
+        # visual channel to an actor standing in darkness (register L6).
+        rel = spatial_rel_between(sc, character_name(sh), p_name,
+                                  observer_room=r, target_room=p_room)
         if _previous_open_group_continuity(
                 ctx, sc, p_name, character_name(sh), c["id"], p_room, r):
             rel = {**rel, "open_group_continuity": True}
-        # The actor may be part-way through a boundary this observer is
-        # standing behind -- going through a doorway is watched from the room
-        # behind rather than vanishing the instant the position field changed.
-        # Floors sight at `shapes`; it never grants more than the light allows.
-        if crossing_visible_from(sc, r, p_name):
-            rel = {**rel, "crossing": True}
-        # A carried body's position derives to its carrier's, so an enclosed
-        # actor reads as `same_room` with everyone around the carrier -- which
-        # answers sight before barrier or light is consulted.
-        if containment_conceals(sc, character_name(sh), p_name):
-            rel = {**rel, "concealed": True}
         rdata = (sc.get("rooms") or {}).get(r) if r else None
         prox_to_others, behind_others = _co_present_company(
             sc, character_name(sh), co_present, known)
@@ -3788,11 +3849,15 @@ def perception_outcome(ctx, nonce):
                            "note": "bodiless voice, present throughout"}
                 else:
                     sp_room = d.get("speaker_room") or room_of(sc, d_speaker)
-                    rel = spatial_rel(sc, sp_room, p.get("room"))
-                    # This fallback builds its own rel and so misses the
-                    # concealment `_source_channels` applies to the map above.
-                    if containment_conceals(sc, p["name"], d_speaker):
-                        rel = {**rel, "concealed": True}
+                    # Same builder as `_source_channels` above: this fallback
+                    # used to hand-build its rel from bare spatial_rel plus a
+                    # concealed patch, so a dialogue speaker who was not a
+                    # source this beat bypassed every enclosure direction --
+                    # a sealed voice arrived at full through exactly the path
+                    # meant to catch speakers the source list missed.
+                    rel = spatial_rel_between(sc, p["name"], d_speaker,
+                                              observer_room=p.get("room"),
+                                              target_room=sp_room)
             can_see = _in_plain_view(rel, visual.get(d_speaker, False))
             if d_speaker in recognized_sources:
                 display = d_speaker
@@ -3835,7 +3900,13 @@ def perception_outcome(ctx, nonce):
             # _inject_dialogue renders "You hear X say...". A co-located
             # bystander is unaffected: not the addressed party, so they fall
             # through to ordinary spatial hearing.
-            level = _dialogue_hear_level(d, rel, p["name"])
+            # MEASURED proximity only (register L3): the onset floor applies
+            # the same downgrade via proximity_to_actor; passing the bare
+            # proximity_rel default ("near", ~91% of rooms have no stations)
+            # would degrade nearly every legitimate mutter to a fragment.
+            level = _dialogue_hear_level(
+                d, rel, p["name"],
+                proximity=measured_proximity_rel(sc, p["name"], d_speaker))
             # Articulation was stamped at the source (director reconcile):
             # formation, not transmission, so it is the SAME for every
             # perceiver and rides alongside volume rather than the level.

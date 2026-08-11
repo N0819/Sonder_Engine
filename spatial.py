@@ -726,16 +726,34 @@ def crossing_visible_from(scene: dict, observer_room, name: str) -> bool:
     return _body_interior_holder(scene, name) is None
 
 
-def spatial_rel_between(scene: dict, observer: str, target: str) -> dict:
+def spatial_rel_between(
+    scene: dict,
+    observer: str,
+    target: str,
+    observer_room: Optional[str] = None,
+    target_room: Optional[str] = None,
+) -> dict:
     """`spatial_rel` for two BODIES rather than two rooms.
 
     Identical to the room-level form except that it carries whatever is true
-    of these two specifically -- currently, whether the target is still
-    part-way through a boundary the observer is standing behind.
+    of these two specifically: whether the target is still part-way through a
+    boundary the observer is standing behind, and the three enclosure
+    directions (`inside_source` / `enclosed_from_source` / `source_enclosed`)
+    that `hear_level` and `scent_level` grade by. This is THE relation builder
+    for any body-to-body channel question -- for a long time it had no
+    production caller at all, so every enclosure guard downstream was a guard
+    that could not fire: a voice sealed inside a body reached the whole room
+    at full clarity, and an enclosed perceiver heard the room it was sealed
+    away from.
+
+    `observer_room` / `target_room` let a caller that has already resolved a
+    position uid/alias-tolerantly (or that carries a declared source room)
+    keep that resolution; absent, `room_of` answers.
     """
-    rel = dict(spatial_rel(scene, room_of(scene, observer),
-                           room_of(scene, target)))
-    if crossing_visible_from(scene, room_of(scene, observer), target):
+    o_room = observer_room if observer_room else room_of(scene, observer)
+    t_room = target_room if target_room else room_of(scene, target)
+    rel = dict(spatial_rel(scene, o_room, t_room))
+    if crossing_visible_from(scene, o_room, target):
         rel["crossing"] = True
     holder = _body_interior_holder(scene, observer)
     if holder and same_subject(scene, holder, target):
@@ -1032,11 +1050,29 @@ def hear_level(
         return "none" if volume in ("mutter", "whisper") else "fragment"
 
     if rel.get("same_room"):
-        # A whisper (mutter) only fully reaches someone WITHIN REACH; it carries
-        # as a fragment to others merely near, and is lost across a large room.
-        # proximity None (unknown) preserves the pre-Phase-2 behavior: same room
-        # -> full. Only an explicit 'near'/'across' tier downgrades a whisper.
-        if volume == "mutter":
+        # The two quiet volumes are NOT one tier, and writing them as one
+        # ("A whisper (mutter)", as this comment used to read) is how the
+        # QUIETEST volume came to be the least attenuated: this branch tested
+        # only 'mutter', so 'whisper' fell through to full at any in-room
+        # distance. The deterministic floor runs this function with no model
+        # in the loop (agents/loops.py's deterministic_micro_perception), so a
+        # whispered line was delivered verbatim to a whole room.
+        #
+        # Whisper is therefore held to mutter's tiers -- and deliberately no
+        # tighter YET, though the spec ("whisper: ONLY same-room perceivers in
+        # close proximity") would justify silence beyond reach. The blocker is
+        # data, not intent: `across` needs both bodies anchored, and measured
+        # over the live corpus only 6.7% of bodies carry an anchored station
+        # and only 8.6% of multi-occupant rooms have two. So `near` is
+        # overwhelmingly a DEFAULT meaning "no station data", not a measured
+        # distance -- and reading it as a measurement would turn ~91% of
+        # whispers into silence for everyone, deleting authored dialogue to
+        # close a leak. Parity with mutter closes the leak (no verbatim
+        # content at range) without inventing a distance nobody recorded.
+        #
+        # Tighten `near` to "none" for whisper once station coverage is real
+        # -- that is the point at which the tier becomes evidence.
+        if volume in ("mutter", "whisper"):
             if proximity == "across":
                 return "none"
             if proximity == "near":
@@ -1359,8 +1395,15 @@ def proximity_rel(scene: dict, observer: str, target: str) -> Optional[str]:
     """Within-room proximity tier between two entities: 'within_reach' | 'near'
     | 'across', or None when they are not co-located. within_reach: same anchor,
     or a mutual 'near' station link. across: distinct anchors in a room flagged
-    size 'large' (a great hall, a warehouse). Otherwise 'near' -- the safe
-    default for an ordinary same-room pair, including when no stations exist."""
+    size 'large' OR BIGGER -- 'huge' and 'vast' are equally real scene sizes
+    (see _ROOM_COST), and gating on 'large' exactly made the two largest floors
+    read as more intimate than a merely large one. Otherwise 'near' -- the safe
+    default for an ordinary same-room pair, including when no stations exist.
+
+    Note for callers reasoning about distance: 'near' is returned BOTH as a
+    measurement and as that default, and the default dominates (6.7% of live
+    bodies carry an anchored station). Do not read 'near' as positive evidence
+    of separation -- see hear_level's quiet-volume branch."""
     o_room = room_of(scene, observer)
     t_room = room_of(scene, target)
     if not o_room or o_room != t_room:
@@ -1372,9 +1415,34 @@ def proximity_rel(scene: dict, observer: str, target: str) -> Optional[str]:
             or observer in (t_st.get("near") or []):
         return "within_reach"
     size = str(((scene.get("rooms") or {}).get(o_room) or {}).get("size") or "").lower()
-    if o_at and t_at and o_at != t_at and size == "large":
+    if o_at and t_at and o_at != t_at and size in ("large", "huge", "vast"):
         return "across"
     return "near"
+
+
+def measured_proximity_rel(scene: dict, observer: str, target: str) -> Optional[str]:
+    """`proximity_rel`, but only when the answer is a MEASUREMENT.
+
+    `proximity_rel` returns "near" both as a real reading (two anchored
+    stations a few steps apart) and as its fallback when no station data
+    exists -- and station data is mostly absent (measured live: 6.7% of bodies
+    carry an anchored station, 8.6% of multi-occupant rooms have two). A
+    delivery gate that treats the fallback as positive evidence of separation
+    silences legitimate content wholesale: `hear_level` degrades a same-room
+    mutter to a fragment at "near", which is the right answer for a measured
+    few-steps gap and the wrong answer for nine rooms in ten where "near" just
+    means "no one wrote stations".
+
+    within_reach and across already require station data by construction;
+    "near" is passed through only when both parties hold an anchor, and
+    otherwise collapses to None -- "unknown", which downgrades nothing.
+    """
+    tier = proximity_rel(scene, observer, target)
+    if tier != "near":
+        return tier
+    if _station(scene, observer).get("at") and _station(scene, target).get("at"):
+        return tier
+    return None
 
 
 def _ci_get(mapping, name):
@@ -5618,6 +5686,17 @@ def visible_adjacent_rooms(
         ):
             continue
 
+        # This list is delivered as literal sight -- a perceiver's
+        # `visible_rooms` admits the whole room record into their payload --
+        # and an unlit room shows an opening full of nothing. The doorway
+        # itself survives elsewhere (the current room's edge keeps its
+        # barrier; only the destination is withheld, the same shape as the
+        # F6 projection). `effective_light` already accounts for spill, so a
+        # dark cellar behind a lit doorway reads dim and stays visible as
+        # shapes; only total dark is withheld.
+        if light_blocks_sight(effective_light(scene, adjacent_id)):
+            continue
+
         room_data = all_rooms[adjacent_id]
         notes = (
             room_data.get("notes")
@@ -5625,9 +5704,16 @@ def visible_adjacent_rooms(
             or ""
         )
 
-        if not notes:
-            continue
-
+        # No prose does NOT mean no room. The reverse loop below has always
+        # kept a descriptionless neighbour (test_reverse_adjacency exercises
+        # exactly that), so skipping it here made visibility depend on which
+        # side happened to declare the edge and on whether anyone had written
+        # notes yet -- a bidirectional edge to the same undescribed room was
+        # already included via the reverse pass. Sight is physical: an
+        # unwritten room is still visibly THERE, and the deterministic
+        # consumers of this list (commit.py's dead-end ledger, character.py's
+        # seen_onward, narration.py's portal gating) read absence as "cannot
+        # see", not as "nothing authored yet".
         visible.append({
             "room_id": adjacent_id,
             "room_name": (
@@ -5663,6 +5749,9 @@ def visible_adjacent_rooms(
                 edge.get("to") != room_id
                 or barrier not in _SIGHT_BARRIERS
                 or _is_carried_interior(scene, other_id)
+                # Same light gate as the forward loop: sight does not care
+                # which room declared the edge, and neither does the dark.
+                or light_blocks_sight(effective_light(scene, other_id))
             ):
                 continue
 

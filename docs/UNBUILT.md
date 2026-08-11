@@ -2661,9 +2661,6 @@ word-anchored and pronoun-continuation-aware — but **not eliminated**.
   The outcome pass now scopes `subject_disguise` to the subject or a `known_to`
   perceiver; `_act_payload` sets it unconditionally and never removes it.
   `_disguise_leak_check` remains warn-only. *Latent.*
-- **B1 residual — no `proximity` in the outcome dialogue path.**
-  `_dialogue_hear_level` calls `hear_level(rel, volume)` with no proximity, where
-  the act pass and the micro-loop now both pass it.
 - **B4 residual — `_ensure_environment` does not check darkness** on the "is here
   with you" branch. Containment is now gated; light is not. *No dedicated test.*
 - **B5 residual — the micro-view append is still post-scrub**, running after the
@@ -3231,6 +3228,43 @@ which starts when the epistemic-leak audit branch merges:
   stops structurally; attachment does not), and nothing yet marks a debt
   honoured. Harmless while obligations are rare; close it before C makes
   places chatty.
+
+### 6.9 Character-agent output audit — [`../design_notes/09-character-agent-audit.md`](../design_notes/09-character-agent-audit.md)
+
+Optimization audit (2026-08-11) of `character_step`'s output contract on the
+owner's corpus snapshot, recent era n=404 calls. Verdict worth keeping: the
+stage does NOT have `director_resolve`'s 84%-discard profile — ~85-90% of its
+~1,974 output tokens/call is genuine product, and the psychology division of
+labor (model authors appraisal, `psychology_runtime`/`affect` own persistence)
+is already right. The note holds the measurements; the actionable gaps:
+
+- **Instrument the invisible second calls FIRST.** The repetition-correction
+  retry (`agents/character.py:3163-3171`) and `complete_validated_json`'s
+  repair/candidate-walking leave no stored trace; measured floor 14
+  retry-failures in 404 calls (>=3.5%), and the 1.25-1.50 live provider
+  calls/turn vs 1.01 stored results/turn gap suggests ~8-15s on affected
+  turns. One `_engine_notes` warning line when a retry or repair fires, then
+  re-measure. Any bounded-delta retry design waits on that number.
+- **Dice-class transcription: `active_state.stress`/`.hedonic` numbers.**
+  The template (`prompts.py:1746-1748`) asks for ten fields; commit reads two
+  (`hedonic.released` at `commit.py:5856`, `stress.coping_mode` at `:5901`)
+  and recomputes the rest wholesale (`:5885-5902`). Shrink the template to
+  those two; schema defaults already tolerate absence. ~0.5s/call, provably
+  nothing lost.
+- **`considered_responses`** — schema-documented viewer-only scratch
+  (`schemas.py:2836-2843`), duplicates the consumed `response_candidates` in
+  137/404 calls. Drop from the required JSON after a cheap A/B for CoT value.
+  ~0.8s/call.
+- **`active_state.goal`** — overwritten by the enacted want's text in 402/404
+  recent calls (`commit.py:5913-5915`). Before dropping it from the template:
+  point `_recent_self_moves` (`agents/character.py:191-192`) at
+  `wants[enacted_want].want`, and make the malformed-wants fallback keep the
+  previous goal instead of going empty. ~0.3s/call.
+- **NOT approved for cutting:** appraisal prose scratch
+  (`goal_relevance`/`expectation`/`uncertainty`/`emotion`, ~130 tok/call) is
+  engine-unread but sits upstream of numeric axes that are non-default in
+  98-100% of emissions — a `contract_bench`-style A/B on stored payloads is
+  the gate, not a grep.
 
 ---
 

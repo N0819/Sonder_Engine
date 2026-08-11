@@ -2969,7 +2969,6 @@ DEFAULT_PROMPTS = {
  "courier_ops:[{op:'send|question|silence',courier_id,sender,to_room,addressee,"
  "world_event_id|claim,method:'word|letter',pace:'riding|walking',description,"
  "listener,by}]}, "
- "dice:[...], fiction_frame:{scale,causal_regime_ids}, "
  "obligations:[{op:'open|discharge|refuse',id,who,what,kind}], "
  "world_pressure:[{op:'open|tick|hold|resolve',id,subject,note}], "
  "fact_adjudications:[{claim_id,claim,subject,verdict:'confirmed|contested|false',"
