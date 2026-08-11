@@ -173,30 +173,13 @@ def advance_carriers(ctx, scene, world_event_result):
 
     public_surfaces = len(event_rows)
     carrier_opportunities = acquired = moved = 0
-    # EXTANT, not active. Acquisition is about a body being somewhere; being
-    # dormant is a decision about what the engine spends on a character, not a
-    # claim that they have left the world. Reading only the active cast made
-    # the whole "an absent mind learns something" route unreachable by
-    # construction: `full_agent_candidates` admits a dormant subject who has
-    # carried reports newer than their last tick, and a dormant subject could
-    # never acquire one. Measured on a fifty-beat quest -- the villain stood in
-    # the room where his own working completed, and learned nothing until the
-    # hero walked in and made him active.
-    #
-    # An antagonist who has always been off-screen is exactly the character
-    # this tier exists for, and was the one character it could not reach.
-    for cast_row in extant_cast(cid, ctx.turn.frame_id):
-        try:
-            sheet = json.loads(cast_row["sheet"] or "{}")
-        except (TypeError, ValueError):
-            sheet = {}
-        current_room = _character_room(scene, sheet)
-        try:
-            state = json.loads(cast_row["cstate"] or "{}")
-        except (TypeError, ValueError):
-            state = {}
-        if not isinstance(state, dict):
-            state = {}
+    # Every body that can hold a report, the player among them -- see
+    # `_carriers` for why the list is extant cast plus persona rather than the
+    # active cast this loop started out reading.
+    for entry in _carriers(cid, ctx.turn.frame_id, scene,
+                           chat=getattr(ctx, "chat", None)):
+        current_room = entry["room"]
+        state = entry["state"]
         reports = [dict(r) for r in state.get(STATE_KEY) or []
                    if isinstance(r, dict) and r.get("world_event_id")]
         changed = False
@@ -250,9 +233,7 @@ def advance_carriers(ctx, scene, world_event_result):
 
         if changed:
             state[STATE_KEY] = reports[-REPORT_CAP:]
-            set_char_state(cid, cast_row["id"],
-                           json.dumps(state, ensure_ascii=False),
-                           frame_id=ctx.turn.frame_id)
+            save_state(cid, entry, state, frame_id=ctx.turn.frame_id)
 
     crowd_opportunities, crowd_acquired = _crowds_acquire(
         ctx, event_rows, standing_rows)
@@ -375,21 +356,47 @@ def save_state(cid, entry, state, *, frame_id=None):
                    json.dumps(state, ensure_ascii=False), frame_id=frame_id)
 
 
-def _cast_index(cid, frame_id, scene, chat=None):
-    """Registered characters this beat, by every name they answer to.
+def _keys_of(entry):
+    """Every name one carrier answers to, folded."""
+    return [str(key).strip().casefold()
+            for key in [entry.get("name"), entry.get("uid"),
+                        *(entry.get("aliases") or [])] if key]
 
-    EXTANT, not active, for the same reason acquisition reads extant: being
-    dormant is a decision about engine spend, not a claim that the body left
-    the world. Reading only the active cast made a dormant body in the room
-    unaddressable as a LISTENER -- a messenger could stand in front of the
-    villain, speak, and be refused with "names someone unregistered". Being
-    told is passive; the room check still applies.
 
-    A dormant SPEAKER stays structurally impossible without a line: the
-    spoke-this-beat gate reads the dialogue_log, and a mind the engine did
-    not run said nothing for it to record.
+def _carriers(cid, frame_id, scene, chat=None):
+    """Every body that can hold a report this beat, in one list.
+
+    Two storage homes, one enumeration. A cast member's reports live in a
+    `chat_chars.cstate` column and the player's in a world key, and the whole
+    point of building the entries here is that nothing downstream has to know
+    which -- `save_state` is handed the entry and writes it wherever that
+    carrier keeps it.
+
+    EXTANT cast, not active. Acquisition is about a body being somewhere;
+    being dormant is a decision about what the engine spends on a character,
+    not a claim that they have left the world. Reading only the active cast
+    made the whole "an absent mind learns something" route unreachable by
+    construction: `full_agent_candidates` admits a dormant subject who has
+    carried reports newer than their last tick, and a dormant subject could
+    never acquire one. Measured on a fifty-beat quest -- the villain stood in
+    the room where his own working completed, and learned nothing until the
+    hero walked in and made him active. An antagonist who has always been
+    off-screen is exactly the character that tier exists for, and was the one
+    character it could not reach.
+
+    The PLAYER is the next ring out and the same argument again: a body
+    standing in the room where something happened learns it. `0bed7cf` gave
+    the player somewhere to hold a report and made them a sender; without
+    them here they could stand in the square while the bell rang, beside an
+    NPC acquiring it, and learn nothing forever.
+
+    Last, and dropped outright if a registered body already answers to that
+    name -- a body with a row is the more specific reading, and admitting the
+    player beside their namesake would take the room's one surface twice into
+    two different homes.
     """
-    index = {}
+    entries = []
+    taken = set()
     for row in extant_cast(cid, frame_id):
         try:
             sheet = json.loads(row["sheet"] or "{}")
@@ -404,22 +411,35 @@ def _cast_index(cid, frame_id, scene, chat=None):
             "row": row,
             "state": state if isinstance(state, dict) else {},
             "name": str(identity.get("name") or ""),
+            "uid": str(identity.get("uid") or ""),
+            "aliases": [a for a in (identity.get("aliases") or []) if a],
             "room": _character_room(scene, sheet),
         }
-        for key in [identity.get("name"), identity.get("uid"),
-                    *(identity.get("aliases") or [])]:
-            if key:
-                index.setdefault(str(key).strip().casefold(), entry)
+        entries.append(entry)
+        taken.update(_keys_of(entry))
 
-    # The player, last, so a cast member who happens to share the persona's
-    # name keeps the name -- a registered body with a row is the more specific
-    # reading, and `setdefault` already encodes that preference above.
     player = persona_entry(cid, chat, scene)
-    if player:
-        for key in [player["name"], player.get("uid"),
-                    *(player.get("aliases") or [])]:
-            if key:
-                index.setdefault(str(key).strip().casefold(), player)
+    if player and not (set(_keys_of(player)) & taken):
+        entries.append(player)
+    return entries
+
+
+def _cast_index(cid, frame_id, scene, chat=None):
+    """Carriers this beat, by every name each answers to.
+
+    Reading only the active cast made a dormant body in the room
+    unaddressable as a LISTENER -- a messenger could stand in front of the
+    villain, speak, and be refused with "names someone unregistered". Being
+    told is passive; the room check still applies.
+
+    A dormant SPEAKER stays structurally impossible without a line: the
+    spoke-this-beat gate reads the dialogue_log, and a mind the engine did
+    not run said nothing for it to record.
+    """
+    index = {}
+    for entry in _carriers(cid, frame_id, scene, chat=chat):
+        for key in _keys_of(entry):
+            index.setdefault(key, entry)
     return index
 
 
