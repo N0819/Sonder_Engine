@@ -2685,6 +2685,48 @@ def _same_region(left, right) -> bool:
     return _same_appendage(left_kind, right_kind)
 
 
+def owned_region(scene: dict, subject, part) -> tuple:
+    """A place on a body, as the pair that actually identifies it.
+
+    A region name is not an identity. `mouth` names no place in a scene:
+    Hinami's mouth is a place, Elyra's mouth is a different one, and a ledger
+    that stores the bare noun has thrown away the half of the fact that tells
+    them apart. Measured live (chat 69 ⎇49, turns 78-80), that is exactly what
+    happened -- one body's cavity was recorded, rendered and delivered as the
+    other's, to both minds at once.
+
+    So this is the unit the ledgers compare and index on: `(who, where)`, the
+    subject folded through `canonical_subject` and the region through
+    `canonical_region`. Empty when either half is missing, because half a
+    region identity is not a weaker identity -- it is a different kind of
+    claim, and treating it as a match is how the confusion got in.
+
+    A comparison TOKEN, exactly as `canonical_region` is: nothing is written
+    back over what the Director wrote, and no stored record is re-keyed.
+    """
+    who = canonical_subject(scene, str(subject or "").strip())
+    where = canonical_region(part)
+    if not who or not where:
+        return ()
+    return (who.casefold(), where)
+
+
+def same_owned_region(scene: dict, subject_a, part_a,
+                      subject_b, part_b) -> bool:
+    """Same place on the same body?
+
+    The question every "same region?" comparison should have been asking. It
+    is deliberately two questions and not one token equality: identity of the
+    BODY goes through `same_subject` (which knows a display name and an entity
+    id are one being), and identity of the PLACE through `_same_region` (which
+    knows a refinement repeats the region's own word). Collapsing them into a
+    single string compare loses one rule or the other.
+    """
+    if not same_subject(scene, subject_a, subject_b):
+        return False
+    return _same_region(part_a, part_b)
+
+
 def _displaces(standing: dict, incoming: dict) -> bool:
     """Does `incoming` say the SAME part moved, rather than a second one?
 
@@ -4174,72 +4216,6 @@ def _interior_destination_for_release(scene, source, source_part):
     return matches[0] if len(matches) == 1 else None
 
 
-def _recorded_region_owners(scene) -> list:
-    """(subject, region) pairs the scene's standing ledgers already assert.
-
-    The engine has no anatomy registry and should not grow one -- anatomy is
-    open-ended and every story invents some. But it does not need one to catch
-    a part slot filled with somebody else's body: the contact and substance
-    ledgers have been recording, all along, which regions belong to whom.
-    That is derived evidence, not a vocabulary, so it costs nothing to keep
-    and cannot be wrong about a story it has not seen.
-
-    Read from the PRE-BEAT scene, exactly as `_interior_destination_for_release`
-    reads topology: this beat's own claim is the thing being checked.
-    """
-    pairs = []
-    seen = set()
-
-    def note(who, part):
-        subject = canonical_subject(scene, _substance_text(who, 120))
-        region = canonical_region(part)
-        if not subject or not region:
-            return
-        key = (subject.casefold(), region)
-        if key in seen:
-            return
-        seen.add(key)
-        pairs.append((subject, _substance_text(part, 120)))
-
-    for contact in ((scene or {}).get("contacts") or []):
-        if not isinstance(contact, dict):
-            continue
-        note(contact.get("actor"), contact.get("actor_part"))
-        note(contact.get("target"), contact.get("target_part"))
-        note(contact.get("target"), contact.get("target_interior"))
-    for record in ((scene or {}).get("substances") or []):
-        if not isinstance(record, dict):
-            continue
-        note(record.get("source"), record.get("source_part"))
-        note(record.get("target"), record.get("target_part"))
-        note(record.get("target"), record.get("target_interior"))
-    return pairs
-
-
-def _region_belongs_elsewhere(scene, subject, part) -> bool:
-    """Has the scene recorded this region on other bodies and never on this one?
-
-    The discriminator that makes the check safe without any anatomy knowledge.
-    Two bodies both having a mouth is the ordinary case and must never fire;
-    a region the ledgers own for somebody else and have never once seen on
-    THIS body is the measured failure -- `glans` recorded three times as Elyra
-    Voss's, then written into a record targeting Hinami.
-
-    Silence is not evidence: a region no ledger has ever mentioned stands as
-    written, because most anatomy is never recorded at all.
-    """
-    if not canonical_region(part):
-        return False
-    owned_by_others = False
-    for owner, recorded in _recorded_region_owners(scene):
-        if not _same_region(recorded, part):
-            continue
-        if same_subject(scene, owner, subject):
-            return False
-        owned_by_others = True
-    return owned_by_others
-
-
 def _substance_id(record):
     supplied = _substance_text(record.get("substance_id") or record.get("id"), 120)
     if supplied:
@@ -4356,23 +4332,31 @@ def _resolved_substance_add(scene, raw, report=None):
             report("discarded interior substance add without an enclosing target_interior")
         return None
 
-    # A part slot holding a region of somebody else's body. Re-attribute
-    # rather than discard: the deposit itself happened, and turn 66 of the
-    # same story is the standing lesson in what silent discarding costs. The
-    # matter's location survives as target + placement (+ enclosure); only the
-    # endpoint precision is lost, and a wrong endpoint was never precision.
+    # NO derived ownership check here, and this is a measured refusal rather
+    # than an omission. A slot's POSITION states whose body its region is, so
+    # `{target: Hinami, target_part: glans}` is a perfectly well-formed owned
+    # region -- `owned_region` makes it unambiguous but cannot make it TRUE.
+    # Judging the truth of the claim needs evidence, and the only evidence
+    # available without an anatomy model is what the other ledgers happen to
+    # have asserted already.
     #
-    # `target_interior` is deliberately NOT checked here. It is load-bearing
-    # for an interior placement -- clearing it would fall straight through the
-    # rejection above and destroy the record -- and the one measured case of a
-    # mis-owned enclosure arrived on a SURFACE placement, where the clear
-    # immediately above already removes it.
-    if target_part and _region_belongs_elsewhere(scene, target, target_part):
-        if report:
-            report(f"dropped {target_part!r} from a deposit on {target} -- the "
-                   "scene records that region on another body and never on "
-                   "this one; target_part is a place on the target's own body")
-        target_part = ""
+    # Replayed over every stored beat, that evidence answers 72 times in 2,066
+    # part assertions and is right ONCE (turn 62's `glans` on Hinami). The
+    # other 71 are ordinary anatomy whose first mention happened to be the
+    # other body -- hand, waist, chest, mouth, hips, face, shoulder -- and
+    # clearing those would destroy correct endpoints on 3.4% of every contact
+    # this engine records.
+    #
+    # It is also self-poisoning, which is the part that settles it: the index
+    # is built from the ledgers, so turn 62's bad `glans` became the scene's
+    # belief, and by turn 64 the same check flagged a CORRECT record about the
+    # body that actually has one. One wrong assertion inverts the check for
+    # everything after it.
+    #
+    # Explicit ownership is the fix the shape of the data actually wants: the
+    # Director naming whose region it is, in the record, rather than the
+    # engine inferring it from history. That is a schema change and is not
+    # taken here.
 
     record = {
         "source": source,
@@ -4434,7 +4418,7 @@ def resolve_substance_ops(scene: dict, ops, report=None) -> list[dict]:
     return resolved
 
 
-def _same_pool(a, b) -> bool:
+def _same_pool(scene, a, b) -> bool:
     """Are these two rows one pool of matter, rather than two deposits?
 
     The substance ledger's answer to the rule the contact ledger has had all
@@ -4464,15 +4448,26 @@ def _same_pool(a, b) -> bool:
     A record inside an enclosure pools on the ENCLOSURE (see `_record_region`):
     matter at the inlet and matter at the outlet of one reservoir is one
     reservoir of matter. With no enclosure named, the part is the place.
+
+    The place is asked as ONE qualified question (`same_owned_region`), not as
+    a body compared here and a region compared there. The earlier version
+    compared `target` as raw casefolded text, which is precisely the `==` that
+    `same_subject` exists to replace -- a being carrying a display name and an
+    entity id at once would have kept two pools on one region of one body.
     """
-    for field in ("source", "substance", "target", "placement"):
+    for field in ("substance", "placement"):
         if _substance_text(a.get(field), 240).casefold() \
                 != _substance_text(b.get(field), 240).casefold():
             return False
+    if not same_subject(scene, a.get("source"), b.get("source")):
+        return False
     left, right = _record_region(a), _record_region(b)
     if bool(left) != bool(right):
         return False
-    return not left or _same_region(left, right)
+    if not left:
+        return same_subject(scene, a.get("target"), b.get("target"))
+    return same_owned_region(scene, a.get("target"), left,
+                             b.get("target"), right)
 
 
 def _record_region(record) -> str:
@@ -4514,9 +4509,11 @@ def _stock_consumed_by(scene, record, current) -> list:
 
     Two conditions, and both are structural:
 
-    * the standing record sits on the body this add names as its SOURCE, at
-      the region this add names as `source_part` (compared through
-      `_same_region`, so a re-spelling still matches);
+    * the standing record sits at the SAME OWNED REGION this add names as its
+      origin -- the body it names as `source`, at the place it names as
+      `source_part`, asked as one qualified question through
+      `same_owned_region`. Matter leaves the moving body's own region, never
+      the same-named region on somebody else standing in the room;
     * that matter is FOREIGN to the body holding it -- its own `source` is
       somebody else. Matter a body produces at one of its own regions is a
       source, not a stock: a gland does not stop existing because some of what
@@ -4542,12 +4539,10 @@ def _stock_consumed_by(scene, record, current) -> list:
     for sid, standing in current.items():
         if sid == record.get("substance_id"):
             continue  # never let an add eat itself
-        if not same_subject(scene, standing.get("target"), source):
-            continue
         if same_subject(scene, standing.get("source"), standing.get("target")):
-            continue
-        region = _record_region(standing)
-        if region and _same_region(region, source_part):
+            continue  # the body's own product at its own region
+        if same_owned_region(scene, standing.get("target"),
+                             _record_region(standing), source, source_part):
             consumed.append(sid)
     return consumed
 
@@ -4571,7 +4566,7 @@ def apply_substance_ops(scene: dict, ops, report=None) -> dict:
             record["target_interior"] = ""
         record["substance_id"] = _substance_id(record)
         pooled_id = next((sid for sid, standing in current.items()
-                          if _same_pool(standing, record)), None)
+                          if _same_pool(scene, standing, record)), None)
         if pooled_id is not None:
             # A scene saved before the fold below can already carry the stack;
             # pool it on read so the ledger heals on the next merge rather
@@ -4586,7 +4581,7 @@ def apply_substance_ops(scene: dict, ops, report=None) -> dict:
             record = {k: v for k, v in raw.items() if k != "op"}
             pooled_id = next(
                 (sid for sid, standing in current.items()
-                 if _same_pool(standing, record)), None)
+                 if _same_pool(scene, standing, record)), None)
             # Conservation runs against the ledger as it stood BEFORE this add
             # lands, and BEFORE pooling, so a deposit can never consume itself
             # and a destination that already held some does not excuse the
