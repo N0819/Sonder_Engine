@@ -391,6 +391,10 @@ function liveReset() {
   const L = $("#live");
   L.innerHTML = "";
   L.classList.toggle("hidden", !$("#streamtgl").checked);
+  // A preview belongs to the turn that produced it. A run that fails before
+  // the re-render would otherwise leave last turn's prose sitting under the
+  // new one, which reads as the beat having already happened.
+  clearNarrationEarly();
 }
 
 // liveReset() only sets #live's visibility once, at the start of a turn --
@@ -583,11 +587,56 @@ function handleEvt(ev) {
   } else if (ev.type === "step") {
     const h = document.getElementById("lk-" + safeId(ev.key));
     if (h) h.textContent = "✓ " + ev.label;
+    showNarrationEarly(ev);
   } else if (ev.type === "error") {
     toast("Pipeline error: " + ev.error, "err", 9000);
   } else if (ev.type === "aborted") {
     toast("Generation stopped.", "warn");
   }
+}
+
+// The narrator's prose is finished, and it is already on the wire: `_evt` puts
+// the whole step output in the `step` event and this handler used only its
+// label. So the reader sat through everything AFTER the words existed --
+// commit's mapping call, three embedding batches, the sixteen-domain write
+// transaction, periodic consolidation -- and then got the beat all at once
+// from `openChat`'s re-render at the end of `runStream`.
+//
+// Measured: commit alone is ~3.4% of a turn, and the whole tail behind it is
+// worth roughly ten seconds of a turn that is mostly spent generating. None of
+// it changes a word of what is shown here.
+//
+// This is a PREVIEW and never the record. `renderChat` empties `#msgs`, so the
+// authoritative re-render replaces it wholesale a moment later; nothing here
+// writes, and anything unexpected in the event simply does nothing and leaves
+// the reader waiting exactly as long as they did before.
+const _NARRATION_STEPS = new Set(["narrator", "narrator_extra"]);
+const EARLY_TURN_ID = "early-turn";
+
+function showNarrationEarly(ev) {
+  if (!ev || !_NARRATION_STEPS.has(ev.key)) return;
+  const prose = ev.content && ev.content.prose;
+  if (typeof prose !== "string" || !prose.trim()) return;
+  const M = document.getElementById("msgs");
+  if (!M) return;
+
+  // Reused rather than appended, because the narrator runs again on a
+  // fidelity or craft rewrite -- measured at about a quarter of turns. A
+  // second element per rewrite would show the reader the same beat twice and
+  // let the superseded one stand.
+  let d = document.getElementById(EARLY_TURN_ID);
+  if (!d) {
+    d = el("div", { class: "turn", id: EARLY_TURN_ID });
+    M.append(d);
+  }
+  d.textContent = "";
+  d.append(el("div", { class: "prose" }, prose));
+  M.scrollTop = M.scrollHeight;
+}
+
+function clearNarrationEarly() {
+  const d = document.getElementById(EARLY_TURN_ID);
+  if (d) d.remove();
 }
 
 // ---- Flipping between rerolls of the newest beat ----
