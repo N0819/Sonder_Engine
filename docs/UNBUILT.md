@@ -1963,6 +1963,50 @@ Nullo Engine closed the equivalent by setting its database env var at conftest
 with a test that asserts the redirect is in force. The same fix applies here.
 
 
+### 1.37 The aversive half of the stress model has never run
+
+`psychology_runtime.resolve_stress` reads `threat` off
+`appraisal["goal_impacts"]` and weights it **0.55** — more than every other
+aversive term combined. Its only production caller (`commit.py`, the
+`new_stress = psychology_runtime.resolve_stress(...)` site) passes
+`affect.appraise`'s **return value**, which is exactly:
+
+    ['dA', 'dV', 'dominant', 'drive_impact', 'emotions']
+
+There is no `goal_impacts` key in it and there never has been. `.get()` returns
+`[]`, so **`threat` has always been 0.0.**
+
+The corpus signature is unmistakable — 78 banks, 27 with a resolved stress
+block:
+
+    strain      min 0.0197   median 0.0454   max 0.3608
+    load        min 0.0000   median 0.0041   max 0.5949
+    activation  min 0.0680   median 0.5222   max 0.7984
+    overloaded fired                          0 of 27
+
+Strain never reaches half its own threshold, `overloaded` has never once
+fired, and the activation median is almost entirely the non-aversive DRIVE
+term — which is the half that does work. Characters can be excited. They
+cannot be threatened.
+
+The fix is to pass the impacts, not the appraisal: the caller has
+`goal_impacts` in hand at that line. Take the parameter separately rather than
+reaching into a dict, so there is no shape a caller can pass that silently
+omits it — Nullo's port did that and it is the fold-on-the-way-in answer
+rather than a guard someone must remember.
+
+**Not fixed here, and it wants a decision.** The one-line version changes the
+emotional trajectory of every existing character in the corpus: bodies that
+have never felt threat would start accruing strain and crossing thresholds
+that have never been crossed. That is a behavioural change to a live product,
+not a silent correction, and the fire-rate row to watch afterwards is
+`overloaded` moving off zero.
+
+Found while porting the module into Nullo Engine, by an agent reading each
+function's arguments after having first dismissed all three by their module
+name.
+
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
