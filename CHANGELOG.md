@@ -2,6 +2,71 @@
 
 ## Unreleased — Development
 
+### Perception no longer asks a model what a mind can see
+
+The mapping and Director stages only ever change spatial data; they never
+determine perspective, because perspective is computable. Perception —
+3.75 model calls per turn, the largest single consumer in the pipeline and
+the only stage that multiplies calls by cast size — now composes every view
+from typed data in `agents/composer.py`. `agents/perception.py` imports no
+model seam at all, and the `PERCEPTION_NO_LLM` flag that gated this during
+development is gone with the model path it used to bypass.
+
+Measured over the full corpus (2,165 turns, 4,261 stage executions, zero
+provider calls), identity-floor era, the same scorer applied to both sides:
+delivered-line recall 94.32% → 99.63%, same-room recall 94.73% → 100%,
+identity-leak views 107 → 22, self-narration views 131 → 0, invented
+dialogue 7 → 0, concealed-line leaks 0 → 0. Memory improved further:
+verbatim twins within the bank 14.6% → 0.4%, and the 812 rows reading “You
+are in an unspecified area.” are structurally impossible — a mind in
+unloaded space now perceives nothing rather than boilerplate.
+
+Removing the model exposed nine leak-class defects it had been masking,
+all pre-existing: `spatial_rel_between` had no production callers, so both
+enclosure guards in `hear_level` were unreachable and a voice sealed inside
+a body reached the room at full clarity; sight was graded by the wrong
+room's light; the outcome floor dropped proximity; `_audience_map` failed
+open where its sibling failed closed.
+
+The armed repair passes turned out to be the only mechanism destroying
+entitled content. `_strip_self_narration` splits on sentence punctuation,
+and sentence punctuation lives inside quoted speech: 167 of 382 fires cut a
+delivered line mid-quote, at least 16 cascaded into the invented-dialogue
+guard deleting the line outright. The guards are now graded by what a wrong
+repair costs — identity still substitutes a descriptor (it cannot delete a
+sentence, and it stops a firewall breach), self-narration masks quoted
+spans before splitting and refuses any drop that would take a quote, and
+invented dialogue only warns.
+
+Authored prose — room notes, appearance and overlay descriptions, ambient
+events — is gated per observer at percept-build time, so an unearned name
+never enters the IR and cannot be rendered, re-derived into an observation
+or minted into a memory. The identity space is no longer the stage roster:
+`active_cast` filters to `status='active'`, so a departed character was off
+the roster while her name stayed written into the room notes, which is why
+69 leaks previously survived with no warning at all.
+
+Also in this work: mapping stops echoing lore `content` back to the engine
+(13.6% of echoes returned mutated and poisoned `lore_cache`, which
+`mapping_quick` re-serves with no model call for 1,879 of 1,881 steps — the
+engine now joins its own rows by id); the resolve contract stops asking for
+dialogue delivery metadata it re-stamps and discards; a warning fires when
+a room becomes shared without an authored size, because size stopped being
+flavour once `proximity_rel` began reading it; and poses compose, the last
+missing hop of a chain that was already Director-declared, normalized and
+stored in the scene blob.
+
+Prose: adjectival tones read as adjectives (“in a quietly authoritative
+voice”, not “with quietly authoritative in their voice”), arrivals bound
+the beat rather than queueing inside it so nobody speaks before walking in,
+presence renders as one sentence per fidelity, and bodies too dim to make
+out are counted rather than repeated.
+
+Known and unfixed: outcome views render declared intent rather than
+resolved outcome (29 measured direction contradictions), episodes omit
+micro-loop content, scales and the contained ledger are not composed, and
+a stranger label can still be cut mid-phrase.
+
 ### Character-owned material outputs now cross the resolution boundary
 
 A live climax completed inside the character model—its hedonic state explicitly
