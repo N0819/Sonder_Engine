@@ -409,6 +409,46 @@ def presence_percepts(scene, observer_name, co_present, display_map):
     return out
 
 
+_COUNT_NAMES = {1: "a", 2: "two", 3: "three", 4: "four", 5: "five",
+                6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
+
+
+def body_part_percepts(rows):
+    """Authored extra body parts -- tails, wings, horns -- already gated.
+
+    Input is `observer_body_regions`' `part_data`: the parts this observer
+    may see, with the same vantage/containment/garment decision the phrase
+    list was built from. Structured rather than pre-phrased, because the
+    composer renders to a reader now and "tail x6 — emerge from the back of
+    the waist" is payload grammar.
+    """
+    out = []
+    for label, part in rows or []:
+        kind = " ".join(str(part.get("kind") or "").split())
+        if not kind:
+            continue
+        try:
+            count = max(1, int(part.get("count", 1)))
+        except (TypeError, ValueError):
+            count = 1
+        out.append(Percept(
+            kind="body_part", channel="sight",
+            source_label=str(label or "someone"),
+            data={"part": kind, "count": count,
+                  "at": str(part.get("at") or "torso"),
+                  "aspect": str(part.get("aspect") or "back"),
+                  "description": " ".join(
+                      str(part.get("description") or "").split()),
+                  "tucked": bool(part.get("tucked")),
+                  "directed_at_self": str(label) == "you"},
+            salience=0.3,
+            dedupe_key="part:" + _short_hash(
+                label, kind, count, part.get("at"), part.get("aspect"),
+                part.get("description"), part.get("tucked")),
+        ))
+    return out
+
+
 def pose_percepts(scene, observer_name, co_present, display_map):
     """How bodies are arranged: posture, what holds them up, who they are
     against, what pins them.
@@ -746,7 +786,8 @@ _STANDING_ORDER = {
     # arranged. Before appearance, because how a body is held is a fact
     # about this beat and its authored description is a fact about the body.
     "environment": 0, "presence": 1, "pose": 2, "appearance": 3,
-    "body_state": 4, "sensation": 5, "body_region": 6, "ambient": 7,
+    "body_state": 4, "sensation": 5, "body_part": 6, "body_region": 7,
+    "ambient": 8,
 }
 
 _TIER_PHRASES = {
@@ -843,6 +884,29 @@ def _render_presence_group(percepts):
     return out
 
 
+def _render_body_part(p):
+    """"Six tails emerge from the back of her waist" -- not "tail x6"."""
+    count, kind = p.data["count"], p.data["part"]
+    you = p.source_label == "you"
+    word = _COUNT_NAMES.get(count, str(count))
+    subject = f"{word} {kind}" if count == 1 else f"{word} {kind}s"
+    verb = "emerges" if count == 1 else "emerge"
+    aspect, at = p.data["aspect"], p.data["at"]
+    whose = "your" if you else f"{p.source_label}'s"
+    if aspect == "sides":
+        where = f"across both sides of {whose} {at}"
+    elif aspect in ("left", "right"):
+        where = f"from the {aspect} side of {whose} {at}"
+    else:
+        where = f"from the {aspect} of {whose} {at}"
+    sentence = f"{_cap(subject)} {verb} {where}"
+    if p.data.get("description"):
+        sentence += f", {p.data['description'].rstrip('.')}"
+    if p.data.get("tucked"):
+        sentence += ", currently beneath clothing"
+    return sentence + "."
+
+
 def _render_pose(p, *, past=False):
     """One body's arrangement as a sentence.
 
@@ -912,6 +976,8 @@ def _render_standing(p):
         return f"You see {desc}." if desc else ""
     if p.kind == "pose":
         return _render_pose(p)
+    if p.kind == "body_part":
+        return _render_body_part(p)
     if p.kind == "body_state":
         parts = []
         if p.data.get("posture"):

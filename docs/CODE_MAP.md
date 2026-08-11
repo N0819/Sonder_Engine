@@ -9,14 +9,14 @@
 | `affect.py` | 1965 |  | `theory_of_mind` |
 | `agents/__init__.py` | 86 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 903 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/character.py` | 3247 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
-| `agents/common.py` | 5567 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/composer.py` | 1309 |  | `agents.common`, `spatial` |
-| `agents/director.py` | 5194 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
+| `agents/character.py` | 3255 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
+| `agents/common.py` | 5691 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/composer.py` | 1375 |  | `agents.common`, `spatial` |
+| `agents/director.py` | 5221 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial` |
 | `agents/loops.py` | 1038 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 975 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/perception.py` | 4099 | Opening, action-onset, and outcome observer views. | `affect`, `agents`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
+| `agents/perception.py` | 4141 | Opening, action-onset, and outcome observer views. | `affect`, `agents`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/runtime.py` | 1009 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 115 | Step and active-variant persistence helpers. | `db` |
 | `ambience.py` | 2082 |  | `backdrops`, `db`, `outofband`, `weather` |
@@ -29,7 +29,7 @@
 | `background_claims.py` | 466 |  | `db` |
 | `canon_provenance.py` | 360 |  | — |
 | `carriers.py` | 696 |  | `character_schema`, `crowds`, `db`, `degradation`, `living_world`, `scene`, `spatial` |
-| `character_schema.py` | 1421 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `attire`, `schemas` |
+| `character_schema.py` | 1554 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `attire`, `schemas` |
 | `chat_archive.py` | 1110 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1132 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
@@ -57,11 +57,11 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 4300 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 4313 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 2181 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
-| `scene.py` | 1431 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
+| `scene.py` | 1436 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 4098 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 7887 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 1022 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
@@ -104,53 +104,53 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 2336 | 912 lines |
-| `_annotate_known_exits()` | 1757 | 445 lines |
-| `_ground_observation_citations()` | 817 | 263 lines |
-| `_unanswered_question_note()` | 271 | 117 lines |
-| `_destination_from_goals()` | 1335 | 109 lines |
-| `sprint_offers()` | 2237 | 97 lines |
-| `_recent_self_moves()` | 144 | 86 lines |
-| `_verdict()` | 1179 | 72 lines |
+| `character_step()` | 2338 | 918 lines |
+| `_annotate_known_exits()` | 1759 | 445 lines |
+| `_ground_observation_citations()` | 819 | 263 lines |
+| `_unanswered_question_note()` | 273 | 117 lines |
+| `_destination_from_goals()` | 1337 | 109 lines |
+| `sprint_offers()` | 2239 | 97 lines |
+| `_recent_self_moves()` | 146 | 86 lines |
+| `_verdict()` | 1181 | 72 lines |
 
 ### `agents/common.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 1671 | 193 lines |
-| `_scrub_invented_dialogue()` | 4444 | 145 lines |
-| `_check_narrator_fidelity()` | 5381 | 123 lines |
-| `_extract_authority_claims()` | 1201 | 106 lines |
-| `_perceptible_entities()` | 779 | 98 lines |
-| `_check_presence_knowledge_channel()` | 3175 | 95 lines |
-| `region_visibility()` | 505 | 92 lines |
-| `_check_quote_attribution()` | 5114 | 91 lines |
+| `norm_sequence()` | 1795 | 193 lines |
+| `_scrub_invented_dialogue()` | 4568 | 145 lines |
+| `_check_narrator_fidelity()` | 5505 | 123 lines |
+| `_extract_authority_claims()` | 1325 | 106 lines |
+| `_perceptible_entities()` | 903 | 98 lines |
+| `_check_presence_knowledge_channel()` | 3299 | 95 lines |
+| `region_visibility()` | 580 | 92 lines |
+| `observer_body_regions()` | 674 | 92 lines |
 
 ### `agents/composer.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `render_view()` | 972 | 90 lines |
-| `render_episode()` | 1143 | 80 lines |
-| `pose_percepts()` | 412 | 75 lines |
-| `observations_from_render()` | 1235 | 75 lines |
-| `_render_standing()` | 892 | 51 lines |
-| `speech_percept()` | 606 | 50 lines |
+| `render_view()` | 1038 | 90 lines |
+| `render_episode()` | 1209 | 80 lines |
+| `pose_percepts()` | 452 | 75 lines |
+| `observations_from_render()` | 1301 | 75 lines |
+| `_render_standing()` | 956 | 53 lines |
+| `speech_percept()` | 646 | 50 lines |
 | `presence_percepts()` | 362 | 48 lines |
-| `_render_presence_group()` | 799 | 45 lines |
+| `_render_presence_group()` | 840 | 45 lines |
 
 ### `agents/director.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 3848 | 1192 lines |
-| `director_interpret()` | 751 | 388 lines |
-| `_reconcile_resolution()` | 3309 | 322 lines |
-| `_reconcile_near_group_positions()` | 2245 | 201 lines |
-| `_evidence_present()` | 2927 | 179 lines |
-| `_reconcile_interpretation()` | 1296 | 119 lines |
-| `_validated_player_contact_assertions()` | 135 | 115 lines |
-| `director_establish()` | 586 | 114 lines |
+| `director_resolve()` | 3862 | 1205 lines |
+| `director_interpret()` | 757 | 396 lines |
+| `_reconcile_resolution()` | 3323 | 322 lines |
+| `_reconcile_near_group_positions()` | 2259 | 201 lines |
+| `_evidence_present()` | 2941 | 179 lines |
+| `_reconcile_interpretation()` | 1310 | 119 lines |
+| `director_establish()` | 590 | 116 lines |
+| `_validated_player_contact_assertions()` | 139 | 115 lines |
 
 ### `agents/loops.py`
 
@@ -191,14 +191,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome()` | 3790 | 310 lines |
-| `perception_outcome()` | 2799 | 298 lines |
-| `perception_act()` | 2372 | 238 lines |
-| `_observer_scene_payload()` | 861 | 204 lines |
+| `_composer_outcome()` | 3830 | 312 lines |
+| `perception_outcome()` | 2808 | 298 lines |
+| `perception_act()` | 2381 | 238 lines |
+| `_observer_scene_payload()` | 862 | 212 lines |
 | `_previous_open_group_continuity()` | 153 | 117 lines |
-| `_composer_act()` | 3678 | 110 lines |
-| `_strip_self_narration()` | 1651 | 107 lines |
-| `perception_establish()` | 2264 | 107 lines |
+| `_composer_act()` | 3716 | 112 lines |
+| `_strip_self_narration()` | 1660 | 107 lines |
+| `perception_establish()` | 2273 | 107 lines |
 
 ### `agents/runtime.py`
 
@@ -353,14 +353,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_character_data()` | 867 | 156 lines |
-| `default_character_data()` | 449 | 93 lines |
+| `normalize_character_data()` | 974 | 159 lines |
+| `default_character_data()` | 553 | 95 lines |
 | `_normalize_psychology()` | 293 | 83 lines |
-| `repair_character_shape()` | 808 | 57 lines |
+| `repair_character_shape()` | 915 | 57 lines |
+| `_normalize_extra_parts()` | 499 | 52 lines |
 | `_as_profile_list()` | 38 | 50 lines |
-| `character_initial_active_state()` | 1222 | 48 lines |
-| `normalize_persona_data()` | 1024 | 47 lines |
-| `_coerce_appearance()` | 729 | 45 lines |
+| `normalize_persona_data()` | 1134 | 50 lines |
+| `character_initial_active_state()` | 1348 | 48 lines |
 
 ### `chat_archive.py`
 
@@ -669,10 +669,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `get_prompt()` | 4291 | 10 lines |
-| `presets()` | 4282 | 2 lines |
-| `active_preset()` | 4285 | 2 lines |
-| `nsfw_enabled()` | 4288 | 2 lines |
+| `get_prompt()` | 4304 | 10 lines |
+| `presets()` | 4295 | 2 lines |
+| `active_preset()` | 4298 | 2 lines |
+| `nsfw_enabled()` | 4301 | 2 lines |
 
 ### `providers.py`
 
@@ -714,14 +714,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `recent_events_for_observer()` | 750 | 59 lines |
-| `director_context()` | 810 | 53 lines |
-| `awareness_conditions()` | 471 | 47 lines |
-| `private_knowledge_for()` | 1388 | 44 lines |
-| `_seed_scene_initial_attire()` | 85 | 31 lines |
-| `active_cast()` | 161 | 31 lines |
-| `active_disguises()` | 363 | 31 lines |
-| `normalize_style_guide()` | 1296 | 31 lines |
+| `recent_events_for_observer()` | 751 | 59 lines |
+| `director_context()` | 811 | 53 lines |
+| `awareness_conditions()` | 472 | 47 lines |
+| `private_knowledge_for()` | 1393 | 44 lines |
+| `_seed_scene_initial_attire()` | 86 | 31 lines |
+| `active_cast()` | 162 | 31 lines |
+| `active_disguises()` | 364 | 31 lines |
+| `normalize_style_guide()` | 1297 | 31 lines |
 
 ### `schemas.py`
 
@@ -1093,15 +1093,15 @@ Sections: Turn-completion chime (`:2`); Which other waits are worth a chime (`:1
 
 Declared functions: `chimeContext()`, `chimeArm()`, `chimePlay()`, `chimeWatches()`, `chimeWorkFinished()`, `chimeSetMuted()`, `toggleChimeMute()`, `updateChimeBtn()`.
 
-### `static/js/components.js` (925 lines)
+### `static/js/components.js` (951 lines)
 
-Sections: Modal (`:18`); Book covers (`:34`); confirm()/prompt() replacements (`:147`); Toasts (`:269`); Background tasks (`:297`); Form helpers (`:383`); Model picker (`:786`).
+Sections: Modal (`:18`); Book covers (`:34`); confirm()/prompt() replacements (`:147`); Toasts (`:269`); Background tasks (`:297`); Form helpers (`:383`); Model picker (`:812`).
 
-Declared functions: `el()`, `coverOfRow()`, `coverOfTitle()`, `modal()`, `modalOwnership()`, `closeModal()`, `closeAllModals()`, `_confirmOverlay()`, `confirmModal()`, `promptModal()`, `promptModalWithToggle()`, `toastHost()`, `toast()`, `renderActivity()`, `elapsedLabel()`, `activityTicking()`, `backgroundTask()`, `buttonTask()`, `loadingBlock()`, `emptyState()`, `fText()`, `fArea()`, `fSelect()`, `fNum()`, `fLineList()`, `fStrList()`, `fCoveragePicker()`, `fAttireGarments()`, `fList()`, `fAbilities()`, `fTraits()`, `fValues()`, `fBeliefs()`, `fCopingStrategies()`, `fAssociations()`, `fGoals()`, `fSenses()`, `fLatent()`, `fPronouns()`, `phEditor()`, `fetchModels()`, `fetchImageModels()`, `modelCombobox()`, `emitChange()`, `load()`, `showDD()`.
+Declared functions: `el()`, `coverOfRow()`, `coverOfTitle()`, `modal()`, `modalOwnership()`, `closeModal()`, `closeAllModals()`, `_confirmOverlay()`, `confirmModal()`, `promptModal()`, `promptModalWithToggle()`, `toastHost()`, `toast()`, `renderActivity()`, `elapsedLabel()`, `activityTicking()`, `backgroundTask()`, `buttonTask()`, `loadingBlock()`, `emptyState()`, `fText()`, `fArea()`, `fSelect()`, `fNum()`, `fLineList()`, `fStrList()`, `fCoveragePicker()`, `fAttireGarments()`, `fList()`, `fAbilities()`, `fTraits()`, `fValues()`, `fBeliefs()`, `fCopingStrategies()`, `fAssociations()`, `fGoals()`, `fSenses()`, `fLatent()`, `fExtraParts()`, `fPronouns()`, `phEditor()`, `fetchModels()`, `fetchImageModels()`, `modelCombobox()`, `emitChange()`, `load()`, `showDD()`.
 
-### `static/js/editors.js` (924 lines)
+### `static/js/editors.js` (940 lines)
 
-Sections: Background-character promotion (`:683`); Import (file upload) (`:732`); Generate (`:803`); Lorebook generate (`:821`); Lorebooks (`:838`); Export (`:912`).
+Sections: Background-character promotion (`:699`); Import (file upload) (`:748`); Generate (`:819`); Lorebook generate (`:837`); Lorebooks (`:854`); Export (`:928`).
 
 Declared functions: `appearanceFillButton()`, `defaultCharacterSheet()`, `greetingCarousel()`, `quickStartModal()`, `charEditor()`, `personaEditor()`, `promotionReviewModal()`, `promoteBackgroundPresence()`, `importModal()`, `generateModal()`, `generateLoreModal()`, `loreModal()`, `exportCharacter()`, `exportPersona()`, `exportLorebook()`.
 

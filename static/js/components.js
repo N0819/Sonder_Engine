@@ -754,6 +754,32 @@ function fLatent(label, latent) {
   }, () => ({ capability: "", visible_when: "", limits: "" }));
 }
 
+// Structured extra body parts (tails, wings, horns, extra arms). WHERE is
+// chosen from closed menus -- the attachment region reuses ATTIRE_REGIONS and
+// the aspect names which face of it the part emerges from -- so the engine
+// gates and renders the part deterministically instead of re-reading prose.
+// The part noun itself stays free text: anatomy is open-ended, and the noun
+// is also the handle contacts use ("her tail" grabs THIS tail).
+const EXTRA_PART_ASPECTS = ["front", "back", "top", "underside", "left", "right", "sides"];
+function fExtraParts(label, parts) {
+  return fList(label, parts, "+ body part", x => {
+    const kind = el("input", { value: x.kind || "", placeholder: "part (tail, wings, horns…)", style: "flex:1" });
+    const count = el("input", { type: "number", min: "1", max: "12", step: "1", value: x.count ?? 1, title: "how many", style: "width:60px" });
+    const at = el("select", { title: "emerges from which body region" },
+      ATTIRE_REGIONS.map(r => el("option", { value: r, ...(r === (x.at || "waist") ? { selected: "" } : {}) }, r)));
+    const aspect = el("select", { title: "which face of that region: front (in front) / back (behind) / top (above) / underside (below) / left / right / sides (one per side)" },
+      EXTRA_PART_ASPECTS.map(a => el("option", { value: a, ...(a === (x.aspect || "back") ? { selected: "" } : {}) }, a)));
+    const through = el("label", { class: "small", title: "clothing over that region is worn around the part (a tail through a skirt). Unchecked: the part is tucked beneath clothing and hidden while the region is covered." },
+      el("input", { type: "checkbox" }), " through clothing");
+    through.querySelector("input").checked = x.through_clothing !== false;
+    const desc = el("input", { value: x.description || "", placeholder: "description (look, motion)", style: "flex:2" });
+    return { node: [kind, count, at, aspect, through, desc], read: () => (kind.value.trim() ? {
+      kind: kind.value.trim(), count: +count.value || 1, at: at.value, aspect: aspect.value,
+      through_clothing: through.querySelector("input").checked, description: desc.value
+    } : null) };
+  }, () => ({ kind: "", count: 1, at: "waist", aspect: "back", through_clothing: true, description: "" }));
+}
+
 function fPronouns(label, pronouns) {
   const subj = el("input", { value: pronouns?.subject || "they", placeholder: "subject", style: "flex:1" });
   const obj = el("input", { value: pronouns?.object || "them", placeholder: "object", style: "flex:1" });
