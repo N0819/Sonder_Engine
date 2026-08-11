@@ -1928,6 +1928,41 @@ into `agents/runtime`'s step dispatch and parallel-group runner would make
 every latency claim continuously checkable instead of re-measured by hand.
 
 
+### 1.35 `memories_fts` is dead, and has been for some time
+
+9,545 rows in the live database and **zero readers anywhere in the repo** —
+`grep memories_fts` outside the schema, trigger and migration statements
+returns nothing. `memory_retrieval_fts`, at 10,696 rows, is the one retrieval
+actually uses.
+
+Worse than unused: its triggers live in a MIGRATION, and `init()` skips every
+migration for a fresh database. So any Sonder database created since that
+change has the table, no triggers, and nothing in it — and nothing has ever
+noticed, in either direction. It is carried through export, import and every
+schema check.
+
+Found while extracting the memory model into Nullo Engine, which dropped it on
+this measurement rather than porting it. Removal here needs a migration and
+should confirm the rowcount is not load-bearing for anything outside the repo
+first.
+
+### 1.36 The suite's database redirect runs after collection
+
+`tests/conftest.py::_never_the_real_database` is a session-scoped autouse
+fixture, and fixtures run *after* collection. A test module that touches `db`
+at IMPORT time — a module-level query, or a constant computed from one — still
+reaches `engine.db` before the redirect is in force.
+
+Latent rather than firing: no current test module appears to do it. But the
+fixture exists because three prompt-cache tests once passed or failed on
+whether a checkbox was ticked in the live database, and the hole it was written
+to close is not fully closed. The next module-level query reopens it silently.
+
+Nullo Engine closed the equivalent by setting its database env var at conftest
+**import**, which pytest guarantees precedes every test module, and pinning it
+with a test that asserts the redirect is in force. The same fix applies here.
+
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
