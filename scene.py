@@ -11,6 +11,7 @@ from character_schema import (
     cast_entity_id,
     character_abilities,
     character_appearance,
+    character_extra_parts,
     character_initial_outfit,
     character_initial_active_state,
     character_initial_stance,
@@ -1371,12 +1372,16 @@ def cast_scene_context(cast_rows):
     for row in cast_rows:
         sheet = json.loads(row["sheet"])
         identity = sheet.get("identity") or {}
+        extra_parts = character_extra_parts(sheet)
         result.append({
             "id": int(row["id"]),
             "entity_id": cast_entity_id(sheet, row["id"]),
             "name": character_name(sheet),
             "aliases": identity.get("aliases") or [],
             "appearance": character_appearance(sheet),
+            # Authored structured extra body parts. Key absent for the
+            # ordinary body so existing payloads are byte-identical.
+            **({"extra_parts": extra_parts} if extra_parts else {}),
             "initial_outfit": character_initial_outfit(sheet),
             "senses": senses_as_text(character_senses(sheet)),
             "abilities": character_abilities(sheet),

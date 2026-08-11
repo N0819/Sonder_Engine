@@ -262,6 +262,7 @@ function charEditor(c, options = {}) {
   f.eyes = fText("Eyes", sheet.embodiment?.visible?.eyes);
   f.distinctive = fLineList("Distinctive features (one per line)", sheet.embodiment?.visible?.distinctive_features);
   f.latent = fLatent("Latent/hidden capabilities (powers, secret identities, equipment functions)", sheet.embodiment?.latent);
+  f.extra_parts = fExtraParts("Extra body parts (tails, wings, horns…) — where each emerges, from menus", sheet.embodiment?.extra_parts);
   f.intero_acuity = fNum("Interoceptive acuity (0..1)", sheet.embodiment?.interoception?.acuity, "0.1");
   f.pain_sensitivity = fNum("Pain sensitivity (0..1)", sheet.embodiment?.interoception?.pain_sensitivity, "0.1");
   f.fatigue_sensitivity = fNum("Fatigue sensitivity (0..1)", sheet.embodiment?.interoception?.fatigue_sensitivity, "0.1");
@@ -425,6 +426,13 @@ function charEditor(c, options = {}) {
         f.summary.node, f.senses.node, f.build.node, f.face.node, f.hair.node,
         f.eyes.node, f.distinctive.node, f.latent.node,
         el("div", { class: "small dim", style: "margin-top:8px" },
+          "Extra body parts are structured, not prose: declare a part once, "
+          + "with where it emerges, and the story can see it, cover it, and "
+          + "touch it deterministically. “Through clothing” means garments "
+          + "over that region are worn around it (a tail through a skirt); "
+          + "unchecked, the part hides under clothing that covers the region."),
+        f.extra_parts.node,
+        el("div", { class: "small dim", style: "margin-top:8px" },
           "Interoception controls how strongly this character notices internal "
           + "body signals. Pain and pleasure work even when survival mode is off."),
         f.intero_acuity.node, f.pain_sensitivity.node, f.fatigue_sensitivity.node,
@@ -485,6 +493,7 @@ function charEditor(c, options = {}) {
               senses: f.senses.read(),
               visible: { summary: f.summary.read(), build: f.build.read(), face: f.face.read(), hair: f.hair.read(), eyes: f.eyes.read(), distinctive_features: f.distinctive.read() },
               latent: f.latent.read(),
+              extra_parts: f.extra_parts.read(),
               interoception: {
                 acuity: f.intero_acuity.read() ?? 0.5,
                 pain_sensitivity: f.pain_sensitivity.read() ?? 0.5,
@@ -609,6 +618,7 @@ function personaEditor(p) {
   f.eyes = fText("Eyes", sheet.embodiment?.visible?.eyes);
   f.distinctive = fLineList("Distinctive features (one per line)", sheet.embodiment?.visible?.distinctive_features);
   f.latent = fLatent("Latent/hidden capabilities", sheet.embodiment?.latent);
+  f.extra_parts = fExtraParts("Extra body parts (tails, wings, horns…) — where each emerges, from menus", sheet.embodiment?.extra_parts);
   f.public_history = fArea("Public history (world could know)", sheet.knowledge?.public_history, 3);
   f.voice_setting = fArea("Voice setting (PRIVATE — narrator only)", sheet.narration?.voice_setting, 3);
   f.abilities = fAbilities("Abilities", sheet.competence?.abilities);
@@ -645,7 +655,12 @@ function personaEditor(p) {
           + "on in Settings."),
         fillAppearance),
       el("details", { open: "" }, el("summary", {}, "Embodiment (Visible & Senses)"),
-        f.appearance.node, f.senses.node, f.build.node, f.face.node, f.hair.node, f.eyes.node, f.distinctive.node, f.latent.node),
+        f.appearance.node, f.senses.node, f.build.node, f.face.node, f.hair.node, f.eyes.node, f.distinctive.node, f.latent.node,
+        el("div", { class: "small dim", style: "margin-top:8px" },
+          "Extra body parts are structured, not prose: declare a part once, "
+          + "with where it emerges, and the story can see it, cover it, and "
+          + "touch it deterministically."),
+        f.extra_parts.node),
       el("details", { open: "" }, el("summary", {}, "History & Voice"), f.public_history.node, f.voice_setting.node),
       el("details", { open: "" }, el("summary", {}, "Abilities"), f.abilities.node),
       el("details", { open: "" }, el("summary", {}, "Private history"), ph.node),
@@ -665,7 +680,8 @@ function personaEditor(p) {
             embodiment: {
               senses: f.senses.read(),
               visible: { summary: f.appearance.read(), build: f.build.read(), face: f.face.read(), hair: f.hair.read(), eyes: f.eyes.read(), distinctive_features: f.distinctive.read() },
-              latent: f.latent.read()
+              latent: f.latent.read(),
+              extra_parts: f.extra_parts.read()
             },
             competence: { abilities: f.abilities.read() },
             knowledge: { public_history: f.public_history.read(), private_history: ph.read() },
