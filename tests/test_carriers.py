@@ -10,9 +10,29 @@ import types
 import crowds
 
 
-def _world(db, *, enabled=True):
-    cid = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
-                ("Carrier story", "", time.time()))
+class _Chat(dict):
+    """A chat with both `.id` and `.get`, as the real `ChatData` has.
+
+    The bare `SimpleNamespace(id=cid)` every other test in this file uses has
+    no `.get`, so `persona_of` cannot resolve a persona from it and the player
+    stays out of the carrier list — the safe direction, and the reason those
+    tests are untouched by the player becoming a carrier.
+    """
+
+    @property
+    def id(self):
+        return self["id"]
+
+
+def _world(db, *, enabled=True, persona=""):
+    persona_id = None
+    if persona:
+        persona_id = db.qi(
+            "INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
+            (persona, json.dumps({"name": persona}), "{}"))
+    cid = db.qi(
+        "INSERT INTO chats(name,scenario,created,persona_id) VALUES(?,?,?,?)",
+        ("Carrier story", "", time.time(), persona_id))
     chars = []
     for name, uid in (("Mora", "mora_uid"), ("Tavi", "tavi_uid")):
         sheet = json.dumps({"identity": {"name": name, "uid": uid}})
@@ -42,8 +62,10 @@ def _world(db, *, enabled=True):
                      "witnessed": "the warning bell rang twice",
                      "source_event_id": "scheduled_bell"}),
          "seed", time.time()))
+    db.wset(cid, "simulation_clock", {"elapsed_seconds": 0.0})
     ctx = types.SimpleNamespace(
-        chat=types.SimpleNamespace(id=cid),
+        chat=(_Chat(id=cid, persona_id=persona_id) if persona
+              else types.SimpleNamespace(id=cid)),
         turn=types.SimpleNamespace(id=turn_id, idx=3, frame_id=None),
     )
     return cid, chars, scene, ctx
@@ -534,3 +556,162 @@ class TestEveryClockReaderSharesTheMonotonicRule:
         body = inspect.getsource(commit.prepare_memory_commit)
         assert "_monotonic_elapsed(_clock, _time_diff)" in body
         assert 'get("end_seconds"' not in body
+
+
+class TestThePlayerStandsWhereItLands:
+    """The player was the one body in the room that could not learn.
+
+    `0bed7cf` made the player a SENDER; acquisition is the other half, and
+    until now it iterated `extant_cast` rows and wrote `set_char_state`, so a
+    persona had neither the row to be found by nor the column to be written
+    to. Corin could stand in the square while the warning bell rang, beside
+    an NPC who acquired it, and hold nothing — forever, and without the
+    metrics recording that a chance had been declined, because the loop never
+    counted an opportunity it could not see.
+
+    It is the same widening this loop already took once from `active_cast` to
+    `extant_cast`, one ring further out: a body standing in the room where
+    something happened learns it.
+    """
+
+    def _played(self, db, *, at="square", others="road"):
+        cid, chars, scene, ctx = _world(db, persona="Corin")
+        scene["positions"] = {"Mora": others, "Tavi": "road", "Corin": at}
+        # Spelled as edges so a courier has a door to walk through; the
+        # acquisition tests do not care either way.
+        scene["rooms"]["square"]["adjacent"] = [{"to": "road",
+                                                 "barrier": "open"}]
+        scene["rooms"]["road"]["adjacent"] = [{"to": "square",
+                                               "barrier": "open"}]
+        return cid, chars, scene, ctx
+
+    def _held(self, db, cid):
+        from carriers import PERSONA_STATE_KEY
+
+        return (db.wget(cid, PERSONA_STATE_KEY, {}) or {}).get(
+            "carried_reports") or []
+
+    def test_the_player_witnesses_their_own_room(self, temp_db):
+        from carriers import advance_carriers
+
+        cid, _chars, scene, ctx = self._played(temp_db)
+        result = advance_carriers(
+            ctx, scene, {"events": [{"event_id": "world_bell"}]})
+        assert result["carrier_opportunities"] == result["acquired"] == 1
+        held = self._held(temp_db, cid)
+        assert [r["claim"] for r in held] == ["the warning bell rang twice"]
+        # The same terms as anyone else's: an eyewitness has been told
+        # nothing, so nothing is degraded and nobody is credited.
+        assert held[0]["provenance"] == "witnessed_surface"
+        assert (held[0]["retellings"], held[0]["hops"]) == (0, 0)
+        assert held[0]["route"] == ["square"]
+
+    def test_the_player_reads_what_was_still_standing_on_arrival(self, temp_db):
+        """The arrival window is shared code, not a second one: the surfaces
+        `standing_rows` gathers and the `ARRIVAL_SURFACES` slice that bounds
+        them are the same objects the cast is offered."""
+        from carriers import advance_carriers
+
+        cid, _chars, scene, ctx = self._played(temp_db)
+        result = advance_carriers(ctx, scene, {"events": []})
+        assert result["public_surfaces"] == 0 and result["acquired"] == 1
+        assert self._held(temp_db, cid)[0]["claim"] == \
+            "the warning bell rang twice"
+
+    def test_the_envelope_moves_because_the_player_walked(self, temp_db):
+        from carriers import advance_carriers
+
+        cid, _chars, scene, ctx = self._played(temp_db)
+        advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
+        scene["positions"]["Corin"] = "road"
+        result = advance_carriers(ctx, scene, {"events": []})
+        report = self._held(temp_db, cid)[0]
+        assert result["carriers_moved"] == 1
+        assert report["route"] == ["square", "road"] and report["hops"] == 1
+
+    def test_the_player_elsewhere_learns_nothing(self, temp_db):
+        """No timer and no broadcast for the player either: co-location with
+        the surface, or silence."""
+        from carriers import advance_carriers
+
+        cid, _chars, scene, ctx = self._played(temp_db, at="road",
+                                               others="square")
+        result = advance_carriers(
+            ctx, scene, {"events": [{"event_id": "world_bell"}]})
+        assert result["acquired"] == 1          # Mora, in the square
+        assert self._held(temp_db, cid) == []
+
+    def test_the_same_surface_is_not_taken_twice(self, temp_db):
+        from carriers import advance_carriers
+
+        cid, _chars, scene, ctx = self._played(temp_db)
+        advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
+        again = advance_carriers(ctx, scene, {"events": []})
+        assert again["acquired"] == 0
+        assert len(self._held(temp_db, cid)) == 1
+
+    def test_the_players_acquisition_rewinds_with_the_story(self, temp_db):
+        """The other home has to rewind too. A cast member's reports ride the
+        `chat_chars` snapshot; the player's ride the `world` one, and a
+        restore that rewound only the first would leave the player holding a
+        report of an event the story has un-happened."""
+        from carriers import advance_carriers
+        from checkpoints import ensure_checkpoint, restore_checkpoint
+
+        cid, _chars, scene, ctx = self._played(temp_db)
+        ensure_checkpoint(cid, 4)
+        advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
+        assert self._held(temp_db, cid)
+        restore_checkpoint(cid, 4)
+        assert self._held(temp_db, cid) == []
+
+    def test_a_chat_with_no_resolvable_persona_is_untouched(self, temp_db):
+        """Failing toward fewer carriers is the safe direction. `_world`
+        without a persona builds the chat object the rest of this file uses,
+        and the beat must land exactly as it did before."""
+        from carriers import PERSONA_STATE_KEY, advance_carriers
+
+        cid, chars, scene, ctx = _world(temp_db)
+        result = advance_carriers(
+            ctx, scene, {"events": [{"event_id": "world_bell"}]})
+        assert result["carrier_opportunities"] == result["acquired"] == 1
+        assert _state(temp_db, cid, chars[0][0])["carried_reports"]
+        assert temp_db.wget(cid, PERSONA_STATE_KEY, {}) == {}
+
+    def test_a_cast_member_of_the_same_name_is_the_more_specific_body(
+            self, temp_db):
+        """A registered body with a row wins the name — the preference
+        `_cast_index` already encodes with `setdefault`. Folded here at the
+        one place carriers are enumerated, because a player admitted beside
+        their namesake would acquire the surface twice, into two homes, and
+        count the room's one opportunity as two."""
+        from carriers import PERSONA_STATE_KEY, advance_carriers
+
+        cid, _chars, scene, ctx = _world(temp_db, persona="Mora")
+        result = advance_carriers(
+            ctx, scene, {"events": [{"event_id": "world_bell"}]})
+        assert result["carrier_opportunities"] == result["acquired"] == 1
+        assert temp_db.wget(cid, PERSONA_STATE_KEY, {}) == {}
+
+    def test_the_player_sends_on_what_the_player_witnessed(self, temp_db):
+        """The two halves meeting, which is the whole point of either. What
+        Corin saw in the square is held where a persona can hold it, and
+        `run_couriers` finds it there through the same `_hold_report` a
+        registered sender is checked with."""
+        from carriers import advance_carriers
+        from couriers import run_couriers
+
+        cid, _chars, scene, ctx = self._played(temp_db)
+        advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
+        metrics, rejected = run_couriers(ctx, scene, [{
+            "op": "send", "sender": "Corin", "to_room": "road",
+            "world_event_id": "world_bell", "method": "word",
+            "pace": "riding", "description": "a boy on a borrowed pony"}])
+        assert rejected == []
+        assert metrics["dispatched"] == 1
+        rider = (temp_db.wget(cid, "couriers", []) or [])[0]
+        assert rider["report"]["claim"] == "the warning bell rang twice"
+        # What rides away is a retelling, as it would be from any other
+        # mouth; the eyewitness row stays verbatim in the player's own hands.
+        assert rider["report"]["provenance"] == "told"
+        assert self._held(temp_db, cid)[0]["provenance"] == "witnessed_surface"
