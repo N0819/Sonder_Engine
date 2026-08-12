@@ -6,6 +6,28 @@
 defect below was found by reading what a live beat actually recorded, and the
 last of them by asking whether any two ledgers in the fiction ever disagree.
 
+**A missing answer is a retryable failure, not a parser bug.** A reasoning
+model can return a message carrying `reasoning` and no `content` key at all —
+it spent its whole budget thinking and never wrote the reply. Read as
+`message["content"]`, that raised `KeyError('content')`, which surfaced live on
+a specialist call as *"all providers failed (last provider error: 'content')"*:
+an ordinary retryable outcome wearing a parser bug's clothes, on the one path
+where the ladder would simply have tried again. Every read of the answer now
+goes through one guard that names what happened. Its consequence was a second
+false report — a failed specialist's granted scope goes unserved, so the stage
+model's content standing in that channel is fail-open working as designed, but
+the backstop announced *"the scope gate mispredicted"* and would have sent the
+next reader to widen a gate that was already right. A failure and a mispredict
+now report as the different things they are.
+
+**A body is not a thing a specialist keeps.** The objects specialist reported
+*"Structural blocker: Hinami is not in the entities index, cannot update state
+for 'lifts legs'"* — a reasonable lookup, since a cast NPC really does carry an
+object record, but the player carries none by design and a posture belongs to
+another hand either way. Every sheet now says so: when a beat says a body
+moved, do not go looking for it among things and do not report that you could
+not find it, because every other hand is answering the same beat beside you.
+
 
 **Every observable change reaches a hand, and thoughts say they were left
 out.** The manifest's rule is now closest-matching category, never an
