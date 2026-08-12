@@ -5696,9 +5696,26 @@ def _orchestration_scope_backstop(ctx, out, stage):
     }
     if not flags:
         return
-    why = (f"specialist call(s) failed: {', '.join(failed)}"
-           if failed else "the scope gate read the scene as having no such "
-           "work")
+    # A FAILED specialist is not a mispredicted gate. Its scope was granted
+    # correctly and simply went unserved, so the author's own content
+    # standing in that channel is fail-open working exactly as designed --
+    # blaming the gate for it sends the next reader to widen a gate that
+    # was already right. Measured live: a contact call died on a provider
+    # returning reasoning with no answer, and the backstop reported "the
+    # scope gate mispredicted" for a channel the gate had granted.
+    if failed:
+        note = (
+            "orchestration: "
+            + ", ".join(failed) + " specialist call(s) failed, so their "
+            "granted scope went unserved and the stage model's own content "
+            "stands there (fail-open, working as designed) -- "
+            + "; ".join(flags)
+            + ". Nothing was dropped and the reconciliation seam stands. "
+            "The gate is not implicated; the CALL failed.")
+        ctx.tell_director(note)
+        ctx.add_warning(note)
+        return
+    why = "the scope gate read the scene as having no such work"
     note = (
         "orchestration gate: content shipped for channels or prose duties "
         "outside any served scope -- " + why + " -- "

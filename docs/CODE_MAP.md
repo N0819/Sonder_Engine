@@ -12,7 +12,7 @@
 | `agents/character.py` | 3277 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6066 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1475 |  | `agents.common`, `spatial` |
-| `agents/director.py` | 7178 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
+| `agents/director.py` | 7195 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/loops.py` | 1038 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 1012 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
@@ -57,8 +57,8 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 5434 | Default system prompts and prompt preset access. | `db` |
-| `providers.py` | 2754 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
+| `prompts.py` | 5445 | Default system prompts and prompt preset access. | `db` |
+| `providers.py` | 2783 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1436 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
@@ -143,7 +143,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 5714 | 1310 lines |
+| `director_resolve()` | 5731 | 1310 lines |
 | `director_interpret()` | 771 | 476 lines |
 | `_reconcile_resolution()` | 3886 | 412 lines |
 | `_evidence_present()` | 3067 | 232 lines |
@@ -675,24 +675,24 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `specialist_prompt()` | 2025 | 17 lines |
-| `prose_author_prompt()` | 2110 | 15 lines |
-| `get_prompt()` | 5425 | 10 lines |
-| `presets()` | 5416 | 2 lines |
-| `active_preset()` | 5419 | 2 lines |
-| `nsfw_enabled()` | 5422 | 2 lines |
+| `specialist_prompt()` | 2036 | 17 lines |
+| `prose_author_prompt()` | 2121 | 15 lines |
+| `get_prompt()` | 5436 | 10 lines |
+| `presets()` | 5427 | 2 lines |
+| `active_preset()` | 5430 | 2 lines |
+| `nsfw_enabled()` | 5433 | 2 lines |
 
 ### `providers.py`
 
 | Function | Start | Size |
 |---|---:|---:|
 | `_chat_complete_once()` | 1776 | 216 lines |
-| `async chat_complete_async()` | 1993 | 88 lines |
+| `async chat_complete_async()` | 2022 | 88 lines |
 | `chat_complete()` | 1544 | 84 lines |
-| `async _chat_complete_async_once()` | 2082 | 84 lines |
+| `async _chat_complete_async_once()` | 2111 | 84 lines |
 | `_sse_openai()` | 1416 | 78 lines |
-| `async _sse_openai_async()` | 2167 | 63 lines |
-| `_embed_request()` | 2484 | 58 lines |
+| `async _sse_openai_async()` | 2196 | 63 lines |
+| `_embed_request()` | 2513 | 58 lines |
 | `resolve_role_candidates()` | 1255 | 54 lines |
 
 ### `psychology_runtime.py`

@@ -221,13 +221,28 @@ class TestEmptyChoicesIsTransport:
         err = providers.LLMError("x: response carried no choices ({})", 200, True)
         assert err.retryable is True
 
-    def test_the_guard_exists_at_the_access_site(self):
-        """The raise must precede the subscript, or the KeyError wins."""
-        import inspect, providers, re
+    def test_there_is_no_raw_subscript_left_to_win(self):
+        """Originally: the raise must precede the subscript, or the KeyError
+        wins. The subscript is now gone entirely -- every read of the answer
+        goes through `_message_content`, which turns a missing message, a
+        missing content key and an empty string into named, retryable
+        failures. Same invariant, enforced by absence rather than ordering.
+
+        The sibling case cost a live specialist call: a reasoning model
+        returned `reasoning` with no `content`, and the KeyError surfaced as
+        "all providers failed (last provider error: 'content')" -- a parser
+        bug wearing a provider's clothes.
+        """
+        import inspect
+
+        import providers
+
         src = inspect.getsource(providers)
-        i = src.index("carried no choices")
-        j = src.index('content = parsed["choices"][0]["message"]["content"]')
-        assert i < j, "the empty-choices guard must come before the subscript"
+        assert '["message"]["content"]' not in src, (
+            "a raw content subscript is back; route it through "
+            "_message_content so a missing answer stays retryable")
+        assert src.index("carried no choices") < src.index(
+            "def _message_content")
 
 
 class TestLenientStrFields:

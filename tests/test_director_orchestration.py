@@ -458,7 +458,14 @@ def test_specialist_failure_never_takes_the_beat_down(temp_db, monkeypatch):
     assert body["run"] is True and body["ran"] is False
     assert "provider 500" in body["error"]
     assert any("fail-open" in w for w in ctx.warnings)
-    assert any("orchestration gate" in n for n in ctx.engine_feedback)
+    # Reported, but NOT as a gate mispredict: the scope was granted
+    # correctly and simply went unserved, so the author's content standing
+    # is fail-open working as designed. Blaming the gate here sends the
+    # next reader to widen a gate that was already right -- measured live,
+    # where a contact call died on a provider returning reasoning with no
+    # answer and the backstop announced "the scope gate mispredicted".
+    assert any("specialist call(s) failed" in n for n in ctx.engine_feedback)
+    assert not any("gate mispredicted" in n for n in ctx.engine_feedback)
 
 
 def test_specialist_payload_is_the_body_slice_and_nothing_more(temp_db,
@@ -2665,3 +2672,20 @@ def test_every_hand_can_name_a_worn_garment(temp_db):
         # Identity only -- no wardrobe state crosses.
         assert all(set(g) == {"name", "worn_by"}
                    for g in payload["worn_garments"]), name
+
+
+def test_the_sheet_tells_every_hand_a_body_is_not_a_thing_it_keeps():
+    """Live warning, chat 71 interpret: "Structural blocker: Hinami is not
+    in the entities index, cannot update state for 'lifts legs'". The
+    lookup was reasonable -- bodies ARE sometimes entity records (the cast
+    NPC has one, kind 'npc') -- but the player has none by design, and a
+    pose belongs to another hand either way. Every specialist answers the
+    same beat at once, so one hand hunting for another hand's subject is
+    both a false blocker and N-1 duplicated observations."""
+    from prompts import specialist_prompt
+
+    sheet = specialist_prompt("objects", ["entities"])
+    assert "A BODY IS NOT A THING YOU KEEP" in sheet
+    # The two facts that make the false blocker impossible to reach.
+    assert "payload.player" in sheet and "payload.cast" in sheet
+    assert "NOT a blocker" in sheet

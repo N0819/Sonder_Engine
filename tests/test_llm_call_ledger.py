@@ -218,3 +218,33 @@ class TestTheLedgerRidesTheSavedVariant:
             providers.call_ledger_sink.reset(token)
         assert set(entries[0]) == {"role", "requested", "served", "in",
                                    "out", "cached", "duration", "kind"}
+
+
+def test_a_reasoning_only_reply_is_a_retryable_failure_not_a_keyerror():
+    """Live, on a specialist call: "all providers failed (last provider
+    error: 'content')". A reasoning model returned a message carrying
+    `reasoning` and NO `content` key, and reading it as message["content"]
+    raised KeyError('content') -- whose str() is the bare word 'content'.
+
+    A model that spent its whole budget thinking and never wrote the answer
+    is an ordinary, retryable outcome. It must never surface looking like a
+    parser bug, and the message must say what actually happened."""
+    import pytest
+
+    import providers
+
+    parsed = {"choices": [{"message": {
+        "reasoning": "1. Analyze the request. " * 40}}]}
+    with pytest.raises(providers.LLMError) as caught:
+        providers._message_content(parsed, "nano", "glm-5p2")
+    assert caught.value.retryable is True
+    text = str(caught.value)
+    assert "reasoning but no answer" in text
+    assert "glm-5p2" in text
+
+
+def test_an_ordinary_reply_still_comes_straight_back():
+    import providers
+
+    parsed = {"choices": [{"message": {"content": '{"ok": true}'}}]}
+    assert providers._message_content(parsed, "nano", "m") == '{"ok": true}'
