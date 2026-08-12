@@ -2246,6 +2246,40 @@ the drive-feed loop working; a `drive_shift` there would have been WRONG
 strain never moving a drive, not success moving it).
 
 
+
+### 1.42 The conduct/reflection split ships default-off; ponder's zero now has a diagnosis and one fix attempt
+
+The split (design note 23, `character_reflection`) is landed and tested but
+OFF, so live minds still write their memories from intent until somebody
+flips it — same posture as habituation (§1.41), same acceptance test: a
+live story played with it on, judged on the fiction
+(`tools/deliberation_ab.py --experiment reflection` is the instrument, and
+its reflection signals — updates, disputes, held beliefs, choice reviews,
+ponders, the gap distribution — are the counters; the prose is the
+verdict).
+
+**Ponder's 0-in-3,083 is diagnosed as emission-side**, not mechanical: the
+plumbing works end to end (normalization, cstate staging, next-turn
+delivery, tests), but every clause of its instruction was a brake
+("EXCEPTIONAL", "never emit it merely because", "never use it as a
+default"), it was absent from the output contract and the schema example,
+it sat at 85% of a 65,903-char sheet, and `tools/fire_rates.py` — the tool
+built to catch never-firing mechanisms — does not watch it. The fix
+attempt: reflection emits it as a typed field with neutral language and an
+engine-computed occasion (the expectation gap). Whether that resurrects it
+is a MEASUREMENT owed after live beats exist; if reflection-emitted ponder
+also reads zero after ~50 beats, retire the mechanism rather than tuning
+it again. `memory_disputes` (15/3,083) rides the same bet — the gap block
+asks for re-readings at the moment later evidence actually exists.
+
+Residuals, recorded: `fire_rates.py` reads conduct-result fields and needs
+a reflection-result reader before any post-split fire-rate claim about the
+moved fields; episode salience is still conduct's number (re-authoring it
+at outcome touches the memory mint — deferred deliberately); a resumed
+turn whose conduct was rehydrated reflects with a degraded self-slice (the
+in-memory stash does not survive resume; outcome and conduct still
+arrive).
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

@@ -19,6 +19,7 @@ from memory import (
 )
 from providers import embed_texts
 from prompts import get_prompt
+from schemas import CHARACTER_REFLECTION_FIELDS
 import affect
 import psychology_runtime
 from character_schema import (character_name, character_name_from_text,
@@ -5672,6 +5673,22 @@ def prepare_memory_commit(ctx, *, scene=None):
         room_name = room_data.get("name") or char_room or ""
         own_result = ctx.character_results.get(ccid) or {}
         own_result = _normalize_character_output(own_result)
+        # The conduct/reflection split (design note 23): when this mind
+        # reflected on the RESOLVED beat, its cognitive updates -- what it
+        # now believes, what it will remember, what it now thinks of whom
+        # -- come from that reflection, written with the outcome in view,
+        # instead of from conduct's pre-resolution guesses. Overlay only
+        # the moved fields (plus a reflection-set ponder); appraisal,
+        # affect, wants and conduct itself stay the conduct call's. With
+        # the split off, or on any turn stored before it existed, there is
+        # no reflection result and this is byte-inert.
+        _reflected = (ctx.get("reflection_results") or {}).get(ccid)
+        if isinstance(_reflected, dict):
+            own_result = {**own_result, **{
+                key: _reflected[key]
+                for key in (*CHARACTER_REFLECTION_FIELDS, "ponder")
+                if key in _reflected
+            }}
         # Place claims are re-keyed onto their place ONCE, up here, before
         # ANYTHING reads mind_model_updates. The inference memory minted for a
         # claim (below) and the hypothesis it is merged under (further down,
@@ -5999,6 +6016,20 @@ def prepare_memory_commit(ctx, *, scene=None):
                 # Telemetry only, never a gate: a useful answer is allowed to
                 # raise a new deliberate question immediately.
                 st["last_ponder_turn"] = turn.idx
+            # How this mind judged its own choice, from its reflection
+            # (design note 23) -- persisted so the NEXT decision knows how
+            # the last one sat with it. Written only when a reflection
+            # delivered a verdict; the previous review stands otherwise,
+            # dated by its own turn stamp.
+            if isinstance(_reflected, dict):
+                _review = _reflected.get("choice_review")
+                if isinstance(_review, dict) \
+                        and str(_review.get("verdict") or "").strip():
+                    st["last_choice_review"] = {
+                        "verdict": str(_review.get("verdict"))[:24],
+                        "why": str(_review.get("why") or "")[:240],
+                        "turn": turn.idx,
+                    }
             seq = own_result.get("sequence") or []
             own_salience = float(own_result.get("salience", 0.0))
             should_store_own_acts = bool(seq) and (
