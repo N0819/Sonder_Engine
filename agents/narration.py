@@ -54,6 +54,8 @@ from character_schema import (
 
 from .common import (
     _agent_json,
+    extra_parts_lines,
+    scene_extra_parts,
     _already_established_phrases,
     _cap_repeated_quotes,
     _overused_phrases,
@@ -242,6 +244,29 @@ def _craft_tells(prose: str) -> list:
         if re.search(pat, scan, re.I):
             found.append(label)
     return list(dict.fromkeys(found))
+
+def _authored_body_parts(ctx, persona, player_name):
+    """{name: part lines} for every present body that AUTHORED extra parts.
+
+    The same fact as `_cast_pronouns`, and the same failure it was built
+    for: guessing flipped a character's pronouns across beats, and guessing
+    here gave a body a part it does not have. Measured live -- the narration
+    handed Elyra the player's six fox tails; her card declares no extra
+    parts at all, so there was nothing in the narrator's payload that could
+    have said otherwise. Perception and the Director have carried this index
+    all along; only the stage that writes the prose was without it.
+
+    Read live from the cards, like every other user of scene_extra_parts,
+    and ABSENT when nobody declared any -- so an ordinary cast leaves the
+    payload shape, and the provider's prefix cache, unchanged.
+    """
+    try:
+        parts = scene_extra_parts(ctx.cast, persona, player_name)
+    except Exception:
+        return {}
+    return {name: extra_parts_lines(p) for name, p in (parts or {}).items()
+            if p}
+
 
 def _cast_pronouns(cast):
     """Authoritative pronouns per cast member, so the narrator renders each
@@ -787,10 +812,15 @@ def narrator(ctx, nonce):
             "portal_states": portal_states,
         }
 
+    _abp = _authored_body_parts(ctx, pers, player_name)
     payload = {
         "player_view": view,
         "player_declared": player_declared,
         "cast_pronouns": cast_pronouns,
+        # A body's extra parts are AUTHORED, never inferred. Absent when
+        # nobody declared any, so ordinary casts keep their payload shape.
+        **({"authored_body_parts": _abp} if _abp else {}),
+
         "do_not_quote_verbatim": p_lines,
         "scene_opening": bool(est),
         "player_awareness": player_awareness,
@@ -929,10 +959,13 @@ def narrator_extra(ctx, nonce):
             extra.get("pronouns") or {}, key=f"narration_person:extra:{pid}",
             pending=pending_person_writes)
 
+        _abp2 = _authored_body_parts(
+            ctx, persona_of(ctx.chat), player_name)
         payload = {
             "player_view": view,
             "player_declared": player_declared,
             "cast_pronouns": _cast_pronouns(ctx.cast),
+            **({"authored_body_parts": _abp2} if _abp2 else {}),
             "do_not_quote_verbatim": p_lines,
             "scene_opening": bool(est),
             "private_voice_setting": "",

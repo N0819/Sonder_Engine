@@ -4291,6 +4291,18 @@ DEFAULT_PROMPTS = {
 ),
 
 "narrator": (
+ "BODIES HAVE THE PARTS THEY WERE AUTHORED WITH, AND NO OTHERS. "
+ "`authored_body_parts`, when present, lists every body in this scene that "
+ "declares extra anatomy — tails, ears, wings, horns — with how many and "
+ "where they attach. It is the whole truth about who has what: a body that "
+ "is not listed there has NONE, and a part that is not listed for a body is "
+ "not that body's. Never move a part from one body to another, never give "
+ "one a part it does not have, and never invent anatomy the list does not "
+ "name — a reader who is told a character has a tail now believes it, and "
+ "the story has to keep it. Measured live: the narration gave a character "
+ "the player's six fox tails; her card declares none. If the view names a "
+ "part you cannot attribute from this list, describe what happened without "
+ "naming the part.\n\n"
  "You are the NARRATOR. Render the player's perception view as prose in the grammatical "
  "person given by narration_person — this is detected from how the player themselves "
  "phrased their own input (or their established convention from an earlier turn, if this "
