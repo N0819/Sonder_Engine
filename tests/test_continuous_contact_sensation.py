@@ -579,3 +579,51 @@ def test_mutual_penetration_survives_as_two_contacts():
     directions = {(c["actor"], c["actor_part"]) for c in contacts}
     assert ("Elyra Voss", "cock") in directions
     assert ("Hinami", "hand") in directions
+
+
+def test_a_body_with_both_anatomies_registers_both_at_once():
+    """Elyra is futanari: she encloses with one part while being enclosed in
+    another, in the same beat, and Hinami is attending to both.
+
+    This is the live case (chat 71) that the inverted record destroyed. The
+    bad row claimed Elyra's vaginal walls were ENTERING Hinami; being a
+    second interior contact between the same pair, it displaced the standing
+    `cock -> Hinami` -- so a body with two sets of anatomy could only ever
+    register one of them, and the one it kept was the impossible one.
+
+    Nothing here is exotic to the model: two interior contacts pointing
+    opposite ways between two bodies, plus a surface contact. The engine
+    just has to keep the directions straight.
+    """
+    import spatial
+
+    scene = {"contacts": [], "positions": {"Elyra Voss": "r", "Hinami": "r"}}
+    spatial.apply_contact_ops(scene, [
+        {"op": "add", "actor": "Elyra Voss", "actor_part": "cock",
+         "target": "Hinami", "target_interior": "vaginal canal",
+         "target_part": "", "manner": "thrust", "relation": "interior"},
+        {"op": "add", "actor": "Elyra Voss", "actor_part": "vaginal walls",
+         "target": "Hinami", "target_part": "hand",
+         "target_interior": "vaginal canal", "manner": "clench",
+         "relation": "interior"},
+        {"op": "add", "actor": "Hinami", "actor_part": "thumb",
+         "target": "Elyra Voss", "target_part": "clit", "manner": "grind",
+         "relation": "surface"},
+    ])
+    assert len(scene["contacts"]) == 3, scene["contacts"]
+
+    felt = {who: [spatial.contact_sensation(c, you=who, scene=scene)
+                  for c in scene["contacts"]]
+            for who in ("Elyra Voss", "Hinami")}
+    hers = " | ".join(s for s in felt["Elyra Voss"] if s)
+    theirs = " | ".join(s for s in felt["Hinami"] if s)
+
+    # She feels her cock enclosed AND her own canal filled -- both, not one.
+    assert "your cock registers Hinami's vaginal canal enclosing it" in hers
+    assert "Hinami's hand within your vaginal canal" in hers
+    assert "your clit registers Hinami's thumb" in hers
+    # And Hinami feels the mirror of each.
+    assert "Elyra Voss's cock within your vaginal canal" in theirs
+    assert "your hand registers Elyra Voss's vaginal canal enclosing it" in theirs
+    # Nobody is told a cavity entered a cavity.
+    assert "vaginal walls register" not in hers.casefold()
