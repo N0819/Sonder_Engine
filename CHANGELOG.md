@@ -1,5 +1,39 @@
 # Changelog
 
+## alpha 8.2.3 — A hand that declines says whose it is
+
+`not_mine` said an event was not this hand's; it did not say whose. So the
+repair tier routed by category — and the category map is exactly what
+misrouted the event to begin with, which meant re-asking the hand that had
+just declined it. Live, the contact and objects specialists both explained in
+free-text notes that a posture change belonged elsewhere (*"no posture channel
+available"*, *"this is a bodily action/pose change"*), and nothing read either
+one. The knowledge was there and thrown away.
+
+A decline may now carry `reroute_to`, and each sheet lists the six hands and
+what each keeps, in plain language. It is a **forwarding note, not a call**: a
+specialist names a hand and stops — it never invokes another and never encodes
+on its behalf. The engine checks the address against the roster and decides,
+because who gets called is a cross-channel judgment and those stay with the
+deterministic orchestrator. A cap in code is a cap; a cap in a prompt is a
+suggestion. Two hands forwarding one event to a third would author two records
+of one change, which is the bug 8.2.1 spent itself on. And engine-side routing
+replays identically on a reroll.
+
+An address naming nobody, naming the sender, or riding a verdict other than a
+decline is dropped rather than carried as a half-fact, and routing falls back
+to the category whenever the address does not hold — so this can only improve
+on the previous behaviour, never degrade it.
+
+It needs no new round: the repair tier already does the scoped call, the
+additive merge and the fail-open, and only *who* it asks changes. Those events
+bought a repair call anyway, so this is cheaper than what it replaces.
+
+Every forwarding note is recorded in `recon.reroutes` with the category that
+misrouted it. `overlays` and `vitals` were reachable by no category at all for
+a whole release and nobody noticed; a routing table corrected from data is
+worth as much as the reroute.
+
 ## alpha 8.2.2 — Small corrections cost small
 
 A ground rule, and the seams that were breaking it: **never pay a full
