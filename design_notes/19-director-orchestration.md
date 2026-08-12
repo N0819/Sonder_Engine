@@ -89,9 +89,26 @@ Candidate specialists and how often each would actually run, measured over all
 **Mean 1.75 of 6 per beat.** 12.1% of beats need none at all — prose and
 nothing else. 76% need two or fewer. Five specialists at once happens on 0.3%.
 
-The offscreen family has never fired in 2,243 beats and is the clearest case
-for cold storage rather than conditional inclusion: its subjects (crowds,
-couriers, offscreen plans) are scene facts, so the gate for it cannot miss.
+**OFFSCREEN'S 0% IS NOT EVIDENCE IT DOES NOT MATTER — it is evidence it is
+unbuilt.** Read the wrong way, that row says "delete it"; read correctly it
+says the world outside the scene is a capability the engine has declared and
+not yet grown. Crowds moving, couriers carrying news, plans advancing while
+nobody watches, what a town does between visits: that is plausibly as complex
+a task as the whole present Director, and it is the specialist most likely to
+become the largest rather than the smallest.
+
+That is an argument FOR this architecture, not a footnote to it. A monolithic
+Director cannot absorb an offscreen simulator without every ordinary beat
+paying for it — which is exactly why the capability has stayed at 0%, since
+nothing that large could be added to an 18.7k sheet already too big. A
+specialist gives it somewhere to grow that costs a beat nothing when the beat
+is indoors with two people and no elsewhere in play.
+
+**Pinned for development, not for deletion.** Its subjects (crowds, couriers,
+offscreen plans) are scene facts, so the gate for it cannot miss today; the
+gate will need revisiting the moment "somewhere else is happening" stops being
+readable from the current scene's contents, because at that point absence of a
+subject in THIS room stops meaning absence of the subject.
 
 ## What stays with the orchestrator
 
