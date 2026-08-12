@@ -2586,3 +2586,82 @@ def test_the_thought_ledger_cannot_excuse_a_physical_beat(temp_db,
     recon = out["reconciliation"]
     assert recon["thoughts_omitted"]        # recorded
     assert recon["tripwire"] is True        # and still caught
+
+
+# ---------------------------------------------------------------------------
+# One real change is one numbered event; one garment is one record.
+# ---------------------------------------------------------------------------
+
+def _live_duplicating_resolve():
+    """The live beat's exact manifest shape (chat 71, v26670): two garments
+    removed, and the SAME two garments separately asserted as entities
+    created on the floor -- which is what the commit seam does by itself."""
+    return {
+        "resolved_event": "Elyra strips the sash and shorts away.",
+        "summary": "Undressed.",
+        "changes_asserted": [
+            {"category": "contact", "subject": "Elyra Voss",
+             "change": "hand leaves Hinami stomach", "actor": "Elyra Voss",
+             "actor_part": "hand", "target": "Hinami",
+             "target_part": "stomach"},
+            {"category": "attire", "subject": "Hinami",
+             "change": "utility sash removed"},
+            {"category": "attire", "subject": "Hinami",
+             "change": "travel shorts removed"},
+            {"category": "entities", "subject": "utility sash",
+             "change": "created in room, placed on floor"},
+            {"category": "entities", "subject": "travel shorts",
+             "change": "created in room, placed on floor"},
+        ],
+        "state_diff": {},
+    }
+
+
+def test_a_derived_entity_event_folds_into_its_attire_event():
+    """A garment coming off and the same garment appearing on the floor are
+    one change described twice. Numbered separately they route to two
+    owners, each of which faithfully authors its own record -- which is
+    exactly how the live scene reached five entity records for two
+    garments. Ids stay a dense sequence after the fold."""
+    items = director._manifest_items(_live_duplicating_resolve())
+    assert [i["category"] for i in items] == ["contacts", "attire", "attire"]
+    assert [i["event_id"] for i in items] == [1, 2, 3]
+    # The fold is remembered, not silently dropped.
+    assert all("entities" in i.get("also_described_as", [])
+               for i in items if i["category"] == "attire")
+
+
+def test_positions_and_poses_are_not_derived_of_attire():
+    """Three different facts about a body, not three descriptions of one --
+    the fold must not reach them."""
+    out = {"changes_asserted": [
+        {"category": "attire", "subject": "Hinami",
+         "change": "travel shorts removed"},
+        {"category": "poses", "subject": "Hinami",
+         "change": "legs lifted, knees parted"},
+        {"category": "positions", "subject": "Hinami",
+         "change": "moved onto the platform"},
+    ]}
+    items = director._manifest_items(out)
+    assert [i["category"] for i in items] == ["attire", "poses", "positions"]
+    assert [i["event_id"] for i in items] == [1, 2, 3]
+
+
+def test_every_hand_can_name_a_worn_garment(temp_db):
+    """A worn garment lives only in sc.attire, so a specialist that needed
+    to name one could not -- and invented an entity instead (the live
+    `hinami_shorts`, whose own note admitted it). Identity only: the name
+    and whose body it is on, never the wardrobe's state."""
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {"Mara": {"wearing": ["wool coat", "boots"]}}
+    ctx = _make_ctx(temp_db, scene=scene)
+    view = {"source": "resolved_beat", "prose": "x", "dialogue": [],
+            "player": "Mara", "cast": [], "declared_actions": [],
+            "dice": [], "manifest": []}
+    for name in ("contact", "objects"):
+        payload = director._specialist_payload(name, ctx, scene, view, {})
+        assert {"name": "wool coat", "worn_by": "Mara"} \
+            in payload["worn_garments"], name
+        # Identity only -- no wardrobe state crosses.
+        assert all(set(g) == {"name", "worn_by"}
+                   for g in payload["worn_garments"]), name

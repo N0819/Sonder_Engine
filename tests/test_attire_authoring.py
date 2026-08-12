@@ -1042,3 +1042,163 @@ class TestDecisiveAttributionDoesNotUndressTheActor:
         assert landed["torso"]["garments"][0]["state"] == "removed"
         assert held["torso"]["garments"][0]["state"] == "loosened"
         assert lifted["torso"]["garments"][0]["state"] == "removed"
+
+
+class TestOneGarmentIsOneRecord:
+    """A thing can be real in the fiction without having exactly one
+    identity in exactly one ledger -- and that is the bug. Measured live
+    (chat 71, one beat after the previous duplication was repaired): five
+    entity records for two garments, one of them still carrying `worn_by`
+    with no `shed` flag while the attire ledger correctly showed the body
+    bare. The private "<garment>_<owner>" key this seam deduped on was
+    never checked against what the MODEL had already written."""
+
+    def test_a_model_authored_record_is_adopted_not_duplicated(self):
+        import commit
+
+        # What the objects specialist wrote for the same garment, under its
+        # own id, in the same beat.
+        sc = {
+            "positions": {"Mira": "room_a"},
+            "entities": {"travel_shorts": {
+                "name": "travel shorts", "kind": "object",
+                "aliases": ["travel shorts"], "portable": True,
+                "state": {"clothing": True, "shed": True,
+                          "condition": "damp"}}},
+        }
+        diff = {"entities": dict(sc["entities"])}
+        commit._mint_shed_garments(sc, [("Mira", "travel shorts")], diff)
+
+        assert list(sc["entities"]) == ["travel_shorts"], sc["entities"]
+        adopted = sc["entities"]["travel_shorts"]
+        assert adopted["state"]["shed"] is True
+        assert adopted["state"]["worn_by"] == "Mira"
+        # It knew something the mint did not; adoption keeps it.
+        assert adopted["state"]["condition"] == "damp"
+        # And it reaches the floor, which is what minting was for.
+        assert sc["positions"]["travel_shorts"] == "room_a"
+
+    def test_an_unrelated_object_is_never_folded_in(self):
+        import commit
+
+        sc = {
+            "positions": {"Mira": "room_a"},
+            "entities": {"lantern": {
+                "name": "brass lantern", "kind": "object",
+                "state": {}}},
+        }
+        commit._mint_shed_garments(sc, [("Mira", "silk sash")], {})
+        assert len(sc["entities"]) == 2
+        assert "lantern" in sc["entities"]
+
+    def test_a_garment_worn_by_someone_else_is_never_folded_in(self):
+        import commit
+
+        sc = {
+            "positions": {"Mira": "room_a"},
+            "entities": {"bo_shorts": {
+                "name": "travel shorts", "kind": "object",
+                "state": {"clothing": True, "worn_by": "Bo"}}},
+        }
+        commit._mint_shed_garments(sc, [("Mira", "travel shorts")], {})
+        assert len(sc["entities"]) == 2
+
+    def test_a_worn_garment_entity_folds_into_the_wardrobe(self):
+        """The mirror: while a garment is WORN the attire ledger owns it.
+        The live `hinami_shorts` -- minted by a specialist that could not
+        otherwise name a worn garment -- claimed `worn_by` with no `shed`
+        and read as still worn beside a ledger that had the body bare."""
+        import commit
+
+        class _Ctx(dict):
+            def __init__(self):
+                super().__init__()
+                self.told, self.warned = [], []
+
+            def tell_director(self, msg):
+                self.told.append(msg)
+
+            def add_warning(self, msg):
+                self.warned.append(msg)
+
+        sc = {
+            "attire": {"Hinami": {
+                "wearing": ["travel shorts"],
+                "regions": {"groin": {"garments": [
+                    {"name": "travel shorts", "state": "worn"}]}},
+            }},
+            "entities": {"hinami_shorts": {
+                "name": "travel shorts", "kind": "object",
+                "state": {"clothing": True, "worn_by": "Hinami",
+                          "condition": "damp"}}},
+            "positions": {"hinami_shorts": "room_a"},
+        }
+        diff = {"entities": dict(sc["entities"])}
+        ctx = _Ctx()
+        commit._fold_worn_garment_entities(sc, diff, ctx)
+
+        assert sc["entities"] == {}
+        assert diff["entities"] == {}
+        assert "hinami_shorts" not in sc["positions"]
+        # The one thing it knew is kept, on the garment in the ledger.
+        garment, = sc["attire"]["Hinami"]["regions"]["groin"]["garments"]
+        assert garment["condition"] == "damp"
+        # Reported, never silent -- the Director asked for a referent it did
+        # not have, and next beat it should know where the answer lives.
+        assert ctx.told and "attire ledger owns it" in ctx.told[0]
+
+    def test_a_shed_record_is_left_alone_by_the_fold(self):
+        """A shed garment IS an object in the world. Only the worn claim is
+        the wardrobe's."""
+        import commit
+
+        sc = {
+            "attire": {"Hinami": {"wearing": ["travel shorts"]}},
+            "entities": {"floor_shorts": {
+                "name": "travel shorts",
+                "state": {"clothing": True, "worn_by": "Hinami",
+                          "shed": True}}},
+        }
+        commit._fold_worn_garment_entities(sc, {}, None)
+        assert "floor_shorts" in sc["entities"]
+
+    def test_records_already_standing_are_healed_and_the_heal_is_idempotent(self):
+        """Adopt-or-mint only runs on a garment removed THIS beat, so a
+        scene that already accumulated duplicates keeps them forever
+        otherwise. Chat 71's live shape: the model's record from resolve,
+        the model's record from interpret, and the commit seam's mint."""
+        import commit
+
+        sc = {
+            "entities": {
+                "travel_shorts": {
+                    "name": "travel shorts",
+                    "state": {"clothing": True, "shed": True,
+                              "condition": "damp"}},
+                "travel_shorts_hinami": {
+                    "name": "travel shorts", "aliases": ["travel shorts"],
+                    "state": {"clothing": True, "worn_by": "Hinami",
+                              "shed": True}},
+            },
+            "positions": {"travel_shorts_hinami": "room_a"},
+        }
+        commit._fold_duplicate_shed_garments(sc)
+        # The survivor is the one that knows where it is.
+        assert list(sc["entities"]) == ["travel_shorts_hinami"]
+        assert sc["entities"]["travel_shorts_hinami"]["state"]["condition"] \
+            == "damp"
+        before = json.loads(json.dumps(sc))
+        commit._fold_duplicate_shed_garments(sc)
+        assert sc == before
+
+    def test_two_different_shed_garments_are_not_merged(self):
+        import commit
+
+        sc = {"entities": {
+            "sash": {"name": "utility sash",
+                     "state": {"clothing": True, "shed": True}},
+            "shorts": {"name": "travel shorts",
+                       "state": {"clothing": True, "shed": True}},
+        }, "positions": {}}
+        commit._fold_duplicate_shed_garments(sc)
+        assert len(sc["entities"]) == 2
