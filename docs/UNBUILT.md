@@ -2212,6 +2212,40 @@ by a synonym table (`_same_appendage` is structural by design).
   closed.
 
 
+### 1.41 Surface-affect habituation ships default-off; flipping it is a decision this entry exists to force
+
+The saturation defect is measured and the fix is landed and validated
+offline (`affect_habituation`, CHANGELOG Unreleased; replay evidence in
+`tools/affect_replay.py` against chat 71's checkpoints), but the setting
+defaults to the shipped behaviour, so **every live story still has the
+defect until somebody flips it**: a surface at the ceiling stays there, and
+a climax cannot out-score its own build-up. What the flip should wait for is
+one live story played with it on and read for feel — the replay proves the
+trajectory shape (plateau ~0.83, releases 0.92–0.94 on chat 71; sub-0.80
+conduct moving a mean 0.012), but felt tone in prose is the thing no
+counter measures. Two calibration facts for whoever tunes it next: the
+compression must stay top-slice (a uniform gain strong enough to help chat
+71 cost the warm long story chat 38 a story-wide ~0.1 valence shift —
+medicine landing on health), and accumulation must read the STIMULUS (the
+uncompressed target), not the body's own dampened surface, which stalls at
+a feedback fixed point (measured: s froze at 0.40 exactly). Residuals
+accepted knowingly: a spike that arrives mid-plateau on the same axis is
+compressed like the plateau (only the hedonic release pierces — shock fires
+chronically there and model novelty is noise); and a fast build that pins
+within ~6 beats starts paying before its plateau formally begins. Both are
+visible in the replay table; neither has a decidable discriminator in
+stored data today.
+
+Also recorded here from the same investigation, judged fine as they stand:
+Elyra's climax minting no `awareness` condition while Hinami's did is the
+Director describing two different bodies (one collapsed, one did not), and
+the moment's structural carriage for Elyra exists regardless — her hedonic
+charge hit 1.0, `released` fired, and the charge zeroed next beat, which is
+the drive-feed loop working; a `drive_shift` there would have been WRONG
+(a peak inside one's own drive confirms it — the hard drive lesson is about
+strain never moving a drive, not success moving it).
+
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

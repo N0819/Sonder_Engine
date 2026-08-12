@@ -6,7 +6,7 @@
 
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
-| `affect.py` | 1965 |  | `theory_of_mind` |
+| `affect.py` | 2148 |  | `theory_of_mind` |
 | `agents/__init__.py` | 88 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 903 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/character.py` | 3304 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
@@ -33,7 +33,7 @@
 | `chat_archive.py` | 1110 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1145 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 7444 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 7457 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `couriers.py` | 1090 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
 | `db.py` | 1657 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
@@ -78,14 +78,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_project_ops()` | 1178 | 137 lines |
-| `appraise()` | 456 | 136 lines |
-| `resolve_affect()` | 673 | 134 lines |
-| `apply_intent_ops()` | 1000 | 132 lines |
-| `normalize_wants()` | 813 | 87 lines |
-| `validate_drive_shift()` | 1748 | 79 lines |
-| `update_drive_strain()` | 1629 | 77 lines |
-| `project_boundary()` | 1512 | 66 lines |
+| `resolve_affect()` | 806 | 184 lines |
+| `apply_project_ops()` | 1361 | 137 lines |
+| `appraise()` | 513 | 136 lines |
+| `apply_intent_ops()` | 1183 | 132 lines |
+| `normalize_wants()` | 996 | 87 lines |
+| `validate_drive_shift()` | 1931 | 79 lines |
+| `update_drive_strain()` | 1812 | 77 lines |
+| `project_boundary()` | 1695 | 66 lines |
 
 ### `agents/background.py`
 
@@ -399,12 +399,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 5581 | 1202 lines |
+| `prepare_memory_commit()` | 5581 | 1215 lines |
 | `prepare_scene_commit()` | 2265 | 425 lines |
 | `commit_world_entities()` | 3147 | 283 lines |
 | `apply_attire_diff()` | 1970 | 253 lines |
 | `track_background_presences()` | 3947 | 231 lines |
-| `_commit_all_locked()` | 7191 | 195 lines |
+| `_commit_all_locked()` | 7204 | 195 lines |
 | `commit_transit_sweep()` | 2739 | 169 lines |
 | `_prepare_destruction()` | 700 | 158 lines |
 

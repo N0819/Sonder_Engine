@@ -6299,9 +6299,22 @@ def prepare_memory_commit(ctx, *, scene=None):
                 turns_since = max(1, turn.idx - int(prev_as.get("affect_turn") or (turn.idx - 1)))
                 elapsed_units = psychology_runtime.elapsed_psych_units(
                     prev_as.get("affect_seconds"), _clock_seconds, turns_since)
+                # Surface habituation (affect.py's _HABITUATION_* block):
+                # default off, the shipped behaviour byte-for-byte. Switched
+                # per install by the `affect_habituation` setting, read here
+                # because affect.py deliberately imports no db. The release
+                # flag is the character's own declared hedonic discharge --
+                # the same one resolve_hedonic below receives -- which is
+                # what lets a climax land uncompressed while the plateau
+                # before it settles.
+                _habituate = str(
+                    get_setting("affect_habituation") or ""
+                ).strip().casefold() in ("1", "on", "true")
                 new_affect = affect.resolve_affect(
                     prev_affect, appraisal_out, baseline, elapsed_units,
-                    proposed=asv.get("affect") or asv.get("mood"))
+                    proposed=asv.get("affect") or asv.get("mood"),
+                    habituate=_habituate,
+                    released=bool(proposed_hedonic.get("released")))
                 _encoded_surface = new_affect.get("surface") or {}
                 _encoding_valence = float(
                     _encoded_surface.get("valence") or 0.0)
