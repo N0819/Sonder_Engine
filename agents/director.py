@@ -5673,6 +5673,24 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
     record["events_addressed"] = _index_addressed_events(dispatch)
 
 
+
+#: Channels whose existence is a property of the STORY, not of the beat: the
+#: gate is false because the ledger is switched off, so no beat can ever put
+#: work in them and an unserved one is never a mispredict.
+_STRUCTURAL_CHANNEL_FACTS = {"vitals": "vitals_tracked"}
+
+
+def _structurally_absent_channels(specialists):
+    """Channels that cannot be served in this story whatever the beat holds."""
+    facts = {}
+    for state in (specialists or {}).values():
+        if isinstance(state, dict) and isinstance(state.get("facts"), dict):
+            facts = state["facts"]
+            break
+    return {channel for channel, fact in _STRUCTURAL_CHANNEL_FACTS.items()
+            if fact in facts and not facts.get(fact)}
+
+
 def _orchestration_scope_backstop(ctx, out, stage):
     """`changes_asserted` reconciliation pointed at the SCOPE.
 
@@ -5712,13 +5730,39 @@ def _orchestration_scope_backstop(ctx, out, stage):
             if channel not in served:
                 flags.append(f"{key} carries content for {channel!r}")
     if stage == "resolve":
+        # A channel can be unserved for two different reasons, and only one
+        # of them is a gate mispredict. "No work in it THIS BEAT" is a
+        # prediction, and a manifest item naming it is evidence the
+        # prediction was wrong. "This story has no such ledger AT ALL" is
+        # not a prediction -- a story with survival off has no vitals to
+        # change, ever -- so a manifest item naming it says the Director
+        # mis-categorised, not that the gate misfired.
+        #
+        # Measured live (chat 71, survival off): the resolve filed a
+        # climax's spent-ness under `vitals` because 8.2.2 told it to take
+        # the CLOSEST category and never omit, and the backstop announced
+        # "the scope gate mispredicted" about a channel that shipped
+        # nothing and could never have shipped anything. A warning that
+        # fires when nothing is wrong is how a reader learns to skip
+        # warnings, so this one is told apart from the real thing and sent
+        # to the Director as the categorisation note it actually is.
+        structural = _structurally_absent_channels(specialists)
         for item in _manifest_items(out):
             channel = _CATEGORY_CHANNELS.get(item.get("category"))
-            if channel and channel not in served:
-                subject = item.get("subject") or "an unnamed subject"
-                flags.append(
-                    f"the prose asserts a {item['category']} change for "
-                    f"{subject!r} ({channel} was not in any served scope)")
+            if not channel or channel in served:
+                continue
+            subject = item.get("subject") or "an unnamed subject"
+            if channel in structural:
+                ctx.tell_director(
+                    f"categorisation: a {item['category']} change was "
+                    f"asserted for {subject!r}, but this story keeps no "
+                    f"{channel} ledger, so nothing can record it. File a "
+                    f"change like this under the closest category this "
+                    f"story DOES keep, or leave it to the prose.")
+                continue
+            flags.append(
+                f"the prose asserts a {item['category']} change for "
+                f"{subject!r} ({channel} was not in any served scope)")
     # The prose half, same mechanism: the beat's final output shows a duty
     # whose prose-author block was not loaded. Only on records that carry a
     # prose scope (the orchestrated resolve; interpret's sheet is not yet
