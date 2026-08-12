@@ -285,6 +285,28 @@ class TestRendering:
 
 # ---- the commit seam, incident beats end to end ----
 
+def _off_the_card(sc, who, garment):
+    """A removed garment is GONE from its wearer's card, not sitting in it
+    marked `removed`.
+
+    That seat was the last relation a shed garment kept to the body it left,
+    and it is what let the ledger and the world hold two copies of one jacket
+    that then disagreed (chat 70, design note 17 §6). The garment is an object
+    in the room now, so the assertion is about absence here and presence
+    there.
+    """
+    entry = (sc.get("attire") or {}).get(who) or {}
+    folded = garment.casefold()
+    for region_entry in (entry.get("regions") or {}).values():
+        for held in region_entry.get("garments") or []:
+            if str(held.get("name", "")).casefold() == folded:
+                return False
+    if garment in (entry.get("wearing") or []):
+        return False
+    return any(e.get("name", "").casefold() == folded
+               for e in (sc.get("entities") or {}).values())
+
+
 def _ctx(temp_db, player_input="wait"):
     from pipeline_context import ChatData, PipelineContext, TurnData
     chat_id = temp_db.qi(
@@ -299,6 +321,93 @@ def _ctx(temp_db, player_input="wait"):
         turn=TurnData(id=turn_id, chat_id=chat_id, idx=1,
                       player_input=player_input, created=time.time()),
         cast=[], input=player_input)
+
+
+class TestAConditionCannotOutliveTheBody:
+    """A garment on the floor is not hanging off anybody's shoulder.
+
+    Chat 70, the fourth incident in this note: the jacket reached `removed`
+    and was minted as a floor object still carrying "peeled off one shoulder,
+    one arm freed from sleeve, hanging loose from the other shoulder" from
+    four beats earlier. `advance` already clears the STRUCTURED displacement
+    record on removal -- and said why, in a comment -- while the prose saying
+    the identical thing rode along. So every reader of the ledger was told a
+    garment lying on the stone was half-worn, and acted on it: the Director
+    removed the same jacket a second time a beat later, and the narrator
+    narrated the removal a third time the beat after that.
+    """
+
+    _WORN = ("peeled off one shoulder, one arm freed from sleeve, "
+             "hanging loose from the other shoulder")
+
+    def _prev(self, condition, state="loosened"):
+        return {"torso": {"garments": [
+            {"name": "lightweight travel jacket", "state": state,
+             "condition": condition}]}}
+
+    def _removed(self, previous):
+        return attire.advance(previous, {"torso": {"garments": [
+            {"name": "lightweight travel jacket", "state": "removed"}]}})
+
+    def test_displacement_prose_does_not_survive_removal(self):
+        after = self._removed(self._prev(self._WORN))
+        garment = after["torso"]["garments"][0]
+        assert garment["state"] == "removed"
+        assert garment["condition"] == ""
+
+    def test_a_fact_about_the_garment_itself_survives_anything(self):
+        """THE LINE. "wine-stained down the front" is true of the cloth and
+        stays true on the floor; "hanging open" was only ever true of a body
+        wearing it. Laundering a stain on removal would be the same error
+        pointed the other way."""
+        after = self._removed(self._prev("wine-stained down the front, torn "
+                                         "at the left elbow"))
+        assert after["torso"]["garments"][0]["condition"] == (
+            "wine-stained down the front, torn at the left elbow")
+
+    def test_the_same_prose_survives_while_it_is_still_worn(self):
+        """Only removal drops it. Half off a shoulder is exactly what a
+        `loosened`/`open` garment's condition is FOR."""
+        after = attire.advance(self._prev(self._WORN), {"torso": {"garments": [
+            {"name": "lightweight travel jacket", "state": "open"}]}})
+        assert after["torso"]["garments"][0]["condition"] == self._WORN
+
+    def test_the_drop_is_reported(self):
+        """The clamp's lesson, pointed the other way: the drop is right and
+        the silence would be the defect. A Director that wrote the note and
+        finds it gone must know the garment left the body rather than assume
+        it was ignored."""
+        previous = self._prev(self._WORN)
+        dropped = attire.worn_conditions_dropped(previous,
+                                                 self._removed(previous))
+        assert dropped == [("lightweight travel jacket", self._WORN)]
+
+    def test_nothing_is_reported_when_nothing_was_dropped(self):
+        previous = self._prev("wine-stained down the front")
+        assert attire.worn_conditions_dropped(
+            previous, self._removed(previous)) == []
+        still_on = self._prev(self._WORN)
+        assert attire.worn_conditions_dropped(still_on, still_on) == []
+
+    def test_a_fresh_condition_this_beat_is_not_second_guessed(self):
+        """Removal prose the Director writes AS it removes -- "dropped in a
+        heap beside the platform" -- is this beat's news and describes the
+        floor, not a body."""
+        after = attire.advance(self._prev(self._WORN), {"torso": {"garments": [
+            {"name": "lightweight travel jacket", "state": "removed",
+             "condition": "in a heap on the warm stone"}]}})
+        assert after["torso"]["garments"][0]["condition"] == (
+            "in a heap on the warm stone")
+
+    def test_the_structured_twin_is_still_cleared_too(self):
+        """Both representations of one fact, tidied together -- which is the
+        whole point. `covered_zones` was already handled; the prose was not."""
+        previous = {"torso": {"garments": [
+            {"name": "lightweight travel jacket", "state": "open",
+             "condition": self._WORN, "covered_zones": ["chest"]}]}}
+        garment = self._removed(previous)["torso"]["garments"][0]
+        assert "covered_zones" not in garment
+        assert garment["condition"] == ""
 
 
 class TestCommitSeam:
@@ -402,10 +511,7 @@ class TestCommitSeam:
         diff = {"attire": {"Hinami": {
             "remove": ["lightweight travel jacket"]}}}
         commit.apply_attire_diff(sc, diff, ctx, ctx.director_resolve)
-        states = {g["state"]
-                  for e in sc["attire"]["Hinami"]["regions"].values()
-                  for g in e["garments"]}
-        assert states == {"removed"}
+        assert _off_the_card(sc, "Hinami", "lightweight travel jacket")
         assert not any("held" in w for w in ctx.warnings)
         shed = [e for e in sc.get("entities", {}).values()
                 if e.get("name") == "lightweight travel jacket"]
@@ -484,8 +590,7 @@ class TestCommitSeam:
                       {"name": "fitted tank top"}]}})}}
         diff = {"attire": {"Hinami": {"remove": ["fitted tank top"]}}}
         commit.apply_attire_diff(sc, diff, ctx, ctx.director_resolve)
-        garment = sc["attire"]["Hinami"]["regions"]["torso"]["garments"][0]
-        assert garment["state"] == "removed"
+        assert _off_the_card(sc, "Hinami", "fitted tank top")
         assert not any("held" in w for w in ctx.warnings)
 
     def test_the_chat_68_removal_now_lands_in_one_beat(self, temp_db):
@@ -503,8 +608,7 @@ class TestCommitSeam:
                       {"name": "fitted tank top"}]}})}}
         diff = {"attire": {"Hinami": {"remove": ["tank top"]}}}
         commit.apply_attire_diff(sc, diff, ctx, ctx.director_resolve)
-        garment = sc["attire"]["Hinami"]["regions"]["torso"]["garments"][0]
-        assert garment["state"] == "removed"
+        assert _off_the_card(sc, "Hinami", "fitted tank top")
         assert not any("held" in w for w in ctx.warnings)
         shed = [e for e in sc.get("entities", {}).values()
                 if e.get("name") == "fitted tank top"]
@@ -525,8 +629,7 @@ class TestCommitSeam:
         diff = {"attire": {"Hinami": {"coverage": {
             "tank top": {"torso": []}}}}}
         commit.apply_attire_diff(sc, diff, ctx, ctx.director_resolve)
-        garment = sc["attire"]["Hinami"]["regions"]["torso"]["garments"][0]
-        assert garment["state"] == "removed"
+        assert _off_the_card(sc, "Hinami", "fitted tank top")
         assert any("decisive removal" in n for n in ctx.engine_feedback)
 
     def test_a_legacy_blob_without_displacement_is_untouched(self, temp_db):
@@ -546,3 +649,83 @@ class TestCommitSeam:
         after = attire.concealing_garments(sc["attire"]["Hinami"]["regions"])
         assert after == before
         assert not ctx.warnings
+
+
+class TestWhereAGarmentIsWornIsNotItsName:
+    """A zone of infinite variation that no single table could account for.
+
+    `region_of` reads a garment's NAME and answers where that KIND of thing is
+    usually worn. That is a fine default for ordinary dressing and structurally
+    wrong for everything else: underwear on the head, a belt across the chest,
+    a flowerpot as a hat, a shirt worn as trousers, trousers pulled onto the
+    arms. The variations have no end, so no word list reaches them — which
+    means the table cannot be the authority. The DECLARATION is.
+
+    The table stays as the default, because the ordinary case is most cases
+    and making every beat spell out that a boot goes on a foot would be its own
+    kind of wrong.
+    """
+
+    def test_a_bare_name_still_takes_the_default(self):
+        after = attire.apply_flat_change({}, ["travel shorts"])
+        assert sorted(r for r, e in after.items() if e["garments"]) == [
+            "groin", "legs"]
+
+    @pytest.mark.parametrize("garment,covers,expected", [
+        ("linen shirt", ["legs", "groin"], ["groin", "legs"]),   # shirt as pants
+        ("cotton trousers", ["arms"], ["arms"]),                 # pants on arms
+        ("flowerpot", ["head"], ["head"]),                       # not clothing at all
+        ("silk underwear", ["head"], ["head"]),                  # underwear as a hat
+        ("leather belt", ["torso"], ["torso"]),                  # belt across the chest
+    ])
+    def test_a_declared_placement_beats_the_table(self, garment, covers,
+                                                  expected):
+        after = attire.apply_flat_change({}, [garment],
+                                         placement={garment: covers})
+        assert sorted(r for r, e in after.items() if e["garments"]) == expected
+
+    def test_the_declaration_is_recorded_so_nothing_re_guesses_it(self):
+        """`placed`, not `covers` — `covers` is DERIVED by the spanning sync
+        from the regions a garment occupies and blanked for single-region
+        ones, so it cannot carry intent. The flag survives every rebuild, so
+        a shirt worn as trousers does not drift back to the torso next beat
+        because its name still says shirt."""
+        after = attire.apply_flat_change({}, ["linen shirt"],
+                                         placement={"linen shirt": ["legs"]})
+        assert after["legs"]["garments"][0]["placed"] is True
+        # ...and it survives a later beat that says nothing about placement.
+        again = attire.apply_flat_change(after, ["linen shirt"])
+        assert again["legs"]["garments"][0]["placed"] is True
+        assert "torso" not in [r for r, e in again.items() if e["garments"]]
+
+    def test_the_diff_accepts_either_spelling(self):
+        """A bare name for the ordinary case; an object when the wearing is
+        not what the name implies. Both reach the same place."""
+        assert attire.coerce_diff_shape(
+            {"add": [{"name": "flowerpot", "covers": ["head"]}]}) == {
+                "add": ["flowerpot"], "placement": {"flowerpot": ["head"]}}
+        assert attire.coerce_diff_shape({"add": ["boots"]}) == {"add": ["boots"]}
+
+    def test_placement_can_move_something_already_worn(self):
+        """Without re-adding it — a garment shoved somewhere new mid-scene."""
+        assert attire.coerce_diff_shape(
+            {"placement": {"cloak": ["legs"]}})["placement"] == {
+                "cloak": ["legs"]}
+
+    def test_an_unknown_region_is_ignored_rather_than_invented(self):
+        assert "placement" not in attire.coerce_diff_shape(
+            {"add": [{"name": "hat", "covers": ["antennae"]}]})
+
+    def test_a_garment_nothing_recognises_is_reported_not_silently_torsoed(self):
+        """The recorded gap (docs/UNBUILT.md §2.14): an unknown garment lands
+        on the torso and NOTHING says so, so the wrong span is discovered when
+        something undresses oddly twenty beats later."""
+        after = attire.apply_flat_change({}, ["dhoti"])
+        assert attire.guessed_spans(after) == ["dhoti"]
+
+    def test_a_declared_placement_is_never_reported_as_a_guess(self):
+        """Nagging about a choice somebody already made is how a warning
+        teaches people to stop reading warnings."""
+        after = attire.apply_flat_change({}, ["dhoti"],
+                                         placement={"dhoti": ["waist", "legs"]})
+        assert attire.guessed_spans(after) == []

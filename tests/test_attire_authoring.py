@@ -470,8 +470,10 @@ class TestAShedGarmentIsARealObject:
         commit.apply_attire_diff(sc, diff, ctx, ctx.director_resolve)
 
         assert "fitted tank top" not in sc["attire"]["Hinami"]["wearing"]
-        assert sc["attire"]["Hinami"]["regions"]["torso"][
-            "garments"][0]["state"] == "removed"
+        # A removed garment leaves the card entirely (design note 17 §6): it
+        # is an object in the room now, so the canonical name this test is
+        # about is asserted where the garment actually is.
+        assert sc["attire"]["Hinami"]["regions"]["torso"]["garments"] == []
         shed = [e for e in sc["entities"].values()
                 if e.get("name") == "fitted tank top"]
         assert len(shed) == 1
@@ -739,16 +741,30 @@ def test_the_director_is_told_a_garments_condition_belongs_to_the_garment():
     assert "Being damaged is not being removed" in prompt
 
 
-def test_the_director_is_told_undressing_is_a_sequence():
-    """The commit path clamps this either way. The prompt is what stops the
-    Director WRITING the instant undress -- clamped state under prose that
-    already said she was bare is a worse failure than the original."""
+def test_the_middle_states_are_offered_without_being_urged():
+    """REORDERED, because the two halves of this block were fighting.
+
+    It used to open "UNDRESSING IS A SEQUENCE, NOT A SWITCH ... give the act
+    its middle beats", and only afterwards say that `remove` is the Director's
+    resolution and the engine honours it. The headline is the sentence a model
+    acts on, and it read as an instruction to stage — which is the defect this
+    channel keeps producing: a garment left half-off in the ledger while the
+    narration puts it on the floor. The clamp was inverted in alpha 8.1 so the
+    engine honours a resolved removal; the prompt had not been.
+
+    So the resolution leads and the middle states follow as what they are: for
+    an act genuinely mid-flight, evidenced by the Director's OWN prose.
+    """
     from prompts import DEFAULT_PROMPTS
 
     prompt = DEFAULT_PROMPTS["director_resolve"]
-    assert "UNDRESSING IS A SEQUENCE" in prompt
+    assert "`remove` IS YOUR RESOLUTION AND THE ENGINE HONOURS IT" in prompt
     assert "worn -> loosened -> open -> removed" in prompt
     assert "STILL BEING WORN" in prompt
+    # the ladder is offered, never urged
+    assert "not a pacing instruction" in prompt
+    assert prompt.index("`remove` IS YOUR RESOLUTION") < prompt.index(
+        "worn -> loosened -> open -> removed"), "the staging rule leads again"
 
 
 class TestOneCharactersAliasIsAnothersName:

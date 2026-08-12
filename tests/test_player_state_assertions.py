@@ -67,7 +67,9 @@ class TestTheSameAuthorityAsResolve:
         ("attire", {"Hinami": {"remove": ["fitted tank top"]}}),
         ("rooms", {"alcove": {"name": "Alcove", "desc": "A shallow recess."}}),
         ("entities", {"crate": {"name": "crate", "room": "room_a"}}),
-        ("positions", {"Hinami": "alcove"}),
+        # An existing room here; naming one that does not exist MINTS it,
+        # which is its own test below.
+        ("positions", {"Hinami": "room_a"}),
         ("stations", {"Hinami": {"at": "treatment_platform"}}),
         ("conditions", {"Hinami": [{"name": "winded"}]}),
         ("world_facts", ["The lamp is lit."]),
@@ -115,6 +117,51 @@ class TestItValidatesShapeAndNothingElse:
         not cost a scene merge."""
         got, _ = _said({"poses": {}, "rooms": {}, "world_facts": []})
         assert got == {}
+
+    def test_declaring_a_place_makes_the_place(self):
+        """A DECLARED PLACE EXISTS. Putting a body somewhere is the strongest
+        possible assertion that the somewhere is there, and the engine already
+        reasons this way for a declared movement destination
+        (`commit.py:2134`) — an asserted position is the same claim by a
+        shorter route.
+
+        REFUSING it is the failure mode, not the fix. A position naming an
+        unknown room merges cleanly, commits, and leaves the body standing
+        nowhere: no exception, no warning, a corrupt scene that persists, with
+        no room for perception to describe and no adjacency for movement to
+        walk. Dropping it instead would just be the engine telling the player
+        their alcove is not real.
+        """
+        notes = []
+        got = validated_player_state_assertions(
+            _scene(), {"positions": {"Hinami": "hidden_alcove"}}, "Hinami",
+            notes.append)
+        assert got["positions"] == {"Hinami": "hidden_alcove"}
+        minted = got["rooms"]["hidden_alcove"]
+        assert minted["name"] == "Hidden Alcove"
+        # A way back, or the place falls out of the world: a room with no
+        # edges reads as `separated`/`far` to every perceiver.
+        assert minted["adjacent"] == [
+            {"to": "room_a", "barrier": "open", "distance": "near"}]
+        assert any("minted it" in n for n in notes)
+
+    def test_an_authored_room_is_never_overwritten_by_the_stub(self):
+        """The stub is a floor, not a ceiling: a room the same assertion
+        describes properly keeps every word of it."""
+        got, notes = _said({"rooms": {"alcove": {"name": "Alcove",
+                                                "desc": "A shallow recess."}},
+                            "positions": {"Hinami": "alcove"}})
+        assert got["rooms"]["alcove"]["desc"] == "A shallow recess."
+        assert notes == []
+
+    def test_other_channels_ride_along_with_a_minted_place(self):
+        """One declaration, one act: ducking into an alcove and crouching
+        there arrive together."""
+        got, _ = _said({"positions": {"Hinami": "nook"},
+                        "poses": {"Hinami": {"posture": "crouching"}}})
+        assert got["positions"] == {"Hinami": "nook"}
+        assert "nook" in got["rooms"]
+        assert got["poses"]["Hinami"]["posture"] == "crouching"
 
     def test_validating_does_not_touch_the_scene(self):
         sc = _scene()
@@ -194,10 +241,12 @@ class TestPassOneSeesIt:
         }, sc)
         seen = preview_player_state_assertions(sc, asserted, ctx, "Hinami")
 
-        top = [g for g in
-               seen["attire"]["Hinami"]["regions"]["torso"]["garments"]
-               if g["name"] == "fitted tank top"]
-        assert top and top[0]["state"] == "removed", "reactors still see it on"
+        # Off the card entirely, not sitting in the region marked `removed`
+        # (design note 17 §6) — a removed garment is an object in the world.
+        assert not [g for g in
+                    seen["attire"]["Hinami"]["regions"]["torso"]["garments"]
+                    if g["name"] == "fitted tank top"], "reactors still see it"
+        assert "fitted tank top" not in seen["attire"]["Hinami"]["wearing"]
         assert seen["poses"]["Hinami"]["posture"] == "kneeling"
         assert "alcove" in seen["rooms"]
 

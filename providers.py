@@ -1363,6 +1363,7 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
     body["stream_options"] = {"include_usage": True}
     text, reasoning = "", ""
     usage = None
+    served = ""
     t0 = time.time()
     _check_cancel()
     with _session().post(url, headers=headers, json=body, stream=True, timeout=_request_timeout()) as r:
@@ -1399,6 +1400,13 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
             # exactly where it is needed -- the same way reasoning capture was
             # dead here for a release.
             _capture_choice_finish(j)
+            # The model of record rides every chunk of an OpenAI-compatible
+            # stream, and a router alias is not a model -- see
+            # `_note_served_model`. The streaming branch is the one the
+            # pipeline actually runs, so reading it only in the non-streaming
+            # path would leave substitution invisible exactly where it counts.
+            if not served:
+                served = str(j.get("model") or "").strip()
             _delta = (j.get("choices") or [{}])[0].get("delta", {})
             # Reasoning arrives on its OWN delta key, never in `content`, and
             # it is the pipeline's real path -- the sink is set for the live
@@ -1416,7 +1424,7 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
                 text += d
                 sink(d)
     if role:
-        _log_usage(role, model, t0, usage)
+        _log_usage(role, model, t0, usage, served=served)
     try:
         last_reasoning.set(reasoning or None)
     except Exception:
@@ -1430,6 +1438,7 @@ def _sse_anthropic(base, headers, body, sink, role=None, model=None):
     # on message_start, the final output count on message_delta. Neither alone
     # is the whole picture, so both are folded together.
     usage = None
+    served = ""
     t0 = time.time()
     _check_cancel()
     with _session().post(base + "/v1/messages", headers=headers, json=body, stream=True, timeout=_request_timeout()) as r:
@@ -1467,7 +1476,7 @@ def _sse_anthropic(base, headers, body, sink, role=None, model=None):
                     text += d
                     sink(d)
     if role:
-        _log_usage(role, model, t0, usage)
+        _log_usage(role, model, t0, usage, served=served)
     return text
 
 def chat_complete(
@@ -1606,16 +1615,64 @@ def _merge_usage(base, extra):
     return merged
 
 
-def _log_usage(role, model, t0, usage):
+# Router aliases that have already answered, and with what. Process-local and
+# reset on restart, like the embedding pacer: what a router served last week is
+# not evidence about this week.
+_SERVED_SEEN = {}
+_SERVED_LOCK = threading.Lock()
+
+
+def _note_served_model(role, requested, served):
+    """Say so when the model that answered is not the one that was asked for.
+
+    A ROUTER ALIAS IS NOT A MODEL. The live configuration points director,
+    character and narrator at `accounts/fireworks/routers/glm-5p2-fast`, and a
+    router dispatches to whatever backing model it picks per request -- so the
+    engine can be served a materially different model, of different speed and
+    different reliability, with nothing in any log, metric or stored turn
+    saying which.
+
+    That is not a theoretical gap. Every wall-clock number in the corpus is a
+    mixture over this unrecorded variable, which made a latency investigation
+    of the pipeline's own stages produce medians that were an artefact of
+    which backing model happened to answer. `usage` was already read back for
+    exactly this reason -- to make caching observable rather than assumed --
+    and the model's own identity was sitting unread in the same response.
+
+    Logged once per (role, alias, served) so a substitution is visible without
+    a line per call.
+    """
+    served = str(served or "").strip()
+    requested = str(requested or "").strip()
+    if not served or not requested or served == requested:
+        return
+    key = (role, requested, served)
+    with _SERVED_LOCK:
+        if key in _SERVED_SEEN:
+            return
+        _SERVED_SEEN[key] = True
+    _logger.warning(
+        "provider served a different model than requested: role=%s "
+        "requested=%s served=%s -- timings and quality for this role are "
+        "about %s, not %s", role, requested, served, served, requested)
+
+
+def _log_usage(role, model, t0, usage, served=None):
     """Make caching observable. Without reading `usage` back there is no way to
     confirm that a role's static system prompt -- repeated byte-for-byte on
     every call for that role -- is actually being served from cache instead of
-    reprocessed, which is how a silently-uncached setup goes unnoticed."""
+    reprocessed, which is how a silently-uncached setup goes unnoticed.
+
+    `served` is the model the PROVIDER says answered, which is not always the
+    one that was asked for -- see `_note_served_model`. It is logged as the
+    model of record so a metrics line describes the call that happened.
+    """
     from logging_utils import log_llm_call
     counts = _normalize_usage(usage)
+    _note_served_model(role, model, served)
     try:
         log_llm_call(
-            role, model,
+            role, str(served or "").strip() or model,
             system_tokens=counts["input"],
             response_tokens=counts["output"],
             cached_tokens=counts["cache_read"],
@@ -1700,7 +1757,8 @@ def _chat_complete_once(
             )
 
         parsed = response.json()
-        _log_usage(role, model, _t0, parsed.get("usage"))
+        _log_usage(role, model, _t0, parsed.get("usage"),
+                   served=parsed.get("model"))
         _capture_finish_reason(parsed.get("stop_reason"))
         return "".join(
             block.get("text", "")
@@ -1837,7 +1895,8 @@ def _chat_complete_once(
             _capture_reasoning(parsed["choices"][0].get("message"))
             _capture_choice_finish(parsed)
             content = parsed["choices"][0]["message"]["content"]
-    _log_usage(role, model, _t0, parsed.get("usage"))
+    _log_usage(role, model, _t0, parsed.get("usage"),
+                   served=parsed.get("model"))
     return content
 
 async def chat_complete_async(
@@ -1962,7 +2021,8 @@ async def _chat_complete_async_once(
             if r.status_code >= 400:
                 raise LLMError(f"{prov['name']}: HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
             parsed = r.json()
-            _log_usage(role, model, _t0, parsed.get("usage"))
+            _log_usage(role, model, _t0, parsed.get("usage"),
+                   served=parsed.get("model"))
             _capture_finish_reason(parsed.get("stop_reason"))
             return "".join(b.get("text", "") for b in parsed.get("content", []))
 
@@ -2007,7 +2067,8 @@ async def _chat_complete_async_once(
         if r.status_code >= 400:
             raise LLMError(f"{prov['name']}: HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
         parsed = r.json()
-        _log_usage(role, model, _t0, parsed.get("usage"))
+        _log_usage(role, model, _t0, parsed.get("usage"),
+                   served=parsed.get("model"))
         _capture_reasoning((parsed.get("choices") or [{}])[0].get("message"))
         _capture_choice_finish(parsed)
         return parsed["choices"][0]["message"]["content"]
@@ -2019,6 +2080,7 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
     body["stream_options"] = {"include_usage": True}
     text, reasoning = "", ""
     usage = None
+    served = ""
     t0 = time.time()
     _check_cancel()
     async with client.stream("POST", url, headers=headers, json=body) as r:
@@ -2050,6 +2112,13 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
             if j.get("usage"):
                 usage = j["usage"]
             _capture_choice_finish(j)
+            # The model of record rides every chunk of an OpenAI-compatible
+            # stream, and a router alias is not a model -- see
+            # `_note_served_model`. The streaming branch is the one the
+            # pipeline actually runs, so reading it only in the non-streaming
+            # path would leave substitution invisible exactly where it counts.
+            if not served:
+                served = str(j.get("model") or "").strip()
             _delta = (j.get("choices") or [{}])[0].get("delta", {})
             _r = _delta.get("reasoning") or _delta.get("reasoning_content")
             if isinstance(_r, str) and _r:
@@ -2060,7 +2129,7 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
                 if sink:
                     sink(d)
     if role:
-        _log_usage(role, model, t0, usage)
+        _log_usage(role, model, t0, usage, served=served)
     try:
         last_reasoning.set(reasoning or None)
     except Exception:
@@ -2071,6 +2140,7 @@ async def _sse_anthropic_async(base, headers, body, sink, client, role=None, mod
     body["stream"] = True
     text = ""
     usage = None
+    served = ""
     t0 = time.time()
     _check_cancel()
     async with client.stream("POST", base + "/v1/messages", headers=headers, json=body) as r:
@@ -2109,7 +2179,7 @@ async def _sse_anthropic_async(base, headers, body, sink, client, role=None, mod
                     if sink:
                         sink(d)
     if role:
-        _log_usage(role, model, t0, usage)
+        _log_usage(role, model, t0, usage, served=served)
     return text
 
 def list_openrouter_endpoints(prov, model):

@@ -2625,6 +2625,90 @@ rather than creating another one-off question script.
 
 ---
 
+### 2.16 The Director as an orchestrator over scoped specialists
+
+**Raised 2026-08-12**, from the owner: *"the director is the single most
+complex task, and most failure prone. Anything to reduce its payload may
+increase its reliability."*
+
+**What is measured.** `director_resolve` reads 18,718 tokens of static
+instruction sheet plus a ~7,500-token payload — the prompt is 71% of a median
+call. Roughly 10–11k of those tokens are conditional machinery, and a typical
+beat needs 2–4k of it. Six op families have never fired once across all 2,243
+stored resolves (`courier_ops`, `crowd_ops`, `telling_ops`, `artifact_ops`,
+`offscreen_plan_ops`, `destruction`), while costing ~1,870 tokens of
+instruction on every call. Near-dead: `cast_changes` 0.5%, `overlays` 0.4%,
+`weather` 0.1%, `containment` 1.9%.
+
+`director_resolve` is also the only stage that can produce an uncommittable
+turn: `_prepare_turn_commit` reads its `state_diff` and any raise there kills
+the beat. Character output cannot — it is not a persistence authority. And 84%
+of all rerolls begin at a Director stage, with 6.1% of turns needing three or
+more attempts.
+
+**The proposal.** An orchestrating Director over specialists, each OWNING a
+subset of `state_diff` channels, behind one prose author.
+
+**The argument that distinguishes it from conditional prompt assembly**, which
+is the cheap alternative and would shrink the sheet to ~9–12k with no
+architectural change: *a specialist that is not dispatched costs nothing at
+all.* Not a smaller prompt block — no prompt, no payload, no output surface,
+and no chance to emit the channel wrongly. Mechanics not in play this beat are
+cold-stored rather than merely trimmed. That is a power conditional assembly
+does not have, because assembly still leaves ONE call responsible for every
+channel that IS in play.
+
+It also answers the prefill objection that sank the first analysis. That
+analysis assumed N shards each need the shared dynamic context, so fan-out
+multiplies prefill. Scoped specialists do not: an attire specialist needs the
+wardrobe, not the room graph, and on an ordinary beat only one or two run at
+all. Total prefill can fall below today's single 26k call rather than
+multiplying it.
+
+**Per-specialist models.** A narrow specialist may not need a frontier model.
+`agent_models` already keys configuration by role, so a lean fast model for a
+scoped structural task and a frontier model for the prose author is a
+configuration change rather than new machinery. Untested, and one of the more
+interesting things the experiment can measure.
+
+**What it must not become.** THE GATE HAS TO FAIL OPEN. If the orchestrator
+decides "no attire this beat" and there was an attire change, the change is
+silently lost — no warning, no retry, nothing in the ledger. That is this
+codebase's recurring failure class, not a hypothetical: `entry_ops`,
+`offscreen_plan_ops` and `project_ops` each cost a measurement, and the
+`ForwardRef` blind spot in `tools/project_check.py` (2026-08-12) hid the guard
+built to catch exactly it. A gating decision is a new silent-drop surface and
+is the one thing that could make the Director LESS durable.
+
+Two things make it survivable, both precedented here: gating already exists
+(`build_plan` omits stages from `interpret.flow`; `pick_background_reactor`
+returns `None` deterministically on most turns), and the backstop is a
+deterministic post-check in the shape of `changes_asserted` reconciliation —
+if the resolved prose asserts a change and no specialist owned it, say so.
+Pointed at the gate rather than at the channel.
+
+**What stays with the orchestrator, not the specialists.** The cross-channel
+judgments: the movement backstop validates against the MERGED diff, substance
+destinations derive from contact topology, a `scales` change cancels contacts
+before the beat's own contact ops, containment derives positions. These cannot
+be seen from inside one channel, which means the orchestrator is not purely a
+router.
+
+**Also settled, so the experiment does not re-litigate it.** Splitting the
+PROSE from the DIFF is refused, not deferred: prose↔diff reconciliation is the
+largest measured defect class in resolve's warnings, and blind concurrent
+peers make it structurally unfixable rather than merely error-prone. One prose
+author, structure owned against it — the alpha-8.0 perception pattern.
+
+**How it gets judged.** Not on argument. `providers.py` now records the model
+that actually SERVED each call (`_note_served_model`), because the corpus
+behind every number above was served by a router silently substituting models
+and cannot be segmented. A pinned model plus per-call attribution is a
+precondition for the experiment meaning anything. The success metric is the
+existing deterministic detectors — reconciliation omissions, authority
+residuals, uncommittable turns — not a subjective read.
+
+
 ## 3. Information-pipeline leaks still open
 
 Ids are the erased pipeline sweep's own. Severity vocabulary: **leak** (a mind
