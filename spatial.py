@@ -3718,6 +3718,19 @@ _ENVELOPMENT_MANNERS = frozenset({
 _ENCLOSING_PART_CAVITY = {
     "mouth": "mouth", "lip": "mouth", "throat": "throat",
     "vagina": "vagina", "pussy": "vagina",
+    # A cavity named by its WALL or its CANAL is the same cavity. `_part_identity`
+    # keeps them distinct kinds -- "vaginal walls" identifies as "vaginal wall",
+    # not "vagina" -- which is right for a ledger (two spellings are two rows)
+    # and wrong here, where the only question is "does this part enclose?".
+    # Measured live (chat 71): `Elyra "vaginal walls" -> Hinami, target_interior
+    # "vaginal canal", interior, clench` stood unflipped, and Elyra was told in
+    # her own perception view that her vaginal walls registered Hinami's vaginal
+    # canal enclosing them. A vagina inside a vagina, delivered to the mind that
+    # owns one of them. The truth was the reverse: Hinami's hand was inside her.
+    "vaginal wall": "vagina", "vaginal canal": "vagina",
+    "vaginal walls": "vagina", "vaginal passage": "vagina",
+    "anal canal": "anus", "rectal wall": "rectum",
+    "throat wall": "throat",
     "anus": "anus", "rectum": "rectum",
 }
 
@@ -3728,7 +3741,11 @@ _ENCLOSING_PART_CAVITY = {
 # surface` also stood a beat as `cavity -> part, clench, surface`: a grasping
 # manner, an enclosing organ, and the wrong topology.
 _STRICT_CAVITY_KINDS = frozenset({"vagina", "pussy", "anus", "rectum",
-                                  "throat"})
+                                  "throat",
+                                  # Same cavity, named by its wall or canal.
+                                  "vaginal wall", "vaginal walls",
+                                  "vaginal canal", "vaginal passage",
+                                  "anal canal", "rectal wall", "throat wall"})
 _CAVITY_GRIP_MANNERS = frozenset({
     "clench", "clenches", "clenched", "clenching",
     "clamp", "clamps", "clamped", "clamping",
