@@ -155,6 +155,60 @@ def strict_json_parse(text: str) -> dict:
 
     return value
 
+_MOVE_SCREEN_SYSTEM = """You screen ONE question about a character's draft action.
+
+You are given: `already_did` (a conversational job this character recently
+performed), `draft_does` (what their new draft does), and `what_is_new`
+(what the character registers this beat).
+
+Answer STRICT JSON: {"verdict": "keep" | "redo"}.
+
+- "keep" when the beat INVITED, answered, challenged, or materially advanced
+  that thread, or when the repetition is itself meaningful -- one continuous
+  riff, an insistence, a deliberate return. Continuing something the beat
+  asked for is not repetition.
+- "redo" only when nothing new motivates it: the draft resets to an earlier
+  job the beat has moved past.
+
+When you cannot tell, answer "redo". Nothing but the JSON object.
+"""
+
+
+def move_repeat_screen(ctx, sh, repeated_move, what_is_new):
+    """keep (True) / redo (False) / undecided (None), on the cheap lane.
+
+    Entitlement is a strict subset of what the character itself was given:
+    its own prior move, its own draft, and its own view of this beat. No
+    other mind, no ledger, nothing it did not already hold -- a screen that
+    widened what is visible would be a leak wearing an optimisation's
+    clothes.
+    """
+    if not isinstance(repeated_move, dict):
+        return None
+    try:
+        raw = chat_complete(
+            "utility",
+            _MOVE_SCREEN_SYSTEM,
+            json.dumps({
+                "already_did": str(repeated_move.get("move") or "")[:400],
+                "draft_does": str(repeated_move.get("current") or "")[:400],
+                "what_is_new": str(what_is_new or "")[:1200],
+            }, ensure_ascii=False),
+            temperature=0.0,
+            max_tokens=200,
+        )
+        verdict = str((strict_json_parse(raw) or {}).get("verdict") or "").strip().lower()
+    except Aborted:
+        raise
+    except Exception:
+        return None
+    if verdict == "keep":
+        return True
+    if verdict == "redo":
+        return False
+    return None
+
+
 # --- The cheap rung: patch the fields that failed, not the whole beat -------
 
 _PATCH_SYSTEM = """You repair ONE malformed field at a time in a JSON object.

@@ -9,7 +9,7 @@
 | `affect.py` | 1965 |  | `theory_of_mind` |
 | `agents/__init__.py` | 88 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 903 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/character.py` | 3277 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
+| `agents/character.py` | 3304 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6066 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1475 |  | `agents.common`, `spatial` |
 | `agents/director.py` | 7195 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
@@ -45,7 +45,7 @@
 | `importers.py` | 2715 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `logging_utils`, `memory`, `prompts`, `providers` |
 | `jobs.py` | 183 |  | `logging_utils` |
 | `living_world.py` | 608 |  | `logging_utils`, `mechanics` |
-| `llm_quality.py` | 645 | Strict JSON parsing, schema validation, and model-assisted repair. | `pipeline_context`, `providers`, `schemas` |
+| `llm_quality.py` | 699 | Strict JSON parsing, schema validation, and model-assisted repair. | `pipeline_context`, `providers`, `schemas` |
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `lore_structure.py` | 242 |  | — |
 | `mechanics.py` | 310 |  | `spatial`, `spatial_frames` |
@@ -104,14 +104,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 2344 | 934 lines |
-| `_annotate_known_exits()` | 1765 | 445 lines |
-| `_ground_observation_citations()` | 825 | 263 lines |
+| `character_step()` | 2345 | 960 lines |
+| `_annotate_known_exits()` | 1766 | 445 lines |
+| `_ground_observation_citations()` | 826 | 263 lines |
 | `_unanswered_question_note()` | 279 | 117 lines |
-| `_destination_from_goals()` | 1343 | 109 lines |
-| `sprint_offers()` | 2245 | 97 lines |
+| `_destination_from_goals()` | 1344 | 109 lines |
+| `sprint_offers()` | 2246 | 97 lines |
 | `_recent_self_moves()` | 148 | 90 lines |
-| `_verdict()` | 1187 | 72 lines |
+| `_verdict()` | 1188 | 72 lines |
 
 ### `agents/common.py`
 
@@ -550,14 +550,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 276 | 370 lines |
-| `_targeted_field_patch()` | 217 | 57 lines |
+| `complete_validated_json()` | 330 | 370 lines |
+| `_targeted_field_patch()` | 271 | 57 lines |
 | `output_ran_out_of_room()` | 89 | 47 lines |
 | `_extract_balanced_object()` | 35 | 34 lines |
+| `move_repeat_screen()` | 177 | 33 lines |
 | `strict_json_parse()` | 138 | 19 lines |
 | `_strip_fences()` | 71 | 16 lines |
-| `_dig()` | 190 | 12 lines |
-| `_error_paths()` | 177 | 11 lines |
+| `_dig()` | 244 | 12 lines |
 
 ### `logging_utils.py`
 
