@@ -586,6 +586,7 @@ def _selected_move_text(result):
 _REPEATED_ASK_THRESHOLD = 0.5
 
 
+
 def _first_repeated_move(result, recent_moves, threshold=0.4):
     """A recent selected conversational move closely restated this beat.
 
@@ -3175,6 +3176,32 @@ def character_step(ctx, cid, nonce):
                 "from a live intention, the drive, the present situation, or "
                 "let the spent thread rest."),
         }
+    # THE CHEAP SCREEN. A semantic-similarity trigger is a REVIEW trigger,
+    # not proof of bad repetition (AGENTS.md), and the review it bought was
+    # a full second character call: the same ~25k payload and another ~7k
+    # of decision, measured live at 58.0s and 36.3s. Across stored variants
+    # that call ran and KEPT the draft 48 times. Paying a frontier model to
+    # re-author a whole decision in order to be told the decision was fine
+    # is the expensive way to ask a cheap question.
+    #
+    # So ask the cheap question cheaply: prior move, draft move, what is new
+    # this beat -- keep or redo. Only a `redo` escalates to the full call.
+    # This does NOT make the mind conclude less, which would be the one
+    # unacceptable fix: the character still decides, and the screen only
+    # decides whether the character is asked AGAIN. Undecidable, erroring or
+    # unconfigured screens fall through to the full retry unchanged.
+    if _corrections and set(_corrections) == {"move_correction"}:
+        from llm_quality import move_repeat_screen
+        _verdict = move_repeat_screen(
+            ctx, sh, _repeated_move,
+            (payload.get("perception") or {}).get("view") or "")
+        if _verdict is True:
+            ctx.add_warning(
+                f"character {character_name(sh)}: repetition screened as "
+                f"warranted by the beat -- kept without a full re-ask "
+                f"({str((_repeated_move or {}).get('current'))[:80]!r})")
+            _corrections = {}
+
     if _corrections:
         # Say the retry HAPPENED, not only that it failed. Until this line
         # existed a retry that came back clean was indistinguishable from a
