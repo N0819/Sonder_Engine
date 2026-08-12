@@ -898,6 +898,13 @@ function erWatch() {
 window.erOfferRebuild = erOfferRebuild;
 async function erOfferRebuild(chatId, bank) {
   if (!bank || !bank.stranded) return;
+  // The configured provider did not answer the status probe, so the server
+  // could not compare anything and reported no stranded rows. Belt and
+  // braces against a stale or hand-built payload: never say a word about the
+  // bank on a comparison that was not made. This is the shape of the live
+  // report — a fully healthy 34-memory story announcing all 34 stranded on
+  // every open, because a rate limit answered the probe.
+  if (bank.live_unknown) return;
   const n = bank.stranded.toLocaleString();
 
   if (bank.is_fallback) {

@@ -88,10 +88,17 @@ def _field_names(model, seen: set | None = None) -> set:
               or getattr(model, "__fields__", {}))
     for name, field in fields.items():
         names.add(name)
-        annotation = (getattr(field, "annotation", None)
-                      or getattr(field, "outer_type_", None))
-        for nested in _models_within(annotation):
-            names |= _field_names(nested, seen)
+        # BOTH, not the first truthy one. A forward-referenced field keeps an
+        # unresolved `ForwardRef` in `.annotation` long after
+        # `update_forward_refs()` has put the real class in `.outer_type_` --
+        # so preferring `.annotation` made every forward-referenced nested
+        # model invisible here, and this check silently stopped covering it.
+        # Found by `DirectorInterpret.state_assertions: Optional["StateDiff"]`,
+        # which is exactly the shape the check exists for.
+        for source in (getattr(field, "annotation", None),
+                       getattr(field, "outer_type_", None)):
+            for nested in _models_within(source):
+                names |= _field_names(nested, seen)
     return names
 
 

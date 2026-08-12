@@ -337,6 +337,62 @@ card, a cue-inference guess wrong exactly where it matters, and — after the
 inversion — no remaining consumer, because nothing needs to know whether a
 middle exists once the engine stops inventing middles.
 
+## The third incident: the trigger had no subject
+
+The inversion held — and the ledger held a garment at `loosened` anyway, a
+third time. Chat 70 turn 9: `remove: ["fitted tank top"]` resolved, the
+player's own input saying it came off over her head, the narrator throwing it
+off the platform. Ledger: `loosened`.
+
+This one is not a missing word, which is why it matters. The clamp fired
+correctly on process language that was really there:
+
+    Both crimson palms press flat against Hinami's bare skin just below the
+    collarbones — warm, deliberate, fingers spreading wide — and BEGIN to
+    drag slowly downward.
+
+A sentence about hands. It names no garment, so `_attributed_targets` walked
+its ladder past every garment tier and landed on the last resort — "exactly
+one body is named in this sentence" — and marked Hinami as mid-undressing.
+The clamp is per-body, so that held *every* removal proposed on her.
+
+**The asymmetry the shared ladder concealed.** `decisive_targets` and
+`process_targets` were unified onto one attribution implementation so the two
+readings of a beat could not drift, and that was right — but the two
+predicates are not equally licensed to use the ladder's non-garment tiers.
+`_DECISIVE` is *intrinsically* about clothing: "Corin strips her clothes off
+in one motion" names no garment the wardrobe knows, and falling to the named
+body is the only way to read it. `_PROCESS` is not about anything.
+`begins`, `starts`, `works at`, `tries to`, `halfway` are generic English
+predicates over *any* act. `_PROCESS.search()` answers "is something in
+progress"; it never answered "is the something an undressing", and the second
+half was simply never asked.
+
+**The fix is the missing half, not a wider ladder.** A process sentence must
+now be about clothing before its attribution counts: a garment the body is
+actually wearing (matched whole, exactly as the ladder's tier 1 matches it)
+or a generic clothing word. Head nouns are deliberately *not* used for the
+wardrobe half — `_garment_keys` reads the last word, and the live wardrobe
+holds "sheer obsidian silk robe that parts with every movement", whose head
+noun is "movement".
+
+**Why enumerating here is allowed when enumerating completions was not.** The
+second incident's lesson was that a wordlist must not sit on the critical
+path of a removal. This one does not: it is a *gate on the clamp*, so a
+garment word missing from it means the clamp does not fire and the Director's
+resolved removal lands — the same safe direction the inversion was built to
+guarantee. The dangerous direction here is a false *positive*, so the
+promiscuous general-English words are left out on purpose: `hook` is what
+fingers do to a hem, bare `tie` is what you do to hair, and `top` carries a
+lookahead because "the top of her thigh" is not a garment.
+
+**Still per-body, and that is still too coarse.** "She begins on the sash"
+holds a jacket the same beat resolved off the same body. The attribution
+ladder answers in bodies, and making it answer in garments is a real
+redesign; the conjunction needed to hit it (one garment in progress, another
+resolved off, same body, same beat) has not been observed live. Recorded in
+`docs/UNBUILT.md` rather than bundled here.
+
 ## Left open (docs/UNBUILT.md)
 
 - Left/right asymmetry (one shoulder down) — no lateral axis in REGIONS.
@@ -344,3 +400,5 @@ middle exists once the engine stops inventing middles.
   separate perception axis; today sheerness lives in prose only.
 - Retro-repair of stale displacement prose in existing corpora — editor and
   play-through healing only, by design.
+- The process clamp is scoped per BODY, not per garment: one garment being
+  worked at holds every removal resolved on that body in the same beat.

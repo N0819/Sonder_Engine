@@ -421,6 +421,73 @@ class TestCommitSeam:
             player_name="Mira")
         assert targets == {"Mira"}
 
+    @pytest.mark.parametrize("sentence", [
+        # THE THIRD INCIDENT (chat 70 t9), verbatim in shape: the Director
+        # resolved the tank top off and narrated it thrown aside, and a LATER
+        # sentence about hands held it at `loosened`.
+        "Both palms press flat against Mira's bare skin just below the "
+        "collarbones and begin to drag slowly downward.",
+        "Mira begins to walk toward the door.",
+        "Corin tries to catch Mira's eye across the room.",
+        "Mira starts up the stairs, one hand at the top of the rail.",
+        "Corin begins to work on the lock, fumbling with the pins.",
+    ])
+    def test_process_language_about_something_else_is_not_evidence(
+            self, sentence):
+        """`begins`, `starts`, `tries to` are generic English.
+
+        `_DECISIVE` may fall back to "exactly one body is named" because
+        "strips"/"tears off" are not sentences about anything but clothing.
+        `_PROCESS` has no such licence: it says an act is in progress and
+        never that the act is an undressing. Without the clothing gate every
+        one of these clamped somebody's resolved removal to `loosened`.
+        """
+        assert attire.process_targets(
+            "", [sentence], {"Mira": ["silk sash"], "Corin": ["jerkin"]},
+            player_name="Mira") == set()
+
+    @pytest.mark.parametrize("sentence", [
+        "Corin fumbles with the knots of Mira's sash.",          # wardrobe
+        "She begins to unlace Mira's bodice.",                   # generic
+        "Mira works at the buttons of her shirt.",
+        "Corin starts on the silk sash, inch by inch.",
+        "Mira's jacket is halfway off her arms.",
+    ])
+    def test_the_gate_does_not_cost_the_clamp_its_real_cases(self, sentence):
+        """The clamp still fires wherever the sentence IS about clothing —
+        by a garment this body wears or by an ordinary clothing word."""
+        assert attire.process_targets(
+            "", [sentence], {"Mira": ["silk sash", "linen shirt",
+                                      "lightweight travel jacket"],
+                             "Corin": ["jerkin"]},
+            player_name="Mira") == {"Mira"}
+
+    def test_the_chat_70_t9_beat_lands_despite_the_later_sentence(
+            self, temp_db):
+        """End to end, the live beat: `remove` lands as `removed`.
+
+        The stored beat that failed, reduced to its two sentences — the
+        removal, then an unrelated act on bare skin. The second one is what
+        broke it, and a beat this ordinary must not be able to.
+        """
+        import commit
+        ctx = _ctx(temp_db)
+        ctx.director_interpret = {}
+        ctx.director_resolve = {
+            "resolved_event":
+                "The tank top comes free, and Elyra tosses it aside. Both "
+                "crimson palms press flat against Hinami's bare skin just "
+                "below the collarbones and begin to drag slowly downward."}
+        sc = {"positions": {"Hinami": "room_a"},
+              "attire": {"Hinami": attire.authored_entry(
+                  [], [], {"torso": {"garments": [
+                      {"name": "fitted tank top"}]}})}}
+        diff = {"attire": {"Hinami": {"remove": ["fitted tank top"]}}}
+        commit.apply_attire_diff(sc, diff, ctx, ctx.director_resolve)
+        garment = sc["attire"]["Hinami"]["regions"]["torso"]["garments"][0]
+        assert garment["state"] == "removed"
+        assert not any("held" in w for w in ctx.warnings)
+
     def test_the_chat_68_removal_now_lands_in_one_beat(self, temp_db):
         """With the vocabulary gap closed, the same beat reaches `removed`
         at once, undamaged, and the shed garment is minted."""

@@ -185,6 +185,32 @@ before any reactor decides, so both participants receive the same relation from
 their own bodily endpoint. The guard admits a new relation only when the player
 is its actor; an NPC-to-player assertion must refine a matching contact that
 already stands, preventing first-person wording from authoring a new NPC act.
+Everything else the player's declaration ASSERTS as already true is carried
+the same way and for the same reason, as `state_assertions`. **Interpret is
+not a lesser authority than `director_resolve`; it is the same authority
+scoped to the player's input**, so the field is a full `StateDiff` — the exact
+structure resolve emits, every channel of it — applied through the same
+`merge_scene_with_diff` commit uses, followed by `apply_attire_diff` in
+commit's own order (attire has its own applier because the removal ladder's
+clamp reads the beat's prose). Without this, a declaration reached the scene
+only through resolve, which runs after every character has declared, so a
+player who took their top off, knelt, or ducked into an alcove was perceived
+in the previous outfit, the previous posture and a room without the alcove
+for the whole beat in which they changed all three.
+
+What bounds it is its SOURCE, not a channel list or a subject guard: interpret
+reads the player's declaration and nothing else. An unfinished attempt, and
+anything acting on another character, is kept out by being classified
+`contestable` — which interpret already does, and which routes it to the
+reaction phase — rather than by restricting which channels may be written.
+`director_resolve` receives the same previewed world and may re-resolve any of
+it; where it speaks about the same subject it wins, and silence does not
+revoke the assertion. The assertion is merged into resolve's own `state_diff`,
+so the beat persists exactly once through every guard commit already runs, and
+commit remains the only writer. The information firewall is unaffected: a fact
+in the scene is not a fact in a mind, and the composer still admits it to an
+observer only if that observer can perceive it.
+
 Contact points remain open anatomical strings and do not collapse onto attire's
 visibility regions: `cervix` remains `cervix`, rather than becoming `groin`.
 For interior topology, `target_interior` separately records the passage,

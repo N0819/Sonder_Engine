@@ -32,6 +32,7 @@ from spatial import (
     has_visual,
     hear_level,
     hiding_holders_of,
+    merge_scene_with_diff,
     nearby_rooms,
     normalize_room_id,
     room_of,
@@ -2284,6 +2285,7 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
             if _i and re.sub(r"[^\w]", "", _w).casefold() in _LINKING_PARTICIPLES:
                 words = words[:_i]
                 break
+        truncated = len(words) > 5
         words = words[:5]
         # The cap can still slice mid-phrase and leave a dangling function
         # word ("...five-foot-seven-inches with a"), which reads as broken
@@ -2295,6 +2297,21 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
                      "its", "as"}
         while words and words[-1].lower() in _DANGLING:
             words = words[:-1]
+        # One preposition over from the participle fix above: the cap can
+        # also cut a phrase just AFTER the dangler took one word with it --
+        # "towering hooded stranger with smooth [skin...]" keeps "with
+        # smooth", which the trailing-word trim cannot see because "smooth"
+        # is a content word. Only when the cap actually truncated (a phrase
+        # this short cannot be judged incomplete otherwise), a dangler in the
+        # tail with at most one word after it is an amputated phrase: cut
+        # back to the content head. "the figure in mourning" survives when
+        # nothing was truncated; a cap-cut label ends on a whole phrase.
+        if truncated:
+            for _i in range(len(words) - 1, 0, -1):
+                if words[_i].lower() in _DANGLING:
+                    if len(words) - 1 - _i <= 1:
+                        words = words[:_i]
+                    break
         if words:
             return "the " + " ".join(words).rstrip(".;:").lower()
     return "the unfamiliar person"
@@ -5716,3 +5733,137 @@ def _resolve_player_room(sc, pers, interp, cast, player_input=None):
         if llm_room:
             return llm_room
     return None
+
+
+# ---- What the player asserts is true before anyone reacts to it ----
+#
+# THE RULE, from the person who owns the fiction: interpret is NOT a lesser
+# authority than resolve. It is merely scoped to player input. If the player
+# says something happens, it happens that turn -- before perception pass 1
+# fires.
+#
+# It was not true, and the reason was structural rather than deliberate. A
+# player's declaration reached `director_interpret` as prose and reached the
+# SCENE only through `director_resolve`, which runs AFTER every character has
+# declared. So everything a player narrated was invisible for the beat in
+# which they narrated it: "I pull my top off" was perceived as still wearing
+# it, "I kneel" as still standing, "I duck into the alcove" as standing in the
+# open with no alcove. Each reactor decided against a world one beat stale,
+# and the change surfaced the turn after.
+#
+# Contact, movement and following were each fixed one at a time, with their
+# own field, their own guard and their own preview. That was the mistake --
+# a hand-picked list of the channels lucky enough to have been noticed, each
+# one re-deciding what the player is allowed to say. This is the general form,
+# and it is deliberately not a shorter list of powers:
+#
+#   * THE SAME SCHEMA. `state_assertions` is a `StateDiff` -- the exact
+#     structure `director_resolve` emits, every channel of it. Rooms, entities,
+#     positions, conditions, world facts, destruction. Equal authority means
+#     the same vocabulary, not a curated subset of it.
+#   * THE SAME APPLIER. `merge_scene_with_diff` is what commit uses, and it is
+#     pure and deep-copying, so pass 1 sees precisely the world commit will.
+#   * SCOPED BY SOURCE, NOT BY SUBJECT. What bounds interpret is that it reads
+#     the player's input and nothing else. There is no channel filter and no
+#     per-subject guard here, because either would be this stage second-
+#     guessing a declaration it was built to carry.
+#
+# What is NOT changed: commit remains the only writer. This previews on a copy
+# for pass 1, and the assertion is merged into resolve's own diff so the beat
+# is still persisted exactly once, through every guard commit already runs
+# (occupied-room removal, destruction, room-registry projection). And the
+# information firewall is untouched -- putting a fact into the scene is not
+# putting it into a mind; the composer still admits it to an observer only if
+# that observer can perceive it.
+
+
+def validated_player_state_assertions(sc, raw, player_name, report=None):
+    """The player's declared state changes, validated as a `StateDiff`.
+
+    SHAPE ONLY, on purpose. An earlier pass of this filtered by channel and
+    then by subject, which made interpret a lesser authority than resolve by
+    construction -- exactly the thing this exists to stop being true. The
+    Director already classifies each act `asserted` or `contestable`, and an
+    act on somebody else IS contestable; deciding that is interpret's job,
+    not a whitelist's.
+
+    Pure: reads nothing, writes nothing, returns a plain dict.
+    """
+    if not isinstance(raw, dict) or not raw:
+        return {}
+    try:
+        from schemas import StateDiff
+        clean = StateDiff(**raw).dict(exclude_unset=True)
+    except Exception as exc:  # noqa: BLE001 - a malformed assertion is not a turn failure
+        if report:
+            report(f"discarded a malformed state assertion: {exc}")
+        return {}
+    return {key: value for key, value in clean.items() if value}
+
+
+def preview_player_state_assertions(sc, assertions, ctx=None,
+                                    player_name=None):
+    """Apply asserted state to a scene COPY and return it.
+
+    The copy is the whole safety property. Pass 1 and the resolving Director
+    both need to see the world the player just described; neither may persist
+    it. `merge_scene_with_diff` deep-copies before it touches anything, so the
+    caller's scene is never the one that changes.
+
+    TWO CALLS, in commit's own order, because commit makes two: attire is not
+    a channel `merge_scene_with_diff` applies -- it has its own applier, since
+    the removal ladder's clamp has to read the beat's prose to tell an
+    undressing in progress from one that finished. A preview that merged and
+    stopped would show every other channel changed and the body still dressed,
+    which is the exact bug this exists to fix, reproduced inside the fix.
+    """
+    if not assertions:
+        return sc
+    merged = merge_scene_with_diff(sc, assertions)
+    if assertions.get("attire") and ctx is not None:
+        from commit import apply_attire_diff
+        # No resolve payload: the clamp's attribution reads
+        # `ctx.turn.player_input`, which at pass 1 is the only account of this
+        # beat that exists -- and the only one perception may ever have.
+        apply_attire_diff(merged, {"attire": assertions["attire"]}, ctx, {},
+                          report=False)
+    return merged
+
+
+def merge_player_state_assertions(assertions, resolved, player_name=None,
+                                  report=None):
+    """Carry asserted state into the durable diff.
+
+    Previewing fixes what reactors SAW and nothing else -- if resolve then
+    never mentions the change, commit writes the turn without it and the
+    ledger forks from the beat everybody just played.
+
+    Resolve keeps the last word and has to use it. Where resolve speaks about
+    the same subject or key it is re-resolving, and it wins; silence is not a
+    contradiction. Lists append rather than replace, since an op is an event
+    and two events both happened.
+    """
+    out = dict(resolved) if isinstance(resolved, dict) else {}
+    for channel, value in (assertions or {}).items():
+        current = out.get(channel)
+        if isinstance(value, dict):
+            merged = dict(current) if isinstance(current, dict) else {}
+            for subject, payload in value.items():
+                if subject in merged:
+                    if report:
+                        report(f"resolve restated {channel} for {subject}; "
+                               "the assertion yields")
+                    continue
+                merged[subject] = payload
+            out[channel] = merged
+        elif isinstance(value, list):
+            existing = list(current) if isinstance(current, list) else []
+            for item in value:
+                if item not in existing:
+                    existing.append(item)
+            out[channel] = existing
+        elif current in (None, "", 0):
+            out[channel] = value
+        elif report:
+            report(f"resolve restated {channel}; the assertion yields")
+    return out

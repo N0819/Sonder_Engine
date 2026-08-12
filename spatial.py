@@ -894,6 +894,22 @@ def visual_level_between(scene: dict, observer: str, target: str) -> str:
     # You see what is LIT, so the light that matters is the light on the thing
     # being looked at.
     level = _LIGHT_SIGHT.get(light_at(scene, target), "full")
+    # DIM IS A RENDERING FACT UP CLOSE, AN ADMISSION FACT AT RANGE (design
+    # note 18). The light verdict used to apply FLAT -- distance could only
+    # ever weaken it -- so two bodies in continuous contact in a dim room saw
+    # each other as silhouettes (measured live: kneeling over a body, both
+    # hands on it, every region concealed by "vantage"). The firewall's own
+    # rule decides the fix: a mind may know anything it has a channel to, and
+    # an observer with hands on a body at arm's reach has one. Lifted ONLY on
+    # positive measurements -- a standing contact between the pair, or a
+    # station-measured within_reach -- never on proximity_rel's "near", which
+    # is the documented no-station-data fallback and would un-dim every
+    # ordinary room. Dark is deliberately NOT lifted: sight fails and the
+    # touch channel already delivers what closeness in darkness gives;
+    # a carried light beside its holder is light_at's business, not this.
+    if level == "shapes" and rel.get("same_room") \
+            and _measured_intimacy(scene, observer, target):
+        level = "full"
     if not rel.get("same_room"):
         cap = _weaker_sight(
             _opening_view_cap(scene, t_room, target, o_room),
@@ -905,6 +921,23 @@ def visual_level_between(scene: dict, observer: str, target: str) -> str:
     if crossing and level == "none":
         return "shapes"
     return level
+
+
+def _measured_intimacy(scene: dict, observer: str, target: str) -> bool:
+    """Is this pair's closeness a MEASUREMENT the engine holds?
+
+    The evidence set is closed on purpose (design note 18): a standing
+    contact between the two (either direction, `same_subject`-matched -- the
+    strongest closeness fact the ledger records), or a station-measured
+    `within_reach`. `proximity_rel`'s "near" is deliberately absent: it is
+    returned both as a reading and as the no-station-data fallback, and a
+    gate that loosens on a fallback would un-dim every ordinary room.
+    """
+    for contact in contacts_of(scene, observer):
+        pair = (contact.get("actor"), contact.get("target"))
+        if any(same_subject(scene, side, target) for side in pair if side):
+            return True
+    return proximity_rel(scene, observer, target) == "within_reach"
 
 
 # Edge `distance` tiers, most intimate first. Measured live (S1d): 86% of
@@ -5762,8 +5795,19 @@ def contact_motion(contact) -> str:
         contact.get("manner"), contact.get("detail"))
 
 
-def contact_sensation(contact: dict, *, you: str, scene: dict = None) -> str:
+def contact_sensation(contact: dict, *, you: str, scene: dict = None,
+                      label_for=None) -> str:
     """What one STANDING contact continuously delivers to ONE party's body.
+
+    `label_for` is the identity floor (AGENTS.md: every payload that hands a
+    mind prose somebody else wrote needs one): a callable mapping the OTHER
+    party's canonical name to what THIS observer may call them. Without it,
+    this clause named the other body canonically and the composer tripwire
+    fired on every contact beat with an unrecognized partner (measured live,
+    chat 70: `unearned identity ['Elyra Voss'] reached the composed view` —
+    the scrub held the line; the floor belongs here at the source). Absent,
+    the canonical name passes through unchanged, for callers rendering an
+    omniscient or self-only view.
 
     `contact_phrase` renders a contact as an objective third-party fact -- who
     is touching whom, where. That is what a narrator needs and it is not what
@@ -5815,6 +5859,8 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None) -> str:
         other = actor
     else:
         return ""
+    if callable(label_for):
+        other = str(label_for(other) or other)
 
     # A slot holding an act, a sound or a state is a malformed record, not a
     # body. Say nothing rather than render a sensation nobody could have.

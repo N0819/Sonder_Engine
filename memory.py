@@ -4664,8 +4664,32 @@ def embedding_bank_status(chat_id=None, char_id=None):
     rather than an error to survive -- the panel says "no embeddings provider
     is answering" and says why. Spending the write path's retry budget here
     would only make a degraded provider slow to admit to.
+
+    A COMPARISON NEEDS BOTH SIDES. The probe answers "what does the engine
+    embed with right now", and when it falls back that answer is a
+    PLACEHOLDER, not the live model's identity. Read as an identity it
+    strands the whole bank: measured live 2026-08-11, chat 70 held 34
+    memories every one of them correctly stamped
+    `openrouter:3:perplexity/pplx-embed-v1-4b`, the open-chat probe hit that
+    provider's rate limit, and the host was told all 34 were written by a
+    different model and should go configure the provider they already had.
+
+    So the configured role -- read from settings, no network -- separates the
+    two cases the probe cannot:
+
+      no provider configured  the hash IS this engine's embedding. Real
+                              stamps genuinely are keyword-only, and a
+                              rebuild onto the hash is a downgrade. Compare.
+      configured, not answering
+                              the live model is known and simply silent. No
+                              row is classifiable, so none is reported, and
+                              `live_unknown` says why rather than inventing a
+                              migration out of a 429.
     """
     live = embed_texts_meta(["status"], retry=None)
+    configured = embedding_model_key()
+    no_provider = configured == "cheap:crc32:256"
+    live_unknown = bool(live.fallback) and not no_provider
     where, args = ["1=1"], []
     if chat_id is not None:
         where.append("chat_id=?"); args.append(chat_id)
@@ -4678,7 +4702,7 @@ def embedding_bank_status(chat_id=None, char_id=None):
     for table in ("memories", "memory_summaries"):
         total = q(f"SELECT COUNT(*) AS n FROM {table} WHERE {clause}",
                   tuple(args), one=True)["n"]
-        stranded = q(
+        stranded = 0 if live_unknown else q(
             f"SELECT COUNT(*) AS n FROM {table} WHERE {clause} AND {stale}",
             tuple(args) + (live.model_key, live.dimensions), one=True)["n"]
         # Of those, the ones THIS ENGINE failed to write rather than the ones
@@ -4713,7 +4737,9 @@ def embedding_bank_status(chat_id=None, char_id=None):
         lore_total = q(f"SELECT COUNT(*) AS n FROM lore_entries "
                        f"WHERE lorebook_id IN ({holes})",
                        tuple(book_ids), one=True)["n"]
-        lore_stranded = q(
+        # Totals are a fact about the bank; staleness is a comparison, and
+        # with the live model silent there is nothing to compare against.
+        lore_stranded = 0 if live_unknown else q(
             f"SELECT COUNT(*) AS n FROM lore_entries "
             f"WHERE lorebook_id IN ({holes}) AND embedding IS NOT NULL "
             "AND ((embedding_model IS NOT NULL "
@@ -4723,12 +4749,23 @@ def embedding_bank_status(chat_id=None, char_id=None):
                                (live.dimensions or 0) * 4), one=True)["n"]
     counts["lore_entries"] = {"total": lore_total, "stranded": lore_stranded}
     return {
-        "model": live.model_key,
+        # The model the engine embeds with. When the provider is silent that
+        # is still the CONFIGURED one -- reporting the hash placeholder here
+        # is what told a host their Perplexity corpus was written by a
+        # different model than Perplexity.
+        "model": configured if live_unknown else live.model_key,
         "dimensions": live.dimensions,
-        # True when no embeddings provider is configured, so the live "model"
-        # is the crc32 fallback. Rebuilding TO that is legal but is a
-        # downgrade, and a caller deserves to be told which way it is going.
-        "is_fallback": bool(live.fallback),
+        # NO EMBEDDINGS PROVIDER IS CONFIGURED -- which is the only thing
+        # every consumer of this flag uses it for: the panel offers to set
+        # one, the chat-open toast says to set one, and `start_rebuild_if_-
+        # needed` refuses to rebuild onto the hash. It used to be
+        # `live.fallback`, i.e. "the last probe failed", so one rate-limited
+        # request presented as an unconfigured engine.
+        "is_fallback": no_provider,
+        # A provider IS configured and did not answer this probe. Nothing is
+        # comparable, so every `stranded` above is 0 by construction and a
+        # caller must say "cannot tell" rather than "nothing to do".
+        "live_unknown": live_unknown,
         # WHY it fell back, verbatim from the provider. Without this the
         # panel can only say "no embeddings provider", which is wrong and
         # unhelpful when one IS configured and is simply not an embeddings
@@ -4796,10 +4833,28 @@ def rebuild_embeddings(chat_id=None, char_id=None, *, batch=_REBUILD_BATCH,
     """
     live = embed_texts_meta(["status"])
     target_key, target_dim = live.model_key, live.dimensions
-    want_fallback = bool(live.fallback)
+    # A fallback batch may be WRITTEN only when the hash is what this run is
+    # migrating onto -- the run's own target, not a fact about one request.
+    # It must also be the target, not merely a failed probe: writing crc32
+    # while `target_key` is a real model marks rows migrated that the `stale`
+    # predicate will select again forever, which is a rebuild that never
+    # terminates.
+    want_fallback = target_key == "cheap:crc32:256"
     report = {"model": target_key, "dimensions": target_dim,
               "memories": 0, "summaries": 0, "lore": 0, "batches": 0,
               "stopped_early": False, "error": ""}
+    if live.fallback and embedding_model_key() != "cheap:crc32:256":
+        # A provider IS configured and did not answer this probe, so there is
+        # nothing to rebuild ONTO: `target_key` is the hash placeholder, it
+        # matches no stored row, and proceeding would either select the whole
+        # bank to overwrite with hashes or stop on the first batch. Whether
+        # the host has an embeddings provider is a settings fact; read as
+        # `live.fallback` instead, one rate-limited request would have turned
+        # the guard above off and licensed a real corpus to be overwritten.
+        report["stopped_early"] = True
+        report["error"] = ("embedding provider unavailable (%s); nothing "
+                           "rebuilt" % (live.error or "unknown"))
+        return report
 
     where, args = ["1=1"], []
     if chat_id is not None:
@@ -5198,6 +5253,12 @@ def start_rebuild_if_needed(chat_id=None, char_id=None, *, force=False):
     except Exception as exc:
         logger.warning("memory: could not check embedding bank: %s", exc)
         return {"started": False, "reason": "status check failed: %s" % exc}
+    if status.get("live_unknown"):
+        # The configured provider did not answer, so every count below is 0
+        # by construction and "nothing to rebuild" would be a guess wearing a
+        # fact's clothes. Say what happened; the next call re-checks.
+        return {"started": False,
+                "reason": "embedding provider not answering", **status}
     # Lore counts. It did not, and `rebuild_embeddings` has had a working lore
     # lane behind this gate the whole time -- so a database whose only stale
     # vectors were lore was told "nothing to rebuild" on every startup and

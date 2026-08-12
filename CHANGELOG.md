@@ -1,5 +1,154 @@
 # Changelog
 
+## alpha 8.1 — What you say happened, happened
+
+### Interpret is not a lesser authority than resolve
+
+The world a character reacts to is now the world you just described.
+
+A player's declaration reached `director_interpret` as prose and reached the
+**scene** only through `director_resolve` — which runs after every character
+has already declared. So everything a player narrated was invisible for the
+beat in which they narrated it. "I pull my top off" was perceived as still
+wearing it. "I kneel" as still standing. "I duck into the alcove" as standing
+in the open, with no alcove. Each reactor decided against a world one beat
+stale, and the change surfaced the turn after.
+
+Contact, movement and following were each fixed one at a time, with their own
+field, their own guard and their own preview. That was the mistake — a
+hand-picked list of the channels lucky enough to have been noticed, each one
+re-deciding what a player is allowed to say. `state_assertions` is the
+general form, and deliberately not a shorter list of powers:
+
+- **The same schema.** It is a `StateDiff` — the exact structure resolve
+  emits, every channel of it. Rooms, entities, positions, poses, attire,
+  conditions, world facts, destruction. Equal authority means the same
+  vocabulary, not a curated subset.
+- **The same applier.** `merge_scene_with_diff`, which is what commit uses and
+  is pure and deep-copying, so pass 1 sees precisely the world commit will —
+  followed by `apply_attire_diff` in commit's own order, since attire has its
+  own applier and a preview that merged and stopped would show every channel
+  changed and the body still dressed.
+- **Scoped by source, not by subject.** What bounds interpret is that it reads
+  the player's input and nothing else. There is no channel filter and no
+  per-subject guard, because either is this stage second-guessing a
+  declaration it was built to carry. An act on someone else is kept out by
+  being `contestable` — the classification interpret already makes — not by a
+  whitelist.
+
+Commit remains the only writer: the preview is a copy, and the assertion is
+merged into resolve's own diff so the beat persists exactly once, through
+every guard commit already runs. Resolve keeps the last word and has to use
+it — where it speaks about the same subject it wins, and silence is not a
+contradiction. The information firewall is untouched: putting a fact into the
+scene is not putting it into a mind, and the composer still admits it to an
+observer only if that observer can perceive it.
+
+Typing the field as `StateDiff` rather than a bare dict turned up a blind spot
+in `tools/project_check.py`: a forward-referenced field keeps an unresolved
+`ForwardRef` in `.annotation` after `update_forward_refs()` has put the real
+class in `.outer_type_`, and the check read only the first, so every
+forward-referenced nested model was invisible to the guard that exists to
+catch exactly this. It reads both now.
+
+### A rate limit is not a model change
+
+Chat 70 held 34 memories, every one of them correctly stamped
+`openrouter:3:perplexity/pplx-embed-v1-4b`, and every single open of that
+story announced that all 34 "were written with a different embedding model"
+and advised setting an embeddings provider — the one that was configured,
+working, and had written them.
+
+A comparison needs both sides. The chat-open probe is sent deliberately
+without retries, so a rate-limited window answers it with the crc32
+placeholder — and that placeholder was read as *the live model's identity*.
+Compared against a model nothing was written by, every correct row in the
+bank is stranded, and `is_fallback` (documented as "no embeddings provider
+is configured", used by both frontends to say exactly that) was really just
+"the last probe failed."
+
+The configured role separates what the probe cannot, from settings, with no
+network call: **no provider** means the hash genuinely is this engine's
+embedding, so real stamps genuinely are keyword-only and the old message is
+correct; **configured but silent** means the live model is known and simply
+not answering, so no row is classifiable and none is reported. `live_unknown`
+carries the second case to the panel, which now says the question cannot be
+checked yet rather than "nothing to do" — a zero it has not earned is the
+same wrong claim pointed the other way.
+
+**The same conflation could destroy vectors.** `rebuild_embeddings`'s guard
+against writing hashes over real vectors is disabled by `want_fallback`,
+which was also `live.fallback` — so a rebuild begun while the provider
+happened to be rate-limited would have overwritten an entire real corpus
+with hashes and stamped them migrated, which its own docstring names as the
+one outcome worse than not running. Reaching it needed nothing but bad luck
+in timing.
+
+### "Begins" is not a sentence about clothing
+
+Third time the attire ledger has held a garment at `loosened` while the
+narration had it on the floor, and the first time the cause was not a
+missing word. Live, chat 70 turn 9: the Director resolved
+`remove: ["fitted tank top"]`, the player said it came off, the narrator
+threw it across the room — and the ledger clamped it, because a *later*
+sentence in the same beat read "both crimson palms press flat against
+Hinami's bare skin … and **begin** to drag slowly downward."
+
+The clamp's inverted trigger fires on process language, and process language
+is generic English. `_DECISIVE` can afford to attribute a sentence by "only
+one body is named here", because "strips" and "tears off" are not sentences
+about anything but clothing. `_PROCESS` — `begins`, `starts`, `works at`,
+`tries to` — says an act is in progress and never says the act is an
+undressing. A sentence about hands fell to that last-resort tier, marked
+Hinami as mid-undressing, and held every removal on her body.
+
+So a process reading now requires the sentence to be about clothing at all:
+a garment the body is actually wearing, matched whole as the attribution
+ladder's first tier already matches it, or an ordinary clothing word. That
+list is enumerated where `_DECISIVE`'s completions are deliberately not,
+because its misses fail in the direction the inversion was built for — an
+unrecognised garment word merely lets a removal land that the stage owning
+objective causality asserted anyway. The promiscuous words are left out on
+purpose: `hook` is what fingers do to a hem, and "the top of her thigh" is
+not a garment. `design_notes/17-garment-displacement.md` §5.
+
+### Hands on a body can see it, even in the dim
+
+Live, chat 70: Elyra kneeling over Hinami, two standing contacts, and every
+region of Hinami concealed "seen only in silhouette" — the attire and body
+surfaces computed correctly and discarded at the sight gate, because the
+room is `dim`, dim maps to `shapes`, and the light verdict applied FLAT:
+distance could weaken sight and nothing could strengthen it for closeness.
+
+The category error is the composer's own vocabulary: Layer A decides
+admission, Layer B renders — and at contact range, dim light is a RENDERING
+fact ("you see her in the low amber light" carries every fact "you see her"
+carries), not an admission one. So sight now grades by light × proximity,
+both computed, never authored — 349 of 395 live rooms write no light at all
+and 40 write `dim`, so a richer word list would be the `DISTANCE_TIERS`
+failure again. Dim plus a MEASURED closeness — a standing contact between
+the pair, or station-measured arm's reach — admits fully, with the dimness
+already rendered as prose by the standing environment line; dim at range
+stays a silhouette; dark stays dark at every range, because touch has its
+own continuous channel and a carried light is already `light_at`'s per-body
+business. The strengthening evidence is deliberately closed and
+positive-only: `proximity_rel`'s "near" is the no-station-data fallback in
+nine rooms of ten, and a gate that loosens on a fallback would un-dim every
+ordinary room. One seam changed — `visual_level_between` — and every
+admission consumer inherits it.
+
+Two more from the same beat: the unknown-actor label no longer truncates
+mid-phrase ("the towering hooded stranger with smooth" ends at the
+content head — the cap-cut prepositional phrase, one preposition over from
+the linking-participle fix already recorded); and the composer tripwire that
+fired every contact beat — `unearned identity ['Elyra Voss'] reached the
+composed view` — is explained and closed at its source: `contact_sensation`
+named the OTHER party of a standing contact canonically, with no identity
+floor, and the scrub had been catching it every time. The sensation clause
+now names the partner through the observer's own display map, falling to
+"someone" rather than to a canonical name, and the tripwire stays as the
+backstop it was built to be. `design_notes/18-dim-light-proximity.md`.
+
 ## alpha 8.0 — Determinism and background life
 
 > ### ⚰️ Here lies the perception LLM
@@ -377,7 +526,7 @@ before you” introduction does not.
 
 ### Perception now receives durable body pose without familiar-card roll calls
 
-The live Horny Story memory defect was downstream rather than mnemonic: Elyra's
+The live memory defect was downstream rather than mnemonic: Elyra's
 `perception_outcome` already said a familiar six-tailed Hinami “stands before
 you,” and episodic memory faithfully stored it. Objective state knew only that
 both bodies were at the massage table. It carried neither Hinami's lying pose
