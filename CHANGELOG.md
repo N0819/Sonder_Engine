@@ -1,5 +1,58 @@
 # Changelog
 
+## alpha 8.2.2 — Small corrections cost small
+
+A ground rule, and the seams that were breaking it: **never pay a full
+re-author for a minor or mechanical correction.** Screen it cheaply, and
+escalate only when the cheap screen says the expensive call is genuinely
+needed.
+
+**Repair the field that failed, not the whole beat.** A malformed field cost
+the entire response re-authored on the stage's own model — measured live,
+`state_assertions.overlays` arrived as a list instead of a name-keyed map and
+bought a 4.2s round-trip on the Director, for a channel a specialist replaced
+immediately afterwards. The validator had already said which path failed and
+why, and none of it was used. The ladder gains a cheap rung below the rebuild:
+it digs out the fragments at the paths the validator named, asks about those
+fragments alone, and splices the answer back at exactly those paths.
+Everything outside them is byte-identical by construction — which is what
+makes a small model safe here, and it is not trust. A patch naming a field
+nobody complained about cannot move it, an unparseable reply falls through,
+and any doubt hands the beat to the full rebuild unchanged.
+
+**`repair` is its own configurable role**, sitting under the Director's
+specialists in the API settings, so a 3000 tok/s open-weight model can fix
+shapes while something steadier writes the summaries a character will later
+remember. Unset it inherits `utility`, and through it `mapping` — never the
+frontier model whose output it is fixing.
+
+**The decision-continuity guard stops re-asking for free.** A semantic
+similarity is a review trigger, not proof of bad repetition — and the review
+it bought was a full second character call: the same ~25k payload and another
+~7k of decision, measured at 58.0s and 36.2s. Across stored variants that call
+ran and *kept the draft* 48 times. It now opens a small screen instead — the
+character's own prior move, its own draft, its own view of the beat, keep or
+redo — and only a `redo` escalates. This does not make the mind conclude less,
+which is the one fix this codebase refuses: the character still decides, and
+the screen only decides whether the character is asked again. Its entitlement
+is a strict subset of what the character already held, because a screen that
+widened what is visible would be a leak wearing an optimisation's clothes.
+
+**Bodies have the parts they were authored with, and no others.** The
+narration gave a character the player's six golden fox tails; her card
+declares no extra parts at all. `scene_extra_parts` reads authored anatomy
+live from the cards and includes the persona — the Director carries that index
+at both stages and perception's composer carries it too, and the one stage that
+actually writes the prose carried nothing. It now sits beside `cast_pronouns`,
+which exists for exactly this reason, and is written as a subtraction: the list
+is the whole truth about who has what, a body not on it has none, and a part
+that cannot be attributed is described without being named.
+
+Also: a name-keyed table written as a list of entries that each name their own
+subject is keyed on the way in rather than costing a repair. A list of bare
+strings is still rejected — nothing may invent a subject, and attaching an
+unclaimed mark to the wrong body is worse than paying for the repair.
+
 ## alpha 8.2.1 — Ledgers that agree
 
 8.2 made the Director work in parts; playing it made the parts legible. Every
