@@ -6538,6 +6538,14 @@ def _consolidate_committed_memories(ctx):
     Summaries are reconstructible caches, not primary turn facts.  Keeping
     their LLM calls outside the transaction avoids deadlocks and ensures a
     consolidation failure can never roll back an otherwise valid turn.
+
+    This is the DIRECT, blocking form -- commit_memories' standalone path
+    and tests use it. The live turn pipeline no longer does: consolidation
+    is a background summarisation job, and running it on the `utility` role
+    inside the player's wait was measured at 29.5s of a 45.8s commit stage
+    (chat 71 turn 10, the first beat to reach the consolidation cadence).
+    `schedule_memory_consolidation` below is the out-of-band twin the commit
+    tail actually calls.
     """
     cid = ctx.chat.id
     turn = ctx.turn
@@ -6565,6 +6573,83 @@ def _consolidate_committed_memories(ctx):
                 if note:
                     notes.append(note)
     return notes
+
+
+MEMORY_CONSOLIDATION_JOB_KEY = "memory_consolidation"
+
+
+def schedule_memory_consolidation(ctx):
+    """Queue this turn's autobiographical consolidation out of band.
+
+    Returns the Job, or None when there is no cast or one is already in
+    flight for this chat. Called from the commit tail AFTER the turn's
+    facts are durable, on the same terms as the offscreen ticks beside it:
+    a summary is a reconstructible cache derived from committed rows, so
+    nothing about correctness changes -- only who waits for it. Measured
+    cost of waiting: the first consolidation of a live chat took 29.5s
+    (27.4s of it one `utility`-role LLM call) inside the commit stage's
+    wall clock.
+
+    The job snapshots the scalars it needs (ids, names, turn, frame) so it
+    never touches ctx after the turn returns. Sequential per character with
+    a cancellation check between -- abandonable at every unit boundary --
+    and a failure for one character is logged and skipped, never raised:
+    background work cannot break a turn, and the cadence check re-offers
+    the window on a later beat. Deduped on the chat by jobs.submit: a
+    consolidation still running when the next beat commits simply keeps
+    running, and that beat schedules nothing (maybe_consolidate re-reads
+    the cursor, so nothing is lost -- only deferred). Checkpoint restore
+    cancels the in-flight job cooperatively (see checkpoints.py) so a
+    rolled-back turn does not land a summary computed from rows that no
+    longer exist; the residual window -- a restore arriving mid-LLM-call --
+    is recorded in docs/UNBUILT.md.
+    """
+    import jobs
+
+    cid = ctx.chat.id
+    turn_idx = ctx.turn.idx
+    frame_id = ctx.turn.frame_id
+    members = [
+        {"id": row["id"],
+         "name": character_name_from_text(row["sheet"])}
+        for row in (ctx.cast or [])
+    ]
+    if not members:
+        return None
+
+    def _produce(job):
+        # Fresh thread, fresh contextvars: pin the scheduling turn's frame
+        # for every frame-scoped read/write below (the offscreen tick
+        # producers set the precedent, and the reason -- a nested frame's
+        # consolidation landing in the present frame -- is the same).
+        from db import active_frame_id
+        from logging_utils import logger
+        token = active_frame_id.set(frame_id)
+        try:
+            notes = []
+            for member in members:
+                if job.cancelled.is_set():
+                    break
+                try:
+                    result = maybe_consolidate_character_memory(
+                        cid, member["id"], turn_idx, frame_id=frame_id,
+                    )
+                    if result:
+                        notes.append(f"{member['name']}: autobiographical "
+                                     "summary updated")
+                except Exception as exc:
+                    # Silence toward the turn, a trace toward the operator:
+                    # the cadence re-offers this window next beat.
+                    logger.info(
+                        "memory consolidation failed out of band: chat=%s "
+                        "char=%s error=%s", cid, member["id"],
+                        str(exc)[:300])
+            return notes
+        finally:
+            active_frame_id.reset(token)
+
+    return jobs.submit(cid, MEMORY_CONSOLIDATION_JOB_KEY, _produce,
+                       base_turn=turn_idx)
 
 
 def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
@@ -6962,11 +7047,17 @@ def _commit_all_locked(ctx, nonce):
         ) from exc
 
     # Autobiographical summaries are derived, reconstructible caches and may
-    # invoke an LLM.  They therefore run only after primary facts are durable;
-    # a summary failure becomes a warning rather than corrupting the turn.
-    results["memories"]["committed"].extend(
-        _consolidate_committed_memories(ctx)
-    )
+    # invoke an LLM. They therefore run OUT OF BAND, beside the offscreen
+    # ticks below: measured live (chat 71 turn 10), the first consolidation
+    # was 29.5s of a 45.8s commit stage -- a background summarisation job on
+    # the `utility` role, inside the player's wait. A failure is a warning,
+    # never a rollback, and never silence.
+    try:
+        job = schedule_memory_consolidation(ctx)
+        results["memory_consolidation"] = job.as_dict() if job else None
+    except Exception as exc:
+        ctx.add_warning(f"memory consolidation scheduling failed: {exc}")
+        results["memory_consolidation"] = {"error": str(exc)}
 
     # Autonomous background->cast promotion likewise runs after the primary
     # transaction: it mints a sheet with an LLM call and is additive and

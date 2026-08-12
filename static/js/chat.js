@@ -1125,6 +1125,19 @@ function renderEngineNotes(box, content) {
     box.append(el("div", { class: "dim" },
       "⇉ ran concurrently with " + notes.parallel_with.join(", ")));
   }
+  // The step's per-call ledger (runtime._with_engine_notes `llm_calls`):
+  // one line per provider call, so a slow stage explains itself from the
+  // stored variant instead of from a stderr line that died with the process.
+  for (const c of notes.llm_calls || []) {
+    const served = c.served && c.served !== c.requested
+      ? `${c.requested} → ${c.served}` : (c.served || c.requested || "?");
+    const tokens = `in ${c.in || 0}` +
+      (c.cached ? ` (${c.cached} cached)` : "") + ` · out ${c.out || 0}`;
+    const secs = Number(c.duration) || 0;
+    box.append(el("div", { class: "dim" },
+      `⏱ ${c.role || "?"} · ${served} · ${tokens} · ${secs.toFixed(2)}s` +
+      (c.kind && c.kind !== "chat" ? ` · ${c.kind}` : "")));
+  }
   for (const w of notes.warnings || []) {
     box.append(el("div", { class: "engine-warning" }, "⚠ " + w));
   }

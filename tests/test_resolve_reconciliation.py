@@ -894,3 +894,165 @@ def test_alias_aware_subjects_resolve_through_entity_aliases():
         sd, {"category": "transit", "subject": "blue police box"}, forms)
     # Without alias expansion the same subject would miss.
     assert not _omission_subject_encoded(sd, "blue police box")
+
+
+# ---------------------------------------------------------------------------
+# The checker must be able to SEE a correct encoding (chat 71, turn 2354).
+# ---------------------------------------------------------------------------
+#
+# Live ground truth, resolve variants v26625/v26634/v26643 (three orchestrated
+# rerolls of one beat): every dispatched specialist ran, and the merged
+# state_diff carried their encodings -- attire.Hinami.remove the jacket,
+# contact_ops remove(stomach)+add(waist), the jacket entity shed, an
+# inventory drop, a station {at: null}. The beat was ENCODED. The
+# deterministic evidence classes then reported five of six manifest items as
+# omissions anyway, fired the Tier-2 repair on them (tens of seconds), the
+# repair answered "already_encoded", the disposition lookup lost that answer
+# to an exact-subject match, and three false "objective state may be stale"
+# warnings shipped per reroll. The checker, not the encoding, was wrong:
+# each class gated on the manifest's free-text SUBJECT naming one particular
+# kind of thing (the wearer for attire, a participant for contacts, a
+# positions key for a placement), while the model words the subject freely
+# ("lightweight travel jacket", "contact_end", "prior hand-to-stomach
+# contact") -- so coverage flickered reroll to reroll with the wording.
+# These fixtures are the live diffs verbatim.
+
+_LIVE_ATTIRE_SD = {  # v26625: garment-subject manifest, wearer-keyed channel
+    "attire": {"Hinami": {"add": [], "remove": ["lightweight travel jacket"],
+                          "conditions": {}, "coverage": {}, "regions": {},
+                          "notes": {}}},
+}
+
+_LIVE_CONTACT_OPS = [  # v26625: the specialist's own encoding
+    {"op": "remove", "actor": "Elyra Voss", "actor_part": "hand",
+     "target": "Hinami", "target_part": "stomach",
+     "source": "character_declaration", "declared_by": "Elyra Voss"},
+    {"op": "add", "actor": "Elyra Voss", "actor_part": "hand",
+     "target": "Hinami", "target_interior": "", "target_part": "waist",
+     "manner": "grip", "relation": "surface", "motion": "settled",
+     "detail": "fingers hooked beneath utility sash"},
+]
+
+
+def test_attire_evidence_accepts_the_garment_as_subject():
+    """v26625: manifest subject 'lightweight travel jacket', channel keyed by
+    the WEARER. The attire class checked only wearer keys, so a correctly
+    encoded removal read as an omission whenever the model named the garment
+    rather than the body it came off."""
+    omission = {"category": "attire", "subject": "lightweight travel jacket",
+                "change": "fully removed from Hinami's remaining shoulder"}
+    assert _evidence_present(_LIVE_ATTIRE_SD, omission)
+    # The wearer-subject spelling (v26634) keeps working.
+    assert _evidence_present(_LIVE_ATTIRE_SD,
+                             {"category": "attire", "subject": "Hinami",
+                              "change": "jacket removed"})
+    # And a garment nowhere in the channel still reads as omitted.
+    assert not _evidence_present(_LIVE_ATTIRE_SD,
+                                 {"category": "attire",
+                                  "subject": "utility sash",
+                                  "change": "sash unbuckled"})
+
+
+def test_contact_evidence_trusts_structured_endpoints_over_the_subject():
+    """v26625/v26643: the manifest carried full structured endpoints
+    (actor/actor_part/target/target_part) -- added for exactly this check --
+    but the participant gate demanded the free-text SUBJECT name a
+    participant before endpoints were even compared. 'contact_end' and
+    'prior hand-to-stomach contact' name the RELATION, so ops matching the
+    manifest's own endpoints exactly were invisible; v26634 passed only
+    because the model happened to spell 'Hinami' inside the subject."""
+    sd = {"contact_ops": list(_LIVE_CONTACT_OPS)}
+    for subject in ("contact_end", "prior hand-to-stomach contact"):
+        assert _evidence_present(sd, {
+            "category": "contacts", "subject": subject, "change": "ended",
+            "actor": "Elyra Voss", "actor_part": "hand",
+            "target": "Hinami", "target_part": "stomach"}), subject
+    assert _evidence_present(sd, {
+        "category": "contacts", "subject": "contact_new",
+        "change": "established", "actor": "Elyra Voss",
+        "actor_part": "hand", "target": "Hinami", "target_part": "waist"})
+    # Endpoints still discriminate: a manifested relation no op encodes
+    # (hand at the SHOULDER) stays an omission whatever the subject says.
+    assert not _evidence_present(sd, {
+        "category": "contacts", "subject": "contact_new",
+        "change": "established", "actor": "Elyra Voss",
+        "actor_part": "hand", "target": "Hinami",
+        "target_part": "shoulder"})
+
+
+def test_contact_evidence_reads_a_cross_op_for_the_ended_endpoint():
+    """v26643 encoded the hand's move as op:'cross' with
+    crossed_target_part:'stomach' -- the one op the repair sheet itself
+    prescribes for relocating a standing endpoint -- and the checker
+    compared manifests only against target_part, so the ENDED contact could
+    never be covered by the very op that ends it."""
+    sd = {"contact_ops": [{
+        "op": "cross", "actor": "Elyra Voss", "actor_part": "hand",
+        "target": "Hinami", "crossed_target_part": "stomach",
+        "target_interior": "", "target_part": "waist", "manner": "hook",
+        "relation": "surface", "motion": "moving",
+        "detail": "fingers trailing before hooking under the sash"}]}
+    assert _evidence_present(sd, {
+        "category": "contacts", "subject": "prior hand-to-stomach contact",
+        "change": "ended", "actor": "Elyra Voss", "actor_part": "hand",
+        "target": "Hinami", "target_part": "stomach"})
+
+
+def test_positions_evidence_accepts_a_station_for_a_within_room_drop():
+    """v26634: 'dropped from platform edge to the stone floor' -- the room
+    unchanged, the placement encoded as stations {at: null} (plus an
+    inventory transfer and the entity's own state). The positions class
+    consulted only sd.positions and cast_changes, so a within-room placement
+    the model filed under 'positions' was an omission however thoroughly the
+    diff carried it."""
+    sd = {"stations": {"lightweight travel jacket": {"at": None,
+                                                    "near": []}}}
+    assert _evidence_present(sd, {
+        "category": "positions", "subject": "lightweight travel jacket",
+        "change": "dropped from platform edge to the stone floor"})
+    # A subject with no placement anywhere still reads as omitted.
+    assert not _evidence_present(sd, {
+        "category": "positions", "subject": "Elyra Voss",
+        "change": "left the room"})
+
+
+def test_disposition_subjects_match_with_the_same_tolerance_as_evidence(
+        temp_db, monkeypatch):
+    """v26625: the repair answered every omission 'already_encoded' -- and
+    the warning shipped anyway, because disp_by_subject matched dispositions
+    to omissions by EXACT normalized subject and the repair had written
+    descriptive subjects ('lightweight travel jacket — fully removed from
+    shoulder, falls onto velvet'). The verdict existed and was discarded.
+    Matching now carries the same substring tolerance _make_subject_hit
+    uses everywhere else in this seam."""
+    ctx = _make_ctx(temp_db, "I slam the door-close button.",
+                    _action_interp())
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
+        "director_resolve": ELEVATOR_RESOLVE_OUTPUT,
+        "resolve_repair": {
+            "state_diff": {},
+            "dispositions": [{
+                "subject": "elevator_interior — doors sealed shut against "
+                           "the smoke-filled hallway",
+                "status": "already_encoded",
+                "reason": "the panel state already carries it"}],
+        },
+    }, calls))
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    # The owner's verdict is believed for the MANIFEST omission: recorded
+    # on the unresolved entry, and no staleness warning ships against it.
+    entry = next(o for o in out["reconciliation"]["unresolved"]
+                 if o["subject"] == "elevator_interior"
+                 and o.get("source") == "manifest")
+    assert entry["disposition"] == "already_encoded"
+    assert not [w for w in ctx.warnings
+                if "still does not encode" in w and "sealed shut" in w]
+    # The STRUCTURAL signal (a blank placeholder was emitted) still warns:
+    # that is a deterministic finding, and a model's verdict does not
+    # overrule the deterministic layer -- only emergent detections
+    # (manifest/audit, model-vs-model) yield to a rejection.
+    assert [w for w in ctx.warnings
+            if "still does not encode" in w and "empty placeholder" in w]

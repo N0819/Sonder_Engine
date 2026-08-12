@@ -2884,6 +2884,13 @@ def _merge_repair_into_diff(sd, patch):
         sd["positions"].setdefault(key, room)
     for key, pose in (patch.get("poses") or {}).items():
         sd["poses"].setdefault(key, pose)
+    # Stations add-only for the positions/poses reason: the original diff's
+    # stations stand, and a partial per-entity update must never be filled
+    # out with defaults that clobber the standing roster (see AGENTS.md's
+    # stations row). Before this, a repair delta's stations were silently
+    # dropped on the floor.
+    for key, station in (patch.get("stations") or {}).items():
+        sd.setdefault("stations", {}).setdefault(key, station)
     for field in ("remove_entities", "remove_rooms", "remove_adjacent",
                   "inventory_ops", "contact_ops", "substance_ops", "cast_changes", "world_facts",
                   "introductions"):
@@ -3094,6 +3101,17 @@ def _evidence_present(sd, omission, forms=None):
     if category == "positions":
         if any(hits(k) for k in (sd.get("positions") or {})):
             return True
+        # A within-room placement is a change the model files under
+        # 'positions' ("dropped from the platform edge to the stone floor")
+        # while the diff legitimately encodes it as a STATION -- the room is
+        # unchanged, so sd.positions is rightly silent. Live case: chat 71
+        # turn 2354 v26634 carried stations {"lightweight travel jacket":
+        # {at: null}} plus an inventory transfer and the entity's own state,
+        # and this class reported the jacket unencoded anyway, which fed a
+        # false repair and a false staleness warning. The mirror of the
+        # stations class above accepting a positions hit.
+        if any(hits(k) for k in (sd.get("stations") or {})):
+            return True
         return any(isinstance(c, dict) and hits(c.get("who"))
                    for c in (sd.get("cast_changes") or []))
     if category == "entities":
@@ -3117,7 +3135,30 @@ def _evidence_present(sd, omission, forms=None):
                     return True
         return False
     if category == "attire":
-        return any(hits(k) for k in (sd.get("attire") or {}))
+        # The channel is keyed by WEARER; the manifest subject is worded
+        # freely and is at least as often the GARMENT ("lightweight travel
+        # jacket" -- chat 71 turn 2354 v26625, where attire.Hinami.remove
+        # carried exactly that garment and this class reported it unencoded,
+        # because it read only the wearer keys). Both spellings of the same
+        # change must count, so the garment handles inside each wearer's
+        # entry are checked too.
+        for wearer, entry in (sd.get("attire") or {}).items():
+            if hits(wearer):
+                return True
+            if not isinstance(entry, dict):
+                continue
+            for field in ("add", "remove"):
+                for garment in entry.get(field) or []:
+                    if isinstance(garment, dict):
+                        garment = garment.get("name") \
+                            or garment.get("garment")
+                    if hits(garment):
+                        return True
+            for garment in list(entry.get("conditions") or {}) \
+                    + list(entry.get("coverage") or {}):
+                if hits(garment):
+                    return True
+        return False
     if category == "contacts":
         manifest_actor = str(omission.get("actor") or "").strip()
         manifest_actor_part = str(omission.get("actor_part") or "").strip()
@@ -3144,9 +3185,19 @@ def _evidence_present(sd, omission, forms=None):
                 if manifest_actor_part and _norm_subject(
                         manifest_actor_part) != _norm_subject(op.get("actor_part")):
                     return False
-                if manifest_target_part and _norm_subject(
-                        manifest_target_part) != _norm_subject(op.get("target_part")):
-                    return False
+                if manifest_target_part:
+                    part = _norm_subject(manifest_target_part)
+                    # A 'cross' op relocates a standing endpoint: the ENDED
+                    # contact lives in crossed_target_part, the new one in
+                    # target_part, and one op encodes both halves of the
+                    # transition -- the repair sheet itself prescribes it.
+                    # Comparing manifests against target_part alone made the
+                    # ended half uncoverable by the very op that ends it
+                    # (chat 71 turn 2354 v26643).
+                    if part != _norm_subject(op.get("target_part")) \
+                            and part != _norm_subject(
+                                op.get("crossed_target_part")):
+                        return False
                 return True
 
             if subject_is_ledger:
@@ -3164,8 +3215,17 @@ def _evidence_present(sd, omission, forms=None):
         for op in (sd.get("contact_ops") or []):
             if not isinstance(op, dict):
                 continue
-            if (subject_is_ledger or hits(op.get("actor"))
-                    or hits(op.get("target"))) \
+            # The subject gate exists for manifests with NO structured
+            # endpoints, where the free-text subject is all there is to
+            # anchor on. When the manifest carries endpoints, they ARE the
+            # subject and endpoint_matches is the whole (stricter) test --
+            # demanding the free-text subject ALSO name a participant made
+            # coverage depend on wording: 'Elyra hand on Hinami stomach
+            # ends' passed while 'contact_end' and 'prior hand-to-stomach
+            # contact' failed against the identical ops, reroll to reroll
+            # on one live beat (chat 71 turn 2354).
+            if (subject_is_ledger or has_manifest_endpoints
+                    or hits(op.get("actor")) or hits(op.get("target"))) \
                     and endpoint_matches(op):
                 return True
         return False
@@ -3414,6 +3474,117 @@ def _stamp_dialogue_articulation(sc, sd, dialogue_log):
     return notices
 
 
+def _route_repair_omissions(omissions):
+    """Partition detected omissions by REPAIRER, for the orchestrated path.
+
+    Returns (routed, core): `routed` maps specialist name -> [(channel,
+    omission), ...] for every omission whose category names a delegated
+    channel -- that channel's owner is who should be asked again, with its
+    own 1-4k sheet, not the prose author with the full core. `core` keeps
+    everything only a whole-diff authority can answer: player claims (their
+    coverage check is whole-diff and they are non-rejectable), and
+    categories no specialist owns (time, transit, 'other').
+    """
+    routed, core = {}, []
+    for om in omissions:
+        if om.get("source") == "player_claim":
+            core.append(om)
+            continue
+        channel = _CATEGORY_CHANNELS.get(
+            _normalize_omission_category(om.get("category")))
+        owner = _CHANNEL_SPECIALISTS.get(channel) if channel else None
+        if owner:
+            routed.setdefault(owner, []).append((channel, om))
+        else:
+            core.append(om)
+    return routed, core
+
+
+def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
+    """Tier 2 on the orchestrated path: the omitted channel's OWNER repairs.
+
+    Measured reason (chat 71 turn 10): the seam's one repair call re-ran the
+    PROSE AUTHOR -- an extra sequential call on the director role with the
+    full-core repair sheet -- to re-encode a change one specialist owned,
+    and still shipped `state_diff still does not encode it` warnings. Under
+    orchestration the wrong repairer was asked: a scoped specialist call
+    measured ~1s against a full-core resolve at tens of seconds, and the
+    specialist is the authority the omitted channel already belongs to.
+
+    Detection is untouched -- this changes only WHO repairs (the
+    `changes_asserted` seam stays the single reconciliation mechanism). At
+    most ONE call per owning specialist, no retries beyond `_agent_json`'s
+    own validation ladder: a repair that cannot succeed stops, and the
+    residual reaches the existing unresolved/warning channel below instead
+    of a repeat spend. Merging is the same additive `_merge_repair_into_
+    diff` contract as the core repair -- scoped to the specialist's granted
+    channels, never deleting what the diff already asserts. A failed call
+    is fail-open exactly like the fan-out: warn, keep the beat, let the
+    re-check below file the omission as unresolved.
+    """
+    repaired = False
+    reports = {}
+    for name in SPECIALISTS:          # canonical order, like the fan-out
+        entries = routed.get(name)
+        if not entries:
+            continue
+        spec = SPECIALISTS[name]
+        omitted = {channel for channel, _om in entries}
+        scope = [ch for ch in spec["channels"] if ch in omitted]
+        report = {"scope": scope, "ok": False}
+        reports[name] = report
+        payload = _specialist_payload(name, ctx, sc, view, extras)
+        payload["previous_channels"] = {
+            ch: copy.deepcopy(sd.get(ch)) for ch in scope}
+        payload["detected_omissions"] = [
+            {k: om.get(k) for k in ("category", "subject", "change",
+                                    "evidence", "source")}
+            for _ch, om in entries]
+        payload["correction_notes"] = (
+            "REPAIR PASS: the finished beat asserts persistent changes in "
+            "your channels that the committed encoding does not carry -- "
+            "detected_omissions lists them, previous_channels is what "
+            "currently stands. Your answer is merged ADDITIVELY over "
+            "previous_channels (it cannot delete existing entries), so "
+            "emit ONLY your channels, encoding each detected omission; "
+            "leave a channel empty when its omission is already covered.")
+        try:
+            result = _agent_json(
+                spec["role"], spec["step_key"],
+                specialist_prompt(name, scope), payload,
+                temperature=0.0,
+                max_tokens=None,   # the configured ceiling
+            )
+        except Aborted:
+            raise
+        except Exception as exc:
+            report["error"] = str(exc)
+            ctx.add_warning(
+                f"{name} specialist repair failed; the unencoded change "
+                f"will be warned, never fabricated (fail-open): {exc}")
+            continue
+        report["ok"] = True
+        patch = {}
+        for channel in scope:
+            value = _normalized_channel_value(channel, result.get(channel))
+            if value:
+                patch[channel] = value
+        if not patch:
+            continue
+        # Same hygiene as the core repair: canonical shapes, no reintroduced
+        # placeholder noise, canonicalized position keys, additive merge.
+        patch = _normalize_diff_shape(patch)
+        _strip_blank_diff_placeholders(patch)
+        patch["positions"] = canonicalize_positions(
+            patch.get("positions") or {}, ctx.cast)
+        report["channels"] = sorted(
+            ch for ch in scope if patch.get(ch))
+        _merge_repair_into_diff(sd, patch)
+        repaired = True
+    recon["specialist_repairs"] = reports
+    return repaired
+
+
 def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
                           tracked_names):
     """The resolve-reconciliation seam (see the block comment above).
@@ -3637,55 +3808,102 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         return
 
     # ---- Tier 2: bounded self-repair (the only common-path LLM spend,
-    # and only on a real detected gap). One shot. -------------------------
-    if scene_slice is None:
-        scene_slice = _reconcile_scene_slice(
-            sc, ctx.cast, ctx.get("_player_room"), sd)
+    # and only on a real detected gap). One shot per repairer. ------------
+    #
+    # WHO repairs depends on the path. Monolithic: the Director itself, with
+    # the full-core repair sheet, exactly as always. Orchestrated: each
+    # omission in a delegated channel goes to that channel's OWNING
+    # specialist (~1s scoped call), and only the omissions no specialist can
+    # answer -- player claims, undelegated categories -- still buy the
+    # full-core call. Detection above is identical on both paths; only the
+    # repairer changes (see _specialist_repairs).
+    core_omissions = omissions
+    orch_repair = None
+    _orch_record = out.get("orchestration")
+    if isinstance(_orch_record, dict) and _orch_record.get("enabled"):
+        orch_repair = ctx.get("_orch_repair")
+    if isinstance(orch_repair, dict) \
+            and isinstance(orch_repair.get("view"), dict):
+        routed, core_omissions = _route_repair_omissions(omissions)
+        if routed and _specialist_repairs(
+                ctx, sc, sd, routed,
+                orch_repair["view"], orch_repair.get("extras") or {},
+                recon):
+            recon["repaired"] = True
+
     dispositions = []
-    try:
-        repair = _agent_json(
-            "director", "resolve_repair",
-            get_prompt("resolve_repair"),
-            {
-                "resolved_event": resolved_event,
-                "dialogue_log": dlog_compact,
-                "previous_state_diff": sd,
-                "detected_omissions": [
-                    {k: o.get(k) for k in ("category", "subject", "change",
-                                           "evidence", "source")}
-                    for o in omissions
-                ],
-                "non_rejectable_subjects": sorted({
-                    o["subject"] for o in omissions
-                    if o.get("source") == "player_claim" and o.get("subject")
-                }),
-                "prior_scene": scene_slice,
-                "cast_names": tracked_names,
-            },
-            temperature=0.0,
-        )
-    except Aborted:
-        raise
-    except Exception as exc:
-        ctx.add_warning(f"Resolve reconciliation repair failed: {exc}")
-        repair = None
+    if core_omissions:
+        if scene_slice is None:
+            scene_slice = _reconcile_scene_slice(
+                sc, ctx.cast, ctx.get("_player_room"), sd)
+        try:
+            repair = _agent_json(
+                "director", "resolve_repair",
+                get_prompt("resolve_repair"),
+                {
+                    "resolved_event": resolved_event,
+                    "dialogue_log": dlog_compact,
+                    "previous_state_diff": sd,
+                    "detected_omissions": [
+                        {k: o.get(k) for k in ("category", "subject",
+                                               "change", "evidence",
+                                               "source")}
+                        for o in core_omissions
+                    ],
+                    "non_rejectable_subjects": sorted({
+                        o["subject"] for o in core_omissions
+                        if o.get("source") == "player_claim"
+                        and o.get("subject")
+                    }),
+                    "prior_scene": scene_slice,
+                    "cast_names": tracked_names,
+                },
+                temperature=0.0,
+            )
+        except Aborted:
+            raise
+        except Exception as exc:
+            ctx.add_warning(f"Resolve reconciliation repair failed: {exc}")
+            repair = None
 
-    if isinstance(repair, dict):
-        patch = _normalize_diff_shape(repair.get("state_diff"))
-        # A repair may not reintroduce the very noise this seam strips.
-        _strip_blank_diff_placeholders(patch)
-        patch["positions"] = canonicalize_positions(
-            patch.get("positions") or {}, ctx.cast)
-        _merge_repair_into_diff(sd, patch)
-        dispositions = [d for d in (repair.get("dispositions") or [])
-                        if isinstance(d, dict)]
-        recon["repaired"] = True
-        recon["dispositions"] = dispositions
+        if isinstance(repair, dict):
+            patch = _normalize_diff_shape(repair.get("state_diff"))
+            # A repair may not reintroduce the very noise this seam strips.
+            _strip_blank_diff_placeholders(patch)
+            patch["positions"] = canonicalize_positions(
+                patch.get("positions") or {}, ctx.cast)
+            _merge_repair_into_diff(sd, patch)
+            dispositions = [d for d in (repair.get("dispositions") or [])
+                            if isinstance(d, dict)]
+            recon["repaired"] = True
+            recon["dispositions"] = dispositions
 
-    disp_by_subject = {
-        _norm_subject(d.get("subject")): str(d.get("status") or "").casefold()
+    # Disposition -> omission matching carries the same substring tolerance
+    # _make_subject_hit gives every other subject comparison in this seam.
+    # Exact normalized equality lost real verdicts: the repair writes
+    # descriptive subjects ("lightweight travel jacket — fully removed from
+    # shoulder, falls onto velvet"), and on chat 71 turn 2354 v26625 every
+    # 'already_encoded' answer was discarded to a failed exact match, so the
+    # staleness warning shipped against a beat the repair had just certified.
+    _disp_pairs = [
+        (_norm_subject(d.get("subject")),
+         str(d.get("status") or "").casefold())
         for d in dispositions
-    }
+    ]
+
+    def _disposition_for(subject):
+        ns = _norm_subject(subject)
+        if not ns:
+            return ""
+        for dn, status in _disp_pairs:
+            if not dn:
+                continue
+            if dn == ns:
+                return status
+            shorter, longer = sorted((dn, ns), key=len)
+            if len(shorter) >= 5 and shorter in longer:
+                return status
+        return ""
 
     for om in omissions:
         source = om.get("source")
@@ -3699,7 +3917,7 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
             encoded = _evidence_present(sd, om, forms)
         if encoded:
             continue
-        status = disp_by_subject.get(_norm_subject(om.get("subject")), "")
+        status = _disposition_for(om.get("subject"))
         if source == "player_claim":
             # NON-REJECTABLE: the player authority contract makes the effect
             # true; a disposition cannot argue it away -- only actual
@@ -4119,14 +4337,25 @@ _DELEGATED_CHANNELS = tuple(
     channel for spec in SPECIALISTS.values() for channel in spec["channels"])
 
 #: `changes_asserted` category -> the delegated channel that answers for it.
-#: Categories with no delegated channel (rooms, positions, time, ...) stay
+#: Categories with no delegated channel (time, transit, other, ...) stay
 #: the prose author's own and are not the scope backstop's business.
+#:
+#: KEYED ON THE NORMALIZED CATEGORY NAMES (_normalize_omission_category's
+#: output: 'contacts', 'substances', 'poses', ...): every reader of this map
+#: looks up items that already went through _manifest_items, which
+#: normalizes. The original raw spellings ('contact', 'substance', 'pose')
+#: are kept as tolerance for a caller that never normalized, but for two
+#: releases they were the ONLY keys -- so a manifest entry asserting a
+#: contact, substance or pose change could never reach the scope backstop
+#: or be sliced into its specialist's payload, silently.
 _CATEGORY_CHANNELS = {
     "attire": "attire",
     "conditions": "conditions",
     "cast_changes": "cast_changes",
     "contact": "contact_ops",
+    "contacts": "contact_ops",
     "substance": "substance_ops",
+    "substances": "substance_ops",
     "inventory": "inventory_ops",
     "entities": "entities",
     "positions": "positions",
@@ -4136,6 +4365,17 @@ _CATEGORY_CHANNELS = {
     # served scope answers for the category.
     "adjacency": "rooms",
     "pose": "poses",
+    "poses": "poses",
+    "stations": "stations",
+}
+
+#: channel -> the specialist that owns it (derived, so the two cannot
+#: disagree). The reconciliation repair router reads this: an omission in a
+#: delegated channel is that channel's OWNER's to repair, at specialist
+#: cost, never the prose author's at full-core cost.
+_CHANNEL_SPECIALISTS = {
+    channel: name
+    for name, spec in SPECIALISTS.items() for channel in spec["channels"]
 }
 
 _LIST_DELEGATED = frozenset({
@@ -4847,7 +5087,7 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
             continue
         spec = SPECIALISTS[name]
         state["ran"] = True
-        replaced, outside = [], []
+        replaced, outside, filled = [], [], []
         for channel in spec["channels"]:
             container, key = _stage_container(out, stage, channel)
             authored = container.get(key)
@@ -4860,6 +5100,8 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                         f"despite the delegation; the {name} specialist's "
                         "channel replaced it (ownership).")
                 container[key] = owned
+                if owned:
+                    filled.append(channel)
             elif owned:
                 # Emitted with no chunk for it: scope under-grant. Fail
                 # open -- asserted state is never discarded -- and report.
@@ -4867,6 +5109,14 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                 if not authored:
                     container[key] = owned
         state["channels_replaced"] = replaced
+        # What this specialist actually CONTRIBUTED -- distinct from
+        # `channels_replaced`, which counts author content that lost to
+        # ownership and is therefore [] on every healthy beat (the lean
+        # author is told to leave delegated channels empty). Two separate
+        # investigations of one live beat read replaced=[] as "the
+        # specialists assembled nothing" while the merged diff carried
+        # their encodings; this field is what lets the record say so.
+        state["channels_filled"] = filled
         if outside:
             state["outside_scope"] = outside
             note = (
@@ -5698,36 +5948,41 @@ def director_resolve(ctx, nonce):
     # movement backstop, the restraint floor and the reconciliation manifest
     # all judge the MERGED diff exactly as they judge a monolithic one.
     if _orch:
-        _run_specialists(
-            ctx, out, sc, _orch_dispatch,
-            _resolve_beat_view(out, decls, char_actions, dice, p_name,
-                               interp),
-            {
-                "nonce": nonce,
-                "clock": clock,
-                "active_awareness": payload.get("active_awareness"),
-                "body_parts": (payload.get("scene") or {}).get("body_parts"),
-                "contacts": resolve_sc.get("contacts") or [],
-                "contact_endings": character_contact_endings,
-                "material_effects": character_material_effects,
-                "notices": payload.get("notices") or [],
-                "movement": interp.get("movement"),
-                "movers": {
-                    str(d.get("name")): {
-                        "exits": d.get("exits"),
-                        "sprint_reach": d.get("sprint_reach"),
-                    }
-                    for d in decls if d.get("name")
-                },
-                "proposal": payload.get("mapping_scene_proposal"),
-                "crowds": payload.get("crowds") or [],
-                "couriers": payload.get("couriers") or [],
-                "carried_reports": payload.get("carried_reports") or [],
-                "unratified_claims": payload.get("unratified_claims") or [],
-                "offscreen_planning": payload.get("offscreen_planning")
-                                      or {"enabled": False, "plans": []},
+        _orch_view = _resolve_beat_view(out, decls, char_actions, dice,
+                                        p_name, interp)
+        _orch_extras = {
+            "nonce": nonce,
+            "clock": clock,
+            "active_awareness": payload.get("active_awareness"),
+            "body_parts": (payload.get("scene") or {}).get("body_parts"),
+            "contacts": resolve_sc.get("contacts") or [],
+            "contact_endings": character_contact_endings,
+            "material_effects": character_material_effects,
+            "notices": payload.get("notices") or [],
+            "movement": interp.get("movement"),
+            "movers": {
+                str(d.get("name")): {
+                    "exits": d.get("exits"),
+                    "sprint_reach": d.get("sprint_reach"),
+                }
+                for d in decls if d.get("name")
             },
-            "resolve")
+            "proposal": payload.get("mapping_scene_proposal"),
+            "crowds": payload.get("crowds") or [],
+            "couriers": payload.get("couriers") or [],
+            "carried_reports": payload.get("carried_reports") or [],
+            "unratified_claims": payload.get("unratified_claims") or [],
+            "offscreen_planning": payload.get("offscreen_planning")
+                                  or {"enabled": False, "plans": []},
+        }
+        _run_specialists(ctx, out, sc, _orch_dispatch, _orch_view,
+                         _orch_extras, "resolve")
+        # Kept for the reconciliation seam below: when it detects an
+        # omission in a delegated channel, the CHANNEL'S OWNER is re-asked
+        # with the same beat view and entitlement slice, never the prose
+        # author with the full core (see _specialist_repairs). In-memory
+        # only -- never persisted with the step.
+        ctx["_orch_repair"] = {"view": _orch_view, "extras": _orch_extras}
         # The prose author's granted scope, persisted beside the
         # specialists' -- what the scope backstop audits shipped prose
         # duties against, and the per-beat measurement the sheet scoping

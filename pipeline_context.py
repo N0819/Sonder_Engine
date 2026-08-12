@@ -179,6 +179,19 @@ class PipelineContext:
     # committed memory of that beat all came out sound-only, and finding out
     # why took a database excavation.
     warnings: StepTaggedWarnings = field(default_factory=StepTaggedWarnings)
+    # Every provider call the turn paid for, one dict per call
+    # ({step_key, role, requested, served, in, out, cached, duration, kind}),
+    # tagged with the running step by the same contextvar warnings use.
+    # Fed by providers.call_ledger_sink -> note_llm_call (compute_step wires
+    # the two together), persisted per step by runtime._with_engine_notes.
+    #
+    # This is the durable half of `_log_usage`: the stderr line dies with the
+    # process, and three slow-stage investigations in one day each began with
+    # a wrong guess because the only surviving record of a live turn was
+    # stage-total timestamps. Diagnostic only -- roles, model ids, token
+    # counts and durations, never content.
+    llm_calls: list = field(default_factory=list)
+
     # What the deterministic layer DID with this beat's model output, in the
     # Director's own terms, carried to the NEXT beat through engine_notices.
     #
@@ -269,6 +282,24 @@ class PipelineContext:
         """Every warning raised while `key` was the running step."""
         for_step = getattr(self.warnings, "for_step", None)
         return for_step(key) if for_step else []
+
+    def note_llm_call(self, entry: dict):
+        """Record one finished provider call against the running step.
+
+        Tagged by contextvar rather than by caller, for the same reason
+        StepTaggedWarnings is: the parallel groups and the specialist
+        fan-out run on copied contexts, so the producer never has to know
+        which step it is under. list.append is atomic under the GIL, so
+        sibling threads sharing this context cannot corrupt the list."""
+        if not isinstance(entry, dict):
+            return
+        self.llm_calls.append(
+            {"step_key": current_step_key.get(), **entry})
+
+    def llm_calls_for_step(self, key: str) -> list[dict]:
+        """Every provider call made while `key` was the running step."""
+        return [dict(entry) for entry in self.llm_calls
+                if entry.get("step_key") == key]
 
     def tell_director(self, msg: str):
         """Report what the engine made of the model's output, for next beat."""

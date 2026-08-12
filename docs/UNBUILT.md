@@ -1918,14 +1918,29 @@ so the existing same-call repair fixes it before `_reconcile_interpretation`
 runs; and make `recon["repaired"]` require the re-check to actually pass, so
 the metric stops reporting 100% success on a 0% success rate.
 
-### 1.34 Nothing on the live path records how long a stage took
+### 1.34 Nothing on the live path records how long a stage took — FIXED (per-call ledger)
 
 `logging_utils.measure_step` and `TurnMetrics` have no callers outside their
 own module. Every per-stage timing figure this project has comes from
 `tools/turn_bench.py` runs on a retired model configuration, so the
-percentages are usable and the absolute seconds are not. Wiring `measure_step`
-into `agents/runtime`'s step dispatch and parallel-group runner would make
-every latency claim continuously checkable instead of re-measured by hand.
+percentages are usable and the absolute seconds are not — and §1.40 records
+the cost: three slow-stage investigations in one day each began with a wrong
+guess, because per-call timing lived in stderr and died with the process.
+
+Fixed with a ledger rather than by wiring `measure_step`: what the
+investigations needed was not stage totals (the `steps`/`variants` timestamps
+already yield those) but WHICH CALLS a stage paid for. `providers._log_usage`
+now offers every finished call — chat, stream, and the embeddings batch path
+— to `providers.call_ledger_sink`; `agents.runtime.compute_step` points the
+sink at the running `PipelineContext` (the `current_warning_sink` pattern,
+so the specialist fan-out and the parallel groups attribute by contextvar);
+`_with_engine_notes` persists each step's slice as
+`_engine_notes.llm_calls` — `{step_key, role, requested, served, in, out,
+cached, duration, kind}` per call, no content — on the saved variant, riding
+archives, branches and traces like every other engine note, rendered per
+step in the pipeline drawer. `tests/test_llm_call_ledger.py`.
+`measure_step`/`TurnMetrics` remain uncalled and could now simply be
+deleted.
 
 
 ### 1.35 `memories_fts` is dead, and has been for some time
@@ -2052,6 +2067,149 @@ appended after the composed view, so they carry none of the percept-level
 gates either — the residual already noted in
 `design_notes/13-composer-build.md` ("the micro loop should emit percepts").
 One fix covers both: emit percepts.
+
+
+### 1.40 The slow turn was model-call multiplicity, and the harness plays too few beats to see it
+
+Measured 2026-08-12, on chat 71 turn 10 (played live 07:01:32–07:05:09,
+216s from `interaction_loop` to `commit` against harness predictions of
+roughly a third of that). Diagnosed from the persisted `steps`/`variants`
+timestamps, the turn's own stored stage outputs, and an offline reproduction
+against a copy of the database — not from the harness. Three findings, one
+per anomalous stage, and none of them is corpus size:
+
+- **`commit` 45.8s (harness 4–8s): ~29.5s of it is the first
+  autobiographical consolidation, reproduced and timed.** Turn 10 is the
+  first beat where `memory.maybe_consolidate_character_memory` fires
+  (`current_turn_idx - last_turn >= 10` with `last_turn=0`), and
+  `_write_consolidated_window` runs on the **`utility`** role — which is
+  configured nowhere and is not in `providers.ROLE_FALLBACKS`, so it falls
+  through to `default` (NanoGPT `zai-org/glm-latest`). Reproduction against
+  a copy of the live database, real providers: consolidation of the
+  34-memory window took **29.47s, 27.38s of it the one LLM call**
+  (`llm_call role=utility … duration=27.38s`). The rest of the commit window
+  is a handful of paced embedding calls (measured: 2.69s for a 4-text batch
+  that ate one 429 penalty; 0.93s single) plus sub-second deterministic
+  work. Mapping was `{"skipped": "nothing new to commit"}` — no mapping LLM
+  call, no lore embeddings, so the chat's lore volume (7 entries) and the
+  2,152-entry database total are both irrelevant. The consolidation runs
+  synchronously inside the commit stage's wall clock even though it is
+  post-transaction and reconstructible; every other post-transaction spend
+  (offscreen ticks, artifact wording, promotion) already went out-of-band.
+- **`director_resolve` 105.5s (harness 22–50s): the 8.2 code, not a stale
+  build.** The stored resolve output carries `orchestration.prose_scope`
+  (granted/gated_out), which exists only at `ab3daad` — `40755ee` has no
+  `_prose_author_scope` — so the 06:58 process was running the merged 8.2
+  tree (merge landed 06:51:40) and the delegation-leak/lean-core fixes
+  explain **none** of the gap. What the record shows instead: an intimate,
+  physically busy beat dispatched **5 of 6 specialists** (`"ran": true` for
+  body, social, contact, objects, spatial), the reconciliation self-repair
+  fired an extra sequential core call (`"repaired": true`) — and it bought
+  nothing (`state_diff still does not encode it after self-repair` warnings,
+  `channels_replaced: []` on every specialist). The harness's 22–50s band
+  was earned on beats with narrow dispatch and no repair pass.
+- **`narrator` 29.5s (harness 6–15s): payload is windowed (LIMIT 4 prose
+  turns, scene-scoped fields — nothing O(corpus)); the multiplier is the
+  bounded rewrite ladder** (`_generate_narration` fidelity-correction and
+  craft passes: up to 3 calls). Inference from code structure, not
+  measurement — the live per-call log lines died with the process (see
+  §1.34).
+
+**Nothing on the turn path scales with corpus.** Measured on the 2.1 GB
+copy: a full-corpus `memories_fts` MATCH is 2.3ms, the chat-scoped vector
+fetch 0.5ms; the resolve/narrator payloads are scene-scoped and windowed;
+mapping skips when nothing is staged. The 2.1 GB database and the DB-wide
+lore/memory totals are red herrings for turn latency.
+
+**Why the harness is blind, and what answers it.** A fresh run of ≤10 turns
+(idx 0–9) can never reach the consolidation cadence, rarely trips wide
+specialist dispatch or a repair/rewrite retry, and — per §1.34 — nothing on
+the live path persists how long a stage took, so a slow live turn leaves
+only stage-total timestamps behind. `tools/stability_run.py` exists for
+exactly this: it drives real turns against the longest stories on a copy
+and parses per-role `llm_call` durations. Run it against long chats either
+side of any latency-relevant change.
+
+**What landed against this (2026-08-12):**
+
+- **Consolidation is out-of-band** (`commit.schedule_memory_consolidation` →
+  `jobs.py`, beside the offscreen ticks): deduped per chat, abandonable
+  between characters, silent-per-character on failure, cancelled
+  cooperatively by `restore_checkpoint`. The ~29.5s leaves the commit
+  stage's wall clock entirely. `tests/test_consolidation_out_of_band.py`.
+- **`utility` inherits `mapping`** in `providers.ROLE_FALLBACKS` before
+  falling to `default` — the settings guidance has always paired
+  "mapping/utility" as the cheap mechanical lane, so an unset utility now
+  lands on the fast model the host already picked instead of their most
+  expensive one. The settings-panel role notes say so.
+- **Reconciliation repair goes to the CHANNEL'S OWNER on the orchestrated
+  path** (`agents/director.py` `_route_repair_omissions` /
+  `_specialist_repairs`): an omission in a delegated channel is re-asked of
+  its owning specialist — one scoped ~1s call, same beat view, same
+  entitlement slice, additive merge — and only player claims and
+  undelegated categories still buy the full-core `resolve_repair` call.
+  Detection unchanged; monolithic path byte-identical. Found and fixed
+  beside it: `_CATEGORY_CHANNELS` was keyed on raw category spellings while
+  every reader looks up `_normalize_omission_category` output, so contact/
+  substance/pose manifest entries could never reach the scope backstop; and
+  a repair delta's `stations` were silently dropped by
+  `_merge_repair_into_diff`.
+- **The per-call ledger** (§1.34) is what turns the narrator question below
+  from an inference into a lookup.
+
+**Correction (2026-08-12, live variants v26625/v26634/v26643, turn 2354):
+the "empty specialists" reading of these rerolls was wrong.** Two separate
+investigations read `channels_replaced: []` as "the specialists assembled
+nothing" — but that field counts AUTHOR content that lost to ownership, and
+a compliant lean author leaves delegated channels empty, so `[]` is the
+healthy state. The merged diffs on all three rerolls carry the specialists'
+encodings (`attire.Hinami.remove` the jacket, `contact_ops`
+remove(stomach)+add(waist), the entity shed, an inventory drop, a station);
+a granted channel's post-assembly content can only be the specialist's,
+because assembly assigns `container[key] = owned` unconditionally. What
+actually broke was the deterministic EVIDENCE CHECKER
+(`_evidence_present`): each class gated on the manifest's free-text
+`subject` naming one particular kind of thing (the wearer for attire, a
+participant for contacts, a `positions` key for a placement) while the
+model words subjects freely ("lightweight travel jacket", "contact_end",
+"prior hand-to-stomach contact") — so coverage flickered reroll to reroll
+with the wording, 5 of 11 live manifest items read as omissions against
+diffs that encoded them, the Tier-2 repair fired on the false positives,
+answered "already_encoded", lost that verdict to an exact-subject
+disposition match, and false "objective state may be stale" warnings
+shipped. Fixed: attire also checks garment handles inside wearer entries;
+structured manifest endpoints bypass the contacts subject gate (they ARE
+the subject); a `cross` op covers its ended endpoint via
+`crossed_target_part`; a within-room drop filed under `positions` is
+covered by its station; disposition matching carries the same substring
+tolerance as every other subject comparison in the seam; and each
+specialist's dispatch record now carries `channels_filled` so the next
+investigation can see assembly working. Replayed against the live diffs:
+9/11 covered (was 6/11) — the two residuals are genuine part-noun
+disagreements between the model's own manifest and its encoding
+(waist/hip, fingers/hand), correctly detected and deliberately not folded
+by a synonym table (`_same_appendage` is structural by design).
+`tests/test_resolve_reconciliation.py` (live-shape fixtures),
+`tests/test_director_orchestration.py`
+(`test_a_specialist_encoded_beat_buys_no_repair_and_no_warning`).
+
+**Residuals, recorded:**
+
+- **`narrator` 29.5s remains an inference** (the fidelity/craft rewrite
+  ladder, up to 3 calls). The ledger now stamps every narrator call on the
+  stored variant, so the next slow narrator beat answers this directly —
+  including whether the orchestrated path makes a rewrite MORE likely,
+  which nothing in `_generate_narration` reads orchestration state to
+  suggest, but which only the ledger on a real beat can rule out.
+- **A restore racing a mid-flight consolidation call**: the cancel in
+  `restore_checkpoint` is cooperative (between characters), so a restore
+  arriving while one character's consolidation LLM call is in flight can
+  still land a summary computed from pre-restore rows, and the cursor on
+  that summary row then skips the window. Seconds-wide, needs a reroll to
+  coincide with the ~10-turn cadence, and the summary layer is
+  reconstructible (`backfill_memory_summary_windows` can rebuild) — but it
+  is a window the synchronous design did not have, recorded rather than
+  closed.
 
 
 ## 2. Roadmap
