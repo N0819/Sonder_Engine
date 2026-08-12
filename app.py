@@ -976,6 +976,9 @@ def bootstrap():
         # always reported, but spelling out the body under the garment is a
         # choice the host makes rather than one a first run makes for them.
         "attire_beneath": get_setting("attire_beneath") == "1",
+        "director_orchestration": str(
+            get_setting("director_orchestration") or "").strip().lower()
+        in ("1", "on", "true", "yes"),
         # Scene backdrops (backdrops.py). Off unless switched on: every new
         # room costs a real image generation, so this is opt-in per install
         # rather than something a first run starts spending money on.
@@ -1231,6 +1234,26 @@ def get_nsfw():
 def set_nsfw(body: dict = Body(...)):
     set_setting("nsfw_enabled", "1" if body.get("enabled") else "0")
     return {"enabled": body.get("enabled", False)}
+
+@app.put("/api/director_orchestration")
+def set_director_orchestration(body: dict = Body(...)):
+    """Whether the Director fans out to its scoped specialists.
+
+    Off is the default and off is the monolithic path this engine shipped
+    with -- the single sheet is a byte-identical recomposition of the same
+    segments, so turning this off is not a fallback, it is the same prompt.
+
+    On, each Director stage keeps ONE step and fans out inside it: a prose
+    author that owns the beat's account, and specialists that own the
+    state_diff channels the beat actually touches. Nothing else about the
+    turn changes -- commit is still the only writer, reroll and replay still
+    work on the same step keys, and a specialist that fails costs its own
+    channels rather than the beat.
+    """
+    enabled = bool(body.get("enabled"))
+    set_setting("director_orchestration", "1" if enabled else "0")
+    return {"enabled": enabled}
+
 
 @app.put("/api/attire_beneath")
 def set_attire_beneath(body: dict = Body(...)):

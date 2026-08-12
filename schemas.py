@@ -89,6 +89,36 @@ def _coerce_station_table(value):
     return out
 
 
+def _coerce_list_valued_map(value):
+    """Wrap the single entry where a `dict[str, list]` channel wanted a list.
+
+    `overlays` and `conditions` are name-keyed tables whose values are LISTS
+    (a body can carry several marks, several conditions), and a model with
+    exactly one to report writes the item directly under the key. Observed
+    live (run 20, twice in 14 beats): interpret emitted
+    `state_assertions.overlays.village_well: <one value>` and the whole
+    otherwise-valid output failed with `value is not a valid list`, costing
+    a full temperature-0 repair round-trip (4.9s) for a shape that means
+    the same thing as the list of one. Same judgment as the
+    mind_model_updates precedent (tests/test_schema_leniency.py): the
+    singular and the list of one are unambiguous; wrap, don't reject. An
+    explicit null under a key means "nothing here" and becomes the empty
+    list; item-level typing (e.g. conditions' entries must be objects) still
+    applies after the wrap, so a genuinely off-schema item still fails.
+    """
+    if not isinstance(value, dict):
+        return value
+    out = {}
+    for key, item in value.items():
+        if item is None:
+            out[key] = []
+        elif isinstance(item, (list, tuple)):
+            out[key] = list(item)
+        else:
+            out[key] = [item]
+    return out
+
+
 def _coerce_attire_diff(value):
     """One body's attire diff, canonicalized by attire.coerce_diff_shape.
 
@@ -1907,6 +1937,10 @@ class StateDiff(LenientModel):
     _coerce_stations = validator("stations", pre=True, allow_reuse=True)(
         lambda cls, v: _coerce_station_table(v)
     )
+    _coerce_list_maps = validator("overlays", "conditions", pre=True,
+                                  allow_reuse=True)(
+        lambda cls, v: _coerce_list_valued_map(v)
+    )
 
 
 # `DirectorInterpret.state_assertions` is a `StateDiff` -- interpret is not a
@@ -2007,6 +2041,11 @@ class DirectorBodySpecialist(LenientModel):
     vitals: dict[str, Optional[dict]] = Field(default_factory=dict)
     overlays: dict[str, list] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
+
+    _coerce_list_maps = validator("overlays", "conditions", pre=True,
+                                  allow_reuse=True)(
+        lambda cls, v: _coerce_list_valued_map(v)
+    )
 
 
 class DirectorSocialSpecialist(LenientModel):
@@ -2148,7 +2187,17 @@ def _coerce_evidence_refs(value):
 
     A token that looks like an id ("current", "turn:12:...") lands on
     `event_id`; anything else is prose and lands on `fact`.
+
+    A BARE string is the same citation without even the list: observed live
+    (run 20, five times in 14 beats) as `remember_lines.0.evidence: "..."`,
+    which slipped past this coercion -- the list-of-strings and dict forms
+    were handled, the naked string fell through to pydantic and the whole
+    character output bought a temperature-0 repair round for it. It gets
+    the identical treatment a list of one string always got.
     """
+    if isinstance(value, str):
+        slot = _evidence_slot(value)
+        return [slot] if slot else []
     if isinstance(value, dict):
         # A map keyed by the evidence itself. The generic map expansion
         # would land the key in `event_id` -- the first empty prose slot --

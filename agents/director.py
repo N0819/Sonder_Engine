@@ -28,7 +28,13 @@ from character_schema import (
 from db import get_setting, q, wget
 from memory import lorebook_manifest
 from paradox import paradox_visible_to
-from prompts import get_prompt, specialist_prompt
+from prompts import (
+    INTERPRET_DELEGATION_NOTE,
+    PROSE_DUTY_CHUNKS,
+    get_prompt,
+    prose_author_prompt,
+    specialist_prompt,
+)
 from scene import (
     IMMOBILIZING_RESTRAINTS,
     NON_AWAKE_GATED,
@@ -93,6 +99,7 @@ from .common import (
     director_may_voice,
     _check_prose_quote_authority,
     _quote_body,
+    _unknown_actor_label,
     _requires_reaction_phase,
     _resolve_player_room,
     _sync_sequence_mirrors,
@@ -875,10 +882,21 @@ def director_interpret(ctx, nonce):
         "variant_seed": nonce,
     }
 
+    # Orchestrated interpret (design note 19): the same sheet plus the
+    # delegation note as a SUFFIX -- the monolithic sheet stays
+    # byte-identical (and a stable cache prefix), and the note overrides
+    # the sheet's own PASS 1 "full structure, no subset" instruction so the
+    # stage model stops authoring the channels the dispatched specialists
+    # will replace anyway (run 20: every such emission was discarded at
+    # assembly, pure output-token latency). One read of the setting serves
+    # the prompt and the dispatch below, so they cannot disagree about
+    # which path this beat is on.
+    _orch = orchestration_enabled()
     out = _agent_json(
         "director",
         "director_interpret",
-        get_prompt("director_interpret"),
+        get_prompt("director_interpret")
+        + (INTERPRET_DELEGATION_NOTE if _orch else ""),
         payload,
         max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
@@ -980,8 +998,8 @@ def director_interpret(ctx, nonce):
     # merges into `state_assertions` (contact into `contact_assertions`,
     # the interpret spelling of the same channel) BEFORE the deterministic
     # validators below, so the merged result crosses the exact floor a
-    # model-authored copy crosses.
-    _orch = orchestration_enabled()
+    # model-authored copy crosses. `_orch` was read once, above the LLM
+    # call, where it also selected the delegation-note suffix.
     if _orch:
         _idispatch = _dispatch_specialists(ctx, sc, _gate_facts(
             ctx, sc,
@@ -3853,6 +3871,77 @@ def _unratified_background_claims(chat_id, turn_idx):
         return []
 
 
+def _report_observer_epithets(ctx, out, sc, p_name):
+    """Report an OBSERVER-RELATIVE epithet used in the objective record.
+
+    `_unknown_actor_label` builds a descriptor from a body's appearance FOR
+    OBSERVERS WHO DO NOT KNOW THEM. A character using it in its own
+    declaration is the firewall working. The Director using it is not: it is
+    omniscient, it knows the name, and the objective account is the one
+    representation from which every observer's own wording is derived.
+
+    Observed live (three-model playthrough, 2026-08-12): `resolved_event` read
+    "Bryn turns toward the young smith's apprentice standing at the group's
+    edge" -- of the PLAYER, whose name the same paragraph had already used --
+    and `intended_target` on both of Bryn's lines read "young smith's
+    apprentice" rather than "Corin". The prose consequence is fixed
+    downstream, deterministically, by the composer's identity floor
+    (`common.self_reference_forms`); this is the feedback that lets the
+    Director stop producing it, and it also names the STRUCTURED cost, which
+    no downstream floor covers: `intended_target` is matched against canonical
+    names, so a line addressed by epithet is addressed to nobody.
+
+    Report-only. It never rewrites the account -- resolved_event and the words
+    of dialogue_log are not this seam's to edit -- and it stays quiet unless
+    the epithet is unambiguous: a descriptor two bodies in the scene share is
+    skipped, because then it may honestly be describing someone unregistered.
+    """
+    bodies = []
+    for row in (ctx.cast or []):
+        try:
+            sheet = json.loads(row["sheet"])
+        except Exception:
+            continue
+        name = character_name(sheet)
+        if name:
+            bodies.append((name, character_appearance(sheet),
+                           character_scene_keys(sheet)[1:]))
+    pers = persona_of(ctx.chat)
+    if isinstance(pers, dict) and p_name:
+        bodies.append((p_name,
+                       pers.get("appearance") or persona_appearance(pers),
+                       (pers.get("identity") or {}).get("aliases") or []))
+    labels = {}
+    for name, appearance, aliases in bodies:
+        label = str(_unknown_actor_label(name, appearance, aliases) or "")
+        if label:
+            labels.setdefault(label.casefold(), []).append(name)
+    prose = str(out.get("resolved_event") or "")
+    targets = [str((d or {}).get("intended_target") or "")
+               for d in (out.get("dialogue_log") or []) if isinstance(d, dict)]
+    for label_cf, owners in labels.items():
+        if len(owners) != 1:
+            continue                  # ambiguous descriptor: not ours to claim
+        name = owners[0]
+        in_prose = label_cf in prose.casefold()
+        in_target = any(label_cf in t.casefold() or t.casefold() in label_cf
+                        for t in targets if t.strip())
+        if not (in_prose or in_target):
+            continue
+        where = " and ".join(
+            [w for w, hit in (("resolved_event", in_prose),
+                              ("intended_target", in_target)) if hit])
+        note = (
+            f"objective record: {name} was referred to in {where} as "
+            f"{label_cf!r}, which is the appearance label perception mints "
+            "for observers who have NOT recognized them. The objective "
+            "account is omniscient -- name them canonically and let "
+            "perception decide what each observer may call them, or a line "
+            "addressed to them is addressed to no one the engine can match.")
+        ctx.tell_director(note)
+        ctx.add_warning(note)
+
+
 def _guard_approach_is_not_arrival(ctx, interp, sd, sc, p_name):
     """A declaration that only reaches TOWARD somewhere does not end inside it.
 
@@ -4118,6 +4207,238 @@ _CHANNEL_GATES = {
     "offscreen_plan_ops": lambda f: f["offscreen_planning_enabled"],
     "ratified_claims": lambda f: f["unratified_claims_present"],
     "contradicted_claims": lambda f: f["unratified_claims_present"],
+}
+
+#: Prose-duty gates for the orchestrated PROSE AUTHOR's own sheet (the same
+#: mechanism as _CHANNEL_GATES, pointed at prompts.PROSE_AUTHOR_SHEET's
+#: chunks): per chunk, does this beat have possible work for that prose
+#: duty? Same rules, verbatim: every input is standing scene state, a
+#: structured declaration, or the payload ledger the duty is ABOUT -- never
+#: prose -- and FAIL OPEN is the rule, which matters MORE here than for the
+#: specialists: a needlessly-run specialist costs a second and a few hundred
+#: tokens, while a wrongly-omitted prose block changes what the Director
+#: WRITES. A chunk is gated out only when its subject provably does not
+#: exist; several gates are EXACT (the duty is about a payload list, and the
+#: gate reads that list), and the rest degrade to `physical_beat`/
+#: `speech_present` where structure cannot decide.
+#:
+#: KNOWLEDGE FIREWALL, CHANGES MANIFEST, PLAYER-ASSERTED FACTS, DIALOGUE
+#: LOG, the authority contract, the delegation contract, CONSEQUENCES ON THE
+#: CLOCK and WEATHER have no gate here ON PURPOSE: the first five are
+#: every-beat contract blocks (the firewall is an invariant, not an
+#: optimization target), and the last two are undecidable from state (any
+#: beat can set a future consequence; a window can show a changed sky from
+#: an "enclosed" room) -- considered and left loaded rather than gated
+#: optimistically.
+#:
+#: Documented residuals, all in the wrongly-cheap direction and all caught
+#: by the prose half of `_orchestration_scope_backstop`: a bodiless voice
+#: DEFINED on the very beat it first speaks (voices gates on one already
+#: existing); a brand-new vehicle minted in a scene that had none (transit);
+#: a light doused mid-beat in a fully-lit scene (light); a size change cast
+#: on a beat the gate read as speech-only cannot happen (size gates on
+#: physical_beat, and a spell is a declared action).
+_PROSE_DUTY_GATES = {
+    "voices": lambda f: f["bodiless_present"],
+    "obligations": lambda f: (f["obligations_pending"]
+                              or f["speech_present"]),
+    "other_players": lambda f: f["other_players_declared"],
+    "comm": lambda f: f["minds_apart"] or f["physical_beat"],
+    "transit": lambda f: f["transit_capable"],
+    "mapping_proposal": lambda f: f["proposal_present"],
+    "hearsay": lambda f: f["unratified_claims_present"],
+    "road": lambda f: f["road_subjects_present"],
+    "approach": lambda f: f["physical_beat"],
+    "due_events": lambda f: f["due_events_present"],
+    "world_pressure": lambda f: f["pressure_ledger_open"],
+    "residue": lambda f: f["residue_present"],
+    "light": lambda f: f["scene_not_fully_lit"],
+    "size": lambda f: f["scales_active"] or f["physical_beat"],
+}
+
+
+def _true_on_error(read):
+    """Fail open, per fact: a fact whose read fails is True, so its duty
+    block loads. Never gate a prose block out on an error."""
+    try:
+        return bool(read())
+    except Exception:
+        return True
+
+
+def _prose_gate_facts(ctx, sc, payload, facts, p_name):
+    """The scene facts the prose-duty gates read, computed once at resolve
+    time on top of the channel-gate facts (one `_gate_facts` call feeds
+    both levels, so they cannot disagree about the scene). Standing scene
+    state and the payload ledgers only; no prose anywhere."""
+
+    def bodiless():
+        from scene import ubiquitous_speaker_names
+        return ubiquitous_speaker_names(sc)
+
+    def minds_apart():
+        # A remote listener is possible unless every tracked mind (player,
+        # active cast, background presences) stands in ONE known room. Any
+        # unknown position is undecidable -> True.
+        names = [p_name] + [character_name_from_text(c["sheet"])
+                            for c in ctx.cast]
+        rooms = set()
+        for name in names:
+            room = room_of(sc, name)
+            if not room:
+                return True
+            rooms.add(room)
+        for presence in payload.get("background_presence_knowledge") or []:
+            room = (presence or {}).get("room")
+            if not room:
+                return True
+            rooms.add(room)
+        return len(rooms) > 1
+
+    def transit_capable():
+        if sc.get("contained"):
+            return True
+        for room in (sc.get("rooms") or {}).values():
+            if isinstance(room, dict) and room.get("parent_entity"):
+                return True
+        for entity in (sc.get("entities") or {}).values():
+            if not isinstance(entity, dict):
+                continue
+            if entity.get("interior_rooms") or entity.get("parent_entity"):
+                return True
+            state = entity.get("state") \
+                if isinstance(entity.get("state"), dict) else {}
+            if state.get("transit") or state.get("link"):
+                return True
+        return False
+
+    def proposal_content():
+        # _normalize_scene_patch always yields the container keys, so an
+        # empty proposal is a dict of empty containers -- content, not
+        # truthiness, is the exact fact.
+        proposal = payload.get("mapping_scene_proposal")
+        if not isinstance(proposal, dict):
+            return proposal
+        return any(bool(value) for value in proposal.values())
+
+    def not_fully_lit():
+        # The engine's own sight semantics (spatial.effective_light: absent
+        # means lit, spill lifts dark to dim): the light block is dead
+        # weight only when EVERY room provably offers ordinary sight.
+        from spatial import effective_light
+        rooms = sc.get("rooms") or {}
+        if not rooms:
+            return True
+        return any(effective_light(sc, rid) not in ("lit", "bright")
+                   for rid in rooms)
+
+    return {
+        "physical_beat": facts["physical_beat"],
+        "speech_present": facts["speech_present"],
+        "scales_active": facts["scales_active"],
+        "unratified_claims_present": facts["unratified_claims_present"],
+        "road_subjects_present": (
+            facts["crowds_present"] or facts["couriers_present"]
+            or facts["reports_carried"] or facts["notices_in_scene"]),
+        "bodiless_present": _true_on_error(bodiless),
+        "obligations_pending": _true_on_error(
+            lambda: payload.get("pending_obligations")),
+        "other_players_declared": _true_on_error(
+            lambda: payload.get("other_players_declarations")),
+        "minds_apart": _true_on_error(minds_apart),
+        "transit_capable": _true_on_error(transit_capable),
+        "proposal_present": _true_on_error(proposal_content),
+        "due_events_present": _true_on_error(
+            lambda: payload.get("due_authored_events")),
+        "pressure_ledger_open": _true_on_error(
+            lambda: payload.get("world_pressure")),
+        "residue_present": _true_on_error(
+            lambda: payload.get("destination_residue")),
+        "scene_not_fully_lit": _true_on_error(not_fully_lit),
+    }
+
+
+def _prose_author_scope(ctx, sc, payload, facts, p_name):
+    """The prose author's granted scope: every prose-duty chunk whose gate
+    reads possible work this beat. The same value selects the sheet
+    (prompts.prose_author_prompt) and is what the backstop audits shipped
+    duties against -- one computation, so the sheet and the audit cannot
+    disagree. Fails open at every level: a failed fact read grants its
+    chunk, a failed gate grants its chunk, and a failure computing the
+    facts at all grants everything."""
+    try:
+        prose_facts = _prose_gate_facts(ctx, sc, payload, facts, p_name)
+    except Exception:
+        return list(PROSE_DUTY_CHUNKS)
+    scope = []
+    for name in PROSE_DUTY_CHUNKS:
+        gate = _PROSE_DUTY_GATES.get(name)
+        try:
+            granted = True if gate is None else bool(gate(prose_facts))
+        except Exception:
+            granted = True
+        if granted:
+            scope.append(name)
+    return scope
+
+
+def _shipped_transit_state(sd):
+    for entity in (sd.get("entities") or {}).values():
+        if not isinstance(entity, dict):
+            continue
+        if entity.get("interior_rooms"):
+            return True
+        state = entity.get("state") \
+            if isinstance(entity.get("state"), dict) else {}
+        if state.get("transit") or state.get("link"):
+            return True
+    return any(isinstance(room, dict) and room.get("parent_entity")
+               for room in (sd.get("rooms") or {}).values())
+
+
+def _shipped_darkened_room(sd):
+    from spatial import normalize_light
+    return any(
+        isinstance(room, dict) and room.get("light") is not None
+        and normalize_light(room.get("light")) in ("dim", "dark")
+        for room in (sd.get("rooms") or {}).values())
+
+
+def _shipped_bodiless_definition(sd):
+    from scene import is_ubiquitous_entity
+    return any(is_ubiquitous_entity(entity)
+               for entity in (sd.get("entities") or {}).values()
+               if isinstance(entity, dict))
+
+
+#: The prose half of the scope backstop: per gated chunk, deterministic
+#: evidence in the FINAL output that its duty shipped anyway. Only the
+#: chunks whose gate is a PREDICTION appear here; the exact-payload gates
+#: (other_players, mapping_proposal, hearsay, due_events, world_pressure,
+#: residue) read the very list their duty is about and cannot mispredict,
+#: and `road`'s op channels are already audited by the specialist-channel
+#: half (its gate facts are a superset of the offscreen dispatch gates).
+_PROSE_DUTY_SHIPPED = {
+    "voices": lambda out, sd: (
+        "a bodiless (ubiquitous) voice was defined"
+        if _shipped_bodiless_definition(sd) else None),
+    "obligations": lambda out, sd: (
+        "obligation ops shipped" if out.get("obligations") else None),
+    "comm": lambda out, sd: (
+        "a medium:'comm' line shipped"
+        if any(isinstance(d, dict)
+               and str(d.get("medium") or "").strip().lower() == "comm"
+               for d in out.get("dialogue_log") or []) else None),
+    "transit": lambda out, sd: (
+        "transit/moving-room state was encoded"
+        if _shipped_transit_state(sd) else None),
+    "approach": lambda out, sd: (
+        "a body was relocated" if sd.get("positions") else None),
+    "light": lambda out, sd: (
+        "a room was set dim or dark"
+        if _shipped_darkened_room(sd) else None),
+    "size": lambda out, sd: (
+        "a size change was encoded" if sd.get("scales") else None),
 }
 
 
@@ -4611,6 +4932,28 @@ def _orchestration_scope_backstop(ctx, out, stage):
                 flags.append(
                     f"the prose asserts a {item['category']} change for "
                     f"{subject!r} ({channel} was not in any served scope)")
+    # The prose half, same mechanism: the beat's final output shows a duty
+    # whose prose-author block was not loaded. Only on records that carry a
+    # prose scope (the orchestrated resolve; interpret's sheet is not yet
+    # leaned), and only for the chunks whose gate is a prediction
+    # (_PROSE_DUTY_SHIPPED). Reported, never dropped: the model did the
+    # duty anyway, so the flag is gate-misprediction evidence, not a loss.
+    prose = record.get("prose_scope")
+    if stage == "resolve" and isinstance(prose, dict):
+        prose_granted = set(prose.get("granted") or ())
+        final_diff = out.get("state_diff")
+        final_diff = final_diff if isinstance(final_diff, dict) else {}
+        for name, probe in _PROSE_DUTY_SHIPPED.items():
+            if name in prose_granted:
+                continue
+            try:
+                evidence = probe(out, final_diff)
+            except Exception:
+                evidence = None
+            if evidence:
+                flags.append(
+                    f"{evidence}, and the prose author's {name!r} duty "
+                    "block was not loaded (widen its gate if this recurs)")
     record["scope_report"] = {
         "granted": sorted(granted),
         "served": sorted(served),
@@ -4622,8 +4965,8 @@ def _orchestration_scope_backstop(ctx, out, stage):
            if failed else "the scope gate read the scene as having no such "
            "work")
     note = (
-        "orchestration gate: content shipped for channels outside any "
-        "served specialist scope -- " + why + " -- "
+        "orchestration gate: content shipped for channels or prose duties "
+        "outside any served scope -- " + why + " -- "
         + "; ".join(flags)
         + ". Nothing was dropped (fail-open); the stage model's encoding "
         "and the reconciliation seam stand. The scope gate mispredicted."
@@ -5056,15 +5399,24 @@ def director_resolve(ctx, nonce):
     # lean when the delegated machinery is cold-stored in the specialists.
     _orch = orchestration_enabled()
     _orch_dispatch = None
+    _prose_scope = None
     if _orch:
-        _orch_dispatch = _dispatch_specialists(ctx, sc, _gate_facts(
+        _orch_facts = _gate_facts(
             ctx, sc,
             physical=_beat_has_physical_activity(interp, char_actions, dice),
             speech=bool(char_speech) or bool(player_speech_lines(interp)),
             material_effects=bool(character_material_effects),
-        ))
-    _resolve_prompt = get_prompt(
-        "director_resolve_lean" if _orch else "director_resolve")
+        )
+        _orch_dispatch = _dispatch_specialists(ctx, sc, _orch_facts)
+        # The prose author's OWN scope (same mechanism as the specialists'
+        # channel scopes, same facts, same fail-open): which conditional
+        # prose-duty blocks this beat can have work for. The sheet is
+        # assembled from the core plus exactly those chunks; the scope is
+        # persisted below and audited by the same backstop.
+        _prose_scope = _prose_author_scope(
+            ctx, sc, payload, _orch_facts, p_name)
+    _resolve_prompt = (prose_author_prompt(_prose_scope) if _orch
+                       else get_prompt("director_resolve"))
 
     out = _agent_json(
         "director",
@@ -5376,6 +5728,16 @@ def director_resolve(ctx, nonce):
                                       or {"enabled": False, "plans": []},
             },
             "resolve")
+        # The prose author's granted scope, persisted beside the
+        # specialists' -- what the scope backstop audits shipped prose
+        # duties against, and the per-beat measurement the sheet scoping
+        # is judged by (gated_out is the saving; a prose gate_flag below
+        # is the misprediction).
+        out["orchestration"]["prose_scope"] = {
+            "granted": sorted(_prose_scope or ()),
+            "gated_out": sorted(
+                set(PROSE_DUTY_CHUNKS) - set(_prose_scope or ())),
+        }
 
     # Safety net: LLM sometimes returns a string/list where an object belongs.
     sd = _normalize_diff_shape(out.get("state_diff"))
@@ -5876,6 +6238,12 @@ def director_resolve(ctx, nonce):
     # W2 backstop: warn on any player-authored world assertion the resolve
     # left in assertion limbo (no confirmed/contested/false verdict).
     _audit_fact_adjudications(ctx, out, interp)
+
+    # Report-only: an observer-relative appearance label in the objective
+    # account. The prose consequence has a deterministic floor downstream
+    # (the composer's identity floor); this teaches the Director, and names
+    # the structured cost the floor cannot reach.
+    _report_observer_epithets(ctx, out, sc, p_name)
 
     # One general prose-vs-diff reconciliation pass (subsumes the old
     # warn-only restraint backstop): deterministic placeholder floor,
