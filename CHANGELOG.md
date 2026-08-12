@@ -934,6 +934,52 @@ A provider outside the built-in kinds is opted in through the allowlist rather
 than merely un-denied, and says so on hover; with the env kill switch set, every
 box is disabled and explains why.
 
+## alpha 7.2.1 — The lore generator read a key its own prompt never offers
+
+Reported on the public repo against alpha 7.2. The plain **Generate entries**
+button on a lorebook — `POST /api/lorebooks/{lid}/generate` — rejected every
+model response that followed the prompt it had just been given, raising
+`Lore generator returned no entries` with the model's own perfectly usable
+output pasted underneath. Nothing was wrong with the model, the provider or the
+book, which is what made it hard to report and easy to blame on the wrong
+thing.
+
+### Fixed
+
+- **The reader asked for `entries`; `generator_lorebook` documents `entry_ops`
+  and nothing else.** That prompt's closing rule tells a model receiving no
+  `"stage"` key — which is every call this path makes — to return complete
+  `entry_ops` in one response, so a fully compliant answer was read as empty.
+  `entries` appears nowhere in the prompt as an output key, and the prompt's
+  `entry_ops` and the reader's error string are both present in this
+  repository's *first* commit: the reader was born wrong, and only this one of
+  the prompt's three callers was left behind. The elaborate resumable tree
+  generator beside it, which folds the same output through
+  `_normalize_entry_ops`, worked all along — two callers of one prompt
+  disagreed about its contract, and the one that was wrong was the one an
+  author reaches from the entry list. Fixed at the shared normalizer rather
+  than by teaching the crash site a second shape. A response in the older flat
+  `entries` shape still works, and a genuinely empty generation still fails
+  loudly instead of quietly reporting that it added nothing.
+
+- **The richer fields the prompt promises no longer fall on the floor.**
+  `importance`, `aliases`, `scope`, `relations` and `source_notes` are asked
+  for by the prompt and accepted by `add_lore`, and were silently discarded in
+  between. Fixing only the crash would have left the quiet half of the same
+  drift standing.
+
+- **An entry op that omits `op` reaches the book instead of vanishing.**
+  `apply_lorebook_plan` dispatches on that key, so an item without one fell
+  through every branch and was dropped — after the author had approved the
+  plan, and while the run still reported success having written nothing. The
+  prompt documents the key, which is not the same as a model always sending it.
+
+- **A model answering `"high"` for `importance` no longer costs the whole
+  plan.** That value reaches `float()` inside `add_lore`, inside the plan's
+  single transaction, so one malformed number would roll back every other entry
+  with it. The field forwarding above is what exposed this, so it is closed in
+  the same change.
+
 ## alpha 7.2 — Order is causality
 
 ### A beat opens with one character, and causality builds as it runs
