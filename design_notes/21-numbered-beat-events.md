@@ -102,15 +102,48 @@ carries ids, which are simply unused there.
 
 ## Residuals
 
-- Composition **uses** the ids for coverage and escalation; it does not yet
-  order the *application* of the merged diff by them. Every delegated channel
-  is currently an end-state assignment, so application order does not change
-  the result — but that is a property of today's channels, not a guarantee, and
-  a genuinely sequential pair of ops in two different channels would need it.
-- `already_true` is trusted to suppress a repair, not to prove standing state
-  carries the change. Verifying it against the scene per category is the
-  natural next step and would let the seam distinguish "correctly no-op" from
-  "quietly wrong" without a call.
+Two of the original three are closed; the record of how is part of the design.
+
+- **Application ordering: closed as a proven invariant, deliberately not
+  built.** Composition uses the ids for coverage and escalation, and that is
+  all the ids are needed for, because diff application is order-independent
+  across specialists *by construction*: every delegated channel has exactly
+  one owner and assembly replaces whole channels, so no channel is ever
+  interleaved from two model sources; every dict channel is a keyed
+  end-state upsert; the only appliers that walk an op list against evolving
+  state (`apply_contact_ops`, `apply_substance_ops`) have their entire
+  read/write family — contact_ops, substance_ops, containment, scales —
+  under the ONE contact specialist, so within-beat chronology *is* that
+  specialist's own list order, preserved verbatim; and every genuinely
+  order-coupled cross-channel pair is adjudicated by a deliberate fixed
+  convention in `spatial.merge_scene_with_diff`, each with a stated causal
+  reason (substances resolve against the PRE-BEAT contact topology and
+  apply before contact removals; scale changes cancel contacts before the
+  beat's own ops; stations derive after contacts settle; vitals last).
+  Event-id ordering would re-litigate conventions each chosen deliberately —
+  including the suspect case, a contact ending and a new contact on the same
+  part in one beat, which lives entirely inside one specialist's one list.
+  What would need ordering, and is therefore refused by the tripwire test
+  (`test_diff_application_is_order_independent_by_construction`): a
+  sequential-stateful op channel granted outside its family's owner; a new
+  delegated op channel left unclassified; two owners writing one coupled
+  family.
+- **`already_true` verified: closed as a defect detector, deliberately not a
+  truth prover.** The manifest's structure carries no *direction* — whether
+  a change puts the garment on or takes it off lives only in its prose, and
+  prose matching is the boundary this design exists to get away from; both
+  end states are legitimate no-op targets, so an undirected "is it already
+  so" check is vacuous. What is decidable is whether standing state can
+  support *any* definite claim about the subject, and
+  `_verify_already_true` refuses the acquittal where it provably cannot: a
+  garment marked `removed` while still resident in regions (the chat 70/71
+  corruption — a ledger a specialist could honestly misread), wearing/
+  regions membership drift, a standing position naming a non-room, a
+  contained body carrying its own disagreeing position. A refusal is a
+  named defect (`recon.already_true_refused`, a warning, `tell_director`)
+  and the omission still buys its owner repair; anything undecidable —
+  contacts and conditions above all — falls through to the existing trust,
+  now deliberately rather than by omission.
 - The routed repair does not yet tell a specialist *which ids* it left
   unaddressed. It gets the omissions; the ids would make the second ask as
   precise as the first.

@@ -57,6 +57,30 @@ cause:
   specialist's record also carries `channels_filled`, the field whose
   absence let `channels_replaced: []` be read — twice — as "the specialists
   produced nothing."
+- **An `already_true` acquittal is checked against standing state.** The
+  numbered-beat-events seam trusted a specialist's "the change is already
+  the standing state" on its word — the one unverified verdict in the
+  design, and the live corruption that started this session (a garment
+  marked `removed` while still resident in three regions) is a ledger a
+  specialist could honestly misread that way. `_verify_already_true` now
+  refuses the acquittal where standing state provably supports no definite
+  claim about the subject — removed-yet-resident attire, wearing/regions
+  drift, a position naming a non-room, a contained body with its own
+  disagreeing position — naming the defect and letting the gap escalate;
+  what it cannot decide (direction lives only in prose, which stays out of
+  bounds) falls through to the existing trust, deliberately. Diff
+  application ordering, the note's other residual, is closed the other way:
+  proven order-independent by construction and pinned by a tripwire test
+  that forces any future sequential channel to be classified consciously.
+- **Specialist calls survive onto the stage's ledger.** `_call_isolated`
+  copied its context INSIDE the pool worker, and ThreadPoolExecutor workers
+  inherit no contextvars — so inside every multi-specialist fan-out the
+  ledger sink, the warning sink, the abort event and the active frame were
+  silently None (live variant v26648: one recorded call against five
+  ran=True specialists). The copy is now made in the parent, one per job,
+  so a resolve variant's ledger shows the author call plus every specialist
+  call with roles intact, specialist-internal repair warnings persist, and
+  an aborted turn can actually interrupt in-flight specialists.
 - **The next slow turn explains itself.** Every provider call a step pays
   for — role, requested and served model, tokens in/out/cached, duration,
   transport — is now persisted on the step's saved variant under
