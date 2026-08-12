@@ -923,6 +923,16 @@ ROLES = [
     "director_offscreen",
     "narrator",
     "mapping",
+    # SHAPE, never content. When a stage's output fails validation, this
+    # model is asked about the failed FIELDS ALONE and its answer is spliced
+    # back at exactly the paths the validator named -- everything else is
+    # byte-identical by construction, so it cannot touch the beat. That
+    # constraint is what makes the job small: fix the shape, keep every
+    # fact. A fast cheap model is the right choice here, and it saves the
+    # rung below, which re-authors the whole response on the stage's own
+    # model (measured: 4.2s on the Director for one malformed field, 36.3s
+    # on a character decision review). Unset, it inherits `utility`.
+    "repair",
     "utility",
     "embeddings",
     # Writes an image prompt from spatial data (backdrops.py). OPTIONAL and
@@ -1249,6 +1259,10 @@ ROLE_FALLBACKS = {
     # specialists above. The role string handed to _log_usage stays
     # "utility" either way.
     "utility": "mapping",
+    # The targeted field patch is the same lane as the other cheap
+    # mechanical work, so an unset repair rides utility (and through it
+    # mapping) rather than the frontier model whose output it is fixing.
+    "repair": "utility",
 }
 
 

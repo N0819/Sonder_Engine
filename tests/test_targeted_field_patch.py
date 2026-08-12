@@ -46,8 +46,8 @@ def test_it_asks_only_about_the_fields_that_failed(monkeypatch):
     # Everything else is byte-identical -- the beat was never re-authored.
     assert out["summary"] == parsed["summary"]
     assert out["state_assertions"]["poses"] == parsed["state_assertions"]["poses"]
-    # Asked on the cheap lane, and handed only the broken fragment.
-    assert seen[0]["role"] == "utility"
+    # Asked on the dedicated cheap lane, and handed only the broken fragment.
+    assert seen[0]["role"] == "repair"
     assert list(seen[0]["user"]["invalid_fragments"]) == [
         "state_assertions.overlays"]
     assert "summary" not in json.dumps(seen[0]["user"])
@@ -92,3 +92,16 @@ def test_paths_reach_into_lists():
     llm_quality._place(parsed, "dialogue_log.1.speaker", "B")
     assert parsed["dialogue_log"][1]["speaker"] == "B"
     assert parsed["dialogue_log"][0]["speaker"] == "A"
+
+
+def test_repair_is_its_own_configurable_role():
+    """Separable from `utility`, which also carries autobiographical
+    consolidation: a host may want a 3000 tok/s open model fixing shapes
+    and something else writing summaries. Unset, it rides utility (and
+    through it mapping) rather than the frontier model whose output it is
+    fixing."""
+    import providers
+
+    assert "repair" in providers.ROLES
+    assert providers.ROLE_FALLBACKS["repair"] == "utility"
+    assert providers.ROLE_FALLBACKS["utility"] == "mapping"
