@@ -54,11 +54,166 @@ def _worn_names(attire_map, owner):
     return [str(x) for x in (entry.get("wearing") or []) if str(x).strip()]
 
 
+def scene_subjects(sc):
+    """Every name this scene treats as a PRESENT SUBJECT, from the ledgers
+    that only bodies appear in. Derived from the scene itself, so a check
+    built on it needs no outside truth to call a reference dangling."""
+    subjects = set()
+    for key in ("attire", "poses", "stations", "overlays", "orientation"):
+        value = sc.get(key)
+        if isinstance(value, dict):
+            subjects |= {str(k) for k in value}
+    entities = set(sc.get("entities") or {})
+    for subject in (sc.get("positions") or {}):
+        if subject not in entities:
+            subjects.add(str(subject))
+    return subjects
+
+
+def check_references(sc):
+    """DANGLING REFERENCES, across every ledger in the fiction.
+
+    The generalisation of the garment work: a ledger that names a subject,
+    a room or an object which no other ledger carries is the same defect
+    shape as two records of one garment -- one representation asserting
+    something the rest of the world cannot answer for. It costs nothing to
+    check for every ledger at once, and it is not about clothing.
+    """
+    out = []
+    subjects = scene_subjects(sc)
+    rooms = set(sc.get("rooms") or {})
+    entities = set(sc.get("entities") or {})
+    named_entities = {str((e or {}).get("name") or "")
+                      for e in (sc.get("entities") or {}).values()}
+    # Room ANCHORS are first-class places a body can be stationed at or
+    # supported by -- `comfort.py` resolves station.at against them. Left
+    # out of this set on the first pass, which reported 33 stations and 9
+    # poses as dangling when every one of them was correct. An invariant
+    # checked against the wrong idea of the world produces confident
+    # nonsense, which is worse than no check.
+    anchors = {str(a) for room in (sc.get("rooms") or {}).values()
+               if isinstance(room, dict)
+               for a in (room.get("anchors") or {})}
+    # Generic ground a body can rest on without the world modelling it.
+    surfaces = {"floor", "ground", "the floor", "the ground"}
+    places = rooms | entities | named_entities | anchors | surfaces
+
+    def known_subject(name):
+        return not name or name in subjects
+
+    # --- who is touching whom -------------------------------------------
+    for op in (sc.get("contacts") or []):
+        if not isinstance(op, dict):
+            continue
+        for role in ("a", "b", "actor", "target", "subject"):
+            who = str(op.get(role) or "").strip()
+            if who and not known_subject(who) and who not in places:
+                out.append(("contact names a subject the scene does not carry",
+                            f"{role}={who!r}"))
+
+    # --- what is on or in what ------------------------------------------
+    for subject, holder in (sc.get("contained") or {}).items():
+        ref = holder.get("in") if isinstance(holder, dict) else holder
+        ref = str(ref or "").strip()
+        if ref and ref not in places:
+            out.append(("contained in something that does not exist",
+                        f"{subject} in {ref!r}"))
+    # A containment cycle is a world that cannot be rendered at all.
+    contained = {k: (v.get("in") if isinstance(v, dict) else v)
+                 for k, v in (sc.get("contained") or {}).items()}
+    for start in contained:
+        seen, node = set(), start
+        while node in contained and node not in seen:
+            seen.add(node)
+            node = contained[node]
+        if node in seen:
+            out.append(("containment cycle", f"{start} -> ... -> {node}"))
+
+    # --- substances, scales, overlays -----------------------------------
+    for op in (sc.get("substances") or []):
+        if not isinstance(op, dict):
+            continue
+        for role in ("source", "target"):
+            who = str(op.get(role) or "").strip()
+            if who and not known_subject(who) and who not in places:
+                out.append(("substance names a subject the scene does not carry",
+                            f"{role}={who!r} ({op.get('substance')!r})"))
+    for who in (sc.get("scales") or {}):
+        if not known_subject(str(who)):
+            out.append(("scale for a subject the scene does not carry", str(who)))
+
+    # --- posture and bearing --------------------------------------------
+    for who, pose in (sc.get("poses") or {}).items():
+        if not isinstance(pose, dict):
+            continue
+        rel = str(pose.get("relative_to") or "").strip()
+        if rel and not known_subject(rel):
+            out.append(("pose relative to a subject the scene does not carry",
+                        f"{who} -> {rel!r}"))
+        support = str(pose.get("support") or "").strip()
+        if support and support not in places:
+            out.append(("pose supported by something that does not exist",
+                        f"{who} on {support!r}"))
+    for who, facing in (sc.get("orientation") or {}).items():
+        focus = (facing or {}).get("focus") if isinstance(facing, dict) else None
+        ref = str((focus or {}).get("ref") or "").strip()
+        if ref and not known_subject(ref) and ref not in places:
+            out.append(("orientation focused on something that does not exist",
+                        f"{who} -> {ref!r}"))
+        came = str((facing or {}).get("came_from") or "").strip()
+        if came and came not in rooms:
+            out.append(("came_from names a room that does not exist",
+                        f"{who} <- {came!r}"))
+
+    # --- stations and company -------------------------------------------
+    for who, station in (sc.get("stations") or {}).items():
+        if not isinstance(station, dict):
+            continue
+        at = str(station.get("at") or "").strip()
+        if at and at not in places:
+            out.append(("station at something that does not exist",
+                        f"{who} at {at!r}"))
+        for near in (station.get("near") or []):
+            if not known_subject(str(near)):
+                out.append(("station near a subject the scene does not carry",
+                            f"{who} near {near!r}"))
+
+    # --- who follows whom ------------------------------------------------
+    following = {k: (v.get("target") if isinstance(v, dict) else v)
+                 for k, v in (sc.get("following") or {}).items()}
+    for who, target in following.items():
+        if not known_subject(str(who)):
+            out.append(("follower the scene does not carry", str(who)))
+        if target and not known_subject(str(target)):
+            out.append(("following a subject the scene does not carry",
+                        f"{who} -> {target!r}"))
+    for start in following:
+        seen, node = set(), start
+        while node in following and node not in seen:
+            seen.add(node)
+            node = following[node]
+        if node in seen:
+            out.append(("following cycle", f"{start} -> ... -> {node}"))
+
+    # --- the geography itself --------------------------------------------
+    for rid, room in (sc.get("rooms") or {}).items():
+        if not isinstance(room, dict):
+            continue
+        for edge in (room.get("adjacent") or []):
+            ref = edge.get("to") if isinstance(edge, dict) else edge
+            ref = str(ref or "").strip()
+            if ref and ref not in rooms:
+                out.append(("adjacency leads to a room that does not exist",
+                            f"{rid} -> {ref!r}"))
+    return out
+
+
 def check_scene(sc):
     """Every disagreement in one scene, as (kind, detail) pairs."""
     out = []
     if not isinstance(sc, dict):
         return out
+    out += check_references(sc)
     ents = sc.get("entities") or {}
     attire_map = sc.get("attire") or {}
     rooms = sc.get("rooms") or {}
@@ -252,6 +407,87 @@ def heal_scene(sc):
 
 # --- driver -----------------------------------------------------------------
 
+def check_story(conn, chat_id, sc):
+    """Invariants that span TABLES, not just the scene blob.
+
+    The scene is one representation of the fiction; the registry, the
+    derived projection and the minds are others. Where two of them answer
+    the same question, they must agree -- and these are the pairs the
+    architecture explicitly names as needing to stay in step.
+    """
+    out = []
+    rooms = set((sc or {}).get("rooms") or {})
+    entities = set((sc or {}).get("entities") or {})
+
+    # room_registry is the cross-frame ledger of room identity; the scene is
+    # the live truth. AGENTS.md: every scene writer must keep the registry
+    # projection in sync.
+    reg = {r["room_uid"]: r for r in conn.execute(
+        "SELECT room_uid, retired_turn_id FROM room_registry WHERE chat_id=?",
+        (chat_id,))}
+    for rid in rooms:
+        if rid not in reg:
+            out.append(("live room missing from room_registry", rid))
+        elif reg[rid]["retired_turn_id"] is not None:
+            out.append(("live room marked retired in room_registry", rid))
+
+    # world_entities is a DERIVED projection of the scene commit -- the one
+    # divergence Phase 3a exists to prevent.
+    proj = {r["entity_id"]: r for r in conn.execute(
+        "SELECT entity_id, retired_turn_id FROM world_entities WHERE chat_id=?",
+        (chat_id,))}
+    for eid in entities:
+        if eid not in proj:
+            out.append(("scene entity missing from world_entities", eid))
+        elif proj[eid]["retired_turn_id"] is not None:
+            out.append(("live entity marked retired in world_entities", eid))
+
+    # A mind's records must belong to a mind this story actually has.
+    attached = {r["char_id"] for r in conn.execute(
+        "SELECT char_id FROM chat_chars WHERE chat_id=?", (chat_id,))}
+    if attached:
+        for row in conn.execute(
+                "SELECT DISTINCT char_id FROM memories WHERE chat_id=?",
+                (chat_id,)):
+            if row["char_id"] and row["char_id"] not in attached:
+                out.append(("memories held by a mind not attached to this story",
+                            f"char_id={row['char_id']}"))
+        for row in conn.execute(
+                "SELECT DISTINCT char_id FROM relationship_events WHERE chat_id=?",
+                (chat_id,)):
+            if row["char_id"] and row["char_id"] not in attached:
+                out.append(("relationship history for a mind not in this story",
+                            f"char_id={row['char_id']}"))
+
+    # A memory of a beat that never happened.
+    last = conn.execute("SELECT MAX(idx) m FROM turns WHERE chat_id=?",
+                        (chat_id,)).fetchone()["m"]
+    if last is not None:
+        row = conn.execute(
+            "SELECT COUNT(*) n FROM memories WHERE chat_id=? AND turn_idx > ?",
+            (chat_id, last)).fetchone()
+        if row["n"]:
+            out.append(("memories of a turn that does not exist",
+                        f"{row['n']} rows past idx {last}"))
+        row = conn.execute(
+            "SELECT COUNT(*) n FROM memory_summaries WHERE chat_id=? "
+            "AND end_turn_idx > ?", (chat_id, last)).fetchone()
+        if row["n"]:
+            out.append(("summary covering turns that do not exist",
+                        f"{row['n']} rows past idx {last}"))
+
+    # One story, one embedding space. A bank written in two models cannot
+    # be searched coherently -- this is the banner the host sees, checked
+    # at its source rather than at render time.
+    models = [r["embedding_model"] for r in conn.execute(
+        "SELECT DISTINCT embedding_model FROM memory_summaries "
+        "WHERE chat_id=? AND embedding_model IS NOT NULL", (chat_id,))]
+    if len(set(models)) > 1:
+        out.append(("memory bank written in several embedding models",
+                    ", ".join(sorted(set(models))[:3])))
+    return out
+
+
 def _scene_of(blob):
     sc = blob.get("world", {}).get("scene") if isinstance(blob, dict) else None
     return json.loads(sc) if isinstance(sc, str) else sc
@@ -280,6 +516,12 @@ def main():
     findings = collections.Counter()
     structure = collections.Counter()
     examples, struct_examples = {}, {}
+    # The NEWEST story a class still appears in. A contradiction that stops
+    # at an old chat is almost always a ledger that did not exist yet, not
+    # a live defect -- the room registry arrived mid-corpus, and reporting
+    # 140 pre-registry rooms as breakage would bury the four classes that
+    # are actually still happening.
+    newest = {}
     healable = []
 
     for row in rows:
@@ -291,9 +533,14 @@ def main():
         for kind, detail in check_scene(sc):
             findings[kind] += 1
             examples.setdefault(kind, (row["chat_id"], detail))
+            newest[kind] = max(newest.get(kind, 0), row["chat_id"])
         for note in check_structure(sc):
             structure[note] += 1
             struct_examples.setdefault(note, row["chat_id"])
+        for kind, detail in check_story(work, row["chat_id"], sc):
+            findings[kind] += 1
+            examples.setdefault(kind, (row["chat_id"], detail))
+            newest[kind] = max(newest.get(kind, 0), row["chat_id"])
         probe = json.loads(json.dumps(sc))
         if heal_scene(probe):
             healable.append(row["chat_id"])
@@ -303,10 +550,23 @@ def main():
     print("=" * 70)
     if not findings:
         print("  none")
+    latest = max((r["chat_id"] for r in rows), default=0)
+    live, historical = [], []
     for kind, n in findings.most_common():
-        cid, detail = examples[kind]
-        print(f"  {n:>5}  {kind}")
-        print(f"         e.g. chat {cid}: {detail}")
+        # A class whose newest sighting is far behind the newest story is
+        # a ledger that did not exist then, not something still going wrong.
+        (historical if newest.get(kind, 0) < latest - 20 else live).append(kind)
+    for group, label in ((live, "STILL HAPPENING"),
+                         (historical, "ONLY IN OLD STORIES "
+                                      "(a ledger that did not exist yet)")):
+        if not group:
+            continue
+        print(f"\n  -- {label} --")
+        for kind in group:
+            cid, detail = examples[kind]
+            print(f"  {findings[kind]:>5}  {kind}"
+                  f"   [newest: chat {newest.get(kind, 0)}]")
+            print(f"         e.g. chat {cid}: {detail}")
 
     if not args.quiet_structure:
         print()
