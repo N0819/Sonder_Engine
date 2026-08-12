@@ -1023,6 +1023,24 @@ class DirectorInterpret(LenientModel):
     # of attire/visibility regions. Each assertion may also carry independent
     # relation (surface|interior) and motion (settled|moving) axes.
     contact_assertions: list[dict] = Field(default_factory=list)
+    # WHAT THE PLAYER SAYS HAPPENS, HAPPENS -- that turn, before perception
+    # pass 1 fires. A full `StateDiff`, deliberately the SAME structure
+    # `director_resolve` emits rather than a curated subset of it: interpret
+    # is not a lesser authority than resolve, it is the same authority scoped
+    # to the player's input. A declaration that reached the scene only through
+    # resolve was invisible for the whole beat in which it was made, because
+    # resolve runs after every character has declared. Previewed on a copy for
+    # pass 1 and merged into resolve's own diff, so persistence stays exactly
+    # where it was: commit, once, through every guard it already runs.
+    #
+    # Typed as `StateDiff` rather than a bare dict on purpose: it makes the
+    # claim checkable. `tools/project_check.py` walks nested models to catch a
+    # prompt asking for a field its schema cannot hold, and through an untyped
+    # dict it saw nothing -- the exact silent-drop class that cost `entry_ops`,
+    # `offscreen_plan_ops` and `project_ops` a measurement each.
+    # Forward-referenced: `StateDiff` is declared further down, and resolving
+    # it after the fact is cheaper than moving either class.
+    state_assertions: Optional["StateDiff"] = None
     # Voluntary durable travel relation for the player. {op:start,target} or
     # {op:stop,reason}; absence means keep the current relation unchanged.
     follow_op: Optional[dict] = None
@@ -1884,6 +1902,14 @@ class StateDiff(LenientModel):
     _coerce_stations = validator("stations", pre=True, allow_reuse=True)(
         lambda cls, v: _coerce_station_table(v)
     )
+
+
+# `DirectorInterpret.state_assertions` is a `StateDiff` -- interpret is not a
+# lesser authority than resolve, it is the same authority scoped to the
+# player's input -- and it is declared above this class, so the forward
+# reference is resolved here.
+DirectorInterpret.update_forward_refs()
+
 
 class AssertedChange(LenientModel):
     """One entry of director_resolve's own changes-asserted manifest: a

@@ -2410,6 +2410,13 @@ all built (`Design.md`, "Clothing by body region"). What remains:
   only SPEED, never who may know what — but it is prose matching, and §3.1
   applies to it as much as anywhere. A structured "this act was decisive"
   signal on the declaration would retire it.
+- **the process clamp is scoped per body, not per garment.** `process_targets`
+  answers "whose undressing is still in progress" in BODIES, so "she begins on
+  the sash" holds a jacket the same beat resolved off the same body. Making
+  the shared attribution ladder answer in garments is a real redesign of
+  `attire._attributed_targets` and of `advance`'s `process` flag; the
+  conjunction needed to hit it (one garment mid-act, another resolved off, same
+  body, same beat) has not been seen live. Design note 17 §"third incident".
 
 ---
 

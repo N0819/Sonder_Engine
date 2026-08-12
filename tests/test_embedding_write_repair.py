@@ -275,3 +275,81 @@ def test_a_failed_write_is_not_counted_as_a_reason_to_ask(bank, monkeypatch):
     status = memory.embedding_bank_status(chat_id=bank["chat"])
     assert status["memories"]["stranded"] == 1
     assert status["memories"]["fallback_written"] == 1
+
+
+# ---- A comparison needs both sides ----
+#
+# Live, 2026-08-11: chat 70 held 34 memories, every one correctly stamped
+# `openrouter:3:perplexity/pplx-embed-v1-4b`, and every open of that story
+# said all 34 were "written with a different embedding model" and told the
+# host to go set an embeddings provider they already had. The probe on the
+# chat-open path is sent without retries and hit that provider's rate limit;
+# its crc32 placeholder was then read as the LIVE MODEL'S IDENTITY, so the
+# comparison ran against a model nothing was written by, and stranded the
+# bank. The configured role separates the case the probe cannot.
+
+def test_a_rate_limited_probe_does_not_strand_a_healthy_bank(bank,
+                                                             monkeypatch):
+    """THE REPORTED BUG, exactly: correct rows, silent provider, no claim."""
+    monkeypatch.setattr(memory, "embed_texts_meta", _real_batch)
+    for i in range(3):
+        _write(bank, "a correctly embedded beat", turn_idx=i)
+
+    monkeypatch.setattr(memory, "embed_texts_meta", _fallen_back)
+    status = memory.embedding_bank_status(chat_id=bank["chat"])
+    assert status["memories"]["total"] == 3
+    assert status["memories"]["stranded"] == 0
+    assert status["live_unknown"] is True
+    # ...and NOT the flag every consumer reads as "no provider configured".
+    assert status["is_fallback"] is False
+    # The model reported is the configured one, not the hash placeholder.
+    assert status["model"] == REAL
+    assert "429" in status["fallback_reason"]
+
+
+def test_no_provider_configured_still_reports_the_split(bank, monkeypatch):
+    """The case the prompt was written for, unchanged.
+
+    With no embeddings provider the hash IS the engine's embedding, so rows
+    carrying a real model's stamp genuinely are keyword-only and rebuilding
+    onto the hash genuinely is a downgrade. `is_fallback` must still say so.
+    """
+    monkeypatch.setattr(memory, "embed_texts_meta", _real_batch)
+    _write(bank, "embedded while a provider was configured")
+    monkeypatch.setattr(memory, "embedding_model_key",
+                        lambda: "cheap:crc32:256")
+    monkeypatch.setattr(memory, "embed_texts_meta", _fallen_back)
+    status = memory.embedding_bank_status(chat_id=bank["chat"])
+    assert status["memories"]["stranded"] == 1
+    assert status["is_fallback"] is True
+    assert status["live_unknown"] is False
+
+
+def test_a_silent_provider_does_not_start_a_rebuild(bank, monkeypatch):
+    monkeypatch.setattr(memory, "embed_texts_meta", _fallen_back)
+    decision = memory.start_rebuild_if_needed(bank["chat"])
+    assert decision["started"] is False
+    assert decision["reason"] == "embedding provider not answering"
+
+
+def test_a_rebuild_never_writes_the_hash_over_real_vectors(bank, monkeypatch):
+    """The same conflation, where it destroys data rather than nagging.
+
+    `want_fallback` was `live.fallback` — "the probe that opened this run
+    failed" — and it is the switch that disables the guard refusing to write
+    crc32 over real vectors. So a rebuild started while the provider happened
+    to be rate limited would have overwritten an entire real corpus with
+    hashes and stamped them migrated. Whether the host has an embeddings
+    provider is a settings fact, not a fact about one request.
+    """
+    from db import q
+    monkeypatch.setattr(memory, "embed_texts_meta", _real_batch)
+    mid = _write(bank, "a real vector worth keeping")
+    monkeypatch.setattr(memory, "embed_texts_meta", _fallen_back)
+
+    report = memory.rebuild_embeddings(chat_id=bank["chat"])
+    assert report["stopped_early"] is True
+    assert report["memories"] == 0
+    assert _stamp(mid) == REAL, "a rate limit overwrote a real vector"
+    assert q("SELECT embedding_dim FROM memories WHERE id=?", (mid,),
+             one=True)["embedding_dim"] == 2560

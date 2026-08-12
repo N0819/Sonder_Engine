@@ -787,14 +787,72 @@ _PROCESS = re.compile(
     re.IGNORECASE)
 
 
-def _process_sentence(sentence):
-    """Does this sentence mark the undressing as still in progress?
+# What `_PROCESS` cannot say on its own (design note 17, THIRD incident).
+# `_DECISIVE` is intrinsically about clothing -- "strips", "tears off" are
+# not sentences about anything else -- so its attribution may fall back to
+# "exactly one body is named here". `_PROCESS` is not: "begins", "starts",
+# "works at", "tries to" are generic English about ANY ongoing act. It says
+# something is in progress; it never says the something is an undressing.
+#
+# Measured live (chat 70 t9): the Director resolved `remove: ["fitted tank
+# top"]` and narrated it thrown across the room, and the ledger held it at
+# `loosened` because a LATER sentence about hands -- "both palms press flat
+# against Hinami's bare skin ... and BEGIN to drag slowly downward" -- named
+# no garment, fell to the one-body-named tier, and clamped her.
+#
+# So a process reading now requires the sentence to be about clothing at
+# all. This list is enumerated where `_DECISIVE`'s completions deliberately
+# are not, because its failure direction is the safe one the inversion was
+# built for: a garment word missing here merely lets a removal land that the
+# Director asserted anyway. Promiscuous general-English words are left OUT
+# ("hook", as in fingers hooking under a hem; bare "tie"; "slip"; "shift"),
+# since a false positive is what this fixes. "top" carries a lookahead
+# because "the top of her thigh" is not a garment.
+_CLOTHING_CONTEXT = re.compile(
+    r"\b(?:clothes|clothing|garments?|outfits?|attire|dress(?:es)?|robes?"
+    r"|gowns?|skirts?|trousers|pants|jeans|shorts|leggings|tights"
+    r"|jackets?|coats?|cloaks?|capes?|corsets?|bodices?|blouses?|shirts?"
+    r"|tunics?|vests?|waistcoats?|sweaters?|jumpers?|hoodies?|kimonos?"
+    r"|saris?|togas?|aprons?|overalls|uniforms?|armou?r|breastplates?"
+    r"|greaves|gauntlets?|bracers?|tops?(?!\s+of\b)"
+    r"|underwear|undergarments?|panties|knickers|briefs|boxers|bras?"
+    r"|brassieres?|chemises?|camisoles?|negligees?|lingerie|stockings"
+    r"|socks|garters?|sashes?|sash|belts?|girdles?|scar(?:f|ves)|shawls?"
+    r"|veils?|hoods?|gloves?|boots?|shoes?|sandals?|slippers?"
+    r"|hems?|sleeves?|collars?|cuffs?|lapels?|waistbands?|necklines?"
+    r"|straps?|laces?|buttons?|buckles?|zips?|zippers?|clasps?|knots?"
+    r"|fastenings?|drawstrings?|ribbons?|seams?|plackets?"
+    r"|undress\w*|disrob\w*|unbutton\w*|unlac\w*|unzip\w*|unhook\w*"
+    r"|unfasten\w*|unbuckl\w*|unti\w*|unclasp\w*)\b",
+    re.IGNORECASE)
 
-    A sentence that also carries a completion shape is the completion — "she
-    stops fumbling and just rips it off" ends the process it names — so the
-    decisive/removal reading wins inside one sentence.
+
+def _process_sentence(sentence, garment_phrases=()):
+    """Does this sentence mark an UNDRESSING as still in progress?
+
+    Three conditions, and the third is the one this used to be missing:
+
+    1. process language is present;
+    2. no completion shape shares the sentence -- "she stops fumbling and
+       just rips it off" ends the process it names, so the decisive reading
+       wins inside one sentence;
+    3. the sentence is about clothing at all -- a garment this body is
+       actually wearing, or a generic clothing word. Without this, every
+       "begins to", "starts to" and "tries to" in a beat was evidence about
+       somebody's clothes.
+
+    `garment_phrases` is the wardrobe's own spellings, matched whole exactly
+    as the attribution ladder's first tier matches them. Head nouns are NOT
+    used here: `_garment_keys` reads the last word, and the live wardrobe
+    holds "sheer obsidian silk robe that parts with every movement", whose
+    head noun is "movement".
     """
-    return bool(_PROCESS.search(sentence)) and not _decisive_sentence(sentence)
+    if not _PROCESS.search(sentence) or _decisive_sentence(sentence):
+        return False
+    if _CLOTHING_CONTEXT.search(sentence):
+        return True
+    folded = sentence.casefold()
+    return any(phrase and phrase in folded for phrase in garment_phrases)
 
 
 def _decisive_sentence(sentence):
@@ -1277,9 +1335,20 @@ def process_targets(player_text, other_texts, wardrobe, player_name=None):
     of her sash" is Mira's sash staying on, not Corin's. A body named here
     has its removal proposals held one rung; everyone else's resolved
     removals land as resolved.
+
+    Unlike the decisive reading, a sentence must first BE about clothing to
+    count at all (see `_process_sentence`) -- process language is generic
+    English, and reading it as evidence about somebody's clothes is how a
+    resolved removal got clamped by a sentence about hands.
     """
-    return _attributed_targets(player_text, other_texts, wardrobe,
-                               player_name, _process_sentence)
+    phrases = {phrase
+               for garments in (wardrobe if isinstance(wardrobe, dict)
+                                else {}).values()
+               for phrase, _noun in (_garment_keys(g) for g in garments or [])
+               if phrase}
+    return _attributed_targets(
+        player_text, other_texts, wardrobe, player_name,
+        lambda sentence: _process_sentence(sentence, phrases))
 
 
 def _attributed_targets(player_text, other_texts, wardrobe, player_name,

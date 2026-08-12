@@ -72,6 +72,9 @@ from spatial import (
 )
 
 from .common import (
+    merge_player_state_assertions,
+    preview_player_state_assertions,
+    validated_player_state_assertions,
     _agent_json,
     _contextual_rooms,
     _dict,
@@ -924,6 +927,7 @@ def director_interpret(ctx, nonce):
         out["action"] = None
         out["actions"] = []
         out["contact_assertions"] = []
+        out["state_assertions"] = {}
     # A speech element that swallowed the raw input's narration is repaired
     # BEFORE anything reads it: perception injects these texts verbatim as
     # dialogue, so narration left here is delivered to every hearer as words
@@ -963,6 +967,10 @@ def director_interpret(ctx, nonce):
     out["contact_assertions"] = _validated_player_contact_assertions(
         sc, out.get("contact_assertions"), p_name,
         report=lambda note: ctx.add_warning(f"player contact: {note}"),
+    )
+    out["state_assertions"] = validated_player_state_assertions(
+        sc, out.get("state_assertions"), p_name,
+        report=lambda note: ctx.add_warning(f"player state: {note}"),
     )
 
     fl = out.get("flow")
@@ -4011,6 +4019,13 @@ def director_resolve(ctx, nonce):
     # durable state is composed into the final diff below.
     resolve_sc = apply_contact_ops(
         json.loads(json.dumps(sc)), onset_contacts, _age=False)
+    # Same for everything else the player asserted: the resolving Director
+    # must see the body the reactors saw, or it re-resolves the beat against
+    # an outfit already off and a posture already changed when they decided.
+    onset_state = interp.get("state_assertions")
+    onset_state = onset_state if isinstance(onset_state, dict) else {}
+    resolve_sc = preview_player_state_assertions(
+        resolve_sc, onset_state, ctx, p_name)
     # Each declaring character's own heading, exactly as the player already
     # gets one in director_interpret. The room graph is undirected, so
     # "steps through the doorway" and "turns west" name a set of doorways
@@ -4564,6 +4579,11 @@ def director_resolve(ctx, nonce):
         resolve_sc, sd.get("substance_ops"), character_material_effects,
         report=lambda note: ctx.add_warning(f"character material: {note}"),
     )
+    if onset_state:
+        sd.update(merge_player_state_assertions(
+            onset_state, sd, p_name,
+            report=lambda note: ctx.add_warning(f"player state: {note}"),
+        ))
     out["state_diff"] = sd
     out["dice"] = dice if isinstance(dice, list) else []
 

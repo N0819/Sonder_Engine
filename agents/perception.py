@@ -817,6 +817,7 @@ def _observations_from_clean_views(clean_views):
 from . import composer
 
 from .common import (
+    preview_player_state_assertions,
     _action_already_rendered,
     _append_micro_view,
     _append_once,
@@ -2402,6 +2403,19 @@ def perception_act(ctx, nonce):
 
     p_rdata = (sc.get("rooms") or {}).get(p_room) if p_room else None
     p_name = pers.get("name") or persona_name(pers)
+    # WHAT THE PLAYER SAID HAPPENED, HAS HAPPENED -- here, before a single
+    # observer's view is built. Everything the player asserted about their own
+    # body reached the scene only through director_resolve, which runs AFTER
+    # every character has declared, so a player who took their own top off or
+    # went to their knees was perceived in the previous posture and previous
+    # outfit for the whole beat in which they changed both.
+    #
+    # Guarded by subject in `validated_player_state_assertions`, applied to a
+    # COPY, persisted by nobody here: commit still writes each channel exactly
+    # once, from resolve. It lands before `p_appearance` and before the
+    # composer reads `sc`, because those are how a body reaches a view at all.
+    sc = preview_player_state_assertions(
+        sc, interp.get("state_assertions"), ctx, p_name)
     p_appearance = _appearance_as_prose(appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc))
     # A physical disguise conceals the actor's real appearance from observers:
@@ -3611,8 +3625,19 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         state_percept = composer.body_state_percept(entity_state)
         if state_percept:
             percepts.append(state_percept)
+    # The identity floor rides the sensation clause at its source: the OTHER
+    # party is named through this observer's own display map — "you" is
+    # impossible here (contact_sensation picks the non-observer party), a
+    # recognized partner gets their name, a stranger the descriptor, and a
+    # spelling the map cannot place falls to "someone" rather than leaking
+    # the canonical name (the tripwire downstream remains the backstop).
+    # Before this, the clause named the partner canonically and the tripwire
+    # fired on every contact beat with an unrecognized partner (chat 70).
+    _sensation_label = (lambda other:
+                        display_map.get(str(other)) or "someone")
     percepts.extend(composer.contact_percepts([
-        (contact, contact_sensation(contact, you=name, scene=sc))
+        (contact, contact_sensation(contact, you=name, scene=sc,
+                                    label_for=_sensation_label))
         for contact in _standing_contacts_for(sc, name)
     ]))
     region_labels = {name: "you"}

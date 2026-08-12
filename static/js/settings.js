@@ -1595,27 +1595,43 @@ function embeddingBankBlock() {
       `Current model: ${data.model || "unknown"}`
       + (data.is_fallback ? " — the local fallback" : "")));
     if (data.is_fallback) {
-      // Say WHY. "No embeddings provider" is wrong and unhelpful when one is
-      // configured and simply is not an embeddings model — the most likely
-      // mistake, since the model picker lists every model a provider offers
-      // and a chat model looks like a perfectly good choice.
+      body.append(el("div", { class: "warn-note", style: "margin-top:4px" },
+        "No embeddings provider is set, so memories are matched by "
+        + "spelling rather than by meaning."));
+    } else if (data.live_unknown) {
+      // A provider IS configured and did not answer. Two very different
+      // reasons, and the provider's own sentence is what separates them —
+      // "Model X does not exist" is a chat model chosen for this role (the
+      // most likely mistake, since the picker lists every model a provider
+      // offers), while a 429 is a rate limit that will pass on its own.
       body.append(el("div", { class: "warn-note", style: "margin-top:4px" },
         data.fallback_reason
-          ? "The configured embeddings model was rejected: "
+          ? "The configured embeddings model did not answer: "
             + data.fallback_reason
-          : "No embeddings provider is set, so memories are matched by "
-            + "spelling rather than by meaning."));
-      if (data.fallback_reason) {
-        body.append(el("div", { style: "margin-top:3px" },
-          "This role needs a model that produces embeddings, not one that "
-          + "writes text — a chat model will be rejected. "
-          + "`openai/text-embedding-3-small` works on OpenRouter and NanoGPT."));
-      }
+          : "The configured embeddings model did not answer."));
+      body.append(el("div", { style: "margin-top:3px" },
+        "This role needs a model that produces embeddings, not one that "
+        + "writes text — a chat model will be rejected. "
+        + "`openai/text-embedding-3-small` works on OpenRouter and NanoGPT. "
+        + "A rate limit will clear on its own."));
     }
     body.append(el("div", { style: "margin-top:3px" },
-      `${total.toLocaleString()} stored, ${stranded.toLocaleString()} written by a `
-      + `different model.`));
+      data.live_unknown
+        ? `${total.toLocaleString()} stored.`
+        : `${total.toLocaleString()} stored, ${stranded.toLocaleString()} `
+          + `written by a different model.`));
 
+    if (data.live_unknown) {
+      // NOT "nothing to do". Which rows are stale is a comparison against the
+      // live model, and the live model is silent — so the honest report is
+      // that the question is unanswerable right now, not that the answer is
+      // zero. Saying "everything is searchable by meaning" here would be the
+      // same wrong claim as the old banner, pointed the other way.
+      body.append(el("div", { style: "margin-top:3px" },
+        "Whether anything needs rebuilding cannot be checked until the "
+        + "provider answers."));
+      return;
+    }
     if (!stranded) {
       body.append(el("div", { style: "margin-top:3px" },
         "Everything is searchable by meaning. Nothing to do."));
