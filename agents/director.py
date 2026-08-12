@@ -3772,7 +3772,13 @@ def _acquit_addressed_events(out, omissions, sc=None):
     return owed, acquitted, refused
 
 
-def _route_repair_omissions(omissions):
+#: Sentinel channel for a REROUTED omission: the hand that declined the
+#: event named the owner but not which of its channels fits -- only the
+#: owner knows that -- so it repairs with its full granted scope.
+_REROUTE_FULL_SCOPE = "*"
+
+
+def _route_repair_omissions(omissions, addressed=None):
     """Partition detected omissions by REPAIRER, for the orchestrated path.
 
     Returns (routed, core): `routed` maps specialist name -> [(channel,
@@ -3784,9 +3790,25 @@ def _route_repair_omissions(omissions):
     categories no specialist owns (time, transit, 'other').
     """
     routed, core = {}, []
+    index = addressed or {}
     for om in omissions:
         if om.get("source") == "player_claim":
             core.append(om)
+            continue
+        # A FORWARDING NOTE BEATS THE CATEGORY MAP. The hand that was given
+        # this event declined it AND named the hand it belongs to, in a
+        # structured field. Routing by category here would re-ask the hand
+        # that just said no -- measured live, where contact and objects both
+        # explained in prose that a posture change was not theirs while the
+        # category kept sending it back. The address is a PROPOSAL, checked
+        # against the roster before it is acted on: an unknown name, or a
+        # hand that already had this event, falls back to the category.
+        entry = index.get(om.get("event_id")) or index.get(
+            str(om.get("event_id")))
+        target = str((entry or {}).get("reroute_to") or "").strip()
+        if (target in SPECIALISTS and target != (entry or {}).get("owner")
+                and om.get("event_id")):
+            routed.setdefault(target, []).append((_REROUTE_FULL_SCOPE, om))
             continue
         channel = _CATEGORY_CHANNELS.get(
             _normalize_omission_category(om.get("category")))
@@ -3828,7 +3850,9 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
             continue
         spec = SPECIALISTS[name]
         omitted = {channel for channel, _om in entries}
-        scope = [ch for ch in spec["channels"] if ch in omitted]
+        scope = ([ch for ch in spec["channels"]]
+                 if _REROUTE_FULL_SCOPE in omitted
+                 else [ch for ch in spec["channels"] if ch in omitted])
         report = {"scope": scope, "ok": False}
         reports[name] = report
         payload = _specialist_payload(name, ctx, sc, view, extras)
@@ -4131,6 +4155,23 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         out, omissions, sc)
     if acquitted:
         recon["acquitted"] = acquitted
+    # Every forwarding note is a recorded vote that _CATEGORY_CHANNELS sent
+    # this event to the wrong hand. `overlays` and `vitals` were reachable
+    # by no category for a whole release and nobody noticed; a routing table
+    # that is corrected from data rather than guessed at is worth as much as
+    # the reroute itself.
+    _addressed = ((out.get("orchestration") or {}).get("events_addressed")
+                  or {})
+    _notes = [
+        {"event_id": eid, "declined_by": e.get("owner"),
+         "reroute_to": e.get("reroute_to"),
+         "category": next((str(m.get("category")) for m in manifest
+                           if m.get("event_id") == int(eid)), "")}
+        for eid, e in _addressed.items()
+        if isinstance(e, dict) and e.get("reroute_to")
+    ]
+    if _notes:
+        recon["reroutes"] = _notes
     # An `already_true` the standing scene provably cannot support is a
     # NAMED defect, never a silence: the omission stays owed (the repair
     # tier still sees the gap), and the ledger corruption itself -- the
@@ -4165,7 +4206,9 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         orch_repair = ctx.get("_orch_repair")
     if isinstance(orch_repair, dict) \
             and isinstance(orch_repair.get("view"), dict):
-        routed, core_omissions = _route_repair_omissions(omissions)
+        routed, core_omissions = _route_repair_omissions(
+            omissions,
+            (_orch_record or {}).get('events_addressed'))
         if routed and _specialist_repairs(
                 ctx, sc, sd, routed,
                 orch_repair["view"], orch_repair.get("extras") or {},
@@ -5409,8 +5452,15 @@ def _resolved_event_verdicts(result, granted_ids):
             continue
         status = str(entry.get("status") or "").strip().casefold()
         if event_id in granted and status in _EVENT_VERDICTS:
-            verdicts[event_id] = status
-    return [{"event_id": eid, "status": verdicts[eid]}
+            record = {"status": status}
+            # An address is only meaningful ON a decline, and only when it
+            # names a hand that exists. Anything else is dropped rather
+            # than carried into routing as a half-fact.
+            target = str(entry.get("reroute_to") or "").strip().casefold()
+            if status == "not_mine" and target in SPECIALISTS:
+                record["reroute_to"] = target
+            verdicts[event_id] = record
+    return [{"event_id": eid, **verdicts[eid]}
             for eid in sorted(verdicts)]
 
 
@@ -5428,7 +5478,9 @@ def _index_addressed_events(dispatch):
             continue
         for entry in (state.get("events_resolved") or []):
             index[int(entry["event_id"])] = {
-                "owner": name, "status": entry["status"]}
+                "owner": name, "status": entry["status"],
+                **({"reroute_to": entry["reroute_to"]}
+                   if entry.get("reroute_to") else {})}
     return index
 
 

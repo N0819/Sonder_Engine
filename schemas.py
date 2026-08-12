@@ -2109,6 +2109,15 @@ class ResolvedEvent(LenientModel):
     # already_true -- standing state carries it; no delta is correct
     # not_mine     -- it needs a channel I was not granted
     status: str = ""
+    # WITH `not_mine` ONLY: which hand this belongs to instead. The
+    # specialists already knew -- "no posture channel available", "this is a
+    # bodily action/pose change" -- and said it in free-text notes nothing
+    # read, while the repair tier re-asked the SAME hand that had just
+    # declined it, by category. An address turns a complaint into a
+    # forwarding note. It is a PROPOSAL: the engine decides whether to act
+    # on it, because who gets called is a cross-channel judgment and those
+    # stay with the deterministic orchestrator.
+    reroute_to: str = ""
 
 
 class DirectorBodySpecialist(LenientModel):

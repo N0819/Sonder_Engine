@@ -2689,3 +2689,103 @@ def test_the_sheet_tells_every_hand_a_body_is_not_a_thing_it_keeps():
     # The two facts that make the false blocker impossible to reach.
     assert "payload.player" in sheet and "payload.cast" in sheet
     assert "NOT a blocker" in sheet
+
+
+# ---------------------------------------------------------------------------
+# A forwarding note beats the category map.
+# ---------------------------------------------------------------------------
+
+def _pose_miscategorized_resolve():
+    """The live shape: a posture change filed under a category that routes
+    it to the body specialist, which owns no posture channel. Both contact
+    and objects said so in free-text notes nothing read, while the repair
+    tier kept re-asking by category."""
+    return {
+        "resolved_event": "Mara lifts her legs, knees parted.",
+        "summary": "Legs lifted.",
+        "changes_asserted": [
+            {"category": "conditions", "subject": "Mara",
+             "change": "legs lifted, knees parted"},
+        ],
+        "state_diff": {},
+    }
+
+
+def _body_declines_to(target):
+    return {"attire": {}, "conditions": {}, "vitals": {}, "overlays": {},
+            "notes": [], "resolved_events": [
+                {"event_id": 1, "status": "not_mine", "reroute_to": target}]}
+
+
+def test_a_declined_event_goes_to_the_hand_that_was_named(temp_db,
+                                                          monkeypatch):
+    """Routing by category re-asks the hand that just declined it. The
+    address is what turns a complaint into a forwarding note."""
+    _orch_on(temp_db)
+    calls = []
+    monkeypatch.setattr(
+        director, "_agent_json",
+        _fake_agent(calls, {
+            "director_resolve": _pose_miscategorized_resolve(),
+            "director_body": _body_declines_to("spatial"),
+            "resolve_repair": {"state_diff": {}, "dispositions": []},
+        }))
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    steps = _steps(calls)
+    # The named hand was asked; the declining hand was NOT asked twice.
+    assert steps.count("director_spatial") >= 1
+    assert steps.count("director_body") == 1
+    assert "resolve_repair" not in steps
+    # And the misroute is recorded, so the category map can be corrected
+    # from data rather than guessed at.
+    assert out["reconciliation"]["reroutes"] == [
+        {"event_id": 1, "declined_by": "body", "reroute_to": "spatial",
+         "category": "conditions"}]
+
+
+def test_an_address_naming_nobody_falls_back_to_the_category(temp_db,
+                                                             monkeypatch):
+    """The address is a PROPOSAL, checked against the roster. An unknown
+    hand is dropped rather than carried into routing as a half-fact."""
+    _orch_on(temp_db)
+    calls = []
+    monkeypatch.setattr(
+        director, "_agent_json",
+        _fake_agent(calls, {
+            "director_resolve": _pose_miscategorized_resolve(),
+            "director_body": _body_declines_to("the vibes department"),
+            "resolve_repair": {"state_diff": {}, "dispositions": []},
+        }))
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+    assert not (out["reconciliation"].get("reroutes") or [])
+    # Category routing stands: conditions is the body specialist's own.
+    assert _steps(calls).count("director_body") == 2
+
+
+def test_an_address_on_anything_but_a_decline_is_ignored(temp_db):
+    """Only a decline forwards. An `encoded` verdict carrying an address is
+    a model contradicting itself, and the engine keeps the encoding."""
+    result = {"resolved_events": [
+        {"event_id": 1, "status": "encoded", "reroute_to": "spatial"}]}
+    assert director._resolved_event_verdicts(result, [1]) == [
+        {"event_id": 1, "status": "encoded"}]
+
+
+def test_a_specialist_cannot_forward_to_itself(temp_db, monkeypatch):
+    """Otherwise the note is a loop with extra steps."""
+    _orch_on(temp_db)
+    calls = []
+    monkeypatch.setattr(
+        director, "_agent_json",
+        _fake_agent(calls, {
+            "director_resolve": _pose_miscategorized_resolve(),
+            "director_body": _body_declines_to("body"),
+            "resolve_repair": {"state_diff": {}, "dispositions": []},
+        }))
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    director.director_resolve(ctx, nonce=0)
+    # Falls back to category routing rather than forwarding to itself.
+    assert _steps(calls).count("director_body") == 2

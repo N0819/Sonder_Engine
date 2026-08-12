@@ -154,6 +154,44 @@ interiority accounts for an empty manifest there — that case is exactly what
 the tripwire exists for, and the ledger is recorded beside it rather than
 excusing it.
 
+## Forwarding notes (added same day)
+
+`not_mine` said an event was not this hand's; it did not say whose. So the
+repair tier routed by category — and the category map is exactly what had
+misrouted the event in the first place, which meant re-asking the hand that
+had just declined it. Live, both the contact and objects specialists
+explained in free-text notes that a posture change belonged elsewhere
+(*"no posture channel available"*, *"this is a bodily action/pose change"*),
+and nothing read either one.
+
+A verdict of `not_mine` may now carry `reroute_to`, naming the hand. Each
+sheet lists the six hands and what each keeps, in plain language rather than
+channel names.
+
+**It is a proposal, not a call.** The specialist names a hand and stops; it
+never invokes another and never encodes on another's behalf. The engine
+checks the address against the roster and acts on it, because who gets
+called is a cross-channel judgment and those stay with the deterministic
+orchestrator. Four things that buys, each of which we hit the hard way
+today:
+
+- a cap in code is a cap; a cap in a prompt is a suggestion
+- two hands forwarding one event to a third would author two records of one
+  change — the five-records-for-two-garments bug, rebuilt
+- reroll determinism: engine-side routing replays identically
+- an address naming nobody, naming the sender, or riding a verdict other
+  than a decline is dropped rather than carried as a half-fact
+
+The reroute needs no new round: it reuses the repair tier, which already
+does the scoped call, the additive merge and the fail-open. Only *who* it
+asks changes — and because those events bought a repair call anyway, the
+fix is cheaper than what it replaces.
+
+Every forwarding note is recorded in `recon.reroutes` with the category that
+misrouted it. `overlays` and `vitals` were reachable by no category at all
+for a whole release and nobody noticed; a routing table corrected from data
+is worth as much as the reroute itself.
+
 ## Residuals
 
 Two of the original three are closed; the record of how is part of the design.
