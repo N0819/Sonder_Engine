@@ -379,6 +379,33 @@ def _coalesce_reset():
         {"callers": 0, "groups": 0, "texts_in": 0, "texts_sent": 0})
 
 
+def _wait_until(predicate, what, timeout=20.0):
+    """Block until a coalescing state is reached, or say what was waited for.
+
+    These tests set up a race deliberately -- a leader in flight, followers
+    queueing behind it -- and the setup used unbounded `while not cond:` spins.
+    That is fine alone and flaky under a loaded full suite: if the followers
+    are slow to enqueue, the leader's own barrier expires first, the grouping
+    the test asserts never forms, and the failure reads as a coalescing defect
+    rather than as scheduling.
+
+    It is not a defect. A caller that arrives after the leader has gone simply
+    forms its own group, which is correct behaviour and the whole point of the
+    queue being time-ordered. So the fix belongs here: wait with a deadline
+    generous enough that load cannot change the ANSWER, and fail with a
+    sentence naming the state that never arrived.
+    """
+    import time as _time
+    deadline = _time.monotonic() + timeout
+    while not predicate():
+        if _time.monotonic() > deadline:
+            raise AssertionError(
+                f"timed out after {timeout:g}s waiting for {what}; "
+                f"queue={len(providers._COALESCE_QUEUE)} "
+                f"inflight={providers._COALESCE_INFLIGHT}")
+        _time.sleep(0.001)
+
+
 def test_a_solo_caller_is_not_delayed_or_batched(monkeypatch):
     """Under no contention this must be the old behaviour exactly."""
     _pace_reset(); _coalesce_reset()
@@ -404,7 +431,7 @@ def test_callers_arriving_during_a_flight_share_the_next_request(monkeypatch):
     def fake(texts, config):
         served.append(list(texts))
         if len(served) == 1:
-            released.wait(5)
+            released.wait(30)
         import numpy as np
         return providers.EmbeddingBatch(
             vectors=[np.full(4, float(hash(t) % 97), dtype=np.float32) for t in texts],
@@ -415,17 +442,16 @@ def test_callers_arriving_during_a_flight_share_the_next_request(monkeypatch):
     leader = threading.Thread(target=lambda: results.update(
         {"lead": providers.embed_texts_meta(["lead"])}))
     leader.start()
-    while not providers._COALESCE_INFLIGHT:
-        time.sleep(0.001)
+    _wait_until(lambda: providers._COALESCE_INFLIGHT, "the leader to go in flight")
     followers = []
     for name in ("b", "c", "d"):
         t = threading.Thread(target=lambda n=name: results.update(
             {n: providers.embed_texts_meta([n])}))
         t.start(); followers.append(t)
-    while len(providers._COALESCE_QUEUE) < 3:
-        time.sleep(0.001)
+    _wait_until(lambda: len(providers._COALESCE_QUEUE) >= 3,
+                "three followers to queue behind it")
     released.set()
-    leader.join(5); [t.join(5) for t in followers]
+    leader.join(30); [t.join(30) for t in followers]
 
     assert served == [["lead"], ["b", "c", "d"]], served
     assert providers._EMBED_STATS["groups"] == 2
