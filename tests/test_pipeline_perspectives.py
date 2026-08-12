@@ -197,18 +197,15 @@ class TestConcurrencyIsVisible:
         assert '"group": members' in src
         assert "parallel_with=" in src
 
-    def test_all_pairings_go_through_the_one_helper(self):
-        """Character siblings, mapping beside action-onset perception,
+    def test_all_three_pairings_go_through_the_one_helper(self):
+        """Character siblings, mapping beside action-onset perception, and
         narrator beside narrator_extra were three copies of the same body —
         which is why making concurrency visible had to mean editing it three
-        times. The reflection pairing (reflection_loop beside the narrator,
-        design note 23) is the proof the consolidation held: a fourth
-        pairing arrived as one more call to the same helper, not a fourth
-        copy of the body."""
+        times."""
         from agents import runtime
 
         src = inspect.getsource(runtime._run_pipeline)
-        assert src.count("_run_parallel_group(") == 4
+        assert src.count("_run_parallel_group(") == 3
         assert "_stream_parallel(bus, jobs, holders)" not in src
 
     def test_the_live_log_marks_a_group(self):
