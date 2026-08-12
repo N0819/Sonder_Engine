@@ -1958,6 +1958,12 @@ class AssertedChange(LenientModel):
     # rooms|adjacency|positions|entities|conditions|attire|contact|substance|inventory|
     # cast_changes|time|transit|other
     category: str = "other"
+    # Assigned by the engine in _manifest_items, never by the model: 1..N in
+    # the order the resolve narrated the changes, which is the beat's own
+    # chronology. Carried into each specialist's manifest slice and echoed
+    # back on its resolved_events, so composition is an id lookup rather
+    # than a comparison of two spellings of the same change (design note 21).
+    event_id: int = 0
     subject: str = ""         # room id / entity id / character name concerned
     change: str = ""          # one short sentence stating the persistent change
     # Contact manifests need the relation's endpoints, not merely one person.
@@ -2028,6 +2034,33 @@ class DirectorResolve(LenientModel):
     orchestration: dict[str, Any] = Field(default_factory=dict)
 
 
+class ResolvedEvent(LenientModel):
+    """One specialist's verdict on ONE numbered beat event (design note 21).
+
+    The manifest a specialist receives is numbered in the order the resolve
+    narrated it, and the specialist echoes each id back with what it did.
+    That echo is what makes coverage a LOOKUP instead of a text comparison:
+    before it existed, an event was matched to its encoding by comparing
+    free-text subject wording, and every measured reconciliation failure was
+    that comparison going wrong in a new way -- a manifest naming the
+    garment against a diff keyed on the wearer, "prior hand-to-stomach
+    contact" against the contact_ops that ended exactly that relation.
+
+    The echo is EVIDENCE, never authority. `encoded` is still checked
+    against the merged diff by _evidence_present, because model output is
+    provisional until deterministic code validates it. What the echo buys
+    is knowing an event was ASKED ABOUT by the mind that owns it, which is
+    what makes a second LLM call pointless -- the measured waste was asking
+    a specialist to repair a change it had already correctly declined to
+    re-encode.
+    """
+    event_id: int = 0
+    # encoded      -- I put this in my channels this beat
+    # already_true -- standing state carries it; no delta is correct
+    # not_mine     -- it needs a channel I was not granted
+    status: str = ""
+
+
 class DirectorBodySpecialist(LenientModel):
     """The body specialist's whole output: the four state_diff channels it
     owns under the orchestrated Director (design note 19), in exactly the
@@ -2041,6 +2074,9 @@ class DirectorBodySpecialist(LenientModel):
     vitals: dict[str, Optional[dict]] = Field(default_factory=dict)
     overlays: dict[str, list] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
+    # The numbered manifest slice this call was handed, echoed back
+    # with a verdict per event (schemas.ResolvedEvent).
+    resolved_events: list[ResolvedEvent] = Field(default_factory=list)
 
     _coerce_list_maps = validator("overlays", "conditions", pre=True,
                                   allow_reuse=True)(
@@ -2057,6 +2093,9 @@ class DirectorSocialSpecialist(LenientModel):
     introductions: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+    # The numbered manifest slice this call was handed, echoed back
+    # with a verdict per event (schemas.ResolvedEvent).
+    resolved_events: list[ResolvedEvent] = Field(default_factory=list)
 
 
 class DirectorContactSpecialist(LenientModel):
@@ -2067,6 +2106,9 @@ class DirectorContactSpecialist(LenientModel):
     containment: dict[str, Optional[dict]] = Field(default_factory=dict)
     scales: dict[str, float] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
+    # The numbered manifest slice this call was handed, echoed back
+    # with a verdict per event (schemas.ResolvedEvent).
+    resolved_events: list[ResolvedEvent] = Field(default_factory=list)
 
 
 class DirectorObjectsSpecialist(LenientModel):
@@ -2078,6 +2120,9 @@ class DirectorObjectsSpecialist(LenientModel):
     artifact_ops: list[ArtifactOp] = Field(default_factory=list)
     destruction: Optional[dict] = None
     notes: list[str] = Field(default_factory=list)
+    # The numbered manifest slice this call was handed, echoed back
+    # with a verdict per event (schemas.ResolvedEvent).
+    resolved_events: list[ResolvedEvent] = Field(default_factory=list)
 
 
 class DirectorSpatialSpecialist(LenientModel):
@@ -2092,6 +2137,9 @@ class DirectorSpatialSpecialist(LenientModel):
     stations: dict[str, dict] = Field(default_factory=dict)
     poses: dict[str, dict] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
+    # The numbered manifest slice this call was handed, echoed back
+    # with a verdict per event (schemas.ResolvedEvent).
+    resolved_events: list[ResolvedEvent] = Field(default_factory=list)
 
     _coerce_stations = validator("stations", pre=True, allow_reuse=True)(
         lambda cls, v: _coerce_station_table(v)
@@ -2111,6 +2159,9 @@ class DirectorOffscreenSpecialist(LenientModel):
     ratified_claims: list[str] = Field(default_factory=list)
     contradicted_claims: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+    # The numbered manifest slice this call was handed, echoed back
+    # with a verdict per event (schemas.ResolvedEvent).
+    resolved_events: list[ResolvedEvent] = Field(default_factory=list)
 
 # ---- Resolve reconciliation (agents/director.py's post-resolve seam) ----
 

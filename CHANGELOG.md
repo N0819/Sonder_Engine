@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+**The beat's changes are numbered, and the numbers round-trip** (design note
+21). The resolve lists `changes_asserted` in the order the changes happened;
+the engine — never the model — numbers them 1..N; each specialist's manifest
+slice carries the ids and each specialist returns `resolved_events:
+[{event_id, status}]` for exactly the ids it was handed. Composition then
+reads ids instead of comparing two spellings of the same change, which is what
+every measured reconciliation failure had been: a manifest naming the garment
+against a diff keyed on the wearer, a subject naming the relation against the
+`contact_ops` that ended it. An event its owner answered (`encoded` or
+`already_true`) is settled and buys no second LLM call; an event nobody
+addressed still buys its repair. Detection is untouched, the echo is evidence
+rather than authority — `encoded` is still checked against the merged diff —
+and three guards keep the acquittal honest: a verdict on an id the specialist
+was not handed is discarded, a failed specialist acquits nothing, and
+`not_mine` reports a gap rather than closing one. The ids also carry the
+beat's chronology across channels, which nothing did before. The monolithic
+path is unchanged and pinned by test.
+
 The 8.2 measurement was earned on fresh stories; a real beat played twice
 (chat 71 turn 10) showed what a fresh story never dispatches: resolve 14.2s
 → 105.5s under orchestration, commit 45.8s, turn ~216s. Three fixes, one per
