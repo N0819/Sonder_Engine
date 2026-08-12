@@ -1,29 +1,5 @@
 # Changelog
 
-## Unreleased (character-cognition branch)
-
-- **A mind now reflects on what happened, not on what it meant to do.** The
-  character loops run before the Director resolves, so every memory, belief
-  update, mind-model update and relationship change was authored from
-  intent — before the mind knew whether its act landed or how anyone
-  answered — and nothing ever re-asked it. Behind `character_reflection`
-  (default off, byte-identical): CONDUCT keeps deciding pre-resolve on a
-  sheet shed of the writing law, and REFLECTION — a new step beside the
-  narrator, off the critical path — reads that mind's own scrubbed outcome
-  view and authors what it keeps. The engine computes the expectation gap
-  (code grades predictions; the model's own surprise introspection measured
-  0.65 novelty mid-plateau and 0.15 at an actual climax) and the gap is the
-  occasion the dead mechanisms never had: ponder (0 emissions in 3,083
-  stored results — every instruction clause a brake, no schema slot, no
-  invitation) becomes a typed reflection field with its existing next-turn
-  delivery untouched, and disputes are asked for at the moment later
-  evidence actually exists. New alongside: `choice_review` (regret and
-  vindication toward one's own choice, persisted and carried into the next
-  decision) and `held_beliefs` (refusing to revise becomes a recorded act
-  instead of silence). Sheets: monolith 16.4k tokens → conduct 15.6k +
-  reflection 2.0k; conduct output sheds a measured 12%. Design note 23.
-
-
 ## Unreleased
 
 - **Saturation finally costs something.** A surface mood that reached the

@@ -30,7 +30,7 @@ from scene import (
 )
 
 from .background import background_react
-from .character import character_step, reflection_loop
+from .character import character_step
 from .common import _assert_plan_materialized, _dict
 from .director import director_establish, director_interpret, director_resolve
 from .loops import interaction_loop, reaction_loop
@@ -174,7 +174,6 @@ def begin_pipeline(chat_id, frame_id=None):
 STEP_HANDLERS = {
     "interaction_loop": interaction_loop,
     "reaction_loop": reaction_loop,
-    "reflection_loop": reflection_loop,
     "director_establish": director_establish,
     "director_interpret": director_interpret,
     "mapping_stage": mapping_stage,
@@ -542,18 +541,8 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
         # beat) -- only then does background_react spend an LLM call.
         (_BG_KEY, _background_stage_label(chat_id)),
         ("perception_outcome", "Perception · pass 2 — the outcome"),
+        ("narrator", "Narrator · render"),
     ]
-    # The post-outcome reflection stage (design note 23): what each mind
-    # KEEPS from the resolved beat, written from its own scrubbed outcome
-    # view. Planned only when the split is on (default off -- the shipped
-    # single-call stage, byte-identical); self-gating like background_react
-    # (a beat where no character ran reflects nobody, zero LLM calls); and
-    # paired with the narrator below, so its wall-clock cost is what it
-    # exceeds the narrator by.
-    from prompts import character_reflection_enabled
-    if character_reflection_enabled():
-        plan.append(("reflection_loop", "Characters · reflection"))
-    plan.append(("narrator", "Narrator · render"))
     # Prefer pre-loaded extra_players (already on ctx from _load_extra_players
     # during pipeline setup) to avoid a redundant DB query every turn. Fall
     # back to _chat_has_extra_players only when caller has no ctx yet
@@ -660,19 +649,6 @@ def _rehydrate_loop_results(ctx, key, content):
         target, results_field, id_field = ctx.character_results, "character_results", "speaker_id"
     elif key == "reaction_loop":
         target, results_field, id_field = ctx.reaction_results, "reaction_results", "reactor_id"
-    elif key == "reflection_loop":
-        # Same defect class as the two loops above: commit reads
-        # ctx.reflection_results directly, and plain `ctx[key] = content`
-        # hydration would leave it empty on a resumed/reroll-commit turn --
-        # silently recommitting the beat's cognition from conduct alone.
-        for cid_str, result in (content.get("reflections") or {}).items():
-            try:
-                cid = int(cid_str)
-            except (TypeError, ValueError):
-                continue
-            if isinstance(result, dict):
-                ctx.reflection_results.setdefault(cid, result)
-        return
     else:
         return
     results = content.get(results_field)
@@ -981,24 +957,6 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             yield from _run_parallel_group(
                 bus, turn_id, [(key, label), plan[i + 1]], keys, ctx)
             i += 2
-            continue
-        if key == "reflection_loop" and i + 1 < len(plan) \
-                and plan[i + 1][0] == "narrator":
-            # Reflection and narration are independent by construction:
-            # the narrator renders the player-facing slice from
-            # perception_outcome and prior committed rows and never reads a
-            # reflection; reflection reads each mind's own outcome view and
-            # conduct and never reads narration. Overlapping them is what
-            # keeps the reflection stage off the player's critical path --
-            # its cost is only what it exceeds the narrator by. Same
-            # independent-work pattern as the two pairings below.
-            group = [(key, label), plan[i + 1]]
-            j = i + 2
-            if j < len(plan) and plan[j][0] == "narrator_extra":
-                group.append(plan[j])
-                j += 1
-            yield from _run_parallel_group(bus, turn_id, group, keys, ctx)
-            i = j
             continue
         if (
             key == "narrator"

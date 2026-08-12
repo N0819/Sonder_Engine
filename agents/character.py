@@ -41,8 +41,7 @@ from memory import (
     provenance_context_label,
     relationships_for_payload,
 )
-from prompts import (character_conduct_prompt, character_reflection_enabled,
-                     get_prompt)
+from prompts import get_prompt
 from scene import (
     NON_AWAKE_GATED,
     all_cast_name_to_id,
@@ -53,14 +52,13 @@ from scene import (
     private_knowledge_for,
     sheet_state,
 )
-from schemas import CHARACTER_REFLECTION_FIELDS, validate_llm_output
+from schemas import validate_llm_output
 from spatial import (contact_phrase, contacts_of, corridor_sightlines, room_of,
                      spatial_digest, speech_articulation_impediment,
                      sprint_reach, visible_adjacent_rooms)
 from survival import vitals_of
 from place_purpose import (affords_here, felt_needs, here_affords,
                            place_options)
-from providers import Aborted, generation_event_sink, token_sink
 from psychology_runtime import cognitive_absorption
 from theory_of_mind import mind_models_for_payload, sheet_capacity
 
@@ -2344,300 +2342,6 @@ def sprint_offers(scene, room_id, stored_state, destination=None):
     return out
 
 
-# ---- Reflection: the post-outcome half of a mind (design note 23) ----------
-#
-# The pipeline runs the character loops BEFORE director_resolve, so a mind
-# used to write its memory of a beat -- remember_lines, belief_updates,
-# mind_model_updates, relationship_updates, memory_effects -- from its
-# PRE-RESOLUTION view: from what it meant to do, before it knew whether the
-# act landed or how anyone answered. perception_outcome then handed every
-# mind a scrubbed view of the resolved beat and nothing ever re-asked it.
-# Reflection is that re-ask: CONDUCT (perceive, appraise, weigh, decide,
-# act) stays where it was, and what a mind KEEPS from a beat moves to the
-# moment that has the outcome. Human memory consolidates at outcome, with
-# salience from the outcome; theory of mind iterates on how the other
-# actually answered; agency attribution stops being a guess.
-#
-# The firewall is the same one conduct lives under, applied to a later
-# moment: a reflection call reads that character's OWN scrubbed
-# perception_outcome view and observations, its OWN declared conduct, its
-# OWN ledgers as conduct already received them, and nothing else -- never
-# the Director's resolution, never another mind's view or reflection.
-
-#: One definition, in schemas (imported by commit too): the fields whose
-#: authorship moves to reflection. Everything else -- appraisal, affect,
-#: wants, sequence, interaction -- stays conduct's.
-REFLECTION_FIELDS = CHARACTER_REFLECTION_FIELDS
-
-
-def _expected_texts(result):
-    """What this mind declared it expected, at conduct time."""
-    texts = []
-    appraisal = result.get("appraisal") if isinstance(result, dict) else None
-    if isinstance(appraisal, dict):
-        expectation = str(appraisal.get("expectation") or "").strip()
-        if expectation:
-            texts.append(expectation)
-    for candidate in (result.get("response_candidates") or []
-                      if isinstance(result, dict) else []):
-        if isinstance(candidate, dict) and candidate.get("selected"):
-            expected = str(candidate.get("expected_outcome") or "").strip()
-            if expected:
-                texts.append(expected)
-    return texts
-
-
-_GAP_PRONOUNS = frozenset({
-    "i", "me", "my", "mine", "myself", "you", "your", "yours", "yourself",
-    "she", "her", "hers", "herself", "he", "him", "his", "himself", "they",
-    "them", "their", "theirs", "it", "its", "we", "us", "our",
-})
-
-
-def _gap_tokens(text):
-    """Content tokens for the expectation comparison, inflection-blunted.
-
-    An expectation is written in a mind's own first person and future tense
-    ("she will pull away from me"); the outcome view arrives in second
-    person and present tense ("She pulls away from you"). Raw token overlap
-    reads that pair as two-thirds divergent, so pronouns are dropped (the
-    two texts systematically disagree about them) and a crude suffix stem
-    folds inflection. Deliberately cruder than a stemmer: over-stemming
-    can only make texts look MORE alike, and the signal's conservative
-    direction is toward "matched" -- a false surprise invites spurious
-    belief-checking, a false match merely leaves things as they were.
-    """
-    from theory_of_mind import _STOPWORDS
-    tokens = set()
-    for word in re.findall(r"[a-z']+", str(text or "").casefold()):
-        word = word.strip("'")
-        if not word or word in _STOPWORDS or word in _GAP_PRONOUNS:
-            continue
-        for suffix in ("ing", "edly", "ed", "es", "s"):
-            if word.endswith(suffix) and len(word) - len(suffix) >= 3:
-                word = word[:-len(suffix)]
-                break
-        tokens.add(word)
-    return tokens
-
-
-def expectation_gap(result, outcome_text):
-    """The ENGINE's comparison of declared expectation against perceived
-    outcome -- the prediction-error signal, computed by code.
-
-    The model's own surprise introspection is measurably unreliable
-    (self-reported novelty ran 0.65 across a twelve-beat plateau and 0.15
-    at the actual climax), and the Assistant repo's rule is the right one:
-    a prediction a model grades itself against is not a prediction. So the
-    grading happens outside the thing being graded: stemmed-content
-    containment of each declared expectation in the outcome view -- an
-    expectation whose content words all appear in the outcome scores as
-    matched, whatever the person or tense.
-
-    Returned as a MEASURE with the compared texts beside it, never a
-    verdict: phrasing alone can diverge, so the reflection sheet tells the
-    mind to judge the gap against the texts. None when the mind declared
-    no expectation -- absence of a prediction is not a surprise.
-    """
-    outcome = str(outcome_text or "").strip()
-    texts = _expected_texts(result)
-    if not texts or not outcome:
-        return None
-    outcome_tokens = _gap_tokens(outcome)
-    best = 0.0
-    for text in texts:
-        expected_tokens = _gap_tokens(text)
-        if not expected_tokens:
-            continue
-        best = max(best,
-                   len(expected_tokens & outcome_tokens)
-                   / len(expected_tokens))
-    return {
-        "score": round(max(0.0, min(1.0, 1.0 - best)), 3),
-        "expected": texts[:2],
-        "note": ("engine-computed textual divergence between what you "
-                 "declared you expected and what you then perceived; "
-                 "0 matched, 1 diverged. Judge it against the texts -- "
-                 "wording alone can diverge."),
-    }
-
-
-def _compact_recall(memory_context):
-    """The delivered memory rows, reduced to what a citation needs."""
-    rows = []
-    if not isinstance(memory_context, dict):
-        return rows
-    for field in ("recent_episodes", "recent_received_information",
-                  "recent_conclusions", "recalled_old_memories"):
-        for row in memory_context.get(field) or []:
-            if not isinstance(row, dict):
-                continue
-            ref = str(row.get("memory_ref") or "").strip()
-            if not ref:
-                continue
-            text = str(row.get("gist") or row.get("summary")
-                       or row.get("content") or "")[:200]
-            entry = {"memory_ref": ref, "gist": text}
-            when = row.get("when")
-            if when:
-                entry["when"] = when
-            rows.append(entry)
-    return rows[:24]
-
-
-def reflection_step(ctx, cid, nonce):
-    """One mind's reflection on one resolved beat.
-
-    Skips (returning a small record saying why) rather than fabricating:
-    no conduct result means the mind never ran this beat; no outcome view
-    means the resolved beat never legitimately reached it.
-    """
-    conduct = ctx.character_results.get(cid)
-    if not isinstance(conduct, dict):
-        return {"skipped": "no conduct result this beat", "char_id": cid}
-    outcome = ctx.perception_outcome or {}
-    view = (outcome.get("views") or {}).get(str(cid))
-    if not str(view or "").strip():
-        return {"skipped": "no outcome view reached this mind",
-                "char_id": cid}
-    observations = (outcome.get("observations") or {}).get(str(cid)) or []
-    stash = ctx.get(f"_reflection_stash:{cid}") or {}
-
-    slim_sequence = []
-    for element in (conduct.get("sequence") or []):
-        if not isinstance(element, dict):
-            continue
-        slim = {"type": element.get("type")}
-        for key in ("text", "attempt", "volume"):
-            if element.get(key):
-                slim[key] = element[key]
-        slim_sequence.append(slim)
-    candidates = [
-        {key: candidate.get(key)
-         for key in ("response", "selected", "expected_outcome", "serves")
-         if candidate.get(key) is not None}
-        for candidate in (conduct.get("response_candidates") or [])
-        if isinstance(candidate, dict)
-    ]
-    gap = expectation_gap(conduct, view)
-
-    payload = {
-        "outcome": {"view": view, "observations": observations},
-        "conduct": {
-            "sequence": slim_sequence,
-            "candidates": candidates,
-            "expectation": str(
-                (conduct.get("appraisal") or {}).get("expectation") or ""),
-            "speech": conduct.get("speech"),
-        },
-        "self": {
-            "name": stash.get("name") or conduct.get("name") or "",
-            "active_hypotheses": stash.get("active_hypotheses") or [],
-            "learned_beliefs": stash.get("learned_beliefs") or [],
-            "relationships": stash.get("relationships") or {},
-            "mind_models": stash.get("mind_models") or {},
-        },
-        "memory": {"recalled": _compact_recall(stash.get("memory_context"))},
-        **({"reflection": {"expectation_gap": gap}} if gap else {}),
-        "variant_seed": nonce,
-    }
-
-    out = _agent_json(
-        stash.get("role") or "character_mid",
-        "character_reflection",
-        get_prompt("character_reflection").replace(
-            "{name}", payload["self"]["name"] or "the character"),
-        payload,
-        temperature=0.3,
-    )
-    out, warnings = validate_llm_output("character_reflection", out)
-    ctx.warnings.extend(warnings)
-    # The same evidence floor conduct's updates lived under, pointed at the
-    # OUTCOME observations: a reflection may only cite what reached it.
-    for _warning in _ground_observation_citations(
-            out, observations, stash.get("memory_context"),
-            stash.get("memory_internal")):
-        ctx.add_warning(
-            f"reflection {payload['self']['name']}: {_warning}")
-    out["mind_model_updates"] = cap_mind_model_updates(
-        out.get("mind_model_updates") or [],
-        absorption=float(stash.get("absorption") or 0.0))
-    if gap:
-        out["expectation_gap"] = gap
-    out["name"] = payload["self"]["name"]
-    out["char_id"] = cid
-    return out
-
-
-def reflection_loop(ctx, nonce):
-    """The reflection stage: every mind that acted this beat, in parallel.
-
-    One pipeline step (no new step key per character), running AFTER
-    perception_outcome and beside the narrator -- nothing between it and
-    commit reads it, so its wall-clock cost is what it exceeds the
-    narrator by, usually nothing. Inner fan-out copies the parent context
-    PER JOB, in the parent (the narration.py rule: pool workers inherit no
-    contextvars, and a copy made in the worker is a copy of nothing).
-    """
-    import contextvars as _contextvars
-    from concurrent.futures import ThreadPoolExecutor as _Pool
-
-    eligible = [
-        int(cid) for cid in ctx.character_results
-        if isinstance(ctx.character_results.get(cid), dict)
-        and not ctx.character_results[cid].get("skipped")
-    ]
-    results, skipped = {}, {}
-    jobs = []
-    for cid in eligible:
-        def _run(cid=cid):
-            token_sink.set(None)
-            generation_event_sink.set(None)
-            return reflection_step(ctx, cid, nonce)
-        jobs.append((cid, _run))
-    if len(jobs) == 1:
-        cid, run = jobs[0]
-        try:
-            results[cid] = _contextvars.copy_context().run(run)
-        except Aborted:
-            raise
-        except Exception as exc:
-            skipped[cid] = str(exc)
-            ctx.add_warning(f"reflection failed for character {cid}; the "
-                            f"beat stands on conduct alone: {exc}")
-    elif jobs:
-        with _Pool(max_workers=len(jobs)) as pool:
-            futures = [
-                (cid, pool.submit(_contextvars.copy_context().run, run))
-                for cid, run in jobs
-            ]
-        aborted = None
-        for cid, future in futures:
-            try:
-                results[cid] = future.result()
-            except Aborted as exc:
-                aborted = exc
-            except Exception as exc:
-                skipped[cid] = str(exc)
-                ctx.add_warning(
-                    f"reflection failed for character {cid}; the beat "
-                    f"stands on conduct alone: {exc}")
-        if aborted is not None:
-            raise aborted
-    for cid, result in results.items():
-        if isinstance(result, dict) and result.get("skipped"):
-            skipped[cid] = result["skipped"]
-    ctx.reflection_results = {
-        cid: result for cid, result in results.items()
-        if isinstance(result, dict) and not result.get("skipped")
-    }
-    return {
-        "reflections": {str(cid): result
-                        for cid, result in ctx.reflection_results.items()},
-        "skipped": {str(cid): why for cid, why in skipped.items()},
-    }
-
-
 def character_step(ctx, cid, nonce):
     chat = ctx.chat
     row = next((c for c in ctx.cast if c["id"] == cid), None)
@@ -3239,14 +2943,6 @@ def character_step(ctx, cid, nonce):
         # the epistemic status. mind_models above is the full ledger; this is
         # what is actually in mind, and its size shrinks with absorption.
         "active_hypotheses": active_hypotheses,
-        # How this mind judged its own LAST choice, written by its previous
-        # reflection and persisted on cstate -- regret and vindication carry
-        # forward as self-knowledge. Key absent when no review exists, so
-        # the payload shape (and the provider prefix cache) is unchanged
-        # for every story without the split.
-        **({"last_choice_review": stored_state["last_choice_review"]}
-           if isinstance(stored_state.get("last_choice_review"), dict)
-           else {}),
         "known_pronouns": _known_pronouns(
             ctx.cast, persona_of(chat),
             set(relationships) | set(mind_models),
@@ -3339,10 +3035,7 @@ def character_step(ctx, cid, nonce):
     role = {"bg": "character_bg", "mid": "character_mid",
             "major": "character_major"}.get(character_tier(sh), "character_mid")
 
-    # The conduct sheet: the monolith byte-for-byte with the split off, the
-    # same segments minus the reflection law with it on (design note 23).
-    _cprompt = character_conduct_prompt().replace(
-        "{name}", character_name(sh))
+    _cprompt = get_prompt("character").replace("{name}", character_name(sh))
     if _carried_reports:
         _cprompt += (
             "\n\nCARRIED REPORTS: carried_reports contains what you know about "
@@ -3608,20 +3301,4 @@ def character_step(ctx, cid, nonce):
         "repeat_survived": (_repeat_survived
                             or bool(_prior_probe.get("repeat_survived"))),
     }
-    if character_reflection_enabled():
-        # What the reflection call will need of THIS mind's conduct-time
-        # knowledge, kept in memory for the same turn only -- the exact
-        # objects conduct computed, so reflection reasons from what the
-        # mind actually had, never a recomputation that could drift.
-        ctx[f"_reflection_stash:{cid}"] = {
-            "name": character_name(sh),
-            "role": role,
-            "memory_context": memory_context,
-            "memory_internal": memory_internal,
-            "active_hypotheses": active_hypotheses,
-            "learned_beliefs": (_interior.get("beliefs") or []),
-            "relationships": relationships,
-            "mind_models": mind_models,
-            "absorption": absorption,
-        }
     return out
