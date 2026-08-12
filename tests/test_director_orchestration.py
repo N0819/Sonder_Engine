@@ -616,9 +616,16 @@ def test_orchestrated_path_emits_the_same_detector_signals(temp_db,
     mono = _manifest_omissions(out_mono)
     orch = _manifest_omissions(out_orch)
     assert mono and orch and mono == orch
-    # Both paths escalated to the same bounded self-repair.
+    # Both paths escalated to a bounded repair -- but to DIFFERENT
+    # repairers, which is the ownership model applied to repair (measured
+    # on chat 71 turn 10: the full-core repair call was the single largest
+    # avoidable spend of a 105.5s orchestrated resolve). The monolith
+    # re-asks the Director; the orchestrated path re-asks the channel's
+    # OWNER, so the body specialist is called twice (fan-out + repair) and
+    # the full-core repair sheet is never loaded.
     assert "resolve_repair" in _steps(calls_mono)
-    assert "resolve_repair" in _steps(calls_orch)
+    assert "resolve_repair" not in _steps(calls_orch)
+    assert _steps(calls_orch).count("director_body") == 2
     # And both left the same unresolved warning trail.
     assert any("Resolve reconciliation" in w and "wool coat" in w
                for w in ctx_mono.warnings)
@@ -1639,3 +1646,304 @@ class TestTheHostCanFindTheSwitch:
                      "director_objects", "director_spatial",
                      "director_offscreen"):
             assert name in roles, f"{name} has no settings row"
+
+
+# ---------------------------------------------------------------------------
+# Reconciliation repair goes to the CHANNEL'S OWNER, not the prose author.
+# ---------------------------------------------------------------------------
+#
+# The defect (chat 71 turn 10, measured live): an orchestrated resolve took
+# 105.5s against the monolith's 14.2s on the same beat, and the single
+# avoidable spend was the reconciliation seam's Tier-2 repair -- an EXTRA
+# SEQUENTIAL call that re-ran the PROSE AUTHOR on the director role with the
+# full-core repair sheet, to re-encode a change the body specialist owned.
+# It then still shipped "state_diff still does not encode it after
+# self-repair" warnings. Under orchestration the wrong repairer was being
+# asked: the specialist that owns the omitted channel answers in ~1s with a
+# 1-4k sheet, and is the authority the channel already belongs to. Detection
+# is unchanged (the changes_asserted seam stays the one reconciliation
+# mechanism); only the REPAIRER changes, and only on the orchestrated path.
+
+def test_routed_repair_is_answered_by_the_owning_specialist(temp_db,
+                                                            monkeypatch):
+    """An attire omission on the orchestrated path is repaired by the body
+    specialist -- called a second time, scoped to the omitted channel, with
+    the omission and what currently stands in its payload -- and the
+    full-core resolve_repair sheet is never loaded."""
+    _orch_on(temp_db)
+    calls = []
+
+    def body(payload):
+        if "correction_notes" in payload:
+            # The repair call: scoped payload carries the detection verbatim
+            # and the standing channel content; answer the omission.
+            assert payload["detected_omissions"] == [
+                {"category": "attire", "subject": "Mara",
+                 "change": "The wool coat is off.", "evidence": "",
+                 "source": "manifest"}]
+            assert "previous_channels" in payload
+            assert payload["resolved_event"]      # the beat, same view
+            assert "relevant_lore" not in payload  # same entitlement slice
+            return {"attire": {"Mara": {"remove": ["wool coat"]}},
+                    "conditions": {}, "vitals": {}, "overlays": {},
+                    "notes": []}
+        # The fan-out call: the specialist misses the change.
+        return {"attire": {}, "conditions": {}, "vitals": {},
+                "overlays": {}, "notes": []}
+
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_resolve": _asserting_resolve_output(),
+        "director_body": body,
+    }))
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    steps = _steps(calls)
+    assert "resolve_repair" not in steps
+    assert steps.count("director_body") == 2
+    # The repair call ran under the specialist's OWN role, so its spend
+    # stays separable in _log_usage exactly like the fan-out call's.
+    repair_call = [c for c in calls if c["step_key"] == "director_body"][-1]
+    assert repair_call["role"] == "director_body"
+    # And the repair sheet is the specialist's scoped sheet, not the core.
+    assert "CLOTHING TRACKING" in repair_call["system"]
+    assert "BODILY CONDITION" not in repair_call["system"]
+
+    assert out["state_diff"]["attire"]["Mara"]["remove"] == ["wool coat"]
+    recon = out["reconciliation"]
+    assert recon["repaired"] is True
+    assert recon["specialist_repairs"]["body"]["ok"] is True
+    assert recon["unresolved"] == []
+    assert not [w for w in ctx.warnings
+                if "still does not encode" in w]
+
+
+def test_unroutable_omissions_still_reach_the_full_core_repair(temp_db,
+                                                               monkeypatch):
+    """Player claims have no owning specialist -- their coverage check is
+    whole-diff and they are non-rejectable -- so on a beat carrying BOTH an
+    attire omission and an unencoded player claim, the attire goes to the
+    body specialist and the full-core repair is asked about the claim
+    alone. Only the repairer is split; nothing is dropped."""
+    _orch_on(temp_db)
+    calls = []
+    resolve_out = _asserting_resolve_output()
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_resolve": resolve_out,
+        "director_body": lambda payload: (
+            {"attire": {"Mara": {"remove": ["wool coat"]}},
+             "conditions": {}, "vitals": {}, "overlays": {}, "notes": []}
+            if "correction_notes" in payload else
+            {"attire": {}, "conditions": {}, "vitals": {},
+             "overlays": {}, "notes": []}),
+        "resolve_repair": {"state_diff": {}, "dispositions": []},
+    }))
+    interp = _action_interp()
+    interp["flow"]["authority_claims"] = [{
+        "claim_id": "claim:0:effect:0", "scope": "effect",
+        "subject_id": "keeper_lamp", "predicate": "extinguished",
+        "commitment": "asserted", "source_text": "I snuff the lamp.",
+    }]
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
+    scene["entities"] = {"keeper_lamp": {"name": "Keeper's Lamp",
+                                         "kind": "fixture"}}
+    ctx = _make_ctx(temp_db, scene=scene, interp=interp)
+    out = director.director_resolve(ctx, nonce=0)
+
+    steps = _steps(calls)
+    assert steps.count("director_body") == 2
+    assert steps.count("resolve_repair") == 1
+    core_call = [c for c in calls if c["step_key"] == "resolve_repair"][0]
+    detected = core_call["payload"]["detected_omissions"]
+    # The core repair sees ONLY what no specialist owns.
+    assert {o["source"] for o in detected} == {"player_claim"}
+    assert core_call["payload"]["non_rejectable_subjects"] == ["keeper_lamp"]
+    # The routed half was still repaired by its owner.
+    assert out["state_diff"]["attire"]["Mara"]["remove"] == ["wool coat"]
+    # The claim the core repair failed to encode still hard-warns.
+    assert any("PLAYER AUTHORITY" in w and "not encoded" in w
+               for w in ctx.warnings)
+
+
+def test_failed_specialist_repair_stops_and_reports_the_residual(
+        temp_db, monkeypatch):
+    """A repair that cannot succeed must stop: the owning specialist gets
+    ONE repair call, a failure is fail-open (warned, beat kept), and the
+    still-unencoded omission lands in the reconciliation record's
+    unresolved list -- the existing manifest channel -- instead of buying
+    another attempt."""
+    _orch_on(temp_db)
+    calls = []
+
+    def body(payload):
+        if "correction_notes" in payload:
+            raise RuntimeError("provider 500")
+        return {"attire": {}, "conditions": {}, "vitals": {},
+                "overlays": {}, "notes": []}
+
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_resolve": _asserting_resolve_output(),
+        "director_body": body,
+    }))
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    steps = _steps(calls)
+    assert steps.count("director_body") == 2      # fan-out + ONE repair
+    assert "resolve_repair" not in steps          # no escalation spend
+    recon = out["reconciliation"]
+    assert recon["specialist_repairs"]["body"]["ok"] is False
+    assert "provider 500" in recon["specialist_repairs"]["body"]["error"]
+    assert any(o["subject"] == "Mara" for o in recon["unresolved"])
+    assert any("specialist repair failed" in w for w in ctx.warnings)
+    assert any("Resolve reconciliation" in w and "wool coat" in w
+               for w in ctx.warnings)
+
+
+def test_monolithic_repair_path_is_untouched(temp_db, monkeypatch):
+    """With orchestration off, the same omission buys exactly the one
+    full-core repair call it always did -- no specialist is consulted,
+    because on the monolithic path none exists."""
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_resolve": _asserting_resolve_output(),
+        "resolve_repair": {
+            "state_diff": {"attire": {"Mara": {"remove": ["wool coat"]}}},
+            "dispositions": [{"subject": "Mara", "status": "encoded",
+                              "reason": ""}],
+        },
+    }))
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    steps = _steps(calls)
+    assert steps == ["director_resolve", "resolve_repair"]
+    assert out["state_diff"]["attire"]["Mara"]["remove"] == ["wool coat"]
+    assert out["reconciliation"]["repaired"] is True
+    assert "specialist_repairs" not in out["reconciliation"]
+
+
+def test_category_channel_map_reads_normalized_categories():
+    """_manifest_items normalizes categories ('contact' -> 'contacts',
+    'substance' -> 'substances', 'pose' -> 'poses') and every reader of
+    _CATEGORY_CHANNELS looks up the normalized form -- but for two releases
+    the map carried only the raw spellings, so a manifest entry asserting a
+    contact, substance or pose change could never reach the scope backstop
+    or its owning specialist, silently."""
+    for raw, channel in (("contact", "contact_ops"),
+                         ("substance", "substance_ops"),
+                         ("pose", "poses"),
+                         ("station", "stations"),
+                         ("inventory_ops", "inventory_ops"),
+                         ("clothing", "attire")):
+        normalized = director._normalize_omission_category(raw)
+        assert director._CATEGORY_CHANNELS.get(normalized) == channel, raw
+    # And every channel the map names has an owner in the specialist table.
+    for channel in set(director._CATEGORY_CHANNELS.values()):
+        assert channel in director._CHANNEL_SPECIALISTS, channel
+
+
+def test_a_specialist_encoded_beat_buys_no_repair_and_no_warning(
+        temp_db, monkeypatch):
+    """Chat 71 turn 2354 end to end (reroll v26625's real shapes): the body
+    and contact specialists encode exactly what the manifest asserts -- the
+    jacket removed (wearer-keyed), the hand off the stomach and onto the
+    waist -- while the manifest words its subjects freely ('lightweight
+    travel jacket', 'contact_end', 'contact_new'). On the live server the
+    evidence classes could not see any of it: three false omissions, a
+    Tier-2 repair spent answering 'already_encoded', the answer lost to an
+    exact-subject disposition match, and three false 'objective state may be
+    stale' warnings -- three rerolls running. A beat the specialists encoded
+    correctly must reconcile deterministically: no repair call of any kind,
+    no reconciliation warnings."""
+    _orch_on(temp_db)
+    calls = []
+    responses = {
+        "director_resolve": {
+            "resolved_event": (
+                "Elyra slides the lightweight travel jacket from Hinami's "
+                "remaining shoulder and lets it fall to the velvet; her "
+                "hand lifts from Hinami's stomach and her fingers hook "
+                "beneath the utility sash at her waist."),
+            "summary": "Jacket off; hand moves from stomach to sash.",
+            "dialogue_log": [],
+            "changes_asserted": [
+                {"category": "attire", "subject": "lightweight travel jacket",
+                 "change": "fully removed from Hinami's remaining shoulder; "
+                           "falls onto the velvet platform beside her",
+                 "actor": "Elyra Voss", "actor_part": "hand",
+                 "target": "lightweight travel jacket"},
+                {"category": "contacts", "subject": "contact_end",
+                 "change": "Elyra's hand lifts from Hinami's stomach",
+                 "actor": "Elyra Voss", "actor_part": "hand",
+                 "target": "Hinami", "target_part": "stomach"},
+                {"category": "contacts", "subject": "contact_new",
+                 "change": "Elyra's fingers hook beneath Hinami's utility "
+                           "sash at her waist",
+                 "actor": "Elyra Voss", "actor_part": "hand",
+                 "target": "Hinami", "target_part": "waist"},
+            ],
+            "state_diff": {},
+        },
+        "director_body": {
+            "attire": {"Hinami": {"add": [],
+                                  "remove": ["lightweight travel jacket"]}},
+            "conditions": {}, "vitals": {}, "overlays": {}, "notes": [],
+        },
+        "director_contact": {
+            "contact_ops": [
+                {"op": "remove", "actor": "Elyra Voss",
+                 "actor_part": "hand", "target": "Hinami",
+                 "target_part": "stomach"},
+                {"op": "add", "actor": "Elyra Voss", "actor_part": "hand",
+                 "target": "Hinami", "target_interior": "",
+                 "target_part": "waist", "manner": "grip",
+                 "relation": "surface", "motion": "settled",
+                 "detail": "fingers hooked beneath utility sash"},
+            ],
+            "substance_ops": [], "containment": {}, "scales": {},
+            "notes": [],
+        },
+    }
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["positions"]["Hinami"] = "keeper_room"
+    scene["positions"]["Elyra Voss"] = "keeper_room"
+    scene["attire"] = {"Hinami": {"wearing": ["lightweight travel jacket"]}}
+    scene["contacts"] = [{"actor": "Elyra Voss", "actor_part": "hand",
+                          "target": "Hinami", "target_part": "stomach"}]
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls, responses))
+
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    # The encodings assembled (this half never failed live, and the
+    # channels_filled record now SAYS so -- 'replaced' counts author
+    # content that lost to ownership, which a compliant lean author never
+    # produces, so [] there is health, not absence).
+    assert out["state_diff"]["attire"]["Hinami"]["remove"] == [
+        "lightweight travel jacket"]
+    assert {op["op"] for op in out["state_diff"]["contact_ops"]} == {
+        "remove", "add"}
+    body = out["orchestration"]["specialists"]["body"]
+    assert body["channels_filled"] == ["attire"]
+    assert "contact_ops" in \
+        out["orchestration"]["specialists"]["contact"]["channels_filled"]
+
+    # And the checker SAW them: no omissions, no repair of either kind,
+    # no reconciliation warnings.
+    assert out["reconciliation"]["omissions"] == []
+    steps = _steps(calls)
+    assert "resolve_repair" not in steps
+    assert steps.count("director_body") == 1
+    assert steps.count("director_contact") == 1
+    assert not [w for w in ctx.warnings
+                if "reconciliation" in w.casefold()
+                or "still does not encode" in w]

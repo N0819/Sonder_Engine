@@ -1,5 +1,51 @@
 # Changelog
 
+## Unreleased
+
+The 8.2 measurement was earned on fresh stories; a real beat played twice
+(chat 71 turn 10) showed what a fresh story never dispatches: resolve 14.2s
+→ 105.5s under orchestration, commit 45.8s, turn ~216s. Three fixes, one per
+cause:
+
+- **Reconciliation repair goes to the channel's owner.** On the orchestrated
+  path, an omission the `changes_asserted` seam detects in a delegated
+  channel is repaired by that channel's owning specialist — one scoped ~1s
+  call with the beat view and its own 1–4k sheet — instead of re-running the
+  prose author with the full-core repair sheet. One shot per owner, residual
+  reported through the existing unresolved/warning channel, never retried to
+  exhaustion. Player claims and undelegated categories keep the full-core
+  repair; the monolithic path is byte-identical. Fixed beside it:
+  `_CATEGORY_CHANNELS` never matched normalized contact/substance/pose
+  categories, and a repair delta's `stations` were silently dropped.
+- **Consolidation is off the turn's wall clock.** The first autobiographical
+  consolidation of a live chat was measured at 29.5s of a 45.8s commit — a
+  background summarisation job inside the player's wait, on the `utility`
+  role, which silently resolved to `default`. It now runs out-of-band beside
+  the offscreen ticks (deduped, abandonable, silent on failure, cancelled by
+  checkpoint restore), and `utility` inherits the `mapping` model before
+  falling to `default`, matching the guidance the settings panel has always
+  given.
+- **The reconciliation checker can now see a correct encoding.** On the
+  live beat, the specialists' encodings were all assembled and all right —
+  and the deterministic evidence classes reported 5 of 11 manifest items as
+  omissions anyway, because each class required the manifest's free-text
+  `subject` to name one particular kind of thing (the wearer for attire, a
+  participant for contacts) while the model words subjects freely. Every
+  false omission bought a repair call and a false "objective state may be
+  stale" warning. The attire class now reads garment handles, structured
+  manifest endpoints bypass the contacts subject gate, a `cross` op covers
+  the endpoint it ends, a within-room drop is covered by its station, and a
+  repair's "already encoded" verdict survives a descriptive subject. Each
+  specialist's record also carries `channels_filled`, the field whose
+  absence let `channels_replaced: []` be read — twice — as "the specialists
+  produced nothing."
+- **The next slow turn explains itself.** Every provider call a step pays
+  for — role, requested and served model, tokens in/out/cached, duration,
+  transport — is now persisted on the step's saved variant under
+  `_engine_notes.llm_calls` and rendered in the pipeline drawer, so per-call
+  timing survives the process instead of dying in stderr. Streaming,
+  blocking and embeddings paths all report.
+
 ## alpha 8.2 — The Director works in parts
 
 The Director was the engine's single most complex task and its most failure

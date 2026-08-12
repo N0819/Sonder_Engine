@@ -12,12 +12,12 @@
 | `agents/character.py` | 3277 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6066 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1475 |  | `agents.common`, `spatial` |
-| `agents/director.py` | 6438 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
+| `agents/director.py` | 6693 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/loops.py` | 1038 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 1012 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/perception.py` | 4234 | Opening, action-onset, and outcome observer views. | `affect`, `agents`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
-| `agents/runtime.py` | 1021 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
+| `agents/runtime.py` | 1038 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 115 | Step and active-variant persistence helpers. | `db` |
 | `ambience.py` | 2082 |  | `backdrops`, `db`, `outofband`, `weather` |
 | `app.py` | 4850 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `ambience`, `attire`, `auth_routes`, `backdrops`, `character_schema`, `chat_archive`, `checkpoints`, `commit`, `db`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `survival`, `updates` |
@@ -31,9 +31,9 @@
 | `carriers.py` | 696 |  | `character_schema`, `crowds`, `db`, `degradation`, `living_world`, `scene`, `spatial` |
 | `character_schema.py` | 1554 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `attire`, `schemas` |
 | `chat_archive.py` | 1110 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
-| `checkpoints.py` | 1132 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
+| `checkpoints.py` | 1145 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 7103 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 7194 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `couriers.py` | 1090 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
 | `db.py` | 1657 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
@@ -53,12 +53,12 @@
 | `offscreen.py` | 2158 |  | `logging_utils` |
 | `outofband.py` | 276 |  | `logging_utils` |
 | `paradox.py` | 489 |  | `character_schema`, `db`, `frames` |
-| `pipeline_context.py` | 277 | Typed mutable context passed through a turn pipeline. | `db` |
+| `pipeline_context.py` | 308 | Typed mutable context passed through a turn pipeline. | `db` |
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
 | `prompts.py` | 5349 | Default system prompts and prompt preset access. | `db` |
-| `providers.py` | 2672 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
+| `providers.py` | 2754 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1436 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
@@ -143,12 +143,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 4979 | 1305 lines |
+| `director_resolve()` | 5229 | 1310 lines |
 | `director_interpret()` | 771 | 476 lines |
-| `_reconcile_resolution()` | 3417 | 322 lines |
+| `_reconcile_resolution()` | 3588 | 369 lines |
+| `_evidence_present()` | 3042 | 232 lines |
 | `_reconcile_near_group_positions()` | 2353 | 201 lines |
-| `_evidence_present()` | 3035 | 179 lines |
-| `_run_specialists()` | 4753 | 134 lines |
+| `_run_specialists()` | 4993 | 144 lines |
 | `_reconcile_interpretation()` | 1404 | 119 lines |
 | `_validated_player_contact_assertions()` | 152 | 116 lines |
 
@@ -204,14 +204,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_run_pipeline()` | 663 | 305 lines |
-| `build_plan()` | 462 | 81 lines |
-| `resume_key_for_turn()` | 407 | 54 lines |
-| `run_pipeline()` | 969 | 53 lines |
-| `_load_extra_players()` | 43 | 52 lines |
-| `_stream_one()` | 261 | 48 lines |
-| `_stream_parallel()` | 310 | 45 lines |
-| `_rehydrate_loop_results()` | 615 | 41 lines |
+| `_run_pipeline()` | 680 | 305 lines |
+| `build_plan()` | 479 | 81 lines |
+| `resume_key_for_turn()` | 424 | 54 lines |
+| `run_pipeline()` | 986 | 53 lines |
+| `_load_extra_players()` | 45 | 52 lines |
+| `_stream_one()` | 278 | 48 lines |
+| `_stream_parallel()` | 327 | 45 lines |
+| `_rehydrate_loop_results()` | 632 | 41 lines |
 
 ### `agents/storage.py`
 
@@ -374,13 +374,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `snapshot_state()` | 15 | 169 lines |
-| `_restore_checkpoint_body()` | 546 | 141 lines |
-| `compact_checkpoints()` | 796 | 118 lines |
-| `insert_world_tables()` | 364 | 105 lines |
+| `_restore_checkpoint_body()` | 559 | 141 lines |
+| `compact_checkpoints()` | 809 | 118 lines |
+| `insert_world_tables()` | 377 | 105 lines |
 | `_restore_books()` | 185 | 104 lines |
-| `ensure_checkpoint()` | 980 | 53 lines |
-| `propagate_memory_summaries_to_checkpoints()` | 1035 | 53 lines |
-| `_verify_no_loss()` | 744 | 50 lines |
+| `ensure_checkpoint()` | 993 | 53 lines |
+| `propagate_memory_summaries_to_checkpoints()` | 1048 | 53 lines |
+| `_verify_no_loss()` | 757 | 50 lines |
 
 ### `comfort.py`
 
@@ -404,7 +404,7 @@
 | `commit_world_entities()` | 2897 | 283 lines |
 | `apply_attire_diff()` | 1724 | 249 lines |
 | `track_background_presences()` | 3697 | 231 lines |
-| `_commit_all_locked()` | 6856 | 189 lines |
+| `_commit_all_locked()` | 6941 | 195 lines |
 | `commit_transit_sweep()` | 2489 | 169 lines |
 | `_prepare_destruction()` | 700 | 158 lines |
 
@@ -686,14 +686,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 1715 | 216 lines |
-| `async chat_complete_async()` | 1932 | 88 lines |
-| `chat_complete()` | 1512 | 84 lines |
-| `async _chat_complete_async_once()` | 2021 | 84 lines |
-| `_sse_openai()` | 1386 | 77 lines |
-| `async _sse_openai_async()` | 2106 | 62 lines |
-| `resolve_role_candidates()` | 1225 | 54 lines |
-| `list_models()` | 2254 | 51 lines |
+| `_chat_complete_once()` | 1776 | 216 lines |
+| `async chat_complete_async()` | 1993 | 88 lines |
+| `chat_complete()` | 1544 | 84 lines |
+| `async _chat_complete_async_once()` | 2082 | 84 lines |
+| `_sse_openai()` | 1416 | 78 lines |
+| `async _sse_openai_async()` | 2167 | 63 lines |
+| `_embed_request()` | 2484 | 58 lines |
+| `resolve_role_candidates()` | 1255 | 54 lines |
 
 ### `psychology_runtime.py`
 
@@ -1090,9 +1090,9 @@ Sections: Scene backdrops (`:2`).
 
 Declared functions: `backdropLayers()`, `backdropLuminance()`, `applyBackdropContrast()`, `releaseBackdropLayer()`, `clearBackdrop()`, `showBackdrop()`, `backdropWorking()`, `awaitBackdrop()`, `generateBackdrop()`, `backdropForTurn()`, `backdropOnVisibleTurn()`, `backdropResetForRender()`, `updateBackdropBtn()`, `toggleBackdrops()`, `syncBackdrops()`.
 
-### `static/js/chat.js` (2387 lines)
+### `static/js/chat.js` (2400 lines)
 
-Sections: The turn being read (`:1`); Flipping between rerolls of the newest beat (`:642`); Pipeline drawer: reading a step through a lens (`:940`); Pipeline drawer (`:1133`); Relationship viewer (`:1469`); Memory browser (`:1541`); Private history (`:2329`).
+Sections: The turn being read (`:1`); Flipping between rerolls of the newest beat (`:642`); Pipeline drawer: reading a step through a lens (`:940`); Pipeline drawer (`:1146`); Relationship viewer (`:1482`); Memory browser (`:1554`); Private history (`:2342`).
 
 Declared functions: `observeVisibleTurn()`, `openChat()`, `renderFrameBar()`, `switchFrame()`, `updateChatScopedButtons()`, `renderChat()`, `branchTurn()`, `editTurnInput()`, `editTurnProse()`, `liveReset()`, `friendlyPhase()`, `turnStatusStart()`, `turnStatusSet()`, `turnStatusStop()`, `_streamOn()`, `liveFlush()`, `liveAppend()`, `liveStep()`, `handleEvt()`, `showNarrationEarly()`, `clearNarrationEarly()`, `_mountRerollNav()`, `_paintRerollCount()`, `showRerollVariant()`, `abortActiveRun()`, `runStream()`, `confirmCheckpointRestore()`, `runReroll()`, `rerollTurn()`, `exportChat()`, `importChatModal()`, `perceiverViews()`, `loopMindIds()`, `stepLenses()`, `perceiverLabel()`, `facetBadge()`, `lensLabel()`, `renderLensBar()`, `lensSlice()`, `perceiverSlice()`, `mindSlice()`, `keySlice()`, `renderEngineNotes()`, `openPipeline()`, `relMeter()`, `relationshipModal()`, `memModal()`, `exportCharacterMemories()`, `importCharacterMemoriesModal()`, `memQS()`, `memCharId()`, `loadMemoryBrowse()`, `getMemUI()`, `renderMemorySummary()`, `sortedMems()`, `renderMemoryList()`, `memoryCard()`, `fieldWrap()`, `reloadMemView()`, `runMemorySearch()`, `showNewMemoryForm()`, `checkMemoryCoverage()`, `backfillMemoryEras()`, `consolidateMemories()`, `previewMemoryContext()`, `chatPH()`, `personaPH()`.
 

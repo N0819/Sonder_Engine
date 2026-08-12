@@ -525,7 +525,7 @@ Domains 5 and 6 run deliberately after the scene/entity/cast writes so they
 inspect this turn's projected world, while staying inside the same rollback
 boundary.
 
-A failure in any domain aborts immediately and rolls back all earlier writes from that turn. Two things run *after* the primary transaction, both because they may call an LLM and neither can corrupt a committed fact: character autobiographical consolidation (a reconstructible derived cache) and autonomous background-to-cast promotion (additive and forward-only — the new character becomes step-eligible next turn). A failure in either is a warning.
+A failure in any domain aborts immediately and rolls back all earlier writes from that turn. Two things run *after* the primary transaction, both because they may call an LLM and neither can corrupt a committed fact: character autobiographical consolidation (a reconstructible derived cache) and autonomous background-to-cast promotion (additive and forward-only — the new character becomes step-eligible next turn). A failure in either is a warning. Consolidation is additionally OUT OF BAND (`commit.schedule_memory_consolidation` → `jobs.py`, beside the offscreen ticks): measured live, the first consolidation of a chat spent 29.5s of a 45.8s commit stage on one `utility`-role LLM call inside the player's wait. The job is deduped per chat, abandonable between characters, silent-per-character on failure, and cooperatively cancelled by `restore_checkpoint` so a rolled-back turn does not land a summary computed from rows that no longer exist.
 
 ## Streaming
 

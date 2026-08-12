@@ -291,6 +291,19 @@ def restore_checkpoint(chat_id, idx):
     r = q("SELECT * FROM checkpoints WHERE chat_id=? AND turn_idx=?", (chat_id, idx), one=True)
     if not r:
         return
+    # Consolidation moved out of band (commit.schedule_memory_consolidation),
+    # so an in-flight job can now overlap a restore -- and a summary computed
+    # from rows this restore is about to roll back must not land afterward.
+    # Cooperative and NARROW: only the consolidation job is asked to stop.
+    # The offscreen ticks beside it are deliberately left running (a turn
+    # starting must never cancel them -- see commit.py's tail), and their
+    # writes are provisional at landing, which consolidation's are not.
+    try:
+        import jobs
+        from commit import MEMORY_CONSOLIDATION_JOB_KEY
+        jobs.cancel(chat_id, MEMORY_CONSOLIDATION_JOB_KEY)
+    except Exception:
+        pass
     # Checkpoint blobs store fully-resolved storage keys already (see
     # snapshot_state, which dumps the `world` table's own key column
     # verbatim, suffix and all). Restoring them through wget/wset while

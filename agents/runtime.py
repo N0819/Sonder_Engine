@@ -17,7 +17,9 @@ from pipeline_context import (
     ChatData, PipelineContext, TurnData, current_step_key,
     current_warning_sink,
 )
-from providers import Aborted, cancel_event, generation_event_sink, token_sink
+from providers import (
+    Aborted, call_ledger_sink, cancel_event, generation_event_sink, token_sink,
+)
 from scene import (
     NON_AWAKE_GATED,
     active_cast,
@@ -223,6 +225,12 @@ def compute_step(key, ctx, nonce):
     # StepTaggedWarnings documents), and a missing add_warning must mean "no
     # notes", never a failed step.
     sink = current_warning_sink.set(getattr(ctx, "add_warning", None))
+    # The per-call ledger rides the same funnel again: providers._log_usage
+    # reports every finished call here, the context stamps it with the step
+    # key, and _with_engine_notes persists the step's slice on the saved
+    # variant. Same getattr tolerance as the warning sink -- a stand-in
+    # context without the method must mean "no ledger", never a failed step.
+    ledger = call_ledger_sink.set(getattr(ctx, "note_llm_call", None))
     try:
         if key.startswith("character:"):
             return character_step(ctx, int(key.split(":", 1)[1]), nonce)
@@ -232,6 +240,7 @@ def compute_step(key, ctx, nonce):
             raise RuntimeError("unknown step " + key)
         return handler(ctx, nonce)
     finally:
+        call_ledger_sink.reset(ledger)
         current_warning_sink.reset(sink)
         current_step_key.reset(token)
 
@@ -248,6 +257,14 @@ def _with_engine_notes(content, ctx, key, parallel_with=()):
         notes["warnings"] = warnings
     if parallel_with:
         notes["parallel_with"] = list(parallel_with)
+    # The step's own provider calls, durably: {step_key, role, requested,
+    # served, in, out, cached, duration, kind} per call. Diagnostic metadata
+    # only (no content), like everything else under ENGINE_NOTES_KEY -- and
+    # stripped by active_content on rehydration like everything else there.
+    calls = (ctx.llm_calls_for_step(key)
+             if hasattr(ctx, "llm_calls_for_step") else [])
+    if calls:
+        notes["llm_calls"] = calls
     if not notes:
         # Absent rather than empty: a step with nothing to report should not
         # grow a key, so an unchanged pipeline produces byte-identical content.

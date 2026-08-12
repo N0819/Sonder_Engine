@@ -302,8 +302,11 @@ concurrently, which `steps.ord` cannot express, so a simultaneous pair reads as
 two sequential steps that happened to be quick. The pipeline drawer therefore
 reads a per-perceiver step one mind at a time (named, with that mind's derived
 observations beside its prose, raw JSON one click away), and every step carries
-an `_engine_notes` record of what the deterministic layer repaired in it and
-which steps it ran beside.
+an `_engine_notes` record of what the deterministic layer repaired in it, which
+steps it ran beside, and — `llm_calls` — every provider call the step paid for
+({step_key, role, requested, served, in, out, cached, duration, kind}), so a
+slow stage explains itself from the stored variant instead of from a stderr
+line that died with the process.
 
 ### Ownership
 

@@ -37,6 +37,23 @@ generation_event_sink = contextvars.ContextVar(
 )
 cancel_event = contextvars.ContextVar("cancel_event", default=None)
 
+# Where one finished provider call's ledger entry should land: a callable
+# taking one dict ({role, requested, served, in, out, cached, duration,
+# kind}), or None outside a pipeline step. `agents.runtime.compute_step`
+# points it at the running PipelineContext (the same funnel that sets
+# `current_step_key`), which stamps the step and keeps the entries for
+# `_with_engine_notes` to persist on the step's saved variant.
+#
+# This exists because per-call timing used to live only in stderr
+# (`_log_usage` -> log_llm_call) and died with the process: three separate
+# slow-stage investigations on 2026-08-11/12 each started from a wrong guess
+# ("it was embeddings", "it was corpus size", "the server is stale") because
+# the only durable record of a turn was stage-total timestamps. A ContextVar
+# for the same reason `last_reasoning` is one: the pipeline fans out across
+# thread pools with contextvars.copy_context(), and a plain global would
+# file one stage's calls under another.
+call_ledger_sink = contextvars.ContextVar("call_ledger_sink", default=None)
+
 # The last reasoning block a thinking model returned, per context. For such a
 # model this is the actual decision trace -- the structured output is only its
 # conclusion -- and it was being dropped at the response boundary, so the one
@@ -1219,6 +1236,19 @@ ROLE_FALLBACKS = {
     "director_objects": "director",
     "director_spatial": "director",
     "director_offscreen": "director",
+    # Utility is the background helper lane: memory-consolidation summaries,
+    # artifact wording, offscreen tick prose, importer fills -- mechanical
+    # work the player never reads directly. Falling through to "default"
+    # meant every host who left it unset ran that lane on whatever model
+    # they chose for the hardest work in the engine; measured live, the
+    # first autobiographical consolidation spent 27.4s of one commit on a
+    # ~57 tok/s default. "mapping" is the role the settings guidance has
+    # always paired it with ("smaller/cheaper for mapping and utility"), so
+    # an unset utility inherits the fast mechanical model the host already
+    # picked -- and only then falls to default, exactly like the
+    # specialists above. The role string handed to _log_usage stays
+    # "utility" either way.
+    "utility": "mapping",
 }
 
 
@@ -1454,7 +1484,8 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
                 text += d
                 sink(d)
     if role:
-        _log_usage(role, model, t0, usage, served=served)
+        _log_usage(role, model, t0, usage, served=served,
+                   kind="stream")
     try:
         last_reasoning.set(reasoning or None)
     except Exception:
@@ -1506,7 +1537,8 @@ def _sse_anthropic(base, headers, body, sink, role=None, model=None):
                     text += d
                     sink(d)
     if role:
-        _log_usage(role, model, t0, usage, served=served)
+        _log_usage(role, model, t0, usage, served=served,
+                   kind="stream")
     return text
 
 def chat_complete(
@@ -1687,7 +1719,7 @@ def _note_served_model(role, requested, served):
         "about %s, not %s", role, requested, served, served, requested)
 
 
-def _log_usage(role, model, t0, usage, served=None):
+def _log_usage(role, model, t0, usage, served=None, kind="chat"):
     """Make caching observable. Without reading `usage` back there is no way to
     confirm that a role's static system prompt -- repeated byte-for-byte on
     every call for that role -- is actually being served from cache instead of
@@ -1696,10 +1728,25 @@ def _log_usage(role, model, t0, usage, served=None):
     `served` is the model the PROVIDER says answered, which is not always the
     one that was asked for -- see `_note_served_model`. It is logged as the
     model of record so a metrics line describes the call that happened.
+
+    Besides the stderr line, every call is offered to `call_ledger_sink` so a
+    pipeline step can persist its own per-call ledger (see the ContextVar's
+    comment). `kind` says which transport carried it ('chat' | 'stream');
+    embeddings report through their own batch path with kind 'embedding'.
     """
     from logging_utils import log_llm_call
     counts = _normalize_usage(usage)
     _note_served_model(role, model, served)
+    record_llm_call({
+        "role": role,
+        "requested": model,
+        "served": str(served or "").strip() or model,
+        "in": counts["input"],
+        "out": counts["output"],
+        "cached": counts["cache_read"],
+        "duration": round(time.time() - t0, 3),
+        "kind": kind,
+    })
     try:
         log_llm_call(
             role, str(served or "").strip() or model,
@@ -1709,6 +1756,20 @@ def _log_usage(role, model, t0, usage, served=None):
             cache_write_tokens=counts["cache_write"],
             duration=time.time() - t0,
         )
+    except Exception:
+        pass
+
+
+def record_llm_call(entry):
+    """Hand one finished provider call to the context's ledger sink, if any.
+
+    A diagnostic must never fail the call it is describing, so every failure
+    -- a sink that raises, a sink that is not callable -- is swallowed."""
+    sink = call_ledger_sink.get()
+    if sink is None:
+        return
+    try:
+        sink(dict(entry))
     except Exception:
         pass
 
@@ -2159,7 +2220,8 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
                 if sink:
                     sink(d)
     if role:
-        _log_usage(role, model, t0, usage, served=served)
+        _log_usage(role, model, t0, usage, served=served,
+                   kind="stream")
     try:
         last_reasoning.set(reasoning or None)
     except Exception:
@@ -2209,7 +2271,8 @@ async def _sse_anthropic_async(base, headers, body, sink, client, role=None, mod
                     if sink:
                         sink(d)
     if role:
-        _log_usage(role, model, t0, usage, served=served)
+        _log_usage(role, model, t0, usage, served=served,
+                   kind="stream")
     return text
 
 def list_openrouter_endpoints(prov, model):
@@ -2422,6 +2485,7 @@ def _embed_request(texts) -> EmbeddingBatch:
     """One embeddings round trip. Raises; the retry loop above decides."""
     prov, model, _ = resolve_role("embeddings")
     base = prov["base_url"].rstrip("/")
+    _t0 = time.time()
     r = _session().post(base + "/embeddings", headers=_headers(prov), json={"model": model, "input": texts}, timeout=REQUEST_TIMEOUT)
     if r.status_code >= 400:
         # The BODY carries the reason; `raise_for_status` discards it and
@@ -2440,7 +2504,25 @@ def _embed_request(texts) -> EmbeddingBatch:
                        r.status_code,
                        r.status_code in DEFAULT_RETRY.retryable_status)
     r.raise_for_status()
-    data = r.json().get("data") or []
+    parsed = r.json()
+    # The batch ledger entry: one round trip, however many texts it carried.
+    # An embedding call on the turn path is precisely the spend the per-call
+    # ledger exists to make attributable -- "the slow commit was embeddings"
+    # has already been guessed wrongly once against a stage that never made
+    # an embedding call at all.
+    record_llm_call({
+        "role": "embeddings",
+        "requested": model,
+        "served": str(parsed.get("model") or "").strip() or model,
+        "in": _int((parsed.get("usage") or {}).get("prompt_tokens")
+                   if isinstance(parsed.get("usage"), dict) else 0),
+        "out": 0,
+        "cached": 0,
+        "duration": round(time.time() - _t0, 3),
+        "kind": "embedding",
+        "texts": len(texts),
+    })
+    data = parsed.get("data") or []
     data = sorted(data, key=lambda item: item.get("index", 0))
     if len(data) != len(texts):
         raise RuntimeError("Embedding provider returned an unexpected vector count")
