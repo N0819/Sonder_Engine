@@ -450,8 +450,16 @@ function fCoveragePicker(covers, auto, attaches, coveredZones = {}) {
   // lives in the same control: a ribbon sits in the hair and covers no head.
   const attachBox = el("input", {
     type: "checkbox", ...(attaches ? { checked: "" } : {}) });
+  // Every covered region is displaceable-or-not (the displacement axis,
+  // design note 17): an unzoned region is its own single zone, so unchecking
+  // it writes {region: []} — worn, pushed off that place. Hand-editing this
+  // matters: a host fixing a ledger by hand is a first-class path, and a
+  // field the editor cannot express is a field the editor will silently
+  // erase.
+  const zonesFor = region => ATTIRE_REGION_ZONES[region] || [region];
   const zoneBoxes = new Map();
-  Object.entries(ATTIRE_REGION_ZONES).forEach(([region, zones]) => {
+  ATTIRE_REGIONS.forEach(region => {
+    const zones = zonesFor(region);
     const explicit = Object.prototype.hasOwnProperty.call(coveredZones || {}, region);
     const selected = explicit ? (coveredZones[region] || []) : zones;
     zoneBoxes.set(region, new Map(zones.map(zone => [zone, el("input", {
@@ -500,7 +508,10 @@ function fCoveragePicker(covers, auto, attaches, coveredZones = {}) {
       + "leaves it bare."),
     ...[...zoneBoxes.entries()].map(([region, zoneMap]) =>
       el("div", { class: "row small", style: "flex-wrap:wrap;gap:8px;margin-top:6px" },
-        el("span", { class: "dim" }, region + " zones still covered:"),
+        el("span", { class: "dim" },
+          (ATTIRE_REGION_ZONES[region]
+            ? region + " zones still covered:"
+            : "still covering:")),
         ...[...zoneMap.entries()].map(([zone, box]) =>
           el("label", {}, box, " " + zone)))),
     el("div", { class: "row", style: "flex-wrap:wrap;gap:4px;margin-top:6px" },
@@ -514,7 +525,7 @@ function fCoveragePicker(covers, auto, attaches, coveredZones = {}) {
       const result = {};
       zoneBoxes.forEach((zoneMap, region) => {
         if (autoBox.checked || !boxes.get(region).checked) return;
-        const all = ATTIRE_REGION_ZONES[region];
+        const all = zonesFor(region);
         const selected = all.filter(zone => zoneMap.get(zone).checked);
         if (selected.length !== all.length) result[region] = selected;
       });

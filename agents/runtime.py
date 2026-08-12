@@ -15,6 +15,7 @@ from commit import commit_all
 from db import active_frame_id, q, qi, wset
 from pipeline_context import (
     ChatData, PipelineContext, TurnData, current_step_key,
+    current_warning_sink,
 )
 from providers import Aborted, cancel_event, generation_event_sink, token_sink
 from scene import (
@@ -212,6 +213,16 @@ def compute_step(key, ctx, nonce):
     # producer knowing it is being attributed. Restored on the way out so a
     # sequential run does not leave the last step's key standing.
     token = current_step_key.set(key)
+    # The warning sink rides the same funnel for the same reason: it lets the
+    # llm_quality repair ladder report an extra provider call it just paid for
+    # without knowing whose step it is under. Before this, a repair or retry
+    # that SUCCEEDED left no stored trace at all, so the invisible-second-call
+    # rate could only be bounded from its failures (audit 2026-08-11: floor
+    # >=3.5%, true rate unknowable). getattr, not attribute access: tests and
+    # extensions drive this funnel with stand-in contexts (the same tolerance
+    # StepTaggedWarnings documents), and a missing add_warning must mean "no
+    # notes", never a failed step.
+    sink = current_warning_sink.set(getattr(ctx, "add_warning", None))
     try:
         if key.startswith("character:"):
             return character_step(ctx, int(key.split(":", 1)[1]), nonce)
@@ -221,6 +232,7 @@ def compute_step(key, ctx, nonce):
             raise RuntimeError("unknown step " + key)
         return handler(ctx, nonce)
     finally:
+        current_warning_sink.reset(sink)
         current_step_key.reset(token)
 
 

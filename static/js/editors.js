@@ -371,6 +371,7 @@ function charEditor(c, options = {}) {
           hair: f.hair.read(), eyes: f.eyes.read(),
           distinctive_features: f.distinctive.read()
         },
+        extra_parts: f.extra_parts.read(),
         initial_outfit: { regions: f.outfit_regions.read() }
       }), refreshed => charEditor(refreshed))
     : null;
@@ -628,6 +629,7 @@ function personaEditor(p) {
       hair: f.hair.read(), eyes: f.eyes.read(),
       distinctive_features: f.distinctive.read()
     },
+    extra_parts: f.extra_parts.read(),
     initial_outfit: { regions: f.outfit_regions.read() }
   }), refreshed => personaEditor(refreshed)) : null;
   const ph = phEditor(sheet.knowledge?.private_history, false);

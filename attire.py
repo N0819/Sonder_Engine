@@ -61,6 +61,25 @@ REGION_ZONES = {
     "torso": ("chest", "midriff"),
 }
 
+
+def zones_of(region):
+    """Every region is coverable-or-not; the torso is finer.
+
+    DISPLACEMENT — a still-worn garment no longer covering a place it
+    normally covers (a jacket pushed off the shoulders, a skirt hiked to the
+    waist, trousers around the ankles) — is a third axis beside the ladder
+    (progress toward removal) and the condition (what happened to the
+    fabric). It lives in the per-garment `covered_zones` override at REGION
+    grain: an unzoned region is its own single zone, so `{waist: []}` means
+    "worn, but not covering the waist" and supplying the full list clears it.
+    Measured before generalizing (design_notes/17-garment-displacement.md):
+    models already wrote region-grain coverage 4 times in the stored corpus
+    (`{"sheer silk robe": {"torso": [], "groin": []}}`) and the torso-only
+    validator silently dropped every one, while 37% of stored condition
+    notes carried displacement language the engine could not read.
+    """
+    return REGION_ZONES.get(region, (region,))
+
 # Ordered. A garment moves DOWN this list, one rung at a time, and never skips
 # unless something says so explicitly.
 GARMENT_STATES = ("worn", "loosened", "open", "removed")
@@ -281,21 +300,31 @@ def _clean_covered_zones(value):
 
     Absence means the garment covers every zone of every region it occupies.
     An empty list is meaningful: the garment remains worn at that region but
-    has been displaced enough to cover none of its zones.
+    has been displaced enough to cover none of its zones — for an unzoned
+    region, "displaced off it" outright.
+
+    THE INVERT GUARD: a non-empty list in which nothing validates (measured
+    live: `{"head": ["hair"]}`) is a garment asserted to still cover
+    something this vocabulary cannot read. Reading that as [] would flip its
+    meaning from "partly covered" to "covers nothing" — so it is skipped,
+    keeping whatever was true before. Only an explicitly empty list means
+    displaced-off. (The weather `_SYNONYMS` rule: an unreadable term keeps
+    what was there, because every default here is the mildest reading.)
     """
     if not isinstance(value, dict):
         return {}
     out = {}
-    for region, allowed in REGION_ZONES.items():
+    for region in REGIONS:
         if region not in value:
             continue
+        allowed = zones_of(region)
         raw = value.get(region)
         raw = raw if isinstance(raw, (list, tuple, set)) else [raw]
-        selected = set()
-        for zone in raw:
-            zone = str(zone or "").strip().casefold()
-            if zone in allowed:
-                selected.add(zone)
+        supplied = [str(zone or "").strip().casefold()
+                    for zone in raw if str(zone or "").strip()]
+        selected = {zone for zone in supplied if zone in allowed}
+        if supplied and not selected:
+            continue  # unreadable assertion of coverage: keep the default
         picked = [zone for zone in allowed if zone in selected]
         # Full coverage is the default and needs no stored override.
         if tuple(picked) != tuple(allowed):
@@ -305,9 +334,7 @@ def _clean_covered_zones(value):
 
 def covered_zones_for(garment, region):
     """The zones of ``region`` this garment currently covers."""
-    zones = REGION_ZONES.get(region)
-    if not zones:
-        return (region,)
+    zones = zones_of(region)
     overrides = garment.get("covered_zones")
     if not isinstance(overrides, dict) or region not in overrides:
         return zones
@@ -472,7 +499,7 @@ def _sync_spanning_garments(regions):
     things that happen to share a name.
     """
     regions = regions or {}
-    furthest, marks, descriptions, spans = {}, {}, {}, {}
+    furthest, marks, descriptions, spans, displaced = {}, {}, {}, {}, {}
     for region in REGIONS:
         for garment in (regions.get(region) or {}).get("garments") or []:
             key = garment.get("name", "").casefold()
@@ -483,6 +510,16 @@ def _sync_spanning_garments(regions):
             if garment.get("description") and not descriptions.get(key):
                 descriptions[key] = garment["description"]
             spans.setdefault(key, []).append(region)
+            # Displacement is a fact about the ONE garment, so every copy
+            # must agree — a jacket pushed off the torso whose waist copy
+            # still claimed full coverage would answer "is the waist covered"
+            # two ways. Region-keyed union: any copy's override for a region
+            # is the garment's override for it.
+            overrides = garment.get("covered_zones")
+            if isinstance(overrides, dict) and overrides:
+                merged = displaced.setdefault(key, {})
+                for changed_region, picked in overrides.items():
+                    merged.setdefault(changed_region, picked)
     for region in REGIONS:
         for garment in (regions.get(region) or {}).get("garments") or []:
             key = garment.get("name", "").casefold()
@@ -493,6 +530,8 @@ def _sync_spanning_garments(regions):
                 garment["description"] = descriptions[key]
             garment["covers"] = (list(spans[key]) if len(spans[key]) > 1
                                  else [])
+            if displaced.get(key) and garment.get("state") != "removed":
+                garment["covered_zones"] = dict(displaced[key])
     return regions
 
 
@@ -585,16 +624,30 @@ def apply_coverage_changes(regions, changes):
         valid = {}
         for region, raw_zones in region_changes.items():
             region = str(region or "").strip().casefold()
-            allowed = REGION_ZONES.get(region)
-            if not allowed:
+            if region not in REGIONS:
+                # Not a region at all — measured live, a coverage entry
+                # carrying `{"state": "loosened"}`: a rung move written into
+                # the coverage channel. Say so; the ladder is not this field.
+                notes.append(
+                    f"attire: coverage for {handle!r} named {region!r}, "
+                    "which is not a body region; the garment ladder moves "
+                    "through remove/decisive acts, never through coverage.")
                 continue
+            allowed = zones_of(region)
             raw_zones = (raw_zones if isinstance(raw_zones, (list, tuple, set))
                          else [raw_zones])
-            selected = set()
-            for zone in raw_zones:
-                zone = str(zone or "").strip().casefold()
-                if zone in allowed:
-                    selected.add(zone)
+            supplied = [str(zone or "").strip().casefold()
+                        for zone in raw_zones if str(zone or "").strip()]
+            selected = {zone for zone in supplied if zone in allowed}
+            if supplied and not selected:
+                # The invert guard (see _clean_covered_zones): an assertion
+                # of coverage in a vocabulary we cannot read must not become
+                # "covers nothing".
+                notes.append(
+                    f"attire: ignored coverage for {handle!r} at {region}; "
+                    f"none of {supplied!r} is a known zone there. An empty "
+                    "list is how a garment is displaced off a region.")
+                continue
             picked = [zone for zone in allowed if zone in selected]
             valid[region] = picked
         if not valid:
@@ -610,7 +663,7 @@ def apply_coverage_changes(regions, changes):
                 found = True
                 overrides = dict(garment.get("covered_zones") or {})
                 for changed_region, picked in valid.items():
-                    allowed = REGION_ZONES[changed_region]
+                    allowed = zones_of(changed_region)
                     if tuple(picked) == tuple(allowed):
                         overrides.pop(changed_region, None)
                     else:
@@ -673,10 +726,87 @@ _DECISIVE = re.compile(
 
 _SENTENCE = re.compile(r"[^.!?\n]+")
 
+# Places a garment is pushed OFF while staying on the body. "Off her
+# shoulders" is a displacement; "off her back" is a removal; and the
+# distinction is exactly the word after "off". This closed list serves BOTH
+# directions of the removal/displacement boundary: it keeps the gap-tolerant
+# removal vocabulary below from firing on "the robe slips off one shoulder",
+# and it keeps the steal guard (`removal_directed_at`) from reading a shove
+# as the removal it is not.
+_DISPLACEMENT_ANCHORS = (
+    "shoulders", "shoulder", "hips", "hip", "waist", "knees", "knee",
+    "thighs", "thigh", "ankles", "ankle", "arms", "arm", "forearms",
+    "forearm", "wrists", "wrist", "elbows", "elbow", "face", "hair",
+)
+
+# The commonest English removal shape puts the GARMENT between the verb and
+# "off" — "she pulls the tank top off" — and the fixed-phrase vocabulary
+# above cannot see it. Measured live (chat 68 t8, design note 17): a beat
+# whose diff said `remove: ["tank top"]` for an act the player asked to be
+# one motion was clamped to `loosened` because decisive_intent returned
+# False on exactly that sentence, and with the fiction already believing the
+# top off, no later beat ever proposed the removal again. Up to four words
+# of gap; "off" followed by a displacement anchor is a shove, not a removal,
+# and does not qualify.
+_DECISIVE_GAP_OFF = re.compile(
+    r"\b(?:pulls?|pulled|pulling|yanks?|yanked|yanking|tugs?|tugged|tugging"
+    r"|drags?|dragged|dragging|hauls?|hauled|hauling|takes?|took|taking"
+    r"|slips?|slipped|slipping|lifts?|lifted|lifting|peels?|peeled|peeling"
+    r"|tears?|tore|tearing|rips?|ripped|ripping|wrenche?s?|wrenched"
+    r"|wrenching|shrugs?|shrugged|shrugging|works?|worked|working"
+    r"|eases?|eased|easing|shakes?|shook|shaking|slides?|slid|sliding"
+    r"|shimm(?:y|ies|ied|ying)|wriggles?|wriggled|wriggling"
+    r"|kicks?|kicked|kicking)"
+    r"\s+(?:[\w'’-]+\s+){0,4}?off\b"
+    r"(?!\s+(?:(?:her|his|their|my|your|its|one|both|the)\s+)?(?:%s)\b)"
+    % "|".join(_DISPLACEMENT_ANCHORS),
+    re.IGNORECASE)
+
+# The removal ladder's clamp, INVERTED (design note 17, second incident).
+# Twice now a wrong ledger's root cause was the completion vocabulary missing
+# one more way English says a garment came off — "pulls the tank top off",
+# then "shrugs the jacket off", a live reroll clamped to `loosened` while the
+# narration had the jacket on the floor. Enumerating completions is unwinnable.
+# What IS a small, stable, closed set is the ways prose marks an act as STILL
+# IN PROGRESS — inchoatives, conatives ("tugs AT", where tugging OFF is the
+# completion), and explicit partiality — so the clamp now fires on process
+# language and otherwise honours the Director's resolved removal. The failure
+# direction flips to safe: an unrecognised process phrase merely lets a
+# removal land that the stage owning objective causality asserted anyway,
+# instead of silently forking the ledger from the fiction.
+_PROCESS = re.compile(
+    r"\b(?:begins?|beginning|began|starts?|starting|started"
+    r"|sets? about|setting about|set about"
+    r"|goes? to work on|went to work on|going to work on"
+    r"|works? at|worked at|working at|fumbl\w+|struggl\w+|fiddl\w+"
+    r"|picks? at|picked at|picking at|tugs? at|tugged at|tugging at"
+    r"|pulls? at|pulled at|pulling at|plucks? at|plucking at"
+    r"|tries to|trying to|tried to|attempts? to|attempting to"
+    r"|halfway|half[- ]off|half out of|partway|part[- ]way"
+    r"|inch by inch|one \w+ at a time|not (?:yet|quite) off)\b",
+    re.IGNORECASE)
+
+
+def _process_sentence(sentence):
+    """Does this sentence mark the undressing as still in progress?
+
+    A sentence that also carries a completion shape is the completion — "she
+    stops fumbling and just rips it off" ends the process it names — so the
+    decisive/removal reading wins inside one sentence.
+    """
+    return bool(_PROCESS.search(sentence)) and not _decisive_sentence(sentence)
+
+
+def _decisive_sentence(sentence):
+    """One sentence's answer to "was this asked for all at once?"."""
+    return bool(_DECISIVE.search(sentence)
+                or _DECISIVE_GAP_OFF.search(sentence))
+
 
 def decisive_intent(text):
     """Did somebody ask for the whole thing at once?"""
-    return bool(_DECISIVE.search(str(text or "")))
+    return any(_decisive_sentence(sentence)
+               for sentence in _SENTENCE.findall(str(text or "")))
 
 
 _ARTICLE = re.compile(r"^(?:a|an|the|his|her|their|its|my|your)\s+", re.I)
@@ -1135,6 +1265,28 @@ def decisive_targets(player_text, other_texts, wardrobe, player_name=None):
     so it is not load-bearing for the information firewall -- see
     docs/UNBUILT.md §3.1 on why prose matching is not allowed to be a boundary.
     """
+    return _attributed_targets(player_text, other_texts, wardrobe,
+                               player_name, _decisive_sentence)
+
+
+def process_targets(player_text, other_texts, wardrobe, player_name=None):
+    """WHOSE undressing this beat's words leave still in progress.
+
+    The clamp's trigger, inverted (see `_PROCESS`): same per-body
+    attribution as `decisive_targets`, because "Corin fumbles with the knots
+    of her sash" is Mira's sash staying on, not Corin's. A body named here
+    has its removal proposals held one rung; everyone else's resolved
+    removals land as resolved.
+    """
+    return _attributed_targets(player_text, other_texts, wardrobe,
+                               player_name, _process_sentence)
+
+
+def _attributed_targets(player_text, other_texts, wardrobe, player_name,
+                        sentence_hit):
+    """The shared attribution ladder behind decisive_targets and
+    process_targets — one implementation of "whose clothes is this sentence
+    about", so the two readings of a beat cannot drift."""
     wardrobe = wardrobe if isinstance(wardrobe, dict) else {}
     keys = {name: [_garment_keys(g) for g in (garments or [])]
             for name, garments in wardrobe.items()}
@@ -1146,7 +1298,7 @@ def decisive_targets(player_text, other_texts, wardrobe, player_name=None):
     hits = set()
     for text, is_player in sources:
         for sentence in _SENTENCE.findall(text):
-            if not _DECISIVE.search(sentence):
+            if not sentence_hit(sentence):
                 continue
             folded = sentence.casefold()
             words = set(re.findall(r"[a-z0-9\-\u2019\']+", folded))
@@ -1156,6 +1308,26 @@ def decisive_targets(player_text, other_texts, wardrobe, player_name=None):
                                 for phrase, _noun in entries)}
             if by_phrase:
                 hits |= by_phrase
+                continue
+            # "<Name>'s tank top" is explicit attribution even when the
+            # garment phrase is abbreviated past recognition and a second
+            # cast name shares the sentence — the genitive says whose.
+            by_owner = set()
+            for owner, entries in keys.items():
+                if not str(owner or "").strip():
+                    continue
+                if not re.search(r"\b%s[’']s\b"
+                                 % re.escape(str(owner).casefold()), folded):
+                    continue
+                for phrase, noun in entries:
+                    tokens = [t for t in re.findall(r"[a-z0-9\-’\']+",
+                                                    phrase or "") if t]
+                    if (noun and noun in words) or any(
+                            t in words for t in tokens):
+                        by_owner.add(owner)
+                        break
+            if by_owner:
+                hits |= by_owner
                 continue
             by_noun = {name for name, entries in keys.items()
                        if any(noun and len(noun) > 3 and noun in words
@@ -1202,19 +1374,230 @@ def decisive_targets(player_text, other_texts, wardrobe, player_name=None):
     return hits
 
 
-def advance(previous, proposed, decisive=False):
+# Displacement said as prose. Mined from the stored corpus (design note 17):
+# of 38 stored condition notes, 14 carried language like these — "pushed back
+# off shoulders", "hem dragged to midriff", "parted fully open, no longer
+# covering torso, waist, groin or legs" — while the structured coverage field
+# went unwritten. This regex DETECTS; it never executes: a condition string
+# is not state (the module's standing rule), so a hit produces a warning and
+# a tell_director line naming the real channel, not a derived coverage
+# change.
+_DISPLACEMENT_LANGUAGE = re.compile(
+    r"\b(?:pushed (?:back |down |up )?(?:off|from)|hiked|hitched|rucked"
+    r"|bunched|shoved (?:up|down|aside)|slipped (?:off|down|from)"
+    r"|slid (?:off|down)|off (?:her |his |their |one |both )?shoulders?"
+    r"|around (?:her |his |their )?(?:ankles|knees|thighs)"
+    r"|pulled (?:up|down|aside|open)|tugged (?:up|down|aside)|dragged"
+    r"|hauled (?:up|upward|down)|fall(?:s|en)? open|hanging open|gapes?"
+    r"|parts? at|parted|untucked|drawn aside|swept aside|pushed to one side"
+    r"|hem (?:up|raised|lifted)|gathered (?:up|at)"
+    r"|no longer cover(?:s|ing))\b", re.IGNORECASE)
+
+# Ladder words inside condition prose. Chat 68 t7 wrote "…bunched under
+# arms — loosened, still worn" INTO the condition field: a rung move, a
+# displacement and a wornness assertion through the one field that accepts a
+# sentence. A rung word in prose moves nothing, and saying so is the floor.
+_RUNG_LANGUAGE = re.compile(
+    r"\b(loosened|removed|taken off|comes? off|came off)\b", re.IGNORECASE)
+
+
+def displacement_language(text):
+    """Does this condition prose describe a coverage change?"""
+    return bool(_DISPLACEMENT_LANGUAGE.search(str(text or "")))
+
+
+def rung_language(text):
+    """The first garment-ladder word this condition prose tries to move."""
+    match = _RUNG_LANGUAGE.search(str(text or ""))
+    return match.group(1).casefold() if match else ""
+
+
+# The fixed phrases whose direction is unambiguously OFF THE BODY. A strict
+# subset of `_DECISIVE` on purpose: bare "yanks"/"rips"/"in one motion" are
+# decisive about SPEED while saying nothing about direction — "yanks her
+# skirt up in one motion" is a shove, and reading it as a removal is the
+# steal this guard exists to prevent, pointed the other way.
+_REMOVAL_PHRASE = re.compile(
+    r"\b(?:strips?|stripped|stripping|throws? off|threw off|throwing off"
+    r"|shrugs? out of|shrugged out of|shrugging out of"
+    r"|steps? out of|stepped out of|stepping out of"
+    r"|kicks? off|kicked off|kicking off"
+    r"|casts? (?:it |them )?aside|flings? (?:it |them )?(?:aside|away|off)"
+    r"|flung (?:it |them )?(?:aside|away|off)"
+    r"|cuts? (?:it |them )?(?:off|away)|slices? (?:it |them )?(?:off|away)"
+    r"|fully undress\w*|completely undress\w*|naked|nude"
+    r"|bare(?:s|d)? (?:her|him|them)self)\b",
+    re.IGNORECASE)
+
+
+def _removal_directed(sentence):
+    """A decisive phrase whose direction is OFF THE BODY, not off a place on
+    it — the gap-tolerant verb…off shape (displacement anchors excluded) or
+    a fixed phrase that can only mean removal."""
+    return bool(_DECISIVE_GAP_OFF.search(sentence)
+                or _REMOVAL_PHRASE.search(sentence))
+
+
+def removal_directed_at(texts, garment_names, worn_names=()):
+    """Do this beat's words decisively take THIS garment off the body?
+
+    The steal guard's question (design note 17 §3): a `coverage` entry that
+    empties every region a garment covers is either a shove (trousers to the
+    ankles — honour it) or a removal the model filed on the wrong axis ("she
+    yanks her shirt off" recorded as displacement — escalate it). Only a
+    sentence that names the garment AND carries a removal-directed decisive
+    phrase distinguishes them, and the default on silence is the shove:
+    wrongly keeping a garment on the body is recoverable next beat, wrongly
+    removing it destroys ledger state and mints a floor object.
+
+    `garment_names` carries every spelling in play — the ledger's canonical
+    name AND the diff's own handle — because the sentence usually uses the
+    handle's shorter phrase ("tank top" for "fitted tank top"), and the
+    head-noun tier alone cannot see it ("top" is under the four-character
+    floor the noun rule keeps).
+    """
+    names = (garment_names if isinstance(garment_names, (list, tuple, set))
+             else [garment_names])
+    keys = [_garment_keys(str(n or "")) for n in names if str(n or "").strip()]
+    primary = str(next(iter(names), "") or "")
+    for text in (texts if isinstance(texts, (list, tuple)) else [texts]):
+        for sentence in _SENTENCE.findall(str(text or "")):
+            if not _removal_directed(sentence):
+                continue
+            folded = sentence.casefold()
+            words = set(re.findall(r"[a-z0-9\-’\']+", folded))
+            for phrase, noun in keys:
+                if phrase and phrase in folded:
+                    return True
+                if noun and len(noun) > 3 and noun in words:
+                    # The head noun alone only counts when it is unambiguous
+                    # among the worn garments, exactly as resolve_garment
+                    # scopes it.
+                    others = [w for w in (worn_names or [])
+                              if w and w.casefold() != primary.casefold()
+                              and _garment_keys(w)[1] == noun]
+                    if not others:
+                        return True
+    return False
+
+
+def coverage_removal_escalations(texts, coverage, regions):
+    """Coverage claims that are removals filed on the wrong axis.
+
+    Returns the coverage HANDLES to escalate: entries that (a) resolve to a
+    worn garment, (b) would leave it covering nothing anywhere it covers,
+    and (c) are named by a removal-directed decisive phrase in this beat's
+    words. Anything less specific keeps its displacement reading.
+    """
+    if not isinstance(coverage, dict):
+        return []
+    worn = flat_wearing(regions)
+    out = []
+    for handle, region_changes in coverage.items():
+        if not isinstance(region_changes, dict):
+            continue
+        target = resolve_garment(handle, worn)
+        if not target:
+            continue
+        covers = set()
+        for region, entry in (regions or {}).items():
+            for garment in entry.get("garments") or []:
+                if (garment.get("name", "").casefold() == target.casefold()
+                        and garment.get("state") != "removed"
+                        and not garment.get("attaches")):
+                    covers.add(region)
+        if not covers:
+            continue
+        emptied = set()
+        for region, raw_zones in region_changes.items():
+            region = str(region or "").strip().casefold()
+            if region not in REGIONS:
+                continue
+            raw = (raw_zones if isinstance(raw_zones, (list, tuple, set))
+                   else [raw_zones])
+            supplied = [str(z or "").strip().casefold()
+                        for z in raw if str(z or "").strip()]
+            if not supplied:
+                emptied.add(region)
+        if not covers <= emptied:
+            continue
+        if removal_directed_at(texts, [target, handle], worn):
+            out.append(handle)
+    return out
+
+
+def removals_held(previous, reconciled, wanted):
+    """Removal proposals the ladder held short of `removed` this beat.
+
+    The chat-68 failure mode (design note 17): a removal clamped to
+    `loosened` while the fiction moved on believing the garment off — and
+    nothing said so, so no later beat ever proposed it again and the ledger
+    diverged from the story for good. The clamp is right; the silence was
+    the defect. Returns [(garment name, state it was held at)], for the
+    commit seam to feed back through tell_director.
+    """
+    worn_names = [g.get("name", "")
+                  for entry in (previous or {}).values()
+                  for g in (entry.get("garments") or [])
+                  if g.get("name")]
+    wanted_keys = set()
+    for name in (wanted or []):
+        resolved = resolve_garment(name, worn_names,
+                                   allow_head_noun=False) or str(name)
+        wanted_keys.add(resolved.casefold())
+    held, seen = [], set()
+    for entry in (previous or {}).values():
+        for garment in entry.get("garments") or []:
+            key = garment.get("name", "").casefold()
+            if (not key or key in seen or key in wanted_keys
+                    or garment.get("state") == "removed"):
+                continue
+            seen.add(key)
+            after = None
+            for r_entry in (reconciled or {}).values():
+                for g in r_entry.get("garments") or []:
+                    if g.get("name", "").casefold() == key:
+                        after = g.get("state")
+                        break
+                if after:
+                    break
+            if after and after != "removed":
+                held.append((garment.get("name", ""), after))
+    return held
+
+
+def advance(previous, proposed, decisive=False, process=False):
     """Reconcile a proposed set of regions against what was true before.
 
-    The rule: a garment may move ONE rung down `GARMENT_STATES` per beat.
-    Putting something back on, or getting further dressed, is unrestricted --
-    the asymmetry is deliberate, because it is undressing that the engine kept
-    doing instantly and it is undressing that has a dramatic middle worth
-    staying in.
+    THE CLAMP IS INVERTED (design note 17, second incident). It used to hold
+    every non-decisive removal to one rung, with "decisive" decided by a
+    completion vocabulary — and twice a wrong ledger's root cause was that
+    vocabulary missing one more way English says a garment came off ("pulls
+    the tank top off", then "shrugs the jacket off" on a live reroll). The
+    Director owns objective causality: a resolved removal IS the resolution,
+    and an engine that re-decides it silently forks the ledger from the
+    fiction with no recovery. So a proposed `removed` now LANDS unless
+    `process` says this beat's own prose shows the act still in progress
+    ("begins to untie", "works at the knots") — a smaller, closed set that
+    fails in the safe direction: an unrecognised phrasing lets a removal
+    land that the Director asserted anyway.
 
-    `decisive` lifts the limit for this beat, for a player who said so.
+    What survives of the old rule, deliberately:
+    - intermediate jumps still clamp (a `worn -> open` proposal reaches
+      `loosened` first) — the dramatic middle is still the contract, stated
+      in the prompt and held here for staged states;
+    - `process` holds a removal one rung, so "begins on the sash" cannot
+      reach bare in the same paragraph — the exact defect the clamp was
+      built against, now detected from the prose that defines it;
+    - `decisive` lifts everything, including a process reading in the same
+      beat ("stops fumbling and tears it off").
+
+    Putting something back on, or getting further dressed, is unrestricted --
+    the asymmetry is deliberate, because it is undressing that has a
+    dramatic middle worth staying in.
 
     Returns the reconciled regions. Anything the proposal invented (a new
-    garment, a new region) is kept; this clamps a transition, it does not
+    garment, a new region) is kept; this reconciles transitions, it does not
     police the wardrobe.
     """
     previous = previous if isinstance(previous, dict) else {}
@@ -1229,12 +1612,24 @@ def advance(previous, proposed, decisive=False):
             before = was.get(name.casefold())
             state = garment.get("state", "worn")
             if before and not decisive:
-                gap = _rung(state) - _rung(before.get("state", "worn"))
-                if gap > 1:
-                    # Two rungs in one beat: hold it at the next one. This is
-                    # the line that keeps "begins to untie her sash" from
-                    # arriving at bare in the same paragraph.
-                    state = GARMENT_STATES[_rung(before.get("state", "worn")) + 1]
+                # A garment already displaced off EVERYTHING it covers has
+                # played its middle out on the coverage axis: trousers at the
+                # ankles do not owe the ladder two more beats to leave the
+                # body. Counted as `open` for the clamp distance only —
+                # partial displacement earns no discount, and the state
+                # itself is untouched.
+                before_rung = _rung(before.get("state", "worn"))
+                covers = before.get("covers") or [region]
+                if all(not covered_zones_for(before, r) for r in covers):
+                    before_rung = max(before_rung, _rung("open"))
+                gap = _rung(state) - before_rung
+                if gap > 1 and (state != "removed" or process):
+                    # Hold it at the next rung: an intermediate jump always
+                    # (staged states are the contract), a removal only when
+                    # this beat's own prose shows the act still in progress.
+                    # A resolved removal with no process reading LANDS -- see
+                    # the docstring.
+                    state = GARMENT_STATES[before_rung + 1]
             # Condition survives a rung change on its own terms: a proposal
             # that says nothing about it must not launder the garment, and a
             # proposal that DOES say something is this beat's news.
@@ -1253,7 +1648,10 @@ def advance(previous, proposed, decisive=False):
                                        if garment.get("attaches") is not None
                                        else (before or {}).get("attaches")),
                       "state": state, "condition": condition}
-            if covered_zones:
+            # `removed` clears the displacement record: a garment off the
+            # body covers nothing anywhere, and a stale override must not
+            # resurface half-displaced if the garment is ever re-worn.
+            if covered_zones and state != "removed":
                 record["covered_zones"] = covered_zones
             garments.append(record)
         out[region] = {"garments": garments,
@@ -1332,6 +1730,14 @@ def describe(regions, beneath_visible=False, body=""):
                     text += " [covers %s; exposes %s]" % (
                         ", ".join(covered) or "none",
                         ", ".join(exposed) or "none")
+                elif (not zones and not garment.get("attaches")
+                        and not covered_zones_for(garment, region)):
+                    # Displacement at region grain: still worn, pushed off
+                    # this place — a jacket off the shoulders, trousers at
+                    # the ankles. The garment stays on the line because it is
+                    # still ON the body; the marker is what stops the
+                    # Director reading its presence as coverage.
+                    text += " [displaced; not covering this region]"
                 if anchored and garment.get("description"):
                     text += " — %s" % garment["description"]
                 pieces.append(text)
@@ -1346,6 +1752,15 @@ def describe(regions, beneath_visible=False, body=""):
                               if beneath_visible else "")
                     pieces.append("%s bare%s" % (
                         zone, " — %s" % detail if detail else ""))
+            else:
+                coverers = [g for g in worn if not g.get("attaches")]
+                if coverers and not any(
+                        covered_zones_for(g, region) for g in coverers):
+                    # Every covering garment here is displaced off the
+                    # region: the skin is bare even though the clothing is
+                    # on the body. (A region holding only ornaments already
+                    # reads "[worn at, covers nothing]" and needs no echo.)
+                    pieces.append("bare here")
             lines.append("%s: %s" % (region, ", ".join(pieces)))
             continue
         if beneath_visible:
@@ -1409,8 +1824,21 @@ def perceptible_region_surfaces(regions, beneath_visible=False):
                         surface += " — %s" % beneath
                 zone_parts.append("%s: %s" % (zone, surface))
             parts.append("; ".join(zone_parts))
+            for shoved in worn:
+                if not covered_zones_for(shoved, region):
+                    # Covering no zone here at all: visible as a hanging
+                    # garment, not as a surface.
+                    parts.append(
+                        "%s [displaced; not covering this region]"
+                        % _garment_text(shoved))
         else:
-            covering = next((g for g in worn), None)
+            # The visible surface is the first garment STILL COVERING the
+            # region — a displaced one (jacket off the shoulders, trousers at
+            # the ankles) is not a covering, but it is not invisible either:
+            # an observer sees the skin AND the garment hanging where it now
+            # hangs, so it rides alongside like an ornament does.
+            covering = next(
+                (g for g in worn if covered_zones_for(g, region)), None)
             if covering:
                 surface = _garment_text(covering)
                 if covering.get("description"):
@@ -1427,6 +1855,11 @@ def perceptible_region_surfaces(regions, beneath_visible=False):
                 if beneath:
                     surface += " — %s" % beneath
                 parts.append(surface)
+            for shoved in worn:
+                if shoved is covering or covered_zones_for(shoved, region):
+                    continue
+                parts.append("%s [displaced; not covering this region]"
+                             % _garment_text(shoved))
         for ornament in ornaments:
             text = "%s [worn at, covers nothing]" % _garment_text(ornament)
             if ornament.get("description"):
@@ -1436,14 +1869,14 @@ def perceptible_region_surfaces(regions, beneath_visible=False):
     return out
 
 
-def apply_flat_change(previous, wanted, decisive=False, conditions=None):
+def apply_flat_change(previous, wanted, decisive=False, conditions=None,
+                      process=False):
     """Reconcile a flat "what they are wearing now" list against the regions.
 
     The Director speaks in whole garments -- add these, remove those -- because
-    that is the shape a model reliably produces. Removing one therefore means
-    "gone", which is precisely the instant undress this module exists to stop.
-    So a removal is read as a PROPOSAL to reach `removed`, and the one-rung
-    rule decides how far it actually gets this beat.
+    that is the shape a model reliably produces. A removal is a resolved
+    fact and lands, unless `process` says this beat's prose still has the
+    act in progress -- see `advance` for the inverted clamp and its history.
 
     `conditions` maps a garment name to what has just happened to it -- spilled
     wine, a tear, soaking. It belongs to the GARMENT rather than to the body,
@@ -1505,7 +1938,7 @@ def apply_flat_change(previous, wanted, decisive=False, conditions=None):
             entry = proposed.setdefault(region, {"garments": [], "beneath": ""})
             entry["garments"].append({"name": name, "state": "worn",
                                       "condition": marks.get(key, "")})
-    return advance(previous, proposed, decisive)
+    return advance(previous, proposed, decisive, process=process)
 
 
 def condition_of(regions, garment_name):
@@ -1582,6 +2015,25 @@ def flat_state(regions):
             if garment.get("state") in ("loosened", "open") and key not in reported:
                 reported.add(key)
                 notes.append("%s %s" % (garment["name"], garment["state"]))
+    # The displacement axis, said once per garment: worn, but pushed off
+    # these regions. Distinct from the exposure notes below — those say what
+    # the BODY shows, this says where the GARMENT has gone while staying on.
+    displaced_reported = set()
+    for region in REGIONS:
+        for garment in ((regions or {}).get(region) or {}).get("garments") or []:
+            key = garment.get("name", "").casefold()
+            if (garment.get("state") == "removed" or garment.get("attaches")
+                    or key in displaced_reported):
+                continue
+            overrides = garment.get("covered_zones")
+            if not isinstance(overrides, dict) or not overrides:
+                continue
+            off = [r for r in REGIONS
+                   if r in overrides and not covered_zones_for(garment, r)]
+            if off:
+                displaced_reported.add(key)
+                notes.append("%s displaced off the %s" % (
+                    garment["name"], ", ".join(off)))
     bare = exposed_regions(regions)
     if bare:
         notes.append("bare at the %s" % ", ".join(bare))
@@ -1604,6 +2056,8 @@ def is_derived_state_note(note):
     if text.startswith("bare at the "):
         return True
     if text.startswith("partly bare at the "):
+        return True
+    if " displaced off the " in text:
         return True
     return any(text.endswith(" " + state) for state in ("loosened", "open"))
 
@@ -1730,6 +2184,13 @@ def compact_line(regions, beneath_visible=False, look=0):
                    if g.get("state") != "removed"]
         worn = [g for g in present if not g.get("attaches")]
         attached = [g for g in present if g.get("attaches")]
+        # A displaced garment (worn, covering nothing here) must not fill the
+        # slot as though it covered: the slot answers "what is over this
+        # region", and it rides alongside instead — `[off:jacket]`, the
+        # `[at:]` idiom — so the Director still knows it is on the body.
+        displaced_here = [g for g in worn
+                          if not covered_zones_for(g, region)]
+        worn = [g for g in worn if covered_zones_for(g, region)]
         zones = REGION_ZONES.get(region)
         partial = bool(zones and any(
             isinstance(g.get("covered_zones"), dict)
@@ -1750,10 +2211,16 @@ def compact_line(regions, beneath_visible=False, look=0):
                                if beneath_visible else "")
                     value = _safe(beneath) or BARE
                 zone_parts.append("%s>%s" % (zone, value))
-            parts.append("%s:%s%s" % (
-                region, "/".join(zone_parts), _attached_text(attached)))
+            parts.append("%s:%s%s%s" % (
+                region, "/".join(zone_parts), _displaced_text(displaced_here),
+                _attached_text(attached)))
             continue
         if not worn:
+            if displaced_here:
+                parts.append("%s:%s%s%s" % (
+                    region, BARE, _displaced_text(displaced_here),
+                    _attached_text(attached)))
+                continue
             # BENEATH ONLY SURFACES WHERE SOMETHING CAME OFF. A region that was
             # never covered -- hands, usually -- is `bare` and says nothing
             # further; a region whose garment is now `removed` reports what the
@@ -1814,8 +2281,9 @@ def compact_line(regions, beneath_visible=False, look=0):
             # read as though the parenthesis belonged to the description.
             piece = "%s(%s)" % (name, ";".join(notes)) if notes else name
             pieces.append("%s=%s" % (piece, described) if described else piece)
-        parts.append("%s:%s%s" % (region, "+".join(pieces),
-                                  _attached_text(attached)))
+        parts.append("%s:%s%s%s" % (region, "+".join(pieces),
+                                    _displaced_text(displaced_here),
+                                    _attached_text(attached)))
     return "|".join(parts)
 
 
@@ -1826,3 +2294,13 @@ def _attached_text(attached):
     if not attached:
         return ""
     return "[at:%s]" % ";".join(_safe(g.get("name")) or "?" for g in attached)
+
+
+def _displaced_text(displaced):
+    """Garments worn but pushed off this region, as a suffix — the `[at:]`
+    idiom for the displacement axis: `groin:bare[off:skirt]` is a hiked
+    skirt, on the body and covering nothing here."""
+    if not displaced:
+        return ""
+    return "[off:%s]" % ";".join(
+        _safe(g.get("name")) or "?" for g in displaced)

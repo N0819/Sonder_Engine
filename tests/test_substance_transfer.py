@@ -685,7 +685,7 @@ class TestMatterMovedLeavesWhereItWas:
         op = {"op": "add", "source": "Vessel", "source_part": "reservoir",
               # Deliberately a DIFFERENT name for the same matter: the
               # Director renamed one substance three times across turns
-              # 61/66/70 ("cum", "seed", "Elyra Voss seed"), so a rule keyed
+              # 61/66/70 ("fluid", "seed", "Elyra Voss seed"), so a rule keyed
               # on the substance name would never once have fired.
               "substance": "settled coolant", "target": "Vessel",
               "placement": "interior", "target_interior": "sump",

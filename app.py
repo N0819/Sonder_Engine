@@ -83,6 +83,7 @@ from memory import (
     dramatic_irony_feed, promise_ledger,
     dump_character_memories, import_character_memories,
     embedding_bank_status, rebuild_progress, start_rebuild_if_needed,
+    queue_fallback_rows_for_repair,
 )
 from scene import (
     persona_of, get_scene, chat_character_sheet, seed_initial_attire,
@@ -2407,11 +2408,29 @@ def chat_get(cid: int):
     # matters when it is about to be read. Two COUNTs; the answer is `None` if
     # anything about it fails, and a failed maintenance check must never stop
     # a chat from opening.
+    # NOT ASKED ABOUT ANYTHING THE ENGINE CAN FINISH ITSELF. A row stamped
+    # `cheap:crc32:256` while a real provider is configured is a write this
+    # engine failed -- a rate limit it should wait out and retry, silently,
+    # because nobody is watching that path and being asked about it is worse
+    # than useless: the question offers a whole-bank rebuild as the cure for
+    # four rows the engine is already finishing. Those rows are handed to the
+    # repair queue here instead, which is also how a story picks its rows back
+    # up after a restart (the queue dies with the process).
+    #
+    # The stamp is the entire discriminator. Some OTHER model's key is a host
+    # who changed embedding model, which is the case this prompt was written
+    # for and still the case it fires on.
+    try:
+        queue_fallback_rows_for_repair(cid)
+    except Exception:
+        pass
     try:
         bank = embedding_bank_status(chat_id=cid)
         stranded = (bank["memories"]["stranded"]
-                    + bank["memory_summaries"]["stranded"])
-        bank = {**bank, "stranded": stranded} if stranded else None
+                    + bank["memory_summaries"]["stranded"]
+                    - bank["memories"].get("fallback_written", 0)
+                    - bank["memory_summaries"].get("fallback_written", 0))
+        bank = {**bank, "stranded": stranded} if stranded > 0 else None
     except Exception:
         bank = None
 

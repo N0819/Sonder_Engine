@@ -92,7 +92,7 @@ expressive):
 | **expressive/pose** (added) | 6 | 13% | Perceivable body language invented at resolve time (posture squaring, head tilt, nods) belonging to no sequence and no `poses` entry. |
 | positions | 3 | 6% | Granularity the schema lacks: mid-transit ("has not yet reached the doors" while the diff already places her at the destination), insertion depth. |
 | inventory | 1 | 2% | An absence assertion (fingers find no combadge). |
-| conditions | 1 | 2% | A character's orgasm state present for one body but not the other. |
+| conditions | 1 | 2% | A character's hedonic release state present for one body but not the other. |
 | lighting (added) | 1 | 2% | Room illumination changed by a carried light source. |
 
 ### Content that is not physically consequential at all

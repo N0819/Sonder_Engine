@@ -4106,19 +4106,20 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 _append_micro_view(current, additions))
             if appended != current:
                 clean_views[pid] = appended
-                observations[pid] = list(observations.get(pid) or []) + [{
-                    "observation_id":
-                        f"current:{pid}:{len(observations.get(pid) or [])}",
-                    "perceiver_id": pid,
-                    "source_atom_id": "current",
-                    "channel": "mixed",
-                    "fidelity": "rendered",
-                    "observed": {"text": str(additions)},
-                    "intensity": 0.5,
-                    "suddenness": 0.2,
-                    "ambiguity": 0.3,
-                    "directed_at_self": False,
-                }]
+                observations[pid] = list(observations.get(pid) or []) + [
+                    composer.compact_observation({
+                        "observation_id":
+                            f"current:{pid}:{len(observations.get(pid) or [])}",
+                        "perceiver_id": pid,
+                        "source_atom_id": "current",
+                        "channel": "mixed",
+                        "fidelity": "rendered",
+                        "observed": {"text": str(additions)},
+                        "intensity": 0.5,
+                        "suddenness": 0.2,
+                        "ambiguity": 0.3,
+                        "directed_at_self": False,
+                    })]
         if not is_player_view:
             content, gist, entities = composer.render_episode(
                 percepts, prev_standing=prev_standing,

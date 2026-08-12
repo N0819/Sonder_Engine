@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from collections import deque
 
 import affect
@@ -64,6 +65,7 @@ from theory_of_mind import mind_models_for_payload, sheet_capacity
 from .common import (
     _agent_json,
     _books,
+    declared_goal,
     observer_label_fn,
     observer_name_scrub,
     scrub_names_deep,
@@ -190,8 +192,12 @@ def _recent_self_moves(chat_id, char_id, current_turn_idx, n_turns=12, cap=12,
             if isinstance(item, dict) and item.get("selected")
         ]
         move = str((candidates[0].get("response") if candidates else "") or "").strip()
-        active = result.get("active_state") or {}
-        goal = str(active.get("goal") or "").strip() if isinstance(active, dict) else ""
+        # Derived, not read: the template stopped asking for active_state.goal
+        # (commit overwrote it with the enacted want's text on 99.0% of
+        # measured calls), so the ledger derives the same text from
+        # wants[enacted].want -- and still reads the legacy field off variants
+        # stored before the change.
+        goal = declared_goal(result)
         said = _speech_texts(result)
         if not (move or goal or said):
             continue
@@ -2370,7 +2376,8 @@ def character_step(ctx, cid, nonce):
     # do not pass through the full perception stage. Never reuse stale base
     # metadata for a changed view; project only the permitted text itself.
     if view and view != base_view:
-        observations = [{
+        from .composer import compact_observation
+        observations = [compact_observation({
             # A character may receive several micro-views in one turn.  The
             # old constant id collapsed them into one apparent observation,
             # making later evidence impossible to audit against the round it
@@ -2385,7 +2392,7 @@ def character_step(ctx, cid, nonce):
             "suddenness": 0.1,
             "ambiguity": 0.3,
             "directed_at_self": False,
-        }]
+        })]
     else:
         observations = base_observations
 
@@ -3169,6 +3176,17 @@ def character_step(ctx, cid, nonce):
                 "let the spent thread rest."),
         }
     if _corrections:
+        # Say the retry HAPPENED, not only that it failed. Until this line
+        # existed a retry that came back clean was indistinguishable from a
+        # first draft, so the fire rate could only be bounded from its
+        # failures -- 14 "repetition retained" notes in 401 recent-era calls,
+        # a floor of >=3.5% with the true rate unknowable -- while the live
+        # benchmark's 1.25-1.50 provider calls/turn against 1.01 stored
+        # results/turn left ~8-15s/turn of suspected retry cost unattributed
+        # (design_notes/09-character-agent-audit.md, finding 1). The duration
+        # is the number that decides whether a bounded-delta retry is worth
+        # designing; collect it before building anything.
+        _t0 = time.monotonic()
         _retry = _agent_json(
             role,
             "character",
@@ -3177,6 +3195,10 @@ def character_step(ctx, cid, nonce):
             temperature=character_temperature(sh),
             sampler=character_sampler(sh) or None,
         )
+        ctx.add_warning(
+            f"character {character_name(sh)}: decision review retry -- "
+            f"{', '.join(sorted(_corrections))} -- full second model call "
+            f"({time.monotonic() - _t0:.1f}s)")
         _retry_line = _first_verbatim_repeat(
             _speech_texts(_retry),
             [str(l.get("said") or "") for l in (_self_lines or [])])

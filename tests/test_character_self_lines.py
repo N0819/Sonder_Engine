@@ -101,6 +101,41 @@ def test_recent_self_moves_is_one_semantic_row_per_turn(temp_db):
     }]
 
 
+def test_recent_self_moves_derives_goal_from_the_enacted_want(temp_db):
+    """The template stopped asking for active_state.goal (commit overwrote it
+    with the enacted want's text on 99.0% of 401 measured recent-era calls),
+    so the ledger derives the same text from wants[enacted].want. A variant
+    stored before the change still reads through the legacy field -- the
+    turn-4 fixture in the test above pins that -- and when BOTH exist the
+    want wins, exactly as commit's own goal slot does."""
+    chat_id = _chat(temp_db)
+    _turn_with_move(temp_db, chat_id, 4, 17, {
+        "response_candidates": [{"response": "walk the proved line east",
+                                 "selected": True}],
+        "active_state": {
+            "wants": [{"want": "reach the shrine by the proved line",
+                       "urgency": 0.8, "serves": "situational"}],
+            "enacted_want": 0,
+        },
+        "sequence": [],
+    })
+    _turn_with_move(temp_db, chat_id, 5, 17, {
+        "response_candidates": [{"response": "double back", "selected": True}],
+        "active_state": {
+            "goal": "a stale legacy transcription",
+            "wants": [{"want": "recheck the west door", "urgency": 0.5,
+                       "serves": "situational"}],
+            "enacted_want": 0,
+        },
+        "sequence": [],
+    })
+
+    moves = _recent_self_moves(chat_id, 17, current_turn_idx=6)
+
+    assert moves[0]["goal"] == "reach the shrine by the proved line"
+    assert moves[1]["goal"] == "recheck the west door"
+
+
 def test_recent_self_moves_uses_turns_not_line_count(temp_db):
     """Four chatty lines in one beat must not evict older move continuity."""
     chat_id = _chat(temp_db)

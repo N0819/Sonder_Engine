@@ -449,7 +449,7 @@ class TestMomentaryResidue:
         assert "friction along its length" in felt
 
     def test_a_fluid_event_manner_is_momentary(self):
-        """A climax recorded `spray` stood as a moving contact into the
+        """A hedonic release recorded `spray` stood as a moving contact into the
         resting beat that followed and was saved with the scene, so the
         aftercare view reported gushing as current. A spray is an event; the
         matter it moved persists in the substance ledger."""

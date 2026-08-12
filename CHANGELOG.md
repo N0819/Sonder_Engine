@@ -1,6 +1,286 @@
 # Changelog
 
-## Unreleased — Development
+## alpha 8.0 — Determinism and background life
+
+> ### ⚰️ Here lies the perception LLM
+> **?–alpha 8.0. Survived by a function.**
+>
+> It was asked, 3.75 times a turn, every turn, what each mind in the room could
+> see. It answered at length. It was paid by the token for work that was
+> arithmetic all along — who is where, what is lit, what a wall stops — and it
+> is now done by code that never embellishes, never forgets a rule, never has
+> an off day, and never charges. Perception is a *filter*, and a filter does
+> not need an imagination. No flowers. It would only have described them.
+
+### A jacket off the shoulders is neither loosened nor stained
+
+Live, chat 70: the narration wrote Hinami out of her travel jacket while the
+ledger held torso, arms and waist covered — the jacket's vivid dislocation
+lived in its `condition` string, and coverage never reads conditions. The
+ledger had two axes where the fiction has three: the LADDER (progress toward
+removal), the CONDITION (what happened to the fabric), and DISPLACEMENT —
+what a still-worn garment currently covers — which had nowhere to go. The
+corpus says so in the models' own writing: 37% of stored condition notes
+carry displacement language, one states coverage outright in prose ("parted
+fully open, no longer covering torso, waist, groin or legs"), and chat 68
+wrote a rung word INTO a condition ("…bunched under arms — loosened, still
+worn") — three axes forced through the one field that accepts a sentence.
+
+Displacement now lives in the coverage channel the models already reach for,
+generalized from torso zones to every region a garment covers: an unzoned
+region is its own single zone, so `coverage:{'jacket':{torso:[],waist:[]}}`
+is the jacket off the shoulders with the arms still in the sleeves, and
+`{'trousers':{legs:[],groin:[]}}` is trousers around the ankles — worn,
+covering nothing, NOT removed. Measured before building: models had already
+emitted region-grain coverage four times and the torso-only validator
+silently dropped every one. Displacement is instant and reversible (one
+gesture each way, no step rule — a shove has no middle worth a beat, and it
+is cheap to undo, which is precisely what removal is not); the ladder is
+untouched except that removing a garment already displaced off everything it
+covers is one rung, because its middle has already been played.
+
+The removal/displacement boundary is guarded in both directions. The
+decisive vocabulary learns the commonest English removal shape it had been
+missing — "she pulls the tank top off", a garment noun between verb and
+"off", which is how a one-motion removal in chat 68 was clamped to
+`loosened` and stranded there — while "off her shoulders" and its kin stay
+shoves, and a coverage claim that empties a garment named by a
+removal-directed decisive phrase is escalated to the removal it plainly was.
+The ambiguous case keeps the shove: wrongly holding a garment on the body is
+recoverable next beat; wrongly removing it is not.
+
+And the floor stops being silent. A removal the ladder holds now tells the
+Director it held (chat 68's clamp was mute, so the fiction moved on and the
+removal was never proposed again); displacement or rung words written only
+as condition prose are detected — never executed, prose is not state — and
+answered with the channel that does move state; and an unreadable coverage
+list ("still covers the `hair`") keeps the garment covering rather than
+flipping to bare, because every default in this vocabulary is the mildest
+reading.
+
+Then a reroll of the same beat, taken with all of the above loaded, proved
+the diagnosis had one more layer: the Director resolved a clean
+`remove: ["lightweight travel jacket"]` and the clamp held it at `loosened`
+— "shrugs the jacket off" was not in the completion vocabulary, one word
+over from the gap just patched. Twice in one incident the root cause was
+the wordlist missing a way English says a garment came off, which is
+evidence about the approach. **The clamp is now inverted.** The Director
+owns objective causality, and a resolved removal IS the resolution: it
+lands by default, and the ladder holds it one rung only when the beat's own
+prose shows the act still in progress ("begins to untie", "works at the
+knots", "halfway off") — inchoatives, conatives and partiality markers, a
+set that is small, stable and closed in a way removal phrasings never will
+be, attributed per body through the same ladder decisive acts use. The
+failure direction flips to safe: an unrecognised process phrase merely lets
+a removal land that the Director asserted anyway. Decisive still lifts a
+same-beat process reading; intermediate jumps still clamp — staged states
+remain the contract the prompt teaches. And the deeper defect dissolves
+with it: the ladder assumes fasteners, an open-front jacket has no
+"loosened", and the engine no longer invents a middle for any garment — it
+only holds the middle the fiction itself is standing in, while a
+fastenerless garment's true middle is displacement, which the coverage axis
+now expresses. Hand edits are first-class: the region editor now offers the
+coverage toggle for every covered region, so the correction the host made by
+raw-ledger surgery this morning is expressible in the UI. No schema change,
+no migration; pre-change scenes load and behave identically until a beat
+speaks the new vocabulary. `design_notes/17-garment-displacement.md` holds
+the enumeration, the corpus numbers, and the designs rejected.
+
+### A cached prefix is only cached on the replica that holds it
+
+The engine sets explicit cache markers for Anthropic models only; every
+other provider was left to its own implicit prefix caching. Fireworks — the
+narrator/director/character_major host — documents that theirs works within
+ONE replica, and that serverless routing scatters requests across replicas
+unless the client says where to send them, via the standard OpenAI `user`
+field. The engine sent no such hint anywhere, so whether a call's ~15,500
+tokens of static role prompt were served from cache or re-prefilled from
+scratch was routing luck — on a stage whose input runs ~24–27k tokens per
+call, with cached input discounted 50–90% and time-to-first-token cut by up
+to 80% when the hit lands.
+
+Both OpenAI-compatible request builders (sync and async — the streaming
+paths consume their bodies) now attach `user: "sonder:<role>"` for providers
+opted in through `cache_affinity_allow`, by name or kind, the
+`prompt_cache_allow` idiom. Unset, no field is added and every request stays
+byte-identical to before; a host that rejects the field loses it on the
+400-retry rather than costing the turn. The value is an engine role constant
+and nothing else — it goes to a third party on every call, so it must never
+carry a chat, character, persona, or input-derived string. Role-only rather
+than per-chat, deliberately: the character prompt is name-substituted 32
+characters in, so cross-character prefix sharing is nil either way; one
+replica caches many prefixes; and a single-host engine's per-role traffic
+(measured 1.01–1.11 character calls/turn) is far below one replica's
+capacity — while the decision-review retry and the repair ladder, calling
+with the same role, inherit the replica that already holds their prefix.
+
+Whether it works is a number, not a feel: both streaming paths already
+request usage, `_normalize_usage` reads the Fireworks dialect's
+`prompt_tokens_details.cached_tokens` beside the Anthropic fields, and every
+call logs `cached_tokens`/`cache_write_tokens` — writes with no subsequent
+reads is the signature of a prefix that is not stable, and reads near the
+prompt's size are the hint landing.
+
+### The character contract stops transcribing dice
+
+The character stage is the pipeline's one deliberating role, and the
+2026-08-11 output audit found its ~2,000 output tokens per call are 85-90%
+genuine product — no `director_resolve`-style discard majority. What waste
+there was sat in specific fields, measured on 401 recent-era stored calls,
+and every emitted token is ~16ms of decode on the critical path:
+
+- The template asked for ten stress/hedonic fields; commit reads two.
+  `hedonic.released` (the discharge declaration — the character's own) and
+  `stress.coping_mode` (a pass-through label) survive; everything else was
+  recomputed wholesale by `resolve_stress`/`resolve_hedonic` from the
+  appraisal, the emitted numbers never reaching state. Both dicts arrived on
+  71% of calls at a mean 78 tokens of which ~12 were signal. The template now
+  asks for the two. A legacy full-shape emission still validates and commits
+  byte-identical state — that equality is the regression test.
+- `active_state.goal` was overwritten with the enacted want's own text on
+  99.0% of calls, and the emitted string matched that want only 16.2% of the
+  time — twenty tokens per call transcribing a worse copy of an answer the
+  result already carries. The template stops asking; every reader of the raw
+  field (the moves ledger, commit's unbidden did-the-goal-move check — a
+  third reader the audit had missed) goes through one derivation,
+  `agents/common.declared_goal`, with the legacy field as fallback so stored
+  variants read identically. And the malformed-wants fallback now keeps the
+  PREVIOUS goal rather than blanking the slot — routing, tenure and the
+  unbidden ledger all read it, and "" is a decision the character never made.
+- The observation wrapper was two-thirds constant: over 1,692 stored
+  observations, `intensity` sat at its 0.35 base in 99%, `suddenness` and
+  `fidelity` likewise, `ambiguity` in 89%, and `source_atom_id`/
+  `perceiver_id` repeated the payload's own structure in 100% — ~356 tokens
+  of wrapper beside ~188 of text, per payload, advisory context no
+  deterministic code consumes. A resting default is now omitted: absent
+  means the default, ids/text/channel are never trimmed, and the 1-11% of
+  non-default values keep their signal byte-for-byte.
+- `considered_responses` — engine-unread, but plausibly the chain-of-thought
+  that seeds the consumed `response_candidates` — is deliberately NOT cut.
+  A token count is not evidence about deliberation quality; an A/B on stored
+  payloads is the gate, and it has not been run.
+
+And the invisible second calls now say they happened. The repair ladder
+(truncation re-ask, temperature-0 repair, fallback candidates) and the
+character stage's decision-review retry each re-issue a full call, and a
+retry that succeeded was indistinguishable from a first draft — the audit
+could bound the rate only from its failures (14 retained-repetition notes in
+401 calls, a floor of >=3.5%), while the live benchmark's 1.25-1.50 provider
+calls/turn against 1.01 stored results/turn left ~8-15s/turn unattributed.
+Every rung now writes one engine-notes line naming its path and duration,
+attributed to the running step by the same contextvar that tags every other
+warning. The audit's order of operations stands: this number is collected
+BEFORE any bounded-delta retry is designed, and the threshold it must clear
+is written down in `docs/UNBUILT.md` §6.9.
+
+### A memory is not stranded by one bad second
+
+A brand-new story offered, on its opening beat, to rebuild memories it had
+written seconds earlier; two beats later it stranded four more. The provider
+was configured correctly and embedded the very same documents on demand a
+minute afterwards.
+
+`embed_texts_meta` degrades to the crc32 hash on any error, and the writers
+store that hash under its own honest stamp. For a query that is one beat of
+worse ranking. For a WRITE it is permanent — nothing re-embeds a row until
+somebody accepts a paid rebuild — and the embeddings request was the one
+provider call in the engine with no retry behind it and nothing in any log to
+say it had happened.
+
+- The embeddings POST retries on the statuses a chat call retries and on the
+  same dropped-connection exceptions. A 400 is not retried: a wrong model is
+  an answer, not a hiccup, and retrying it would treble the cost of every
+  write for as long as the role is misconfigured.
+- A fallback WRITE now says which provider failed and why, once a minute per
+  distinct error, so an outage reports itself without flooding the log. With
+  no embeddings provider configured the hash *is* the engine's embedding, and
+  nothing is said.
+- The bank status and the live-dimension probe opt out of retrying. They run
+  while somebody waits for a chat to open, and a degraded provider is the
+  thing they are asking about, not an error to survive.
+- Greeting seeds are embedded in one batch. Six seeds were six independent
+  round trips on the busiest moment a story has, each its own chance to be
+  stranded.
+
+Later the same day, the provider began refusing outright, and measurement
+found the reason the failures had looked random. Against the configured
+route: a burst of 12 requests took 4 rate limits, and **8 sequential requests
+at ~2.5/s took 3**. So it is a request RATE, not a concurrency cap; the 429 is
+Perplexity's own `request_rate_limit_exceeded` relayed by OpenRouter, nothing
+to do with the account (not free tier, no spend limit, $0 used that day); and
+the engine's ordinary fan-out — parallel character steps, one retrieval
+embedding each — reaches it. Six greeting seeds fired back to back is exactly
+that pattern.
+
+- Embedding requests pace themselves. The engine starts unpaced, learns an
+  interval from the provider's own 429s, and lets it decay away once they
+  stop. Adaptive rather than configured, because the ceiling belongs to the
+  model: a local embedder does tens per second and must not pay a number
+  chosen for somebody else's provider.
+- Retry backoff is jittered. Fixed 1s/2s/4s was written for a random hiccup;
+  against a rate ceiling a fan-out sleeps in lockstep and retries as the same
+  wave that was refused. Equal jitter, not full — a full-jitter draw near zero
+  is not a backoff.
+
+None of which is enough on its own: a beat can still exhaust its whole retry
+budget inside one depleted window, and chat 70 turn 6 lost all four of its
+memories that way with every fix above already running. So the engine now
+**finishes its own failed write**. Rows stored on the fallback are re-embedded
+by id about half a minute later, once the window has refilled.
+
+This is deliberately NOT a rebuild, and the distinction is the whole design.
+Walking the bank is a migration a host should choose and pay for; re-doing a
+write the engine fumbled seconds ago is the engine finishing its job. The pass
+touches only the rows whose own write fell back — never the historical corpus,
+never lore, never another chat — refuses to write the hash over the hash,
+skips rows something else already fixed, and is bounded, so a provider that is
+down for an hour hands the problem back to the ordinary rebuild offer rather
+than accumulating forever. That offer stays exactly where it was, for the case
+it was written for: a host changing embedding model.
+
+And because the ceiling counts REQUESTS rather than tokens, concurrent
+embedding calls are now coalesced into one. Callers that arrive while a
+request is in flight queue behind it and the next request serves the whole
+group — no artificial batching window, so a solo call is exactly as fast as it
+was, and the busier the fan-out the better it batches. Identical texts within
+a group are embedded once.
+
+The licence for that is measured, not assumed: the same document embedded
+alone and embedded inside a batch of three came back **bitwise identical**, at
+both first and last position, so a text's vector does not depend on its
+companions and no ranking can move. The engine was already relying on this in
+one direction — writes go out batched while queries go out one at a time, and
+recall would already have been broken otherwise.
+
+### Generated and imported characters can have a tail
+
+`embodiment.extra_parts` was read by the Director, the character agents, the
+perception composer and the scene — and written by nothing except a human in
+the editor. Every path that authors a card emitted an empty list, so a kitsune
+generated from a brief or imported from a card arrived with nine tails in
+prose and none the engine could see, cover, or let anybody touch. It is the
+failure `psychology.drive` taught: a structured field that is empty reads as
+complete, does not error, and shows up much later as a body that does not
+behave.
+
+One shared rule (`prompts.EXTRA_PARTS_NOTE`) is now spliced into
+`generator_character`, `generator_persona`, `fill_appearance`,
+`promote_character` and both import-reinterpret prompts, each of which also
+carries `extra_parts` in its JSON template. The appearance fill keeps what
+comes back — its merge read `visible` and `initial_outfit` only, so a proposed
+part was discarded — treating an omitted list as silence rather than an
+amputation, and the editor sends the author's unsaved parts with the request
+so a fill run after typing "tail" does not propose a second one. An import
+warning fires when body prose names a part the sheet does not declare.
+
+### Perception has no model role to configure
+
+Perception became deterministic; the `perception` entry in `providers.ROLES`
+did not go with it, so the settings panel went on offering a model for a stage
+that cannot call one. Removed from the role list, the per-provider sizing
+tips, `docs/FEATURES.md` and a `Design.md` row that still described one LLM
+call per perceiver. The perception STEP key stays where it is: stored steps,
+archives and traces from before the change still replay through it.
 
 ### Perception no longer asks a model what a mind can see
 
@@ -69,7 +349,7 @@ a stranger label can still be cut mid-phrase.
 
 ### Character-owned material outputs now cross the resolution boundary
 
-A live climax completed inside the character model—its hedonic state explicitly
+A live hedonic release completed inside the character model—its state explicitly
 said `released:true` and zeroed the accumulated charge—but its public sequence
 began with the aftershocks. The Director intentionally receives conduct rather
 than private psychology, so it could not see that completion marker. It rendered
@@ -352,7 +632,7 @@ sensation to each participant.
 The next reroll showed that persistence was still too late. Interpret reduced
 the player's already-present full-depth contact declaration to visible squirming,
 so perception pass 1 gave the other participant only the older coarse
-`cock -> groin` record; the exact relation appeared, if at all, after that
+coarse `part -> region` record; the exact relation appeared, if at all, after that
 participant had already decided. Interpret now carries guarded
 `contact_assertions` into a copy-only onset scene before pass 1. A player may
 establish contact through their own completed conduct; when the other body is

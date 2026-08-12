@@ -1,8 +1,8 @@
 """Player-declared standing contact reaches the other party in perception 1.
 
 Chat 68 turn 15 supplied the failure: the player explicitly felt a standing
-cock-to-cervix relation, interpret retained only the visible squirm, and pass 1
-reused the older coarse cock-to-groin record. The other participant therefore
+exact part-to-interior relation, interpret retained only the visible squirm,
+and pass 1 reused the older coarse part-to-region record. The other participant therefore
 decided before receiving the contact declaration their own body should feel.
 """
 

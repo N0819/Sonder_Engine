@@ -331,3 +331,42 @@ class TestKnowledgeSeedRouting:
         rows = q("SELECT content FROM memories WHERE chat_id=?", (chat_id,))
         assert [r["content"] for r in rows] == [
             "I know the harbour road floods at spring tide."]
+
+    def test_every_seed_is_embedded_in_one_call(self, temp_db, monkeypatch):
+        """Six seeds cost ONE round trip to the embedding provider, not six.
+
+        Each seed embeds two documents, and `embed_texts_meta` degrades to the
+        crc32 hash on any error -- so one call per seed was six independent
+        chances to write a memory that is stamped `cheap:crc32:256` and
+        reachable by keyword only. Reported live on 2026-08-11: a story made
+        from a greeting offered, on its own first beat, to rebuild the
+        memories it had just written. Batching does not make the failure
+        impossible; it makes it one failure instead of six, and that one is
+        retried inside the provider seam.
+        """
+        import memory
+        calls = []
+        real = memory.embed_texts_meta
+        monkeypatch.setattr(memory, "embed_texts_meta",
+                            lambda texts, **kw: (calls.append(list(texts)),
+                                                 real(texts, **kw))[1])
+        chat_id, _tid = self._launch(monkeypatch, [
+            {"content": f"I remember the {word} well.", "salience": 0.5}
+            for word in ("harbour", "chandler", "toll", "ferry", "vault",
+                         "signal")])
+        from db import q
+        assert len(q("SELECT id FROM memories WHERE chat_id=?", (chat_id,))) == 6
+        assert len(calls) == 1
+        assert len(calls[0]) == 12  # document + cues per seed
+
+    def test_seeds_still_carry_one_stamp_each(self, temp_db, monkeypatch):
+        """The batch must stamp every row, not only the first."""
+        chat_id, _tid = self._launch(monkeypatch, [
+            {"content": "I know the harbour road floods.", "salience": 0.5},
+            {"content": "I know the chandler waters his oil.", "salience": 0.5}])
+        from db import q
+        rows = q("SELECT embedding_model, embedding_dim, embedding FROM "
+                 "memories WHERE chat_id=?", (chat_id,))
+        assert len(rows) == 2
+        assert all(r["embedding_model"] and r["embedding_dim"] and r["embedding"]
+                   for r in rows)

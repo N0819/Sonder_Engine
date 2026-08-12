@@ -71,6 +71,33 @@ TRANSIT_NOTE = (
  "in the same beat."
 )
 
+# Every path that AUTHORS a card says this, because the field is invisible in
+# its absence: a card with a tail described in prose and an empty
+# `extra_parts` reads as complete and is not. The engine can only see, clothe,
+# conceal or let somebody touch a part that is declared structurally, so a
+# generated kitsune had nine tails no one could ever notice. Spliced into
+# generator_character, generator_persona, fill_appearance, promote_character
+# and importers.REINT_CHAR_SYS -- one wording, so the four cannot drift.
+EXTRA_PARTS_NOTE = (
+ "EXTRA BODY PARTS ARE A FIELD, NOT A SENTENCE. Anything this body has that a human "
+ "body does not — a tail, wings, horns, antlers, animal ears, extra arms, tentacles, a "
+ "halo — belongs in embodiment.extra_parts as objects: {\"kind\":\"tail\",\"count\":1,"
+ "\"at\":\"waist\",\"aspect\":\"back\",\"through_clothing\":true,\"description\":\"\"}. "
+ "`kind` is the bare noun the story will use, and is also the handle somebody grabs it "
+ "by, so write \"tail\", never \"a long russet fox tail\" — that belongs in "
+ "`description`. `at` is the body region it emerges from: head, torso, arms, hands, "
+ "waist, groin, legs, feet. `aspect` is which face of that region: front, back, top, "
+ "underside, left, right, or sides (bilaterally — an extra PAIR of arms). `count` is how "
+ "many there are in total. `through_clothing` is true when garments over that region are "
+ "worn around the part (a tail through a skirt), false when the part is tucked beneath "
+ "them and hidden while the region is covered.\n"
+ "The engine can only see, cover, conceal and let someone touch a part that is declared "
+ "here. A tail that exists only in the appearance summary is decoration: nothing can be "
+ "done to it and nobody will ever notice it. Describe it in the summary as well if the "
+ "prose wants it — the two are not in competition. An ordinary human body leaves the "
+ "list empty."
+)
+
 NSFW_OVERLAY = "\n\n" + (
     "CONTENT POLICY — UNCENSORED ADULT MODE: This is an adult-oriented "
     "fiction engine. Violence, blood, intimacy, and explicit sexual content "
@@ -1754,14 +1781,33 @@ DEFAULT_PROMPTS = {
  "\"sequence\":[],"
  "\"contact_ops\":[],"
  "\"material_effects\":[],"
- "\"active_state\":{\"mood\":\"\",\"goal\":\"\","
+ # No `goal` slot: commit derives the goal from the enacted want's own
+ # text (measured: it did so on 99.0% of 401 recent-era calls, and the
+ # emitted string matched that want only 16.2% of the time -- ~20
+ # tokens/call transcribing an answer `wants`+`enacted_want` already
+ # carry). A goal a legacy provider still emits remains accepted by the
+ # schema and is used as commit's fallback when the wants are malformed.
+ "\"active_state\":{\"mood\":\"\","
  "\"affect\":{\"surface\":{\"label\":\"\",\"valence\":0.0,\"arousal\":0.0},"
  "\"undercurrent\":null,\"baseline\":{\"valence\":0.0,\"arousal\":0.0}},"
  "\"wants\":[{\"want\":\"\",\"urgency\":0.5,\"serves\":\"\",\"conflicts_with\":null}],"
  "\"enacted_want\":0,\"suppressed_want\":null,"
- "\"stress\":{\"activation\":0.0,\"load\":0.0,\"coping_mode\":\"\","
- "\"overloaded\":false},\"hedonic\":{\"pain\":0.0,\"pleasure\":0.0,"
- "\"source\":\"\",\"released\":false},\"active_concerns\":[]},"
+ # Two fields, not ten: commit reads ONLY `coping_mode` (a pass-through
+ # label) and `released` (the discharge declaration, rightly the
+ # character's own) -- everything else in the old
+ # stress{activation,load,overloaded}/hedonic{pain,pleasure,source} shape
+ # is recomputed wholesale by psychology_runtime.resolve_stress/
+ # resolve_hedonic from the appraisal plus prior state, and the emitted
+ # numbers never reach st["active_state"] (commit.py). Measured on the
+ # stored corpus (401 recent-era calls, 2026-08-11 audit + re-measure):
+ # both dicts were emitted on 71% of calls at a mean 78 tokens, of which
+ # the consumed signal was ~12 -- pure decode-time cost, the resolve
+ # `dice` precedent. Schema defaults tolerate the old shape, so legacy
+ # providers emitting the full dicts stay valid, and the character still
+ # RECEIVES its full committed stress/hedonic in self.active_state next
+ # beat -- self-knowledge is untouched.
+ "\"stress\":{\"coping_mode\":\"\"},\"hedonic\":{\"released\":false},"
+ "\"active_concerns\":[]},"
  "\"intent_ops\":[{\"op\":\"add|progress|block|satisfy|abandon|nonviable\",\"id\":\"\","
  "\"intent\":\"\",\"why\":\"\",\"evidence\":[]}],"
  "\"follow_op\":null,"
@@ -2281,22 +2327,51 @@ DEFAULT_PROMPTS = {
  "by reproducing them in your output, correct malformed portions, and reject unsupported "
  "invention.\n\n"
  "CLOTHING TRACKING: If the beat changes anyone's clothing, record it in "
- "state_diff.attire. UNDRESSING IS A SEQUENCE, NOT A SWITCH. A garment goes "
- "worn -> loosened -> open -> removed, and moves ONE step per beat. Someone "
- "who begins on a sash has a loosened sash at the end of that beat, not a bare "
- "body: do not drop a garment from `wearing` the beat it was first touched, "
- "and never write events describing skin that this beat's step does not "
- "actually uncover. A garment that is loosened or open is STILL BEING WORN — "
- "keep it in `wearing` and put its condition in `state`. The one exception is "
- "a decisive act (tearing it off, stripping, undressing completely), which "
- "reaches removed at once. A garment that does come off becomes an object in "
+ "state_diff.attire. CLOTHING HAS THREE SEPARATE AXES, and each has its own "
+ "channel — a fact written into the wrong one moves nothing. (1) THE LADDER: "
+ "how far toward off the body, via `remove`/`wearing`. (2) DISPLACEMENT: "
+ "what a still-worn garment currently covers, via `coverage`. (3) CONDITION: "
+ "what happened to the fabric (wine, a tear, blood), via `conditions`. A "
+ "jacket pushed off the shoulders is fully worn on the ladder, undamaged in "
+ "condition, and changed ONLY in coverage.\n"
+ "UNDRESSING IS A SEQUENCE, NOT A SWITCH. A garment with fastenings goes "
+ "worn -> loosened -> open -> removed; give the act its middle beats when "
+ "the fiction is savouring them, and never write events describing skin "
+ "that this beat's own act does not actually uncover. `remove` is YOUR "
+ "RESOLUTION and the engine honours it: emit it when the garment has come "
+ "off ON THIS BEAT'S PAGE, whatever the phrasing — shrugged off, pulled "
+ "off, stepped out of. Emit the staged state instead when your prose shows "
+ "the act still in progress (begins to, works at, fumbles with): a beat "
+ "whose prose is in progress but whose diff says `remove` is held one step "
+ "and reported. A garment that is loosened or open is STILL BEING WORN — "
+ "keep it in `wearing`. A garment that does come off becomes an object in "
  "the room automatically — do not also create it in state_diff.entities.\n"
+ "DISPLACEMENT IS STRUCTURED, INSTANT, AND REVERSIBLE. When a still-worn "
+ "garment stops covering a place it normally covers — a jacket pushed off "
+ "the shoulders, a skirt hiked to the waist, trousers around the ankles — "
+ "write attire.<name>.coverage as {garment: {region: [zones it STILL "
+ "covers]}}, using [] for a region it no longer covers at all. Examples: "
+ "jacket off the shoulders with arms still in the sleeves = "
+ "coverage:{'jacket':{torso:[],waist:[]}}; trousers at the ankles = "
+ "coverage:{'trousers':{legs:[],groin:[]}} — still worn, covering nothing, "
+ "NOT removed. The torso is finer: its zones are `chest` and `midriff`, so a "
+ "tank top rucked above the stomach is coverage:{'tank top':{torso:['chest']}}. "
+ "Displacement happens in one gesture and reverses in one gesture — when the "
+ "garment is pulled back into place, write the full zone list (a bare region "
+ "name for regions without zones) to clear the override. Never leave a "
+ "coverage fact only in a condition string: the engine cannot read prose as "
+ "state, and the body will stay covered in the ledger while your narration "
+ "says otherwise. Off the BODY is `remove`; off a PLACE while still on the "
+ "body is `coverage`.\n"
  "WHAT HAPPENS TO A GARMENT BELONGS TO THE GARMENT. Spilled wine, a tear, "
  "soaking, scorching, blood: put it in attire.<name>.conditions keyed by the "
  "garment, not in the body's `state`. It persists until something changes it "
  "and travels with the garment when it comes off, so a stained shirt is a "
  "stained shirt on the floor. Being damaged is not being removed — a torn "
- "sleeve is still worn.\n"
+ "sleeve is still worn. A condition is prose about FABRIC, never a state "
+ "word: writing 'loosened' or 'pushed off her shoulders' into a condition "
+ "moves nothing — the ladder and coverage channels are where those facts "
+ "act.\n"
  "A BLOW LANDS ON BOTH. Anything reaching a COVERED part of a body goes "
  "through what covers it first: a slash across the chest cuts the coat AND "
  "the chest. Record both — the garment in attire.<name>.conditions, the body "
@@ -2307,13 +2382,6 @@ DEFAULT_PROMPTS = {
  "describes what the body IS, not what has lately happened to it. If the "
  "region was bare, mark only the body. Match the region to where the blow "
  "landed: a blow to the legs does not tear a hat.\n"
- "PARTIAL TORSO COVERAGE IS STRUCTURED. The torso has two coverable zones: "
- "`chest` and `midriff`. When a still-worn garment exposes one, write "
- "attire.<name>.coverage as {garment_handle:{torso:[zones it STILL covers]}}. "
- "Example: a tank top rucked above the stomach is "
- "coverage:{'tank top':{torso:['chest']}}. Never leave this fact only in a "
- "condition string. When it comes back down, write both zones to clear the "
- "standing override. Use remove when the whole garment comes off.\n"
  "WHAT A BODY SHOWS IS EXACTLY WHAT `exposed` LISTS. Every body's attire "
  "carries a per-region view and an `exposed` list of the regions nothing "
  "covers. Treat that list as the whole truth about bare skin: do not write, "
@@ -2976,8 +3044,10 @@ DEFAULT_PROMPTS = {
  "containment:{name:{in,mode}|null}, vitals:{name:{air,stamina,nourishment,injury}}, "
  "overlays:{name:[...]}, attire:{name:{add:[],remove:[],"
  "replace:null,state:null,conditions:{garment_name:'what just happened to "
- "it'},coverage:{garment_name:{torso:['chest','midriff']}}}} — coverage lists "
- "the zones a still-worn garment continues to cover; a garment handle need not repeat its full registered name ('robe' "
+ "it'},coverage:{garment_name:{region:[zones it STILL covers] or [] for a "
+ "region it no longer covers}}}} — coverage is the displacement axis for any "
+ "body region (torso's zones are chest/midriff; every other region is "
+ "all-or-nothing); a garment handle need not repeat its full registered name ('robe' "
  "finds the one robe she is wearing), and a condition keyed by a garment she is "
  "NOT wearing dresses her in it, "
  "cast_changes:[{who,status,reason}], world_facts:[], "
@@ -3075,7 +3145,7 @@ DEFAULT_PROMPTS = {
  "target_interior?,target_part?,amount?,detail?}], Material transfer belongs here, never "
  "as contact with a material body part. A unique standing interior contact for source_part "
  "may supply its target/interior destination; otherwise target and placement are required. "
- "attire:{name:{add:[],remove:[],conditions:{},coverage:{garment:{torso:[zones still covered]}}}}, "
+ "attire:{name:{add:[],remove:[],conditions:{},coverage:{garment:{region:[zones still covered] or []}}}}, "
  "cast_changes:[], world_facts:[], location:'', time. NEVER emit an empty-placeholder entry (all fields "
  "blank) — encode the actual change or leave the key out.\n\n"
  "RELOCATION LABEL: when the resolved event moves the party to a genuinely "
@@ -3744,6 +3814,8 @@ DEFAULT_PROMPTS = {
  "hair/eyes/scars and never clothing. Put the outfit worn in the last evidenced "
  "scene in initial_outfit.wearing (and tears, wetness, blood, etc. in its state). "
  "Do not repeat garments in the appearance summary.\n\n"
+ + EXTRA_PARTS_NOTE + " Take them from the evidence: a presence the story has "
+ "been describing with a tail is being promoted WITH that tail.\n\n"
  "Build conditional psychology from the evidence: traits have activation cues "
  "and inhibitors; values have behavioral expression and conflicts; self/world "
  "beliefs carry confidence and emotional charge; coping strategies name trigger, "
@@ -3769,6 +3841,7 @@ DEFAULT_PROMPTS = {
  "\"acuity\":\"ordinary\",\"range\":\"ordinary\",\"notes\":\"\"}],"
  "\"visible\":{\"summary\":\"\",\"build\":\"\",\"face\":\"\","
  "\"hair\":\"\",\"eyes\":\"\",\"distinctive_features\":[]},"
+ "\"extra_parts\":[],"
  "\"latent\":[{\"capability\":\"\",\"visible_when\":\"\","
  "\"limits\":\"\"}],\"interoception\":{\"acuity\":0.5,"
  "\"pain_sensitivity\":0.5,\"fatigue_sensitivity\":0.5,"
@@ -3918,6 +3991,9 @@ DEFAULT_PROMPTS = {
  "hair, eyes, skin, scars, bearing — what remains when the clothes change. It "
  "must never mention a garment. initial_outfit is CLOTHING: what they are "
  "wearing when the story opens.\n\n"
+ + EXTRA_PARTS_NOTE + " The card and the author's draft both carry the parts "
+ "already declared: return those unchanged unless the brief asks otherwise, "
+ "and add any the card describes in prose but has not declared.\n\n"
  "THE CLOTHES COME FROM THE CARD TOO. Choose each garment because THIS "
  "person, with that trade, that history, that money and that need to be seen "
  "or not seen, would be wearing it in the situation the card opens in — then "
@@ -3990,7 +4066,7 @@ DEFAULT_PROMPTS = {
  "must be an empty string.\n\n"
  "Output STRICT JSON {\"embodiment\":{\"visible\":{\"summary\":\"\","
  "\"build\":\"\",\"face\":\"\",\"hair\":\"\",\"eyes\":\"\","
- "\"distinctive_features\":[]}},\"initial_outfit\":{\"wearing\":[],"
+ "\"distinctive_features\":[]},\"extra_parts\":[]},\"initial_outfit\":{\"wearing\":[],"
  "\"state\":[],\"regions\":{\"torso\":{\"garments\":[{\"name\":\"\","
  "\"description\":\"\",\"state\":\"worn\",\"covers\":[],"
  "\"covered_zones\":{},"
@@ -4009,6 +4085,7 @@ DEFAULT_PROMPTS = {
  "embodiment.latent. Every starting garment/accessory belongs in "
  "initial_outfit.wearing; clothing condition belongs in initial_outfit.state. "
  "Never repeat outfit text in the appearance summary.\n\n"
+ + EXTRA_PARTS_NOTE + "\n\n"
  "Psychology must be behaviorally useful and conditional. Traits include "
  "strength, ordinary expression, activation cues, and what inhibits them. "
  "Values include priority, behavioral expression, and genuine conflicts. "
@@ -4044,6 +4121,7 @@ DEFAULT_PROMPTS = {
  "\"acuity\":\"ordinary\",\"range\":\"ordinary\",\"notes\":\"\"}],"
  "\"visible\":{\"summary\":\"\",\"build\":\"\",\"face\":\"\","
  "\"hair\":\"\",\"eyes\":\"\",\"distinctive_features\":[]},"
+ "\"extra_parts\":[],"
  "\"latent\":[{\"capability\":\"\",\"visible_when\":\"\","
  "\"limits\":\"\"}],\"interoception\":{\"acuity\":0.5,"
  "\"pain_sensitivity\":0.5,\"fatigue_sensitivity\":0.5,"
@@ -4097,6 +4175,7 @@ DEFAULT_PROMPTS = {
  "appearance summary. narration."
  "voice_setting is private narrator-only style guidance and is never "
  "available to NPCs.\n\n"
+ + EXTRA_PARTS_NOTE + "\n\n"
  "Output STRICT JSON:"
  "{"
  "\"identity\":{\"uid\":\"\",\"name\":\"\",\"aliases\":[],"
@@ -4107,6 +4186,7 @@ DEFAULT_PROMPTS = {
  "\"acuity\":\"ordinary\",\"range\":\"ordinary\",\"notes\":\"\"}],"
  "\"visible\":{\"summary\":\"\",\"build\":\"\",\"face\":\"\","
  "\"hair\":\"\",\"eyes\":\"\",\"distinctive_features\":[]},"
+ "\"extra_parts\":[],"
  "\"latent\":[]},"
  "\"competence\":{\"abilities\":[{\"name\":\"\","
  "\"level\":\"competent\",\"scope\":\"\",\"limits\":\"\","

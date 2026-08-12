@@ -398,7 +398,9 @@ def test_observation_merge_keys_on_the_delivery_verdict():
     atoms = composer.observations_from_render("player", rendered)
     hearing = [a for a in atoms if a["channel"] == "hearing"]
     assert len(hearing) == 2
-    fidelities = {a["fidelity"] for a in hearing}
+    # "rendered" is the resting fidelity and is omitted (absent means the
+    # default -- see OBSERVATION_DEFAULTS); "ambiguous" is signal and stays.
+    fidelities = {a.get("fidelity", "rendered") for a in hearing}
     assert fidelities == {"rendered", "ambiguous"}
 
 
@@ -409,9 +411,46 @@ def test_observations_text_is_the_rendered_span():
     assert atoms
     for atom in atoms:
         assert atom["observed"]["text"] in rendered.text
-        assert atom["perceiver_id"] == "7"
+        # The perceiver is named once, by the citation id; a separate
+        # perceiver_id repeating it is wrapper the payload no longer carries
+        # (measured: it matched the id's perceiver in 100% of 1,692 stored
+        # observations).
+        assert atom["observation_id"].startswith("current:7:")
+        assert "perceiver_id" not in atom
     channels = {a["channel"] for a in atoms}
     assert "hearing" in channels and "sight" in channels
+
+
+def test_observation_wrapper_omits_only_resting_defaults():
+    """The advisory axes are context for the model's appraisal, and nothing
+    deterministic consumes them (docs/PIPELINE.md) -- so a resting default
+    (intensity 0.35 / suddenness 0.1 / ambiguity 0.15 / fidelity "rendered" /
+    source_atom_id "current" / directed_at_self false, near-constant across
+    99%/99%/89%/99%/100% of 1,692 stored observations) carries no information
+    and is omitted, while every non-default value survives byte-for-byte.
+    Ids, text and channel are never trimmed: they are the citation namespace
+    and the content."""
+    resting = {
+        "observation_id": "current:7:0", "perceiver_id": "7",
+        "source_atom_id": "current", "channel": "sight",
+        "fidelity": "rendered", "observed": {"text": "A door stands open."},
+        "intensity": 0.35, "suddenness": 0.1, "ambiguity": 0.15,
+        "directed_at_self": False,
+    }
+    assert composer.compact_observation(resting) == {
+        "observation_id": "current:7:0", "channel": "sight",
+        "observed": {"text": "A door stands open."},
+    }
+    varied = dict(resting, intensity=0.75, suddenness=0.35, ambiguity=0.55,
+                  fidelity="ambiguous", directed_at_self=True)
+    compacted = composer.compact_observation(varied)
+    for key in ("intensity", "suddenness", "ambiguity", "fidelity",
+                "directed_at_self"):
+        assert compacted[key] == varied[key]
+    # A perceiver_id that does NOT match the id's perceiver is a fact, not a
+    # repetition, and must fail safe by surviving.
+    crossed = dict(resting, perceiver_id="99")
+    assert composer.compact_observation(crossed)["perceiver_id"] == "99"
 
 
 def test_residue_is_the_whole_output_for_a_non_awake_mind():

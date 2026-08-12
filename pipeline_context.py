@@ -14,6 +14,35 @@ from db import wget
 current_step_key: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
     "current_step_key", default=None)
 
+# Where a warning raised BELOW the agent layer should land. `llm_quality`'s
+# repair ladder (truncation re-ask, temperature-0 repair, fallback candidates)
+# and the character stage's decision-review retry each issue a full extra
+# provider call, and none of them left a stored trace: a retry that succeeded
+# was indistinguishable from a first draft. The 2026-08-11 character-agent
+# audit could bound the retry rate only from its failures -- 14 "repetition
+# retained" notes in 401 recent-era calls, a floor of >=3.5% with the true
+# rate unknowable -- while the live benchmark's 1.25-1.50 provider calls/turn
+# against 1.01 stored results/turn suggested ~8-15s/turn on affected sessions.
+# `agents.runtime.compute_step` points this at ctx.add_warning for the running
+# step (the same funnel that sets current_step_key, so thread-copied contexts
+# inherit it); outside a pipeline step it stays None and noting is a no-op --
+# importers, generators and jobs keep making repairs silently as before.
+current_warning_sink: contextvars.ContextVar[Optional[Any]] = \
+    contextvars.ContextVar("current_warning_sink", default=None)
+
+
+def note_step_warning(msg: str) -> None:
+    """Record one diagnostic line on the running pipeline step's engine
+    notes, from code that has no PipelineContext in scope. No-op outside a
+    step."""
+    sink = current_warning_sink.get()
+    if sink is not None:
+        try:
+            sink(str(msg))
+        except Exception:
+            # A diagnostic must never fail the call it is describing.
+            pass
+
 
 class StepTaggedWarnings(list):
     """A list of warning strings that also remembers which step raised each.

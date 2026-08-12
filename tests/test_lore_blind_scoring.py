@@ -136,7 +136,7 @@ def _live_embedder(monkeypatch, dims=2560):
     """A provider that answers, at `dims` wide."""
     from providers import EmbeddingBatch
 
-    def meta(texts):
+    def meta(texts, **_k):
         v = np.ones(dims, dtype=np.float32) / np.sqrt(dims)
         return EmbeddingBatch(vectors=[v for _ in texts],
                               model_key="test:1:model", dimensions=dims,
@@ -181,7 +181,7 @@ def test_a_rebuild_uses_the_same_document_update_lore_builds(temp_db,
     seen = []
     from providers import EmbeddingBatch
 
-    def meta(texts):
+    def meta(texts, **_k):
         seen.extend(texts)
         v = np.ones(2560, dtype=np.float32) / np.sqrt(2560)
         return EmbeddingBatch(vectors=[v for _ in texts],
@@ -209,7 +209,7 @@ def test_a_provider_hiccup_never_writes_a_fallback_over_lore(temp_db,
     stale = _entry(temp_db, book, "Third Floor", "the roost", 256)
     from providers import EmbeddingBatch
 
-    def degraded(texts):
+    def degraded(texts, **_k):
         v = np.ones(256, dtype=np.float32) / np.sqrt(256)
         return EmbeddingBatch(vectors=[v for _ in texts],
                               model_key="cheap:crc32:256", dimensions=256,
@@ -275,7 +275,7 @@ def test_an_entry_written_during_an_outage_says_it_was(temp_db, monkeypatch):
     """
     from providers import EmbeddingBatch
     book = _book(temp_db)
-    monkeypatch.setattr(memory, "embed_texts_meta", lambda texts: EmbeddingBatch(
+    monkeypatch.setattr(memory, "embed_texts_meta", lambda texts, **_k: EmbeddingBatch(
         vectors=[np.ones(256, dtype=np.float32) / 16 for _ in texts],
         model_key="cheap:crc32:256", dimensions=256, fallback=True,
         error="provider down"))
@@ -442,7 +442,7 @@ def test_a_narrower_live_model_does_not_invert_the_reference(temp_db,
     temp_db.qi("UPDATE lore_entries SET embedding_model=?,embedding_dim=? "
                "WHERE id=?", ("old-wide:1:model", 2560, wide_but_retired))
 
-    monkeypatch.setattr(memory, "embed_texts_meta", lambda texts: EmbeddingBatch(
+    monkeypatch.setattr(memory, "embed_texts_meta", lambda texts, **_k: EmbeddingBatch(
         vectors=[np.ones(1024, dtype=np.float32) / 32 for _ in texts],
         model_key="new-narrow:1:model", dimensions=1024, fallback=False))
 
@@ -465,7 +465,7 @@ def test_a_degraded_probe_is_not_mistaken_for_the_live_model(temp_db,
     temp_db.qi("UPDATE lore_entries SET embedding_model=?,embedding_dim=? "
                "WHERE id=?", ("real:1:model", 2560, good))
 
-    monkeypatch.setattr(memory, "embed_texts_meta", lambda texts: EmbeddingBatch(
+    monkeypatch.setattr(memory, "embed_texts_meta", lambda texts, **_k: EmbeddingBatch(
         vectors=[np.ones(256, dtype=np.float32) / 16 for _ in texts],
         model_key="cheap:crc32:256", dimensions=256, fallback=True,
         error="down"))

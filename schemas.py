@@ -1362,10 +1362,15 @@ class EventAtom(LenientModel):
 
 class Observation(LenientModel):
     observation_id: str
-    perceiver_id: str
-    source_atom_id: str
-    channel: str
-    fidelity: str
+    # Defaults, not requirements: the engine's own projection
+    # (agents/composer.py, OBSERVATION_DEFAULTS) omits wrapper fields at
+    # their resting values -- absent means the default -- so a compacted
+    # observation must validate. Old stored observations carry the full
+    # shape and validate unchanged.
+    perceiver_id: str = ""
+    source_atom_id: str = "current"
+    channel: str = "mixed"
+    fidelity: str = "rendered"
     observed: dict[str, Any] = Field(default_factory=dict)
     intensity: float = Field(default=0.5, ge=0.0, le=1.0)
     suddenness: float = Field(default=0.0, ge=0.0, le=1.0)

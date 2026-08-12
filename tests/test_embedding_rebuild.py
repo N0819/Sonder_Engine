@@ -43,7 +43,11 @@ def test_status_reports_the_split(bank):
     assert memory.embedding_bank_status()["memories"]["stranded"] == 0
     _strand()
     st = memory.embedding_bank_status()
-    assert st["memories"] == {"total": 4, "stranded": 4}
+    assert st["memories"]["total"] == 4
+    assert st["memories"]["stranded"] == 4
+    # Stranded by a MODEL CHANGE ("ancient:model"), not by a failed write, so
+    # none of it is the engine's own to finish -- see `fallback_written`.
+    assert st["memories"]["fallback_written"] == 0
     assert st["is_fallback"] is True     # no embeddings provider configured
 
 

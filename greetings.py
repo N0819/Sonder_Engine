@@ -21,7 +21,7 @@ from character_schema import (
 )
 from llm_quality import complete_validated_json
 from prompts import get_prompt
-from memory import add_memory, duplicate_lorebook_for_chat
+from memory import add_memories_batch, duplicate_lorebook_for_chat
 from agents.runtime import _run_pipeline
 from agents.storage import active_content
 
@@ -254,6 +254,7 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     # per-character and never enter the player's perception, so an
     # unrevealed-in-prose seed is knowledge the character has and the player
     # does not -- the whole point of the extraction.
+    seed_specs = []
     for seed in extraction.get("knowledge_seeds") or []:
         # NOT `sub`. That resolves the player's slot to the persona's name,
         # which is right for the prose the player reads and wrong for a
@@ -262,12 +263,12 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
         # the character is meant to know it, and a description otherwise --
         # and either way this is the one path that also rewrites the literal
         # words "the player", which `sub` cannot see (see _PLAYER_SLOT).
-        content = _substitute_player_slot(seed.get("content") or "",
-                                          seed_handle).strip()
-        if not content:
-            continue
         try:
-            # Give each seed a stable identity. `add_memory` upserts on
+            content = _substitute_player_slot(seed.get("content") or "",
+                                              seed_handle).strip()
+            if not content:
+                continue
+            # Give each seed a stable identity. The batch upserts on
             # (chat, character, event_key), so routing the same seed twice
             # updates one row instead of writing a second -- which is what
             # every other memory writer in the engine already gets, and what
@@ -282,11 +283,28 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
             # Keyed by content, not position, so editing or reordering the
             # greeting does not silently orphan the old row.
             digest = hashlib.sha1(content.encode("utf-8", "ignore")).hexdigest()
-            add_memory(cid, char_id, None, "episode", "remembered",
-                       _seed_salience(seed.get("salience")), content,
-                       turn_idx=0, event_key="greeting_seed:%s" % digest[:16])
+            seed_specs.append({
+                "chat_id": cid, "char_id": char_id, "turn_id": None,
+                "kind": "episode", "provenance": "remembered",
+                "salience": _seed_salience(seed.get("salience")),
+                "content": content, "turn_idx": 0,
+                "event_key": "greeting_seed:%s" % digest[:16],
+            })
         except Exception:
-            pass  # a bad seed must not abort the launch
+            continue  # a bad seed must not abort the launch
+    if seed_specs:
+        # ONE embedding call for the whole set, not one per seed. Each seed
+        # embeds two documents, so six seeds were six separate round trips to
+        # the provider on the busiest moment a story ever has -- and any one
+        # of them failing strands that memory on the crc32 fallback under its
+        # own stamp, which is what makes a brand-new story offer to rebuild
+        # memories it wrote seconds ago (reported live, 2026-08-11). Batching
+        # is not merely faster: it turns six chances to be stranded into one,
+        # and that one is retried inside `embed_texts_meta`.
+        try:
+            add_memories_batch(seed_specs)
+        except Exception:
+            pass  # a failed seed batch must not abort the launch
 
     # Turn 0: run establishment (valid, committed), then show the greeting verbatim.
     tid = db.qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",

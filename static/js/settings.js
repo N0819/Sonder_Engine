@@ -1539,17 +1539,17 @@ function renderPromiseLedgerPanel(chatId) {
 // permanence. Keyed by the same provider `kind` strings used in
 // provider_presets, so it lines up with the dropdown when adding a provider.
 const MODEL_RECOMMENDATIONS = {
-  anthropic: "Pick the current flagship Claude (Opus or Sonnet) for narrator/character_major; a smaller Claude (Haiku) is fine for perception/mapping/utility.",
-  openai: "Pick the current flagship GPT for narrator/character_major; a 'mini'/'nano'-tier variant is fine for perception/mapping/utility.",
-  gemini: "Pick the current flagship Gemini Pro for narrator/character_major; Gemini Flash is fine for perception/mapping/utility.",
+  anthropic: "Pick the current flagship Claude (Opus or Sonnet) for narrator/character_major; a smaller Claude (Haiku) is fine for mapping/utility.",
+  openai: "Pick the current flagship GPT for narrator/character_major; a 'mini'/'nano'-tier variant is fine for mapping/utility.",
+  gemini: "Pick the current flagship Gemini Pro for narrator/character_major; Gemini Flash is fine for mapping/utility.",
   deepseek: "DeepSeek's main chat/reasoning model works well for narrator/character_major; it's inexpensive enough that lightening other roles matters less.",
-  xai: "Pick the current flagship Grok for narrator/character_major; a smaller/faster Grok variant for perception/mapping/utility.",
-  mistral: "Pick a 'large' Mistral model for narrator/character_major; a 'small'/'nemo' variant for perception/mapping/utility.",
+  xai: "Pick the current flagship Grok for narrator/character_major; a smaller/faster Grok variant for mapping/utility.",
+  mistral: "Pick a 'large' Mistral model for narrator/character_major; a 'small'/'nemo' variant for mapping/utility.",
   groq: "Groq hosts other labs' open-weight models at very high speed -- pick the largest Llama/Qwen/Mixtral-family model it serves for narrator/character_major, a smaller one for the rest.",
-  together: "Together hosts many open-weight models -- prefer a 70B+ Llama/Qwen/DeepSeek-family model for narrator/character_major, a smaller one for perception/mapping/utility.",
+  together: "Together hosts many open-weight models -- prefer a 70B+ Llama/Qwen/DeepSeek-family model for narrator/character_major, a smaller one for mapping/utility.",
   openrouter: "Aggregates most providers above under one key -- the same per-role sizing logic applies; OpenRouter's model list shows context length and price per model to help compare.",
   nanogpt: "Also an aggregator with a large open-weight catalog -- prefer a well-known, large instruction-tuned model for narrator/character_major. Use '↻ models' to see what's actually included in your plan before picking.",
-  ollama: "Whatever you've pulled locally -- larger/more recent (e.g. current Llama, Qwen, or Mistral family) for narrator/character_major, a smaller quantized model for perception/mapping/utility so it stays responsive on your hardware.",
+  ollama: "Whatever you've pulled locally -- larger/more recent (e.g. current Llama, Qwen, or Mistral family) for narrator/character_major, a smaller quantized model for mapping/utility so it stays responsive on your hardware.",
   koboldcpp: "Whatever GGUF model you've loaded -- same sizing logic as Ollama above.",
   lmstudio: "Whatever model you've downloaded in LM Studio -- same sizing logic as Ollama above.",
   llamacpp: "Whatever GGUF model your llama.cpp server is serving -- same sizing logic as Ollama above.",
@@ -1652,7 +1652,7 @@ function embeddingBankBlock() {
 
 function modelRecommendationsBlock() {
   return el("div", { class: "small dim", style: "margin-top:6px" },
-    el("div", {}, "The rule that matters most: ", el("b", {}, "bigger/newer for narrator and character_major"), " (this is the writing you actually read), ", el("b", {}, "smaller/cheaper for perception, mapping, and utility"), " (mechanical, rarely visible). Specific model names below are current examples, not a permanent list -- providers update their lineups often."),
+    el("div", {}, "The rule that matters most: ", el("b", {}, "bigger/newer for narrator and character_major"), " (this is the writing you actually read), ", el("b", {}, "smaller/cheaper for mapping and utility"), " (mechanical, rarely visible). Specific model names below are current examples, not a permanent list -- providers update their lineups often."),
     ...Object.entries(MODEL_RECOMMENDATIONS).map(([kind, text]) =>
       el("div", { style: "margin-top:6px" }, el("b", {}, kind), " — ", text)));
 }
@@ -2093,7 +2093,7 @@ function renderFullApiSettings(b) {
         el("div", { class: "small dim", style: "margin-top:6px" },
           el("div", {}, el("b", {}, "Setting only Default is enough to start playing"), " — every other role falls back to it automatically, with one exception: embeddings, which needs a model of a different KIND and so is never inherited. The rest let you assign a faster or cheaper model to a specific stage of each turn without touching quality where it matters most."),
           el("div", { style: "margin-top:8px" }, el("b", {}, "director"), " — reads what you typed and decides what actually happens: whether an action succeeds, what an NPC's action resolves to. Gets this wrong and the story stops making sense, so keep it on a strong model."),
-          el("div", {}, el("b", {}, "perception"), " — filters what each character can actually see/hear/know this turn, based on where they are and what their senses allow. Mechanical, not creative — a good candidate for a lighter model."),
+          el("div", { class: "small dim" }, "There is no ", el("b", {}, "perception"), " role any more, and that is not an omission: what each character can see, hear and know is now worked out in code rather than asked of a model, so it costs nothing, cannot be got wrong by a cheap model, and has no setting to tune."),
           el("div", {}, el("b", {}, "character_bg / character_mid / character_major"), " — generate what a character does and says, tiered by how central that character is to the scene. Quality shows up directly in dialogue, so keep major characters on a strong model even if you lighten background ones."),
           el("div", {}, el("b", {}, "narrator"), " — turns everything into the prose you actually read. This is the model whose writing style you'll notice most."),
           el("div", {}, el("b", {}, "mapping"), " — keeps track of world facts, lore, and location layout in the background. Rarely visible directly, safe to experiment with."),

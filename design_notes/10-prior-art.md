@@ -308,7 +308,7 @@ non-injector. Reading them:
 |---|---|
 | "Her tail is coiled firmly around your calf, a steady weight of warmth and pressure." | one settled surface contact record |
 | "Her calf holds the coil of your tail with continuous pressure and shared heat." | the same record from the other party |
-| "Her cock keeps grinding against your exposed vulva in firm, rhythmic pulses of pressure, movement, and friction, while her tail remains coiled around your calf." | one **moving** contact + one **settled** contact, aggregated into a single sentence — and "pressure, movement, and friction" is verbatim `_SENSATION_FORMS[("moving","either")]`, reordered |
+| "Her palm keeps sliding against your bare hip in firm, rhythmic pulses of pressure, movement, and friction, while her tail remains coiled around your calf." | one **moving** contact + one **settled** contact, aggregated into a single sentence — and "pressure, movement, and friction" is verbatim `_SENSATION_FORMS[("moving","either")]`, reordered |
 | "Her tail drifts lazily, barely touching your thigh." | a light/momentary contact |
 | "Her tail, now relaxed, sways gently, and her ears are upright." | pose/state change |
 | "Your nine tails bristle behind you, fanning wide, each hair standing on end." | an involuntary **display** — not typed today; exactly the `display` event type Phase 1 proposes |

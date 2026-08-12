@@ -10,7 +10,7 @@ from providers import (
     chat_complete, token_sink, embed_texts, request_timeout,
     clamp_read_timeout,
 )
-from prompts import get_prompt
+from prompts import EXTRA_PARTS_NOTE, get_prompt
 from character_schema import (
     CHARACTER_SCHEMA,
     PERSONA_SCHEMA,
@@ -418,6 +418,12 @@ REINT_CHAR_SYS = (
  "capabilities, transformations, secret identities, and equipment functions "
  "belong in latent. Put every garment/accessory currently worn in "
  "initial_outfit.wearing; never repeat outfit text in the appearance summary.\n\n"
+ # The same wording the four card-authoring prompts carry, for the same
+ # reason drive is repeated below: this path keeps its own schema prompt, so
+ # guidance added there never reaches it. Non-human cards are the ecosystem's
+ # commonest kind -- a kitsune imported without this arrives with nine tails
+ # in prose and none the engine can see.
+ + EXTRA_PARTS_NOTE + "\n\n"
  "Psychology should be behaviorally concrete and conditional. Traits include "
  "strength, ordinary expression, activation cues, and inhibitors. Values include "
  "priority, behavioral expression, and conflicts. The self_model includes a few "
@@ -459,6 +465,7 @@ REINT_CHAR_SYS = (
  "\"acuity\":\"ordinary\",\"range\":\"ordinary\",\"notes\":\"\"}],"
  "\"visible\":{\"summary\":\"\",\"build\":\"\",\"face\":\"\","
  "\"hair\":\"\",\"eyes\":\"\",\"distinctive_features\":[]},"
+ "\"extra_parts\":[],"
  "\"latent\":[{\"capability\":\"\",\"visible_when\":\"\","
  "\"limits\":\"\"}],\"interoception\":{\"acuity\":0.5,"
  "\"pain_sensitivity\":0.5,\"fatigue_sensitivity\":0.5,"
@@ -512,6 +519,7 @@ REINT_PERSONA_SYS = (
  "in the appearance summary. "
  "narration.voice_setting is private narrator guidance and is never "
  "available to NPCs.\n\n"
+ + EXTRA_PARTS_NOTE + "\n\n"
  "Output STRICT JSON matching the native persona schema:\n"
  "{"
  "\"identity\":{\"uid\":\"\",\"name\":\"\",\"aliases\":[],"
@@ -522,6 +530,7 @@ REINT_PERSONA_SYS = (
  "\"acuity\":\"ordinary\",\"range\":\"ordinary\",\"notes\":\"\"}],"
  "\"visible\":{\"summary\":\"\",\"build\":\"\",\"face\":\"\","
  "\"hair\":\"\",\"eyes\":\"\",\"distinctive_features\":[]},"
+ "\"extra_parts\":[],"
  "\"latent\":[]},"
  "\"competence\":{\"abilities\":[{\"name\":\"\","
  "\"level\":\"competent\",\"scope\":\"\",\"limits\":\"\","
@@ -663,7 +672,46 @@ def character_import_warnings(sheet):
             "(narrow / focused / ordinary / broad / wide) to make them "
             "single-minded or to let them keep more in the air at once."
         )
+    if _prose_names_a_part(sheet) and not (
+            (sheet.get("embodiment") or {}).get("extra_parts")):
+        warnings.append(
+            "This card describes a body part in prose that is not declared in "
+            "embodiment.extra_parts, so the engine cannot see, cover or touch "
+            "it — nobody in the story will ever notice it. Add it under Extra "
+            "body parts in the character editor, or re-import with AI "
+            "reinterpretation."
+        )
     return warnings
+
+
+# Nouns whose presence in a body DESCRIPTION means the body is not the human
+# default. Deliberately a small, high-precision list rather than an anatomy:
+# this only decides whether to say a sentence to the author, and a false
+# positive costs a wrong warning on a card that mentions a horn of ale.
+# `_EXTRA_PART_PLACEMENTS` in character_schema is the sibling table -- it is
+# for placing a declared part, this is for noticing an undeclared one.
+_PART_WORDS = (
+    "tail", "tails", "wing", "wings", "horn", "horns", "antler", "antlers",
+    "tentacle", "tentacles", "halo", "fox ears", "cat ears", "wolf ears",
+    "animal ears", "extra arms", "second pair of arms",
+)
+
+
+def _prose_names_a_part(sheet):
+    """Does this card's BODY prose describe a part the schema would want?
+
+    Only the visible-body fields, never psychology or history: a character
+    who "turned tail" or values "taking the bull by the horns" has no anatomy
+    in either sentence, and a warning about one would teach an author to stop
+    reading warnings.
+    """
+    visible = ((sheet.get("embodiment") or {}).get("visible") or {})
+    text = " ".join(str(visible.get(field) or "") for field in
+                    ("summary", "build", "face", "hair", "eyes")).casefold()
+    text += " " + " ".join(str(item or "") for item
+                           in (visible.get("distinctive_features") or [])).casefold()
+    return any(re.search(r"\b%s\b" % re.escape(word), text)
+               for word in _PART_WORDS)
 
 def recover_greetings_from_source(char_id):
     """Backfill opening.greetings for an already-imported character from its
@@ -1029,6 +1077,9 @@ def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None):
         "author_draft": {
             "appearance": draft.get("appearance") or {},
             "initial_outfit": draft.get("initial_outfit") or {},
+            # The unsaved parts list too, or a fill run right after typing
+            # "tail" proposes a second one.
+            "extra_parts": draft.get("extra_parts") or [],
         },
     }
     with _silent_provider_stream():
@@ -1077,6 +1128,19 @@ def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None):
             merged["embodiment"] = {}
         merged["embodiment"]["visible"] = {
             **(merged["embodiment"].get("visible") or {}), **visible}
+    # Structured extra parts, taken only when the model actually returned a
+    # list. Silence is not a deletion: this fill is allowed to REPLACE body
+    # and clothing (see the docstring), but a model that simply omitted the
+    # field must not quietly amputate a tail the author declared by hand.
+    # `normalize` below enforces the closed menus, so junk lands somewhere
+    # visible rather than being trusted.
+    parts = ((proposed.get("embodiment") or {}).get("extra_parts")
+             if isinstance(proposed.get("embodiment"), dict) else None)
+    if isinstance(parts, list):
+        merged.setdefault("embodiment", {})
+        if not isinstance(merged["embodiment"], dict):
+            merged["embodiment"] = {}
+        merged["embodiment"]["extra_parts"] = parts
     outfit = proposed.get("initial_outfit")
     if isinstance(outfit, dict):
         if not include_beneath:
