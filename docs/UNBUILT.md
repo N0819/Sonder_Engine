@@ -2006,6 +2006,53 @@ Found while porting the module into Nullo Engine, by an agent reading each
 function's arguments after having first dismissed all three by their module
 name.
 
+### 1.38 A line addressed by epithet is addressed to nobody
+
+`director_resolve` writes `intended_target` on every dialogue entry, and both
+readers of it — `composer._addresses` and `perception._addresses` — match it
+against the observer's canonical NAME by casefolded equality. Measured live
+(three-model playthrough, 2026-08-12, `mix2.db` turn 1): both of Bryn's lines
+carried `"intended_target": "young smith's apprentice"` — the appearance label
+perception mints for strangers — where the target was the player, Corin. Every
+equality test failed.
+
+Two things ride that answer, and they are not the same kind of thing:
+
+- `directed_at_self` on the speech percept — presentation and salience;
+- `line_hear_level`'s **addressed rescue**, which is an ADMISSION decision: a
+  quiet line plainly naming you is audible to you when it would otherwise not
+  be. So a whisper aimed at the player by epithet is silently not delivered.
+
+The obvious fix — also match `intended_target` against the epithets
+`common.self_reference_forms` mints for that observer — is not taken here on
+purpose. It LOOSENS an admission gate on a string match, and this engine's
+guards subtract; a false positive delivers a line to someone it was not aimed
+at. `design_notes/20-observer-epithet-floor.md` closed the prose half of this
+defect deterministically and reports the structured half back through
+`tell_director` (`director._report_observer_epithets`) so the Director stops
+producing it. Before closing the gate, measure how often `intended_target`
+fails to match any body at all across the stored corpus — if the Director
+stops writing epithets once it is told, the gate never needs touching.
+
+### 1.39 Micro-perception deliveries bypass the composer's identity floor
+
+Pre-existing, and now visible beside §1.38.
+`loops.deterministic_micro_perception` composes each delivered sentence with
+`_observable_predicate(display, surface)` and applies **no** self-reference
+rewrite at all — not the epithet floor added in note 20, and not the older
+name-based `_self_second_person` every other delivery site runs. So a
+character whose own name or minted epithet appears in another actor's
+`observable` surface reads about themselves in the third person in their own
+micro-view, and that text flows verbatim into their next character step and
+their memory of the beat. (The player is unaffected: `_composer_outcome` skips
+the `player` key when merging `micro_by_pid`.)
+
+These additions also arrive at `_composer_outcome` **pre-rendered** and are
+appended after the composed view, so they carry none of the percept-level
+gates either — the residual already noted in
+`design_notes/13-composer-build.md` ("the micro loop should emit percepts").
+One fix covers both: emit percepts.
+
 
 ## 2. Roadmap
 
@@ -2625,7 +2672,7 @@ rather than creating another one-off question script.
 
 ---
 
-### 2.16 The Director as an orchestrator over scoped specialists
+### 2.18 The Director as an orchestrator over scoped specialists
 
 **Raised 2026-08-12**, from the owner: *"the director is the single most
 complex task, and most failure prone. Anything to reduce its payload may
@@ -2649,14 +2696,24 @@ more attempts.
 **The proposal.** An orchestrating Director over specialists, each OWNING a
 subset of `state_diff` channels, behind one prose author.
 
-**The argument that distinguishes it from conditional prompt assembly**, which
-is the cheap alternative and would shrink the sheet to ~9–12k with no
-architectural change: *a specialist that is not dispatched costs nothing at
-all.* Not a smaller prompt block — no prompt, no payload, no output surface,
-and no chance to emit the channel wrongly. Mechanics not in play this beat are
-cold-stored rather than merely trimmed. That is a power conditional assembly
-does not have, because assembly still leaves ONE call responsible for every
-channel that IS in play.
+**The argument that distinguishes it from conditional prompt assembly**:
+*a specialist that is not dispatched costs nothing at all.* Not a smaller
+prompt block — no prompt, no payload, no output surface, and no chance to
+emit the channel wrongly. Mechanics not in play this beat are cold-stored
+rather than merely trimmed.
+
+**RETRACTED (owner, 2026-08-12): the framing of conditional assembly as the
+ALTERNATIVE.** They are levels of one hierarchy, not competitors:
+orchestration gives ownership, parallelism and fault isolation; conditional
+assembly INSIDE each specialist gives the token savings. Measured over the
+same corpus, a specialist that runs at all almost always touches exactly one
+of its own channels (objects 1.11 of 5, social 1.10 of 4, body 1.13 of 4,
+contact 1.22 of 4, spatial 1.52 of 6), so the orchestrator grants each
+specialist a per-beat SCOPE — the set of its channels with possible work —
+and the specialist's sheet is assembled from exactly those channels' chunks.
+Dispatch is `bool(scope)`: one computation, so the two gating levels cannot
+disagree, and one backstop covers both (a channel outside every served scope
+that ships content anyway reaches `tell_director`).
 
 It also answers the prefill objection that sank the first analysis. That
 analysis assumed N shards each need the shared dynamic context, so fan-out
@@ -2664,6 +2721,17 @@ multiplies prefill. Scoped specialists do not: an attire specialist needs the
 wardrobe, not the room graph, and on an ordinary beat only one or two run at
 all. Total prefill can fall below today's single 26k call rather than
 multiplying it.
+
+**The offscreen family's 0% is a placeholder, not a verdict.** Read the wrong
+way that number says "delete it"; it says the world outside the scene is
+declared and unbuilt. Crowds moving, couriers carrying news, plans advancing
+while nobody watches — plausibly as complex a task as the whole present
+Director, and the specialist most likely to become the LARGEST rather than the
+smallest. It is an argument for this architecture: a monolith cannot absorb an
+offscreen simulator without every ordinary beat paying for it, which is part of
+why the capability has stayed at zero. Pinned for development. Its gate reads
+scene contents today and will need revisiting the moment "somewhere else is
+happening" stops being visible from the current room.
 
 **Per-specialist models.** A narrow specialist may not need a frontier model.
 `agent_models` already keys configuration by role, so a lean fast model for a
@@ -2707,6 +2775,116 @@ and cannot be segmented. A pinned model plus per-call attribution is a
 precondition for the experiment meaning anything. The success metric is the
 existing deterministic detectors — reconciliation omissions, authority
 residuals, uncommittable turns — not a subjective read.
+
+**Built (branch `director-orchestration`):** all six specialists — `body`,
+`social`, `contact`, `objects`, `spatial` (the movement backstop stays with
+the orchestrator, judging the MERGED diff), and `offscreen` (its OPS
+surface and gate only: crowds/couriers/tellings/plans/hearsay-verdicts,
+genuinely dispatchable the moment its subjects exist in scene and cold in
+practice because the corpus has never contained them; the SIMULATOR stays
+deferred) — shared between BOTH Director stages (interpret dispatches the
+same definitions, scoped to the player's declaration, merging into
+`state_assertions` before the deterministic validators), behind the
+`director_orchestration` setting, default OFF. Per-beat channel SCOPE
+drives dispatch AND per-specialist sheet assembly (chunked prompts,
+`prompts.specialist_prompt`; structure enforced by
+`tools/project_check.py`); the fan-out is genuinely PARALLEL and never
+streams (canonical-order assembly, failure isolation under concurrency,
+Aborted propagation — measured: five specialists at 0.5s collapse from
+2.50s sequential to 0.51s, 9ms overhead); scope_report {granted, served,
+produced} persists on each step; the single scope backstop reports through
+`tell_director`; per-specialist roles are separable in `_log_usage`;
+detector parity and every joint pinned by
+`tests/test_director_orchestration.py`. The monolithic sheet remains a
+byte-identical recomposition. The prose author's OWN sheet is scoped the
+same way (second carve, same mechanism): 14 prose-duty chunks
+(`prompts.PROSE_AUTHOR_SHEET`/`prose_author_prompt`) gated on scene state
+by `_PROSE_DUTY_GATES` from the same `_gate_facts` call, fail-open at
+every level, never-gated contract blocks (firewall, manifest,
+player-asserted facts, dialogue log, authority, pressure-OPEN) enforced by
+`check_prose_author_chunks`, shipped-duty audit folded into the same scope
+backstop, granted/gated_out persisted as `orchestration.prose_scope`.
+Numbers (design note 19, end): prose-author core 6.3k tok, ~6.7–7.6k
+typical, 9.3k fail-open ceiling, vs the 21.1k monolith; typical-beat floor
+~9.1k total; the heaviest fail-open physical beats reach ~21k total but
+spread over parallel sub-7.6k calls. Run 20 (14 beats, real
+models, 2026-08-12) hardened the delegation from rhetorical to structural:
+the prose author's stated output shape no longer carries the delegated
+channels at all (`_PROSE_AUTHOR_OUTPUT_SHAPE` — the full shape was the
+template the model kept filling, 18 discarded-channel emissions in 14
+beats, pure output-token latency), and interpret gets
+`INTERPRET_DELEGATION_NOTE` appended at the call site only when the flag
+is on, overriding its own "FULL state_diff structure ... no subset"
+instruction (design note 19, run-20 section). **What remains:** slicing
+the prose author's PAYLOAD (still the full monolithic payload — the next
+real token win); leaning interpret's own sheet by chunks (the delegated
+channels are suppressed at the source now, but the blocks teaching them
+still load); optional leaner rewrites of the specialist chunks (permitted
+— they exist only on the orchestrated path); the offscreen SIMULATOR
+(owner-deferred, out-of-band propose/ratify per the note above);
+re-measuring the replaced-channel warning rate on a live run (the stored
+variants hold only the MERGED output, so the after-rate cannot be read
+from run 20's own beats); provider cache affinity (run 20 diagnosed the
+19% prefix-cache rate as provider replica routing, not byte instability —
+hits were constant sheet-sized prefixes, misses all-or-nothing; honest
+ceiling ~57% with the per-beat payload inherently uncacheable; a
+pinned/dedicated instance is configuration, not code, and is recorded
+rather than chased); and the measurement — flag on vs. off on a pinned
+model, judged by the detectors above plus the persisted scope_report,
+before the flag may default on. Two shape traps the same run surfaced are
+closed in `schemas.py` rather than the prompts: a single value under a
+`dict[str, list]` channel (`overlays`/`conditions`, StateDiff and the body
+specialist) now wraps to the list of one, and a bare-string
+`evidence` citation coerces like the list-of-strings form always did —
+each had been costing a full temperature-0 repair round.
+
+
+### 2.19 Character: scope the sheet, do not split the judgement
+
+**Raised 2026-08-12**, alongside §2.18. Recorded so a future session does not
+reach for the decomposition first.
+
+The character step is the pipeline's largest single cost (~38.8s median, ~56%
+of the turn on a one-reactor beat) and its sheet is the second largest prompt
+in the engine: **48 named rule blocks in ~15,100 tokens**. The obvious thought
+is to do to it what §2.18 does to the Director. Two halves of that thought,
+and they come apart.
+
+**SCOPING GENERALISES. SPLITTING PROBABLY DOES NOT.**
+
+Many of those 48 blocks are plainly conditional and have structural
+preconditions that are checkable the same way a specialist's scope is:
+`SOMEONE IS WAITING ON YOU` (is anyone actually waiting), `ON PROBATION` and
+`GOAL EXHAUSTION` (is a goal actually in that state), `PAIN AND PLEASURE` and
+`ATTENTION UNDER STRESS` (is there any), `AUTHORIAL OFFERS` (were any made),
+`SPATIAL FRAME` (is there anywhere to go), `UNBIDDEN MEMORY`. Assembling the
+sheet from the blocks that apply gets the token and reliability win with **one
+call, one mind, one coherent decision** — nothing about the judgement changes.
+
+Splitting the judgement is the part to resist. The Director emits 34 mostly
+independent state channels, which is what makes ownership meaningful there.
+A character emits a DECISION: speech, action, affect, wants and belief updates
+are facets of one act of judgement, and coherence IS the deliverable rather
+than a constraint on it. Splitting "what she says" from "what she does" from
+"how she feels about it" produces incoherence, not modularity — the prose/diff
+join problem again, and worse, because there is no representation to reconcile
+against, only a mind that either held together or did not.
+
+**THE FIREWALL OBJECTION IS VOID, and should not be revived.** An earlier
+draft of this argued that character sub-agents would multiply the firewall
+surface. They would not. The character agent enforces nothing: it receives a
+view that perception and spatial already scrubbed, deterministically since
+alpha 8.0. Slices of an already-scrubbed view contain nothing the whole view
+did not, so no new boundary exists and there is no new place to leak. A leak
+there would be perception's failure and would have reached the single
+character call identically. The boundary is upstream and singular; do not
+re-argue this.
+
+**The genuinely open question is narrower:** *what in that call is not the
+judgement?* Psychology persistence already is not — `psychology_runtime.py`
+does it deterministically from permitted inputs. If other pre- or post-work is
+bundled into the same call, that is separable without touching the decision at
+all, and is where any character-side decomposition should start.
 
 
 ## 3. Information-pipeline leaks still open

@@ -46,7 +46,11 @@ def _spatial_facts_field(scene, observer):
     return {"spatial_facts": facts} if facts else {}
 from schemas import validate_llm_output
 
-from character_schema import character_appearance, character_name
+from character_schema import (
+    character_appearance,
+    character_name,
+    persona_appearance,
+)
 
 from .common import (
     _agent_json,
@@ -59,6 +63,9 @@ from .common import (
     _protected_view_quotes,
     _quote_body,
     _recognizes,
+    _self_second_person,
+    self_name_forms,
+    self_reference_forms,
     _strip_identity_tokens,
     _strip_player_echo,
     _unknown_actor_label,
@@ -271,7 +278,7 @@ def _speaker_display(name, recognized, appearance=None, aliases=None):
 
 
 def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
-                         scene=None, p_room=None):
+                         scene=None, p_room=None, player_forms=()):
     """F1/F4: the pipeline's own numbered causal record of this beat, built
     from step order + the loop call sequences (stimulus -> response pairs):
     player declaration first, then reaction rounds, then interaction rounds in
@@ -410,7 +417,18 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
         if kind == "speech":
             ev["quote"] = text
         else:
-            ev["action"] = text
+            # The same identity floor the composer puts under the player's
+            # view, applied to the second copy of this beat's prose that
+            # reaches the player. An act's `observable` surface is written in
+            # the third person by whoever declared it, and it names the player
+            # the way THAT mind refers to them -- by name, or by the epithet
+            # the engine minted for a mind that has not recognized them
+            # ("eyes settling on the sword at the apprentice's hip", observed
+            # live). This is not narrator compensation: event_order is a
+            # delivery of engine-written prose to the player, so it carries
+            # the delivery floor rather than inheriting one.
+            ev["action"] = _self_second_person(text, player_forms) \
+                if player_forms else text
         events.append(ev)
     return events
 
@@ -720,9 +738,28 @@ def narrator(ctx, nonce):
                 "aliases": character_scene_keys(_sh)[1:],
             }
         p_room = ctx.get("_player_room") or room_of(_scene_for_frame, player_name)
+        # Everything that means "the player" in engine-written prose: their
+        # own name forms, and the epithets minted for the minds that have not
+        # recognized them. `avoid` is every OTHER body's display in this
+        # payload, so a descriptor two bodies share is never claimed as the
+        # player's.
+        _p_aliases = ((pers.get("identity") or {}).get("aliases") or []) \
+            if isinstance(pers, dict) else []
+        _other_displays = [
+            _speaker_display(_n, recognized, _i.get("appearance"),
+                             _i.get("aliases"))
+            for _n, _i in cast_info.items() if _n != player_name
+        ]
+        player_forms = self_name_forms(
+            player_name, [player_name, *_p_aliases]) + self_reference_forms(
+                player_name,
+                (pers.get("appearance") or persona_appearance(pers))
+                if isinstance(pers, dict) else "",
+                _p_aliases, avoid=_other_displays)
         event_order = _ordered_beat_events(
             ctx, player_name, view, recognized, cast_info,
-            scene=_scene_for_frame, p_room=p_room)
+            scene=_scene_for_frame, p_room=p_room,
+            player_forms=player_forms)
         pos_payload, pos_facts, room_names = _position_delta_payload(
             ctx, chat, player_name, p_room, recognized, cast_info)
         # S3-A5: pass visible rooms so portal states for unseen rooms are

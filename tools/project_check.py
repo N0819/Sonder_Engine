@@ -54,7 +54,20 @@ def check_empty_tests(errors: list[str]) -> None:
 #: tiny: an entry here is a promise that the stage is DESCRIBING another
 #: stage's field rather than asking for one, and every addition should be
 #: justified in the same breath as it is made.
-OPS_MENTIONED_BUT_NOT_OWNED: dict[str, set[str]] = {}
+OPS_MENTIONED_BUT_NOT_OWNED: dict[str, set[str]] = {
+    # The spatial specialist's stations/poses chunks name contact_ops
+    # precisely to DISCLAIM it ("Stations are not contact: contact_ops says
+    # what a body is AGAINST...") -- contact is the contact specialist's
+    # channel, and the shared segments reference it to draw that boundary.
+    "director_spatial": {"contact_ops"},
+}
+
+#: Prompt ids validated against another stage's model: the orchestrated
+#: prose author's lean sheet is the SAME step (same schema, same step key)
+#: as the monolithic resolve, under a different prompt id.
+PROMPT_MODEL_ALIASES = {
+    "director_resolve_lean": "director_resolve",
+}
 
 OPS_NAME = re.compile(r"\b([a-z][a-z0-9]*(?:_[a-z0-9]+)*_ops)\b")
 
@@ -137,19 +150,195 @@ def check_prompt_schema_ops(errors: list[str]) -> None:
         errors.append(f"could not check prompt/schema ops drift: {exc}")
         return
 
-    for stage, model in schemas.SCHEMA_MAP.items():
-        text = prompts.DEFAULT_PROMPTS.get(stage)
-        if not isinstance(text, str):
+    checks = [(stage, stage) for stage in schemas.SCHEMA_MAP]
+    checks += [(pid, stage) for pid, stage in PROMPT_MODEL_ALIASES.items()]
+    for pid, stage in checks:
+        model = schemas.SCHEMA_MAP.get(stage)
+        text = prompts.DEFAULT_PROMPTS.get(pid)
+        if model is None or not isinstance(text, str):
             continue
-        allowed = OPS_MENTIONED_BUT_NOT_OWNED.get(stage, set())
+        allowed = OPS_MENTIONED_BUT_NOT_OWNED.get(pid, set())
         missing = sorted(set(OPS_NAME.findall(text))
                          - _field_names(model) - allowed)
         for name in missing:
             errors.append(
-                f"the {stage!r} prompt asks for {name!r} and "
+                f"the {pid!r} prompt asks for {name!r} and "
                 f"{model.__name__} has no such field, so validation will drop "
                 "every one the model sends"
             )
+
+
+def check_specialist_prompt_chunks(errors: list[str]) -> None:
+    """The orchestrated Director's scoping is only real if the prompts are
+    CHUNKED to match it (design note 19, hierarchical gating): a specialist's
+    sheet is core + one chunk per channel in the granted scope, and scope
+    selects chunks with no other logic. An unchunked prompt silently defeats
+    the mechanism -- a specialist whose instructions all live in its core
+    loads everything on every beat while appearing scoped. Three files spell
+    the ownership (agents/director.SPECIALISTS, prompts.
+    SPECIALIST_PROMPT_SPECS, schemas.SPECIALIST_CHANNELS); this holds them
+    level and enforces the chunk structure:
+
+      * every channel a specialist owns has a chunk, and no chunk exists for
+        a channel it does not own (an orphan means a channel changed hands
+        and its instructions did not);
+      * the three registries agree on channels per specialist;
+      * a specialist's CORE never names its own channels (word-boundary
+        match): channel-specific instruction lives in chunks ONLY. This is
+        the honest approximation of "no channel-specific instruction in the
+        core" -- it cannot see a paraphrase, and that limitation is
+        accepted and recorded in design note 19 rather than papered over
+        with a semantic check that would pass for the wrong reason.
+    """
+    sys.path.insert(0, str(ROOT))
+    try:
+        import prompts
+        import schemas
+        from agents import director
+    except Exception as exc:  # pragma: no cover - import failure is its own error
+        errors.append(f"could not check specialist prompt chunks: {exc}")
+        return
+
+    prompt_specs = getattr(prompts, "SPECIALIST_PROMPT_SPECS", {})
+    runtime_specs = getattr(director, "SPECIALISTS", {})
+    schema_channels = getattr(schemas, "SPECIALIST_CHANNELS", {})
+
+    if set(prompt_specs) != set(runtime_specs):
+        errors.append(
+            "specialist registries disagree: prompts.SPECIALIST_PROMPT_SPECS "
+            f"has {sorted(prompt_specs)} but agents/director.SPECIALISTS has "
+            f"{sorted(runtime_specs)}")
+        return
+
+    for name, runtime in sorted(runtime_specs.items()):
+        owned = set(runtime.get("channels") or ())
+        prompt_spec = prompt_specs.get(name) or {}
+        chunks = set((prompt_spec.get("chunks") or {}).keys())
+        order = list(prompt_spec.get("order") or ())
+        step_key = runtime.get("step_key")
+        schema_owned = set(schema_channels.get(step_key) or ())
+
+        for missing in sorted(owned - chunks):
+            errors.append(
+                f"specialist {name!r} owns channel {missing!r} but its "
+                "prompt has no chunk for it -- the scoped sheet can never "
+                "teach that channel and every grant of it loads nothing")
+        for orphan in sorted(chunks - owned):
+            errors.append(
+                f"specialist {name!r} prompt carries a chunk for "
+                f"{orphan!r}, a channel it does not own -- the channel "
+                "changed hands and its instructions did not")
+        if owned != schema_owned:
+            errors.append(
+                f"specialist {name!r} channels disagree with schemas."
+                f"SPECIALIST_CHANNELS[{step_key!r}]: {sorted(owned)} vs "
+                f"{sorted(schema_owned)}")
+        if set(order) != chunks:
+            errors.append(
+                f"specialist {name!r} chunk order {order} does not cover "
+                f"exactly its chunks {sorted(chunks)} -- an unordered chunk "
+                "never loads")
+
+        core = str(prompt_spec.get("core") or "")
+        for channel in sorted(owned):
+            if re.search(r"(?<![\w.])%s\b" % re.escape(channel), core):
+                errors.append(
+                    f"specialist {name!r} core names its own channel "
+                    f"{channel!r} -- channel-specific instruction belongs "
+                    "in that channel's chunk, or scoping silently stops "
+                    "meaning anything")
+
+        # The same `_ops` drift check the stage prompts get, against the
+        # FULLY assembled sheet: every _ops name the sheet can ask for must
+        # exist on this specialist's model, or validation silently drops
+        # every one the model sends (the project_ops lesson, one level in).
+        model = schemas.SCHEMA_MAP.get(step_key)
+        if model is not None:
+            sheet = core + "".join(
+                str(chunk) for chunk in
+                (prompt_spec.get("chunks") or {}).values())
+            allowed = OPS_MENTIONED_BUT_NOT_OWNED.get(step_key, set())
+            for op_name in sorted(set(OPS_NAME.findall(sheet))
+                                  - _field_names(model) - allowed):
+                errors.append(
+                    f"specialist {name!r} sheet asks for {op_name!r} and "
+                    f"{model.__name__} has no such field, so validation "
+                    "will drop every one the model sends")
+
+
+#: Blocks of the orchestrated prose author's sheet that must NEVER be
+#: gateable: every-beat authority/firewall contract material. Each marker
+#: must appear in the CORE (the segments that load on every scope,
+#: including the empty one) -- a marker migrating into a gated chunk is
+#: exactly the quality regression the scoping was forbidden to introduce.
+PROSE_AUTHOR_NEVER_GATED = (
+    "KNOWLEDGE FIREWALL",
+    "CHANGES MANIFEST",
+    "PLAYER-ASSERTED FACTS",
+    "DIALOGUE LOG — MANDATORY",
+    "PLAYER AUTHORITY CONTRACT",
+    "DELEGATED CHANNELS",
+    "WORLD PRESSURE — OPENING",   # opening a process is undecidable
+    "Output STRICT JSON",
+)
+
+
+def check_prose_author_chunks(errors: list[str]) -> None:
+    """The prose author's sheet scoping, held level the same way the
+    specialists' is (design note 19): prompts.PROSE_AUTHOR_SHEET names the
+    chunks, agents/director._PROSE_DUTY_GATES grants them, and
+    agents/director._PROSE_DUTY_SHIPPED audits the gated-out ones. A chunk
+    with no gate never loads on the orchestrated path (silent drop); a gate
+    with no chunk grants nothing; an audit for a name that is not a chunk
+    audits nothing. And the never-gated contract blocks must live in the
+    CORE -- the firewall is an invariant, not an optimization target."""
+    sys.path.insert(0, str(ROOT))
+    try:
+        import prompts
+        from agents import director
+    except Exception as exc:  # pragma: no cover - import failure is its own error
+        errors.append(f"could not check prose author chunks: {exc}")
+        return
+
+    sheet = getattr(prompts, "PROSE_AUTHOR_SHEET", ())
+    chunk_names = set(getattr(prompts, "PROSE_DUTY_CHUNKS", ()))
+    gates = set(getattr(director, "_PROSE_DUTY_GATES", {}))
+    audits = set(getattr(director, "_PROSE_DUTY_SHIPPED", {}))
+
+    if chunk_names != gates:
+        errors.append(
+            "prose-author registries disagree: prompts.PROSE_DUTY_CHUNKS "
+            f"has {sorted(chunk_names)} but agents/director."
+            f"_PROSE_DUTY_GATES has {sorted(gates)} -- an ungated chunk "
+            "never loads on the orchestrated path, and a chunkless gate "
+            "grants nothing")
+    for orphan in sorted(audits - chunk_names):
+        errors.append(
+            f"agents/director._PROSE_DUTY_SHIPPED audits {orphan!r}, which "
+            "is not a prose-duty chunk -- the audit can never fire")
+
+    core = "".join(text for name, text in sheet if name is None)
+    gated = "".join(text for name, text in sheet if name)
+    for marker in PROSE_AUTHOR_NEVER_GATED:
+        if marker not in core:
+            errors.append(
+                f"never-gated prose-author block {marker!r} is missing "
+                "from the sheet's core -- it must load on every beat")
+    for marker in ("KNOWLEDGE FIREWALL", "CHANGES MANIFEST",
+                   "DIALOGUE LOG — MANDATORY", "PLAYER AUTHORITY CONTRACT"):
+        if marker in gated:
+            errors.append(
+                f"never-gated prose-author block {marker!r} appears inside "
+                "a gated chunk -- a beat could load a second, gateable "
+                "spelling of an every-beat contract")
+
+    full = "".join(text for _name, text in sheet)
+    if prompts.DEFAULT_PROMPTS.get("director_resolve_lean") != full:
+        errors.append(
+            "DEFAULT_PROMPTS['director_resolve_lean'] is not the full-scope "
+            "assembly of PROSE_AUTHOR_SHEET -- the _ops drift check and "
+            "preset editing would see a different sheet than the "
+            "orchestrated path can load")
 
 
 def check_generated_map(errors: list[str]) -> None:
@@ -165,6 +354,8 @@ def main() -> int:
     check_patch_debris(errors)
     check_empty_tests(errors)
     check_prompt_schema_ops(errors)
+    check_specialist_prompt_chunks(errors)
+    check_prose_author_chunks(errors)
     check_generated_map(errors)
 
     if errors:

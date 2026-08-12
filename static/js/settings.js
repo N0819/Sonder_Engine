@@ -2101,6 +2101,43 @@ function renderFullApiSettings(b) {
           "A local folder is searched by filename — name files for what they sound like (“rain_on_tin_roof.ogg”), or drop an index.json beside them mapping a file to extra words. Freesound needs a free API key from freesound.org/apiv2/apply; it fetches CC0 and Attribution sounds by default, and whatever is playing is credited in the 🎧 panel."));
     }
 
+    // The orchestrated Director, switched where its specialists are
+    // configured. It belongs HERE rather than in a general behaviour panel:
+    // the six `director_*` roles below are inert without it, and a row of
+    // model pickers for stages that never run is how a setting becomes
+    // folklore.
+    {
+      const orchBox = el("input", {
+        type: "checkbox",
+        ...(S.boot.director_orchestration ? { checked: "" } : {})
+      });
+      orchBox.onchange = async () => {
+        await api("PUT", "/api/director_orchestration",
+                  { enabled: orchBox.checked });
+        await boot();
+        toast(orchBox.checked
+          ? "The Director will fan out to its specialists."
+          : "The Director will run as a single stage.", "ok");
+      };
+      b.append(el("h4", {}, "Director orchestration"),
+        el("div", { class: "small dim" },
+          "Off, the Director does the whole beat in one call from one large "
+          + "instruction sheet. On, it keeps the same single step but works "
+          + "inside it as a writer plus specialists: one call writes the "
+          + "beat's account, and the six roles below encode only the kinds of "
+          + "change the beat actually contains — a scene with no clothing "
+          + "change never loads the clothing rules at all. Measured on a "
+          + "played story: the largest single call falls from about 21,000 "
+          + "tokens to 6,200, the specialists run at once rather than in "
+          + "turn, and the Director's share of a turn drops sharply."),
+        el("div", { class: "small dim", style: "margin-top:4px" },
+          "Reroll, resuming from a stage and every stored story work exactly "
+          + "as before — this changes how one step is done, not the shape of "
+          + "a turn. Switching it off restores the original prompt exactly."),
+        el("label", { class: "row", style: "margin-top:6px" },
+          orchBox, el("span", {}, "Fan the Director out to its specialists")));
+    }
+
     b.append(el("h4", {}, "Agent models"),
       el("div", { class: "small dim" },
         "Type to search the provider's model list. Open 'advanced' for samplers and backup models."),
@@ -2109,6 +2146,7 @@ function renderFullApiSettings(b) {
         el("div", { class: "small dim", style: "margin-top:6px" },
           el("div", {}, el("b", {}, "Setting only Default is enough to start playing"), " — every other role falls back to it automatically, with one exception: embeddings, which needs a model of a different KIND and so is never inherited. The rest let you assign a faster or cheaper model to a specific stage of each turn without touching quality where it matters most."),
           el("div", { style: "margin-top:8px" }, el("b", {}, "director"), " — reads what you typed and decides what actually happens: whether an action succeeds, what an NPC's action resolves to. Gets this wrong and the story stops making sense, so keep it on a strong model."),
+          el("div", {}, el("b", {}, "director_body / _social / _contact / _objects / _spatial / _offscreen"), " — experimental, used only when the orchestrated Director is switched on: scoped specialists that encode bodies (clothing, wounds, vitals, overlays), the scene roster, physical contact and matter, the object world, the room graph and positions, and the world's traffic (crowds, couriers, hearsay) from the beat the Director authored. The one exception to the Default fallback: left unset each follows the ", el("b", {}, "director"), " model, so the engine's most failure-prone stage never silently downgrades."),
           el("div", { class: "small dim" }, "There is no ", el("b", {}, "perception"), " role any more, and that is not an omission: what each character can see, hear and know is now worked out in code rather than asked of a model, so it costs nothing, cannot be got wrong by a cheap model, and has no setting to tune."),
           el("div", {}, el("b", {}, "character_bg / character_mid / character_major"), " — generate what a character does and says, tiered by how central that character is to the scene. Quality shows up directly in dialogue, so keep major characters on a strong model even if you lighten background ones."),
           el("div", {}, el("b", {}, "narrator"), " — turns everything into the prose you actually read. This is the model whose writing style you'll notice most."),
@@ -2149,9 +2187,19 @@ function renderFullApiSettings(b) {
     // provider, the engine silently falls back to the local hash, and play
     // continues looking fine while memory quietly stops working by meaning.
     // Everything else announces itself in the prose.
-    const ROLE_ORDER = { embeddings: -2, default: -1 };
+    // `embeddings` first, then Default, then the Director and — DIRECTLY
+    // BENEATH IT — its six specialists, which are the roles whose meaning
+    // depends on it: each is inert unless the orchestrated Director is on,
+    // and each falls back to the `director` model rather than to Default.
+    // Sorting them next to the stage they serve is the difference between a
+    // list of seventeen roles and a list that explains itself.
+    const ROLE_ORDER = {
+      embeddings: -2, default: -1, director: 0,
+      director_body: 1, director_social: 2, director_contact: 3,
+      director_objects: 4, director_spatial: 5, director_offscreen: 6,
+    };
     const orderedRoles = [...S.boot.roles].sort(
-      (a, b) => (ROLE_ORDER[a] ?? 0) - (ROLE_ORDER[b] ?? 0)
+      (a, b) => (ROLE_ORDER[a] ?? 50) - (ROLE_ORDER[b] ?? 50)
     );
 
     // Embedding models have to be OFFERED, not filtered for: a provider's
