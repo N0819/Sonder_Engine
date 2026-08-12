@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## alpha 8.2.1 — Ledgers that agree
+
+8.2 made the Director work in parts; playing it made the parts legible. Every
+defect below was found by reading what a live beat actually recorded, and the
+last of them by asking whether any two ledgers in the fiction ever disagree.
+
 
 **Every observable change reaches a hand, and thoughts say they were left
 out.** The manifest's rule is now closest-matching category, never an
