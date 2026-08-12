@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+- **Saturation finally costs something.** A surface mood that reached the
+  ceiling stayed there — decay handled fading, nothing handled saturation —
+  so chat 71's Elyra sat at 0.99/0.99 for twelve straight beats and her own
+  climax committed a surface *lower* than the plateau before it: zero
+  contrast at the story's peak, which is exactly why she read unfazed.
+  Corpus-wide, 21 of 44 measured characters carry a ≥6-beat pinned streak;
+  three stories hold thirty-beat valence streaks. `resolve_affect` can now
+  habituate (`affect_habituation` setting, **default off — shipped
+  behaviour is byte-identical**): sensitivity accumulates per axis while
+  the stimulus holds the ceiling-slice above the character's own baseline,
+  recovers on a short half-life, and compresses only that top slice —
+  sustained ordinary warmth below the protected range is a trait and pays
+  nothing (measured: beats under 0.80 valence move by a mean 0.012). The
+  hedonic RELEASE pierces: it refunds the cost and waives compression on
+  its own beat, because shock and novelty both fail as discriminators on
+  the live data (plateau impacts run 0.85–0.95; model novelty reads 0.65
+  mid-plateau and 0.15 at the actual climax). Replayed offline against the
+  stored appraisals (`tools/affect_replay.py`, ground truth from per-turn
+  checkpoints): the plateau settles to ~0.83, and the three release beats
+  (0.92/0.94/0.93) become the highest points of the whole trajectory —
+  where live they were indistinguishable from the wallpaper.
+
 ## alpha 8.2.3 — A hand that declines says whose it is
 
 `not_mine` said an event was not this hand's; it did not say whose. So the

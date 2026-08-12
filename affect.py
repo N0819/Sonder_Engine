@@ -64,6 +64,63 @@ _UNDERCURRENT_HALF_LIFE = 4.0
 _UNDERCURRENT_FLOOR = 0.1
 _SIGN_EPS = 0.05
 
+# --- Surface habituation (saturation has a cost) ---------------------------
+#
+# Decay handles FADING; nothing handled SATURATION. A model that sees its own
+# ceiling-pinned surface in the payload proposes the ceiling again, the clamp
+# at +/-1 accepts it, and per-beat decay (half-life 8) is undone by the next
+# proposal -- so a surface that reaches maximum STAYS there. Measured across
+# the live corpus (44 characters with >=8 beats): 21 carry a pinned streak of
+# six beats or more at >=0.9 on an axis, three stories hold THIRTY-beat
+# valence streaks, and chat 71's Elyra sat ~0.55 above her own baseline for
+# seventeen straight turns -- so the climax her whole scene built toward
+# landed mathematically FLATTER than its own build-up, which is exactly why
+# she read unfazed at it.
+#
+# The precedent is the codebase's own: `psychology_runtime` habituates the
+# hedonic level's cognitive claim across `sustained_beats` ("habituation
+# covers the plateau, never the spike"), and comfort habituates on a
+# sustained source. The same idea applied to the surface: holding an axis
+# near the ceiling costs sensitivity, so under CONTINUED identical stimulus
+# the surface drifts down -- restoring headroom -- and a genuine peak has
+# somewhere to land. Physiologically true, and dramatically it converts a
+# flat plateau into an actual plateau followed by an actual peak.
+#
+# The pierce condition is the hedonic RELEASE, deliberately. Neither shock
+# nor novelty can discriminate the peak on the measured story: the plateau
+# beats carry dominant impacts of 0.85-0.95 (shock fires chronically) and
+# model-reported novelty reads 0.65 mid-plateau and 0.15 on the actual first
+# climax. `released` is the character's own declared discharge, already owned
+# and zeroed by the hedonic layer -- on that beat sensitivity is mostly
+# refunded (the body re-sensitizes through discharge), so the peak lands with
+# its headroom restored while the plateau around it stays compressed.
+#
+# Per axis, symmetric about the baseline (misery pins exactly as delight
+# does): `s` in [0,1] approaches the ELEVATION -- the fraction of the axis's
+# available headroom the held surface occupies -- at _HABITUATION_RATE per
+# psych unit while elevation stays above the floor, recovers on a half-life
+# when the surface comes down, and compresses the resolution TARGET's excess
+# over baseline by up to _HABITUATION_MAX_COMPRESSION. The model still
+# authors what it feels; the engine bounds it honestly -- the same contract
+# resolve_affect has always stated.
+# THE FLOOR IS A PROTECTED RANGE, NOT A TRIGGER. Everything below elevation
+# _HABITUATION_ELEVATION_FLOOR is never compressed at all -- sustained
+# ordinary warmth is a character trait, not a defect -- and only the
+# ceiling-slice ABOVE it pays, at up to _HABITUATION_MAX_COMPRESSION of
+# that slice. Both halves were calibrated on live replays: a uniform
+# compression strong enough to give chat 71's climax a +0.1 contrast cost
+# the control story (chat 38, 144 beats of recurring warmth around
+# elevation 0.7-0.9) a story-wide ~0.1 valence shift, because its stimulus
+# also rides high -- medicine landing on health. Top-slice compression
+# separates them structurally: the control's mid-range passes through
+# untouched by construction, and the pinned plateau -- which lives almost
+# entirely inside the slice -- still settles.
+_HABITUATION_RATE = 0.18
+_HABITUATION_RECOVERY_HALF_LIFE = 2.5
+_HABITUATION_ELEVATION_FLOOR = 0.70
+_HABITUATION_MAX_COMPRESSION = 0.85
+_HABITUATION_RELEASE_RESET = 0.4
+
 _WANT_CAP = 3
 _WANT_SIMILARITY = 0.4
 _INTENT_CAP = 4
@@ -626,6 +683,82 @@ def decay_affect(va, baseline_va, turns, half_life=_SURFACE_HALF_LIFE):
     return (_clamp(base_v + (v - base_v) * factor),
             _clamp(base_a + (a - base_a) * factor))
 
+def _habituation_elevation(value, base):
+    """The fraction of this axis's available headroom a surface occupies.
+
+    Relative to the character's OWN baseline, so a placid 0.1-baseline body
+    and an excitable 0.7-baseline body saturate at the same felt distance
+    from home, not at the same absolute number. The span floor keeps a
+    baseline sitting near a rail from making every twitch read as
+    saturation."""
+    span = max(0.25, 1.0 - abs(_clamp(base)))
+    return _clamp01(abs(_clamp(value) - _clamp(base)) / span)
+
+
+def resolve_surface_habituation(prev_s, elevation, turns, released=False):
+    """One axis's sensitivity state, advanced one resolution.
+
+    Pure and total, the resolve_hedonic idiom: `prev_s` in [0,1] (junk reads
+    as 0), `elevation` from _habituation_elevation, `turns` in psych units.
+    A release refunds most of the accumulated cost FIRST (discharge
+    re-sensitizes the body), then the beat accumulates or recovers as
+    usual: elevation held above the floor drags `s` toward it at
+    _HABITUATION_RATE per unit; anything lower lets `s` decay home on the
+    recovery half-life."""
+    s = _clamp01(prev_s)
+    elevation = _clamp01(elevation)
+    units = max(0.0, _float_or(turns))
+    if released:
+        s *= _HABITUATION_RELEASE_RESET
+    if units == 0.0:
+        return round(s, 4)
+    # The destination is the elevation's EXCESS above the floor, rescaled --
+    # not the elevation itself. A merely-warm hold just over the floor
+    # habituates toward almost nothing, a pinned ceiling toward almost
+    # everything; measured on the control story (chat 38), destination =
+    # elevation compressed its recurring 0.9-ish warmth nearly as hard as
+    # chat 71's flat 1.0 plateau, which is medicine landing on health.
+    span = max(0.001, 1.0 - _HABITUATION_ELEVATION_FLOOR)
+    destination = _clamp01((elevation - _HABITUATION_ELEVATION_FLOOR) / span)
+    if destination > s:
+        rate = 1.0 - (1.0 - _HABITUATION_RATE) ** units
+        s = s + (destination - s) * rate
+    else:
+        factor = 0.5 ** (units / _HABITUATION_RECOVERY_HALF_LIFE)
+        s = destination + (s - destination) * factor
+    return round(_clamp01(s), 4)
+
+
+def _compress_top_slice(value, base, s):
+    """Habituation's cost, paid only by the ceiling-slice of an axis.
+
+    The excess of `value` over the baseline is split at the protected
+    range's edge (_HABITUATION_ELEVATION_FLOOR of the axis's span): the
+    part below passes through untouched, the slice above is scaled by
+    (1 - _HABITUATION_MAX_COMPRESSION * s). Symmetric about the baseline,
+    total on junk."""
+    base = _clamp(base)
+    value = _clamp(value)
+    span = max(0.25, 1.0 - abs(base))
+    protected = _HABITUATION_ELEVATION_FLOOR * span
+    excess = value - base
+    magnitude = abs(excess)
+    if magnitude <= protected:
+        return value
+    slice_ = magnitude - protected
+    compressed = protected + slice_ * (
+        1.0 - _HABITUATION_MAX_COMPRESSION * _clamp01(s))
+    return _clamp(base + (1.0 if excess >= 0 else -1.0) * compressed)
+
+
+def _habituation_state(prev_affect):
+    """The stored per-axis sensitivity state, tolerantly read."""
+    prev = prev_affect if isinstance(prev_affect, dict) else {}
+    state = prev.get("habituation")
+    state = state if isinstance(state, dict) else {}
+    return (_clamp01(state.get("valence")), _clamp01(state.get("arousal")))
+
+
 # ---- Resolution (the commit-side orchestrator entry point) ----
 
 def _proposed_surface(proposed):
@@ -670,7 +803,8 @@ def _relief_impacts(appraisal):
             if _float_or(i.get("impact")) > 0
             and _float_or(i.get("certainty")) >= _CERTAINTY_THRESHOLD]
 
-def resolve_affect(prev_affect, appraisal_out, baseline, turns_since, proposed):
+def resolve_affect(prev_affect, appraisal_out, baseline, turns_since, proposed,
+                   *, habituate=False, released=False):
     """Fold decay, appraisal, and the model's proposed affect into fresh state.
 
     The affect object is {surface: {label, valence, arousal},
@@ -703,6 +837,17 @@ def resolve_affect(prev_affect, appraisal_out, baseline, turns_since, proposed):
 
     Total and graceful: empty appraisal with a bare/absent proposal is
     pure decay toward baseline, and no undercurrent is invented.
+
+    `habituate` (default False -- the shipped behaviour, byte-identical,
+    and the state key is then neither read nor written) switches on
+    surface habituation: sustained near-ceiling elevation accumulates a
+    per-axis sensitivity cost (see the _HABITUATION_* block) that
+    compresses the target's excess over baseline, so a pinned plateau
+    settles and a genuine peak has headroom to land in. `released` is the
+    hedonic discharge flag for THIS beat (the same one resolve_hedonic
+    receives): it refunds most of the accumulated cost before this beat
+    resolves, which is what lets the climax pierce the compression the
+    plateau earned.
     """
     prev = prev_affect if isinstance(prev_affect, dict) else {}
     appraisal = appraisal_out if isinstance(appraisal_out, dict) else {}
@@ -729,6 +874,38 @@ def resolve_affect(prev_affect, appraisal_out, baseline, turns_since, proposed):
         shock = shock or jump >= _PROPOSAL_SHOCK_JUMP
     else:
         target_v, target_a = _clamp(decayed_v + d_v), _clamp(decayed_a + d_a)
+    habituation = None
+    if habituate:
+        # Sensitivity accumulates from the STIMULUS -- this beat's
+        # uncompressed target elevation -- not from the body's own already-
+        # dampened surface, which would cap `s` at a feedback fixed point
+        # and let a pinned stimulus keep most of its ceiling (measured on
+        # the chat-71 replay: surface-driven accumulation stalled at
+        # s=0.40 exactly where compressed elevation met its own
+        # destination). The target then pays the cost: its excess over
+        # baseline is compressed by up to _HABITUATION_MAX_COMPRESSION.
+        # A released beat refunds most of the cost first (inside
+        # resolve_surface_habituation), so the discharge lands with its
+        # headroom restored. Compression bounds the DESTINATION only --
+        # the label, the undercurrent and every other channel of the
+        # resolution are untouched, and the model's self-report survives
+        # exactly as before.
+        prev_s_v, prev_s_a = _habituation_state(prev)
+        s_v = resolve_surface_habituation(
+            prev_s_v, _habituation_elevation(target_v, base_v),
+            turns_since, released=released)
+        s_a = resolve_surface_habituation(
+            prev_s_a, _habituation_elevation(target_a, base_a),
+            turns_since, released=released)
+        # Habituation covers the plateau, never the spike (the
+        # cognitive_absorption rule, applied here): on the RELEASE beat
+        # compression is waived outright -- the discharge is the one moment
+        # the body is fully present -- and the reset `s` above covers the
+        # beats that follow it.
+        if not released:
+            target_v = _compress_top_slice(target_v, base_v, s_v)
+            target_a = _compress_top_slice(target_a, base_a, s_a)
+        habituation = {"valence": s_v, "arousal": s_a}
     v, a = blend_affect(
         (decayed_v, decayed_a), (target_v, target_a), decayed_a, shock=shock)
 
@@ -799,11 +976,17 @@ def resolve_affect(prev_affect, appraisal_out, baseline, turns_since, proposed):
         if new_undercurrent is not None:
             undercurrent = new_undercurrent  # suppression supersedes stale residue
 
-    return {
+    resolved = {
         "surface": {"label": label, "valence": round(v, 4), "arousal": round(a, 4)},
         "undercurrent": undercurrent,
         "baseline": {"valence": base_v, "arousal": base_a},
     }
+    if habituation is not None:
+        # Present only when the feature is on: the default path stays
+        # byte-identical, and a story switched back off simply stops
+        # carrying (and reading) the state.
+        resolved["habituation"] = habituation
+    return resolved
 
 # ---- Wants ----
 
