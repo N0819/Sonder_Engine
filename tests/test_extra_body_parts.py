@@ -322,3 +322,47 @@ def test_a_single_part_reads_as_one():
         ("the horned man", {"kind": "horn", "count": 1, "at": "brow",
                             "aspect": "left"})])).text
     assert text == "A horn emerges from the left side of the horned man's brow."
+
+
+class TestAnAuthoredKindIsRenderedAsWritten:
+    """A card's `kind` is authored, so it arrives however a human wrote it.
+
+    Measured live in a player's own perception view (chat 71, Elyra Voss):
+    "Two membranous bat-like wingss emerge from the back of your torso" and
+    "A and a long flexible tail ending in a spade emerges from ...". The
+    renderer's docstring example assumes a bare singular noun ("tail" ->
+    "Six tails"); real cards carry plurals and stray connectives. A body's
+    own anatomy reading as gibberish in its owner's view is the loudest
+    possible way for this engine to look broken.
+    """
+
+    def _render(self, kind, count):
+        from types import SimpleNamespace
+
+        from agents.composer import _render_body_part
+
+        return _render_body_part(SimpleNamespace(
+            source_label="you",
+            data={"count": count, "part": kind, "aspect": "back",
+                  "at": "torso", "description": "", "tucked": False},
+        ))
+
+    def test_an_already_plural_kind_is_not_pluralized_again(self):
+        assert "wingss" not in self._render("membranous bat-like wings", 2)
+        assert "Two membranous bat-like wings emerge" in self._render(
+            "membranous bat-like wings", 2)
+        # Hinami's card, the case that made this visible.
+        assert "tailss" not in self._render("tails", 6)
+        assert "fox earss" not in self._render("fox ears", 2)
+
+    def test_a_singular_kind_still_pluralizes(self):
+        """The docstring's own example must keep working."""
+        assert "Six tails emerge" in self._render("tail", 6)
+
+    def test_a_leading_connective_does_not_double_the_article(self):
+        out = self._render("and a long flexible tail ending in a spade", 1)
+        assert not out.startswith("A and a")
+        assert "A long flexible tail ending in a spade emerges" in out
+
+    def test_one_of_a_singular_kind_is_unchanged(self):
+        assert self._render("tail", 1).startswith("A tail emerges")
