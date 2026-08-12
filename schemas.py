@@ -1057,6 +1057,11 @@ class DirectorInterpret(LenientModel):
     # single-player chat -- nothing here changes behavior unless
     # ctx.extra_players is non-empty.
     other_players: dict[str, OtherPlayerInterpret] = Field(default_factory=dict)
+    # ENGINE-AUTHORED (the DirectorResolve.orchestration contract): the
+    # orchestrated interpret's own dispatch/scope record. Interpret and
+    # resolve are equivalent in capability, so both stages carry the same
+    # record shape; empty on every monolithic interpret.
+    orchestration: dict[str, Any] = Field(default_factory=dict)
 
 # ---- Scene Entities ----
 
@@ -1981,6 +1986,92 @@ class DirectorResolve(LenientModel):
     # the schema dump drops unknown keys, which would have silently discarded
     # the hand-off and turned a re-homed line into a deleted one.
     routed_to_background: list[str] = Field(default_factory=list)
+    # ENGINE-AUTHORED (same contract as routed_to_background): the orchestrated
+    # Director's dispatch record -- which specialists this beat ran, the scene
+    # facts the gate read, and what assembly replaced (design note 19). Empty
+    # on every monolithic resolve, so stored pre-orchestration variants are
+    # unchanged. Declared so the round-trip keeps the record inspectable.
+    orchestration: dict[str, Any] = Field(default_factory=dict)
+
+
+class DirectorBodySpecialist(LenientModel):
+    """The body specialist's whole output: the four state_diff channels it
+    owns under the orchestrated Director (design note 19), in exactly the
+    shapes StateDiff declares for them, so assembly can move each channel
+    into the resolve diff without a second spelling of any coercion.
+    `notes` is the specialist's own flag lane for a bodily change the prose
+    asserts that it could not encode -- including one in a channel outside
+    this call's granted scope, which is how scope under-grant surfaces."""
+    attire: dict[str, AttireDiff] = Field(default_factory=dict)
+    conditions: dict[str, list[dict]] = Field(default_factory=dict)
+    vitals: dict[str, Optional[dict]] = Field(default_factory=dict)
+    overlays: dict[str, list] = Field(default_factory=dict)
+    notes: list[str] = Field(default_factory=list)
+
+
+class DirectorSocialSpecialist(LenientModel):
+    """The social-fabric specialist: scene roster and record channels, in
+    StateDiff's own shapes (same contract as DirectorBodySpecialist).
+    `following_ops` is deliberately NOT here: following is actor-owned and
+    engine-projected (`_collect_following_ops`), so no model authors it."""
+    cast_changes: list[dict] = Field(default_factory=list)
+    introductions: list[dict] = Field(default_factory=list)
+    world_facts: list = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class DirectorContactSpecialist(LenientModel):
+    """The contact-and-matter specialist: the physical-relation channels,
+    in StateDiff's own shapes (same contract as DirectorBodySpecialist)."""
+    contact_ops: list[dict] = Field(default_factory=list)
+    substance_ops: list[dict] = Field(default_factory=list)
+    containment: dict[str, Optional[dict]] = Field(default_factory=dict)
+    scales: dict[str, float] = Field(default_factory=dict)
+    notes: list[str] = Field(default_factory=list)
+
+
+class DirectorObjectsSpecialist(LenientModel):
+    """The object-world specialist: the object ledgers, in StateDiff's own
+    shapes (same contract as DirectorBodySpecialist)."""
+    entities: dict[str, SceneEntityDef] = Field(default_factory=dict)
+    remove_entities: list[str] = Field(default_factory=list)
+    inventory_ops: list[dict] = Field(default_factory=list)
+    artifact_ops: list[ArtifactOp] = Field(default_factory=list)
+    destruction: Optional[dict] = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class DirectorSpatialSpecialist(LenientModel):
+    """The spatial specialist: the geography channels, in StateDiff's own
+    shapes (same contract as DirectorBodySpecialist). The movement backstop
+    stays with the orchestrator and validates the MERGED diff -- this model
+    proposes relocations, it never has the last word on them."""
+    positions: dict[str, str] = Field(default_factory=dict)
+    rooms: dict[str, RoomDef] = Field(default_factory=dict)
+    remove_rooms: list[str] = Field(default_factory=list)
+    remove_adjacent: list[dict] = Field(default_factory=list)
+    stations: dict[str, dict] = Field(default_factory=dict)
+    poses: dict[str, dict] = Field(default_factory=dict)
+    notes: list[str] = Field(default_factory=list)
+
+    _coerce_stations = validator("stations", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_station_table(v)
+    )
+
+
+class DirectorOffscreenSpecialist(LenientModel):
+    """The world-traffic specialist: crowds, couriers, tellings, offscreen
+    plans and the hearsay verdict, in StateDiff's own shapes (same contract
+    as DirectorBodySpecialist). This is the OPS surface only -- the
+    offscreen SIMULATOR (design note 19's out-of-band parallel) remains
+    unbuilt, and nothing here schedules or simulates anything."""
+    crowd_ops: list[CrowdOp] = Field(default_factory=list)
+    courier_ops: list[CourierOp] = Field(default_factory=list)
+    telling_ops: list[TellingOp] = Field(default_factory=list)
+    offscreen_plan_ops: list[OffscreenPlanOp] = Field(default_factory=list)
+    ratified_claims: list[str] = Field(default_factory=list)
+    contradicted_claims: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
 
 # ---- Resolve reconciliation (agents/director.py's post-resolve seam) ----
 
@@ -2775,6 +2866,12 @@ SCHEMA_MAP = {
     "director_interpret": DirectorInterpret,
     "director_establish": DirectorEstablish,
     "director_resolve": DirectorResolve,
+    "director_body": DirectorBodySpecialist,
+    "director_social": DirectorSocialSpecialist,
+    "director_contact": DirectorContactSpecialist,
+    "director_objects": DirectorObjectsSpecialist,
+    "director_spatial": DirectorSpatialSpecialist,
+    "director_offscreen": DirectorOffscreenSpecialist,
     "resolve_reconcile": ResolveReconcileOutput,
     "resolve_repair": ResolveRepairOutput,
     "interpret_repair": InterpretRepairOutput,
@@ -3006,6 +3103,37 @@ _STATE_DIFF_DICT_FIELDS = (
     "poses",
 )
 
+#: The orchestrated Director's specialists (design note 19), step_key ->
+#: the state_diff channels that specialist owns. One authority for the
+#: preprocess unwrap, the channel-level prune, and (via import) the
+#: project-structure check that holds prompts.SPECIALIST_PROMPT_SPECS and
+#: agents/director.SPECIALISTS level with this map.
+SPECIALIST_CHANNELS = {
+    "director_body": ("attire", "conditions", "vitals", "overlays"),
+    "director_social": ("cast_changes", "introductions", "world_facts"),
+    "director_contact": ("contact_ops", "substance_ops", "containment",
+                         "scales"),
+    "director_objects": ("entities", "remove_entities", "inventory_ops",
+                         "artifact_ops", "destruction"),
+    "director_spatial": ("positions", "rooms", "remove_rooms",
+                         "remove_adjacent", "stations", "poses"),
+    "director_offscreen": ("crowd_ops", "courier_ops", "telling_ops",
+                           "offscreen_plan_ops", "ratified_claims",
+                           "contradicted_claims"),
+}
+
+_SPECIALIST_DICT_CHANNELS = frozenset({
+    "attire", "conditions", "vitals", "overlays", "containment", "scales",
+    "entities", "positions", "rooms", "stations", "poses",
+})
+_SPECIALIST_LIST_CHANNELS = frozenset({
+    "cast_changes", "introductions", "world_facts", "contact_ops",
+    "substance_ops", "remove_entities", "inventory_ops", "artifact_ops",
+    "remove_rooms", "remove_adjacent", "crowd_ops", "courier_ops",
+    "telling_ops", "offscreen_plan_ops", "ratified_claims",
+    "contradicted_claims",
+})
+
 _STATE_DIFF_SIBLING_FIELDS = (
     "remove_entities", "remove_rooms", "remove_adjacent", "conditions",
     "inventory_ops", "contact_ops", "substance_ops", "stations", "poses", "scales", "containment",
@@ -3225,6 +3353,38 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
                 flat for flat in (_flatten_view_value(x) for x in specifics)
                 if flat
             ]
+
+    if step_key in SPECIALIST_CHANNELS:
+        # A specialist's instruction blocks are shared verbatim with the
+        # full Director sheet, which says "state_diff.<channel>" -- so a
+        # model will sometimes wrap its channels in a state_diff (or, on
+        # the interpret side, state_assertions) envelope despite the core
+        # saying not to. Deterministic unwrap, then the same coercions the
+        # resolve diff gets for the same fields.
+        channels = SPECIALIST_CHANNELS[step_key]
+        for envelope in ("state_diff", "state_assertions"):
+            wrapped = result.get(envelope)
+            if isinstance(wrapped, dict) and not any(
+                    k in result for k in channels):
+                notes = result.get("notes")
+                result = dict(wrapped)
+                if notes is not None and "notes" not in result:
+                    result["notes"] = notes
+                break
+        if "conditions" in channels and "conditions" in result:
+            result["conditions"] = _coerce_conditions(result["conditions"])
+        for field in channels:
+            if field not in result:
+                continue
+            if field in _SPECIALIST_DICT_CHANNELS:
+                result[field] = _coerce_empty_list_to_dict(result[field])
+            elif field in _SPECIALIST_LIST_CHANNELS:
+                result[field] = _coerce_empty_dict_to_list(result[field])
+        if "entities" in channels:
+            # SceneEntityDef.name is required but the dict key already
+            # carries it; recover rather than fail the call (the same
+            # recovery the resolve diff gets).
+            _fill_entity_names(result)
 
     if step_key in ("director_resolve", "director_establish", "resolve_repair"):
         target = result
@@ -3576,6 +3736,80 @@ OUTPUT_EXAMPLES = {
              "are dead", "subject": "deck 12 crew", "verdict": "confirmed",
              "landing": "the medic confirms the deaths on-page"},
         ],
+    },
+    "director_body": {
+        "attire": {
+            "Mara": {"add": [], "remove": ["wool coat"], "replace": None,
+                     "state": None, "conditions": {},
+                     "coverage": {}},
+        },
+        "conditions": {
+            "mara_forearm_cut": [
+                {"condition_id": "mara_forearm_cut", "subject_id": "Mara",
+                 "kind": "wound", "severity": 0.2,
+                 "started_at_seconds": 0.0, "tick_interval_seconds": 0,
+                 "state": {"detail": "a shallow cut across the forearm"}},
+            ],
+        },
+        "vitals": {},
+        "overlays": {},
+        "notes": [],
+    },
+    "director_social": {
+        "cast_changes": [
+            {"who": "Merek", "status": "departed",
+             "reason": "rode for the garrison"},
+        ],
+        "introductions": [{"who": "Mara", "learns": "Sable"}],
+        "world_facts": [],
+        "notes": [],
+    },
+    "director_contact": {
+        "contact_ops": [
+            {"op": "add", "actor": "Mara", "actor_part": "hand",
+             "target": "Sable", "target_part": "shoulder",
+             "manner": "rest", "relation": "surface", "motion": "settled"},
+        ],
+        "substance_ops": [],
+        "containment": {},
+        "scales": {},
+        "notes": [],
+    },
+    "director_objects": {
+        "entities": {
+            "storm_lantern": {"name": "Storm Lantern", "kind": "object",
+                              "description": "a brass storm lantern",
+                              "aliases": [], "portable": True,
+                              "container": False, "interior_rooms": [],
+                              "state": {"lit": True}},
+        },
+        "remove_entities": [],
+        "inventory_ops": [],
+        "artifact_ops": [],
+        "destruction": None,
+        "notes": [],
+    },
+    "director_spatial": {
+        "positions": {"Mara": "lamp_room"},
+        "rooms": {},
+        "remove_rooms": [],
+        "remove_adjacent": [],
+        "stations": {"Mara": {"at": "the_lamp", "near": []}},
+        "poses": {},
+        "notes": [],
+    },
+    "director_offscreen": {
+        "crowd_ops": [
+            {"op": "set", "crowd_id": "", "room": "market_square",
+             "band": "a few dozen", "composition": "market-goers",
+             "mood": "wary"},
+        ],
+        "courier_ops": [],
+        "telling_ops": [],
+        "offscreen_plan_ops": [],
+        "ratified_claims": [],
+        "contradicted_claims": [],
+        "notes": [],
     },
     "character": {
         "observations_used": [],
@@ -4025,6 +4259,24 @@ def _prunable_diff_fields(errors):
     return fields or None
 
 
+# A specialist's whole output IS channels, so its analogue of the
+# state_diff prune above is one level shallower: when every validation error
+# is rooted under one of its channel fields (or `notes`), drop those fields
+# and keep the rest. Absent is already "no change asserted" for each of
+# them, and the resolve-side reconciliation seam catches anything the drop
+# lost -- the same contract the state_diff prune documents. DROPPED, NEVER
+# INVENTED.
+def _prunable_specialist_fields(step_key, errors):
+    allowed = set(SPECIALIST_CHANNELS.get(step_key) or ()) | {"notes"}
+    fields = set()
+    for error in errors:
+        loc = [str(part) for part in (error.get("loc") or [])]
+        if not loc or loc[0] not in allowed:
+            return None
+        fields.add(loc[0])
+    return fields or None
+
+
 def validate_llm_output_strict(
     step_key: str,
     raw: dict,
@@ -4103,6 +4355,31 @@ def validate_llm_output_strict(
                         ((f, next((e for e in errors
                                    if e.startswith("state_diff.%s" % f)), ""))
                          for f in sorted(prunable))
+                    ],
+                )
+
+        spec_prunable = (_prunable_specialist_fields(step_key, exc.errors())
+                         if step_key in SPECIALIST_CHANNELS else None)
+        if spec_prunable:
+            pruned = dict(prepared)
+            for field in spec_prunable:
+                pruned.pop(field, None)
+            try:
+                model = _validate(model_cls, pruned)
+            except ValidationError:
+                pass
+            else:
+                return ValidationReport(
+                    valid=True,
+                    output=_dump(model),
+                    warnings=[
+                        "Dropped malformed specialist channel %s so the "
+                        "beat could keep what it did encode (%s)"
+                        % (field, detail)
+                        for field, detail in
+                        ((f, next((e for e in errors
+                                   if e.startswith("%s" % f)), ""))
+                         for f in sorted(spec_prunable))
                     ],
                 )
 

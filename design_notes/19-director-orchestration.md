@@ -1,7 +1,7 @@
 # The Director as an orchestrator over scoped specialists
 
 **Branch `director-orchestration`, opened 2026-08-12.** Experiment, not a
-landing. `docs/UNBUILT.md` §2.16 holds the argument and the measurements; this
+landing. `docs/UNBUILT.md` §2.18 holds the argument and the measurements; this
 note holds the architecture and the decisions already closed, so the branch
 does not re-litigate them every time it is picked up.
 
@@ -203,3 +203,237 @@ read of the prose.
   owning objective causality, and a specialist that emits text reaching a
   perceiver does not inherit it.
 - **`commit.py` stays the sole persistence boundary.**
+
+---
+
+# Design detail — as built (body, social, contact, objects; both stages)
+
+Behind the `director_orchestration` setting (`orchestration_enabled()` in
+`agents/director.py`): default OFF, any of `1|on|true|body` turns it on, and
+OFF is byte-for-byte the old path — the monolithic sheet is a byte-identical
+recomposition of named segments in `prompts.py`, verified against the
+pre-split sha256 on every change. Everything below lives inside the two
+Director steps; `agents/runtime.py` learned nothing, and
+`tests/test_director_orchestration.py` pins each joint.
+
+## One correction to the note above, from the owner, and it closes a fork
+
+The section that framed conditional prompt assembly as the CHEAP ALTERNATIVE
+to orchestration is retracted: **they are not competitors, they are levels of
+one hierarchy.** Orchestration gives ownership, parallelism and fault
+isolation; intra-specialist conditional assembly gives the token savings.
+Dispatch specialists, then assemble each specialist's sheet from the channels
+it needs. Measured over the 2,243 stored resolves, a specialist that runs at
+all almost always touches exactly ONE of its own channels (objects 1.11 of 5,
+social 1.10 of 4, body 1.13 of 4, contact 1.22 of 4, spatial 1.52 of 6), so
+an unscoped specialist carries ~4x what the beat needs — which is what makes
+the 1–2k specialist figure above real without rewriting a word.
+
+## Scope: the orchestrator measures how much of a job a specialist needs
+
+The orchestrator's output per specialist is not a boolean — it is a SCOPE,
+the set of that specialist's channels with possible work this beat
+(`_dispatch_specialists` over `_CHANNEL_GATES`). Everything follows from that
+one value:
+
+    scope == empty         not dispatched at all
+    scope == some channels dispatched; sheet = core + those channels' chunks
+    scope == all channels  dispatched with everything (the fail-open ceiling)
+
+Dispatch is `bool(scope)` — one computation, one code path, so "which
+specialists run" and "how much sheet loads" can never disagree. Per-CHANNEL
+gates read standing scene state and structured declarations only (the
+conditions/contact/containment/scale ledgers, the wardrobe, the survival
+setting, posted notices, carried reports, destructible entities,
+`_beat_has_physical_activity`, declared speech): never prose. FAIL OPEN per
+channel: a channel is gated out only when its subject provably does not
+exist; where structure cannot decide, it is in scope, which is why most
+gates degrade to `physical_beat`.
+
+**Documented residuals, all backstopped, none closed:** dressing a fully
+bare body (attire gates on `anyone_wears`; the manifest backstop catches
+it); posting an INVENTED claim with nothing standing and nothing carried
+(artifact_ops; reconciliation catches it); narrated destruction of a bare
+room (`destruction` gates on a destructible entity; the deterministic
+destruction tripwire stays core and warn-only, as before).
+
+**One backstop covers both gating levels** (`_orchestration_scope_backstop`,
+run LAST on the final reconciled output): if content shipped for a channel
+not in any SERVED scope — a `changes_asserted` entry in that channel's
+category, or channel content in the final diff — say so via `tell_director`.
+A wrongly-skipped specialist and a wrongly-omitted chunk are the same fact
+at this level. A specialist's `notes` lane is the under-grant escape valve
+from the other side: its sheet tells it never to emit a channel it has no
+block for and to flag the work instead; notes reach `tell_director` too, and
+an out-of-scope emission that arrives anyway is kept (fail-open, asserted
+state is never discarded) and reported.
+
+**Measured per beat and persisted** on the step's `orchestration` record:
+`scope_report = {granted, served, produced}`. Under-grant is the dangerous
+direction and the backstop catches it; over-grant is only cost, and is the
+number that says how well the scoping works.
+
+## Chunked sheets, enforced
+
+A specialist's sheet is authored as a shared CORE (identity, source scope,
+output contract, refusals — the only part that always loads) plus one chunk
+per owned channel, keyed by the channel name
+(`prompts.SPECIALIST_PROMPT_SPECS`); assembly is literally
+`core + [chunk[c] for c in scope]` in canonical order
+(`prompts.specialist_prompt`), cache-stable per scope combination. The
+chunks REUSE the same segment constants the monolith is recomposed from
+(one spelling), plus a specialist-only shape fragment each; per the owner,
+a specialist's own prompt MAY later be rewritten leaner than the verbatim
+blocks — it exists only on the orchestrated path — but that is deferred
+prompt-writing work, not architecture.
+
+`tools/project_check.py` (`check_specialist_prompt_chunks`) makes the
+structure checkable: every owned channel has a chunk; no orphan chunks; the
+three registries (`agents/director.SPECIALISTS`,
+`prompts.SPECIALIST_PROMPT_SPECS`, `schemas.SPECIALIST_CHANNELS`) agree; the
+assembled sheet passes the `_ops` drift check against its own schema; and a
+specialist's core never names its own channels (word-boundary regex).
+**Limitation, recorded rather than papered over:** the core-purity check
+cannot see a paraphrase — a core that described a channel's rules without
+naming it would pass. The honest guarantee is only that channel names, and
+therefore channel shapes and `state_diff.<channel>` references, cannot live
+in a core.
+
+## Both stages, one specialist definition
+
+Interpret and resolve are equivalent in capability — interpret is the same
+authority scoped to the player's input (the alpha-8.1 fix), and the
+orchestration must not rebuild that asymmetry by construction. So the
+specialists are SHARED: one definition, two callers, differing only in
+source and dispatch timing. `payload.source` names the scope of a call:
+`resolved_beat` (encode what the authoritative prose asserts) or
+`player_declaration` (encode ONLY what the declaration asserts as already
+true or completed; attempts and contestable acts encode nothing). At
+interpret the channels merge into `state_assertions` — contact into
+`contact_assertions`, the interpret spelling of the same channel — BEFORE
+the deterministic validators (`validated_player_state_assertions`,
+`_validated_player_contact_assertions`), so the merged result crosses the
+exact floor a model-authored copy crosses. Each stage dispatches at its own
+time from its own facts; nothing is stored between them. The interpret-side
+specialist never receives `ctx.input` or `private_thought` (the X19 lesson):
+it reads the structured declaration.
+
+## The specialist contract
+
+One call per dispatched specialist: role = step key (`director_body`,
+`director_social`, `director_contact`, `director_objects`; in
+`providers.ROLES`, inheriting the `director` model via `ROLE_FALLBACKS` when
+unconfigured, always separable in `_log_usage`). Schemas own exactly the
+channels (`DirectorBodySpecialist` etc.); validation prunes a malformed
+channel rather than failing the call, and `preprocess_llm_output` unwraps
+the `state_diff`/`state_assertions` envelope a model sometimes adds. A
+failed specialist leaves the stage model's channels standing, warns, and
+never kills the beat. Assembly is ownership per GRANTED channel; everything
+outside the channels is untouched, and the deterministic projections that
+override model output in the monolith (player state assertions, character
+contact endings, following ops, movement backstop, restraint floor,
+reconciliation) run AFTER assembly on the merged output — same authority
+order, same detector signals, pinned by the parity test.
+
+**Entitlements, per specialist** (enforced by the entitlement tests): each
+receives the beat (prose+dialogue at resolve; the structured declaration at
+interpret), declared action attempts, final dice, its categories' manifest
+entries, the roster — plus its OWN ledgers only: body gets the wardrobe,
+overlays, active awareness (with condition ids), vitals when tracked, extra
+body parts, a room-name index; social gets background presence names;
+contact gets the standing contact ledger (post-onset at resolve), the
+containment and scale records, actor-owned endings and material effects,
+extra parts, room and entity name indexes; objects gets the scene entities
+with state, posted notices with ids, a room-name index. None receives the
+room graph, lore, minds, positions, world machinery, or another
+specialist's ledgers.
+
+**`following_ops` finding:** the corpus table lists it under social, but it
+is actor-owned and engine-projected (`_collect_following_ops` overwrites the
+channel deterministically every resolve) — no model authors it, so no
+specialist owns it. Social owns three model channels, not four.
+
+## The fan-out is genuinely parallel, and never streams
+
+Specialists produce structured output, not player-facing prose — only prose
+streams, and that is the prose author alone. So the ∥ in the shape has no UI
+question in it: `_run_specialists` submits every dispatched specialist to a
+thread pool, each call running under a COPY of the caller's context (the
+`loops.py`/`narration.py` precedent — `copy_context` is what carries
+`cancel_event` into the worker, so a cancelled turn aborts in-flight
+specialists through the existing `_check_cancel`) with both sinks cleared.
+Three properties, each pinned by a test:
+
+- **Deterministic assembly:** results are collected per specialist and
+  merged in canonical `SPECIALISTS` order, never completion order — the
+  test inverts completion order with delays and asserts the sequential
+  merge.
+- **Failure isolation survives concurrency:** a failed call becomes that
+  specialist's recorded error and never touches a sibling's completed work,
+  including two failing at once.
+- **Cancellation:** `Aborted` is the one exception that propagates — a
+  cancelled turn has no beat to fail open into.
+
+Measured through the real fan-out with a 0.5s-per-call provider stand-in,
+five dispatched specialists: sequential 2.50s → parallel 0.51s, machinery
+overhead 9ms. The critical path is `max(specialist)` instead of
+`Σ(specialist)`; at live structured-call latencies (1.5–4s) a physical beat
+dispatching four or five specialists gets seconds back per beat.
+
+## The numbers, as of this build (all six specialists)
+
+Sheets (chars ÷ 4 ≈ tokens; **monolith 21,064 tok**, byte-identical when the
+flag is off):
+
+| specialist | core | full sheet | expected loaded* | biggest chunks |
+|---|---|---|---|---|
+| body | ~0.7k | ~4.3k | **~1.7k** | attire 1.8k, conditions 1.5k |
+| social | ~0.7k | ~0.9k | **~0.7k** | (all three chunks < 0.1k) |
+| contact | ~0.7k | ~4.0k | **~1.7k** | contact_ops 1.5k, substance 1.0k |
+| objects | ~0.7k | ~2.7k | **~1.2k** | entities 1.0k, destruction 0.6k |
+| spatial | ~0.8k | ~3.0k | **~1.4k** | positions 0.9k, rooms 0.5k |
+| offscreen | ~0.7k | ~3.4k | **~1.2k** | crowds 0.8k, couriers 0.7k |
+
+\* core + mean-touched × average chunk — a FLOOR, from the corpus touched
+distribution. The fail-open gates grant more than the touched distribution
+(most undecidable channels degrade to `physical_beat`), so real loads sit
+between "expected" and "full"; the persisted `scope_report` is what settles
+it per beat.
+
+**The headline pair, against the 21,064-token monolith:**
+
+- **Largest single call: lean core ~9,236 tok** (down 56%). The delegation
+  note is ~1.1k of that — it covers six families and every surviving prose
+  duty, and is the main reason the core sits above the ~8.2k arithmetic
+  target.
+- **Typical-beat sheet total (floor, corpus fire rates): ~11.6k tok** —
+  lean core + fire-rate-weighted expected specialist loads.
+- **In practice (fail-open, a full physical beat):** body+social+contact+
+  objects+spatial dispatched with generous scopes ≈ 13–14k of specialist
+  sheet on top of the 9.2k core ≈ 23k TOTAL — at or slightly above the
+  monolith in total tokens on the heaviest beats, but spread over parallel
+  calls none of which exceeds 9.2k, which is the reliability thesis. A
+  dialogue beat runs ~10–12k total. Offscreen is cold on both (0 fires in
+  2,243 beats; it dispatches the moment a crowd, courier, carried report or
+  unratified claim exists — pinned by test in both directions).
+
+**Said plainly, per the owner:** social's gate barely gates — world_facts
+and introductions are undecidable from scene state, so social dispatches on
+any beat with speech or physical activity. That is fine at a 0.9k full
+sheet and is not a working gate; it is a cheap specialist with a formality
+in front of it.
+
+## What remains after this build
+
+- The prose author's PAYLOAD is untouched (still the full monolithic
+  payload); payload slicing is the next real token win.
+- Interpret's own sheet is not leaned (its model still writes the delegated
+  channels; ownership assembly resolves the double-write).
+- Leaner rewrites of specialist chunks are permitted (they exist only on
+  the orchestrated path) and deferred — the verbatim blocks keep one
+  spelling with the monolith.
+- The offscreen SIMULATOR (out-of-band, propose/ratify) stays owner-
+  deferred; what shipped is its ops surface and gate only.
+- The measurement: flag on vs off on a pinned model, judged by the
+  deterministic detectors plus the persisted scope_report, before the flag
+  may default on.
