@@ -1235,3 +1235,407 @@ def test_specialists_never_stream(temp_db, monkeypatch):
     assert specialist_keys
     for key in specialist_keys:
         assert observed[key] is None, key
+
+
+# ---------------------------------------------------------------------------
+# The prose author's OWN sheet is scoped (same mechanism, same rules).
+# ---------------------------------------------------------------------------
+
+def _resolve_sheet(calls):
+    """The system sheet the prose author actually received."""
+    return next(c["system"] for c in calls
+                if c["step_key"] == "director_resolve")
+
+
+#: heading -> the chunk name that carries it, for presence assertions.
+PROSE_DUTY_HEADINGS = {
+    "voices": "BODILESS VOICES",
+    "obligations": "OBLIGATION LEDGER",
+    "other_players": "OTHER PLAYERS' DECLARATIONS",
+    "comm": "MEDIUM — COMM CHANNELS",
+    "transit": "TRANSIT / MOVING ROOMS",
+    "mapping_proposal": "MAPPING SCENE PROPOSAL",
+    "hearsay": "- HEARSAY:",
+    "road": "- THE ROAD:",
+    "approach": "APPROACHING IS NOT ARRIVING",
+    "due_events": "DUE AUTHORED EVENTS",
+    "world_pressure": "WORLD PRESSURE — THE WORLD ACTS",
+    "residue": "DESTINATION RESIDUE",
+    "light": "WHAT LIGHT LETS THEM DO",
+    "size": "SIZE CHANGES WHAT IS POSSIBLE",
+}
+
+#: Every-beat contract blocks that may NEVER be gated out of the sheet.
+NEVER_GATED_HEADINGS = (
+    "KNOWLEDGE FIREWALL",
+    "CHANGES MANIFEST",
+    "PLAYER-ASSERTED FACTS",
+    "DIALOGUE LOG — MANDATORY",
+    "PLAYER AUTHORITY CONTRACT",
+    "DELEGATED CHANNELS",
+    "WORLD PRESSURE — OPENING",
+    "CONSEQUENCES ON THE CLOCK",
+    "NO STALLED SCENE",
+)
+
+
+def test_prose_author_core_keeps_the_never_gated_blocks():
+    """THE CONSTRAINT ABOVE ALL OTHERS: the firewall, the manifest, the
+    player-authority contract, the dialogue-log duty and the delegation
+    contract load on EVERY beat -- the empty scope (a floor dispatch can
+    never even produce) still carries all of them, plus the world-pressure
+    OPENING duty, so an empty ledger can still be opened into. And the
+    gated headings are genuinely chunked: none of them survives into the
+    bare core."""
+    from prompts import prose_author_prompt
+
+    core = prose_author_prompt([])
+    for marker in NEVER_GATED_HEADINGS:
+        assert marker in core, marker
+    assert "op:'open', subject, note" in core  # the opening op teaching
+    for name, heading in PROSE_DUTY_HEADINGS.items():
+        assert heading not in core, (name, heading)
+
+
+def test_prose_author_full_scope_is_the_registered_lean_sheet(monkeypatch):
+    """One spelling: the fail-open ceiling (scope=None) is byte-identical
+    to DEFAULT_PROMPTS['director_resolve_lean'], which is what the _ops
+    drift check and preset editing see -- and assembly is canonical-order,
+    so a given scope is byte-stable whatever order it arrives in (provider
+    prefix caching)."""
+    import prompts
+
+    monkeypatch.setattr(prompts, "nsfw_enabled", lambda: False)
+    full = prompts.prose_author_prompt(None)
+    assert full == prompts.DEFAULT_PROMPTS["director_resolve_lean"]
+    assert full == prompts.prose_author_prompt(list(
+        reversed(prompts.PROSE_DUTY_CHUNKS)))
+    for heading in list(PROSE_DUTY_HEADINGS.values()) + list(
+            NEVER_GATED_HEADINGS):
+        assert heading in full, heading
+    assert prompts.prose_author_prompt(["light", "size"]) == \
+        prompts.prose_author_prompt(["size", "light"])
+
+
+def test_prose_scope_gates_out_duties_whose_subject_is_absent(temp_db,
+                                                              monkeypatch):
+    """The skip direction, exercised end-to-end: a physical beat with no
+    speech, one lit room, empty ledgers, no bodiless voice, no vehicle, no
+    proposal. Every conditional duty whose subject provably does not exist
+    is out of the sheet; every contract block is still in it; and the
+    granted/gated_out split is persisted for the measurement."""
+    _orch_on(temp_db)
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
+
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    sheet = _resolve_sheet(calls)
+    for name in ("voices", "obligations", "other_players", "transit",
+                 "mapping_proposal", "hearsay", "road", "due_events",
+                 "world_pressure", "residue", "light"):
+        assert PROSE_DUTY_HEADINGS[name] not in sheet, name
+    # A physical beat can move, split rooms, and change sizes: those duties
+    # stay loaded because structure cannot rule them out (fail open).
+    for name in ("approach", "comm", "size"):
+        assert PROSE_DUTY_HEADINGS[name] in sheet, name
+    for marker in NEVER_GATED_HEADINGS:
+        assert marker in sheet, marker
+    prose = out["orchestration"]["prose_scope"]
+    assert set(prose["granted"]) == {"approach", "comm", "size"}
+    assert "light" in prose["gated_out"]
+
+
+def test_prose_scope_loads_a_block_when_its_subject_exists(temp_db,
+                                                           monkeypatch):
+    """The load direction: a pure-dialogue beat -- movement, comm and size
+    duties provably out of play -- EXCEPT every subject seeded here brings
+    its duty back in: a dim room, a bodiless ship AI, a docked elevator, an
+    open world-pressure ledger, a standing obligation, and speech itself
+    (a new debt is a speech act, so obligations ride any spoken beat)."""
+    _orch_on(temp_db)
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["rooms"]["lamp_room"]["light"] = "dim"
+    scene["entities"] = {
+        "ship_ai": {"name": "VIGIL", "kind": "ship AI", "ubiquitous": True},
+        "lift": {"name": "Service Lift", "kind": "elevator",
+                 "interior_rooms": ["lift_car"],
+                 "state": {"transit": {"phase": "docked", "hatch": "open"}}},
+    }
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
+
+    ctx = _make_ctx(temp_db, scene=scene, interp=_speech_interp())
+    temp_db.wset(ctx.chat.id, "world_pressures",
+                 [{"id": "wp1", "subject": "an active scan", "note": "",
+                   "held_streak": 0}])
+    temp_db.wset(ctx.chat.id, "pending_obligations",
+                 [{"id": "ob1", "who": "Mara", "what": "the report",
+                   "kind": "demand", "opened_turn": 0}])
+    out = director.director_resolve(ctx, nonce=0)
+
+    sheet = _resolve_sheet(calls)
+    for name in ("voices", "obligations", "world_pressure", "transit",
+                 "light"):
+        assert PROSE_DUTY_HEADINGS[name] in sheet, name
+    # A pure-dialogue beat in one known room still provably cannot move
+    # anyone, transmit to a remote listener, or change a size.
+    for name in ("approach", "comm", "size"):
+        assert PROSE_DUTY_HEADINGS[name] not in sheet, name
+    prose = out["orchestration"]["prose_scope"]
+    assert {"voices", "obligations", "world_pressure", "transit",
+            "light"} <= set(prose["granted"])
+    assert {"approach", "comm", "size"} <= set(prose["gated_out"])
+
+
+def test_prose_scope_comm_loads_when_minds_are_apart(temp_db, monkeypatch):
+    """The comm duty's subject is a remote listener: the same dialogue beat
+    gains the MEDIUM block the moment a tracked mind stands in another room
+    -- and an UNKNOWN position is undecidable, which is the fail-open
+    direction (asserted with Mara's position removed)."""
+    _orch_on(temp_db)
+    for mutate in (
+        lambda s: s["positions"].__setitem__("Mara", "lamp_room"),
+        lambda s: s["positions"].pop("Mara"),
+    ):
+        scene = json.loads(json.dumps(BASE_SCENE))
+        mutate(scene)
+        calls = []
+        monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
+        ctx = _make_ctx(temp_db, scene=scene, interp=_speech_interp())
+        out = director.director_resolve(ctx, nonce=0)
+        assert PROSE_DUTY_HEADINGS["comm"] in _resolve_sheet(calls)
+        assert "comm" in out["orchestration"]["prose_scope"]["granted"]
+
+
+def test_prose_scope_fails_open_when_the_facts_cannot_be_read(temp_db,
+                                                              monkeypatch):
+    """Undecidable means loaded, at every level: if the prose facts cannot
+    be computed at all, the WHOLE sheet loads -- the fail-open ceiling,
+    byte-identical to the registered lean sheet -- and the beat proceeds."""
+    _orch_on(temp_db)
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
+
+    def broken(*a, **kw):
+        raise RuntimeError("facts unreadable")
+    monkeypatch.setattr(director, "_prose_gate_facts", broken)
+
+    ctx = _make_ctx(temp_db, interp=_speech_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    sheet = _resolve_sheet(calls)
+    for heading in PROSE_DUTY_HEADINGS.values():
+        assert heading in sheet, heading
+    assert out["orchestration"]["prose_scope"]["gated_out"] == []
+
+
+def test_prose_scope_fails_open_per_fact(temp_db, monkeypatch):
+    """One fact source erroring grants ITS chunk without disturbing the
+    rest of the scope: the bodiless-voices reader raising loads the voices
+    block on a beat whose every other absent subject stays gated out."""
+    import scene as scene_mod
+
+    _orch_on(temp_db)
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
+
+    def broken(_sc):
+        raise RuntimeError("unreadable")
+    monkeypatch.setattr(scene_mod, "ubiquitous_speaker_names", broken)
+
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert PROSE_DUTY_HEADINGS["voices"] in _resolve_sheet(calls)
+    prose = out["orchestration"]["prose_scope"]
+    assert "voices" in prose["granted"]
+    assert "light" in prose["gated_out"]  # the rest of the scope undisturbed
+
+
+def test_prose_backstop_reports_a_duty_shipped_without_its_block(temp_db,
+                                                                 monkeypatch):
+    """The backstop's prose half, the load-bearing direction: a duty whose
+    block was not loaded ships anyway (an obligation opened on a speechless
+    beat with an empty ledger -- the gate's documented blind side made
+    real). The SAME backstop that audits specialist scopes must (a) say so
+    via tell_director, and (b) drop nothing: the ops stand, because the
+    gate fails open rather than enforcing its own prediction."""
+    _orch_on(temp_db)
+    calls = []
+    resolve_out = {
+        "resolved_event": "Mara holds out an open palm until the coin is "
+                          "promised to her.",
+        "summary": "Mara exacts a promise.",
+        "state_diff": {},
+        "obligations": [{"op": "open", "who": "The Stranger",
+                         "what": "the promised coin", "kind": "promise"}],
+    }
+    monkeypatch.setattr(
+        director, "_agent_json",
+        _fake_agent(calls, {"director_resolve": resolve_out}))
+
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert PROSE_DUTY_HEADINGS["obligations"] not in _resolve_sheet(calls)
+    # Fail-open: the ops shipped untouched.
+    assert out["obligations"] and out["obligations"][0]["op"] == "open"
+    # And the misprediction is REPORTED, on both surfaces, and recorded.
+    notes = [n for n in ctx.engine_feedback if "'obligations' duty" in n]
+    assert notes and "orchestration gate" in notes[0]
+    assert any("'obligations' duty" in w for w in ctx.warnings)
+    assert any("obligations" in f
+               for f in out["orchestration"]["gate_flags"])
+
+
+def test_prose_registries_are_level():
+    """The three prose-scoping registries cannot drift: every chunk has a
+    gate (an ungated chunk never loads on the orchestrated path), every
+    gate a chunk, and every shipped-duty audit points at a real chunk --
+    the same three-files-level discipline the specialists get from
+    tools/project_check.py, which enforces this same fact at check time."""
+    from prompts import PROSE_DUTY_CHUNKS
+
+    assert set(PROSE_DUTY_CHUNKS) == set(director._PROSE_DUTY_GATES)
+    assert set(director._PROSE_DUTY_SHIPPED) <= set(PROSE_DUTY_CHUNKS)
+    # The exact-payload gates deliberately carry no shipped audit; the
+    # audited set is exactly the prediction gates.
+    assert set(director._PROSE_DUTY_SHIPPED) == {
+        "voices", "obligations", "comm", "transit", "approach", "light",
+        "size"}
+
+
+# ---------------------------------------------------------------------------
+# The delegation must not depend on the model's obedience (run 20).
+# ---------------------------------------------------------------------------
+
+def test_prose_author_shape_carries_no_delegated_fields():
+    """Run 20 measured the delegation note NOT holding: 18 discarded-channel
+    emissions in 14 beats, because the prose author's sheet still ENDED with
+    the full monolithic output shape -- the note said "leave them empty" a
+    thousand tokens before a JSON template that listed every delegated field
+    with its sub-shape, and the template won (23 of the 28 replacements were
+    the spatial channels, the ones spelled out most concretely). Every such
+    emission is discarded at assembly, so it was pure output-token latency.
+    The fix is structural, not rhetorical: the delegated channels have NO
+    field in the prose author's stated shape, so there is nothing to fill.
+    The monolithic shape keeps every channel -- it has no specialists."""
+    import re
+
+    from prompts import _PROSE_AUTHOR_OUTPUT_SHAPE, _RESOLVE_OUTPUT_SHAPE
+
+    for channel in director._DELEGATED_CHANNELS:
+        assert not re.search(r"\b%s\b" % re.escape(channel),
+                             _PROSE_AUTHOR_OUTPUT_SHAPE), channel
+        # artifact_ops has never been in the resolve shape line (notices are
+        # taught in their own block); every other delegated channel must
+        # still be in the monolith's.
+        if channel != "artifact_ops":
+            assert re.search(r"\b%s\b" % re.escape(channel),
+                             _RESOLVE_OUTPUT_SHAPE), channel
+    # What stays the prose author's own is still all there.
+    for kept in ("resolved_event", "summary", "dialogue_order",
+                 "dialogue_log", "changes_asserted", "state_diff", "time",
+                 "weather", "location", "claim_dispositions", "consequences",
+                 "obligations", "world_pressure", "fact_adjudications"):
+        assert kept in _PROSE_AUTHOR_OUTPUT_SHAPE, kept
+    # And the sheet actually ships the lean shape, not the monolithic one.
+    from prompts import DEFAULT_PROMPTS
+    lean = DEFAULT_PROMPTS["director_resolve_lean"]
+    assert _PROSE_AUTHOR_OUTPUT_SHAPE in lean
+    assert _RESOLVE_OUTPUT_SHAPE not in lean
+    assert _RESOLVE_OUTPUT_SHAPE in DEFAULT_PROMPTS["director_resolve"]
+
+
+def test_interpret_gets_the_delegation_note_only_when_orchestrated(
+        temp_db, monkeypatch):
+    """The interpret sheet's own PASS 1 block instructs "the FULL state_diff
+    structure ... no subset", so on the orchestrated path the stage model was
+    GUARANTEED to duplicate every dispatched specialist's work and have it
+    replaced at assembly (run 20: 8 interpret-side replaced-channel warnings
+    in 14 beats). The delegation note overrides that instruction -- appended
+    as a suffix at the call site, so the monolithic sheet stays
+    byte-identical and cache-prefix-stable."""
+    interpret_out = {
+        "kind": "dialogue",
+        "sequence": [{"type": "speech", "text": "Quiet night."}],
+        "speech": "Quiet night.", "action": None, "movement": None,
+        "flow": {"reactors": [], "authority_claims": [], "dice": [],
+                 "resolution_flags": {}, "fiction_frame": {}},
+    }
+
+    # Flag off: the sheet is the registered prompt, note-free.
+    calls = []
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls, {"director_interpret":
+                                            interpret_out}))
+    ctx = _make_ctx(temp_db, player_input="Quiet night.")
+    ctx.director_interpret = None
+    director.director_interpret(ctx, nonce=0)
+    sheet = [c for c in calls if c["step_key"] == "director_interpret"
+             ][0]["system"]
+    assert "SPECIALISTS ENCODE, YOU DECOMPOSE" not in sheet
+
+    # Flag on: the same sheet as a PREFIX (caching), the note appended.
+    _orch_on(temp_db)
+    calls_on = []
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls_on, {"director_interpret":
+                                               interpret_out}))
+    ctx = _make_ctx(temp_db, player_input="Quiet night.")
+    ctx.director_interpret = None
+    director.director_interpret(ctx, nonce=0)
+    sheet_on = [c for c in calls_on if c["step_key"] == "director_interpret"
+                ][0]["system"]
+    assert sheet_on.startswith(sheet)
+    assert "SPECIALISTS ENCODE, YOU DECOMPOSE" in sheet_on
+    # The note must name the interpret spelling of the contact channel --
+    # that is the one whose name differs between the stages.
+    assert "contact_assertions" in sheet_on
+
+
+class TestTheHostCanFindTheSwitch:
+    """A capability nobody can turn on is a capability nobody has.
+
+    The orchestrated Director shipped behind `director_orchestration`, and
+    until this it was reachable only by writing the settings row by hand. The
+    six `director_*` roles were meanwhile listed among the model pickers with
+    no way to make them run -- which is how a setting becomes folklore.
+    """
+
+    def test_the_route_writes_what_the_engine_reads(self, temp_db):
+        """One setting key, one spelling. The route and the gate agreeing is
+        the whole contract; a toggle that writes a key nothing reads is the
+        failure this pins."""
+        import app as app_module
+        import agents.director as director
+
+        assert director.orchestration_enabled() is False
+        assert app_module.set_director_orchestration({"enabled": True}) == {
+            "enabled": True}
+        assert director.orchestration_enabled() is True
+        assert app_module.set_director_orchestration({"enabled": False}) == {
+            "enabled": False}
+        assert director.orchestration_enabled() is False
+
+    def test_boot_reports_it_so_the_checkbox_can_show_its_state(self, temp_db):
+        """A toggle that always renders unchecked is worse than none: it
+        invites a host to switch on something already on."""
+        import app as app_module
+
+        app_module.set_director_orchestration({"enabled": True})
+        assert app_module.bootstrap()["director_orchestration"] is True
+        app_module.set_director_orchestration({"enabled": False})
+        assert app_module.bootstrap()["director_orchestration"] is False
+
+    def test_every_specialist_role_is_offered_to_the_host(self, temp_db):
+        """The switch and the roles it governs have to arrive together."""
+        import app as app_module
+
+        roles = app_module.bootstrap()["roles"]
+        for name in ("director_body", "director_social", "director_contact",
+                     "director_objects", "director_spatial",
+                     "director_offscreen"):
+            assert name in roles, f"{name} has no settings row"

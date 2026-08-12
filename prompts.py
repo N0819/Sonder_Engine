@@ -244,7 +244,15 @@ RESOLVE_SPATIAL_RUNNING = (
  "walked in.\n\n"
 )
 
-_RESOLVE_PRELUDE_B = (
+# _RESOLVE_PRELUDE_B, split into named pieces so the orchestrated prose
+# author (design note 19) can gate the conditional prose duties on scene
+# state the way the specialists' channel chunks already are. The monolithic
+# sheet recomposes the pieces byte-identically below; RESOLVE_PROSE_*
+# constants are the gateable duties, `_RESOLVE_PRELUDE_B*` the unconditional
+# core between them. PLAYER-ASSERTED FACTS, CHANGES MANIFEST, KNOWLEDGE
+# FIREWALL and DIALOGUE LOG are authority/firewall contract blocks and are
+# deliberately NOT gateable: they apply to every beat.
+_RESOLVE_PRELUDE_B1 = (
  "PLAYER-ASSERTED FACTS — ADJUDICATE, NEVER IGNORE: when the player's declaration "
  "asserts a plot fact beyond their own directly-performed acts — a death or event that "
  "happened offscreen, the contents of an unread document, another character's change of "
@@ -275,6 +283,13 @@ _RESOLVE_PRELUDE_B = (
  "resolved_event MUST render that character's immediate physical and emotional reaction to "
  "it this beat (they flinch, resist, go still, meet the eyes, speak). A struggle in which "
  "only one side is rendered is half a struggle.\n\n"
+)
+
+# Gate (prose author): standing obligations, or any speech this beat — every
+# way a NEW debt is created (a demand, a promise, a question, an announced
+# action) is a speech act, so a speechless beat with an empty ledger provably
+# has no obligation work.
+RESOLVE_PROSE_OBLIGATIONS = (
  "OBLIGATION LEDGER: pending_obligations lists this fiction's open narrative debts — "
  "demands made and not yet met, promises and announced actions not yet performed, "
  "questions not yet answered — each with who owes it, what is owed, its age in beats, "
@@ -297,6 +312,9 @@ _RESOLVE_PRELUDE_B = (
  "emotional beat; discharge it the very next beat. This never applies to a demand, a "
  "promise, a question, or anything a character is emotionally owed — only a mechanical "
  "delivery — and never more than once.\n\n"
+)
+
+_RESOLVE_PRELUDE_B2 = (
  "CHANGES MANIFEST — MANDATORY SELF-CHECK: before writing state_diff, enumerate in "
  "changes_asserted every PERSISTENT physical change your resolved_event asserts as "
  "COMPLETED, BEYOND the player's supplied authority_claims (those are checked "
@@ -317,6 +335,12 @@ _RESOLVE_PRELUDE_B = (
  "omission. Do NOT list attempts/unfinished actions, transient sensations, or feelings "
  "— completed persistent physical changes only. An empty list is correct for a "
  "pure-dialogue beat.\n\n"
+)
+
+# Gate (prose author): the other_players_declarations payload itself — the
+# duty is about entries in that list, so an empty list is exact absence, not
+# a prediction.
+RESOLVE_PROSE_OTHER_PLAYERS = (
  "OTHER PLAYERS' DECLARATIONS: other_players_declarations lists any additional HUMAN "
  "players' declarations for this same beat, each marked ABSOLUTE exactly like the primary "
  "player_declaration above — these are real players, not character_declarations (which "
@@ -326,6 +350,9 @@ _RESOLVE_PRELUDE_B = (
  "cannot both be true), resolve it explicitly and note the conflict in your reasoning — "
  "do not silently favor one over the other without an in-fiction reason (turn order, "
  "physical proximity, etc.).\n\n"
+)
+
+_RESOLVE_PRELUDE_B3 = (
  "REACTION RESOLUTION: Character declarations marked is_reaction are reactive attempts "
  "to the player's action onset. Compare timing: did the reactor perceive the onset in "
  "time? Did their reaction begin before the action's effect? Is the reaction physically "
@@ -407,6 +434,14 @@ _RESOLVE_PRELUDE_B = (
  "character_declarations speaks and acts only through their own declaration -- never "
  "author additional lines, actions, or interiority for a sheeted character beyond what "
  "they themselves declared.\n"
+)
+
+# Gate (prose author): a remote listener existing at all — every tracked mind
+# (player, cast, background presences) standing in ONE known room on a beat
+# with no physical act provably has nobody elsewhere to transmit to. Any
+# unknown position, minds in different rooms, or a physical beat (which can
+# split rooms mid-beat) loads it.
+RESOLVE_PROSE_COMM = (
  "MEDIUM — COMM CHANNELS: when a line is spoken over a communication channel "
  "(a combadge/radio/intercom/phone/comm hail) to a party who is NOT in the same room "
  "as the speaker, set medium:'comm' on that dialogue_log entry AND fill intended_target "
@@ -417,7 +452,9 @@ _RESOLVE_PRELUDE_B = (
  "just because a combadge exists -- only when the addressed party is elsewhere and the "
  "line is actually transmitted. medium is orthogonal to visibility/conceal_from: a comm "
  "line can still be concealed from others on or near the channel.\n\n"
+)
 
+_RESOLVE_PRELUDE_B4 = (
  "TIME: Emit state_diff.time with start_seconds, duration_seconds, end_seconds, mode "
  "('action'|'time_skip'), explicit (bool), and display_advance.\n"
  "Duration follows THE FICTION, not the player's phrasing. Most beats are seconds and "
@@ -463,10 +500,30 @@ _RESOLVE_PRELUDE_B = (
  "evidence establishes them. Use state_diff.entities for physical entities and "
  "state_diff.rooms for navigable spaces. A vehicle or container's interior is a room "
  "whose parent_entity points to that entity. The container itself occupies its exterior "
- "room, while occupants occupy its interior room.\n\n" + TRANSIT_NOTE + "\n\n"
+ "room, while occupants occupy its interior room.\n\n"
+)
+
+# Gate (prose author): a transit-capable subject in scene — an entity with
+# interior rooms or transit/link state, a room with a parent_entity, or a
+# carried body. Minting a brand-new vehicle in a scene that had none is the
+# documented residual (the crowd-minting shape), caught by the backstop when
+# the merged diff carries transit state the gate did not predict.
+RESOLVE_PROSE_TRANSIT = TRANSIT_NOTE + "\n\n"
+
+# Gate (prose author): the mapping_scene_proposal payload itself — exact
+# absence, not a prediction.
+RESOLVE_PROSE_PROPOSAL = (
  "MAPPING SCENE PROPOSAL: mapping_scene_proposal is advisory. Accept supported portions "
  "by reproducing them in your output, correct malformed portions, and reject unsupported "
  "invention.\n\n"
+)
+
+# The monolithic sheet's recomposition of the pieces above -- byte-identical
+# to the pre-split constant by construction (pure concatenation).
+_RESOLVE_PRELUDE_B = (
+    _RESOLVE_PRELUDE_B1 + RESOLVE_PROSE_OBLIGATIONS + _RESOLVE_PRELUDE_B2
+    + RESOLVE_PROSE_OTHER_PLAYERS + _RESOLVE_PRELUDE_B3 + RESOLVE_PROSE_COMM
+    + _RESOLVE_PRELUDE_B4 + RESOLVE_PROSE_TRANSIT + RESOLVE_PROSE_PROPOSAL
 )
 
 
@@ -697,12 +754,17 @@ RESOLVE_BODY_CONDITIONS = (
  "took a player's own character away mid-stride, one line after she said good night.\n\n"
 )
 
-_RESOLVE_MID_B1a = (
+# Gate (prose author): the due_authored_events payload itself — exact
+# absence, not a prediction.
+RESOLVE_PROSE_DUE_EVENTS = (
  "DUE AUTHORED EVENTS: the payload's due_authored_events are world beats the PLAYER "
  "scheduled on an earlier turn and that are due NOW. Enact each as actually occurring this "
  "beat — narrate it in resolved_event and apply its consequences in state_diff — folded "
  "together with whatever else resolves this turn. Do not defer or ignore one; the engine "
  "re-queues any you leave unresolved, so the scene will keep pressing until it lands.\n\n"
+)
+
+_RESOLVE_NO_STALL = (
  "NO STALLED SCENE: a beat must move the objective situation. If your resolved_event "
  "would leave the physical/causal state materially unchanged from the previous beat — "
  "the same standoff, the same 'approaching' with no arrival, the same unanswered "
@@ -711,6 +773,14 @@ _RESOLVE_MID_B1a = (
  "drawn from the ESTABLISHED situation (an ambient clock already in play — a breach, an "
  "alarm, a countdown; an approaching third party; a radio order; a queue forming "
  "behind). Never invent unrelated events; escalate from what already exists.\n"
+)
+
+# Gate (prose author): the world_pressure ledger itself — the tick/hold/
+# resolve/must_tick duties are about LISTED entries, so an empty ledger is
+# exact absence. The OPENING duty ("emit op:'open' when this beat starts
+# such a process") is undecidable from state and stays in the core via
+# RESOLVE_PRESSURE_OPEN below, so an empty ledger can still be opened into.
+RESOLVE_PROSE_PRESSURE = (
  "WORLD PRESSURE — THE WORLD ACTS: world_pressure (payload) is the ledger of this "
  "fiction's ongoing OFF-CHARACTER processes — an active scan of an unknown artifact, a "
  "signal sent and not yet answered, a fire spreading, an authority alerted, a countdown "
@@ -725,13 +795,24 @@ _RESOLVE_MID_B1a = (
  "ended. An entry you leave without an op is recorded as an implicit hold AND flagged as "
  "an engine warning — silence is never neutral. HARD RULE: an entry flagged "
  "must_tick_this_beat has already been held past its window and MUST tick this beat — "
- "the world acts now, drawn from the process itself, never an unrelated invention. And "
+ "the world acts now, drawn from the process itself, never an unrelated invention. "
+)
+
+RESOLVE_PRESSURE_OPEN = (
+ "And "
  "when THIS beat's events START such a process — the player activates a scan, hails an "
  "unknown power, lights a fuse, alerts a garrison, and the scenario or lore gives the "
  "object any threat or escalation potential — emit {op:'open', subject, note} so the "
  "ledger tracks it from its first beat. A scenario object with an authored threat/"
  "escalation note that becomes active and is never opened here is the exact failure "
  "this ledger exists to prevent: a whole run in which the world never once acts.\n"
+)
+
+# NOT gateable: whether this beat's events have a later, elsewhere effect is
+# a fact about the future, undecidable from any scene state — a speech beat
+# can set one in motion (a proclamation, a public accusation) as surely as a
+# physical one. Considered and refused rather than gated optimistically.
+_RESOLVE_CONSEQUENCES = (
  "CONSEQUENCES ON THE CLOCK: when THIS beat's resolved events will have a later, "
  "elsewhere effect — a theft that gets reported once discovered, a garrison that "
  "doubles the patrol days after the raid, word of a public act reaching another town, "
@@ -746,6 +827,12 @@ _RESOLVE_MID_B1a = (
  "are met as state when someone next stands where they landed. This beat's own "
  "outcome belongs in the fields above, not here; most beats declare none — an empty "
  "list is the normal answer — and at most 2 land per beat.\n"
+)
+
+# The monolithic sheet's recomposition -- byte-identical by construction.
+_RESOLVE_MID_B1a = (
+    RESOLVE_PROSE_DUE_EVENTS + _RESOLVE_NO_STALL + RESOLVE_PROSE_PRESSURE
+    + RESOLVE_PRESSURE_OPEN + _RESOLVE_CONSEQUENCES
 )
 
 RESOLVE_OFFSCREEN_PLANS = (
@@ -890,7 +977,9 @@ RESOLVE_OFFSCREEN_CROWDS = (
  "of the best things a crowd does — when it happens, move both.\n"
 )
 
-_RESOLVE_MID_B2a = (
+# Gate (prose author): the destination_residue payload itself — delivered
+# only on an eligible re-entry beat, so absence is exact.
+RESOLVE_PROSE_RESIDUE = (
  "DESTINATION RESIDUE: destination_residue (payload; present only when the party "
  "moves somewhere after an absence) lists short present-tense facts about how that "
  "room now stands — a cold hearth, a thinner crowd, a consequence that landed there "
@@ -899,6 +988,9 @@ _RESOLVE_MID_B2a = (
  "would actually show, let characters react only if a difference would genuinely "
  "strike them, and drop any fact the story's own time or state contradicts: these "
  "are deterministic defaults, and your resolution outranks them.\n"
+)
+
+_RESOLVE_MID_B2b = (
  "CONTROLLED THRESHOLDS: at a guarded or gated threshold (checkpoint, border, sealed "
  "door, sentry post) the gatekeepers' JOB is to resolve the status of everyone crossing. "
  "If an unverified, undocumented, or anomalous party is present or being escorted, the "
@@ -920,6 +1012,9 @@ _RESOLVE_MID_B2a = (
  "standing gap must be an explicit on-page ACT with a reason (the superior nods "
  "assent; the actor chooses to obey and shows it) — never a silent default.\n\n"
 )
+
+# The monolithic sheet's recomposition -- byte-identical by construction.
+_RESOLVE_MID_B2a = RESOLVE_PROSE_RESIDUE + _RESOLVE_MID_B2b
 
 
 RESOLVE_OBJECTS_INVENTORY = (
@@ -1330,9 +1425,59 @@ _RESOLVE_OUTPUT_SHAPE = (
  "landing}]}."
 )
 
-# --- The orchestrated prose author's delegation note (lean sheet only) -----
+# The orchestrated prose author's output shape: the monolithic shape MINUS
+# every delegated channel. The delegated channels are absent on purpose --
+# see the note above _RESOLVE_DELEGATION_CORE -- and this constant must
+# never grow one back: the shape is the template the model fills, and a
+# field listed here is a field it will populate however firmly the
+# delegation note says otherwise (run 20: 18 discarded-channel emissions in
+# 14 beats against the full shape).
+_PROSE_AUTHOR_OUTPUT_SHAPE = (
+ "Output STRICT JSON {resolved_event, summary(<=40 words), dialogue_order:[names], "
+ "dialogue_log:[{speaker,exact_quote,intended_target,tone,medium?:'comm',"
+ "volume?,visibility?,conceal_from?:[] — these last three ONLY on lines you "
+ "originate; on declared lines the engine re-stamps them from the declaration}], "
+ "changes_asserted:[{category,subject,change,actor?,actor_part?,target?,target_part?,"
+ "substance?,placement?,target_interior?}], "
+ "state_diff:{time:{start_seconds,duration_seconds,end_seconds,mode,explicit,"
+ "display_advance}, "
+ "weather:{sky,precipitation,intensity,wind,temperature} ONLY when the beat "
+ "changes the sky, "
+ "location: new place label ONLY when the beat relocates the party, "
+ "claim_dispositions:[{claim_id,status,realized_event_ids,notes}], "
+ "consequences:[{what,where,due_seconds,witnessed,originator}]}, "
+ "obligations:[{op:'open|discharge|refuse',id,who,what,kind}], "
+ "world_pressure:[{op:'open|tick|hold|resolve',id,subject,note}], "
+ "fact_adjudications:[{claim_id,claim,subject,verdict:'confirmed|contested|false',"
+ "landing}]}. "
+ "state_diff carries ONLY the five fields named here. The delegated "
+ "channels have no field in your output and you must not invent one: what "
+ "happened lives in your resolved_event and changes_asserted, and the "
+ "specialists encode it from there."
+)
 
-_RESOLVE_DELEGATION = (
+# --- The orchestrated prose author's delegation note (lean sheet only) -----
+#
+# Split like the rest of the lean sheet: the note's contract and the duties
+# that apply to every beat stay core; the three bullets whose subjects are
+# exact scene facts (standing hearsay, the world's traffic, a mapping
+# proposal) are prose-duty chunks gated on the SAME facts the offscreen
+# specialist's dispatch and the proposal payload already key on, so the two
+# gating levels cannot disagree about whether the subject exists.
+#
+# The prose author's OUTPUT SHAPE (below, _PROSE_AUTHOR_OUTPUT_SHAPE) is the
+# other half of this note and the stronger half: run 20 measured the stage
+# model going on filling delegated channels 18 times in 14 beats when the
+# note said "leave them empty" but the shape -- the last thing the model
+# reads, and the thing it copies keys from -- still listed every delegated
+# field with its full sub-shape (23 of the 28 resolve-side replacements were
+# the spatial channels, whose sub-shapes were spelled out most concretely).
+# So the delegated channels are REMOVED from the prose author's stated shape
+# entirely: a field that does not exist is not a field to fill, and every
+# token spent on one was pure discarded latency (assembly replaces the
+# channel by ownership either way; output tokens are the wall clock).
+
+_RESOLVE_DELEGATION_CORE = (
  "DELEGATED CHANNELS -- SPECIALISTS ENCODE, YOU NARRATE. This beat's "
  "structured encoding of BODIES (attire, conditions, vitals, overlays), "
  "CONTACT AND MATTER (contact_ops, substance_ops, containment, scales), "
@@ -1342,7 +1487,10 @@ _RESOLVE_DELEGATION = (
  "poses) and THE WORLD'S TRAFFIC (crowd_ops, courier_ops, telling_ops, "
  "offscreen_plan_ops, ratified_claims, contradicted_claims) is owned by "
  "scoped specialists that read your finished resolved_event after you "
- "write it. Leave ALL of those channels empty. Your prose is still the "
+ "write it. None of those channels exists in YOUR output shape, and you "
+ "must not add one: anything you write in a delegated channel is "
+ "discarded unread and re-encoded by its specialist, so every token "
+ "spent there buys nothing and slows the beat. Your prose is still the "
  "sole authority on WHAT HAPPENED: state every such change plainly and "
  "completely in resolved_event, and list every persistent one in "
  "changes_asserted with its category -- and, for a contact or substance "
@@ -1381,20 +1529,37 @@ _RESOLVE_DELEGATION = (
  "the beat where it stood. Narrating a destruction outright obliges your "
  "prose to say where every survivor of the affected rooms ends up, and "
  "to list the loss in changes_asserted.\n"
+)
+
+# Gate (prose author): standing unratified background claims — the same
+# fact the offscreen specialist's ratified/contradicted gate reads.
+RESOLVE_PROSE_HEARSAY = (
  "- HEARSAY: payload.unratified_claims are background presences' "
  "unverified assertions. Adopt one by writing it into the objective "
  "record ON-PAGE, contradict one by establishing something incompatible "
  "ON-PAGE, or ignore it -- a specialist reads your verdict off the page. "
  "Adopt sparingly; never treat a claim as true just because it was "
  "said.\n"
+)
+
+# Gate (prose author): the world's traffic standing in scene — crowds,
+# couriers, carried reports or posted notices, the same facts that dispatch
+# the offscreen specialist's op channels.
+RESOLVE_PROSE_ROAD = (
  "- THE ROAD: a courier questioned or waylaid, a crowd spoken to or "
  "pushed through, a story passed on, a notice read -- these happen in "
  "your prose, concretely; the specialists encode the ops from what you "
  "wrote.\n"
+)
+
+# Gate (prose author): the mapping_scene_proposal payload — exact absence.
+# Rides the same chunk name as RESOLVE_PROSE_PROPOSAL above, so one grant
+# loads both halves of the proposal duty.
+RESOLVE_PROSE_PROPOSAL_NOTE = (
  "- MAPPING PROPOSAL: mapping_scene_proposal is still yours to "
  "adjudicate IN PROSE -- stage what you accept on the page; the "
  "specialists, who receive the proposal too, reproduce the accepted "
- "structure and reject the rest.\n\n"
+ "structure and reject the rest.\n"
 )
 
 # --- Specialist sheets: shared core scaffolding + per-channel chunks -------
@@ -1797,6 +1962,129 @@ def specialist_prompt(name, scope):
     if spec.get("nsfw") and nsfw_enabled():
         sheet += NSFW_OVERLAY
     return sheet
+
+
+# --- The orchestrated prose author's own sheet, chunked ---------------------
+#
+# The same mechanism as SPECIALIST_PROMPT_SPECS, applied to the prose
+# author: an unconditional core in canonical order with named PROSE-DUTY
+# chunks interleaved, selected by a scope `agents/director.py` computes from
+# scene state (`_PROSE_DUTY_GATES`) with the same rules the specialists'
+# channel gates follow -- gate on state, never prose; FAIL OPEN wherever
+# structure cannot decide; one backstop (`_orchestration_scope_backstop`)
+# reports a duty that shipped without its block. Chunk names may repeat
+# (mapping_proposal covers two segments); a granted name loads every segment
+# carrying it. tools/project_check.py (check_prose_author_chunks) holds the
+# chunk names, the runtime gates, the shipped-duty audit and the
+# `director_resolve_lean` registry entry level.
+#
+# NEVER GATEABLE, by contract: KNOWLEDGE FIREWALL, CHANGES MANIFEST,
+# PLAYER-ASSERTED FACTS, DIALOGUE LOG, the PLAYER AUTHORITY CONTRACT, the
+# delegation note's contract, and the output shape. They apply to every
+# beat; the firewall in particular is an invariant, not an optimization
+# target.
+
+# Lean-only bridge: the world-pressure OPENING duty must survive an empty
+# ledger (starting a process is undecidable from state), so the core carries
+# it under its own heading; RESOLVE_PRESSURE_OPEN keeps one spelling with
+# the monolith and this line makes it stand alone when the ledger chunk is
+# not loaded.
+_PRESSURE_OPEN_LEAN = (
+ "WORLD PRESSURE — OPENING: world_pressure (payload) is the ledger of this "
+ "fiction's ongoing OFF-CHARACTER processes. "
+) + RESOLVE_PRESSURE_OPEN
+
+PROSE_AUTHOR_SHEET = (
+    ("voices", _RESOLVE_PRELUDE_A1),
+    (None, _RESOLVE_PRELUDE_A2),
+    (None, _RESOLVE_PRELUDE_B1),
+    ("obligations", RESOLVE_PROSE_OBLIGATIONS),
+    (None, _RESOLVE_PRELUDE_B2),
+    ("other_players", RESOLVE_PROSE_OTHER_PLAYERS),
+    (None, _RESOLVE_PRELUDE_B3),
+    ("comm", RESOLVE_PROSE_COMM),
+    (None, _RESOLVE_PRELUDE_B4),
+    ("transit", RESOLVE_PROSE_TRANSIT),
+    ("mapping_proposal", RESOLVE_PROSE_PROPOSAL),
+    (None, _RESOLVE_DELEGATION_CORE),
+    ("hearsay", RESOLVE_PROSE_HEARSAY),
+    ("road", RESOLVE_PROSE_ROAD),
+    ("mapping_proposal", RESOLVE_PROSE_PROPOSAL_NOTE),
+    (None, "\n"),                        # closes the delegation note
+    ("approach", _RESOLVE_MID_A1a),
+    ("due_events", RESOLVE_PROSE_DUE_EVENTS),
+    (None, _RESOLVE_NO_STALL),
+    ("world_pressure", RESOLVE_PROSE_PRESSURE),
+    (None, _PRESSURE_OPEN_LEAN),
+    (None, _RESOLVE_CONSEQUENCES),
+    ("residue", RESOLVE_PROSE_RESIDUE),
+    (None, _RESOLVE_MID_B2b),
+    ("light", _RESOLVE_TAIL1c),
+    ("size", _RESOLVE_TAIL2),
+    (None, _PROSE_AUTHOR_OUTPUT_SHAPE),
+)
+
+#: Canonical chunk-name order, deduplicated -- the registry the runtime
+#: gates and project_check key on.
+PROSE_DUTY_CHUNKS = tuple(dict.fromkeys(
+    name for name, _text in PROSE_AUTHOR_SHEET if name))
+
+
+def prose_author_prompt(scope):
+    """The orchestrated prose author's sheet for THIS beat: the core plus
+    every prose-duty chunk in the granted scope, in canonical order
+    (cache-stable per scope combination). Scope selects chunks; there is no
+    other selection logic and no prose is consulted anywhere on this path.
+    `scope=None` is the fail-open ceiling (everything loads). The NSFW
+    overlay rides the same host setting `get_prompt` honours for
+    director_resolve_lean, which this sheet replaces on the orchestrated
+    path."""
+    granted = set(PROSE_DUTY_CHUNKS if scope is None else scope)
+    sheet = "".join(text for name, text in PROSE_AUTHOR_SHEET
+                    if name is None or name in granted)
+    if nsfw_enabled():
+        sheet += NSFW_OVERLAY
+    return sheet
+
+
+# --- The orchestrated interpret stage's delegation note --------------------
+#
+# Appended to the director_interpret sheet AT THE CALL SITE (agents/
+# director.py) only when the `director_orchestration` setting is on, so the
+# monolithic path stays byte-identical. Appended as a SUFFIX on purpose:
+# the interpret sheet is a stable prefix for provider caching, and the note
+# lands after the output shape, which is also where it argues best -- the
+# sheet's own PASS 1 block instructs "the FULL state_diff structure ... no
+# subset", so without this override the stage model duplicates every
+# dispatched specialist's work and assembly discards it (run 20: 8
+# interpret-side replaced-channel warnings in 14 beats, all pure wasted
+# output tokens, and output tokens are the wall clock).
+INTERPRET_DELEGATION_NOTE = (
+ "\n\nDELEGATED CHANNELS -- SPECIALISTS ENCODE, YOU DECOMPOSE. This engine "
+ "is running the orchestrated Director: scoped specialists read your "
+ "finished structured declaration after you write it and own this beat's "
+ "encoding of BODIES (attire, conditions, vitals, overlays), CONTACT AND "
+ "MATTER (contact_assertions, substance_ops, containment, scales), OBJECTS "
+ "(entities, remove_entities, inventory_ops, artifact_ops, destruction), "
+ "SOCIAL FABRIC (cast_changes, introductions, world_facts), GEOGRAPHY "
+ "(positions, rooms, remove_rooms, remove_adjacent, stations, poses) and "
+ "THE WORLD'S TRAFFIC (crowd_ops, courier_ops, telling_ops, "
+ "offscreen_plan_ops, ratified_claims, contradicted_claims) -- your own "
+ "authority, applied by other hands. This OVERRIDES the PASS 1 "
+ "instruction to emit the full state_diff structure yourself: leave every "
+ "channel above out of state_assertions and leave contact_assertions "
+ "empty. Anything you write in a delegated channel is discarded unread "
+ "and re-encoded by its specialist, so every token spent there buys "
+ "nothing and slows the beat. state_assertions keeps ONLY the channels no "
+ "specialist owns -- time, weather, location -- when the declaration "
+ "asserts them. Everything else in your output is unchanged and stays "
+ "yours: the sequence with raw_text, attempt and commitment on every "
+ "element, asserted_effects and intended_effects, speech, movement, "
+ "follow_op, location_query, other_players, flow, notes. The specialists "
+ "can only encode what your decomposition states plainly: a declared "
+ "assertion your sequence drops is an assertion the world never receives."
+)
+
 
 DEFAULT_PROMPTS = {
 "greeting_interpret": (
@@ -3735,14 +4023,11 @@ DEFAULT_PROMPTS = {
 # The orchestrated prose author (design note 19): the same sheet with every
 # specialist-owned channel's machinery cold-stored in the specialists. Same
 # schema, same step key, same payload -- only the instruction sheet is lean.
-"director_resolve_lean": (
- _RESOLVE_PRELUDE_A1 + _RESOLVE_PRELUDE_A2 + _RESOLVE_PRELUDE_B
- + _RESOLVE_DELEGATION
- + _RESOLVE_MID_A1a
- + _RESOLVE_MID_B1a + _RESOLVE_MID_B2a
- + _RESOLVE_TAIL1c + _RESOLVE_TAIL2
- + _RESOLVE_OUTPUT_SHAPE
-),
+# Registered as the FULL-scope assembly of PROSE_AUTHOR_SHEET (the fail-open
+# ceiling) so preset editing and the _ops drift check see the whole sheet;
+# the orchestrated path assembles per beat via `prose_author_prompt`.
+"director_resolve_lean": "".join(
+    text for _name, text in PROSE_AUTHOR_SHEET),
 
 "resolve_reconcile": (
  "You are the RESOLUTION AUDITOR of a simulation-first fiction engine. One beat was just "

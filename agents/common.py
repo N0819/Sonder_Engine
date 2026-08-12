@@ -3934,6 +3934,92 @@ def self_name_forms(primary_name, forms=None):
     return out
 
 
+# Head nouns too generic to shorten a minted label onto. "the person"/"the
+# figure" is not a shortening of one body's descriptor, it is the word every
+# stranger label is built from, and rewriting it into "you" would claim any
+# passing body as the perceiver.
+_GENERIC_LABEL_HEADS = frozenset({
+    "person", "figure", "one", "body", "stranger", "someone", "somebody",
+    "people", "presence", "voice", "shape", "appearance", "thing", "man",
+    "woman", "child", "adult", "individual", "form", "silhouette",
+})
+
+
+def self_reference_forms(name, appearance=None, aliases=None, *,
+                         labels=(), avoid=()):
+    """The EPITHETS this engine mints for one body, as self-reference forms.
+
+    `self_name_forms` above answers "what does prose call this mind by NAME".
+    This answers the other half, and it exists because a name is not the only
+    handle the engine itself puts into circulation: `_unknown_actor_label`
+    mints a descriptor for every body an observer has not recognized, and
+    every mind that receives that descriptor then writes it back out in its
+    own declarations. The Director does it too.
+
+    Measured live (three-model playthrough, 2026-08-12): the persona Corin
+    reads "A young smith's apprentice with a borrowed sword", the composer
+    minted "the young smith's apprentice" for every character in the square,
+    and it came back through `director_resolve` ("Bryn turns toward the young
+    smith's apprentice") and through the cast's own observable surfaces ("eyes
+    settling on the sword at the apprentice's hip") into Corin's OWN view.
+    The composer translates a canonical NAME into "you" for the body it
+    belongs to; handed the epithet it minted, it had nothing to translate, so
+    the player read about himself in the third person, described by a label
+    that exists only because other people do not know who he is.
+
+    The forms returned are deliberately narrow:
+
+    - the exact minted label(s) -- the base `_unknown_actor_label` descriptor
+      plus whatever `labels` the caller actually minted this beat (a widened
+      or ordinal-distinguished variant), because those are the strings the
+      engine put into circulation and nothing else is;
+    - one SHORT definite form ("the apprentice") cut from a label's head
+      noun, because prose shortens a long descriptor on second mention and
+      that is exactly how the live case reached the player. Guarded three
+      ways: the label must be long enough for the short form to be a genuine
+      shortening, the head noun must not be generic
+      (`_GENERIC_LABEL_HEADS`), and the head noun must not appear in any
+      `avoid` label.
+
+    `avoid` is the set of labels this observer currently holds for OTHER
+    bodies. Any form colliding with one of them is dropped outright: two
+    strangers who look alike can share a descriptor, and rewriting a
+    reference to one of them into "you" would tell the perceiver they did
+    something somebody else did. Under-matching costs one clumsy sentence;
+    over-matching invents an act.
+
+    Indefinite variants ("a young smith's apprentice") are NOT returned. That
+    phrasing is how prose introduces a body nobody has met, so matching it
+    would reach for referents this cannot check.
+    """
+    avoid_labels = {str(a or "").strip().casefold()
+                    for a in (avoid or []) if str(a or "").strip()}
+    avoid_words = set()
+    for label in avoid_labels:
+        avoid_words.update(re.findall(r"[\w']+", label))
+    minted = []
+    for label in [_unknown_actor_label(name, appearance, aliases), *(labels or [])]:
+        label = str(label or "").strip()
+        if not label or label.casefold() in avoid_labels:
+            continue
+        if label.casefold() not in {m.casefold() for m in minted}:
+            minted.append(label)
+    out = list(minted)
+    for label in minted:
+        words = re.findall(r"[\w']+", label)
+        if len(words) < 3:
+            continue
+        head = words[-1].casefold()
+        if head in _GENERIC_LABEL_HEADS or head in avoid_words or len(head) < 3:
+            continue
+        short = f"the {words[-1]}"
+        if short.casefold() in avoid_labels:
+            continue
+        if short.casefold() not in {m.casefold() for m in out}:
+            out.append(short)
+    return out
+
+
 def _self_second_person(text, forms):
     """Rewrite a PERCEIVER's own name/alias forms inside engine-supplied prose
     into second person, before that prose is injected into their own view.
@@ -5136,6 +5222,71 @@ def _check_player_person(prose, player_name, narration_person, player_aliases=No
     ]
 
 
+#: How far the prose's dominant person must lead the person that was ASKED
+#: for before the mismatch is reported. Same margin as
+#: `_resolve_narration_person`'s hysteresis, for the same reason: one stray
+#: token is not a voice change.
+_PERSON_DRIFT_MARGIN = 2
+
+
+def _check_narration_person_match(prose, narration_person, player_name=None):
+    """Did the narrator actually WRITE in the person it was told to.
+
+    `_narration_person_counts` was called in exactly one place -- on the
+    PLAYER's raw input, to decide `narration_person`. The narrator was then
+    told "PERSON DISCIPLINE: ONLY the player character is 'I'/'me'/'my'" and
+    nothing read the prose that came back. This is that missing half: the same
+    detector, run over the output, warning when the dominant person disagrees
+    with the person that was asked for.
+
+    Reusing the detector rather than writing a second one is the point -- it
+    already strips quoted dialogue (a "you" inside a spoken line addresses a
+    character, not the reader), and unterminated-quote folding is the part
+    that is easy to get wrong.
+
+    Two deliberate narrowings, because this scores prose full of OTHER people:
+
+    - third-person evidence comes from the player's NAME only
+      (`player_pronouns` is not passed). Every other body on the page is
+      legitimately "he"/"she"/"they", and the player's own pronouns are
+      routinely the same words; counting them would report every beat where
+      the cast moved more than the player did.
+    - the dominant person must lead the declared one by `_PERSON_DRIFT_MARGIN`.
+
+    Measured over the stored corpus (2,303 narrator drafts, per-turn person
+    replayed from each turn's own input): 12 warnings, 0.52%, and every one of
+    them is a real disagreement -- prose reading "Your words land in the
+    corridor's flat hum" for a turn whose person resolved to `first`. It is a
+    WARNING, never enforceable: a rewrite costs a whole narrator call, and
+    person is a whole-draft property that a correction note cannot patch
+    locally.
+
+    **What it cannot catch, stated plainly:** it would NOT have caught the
+    Director's observer-relative epithet reaching the player ("the young
+    smith's apprentice" for the player's own body). That phrase is neither a
+    name nor a pronoun, so it is invisible to every person detector. This is a
+    backstop for genuine model non-compliance, not a fix for bad input --
+    that fix is the composer's identity floor (`self_reference_forms`).
+    """
+    person = str(narration_person or "").strip().lower()
+    if person not in ("first", "second", "third"):
+        return []
+    text = str(prose or "")
+    if not text.strip():
+        return []
+    counts = _narration_person_counts(text, player_name, None)
+    dominant = max(counts, key=counts.get)
+    if dominant == person or counts[dominant] == 0:
+        return []
+    if counts[dominant] - counts.get(person, 0) < _PERSON_DRIFT_MARGIN:
+        return []
+    return [
+        f"Narrator prose reads as {dominant} person but narration_person is "
+        f"'{person}' ({counts['first']} first / {counts['second']} second / "
+        f"{counts['third']} third-person markers outside quoted dialogue)."
+    ]
+
+
 def _flexible_quote_re(body, flags=re.I):
     """Regex matching a quote body verbatim but whitespace-flexible (the
     narrator may re-wrap lines) and terminal-punctuation-tolerant (English
@@ -5656,6 +5807,8 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     warnings.extend(_check_pronoun_fidelity(prose, cast_pronouns))
     warnings.extend(_check_player_person(
         prose, player_name, narration_person, player_aliases))
+    warnings.extend(_check_narration_person_match(
+        prose, narration_person, player_name))
 
     # F1-F4 world/ordering fidelity (all deterministic; each has its own
     # enforceable prefix in agents/narration.py so a violation buys exactly

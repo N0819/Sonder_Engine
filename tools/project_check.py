@@ -266,6 +266,81 @@ def check_specialist_prompt_chunks(errors: list[str]) -> None:
                     "will drop every one the model sends")
 
 
+#: Blocks of the orchestrated prose author's sheet that must NEVER be
+#: gateable: every-beat authority/firewall contract material. Each marker
+#: must appear in the CORE (the segments that load on every scope,
+#: including the empty one) -- a marker migrating into a gated chunk is
+#: exactly the quality regression the scoping was forbidden to introduce.
+PROSE_AUTHOR_NEVER_GATED = (
+    "KNOWLEDGE FIREWALL",
+    "CHANGES MANIFEST",
+    "PLAYER-ASSERTED FACTS",
+    "DIALOGUE LOG — MANDATORY",
+    "PLAYER AUTHORITY CONTRACT",
+    "DELEGATED CHANNELS",
+    "WORLD PRESSURE — OPENING",   # opening a process is undecidable
+    "Output STRICT JSON",
+)
+
+
+def check_prose_author_chunks(errors: list[str]) -> None:
+    """The prose author's sheet scoping, held level the same way the
+    specialists' is (design note 19): prompts.PROSE_AUTHOR_SHEET names the
+    chunks, agents/director._PROSE_DUTY_GATES grants them, and
+    agents/director._PROSE_DUTY_SHIPPED audits the gated-out ones. A chunk
+    with no gate never loads on the orchestrated path (silent drop); a gate
+    with no chunk grants nothing; an audit for a name that is not a chunk
+    audits nothing. And the never-gated contract blocks must live in the
+    CORE -- the firewall is an invariant, not an optimization target."""
+    sys.path.insert(0, str(ROOT))
+    try:
+        import prompts
+        from agents import director
+    except Exception as exc:  # pragma: no cover - import failure is its own error
+        errors.append(f"could not check prose author chunks: {exc}")
+        return
+
+    sheet = getattr(prompts, "PROSE_AUTHOR_SHEET", ())
+    chunk_names = set(getattr(prompts, "PROSE_DUTY_CHUNKS", ()))
+    gates = set(getattr(director, "_PROSE_DUTY_GATES", {}))
+    audits = set(getattr(director, "_PROSE_DUTY_SHIPPED", {}))
+
+    if chunk_names != gates:
+        errors.append(
+            "prose-author registries disagree: prompts.PROSE_DUTY_CHUNKS "
+            f"has {sorted(chunk_names)} but agents/director."
+            f"_PROSE_DUTY_GATES has {sorted(gates)} -- an ungated chunk "
+            "never loads on the orchestrated path, and a chunkless gate "
+            "grants nothing")
+    for orphan in sorted(audits - chunk_names):
+        errors.append(
+            f"agents/director._PROSE_DUTY_SHIPPED audits {orphan!r}, which "
+            "is not a prose-duty chunk -- the audit can never fire")
+
+    core = "".join(text for name, text in sheet if name is None)
+    gated = "".join(text for name, text in sheet if name)
+    for marker in PROSE_AUTHOR_NEVER_GATED:
+        if marker not in core:
+            errors.append(
+                f"never-gated prose-author block {marker!r} is missing "
+                "from the sheet's core -- it must load on every beat")
+    for marker in ("KNOWLEDGE FIREWALL", "CHANGES MANIFEST",
+                   "DIALOGUE LOG — MANDATORY", "PLAYER AUTHORITY CONTRACT"):
+        if marker in gated:
+            errors.append(
+                f"never-gated prose-author block {marker!r} appears inside "
+                "a gated chunk -- a beat could load a second, gateable "
+                "spelling of an every-beat contract")
+
+    full = "".join(text for _name, text in sheet)
+    if prompts.DEFAULT_PROMPTS.get("director_resolve_lean") != full:
+        errors.append(
+            "DEFAULT_PROMPTS['director_resolve_lean'] is not the full-scope "
+            "assembly of PROSE_AUTHOR_SHEET -- the _ops drift check and "
+            "preset editing would see a different sheet than the "
+            "orchestrated path can load")
+
+
 def check_generated_map(errors: list[str]) -> None:
     expected = generate()
     actual = OUTPUT.read_text(encoding="utf-8") if OUTPUT.exists() else ""
@@ -280,6 +355,7 @@ def main() -> int:
     check_empty_tests(errors)
     check_prompt_schema_ops(errors)
     check_specialist_prompt_chunks(errors)
+    check_prose_author_chunks(errors)
     check_generated_map(errors)
 
     if errors:

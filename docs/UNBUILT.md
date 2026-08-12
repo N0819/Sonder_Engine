@@ -2006,6 +2006,53 @@ Found while porting the module into Nullo Engine, by an agent reading each
 function's arguments after having first dismissed all three by their module
 name.
 
+### 1.38 A line addressed by epithet is addressed to nobody
+
+`director_resolve` writes `intended_target` on every dialogue entry, and both
+readers of it — `composer._addresses` and `perception._addresses` — match it
+against the observer's canonical NAME by casefolded equality. Measured live
+(three-model playthrough, 2026-08-12, `mix2.db` turn 1): both of Bryn's lines
+carried `"intended_target": "young smith's apprentice"` — the appearance label
+perception mints for strangers — where the target was the player, Corin. Every
+equality test failed.
+
+Two things ride that answer, and they are not the same kind of thing:
+
+- `directed_at_self` on the speech percept — presentation and salience;
+- `line_hear_level`'s **addressed rescue**, which is an ADMISSION decision: a
+  quiet line plainly naming you is audible to you when it would otherwise not
+  be. So a whisper aimed at the player by epithet is silently not delivered.
+
+The obvious fix — also match `intended_target` against the epithets
+`common.self_reference_forms` mints for that observer — is not taken here on
+purpose. It LOOSENS an admission gate on a string match, and this engine's
+guards subtract; a false positive delivers a line to someone it was not aimed
+at. `design_notes/20-observer-epithet-floor.md` closed the prose half of this
+defect deterministically and reports the structured half back through
+`tell_director` (`director._report_observer_epithets`) so the Director stops
+producing it. Before closing the gate, measure how often `intended_target`
+fails to match any body at all across the stored corpus — if the Director
+stops writing epithets once it is told, the gate never needs touching.
+
+### 1.39 Micro-perception deliveries bypass the composer's identity floor
+
+Pre-existing, and now visible beside §1.38.
+`loops.deterministic_micro_perception` composes each delivered sentence with
+`_observable_predicate(display, surface)` and applies **no** self-reference
+rewrite at all — not the epithet floor added in note 20, and not the older
+name-based `_self_second_person` every other delivery site runs. So a
+character whose own name or minted epithet appears in another actor's
+`observable` surface reads about themselves in the third person in their own
+micro-view, and that text flows verbatim into their next character step and
+their memory of the beat. (The player is unaffected: `_composer_outcome` skips
+the `player` key when merging `micro_by_pid`.)
+
+These additions also arrive at `_composer_outcome` **pre-rendered** and are
+appended after the composed view, so they carry none of the percept-level
+gates either — the residual already noted in
+`design_notes/13-composer-build.md` ("the micro loop should emit percepts").
+One fix covers both: emit percepts.
+
 
 ## 2. Roadmap
 
@@ -2749,18 +2796,47 @@ produced} persists on each step; the single scope backstop reports through
 `tell_director`; per-specialist roles are separable in `_log_usage`;
 detector parity and every joint pinned by
 `tests/test_director_orchestration.py`. The monolithic sheet remains a
-byte-identical recomposition. Numbers (design note 19, end): largest
-single call ~9.2k tok vs the 21.1k monolith; typical-beat floor ~11.6k
-total; the heaviest fail-open physical beats reach ~23k total but spread
-over parallel sub-9.2k calls. **What remains:** slicing the prose author's
-PAYLOAD (still the full monolithic payload — the next real token win);
-leaning interpret's own sheet (its model still writes the delegated
-channels; ownership assembly resolves the double-write); optional leaner
-rewrites of the specialist chunks (permitted — they exist only on the
-orchestrated path); the offscreen SIMULATOR (owner-deferred, out-of-band
-propose/ratify per the note above); and the measurement — flag on vs. off
-on a pinned model, judged by the detectors above plus the persisted
-scope_report, before the flag may default on.
+byte-identical recomposition. The prose author's OWN sheet is scoped the
+same way (second carve, same mechanism): 14 prose-duty chunks
+(`prompts.PROSE_AUTHOR_SHEET`/`prose_author_prompt`) gated on scene state
+by `_PROSE_DUTY_GATES` from the same `_gate_facts` call, fail-open at
+every level, never-gated contract blocks (firewall, manifest,
+player-asserted facts, dialogue log, authority, pressure-OPEN) enforced by
+`check_prose_author_chunks`, shipped-duty audit folded into the same scope
+backstop, granted/gated_out persisted as `orchestration.prose_scope`.
+Numbers (design note 19, end): prose-author core 6.3k tok, ~6.7–7.6k
+typical, 9.3k fail-open ceiling, vs the 21.1k monolith; typical-beat floor
+~9.1k total; the heaviest fail-open physical beats reach ~21k total but
+spread over parallel sub-7.6k calls. Run 20 (14 beats, real
+models, 2026-08-12) hardened the delegation from rhetorical to structural:
+the prose author's stated output shape no longer carries the delegated
+channels at all (`_PROSE_AUTHOR_OUTPUT_SHAPE` — the full shape was the
+template the model kept filling, 18 discarded-channel emissions in 14
+beats, pure output-token latency), and interpret gets
+`INTERPRET_DELEGATION_NOTE` appended at the call site only when the flag
+is on, overriding its own "FULL state_diff structure ... no subset"
+instruction (design note 19, run-20 section). **What remains:** slicing
+the prose author's PAYLOAD (still the full monolithic payload — the next
+real token win); leaning interpret's own sheet by chunks (the delegated
+channels are suppressed at the source now, but the blocks teaching them
+still load); optional leaner rewrites of the specialist chunks (permitted
+— they exist only on the orchestrated path); the offscreen SIMULATOR
+(owner-deferred, out-of-band propose/ratify per the note above);
+re-measuring the replaced-channel warning rate on a live run (the stored
+variants hold only the MERGED output, so the after-rate cannot be read
+from run 20's own beats); provider cache affinity (run 20 diagnosed the
+19% prefix-cache rate as provider replica routing, not byte instability —
+hits were constant sheet-sized prefixes, misses all-or-nothing; honest
+ceiling ~57% with the per-beat payload inherently uncacheable; a
+pinned/dedicated instance is configuration, not code, and is recorded
+rather than chased); and the measurement — flag on vs. off on a pinned
+model, judged by the detectors above plus the persisted scope_report,
+before the flag may default on. Two shape traps the same run surfaced are
+closed in `schemas.py` rather than the prompts: a single value under a
+`dict[str, list]` channel (`overlays`/`conditions`, StateDiff and the body
+specialist) now wraps to the list of one, and a bare-string
+`evidence` citation coerces like the list-of-strings form always did —
+each had been costing a full temperature-0 repair round.
 
 
 ### 2.19 Character: scope the sheet, do not split the judgement

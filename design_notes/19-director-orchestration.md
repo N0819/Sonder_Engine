@@ -380,6 +380,71 @@ overhead 9ms. The critical path is `max(specialist)` instead of
 `Σ(specialist)`; at live structured-call latencies (1.5–4s) a physical beat
 dispatching four or five specialists gets seconds back per beat.
 
+## The prose author's own sheet, scoped (second carve, same mechanism)
+
+The first carve scoped the SPECIALISTS' channels and left the prose author's
+sheet whole: ~3,000 tokens of conditional prose duties (light rules, comm
+transmission, the obligation ledger, transit vocabulary, approach semantics,
+size physics, bodiless voices, the world-pressure ledger, hearsay/traffic/
+proposal bullets of the delegation note) loaded on every beat. They are
+prose duties rather than state channels, but they gate on facts the engine
+already computes — so they now gate the same way, with the SAME machinery
+rather than a sibling of it:
+
+- `prompts.PROSE_AUTHOR_SHEET` is the lean sheet as an ordered core with 14
+  named prose-duty chunks interleaved (`prose_author_prompt(scope)`
+  assembles; canonical order, cache-stable per scope; the monolith stays a
+  byte-identical recomposition of the same split segments, sha-checked
+  during the carve).
+- `agents/director._PROSE_DUTY_GATES` grants the scope from the same
+  `_gate_facts` call that dispatches the specialists plus prose-specific
+  facts (`_prose_gate_facts`), so the two gating levels read one scene.
+  Same rules, verbatim: gate on state, never prose; FAIL OPEN per fact, per
+  gate, and per scope computation (any error grants the chunk, or the whole
+  sheet). Several gates are EXACT — the duty is about a payload ledger and
+  the gate reads that ledger (world_pressure, due_events, residue,
+  other_players, mapping_proposal, hearsay) — and the rest degrade to
+  `physical_beat`/`speech_present` where structure cannot decide.
+- **Never gateable, enforced** (`tools/project_check.py`,
+  `check_prose_author_chunks`): KNOWLEDGE FIREWALL, CHANGES MANIFEST,
+  PLAYER-ASSERTED FACTS, DIALOGUE LOG, the PLAYER AUTHORITY CONTRACT, the
+  delegation contract, the output shape — and the world-pressure OPENING
+  duty, split out of the ledger block so an empty ledger can still be
+  opened into (starting a process is undecidable from state; only acting
+  on LISTED entries gates on the ledger).
+- **The same backstop, extended, not a second mechanism**:
+  `_orchestration_scope_backstop` audits the final output for a duty that
+  shipped without its block (obligation ops, a medium:'comm' line, transit
+  state, a relocation, a darkened room, a size change, a bodiless voice
+  defined) and reports through `tell_director`. Only the prediction gates
+  are audited; the exact-payload gates cannot mispredict. The granted/
+  gated_out split persists as `orchestration.prose_scope` beside the
+  specialists' scope_report.
+- Considered and REFUSED, recorded here so it is not re-litigated:
+  CONSEQUENCES ON THE CLOCK (whether this beat has a later, elsewhere
+  effect is a fact about the future — a proclamation is a speech act with
+  consequences, so no state gate exists) and WEATHER (a window can show a
+  changed sky from a room marked enclosed; not provably absent). Both stay
+  core. The delegation note's contract and its BODIES/CONTACT/MOVEMENT
+  bullets stay core too: they mix every-beat duties with conditional ones
+  and gating them against the specialist scopes would couple two gates.
+
+Sizes: **core 6,256 tok** (down from the 9,236 unsplit lean sheet, 70%
+below the monolith); chunks 3,038 tok total — obligations 439, size 433,
+transit 395, world_pressure 311, approach 240, comm 205, voices 184,
+other_players 177, residue 156, light 119, due_events 107,
+mapping_proposal 101, hearsay 85, road 52 (the full-scope ceiling is 9,265,
+the old lean sheet plus a 29-token bridge that keeps the pressure-OPEN duty
+standalone). **Floor vs practice, honestly:** 6,256 is the floor and no
+real beat sits on it — a spoken beat carries obligations (a new debt is a
+speech act), a physical beat carries approach+comm+size (movement, room
+splits and size changes are acts), so typical beats assemble ~6.7–7.6k and
+the fail-open ceiling is ~9.3k. The saving is real (~1.7–2.6k/beat,
+~15–25%) but the honest reading is RELIABILITY, not speed: wall clock on
+the live providers is decode-bound (see the output-volume note below), so
+sheet reduction buys a smaller instruction surface for the same answer,
+and only marginal latency.
+
 ## The numbers, as of this build (all six specialists)
 
 Sheets (chars ÷ 4 ≈ tokens; **monolith 21,064 tok**, byte-identical when the
@@ -402,18 +467,20 @@ it per beat.
 
 **The headline pair, against the 21,064-token monolith:**
 
-- **Largest single call: lean core ~9,236 tok** (down 56%). The delegation
-  note is ~1.1k of that — it covers six families and every surviving prose
-  duty, and is the main reason the core sits above the ~8.2k arithmetic
-  target.
-- **Typical-beat sheet total (floor, corpus fire rates): ~11.6k tok** —
-  lean core + fire-rate-weighted expected specialist loads.
+- **Largest single call: prose-author sheet 6.3k core, ~6.7–7.6k on a
+  typical beat, 9.3k fail-open ceiling** (the second carve above; the
+  unscoped lean sheet was 9,236, down 56% — the scoped one is down ~65%
+  in practice). The delegation contract is ~0.7k of the core — it covers
+  six families and the surviving every-beat prose duties.
+- **Typical-beat sheet total (floor, corpus fire rates): ~9.1k tok** —
+  scoped prose-author sheet + fire-rate-weighted expected specialist
+  loads (was ~11.6k with the unscoped author sheet).
 - **In practice (fail-open, a full physical beat):** body+social+contact+
   objects+spatial dispatched with generous scopes ≈ 13–14k of specialist
-  sheet on top of the 9.2k core ≈ 23k TOTAL — at or slightly above the
-  monolith in total tokens on the heaviest beats, but spread over parallel
-  calls none of which exceeds 9.2k, which is the reliability thesis. A
-  dialogue beat runs ~10–12k total. Offscreen is cold on both (0 fires in
+  sheet on top of a ~7.4k author sheet ≈ 21k TOTAL — about the monolith in
+  total tokens on the heaviest beats, but spread over parallel calls none
+  of which exceeds ~7.6k, which is the reliability thesis. A dialogue beat
+  runs ~7–9k total. Offscreen is cold on both (0 fires in
   2,243 beats; it dispatches the moment a crowd, courier, carried report or
   unratified claim exists — pinned by test in both directions).
 
@@ -423,12 +490,117 @@ any beat with speech or physical activity. That is fine at a 0.9k full
 sheet and is not a working gate; it is a cheap specialist with a formality
 in front of it.
 
+## Where resolve's output volume actually goes (measured, 2026-08-12)
+
+Live measurements showed resolve emitting 19,899 output tokens in 347s on
+nanogpt `glm-latest` (~57 tok/s, decode-bound) and 11,969 in 47s on
+Fireworks `glm-5p2` (~254 tok/s). Against that, the stored corpus: across
+2,834 persisted `director_resolve` variants the FINAL answer JSON is
+median ~1.2k tokens, p90 ~1.9k, maximum ~3.0k — and part of that is
+engine-authored (dice, orchestration record, projected following_ops), so
+the model's own answer is smaller still. Composition at the median: diff
+~355, prose ~155, dialogue_log ~153, changes_asserted ~87. Zero resolve
+variants carry a stored reasoning trace.
+
+So the 12–20k is not content and not the sheet's doing: **~80–90% of
+resolve's billed output is thinking-trace**, which the engine discards and
+the clock pays for. Nothing in the sheet requests volume — the one
+mandated restatement (changes_asserted) measures 87 tokens at the median,
+and the sheet already forbids the echo duties it once invited
+(transcribing volume/visibility, quoting the declaration back). Sheet
+edits therefore cannot move the wall clock much; two knobs can:
+
+- `reasoning_effort` per role already exists (`providers.
+  reasoning_efforts()`, including "off"). The corpus says the ANSWER needs
+  ≤3k tokens; whether a lower thinking budget degrades resolution QUALITY
+  is exactly the kind of question the detector-based measurement should
+  answer on the pinned model — run it as an experiment, not an assumption.
+  **Run 20 (2026-08-12, Fireworks `glm-5p2`, director at `low`) weakens
+  this lever:** resolve still drew 9,714 and 6,409 output tokens on some
+  beats alongside 1,225 on others — the setting did NOT reliably cut
+  output, and the beat-to-beat variance survives it. The 80–90%-thinking
+  finding stands as an account of where the tokens go; `reasoning_effort`
+  is not, on this provider/model pair, a dependable way to take them
+  back.
+- Decode speed is a 4–5x wall-clock lever with zero content change
+  (57 vs 254 tok/s on the same stage, same day).
+
+One blind spot worth closing when convenient: `_normalize_usage` does not
+read `completion_tokens_details.reasoning_tokens`, so the thinking share
+is invisible in `_log_usage` and had to be inferred by subtraction.
+
+## The delegation is structural now, not rhetorical (run 20, 2026-08-12)
+
+A 14-beat orchestrated run with real models produced 36 replaced-channel
+warnings on active variants (18 distinct occurrences were counted in the
+run's own top-line): the stage models went on authoring delegated channels,
+assembly discarded and replaced every one (ownership worked), and the
+discarded tokens were pure latency — output tokens are the wall clock.
+Breakdown: resolve-side 28, of which 23 were the spatial family
+(positions 8, stations 8, poses 4, rooms 3); interpret-side 8.
+
+Both had the same cause at different strengths. The prose author's lean
+sheet still ENDED with the full monolithic output shape — the ~1k-token
+delegation note said "leave them empty" and then the JSON template, the
+last thing the model reads and the thing it copies keys from, listed every
+delegated field with its sub-shape; the most concretely spelled sub-shapes
+(spatial) were the most-filled. Interpret was worse than a weak note: it
+had NO note, and its PASS 1 block explicitly instructs "the FULL
+state_diff structure ... no subset", so under orchestration the stage
+model was instructed into the double-write.
+
+The fix removes the field rather than arguing about it, which was judged
+the strongest of the three options (louder naming, stating the cost,
+removing the fields) because it is the only one that does not depend on
+the model weighing one instruction against another: a field absent from
+the stated shape is not a field to fill. `_PROSE_AUTHOR_OUTPUT_SHAPE` is
+the monolithic shape minus every delegated channel (state_diff keeps
+exactly time, weather, location, claim_dispositions, consequences); the
+delegation note now states the cost ("discarded unread ... slows the
+beat") instead of only the ownership. Interpret gets
+`INTERPRET_DELEGATION_NOTE` appended AT THE CALL SITE only when the flag
+is on — a suffix, so the monolithic sheet stays byte-identical and its
+cache prefix stable — explicitly overriding PASS 1 for the delegated
+channels and `contact_assertions`, while naming what stays (time,
+weather, location; the whole sequence/flow surface). Both are pinned by
+`tests/test_director_orchestration.py`. The before rate is measured above;
+the after rate needs a live rerun (the stored variants hold the MERGED
+output — the discarded author copies were never persisted), so it is the
+first thing the next run should read off its warning counts.
+
+## Prefix cache: 19% observed, ~57% honest ceiling, and the gap is not ours
+
+Run 20's log (llm_call lines) answers why `cached_tokens` sat at 19.2% of
+2.55M input despite deliberately cache-ordered sheets. The hits prove the
+byte order is already right: when a call hit, it cached a CONSTANT
+per-role prefix, stable across the whole run — contact 3,648, spatial
+2,752, body 2,176, narrator ~5,207, resolve ~3.7k, character ~13.9k
+(sheet plus the stable head of the payload) — i.e. the sheet-first
+ordering and canonical chunk assembly are byte-stable in practice (scope
+did not even vary enough in 14 beats to produce a second prefix size).
+The misses are ALL-OR-NOTHING: the same bytes cached ~0 (a 13–128-token
+floor) rather than partially, which is the signature of landing on a cold
+replica, not of an unstable prompt — Fireworks/xAI route across replicas
+and prefix caches are per-replica. Hit odds per role ran 25–46%
+(Cerebras/mapping, with the strongest affinity, hit 16 of 17 calls).
+
+Ceiling, computed per call as min(median observed full-prefix hit, call
+input): **~57% overall under perfect provider affinity** (character ~58%,
+director ~47%). The remaining ~43% is the per-beat payload, which is
+inherently novel and not cacheable. So: no engine-side reordering is
+warranted — the lever that remains is provider routing affinity
+(pinned/dedicated instances, or a router that honors cache locality),
+which is configuration, not code, and is recorded here rather than
+chased.
+
 ## What remains after this build
 
 - The prose author's PAYLOAD is untouched (still the full monolithic
   payload); payload slicing is the next real token win.
-- Interpret's own sheet is not leaned (its model still writes the delegated
-  channels; ownership assembly resolves the double-write).
+- Interpret's own sheet is not leaned (chunk-scoped); the delegated
+  channels are now suppressed at the source by the call-site delegation
+  note (run 20 section above), but the instruction blocks teaching them
+  still load on every interpret call.
 - Leaner rewrites of specialist chunks are permitted (they exist only on
   the orchestrated path) and deferred — the verbatim blocks keep one
   spelling with the monolith.
