@@ -3293,7 +3293,16 @@ def _deep_audit_mode():
 
 def _manifest_items(out):
     """director_resolve's own changes_asserted manifest, normalized to the
-    seam's omission shape (source 'manifest')."""
+    seam's omission shape (source 'manifest').
+
+    Numbered here, by the ENGINE, in the order the resolve emitted them --
+    which is the order it narrated them, so the ids are the beat's own
+    chronology (design note 21). The model is never asked for the number:
+    an id it authored could repeat, skip, or reorder, and every downstream
+    use assumes the ids are a dense sequence over exactly this manifest.
+    Numbering runs BEFORE the length clamp so an id always indexes the item
+    a specialist was actually handed.
+    """
     items = []
     raw = out.get("changes_asserted")
     for item in (raw if isinstance(raw, list) else []):
@@ -3306,6 +3315,7 @@ def _manifest_items(out):
             "category": _normalize_omission_category(item.get("category")),
             "subject": str(item.get("subject") or "").strip(),
             "change": change, "evidence": "", "source": "manifest",
+            "event_id": len(items) + 1,
         }
         # Preserve the historical public manifest shape for every non-contact
         # change; endpoint keys exist only when the model actually supplied
@@ -3472,6 +3482,49 @@ def _stamp_dialogue_articulation(sc, sd, dialogue_log):
                 "the line, or keep the line to a word or two at volume "
                 "'mutter' -- muffled against what blocks it.")
     return notices
+
+
+#: Verdicts that settle an event without a second call. `not_mine` is
+#: deliberately absent: a specialist saying the change needs a channel it
+#: was not granted is REPORTING A GAP, not closing one, and that gap is
+#: exactly what the repair tier exists for.
+_SETTLING_VERDICTS = frozenset({"encoded", "already_true"})
+
+
+def _acquit_addressed_events(out, omissions):
+    """Split detected omissions into (still owed a repair, acquitted).
+
+    An omission is acquitted when it carries an event_id that the specialist
+    OWNING that event answered with a settling verdict this beat. Ownership
+    is implicit and cannot be forged: an id only reaches the index through
+    the specialist that was handed it, by the same category filter that
+    built its payload, and only if that call actually ran.
+
+    Everything without an event_id -- signals, player claims, deep-audit
+    findings, and every omission on the monolithic path, where no specialist
+    ran and the index is empty -- falls through unchanged. That is what
+    keeps the monolithic repair path byte-identical.
+    """
+    record = out.get("orchestration")
+    index = (record or {}).get("events_addressed") or {}
+    if not isinstance(index, dict) or not index:
+        return omissions, []
+    owed, acquitted = [], []
+    for om in omissions:
+        entry = index.get(om.get("event_id")) or index.get(
+            str(om.get("event_id")))
+        status = (entry or {}).get("status")
+        if entry and status in _SETTLING_VERDICTS:
+            acquitted.append({
+                "event_id": om.get("event_id"),
+                "category": om.get("category"),
+                "subject": om.get("subject"),
+                "owner": entry.get("owner"),
+                "status": status,
+            })
+        else:
+            owed.append(om)
+    return owed, acquitted
 
 
 def _route_repair_omissions(omissions):
@@ -3804,6 +3857,18 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
 
     omissions = signals + claim_omissions + manifest_omissions + audit_omissions
     recon["omissions"] = [_public_omission(o) for o in omissions]
+
+    # DETECTION IS UNTOUCHED ABOVE; what changes here is who gets ASKED
+    # AGAIN. An event whose owning specialist already answered it this beat
+    # buys no second call -- the measured waste (chat 71 turn 10) was a
+    # full-core repair spending 105-225s to re-ask a change the owner had
+    # correctly encoded or correctly declined, whose answer was then
+    # discarded on a subject-text mismatch. The acquittal is bookkeeping,
+    # not belief: the encoding still had to pass _evidence_present, and an
+    # unaddressed event still buys its repair.
+    omissions, acquitted = _acquit_addressed_events(out, omissions)
+    if acquitted:
+        recon["acquitted"] = acquitted
     if not omissions:
         return
 
@@ -4854,6 +4919,21 @@ def _interpret_beat_view(ctx, out, p_name):
     }
 
 
+def _specialist_manifest_slice(name, view):
+    """The numbered manifest entries in one specialist's categories.
+
+    One definition, read twice: once to build the payload the specialist is
+    given, once to record which ids it was HANDED (design note 21). Two
+    spellings of this filter would mean a specialist could be judged on an
+    event it never received.
+    """
+    channels = SPECIALISTS[name]["channels"]
+    return [
+        item for item in (view.get("manifest") or [])
+        if _CATEGORY_CHANNELS.get(item.get("category")) in channels
+    ]
+
+
 def _specialist_payload(name, ctx, sc, view, extras):
     """One specialist's scoped payload -- its written entitlement, applied
     to whichever stage's beat view it was handed. Shared part: the beat
@@ -4878,10 +4958,7 @@ def _specialist_payload(name, ctx, sc, view, extras):
         payload["dialogue_log"] = view["dialogue"]
     else:
         payload["player_declaration"] = view["declaration"]
-    manifest = [
-        item for item in view["manifest"]
-        if _CATEGORY_CHANNELS.get(item.get("category")) in spec["channels"]
-    ]
+    manifest = _specialist_manifest_slice(name, view)
     if manifest:
         payload["changes_asserted"] = manifest
 
@@ -4990,6 +5067,57 @@ def _normalized_channel_value(channel, value):
     return value if isinstance(value, dict) else {}
 
 
+#: The verdicts a specialist may return on a numbered event. Anything else
+#: -- a blank, a synonym, a sentence -- is dropped rather than guessed at:
+#: an unrecognized verdict must read as "this event was not addressed", the
+#: same as silence, because the whole point of the echo is that only a
+#: DELIBERATE answer counts as one.
+_EVENT_VERDICTS = frozenset({"encoded", "already_true", "not_mine"})
+
+
+def _resolved_event_verdicts(result, granted_ids):
+    """One specialist's resolved_events, kept only where they answer an
+    event this call was actually handed.
+
+    An id outside `granted_ids` is discarded: a specialist cannot acquit an
+    event it never saw, and a model that echoes the whole manifest back
+    would otherwise silence every omission in the beat. Last verdict wins
+    on a duplicated id -- deterministic, and the shape is already degenerate.
+    """
+    granted = {int(i) for i in granted_ids}
+    verdicts = {}
+    for entry in (result.get("resolved_events") or []):
+        if not isinstance(entry, dict):
+            continue
+        try:
+            event_id = int(entry.get("event_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        status = str(entry.get("status") or "").strip().casefold()
+        if event_id in granted and status in _EVENT_VERDICTS:
+            verdicts[event_id] = status
+    return [{"event_id": eid, "status": verdicts[eid]}
+            for eid in sorted(verdicts)]
+
+
+def _index_addressed_events(dispatch):
+    """event_id -> {owner, status}, across every specialist that ran.
+
+    The beat-wide answer to "was this event addressed by the mind that owns
+    it?". Only a specialist that RAN contributes: a failed call leaves its
+    events unaddressed, which is what keeps a fail-open failure from
+    silently acquitting the changes it was supposed to encode.
+    """
+    index = {}
+    for name, state in (dispatch or {}).items():
+        if not isinstance(state, dict) or not state.get("ran"):
+            continue
+        for entry in (state.get("events_resolved") or []):
+            index[int(entry["event_id"])] = {
+                "owner": name, "status": entry["status"]}
+    return index
+
+
 def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
     """Fan out to every dispatched specialist and assemble by ownership.
 
@@ -5042,6 +5170,15 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
 
     jobs = [(name, state) for name, state in dispatch.items()
             if state.get("run")]
+    # Recorded BEFORE the call, from the same filter that builds the
+    # payload: which numbered events this specialist is answerable for.
+    # A verdict on anything else is discarded (_resolved_event_verdicts).
+    for name, state in jobs:
+        state["event_ids"] = [
+            int(item["event_id"])
+            for item in _specialist_manifest_slice(name, view)
+            if item.get("event_id")
+        ]
     results = {}
     if len(jobs) == 1:
         name, state = jobs[0]
@@ -5127,6 +5264,14 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                 "recurs.")
             ctx.tell_director(note)
             ctx.add_warning(note)
+        # The numbered manifest slice, answered. Kept per specialist AND
+        # folded into one beat-wide index below, because the question the
+        # repair seam asks is "did the mind that OWNS this event address
+        # it?" -- an id claimed by a specialist that was never handed it is
+        # not an answer, so the owner is recorded with the verdict.
+        state["events_resolved"] = _resolved_event_verdicts(
+            result, state.get("event_ids") or [])
+
         notes = [str(n) for n in (result.get("notes") or [])
                  if str(n).strip()]
         if notes:
@@ -5134,6 +5279,8 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
             for note in notes:
                 ctx.add_warning(f"{name} specialist: {note}")
                 ctx.tell_director(f"{name} specialist: {note}")
+
+    record["events_addressed"] = _index_addressed_events(dispatch)
 
 
 def _orchestration_scope_backstop(ctx, out, stage):

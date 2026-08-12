@@ -1947,3 +1947,178 @@ def test_a_specialist_encoded_beat_buys_no_repair_and_no_warning(
     assert not [w for w in ctx.warnings
                 if "reconciliation" in w.casefold()
                 or "still does not encode" in w]
+
+
+# ---------------------------------------------------------------------------
+# Design note 21: the beat's changes are numbered, and the numbers round-trip.
+# ---------------------------------------------------------------------------
+
+def _two_event_resolve():
+    """A beat asserting two changes in chronological order: a hand leaves a
+    waist, then a coat comes off. Two entries, in that order -- which is
+    what the manifest numbering is FOR."""
+    return {
+        "resolved_event": ("Mara's hand lifts from Bo's waist, and she "
+                           "shrugs the wool coat off."),
+        "summary": "Hand away, coat off.",
+        "changes_asserted": [
+            {"category": "contact", "subject": "prior hand-to-waist contact",
+             "change": "ended", "actor": "Mara", "actor_part": "hand",
+             "target": "Bo", "target_part": "waist"},
+            {"category": "attire", "subject": "wool coat",
+             "change": "The wool coat is off."},
+        ],
+        "state_diff": {},
+    }
+
+
+def test_the_engine_numbers_the_manifest_in_narrated_order(temp_db):
+    """The ids are the ENGINE's, assigned 1..N in emission order, never the
+    model's. A model-authored id could repeat, skip or reorder, and every
+    downstream use assumes a dense sequence over exactly this manifest."""
+    items = director._manifest_items(_two_event_resolve())
+    assert [i["event_id"] for i in items] == [1, 2]
+    # Chronology, not category order: the contact ended BEFORE the coat came
+    # off, and that is the order the resolve wrote them in.
+    assert items[0]["category"] == "contacts"
+    assert items[1]["category"] == "attire"
+
+
+def test_each_specialist_is_handed_only_its_own_numbered_events(temp_db):
+    """The slice a specialist receives and the ids it is answerable for come
+    from ONE filter -- two spellings would let a specialist be judged on an
+    event it never saw."""
+    view = {"manifest": director._manifest_items(_two_event_resolve())}
+    body = director._specialist_manifest_slice("body", view)
+    contact = director._specialist_manifest_slice("contact", view)
+    assert [i["event_id"] for i in body] == [2]
+    assert [i["event_id"] for i in contact] == [1]
+
+
+def test_a_verdict_on_an_unhanded_event_is_discarded(temp_db):
+    """A specialist cannot acquit an event it was never given. Without this,
+    a model echoing the whole manifest back would silence every omission in
+    the beat."""
+    result = {"resolved_events": [
+        {"event_id": 1, "status": "encoded"},      # granted
+        {"event_id": 2, "status": "already_true"},  # NOT granted to this call
+        {"event_id": 1, "status": "nonsense"},      # unrecognized verdict
+    ]}
+    assert director._resolved_event_verdicts(result, [1]) == [
+        {"event_id": 1, "status": "encoded"}]
+
+
+def test_an_answered_event_buys_no_second_call(temp_db, monkeypatch):
+    """The measured waste (chat 71 turn 10): a full-core repair spending
+    tens of seconds to re-ask a change the owner had already correctly
+    declined to re-encode, whose 'already encoded' answer was then discarded
+    on a subject-text mismatch. An event its owner answered is settled --
+    detection still fires, no one is asked twice."""
+    _orch_on(temp_db)
+    calls = []
+    monkeypatch.setattr(
+        director, "_agent_json",
+        _fake_agent(calls, {
+            "director_resolve": _asserting_resolve_output(),
+            # The owner answers: standing state already carries it.
+            "director_body": {
+                "attire": {}, "conditions": {}, "vitals": {}, "overlays": {},
+                "notes": [],
+                "resolved_events": [{"event_id": 1,
+                                     "status": "already_true"}],
+            },
+            "resolve_repair": {"state_diff": {}, "dispositions": []},
+        }))
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    # Detection is untouched -- the omission is still recorded.
+    assert _manifest_omissions(out)
+    # But nobody was asked again: no full-core repair, and the body
+    # specialist ran exactly once (the fan-out), not twice.
+    assert "resolve_repair" not in _steps(calls)
+    assert _steps(calls).count("director_body") == 1
+    recon = out["reconciliation"]
+    assert recon["acquitted"] == [{
+        "event_id": 1, "category": "attire", "subject": "Mara",
+        "owner": "body", "status": "already_true"}]
+    assert not any("may be stale" in w for w in ctx.warnings)
+
+
+def test_an_unanswered_event_still_buys_its_repair(temp_db, monkeypatch):
+    """The acquittal is bookkeeping, not belief. A specialist that stays
+    silent on an id it was handed has not addressed it, and the repair tier
+    is exactly what an unaddressed gap is for."""
+    _orch_on(temp_db)
+    calls = []
+    monkeypatch.setattr(
+        director, "_agent_json",
+        _fake_agent(calls, {
+            "director_resolve": _asserting_resolve_output(),
+            "director_body": {"attire": {}, "conditions": {}, "vitals": {},
+                              "overlays": {}, "notes": [],
+                              "resolved_events": []},
+            "resolve_repair": {"state_diff": {}, "dispositions": []},
+        }))
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+    assert _steps(calls).count("director_body") == 2   # fan-out + repair
+    assert not (out["reconciliation"].get("acquitted") or [])
+
+
+def test_not_mine_reports_a_gap_rather_than_closing_one(temp_db, monkeypatch):
+    """'not_mine' is a specialist saying the change needs a channel it was
+    not granted. That is scope under-grant -- a gap REPORTED, and the repair
+    tier is what a reported gap is for."""
+    _orch_on(temp_db)
+    calls = []
+    monkeypatch.setattr(
+        director, "_agent_json",
+        _fake_agent(calls, {
+            "director_resolve": _asserting_resolve_output(),
+            "director_body": {"attire": {}, "conditions": {}, "vitals": {},
+                              "overlays": {}, "notes": [],
+                              "resolved_events": [{"event_id": 1,
+                                                   "status": "not_mine"}]},
+            "resolve_repair": {"state_diff": {}, "dispositions": []},
+        }))
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+    assert not (out["reconciliation"].get("acquitted") or [])
+    assert _steps(calls).count("director_body") == 2
+
+
+def test_a_failed_specialist_acquits_nothing(temp_db, monkeypatch):
+    """Fail-open must not become fail-silent: a specialist whose call died
+    leaves its events unaddressed, so the changes it was supposed to encode
+    still escalate."""
+    dispatch = {"body": {"run": True, "ran": False,
+                         "events_resolved": [{"event_id": 1,
+                                              "status": "encoded"}]}}
+    assert director._index_addressed_events(dispatch) == {}
+
+
+def test_the_monolithic_path_numbers_but_never_acquits(temp_db, monkeypatch):
+    """No specialist ran, so the index is empty and every omission falls
+    through unchanged -- which is what keeps the monolithic repair path
+    byte-identical while the manifest still carries ids."""
+    calls = []
+    monkeypatch.setattr(
+        director, "_agent_json",
+        _fake_agent(calls, {
+            "director_resolve": _asserting_resolve_output(),
+            "resolve_repair": {"state_diff": {}, "dispositions": []},
+        }))
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+    assert "resolve_repair" in _steps(calls)
+    assert not (out["reconciliation"].get("acquitted") or [])
+    assert [m["event_id"] for m in out["reconciliation"]["manifest"]] == [1]
