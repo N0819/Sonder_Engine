@@ -2789,3 +2789,47 @@ def test_a_specialist_cannot_forward_to_itself(temp_db, monkeypatch):
     director.director_resolve(ctx, nonce=0)
     # Falls back to category routing rather than forwarding to itself.
     assert _steps(calls).count("director_body") == 2
+
+
+def test_a_ledger_this_story_does_not_keep_is_not_a_gate_mispredict(temp_db,
+                                                                    monkeypatch):
+    """Measured live, chat 71 with survival off: the resolve filed a
+    climax's spent-ness under `vitals` -- reasonably, since 8.2.2 tells it
+    to take the CLOSEST category and never omit -- and the backstop
+    announced "the scope gate mispredicted" about a channel that shipped
+    nothing and could never ship anything, because this story keeps no
+    vitals ledger at all.
+
+    Two different things wear the same shape. "No work in it this beat" is
+    a prediction and a manifest item naming it is evidence the prediction
+    was wrong. "This story has no such ledger" is not a prediction. A
+    warning that fires when nothing is wrong is how a reader learns to skip
+    warnings."""
+    _orch_on(temp_db)
+    calls = []
+    monkeypatch.setattr(
+        director, "_agent_json",
+        _fake_agent(calls, {
+            "director_resolve": {
+                "resolved_event": "Mara sags, spent.",
+                "summary": "Spent.",
+                "changes_asserted": [
+                    {"category": "vitals", "subject": "Mara",
+                     "change": "reserves spent"},
+                ],
+                "state_diff": {},
+            },
+            "resolve_repair": {"state_diff": {}, "dispositions": []},
+        }))
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    # survival is off in the fixture, so `vitals_tracked` is False and the
+    # gate never served vitals -- correctly.
+    served = set((out["orchestration"].get("scope_report") or {}).get("served") or ())
+    assert "vitals" not in served
+    # No mispredict is claimed...
+    assert not any("gate mispredicted" in w for w in ctx.warnings)
+    # ...and the Director is told what it actually needs to know instead.
+    assert any("this story keeps no vitals ledger" in n
+               for n in ctx.engine_feedback)

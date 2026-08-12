@@ -12,7 +12,7 @@
 | `agents/character.py` | 3304 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6066 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1475 |  | `agents.common`, `spatial` |
-| `agents/director.py` | 7247 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
+| `agents/director.py` | 7291 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/loops.py` | 1038 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 1045 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
@@ -143,14 +143,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 5783 | 1310 lines |
+| `director_resolve()` | 5827 | 1310 lines |
 | `director_interpret()` | 771 | 476 lines |
 | `_reconcile_resolution()` | 3910 | 431 lines |
 | `_evidence_present()` | 3067 | 232 lines |
 | `_reconcile_near_group_positions()` | 2353 | 201 lines |
 | `_run_specialists()` | 5487 | 187 lines |
 | `_specialist_payload()` | 5268 | 133 lines |
-| `_verify_already_true()` | 3593 | 126 lines |
+| `_orchestration_scope_backstop()` | 5694 | 131 lines |
 
 ### `agents/loops.py`
 
