@@ -2122,3 +2122,332 @@ def test_the_monolithic_path_numbers_but_never_acquits(temp_db, monkeypatch):
     assert "resolve_repair" in _steps(calls)
     assert not (out["reconciliation"].get("acquitted") or [])
     assert [m["event_id"] for m in out["reconciliation"]["manifest"]] == [1]
+
+
+def test_the_stage_variant_carries_every_call_made_under_its_fanout(
+        temp_db, monkeypatch):
+    """The ledger defect found on the first live turn under the per-call
+    ledger (variant v26648: ONE recorded call against five ran=True
+    specialists). `_call_isolated` ran `contextvars.copy_context()` INSIDE
+    the pool worker, and ThreadPoolExecutor workers do not inherit the
+    submitting thread's contextvars -- so the copy was of an EMPTY context,
+    and everything it exists to carry was None inside every
+    multi-specialist fan-out: the ledger sink (calls unrecorded), the
+    warning sink (a repair ladder firing inside a specialist left no
+    trace), cancel_event (an abort could not reach in-flight specialists),
+    and db.active_frame_id. The existing thread test proved attribution BY
+    contextvar; this proves what it did not: that a persisted stage
+    variant carries the calls its own fan-out made, stamped with the
+    STAGE's key, each entry's role still naming the specialist."""
+    import threading
+
+    import providers
+    from agents.runtime import _with_engine_notes
+    from agents.storage import ENGINE_NOTES_KEY
+    from pipeline_context import current_step_key, current_warning_sink
+    from pipeline_context import note_step_warning
+
+    _orch_on(temp_db)
+    calls = []
+    seen_cancel_events = []
+
+    def reporting(role):
+        def respond(payload):
+            # What a real call does beneath _agent_json: report usage to
+            # the ledger, and (sometimes) note a repair through the sink.
+            providers._log_usage(role, "m-" + role, time.time() - 0.1,
+                                 {"prompt_tokens": 10,
+                                  "completion_tokens": 5})
+            note_step_warning(f"{role}: repair ladder fired")
+            seen_cancel_events.append(providers.cancel_event.get())
+            return {}
+        return respond
+
+    responses = {
+        "director_resolve": reporting("director"),
+        "director_body": reporting("director_body"),
+        "director_social": reporting("director_social"),
+        "director_contact": reporting("director_contact"),
+        "director_objects": reporting("director_objects"),
+        "director_spatial": reporting("director_spatial"),
+    }
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls, responses))
+
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    abort = threading.Event()
+    tokens = (current_step_key.set("director_resolve"),
+              current_warning_sink.set(ctx.add_warning),
+              providers.call_ledger_sink.set(ctx.note_llm_call),
+              providers.cancel_event.set(abort))
+    try:
+        out = director.director_resolve(ctx, nonce=0)
+    finally:
+        providers.cancel_event.reset(tokens[3])
+        providers.call_ledger_sink.reset(tokens[2])
+        current_warning_sink.reset(tokens[1])
+        current_step_key.reset(tokens[0])
+
+    ran = [name for name, st in out["orchestration"]["specialists"].items()
+           if st.get("ran")]
+    assert len(ran) >= 2, "the pool path needs a real fan-out"
+
+    # Every fan-out call is on the stage's ledger slice -- the slice
+    # _with_engine_notes persists -- with the specialist identity intact.
+    entries = ctx.llm_calls_for_step("director_resolve")
+    roles = sorted(e["role"] for e in entries)
+    assert "director" in roles
+    for name in ran:
+        assert f"director_{name}" in roles, name
+    saved = _with_engine_notes(out, ctx, "director_resolve")
+    persisted_roles = {e["role"]
+                       for e in saved[ENGINE_NOTES_KEY]["llm_calls"]}
+    assert {f"director_{name}" for name in ran} <= persisted_roles
+
+    # A warning raised INSIDE a specialist call reaches the stage's notes.
+    stage_warnings = saved[ENGINE_NOTES_KEY]["warnings"]
+    for name in ran:
+        assert any(f"director_{name}: repair ladder fired" == w
+                   for w in stage_warnings), name
+
+    # And the abort event actually rides into every worker, as the fan-out
+    # comment has always claimed.
+    assert all(ev is abort for ev in seen_cancel_events)
+
+
+# ---------------------------------------------------------------------------
+# already_true is checked against standing state (design note 21, residual 2
+# closed): a defect detector, deliberately not a truth prover.
+# ---------------------------------------------------------------------------
+#
+# The manifest's structure carries no DIRECTION -- whether a change puts the
+# garment on or takes it off lives only in its prose, and prose matching is
+# the boundary this design exists to get away from. Both end states are
+# legitimate no-op targets, so an undirected "is it already so" check is
+# vacuous. What IS decidable is whether standing state can support ANY
+# definite claim about the subject: the live corruption that motivated this
+# (chat 70/71, repaired via attire.release_removed_garments) was a garment
+# marked `removed` while still resident in three regions -- a ledger a
+# specialist could honestly read and answer `already_true` about a change
+# standing state did NOT properly carry. Refusal turns that silence into a
+# named defect; everything undecidable falls through to the existing trust.
+
+def test_already_true_is_refused_on_the_removed_resident_corruption(
+        temp_db, monkeypatch):
+    """End to end on the corrupt-ledger shape: the body specialist answers
+    already_true; standing attire still seats the garment in regions marked
+    'removed'. The acquittal is refused, the omission still buys its owner
+    repair, and the ledger defect is named on the step and to the Director."""
+    _orch_on(temp_db)
+    calls = []
+    monkeypatch.setattr(
+        director, "_agent_json",
+        _fake_agent(calls, {
+            "director_resolve": {
+                "resolved_event": "Mara shrugs the wool coat off.",
+                "summary": "Coat off.",
+                "changes_asserted": [
+                    {"category": "attire", "subject": "Mara",
+                     "change": "The wool coat is off."},
+                ],
+                "state_diff": {},
+            },
+            "director_body": {
+                "attire": {}, "conditions": {}, "vitals": {}, "overlays": {},
+                "notes": [],
+                "resolved_events": [{"event_id": 1,
+                                     "status": "already_true"}],
+            },
+        }))
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {"Mara": {
+        "wearing": [],
+        "regions": {"torso": {"garments": [
+            {"name": "wool coat", "state": "removed"}]}},
+    }}
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+
+    recon = out["reconciliation"]
+    assert not (recon.get("acquitted") or [])
+    refusal = recon["already_true_refused"][0]
+    assert refusal["event_id"] == 1 and refusal["owner"] == "body"
+    assert "removed" in refusal["reason"]
+    # The gap still escalated to the owner: fan-out + one repair call.
+    assert _steps(calls).count("director_body") == 2
+    assert any("already_true refused" in w for w in ctx.warnings)
+    assert any("already_true refused" in n for n in ctx.engine_feedback)
+
+
+def test_already_true_verifier_names_each_decidable_defect():
+    """Unit coverage of the refusal classes, each a measured ledger-defect
+    shape: removed-yet-resident attire; wearing/regions drift; a standing
+    position naming a non-room (the category error every spatial query
+    answers as unknown); a contained body carrying its own disagreeing
+    position (derived-position violation)."""
+    om_attire = {"category": "attire", "subject": "Mara"}
+    ok, reason = director._verify_already_true(om_attire, {
+        "attire": {"Mara": {"wearing": [], "regions": {"torso": {"garments": [
+            {"name": "wool coat", "state": "removed"}]}}}}})
+    assert not ok and "removed" in reason
+
+    ok, reason = director._verify_already_true(om_attire, {
+        "attire": {"Mara": {"wearing": ["wool coat"],
+                            "regions": {"torso": {"garments": [
+                                {"name": "silk scarf", "state": "worn"}]}}}}})
+    assert not ok and "disagree" in reason
+
+    ok, reason = director._verify_already_true(
+        {"category": "positions", "subject": "Mara"},
+        {"rooms": {"keeper_room": {}},
+         "positions": {"Mara": "elevator_control_panel"}})
+    assert not ok and "not a room" in reason
+
+    ok, reason = director._verify_already_true(
+        {"category": "inventory", "subject": "wool coat"},
+        {"contained": {"wool coat": {"in": "Mara"}},
+         "positions": {"wool coat": "lamp_room", "Mara": "keeper_room"}})
+    assert not ok and "derived" in reason
+
+
+def test_already_true_verifier_trusts_what_it_cannot_decide():
+    """The fall-through side, deliberate rather than by omission: a coherent
+    ledger earns the acquittal whichever direction the change went (direction
+    is not in the manifest's structure); a legacy entry with underived
+    regions is undecidable; contacts and conditions have no decidable
+    refusal (either end state is a legitimate no-op); and a broken scene
+    fails open."""
+    # Coherent wardrobe: worn AND seated -- no refusal, whatever the change.
+    ok, _ = director._verify_already_true(
+        {"category": "attire", "subject": "Mara"},
+        {"attire": {"Mara": {"wearing": ["wool coat"],
+                             "regions": {"torso": {"garments": [
+                                 {"name": "wool coat",
+                                  "state": "worn"}]}}}}})
+    assert ok
+    # Legacy shape: wearing only, regions never derived -- undecidable.
+    ok, _ = director._verify_already_true(
+        {"category": "attire", "subject": "Mara"},
+        {"attire": {"Mara": {"wearing": ["wool coat"]}}})
+    assert ok
+    # Contacts: presence and absence are both legitimate no-op end states.
+    ok, _ = director._verify_already_true(
+        {"category": "contacts", "subject": "contact_end",
+         "actor": "Mara", "actor_part": "hand",
+         "target": "Bo", "target_part": "waist"},
+        {"contacts": []})
+    assert ok
+    # Conditions: no decidable refusal either.
+    ok, _ = director._verify_already_true(
+        {"category": "conditions", "subject": "Mara"}, {})
+    assert ok
+    # Fail open on garbage.
+    ok, _ = director._verify_already_true(
+        {"category": "attire", "subject": "Mara"},
+        {"attire": {"Mara": "not-a-dict"}})
+    assert ok
+
+
+def test_diff_application_is_order_independent_by_construction():
+    """Design note 21's other residual, closed as a PROVEN INVARIANT rather
+    than built machinery: applying the merged diff needs no event-id
+    ordering, and this test is the tripwire that forces the decision to be
+    remade consciously if a future channel breaks the reasons why.
+
+    The reasons, precisely:
+
+    1. EXCLUSIVE OWNERSHIP. Every delegated channel has exactly one
+       specialist, and assembly replaces whole channels -- so no channel is
+       ever interleaved from two model sources, and "op order across
+       specialists" cannot exist within a channel.
+    2. END-STATE CHANNELS COMMUTE. Every dict channel is a keyed end-state
+       upsert (attire, conditions, vitals, overlays, entities, containment,
+       scales, positions, rooms, stations, poses); one writer per beat per
+       key means application order across channels changes nothing.
+    3. THE SEQUENTIAL APPLIERS SHARE ONE OWNER. The only appliers that walk
+       an op list against evolving state are apply_contact_ops and
+       apply_substance_ops, and their whole read/write family -- contact_ops,
+       substance_ops, containment, scales -- belongs to the ONE contact
+       specialist. Within-beat chronology there IS that specialist's own
+       list order, preserved verbatim through assembly; the engine-side
+       sources merged into contact_ops (player onset assertions, character
+       contact endings) are ordered by fixed conventions that match
+       chronology (onset precedes resolve).
+    4. CROSS-CHANNEL COUPLINGS ARE ADJUDICATED BY DELIBERATE FIXED
+       CONVENTIONS in spatial.merge_scene_with_diff, each with a stated
+       causal reason: substances resolve against the PRE-BEAT contact
+       topology and apply before contact removals (a release can route
+       through an interior relation the same beat's withdrawal ends); scale
+       changes cancel contacts BEFORE the beat's own contact ops (a
+       re-established hold survives); stations derive AFTER contacts settle;
+       vitals last. Event-id ordering would re-litigate conventions that
+       were each chosen deliberately -- including the coordinating suspect
+       (a contact ending and a new contact on the same part in one beat),
+       which lives entirely inside one specialist's one list.
+
+    What would have to become true for ordering to be needed -- and what
+    this test therefore refuses: a sequential-stateful op channel granted
+    to a specialist other than the owner of the state its applier reads; a
+    new delegated op channel left unclassified below; two owners able to
+    write the same coupled family."""
+    from agents.director import (
+        SPECIALISTS, _CHANNEL_SPECIALISTS, _DELEGATED_CHANNELS,
+        _LIST_DELEGATED,
+    )
+
+    # Keyed end-state upserts: order across channels cannot matter.
+    end_state = {
+        "attire", "conditions", "vitals", "overlays", "entities",
+        "containment", "scales", "positions", "rooms", "stations", "poses",
+        "destruction",
+    }
+    # Op lists whose appliers read no other delegated channel's
+    # mid-application state (commit-side ledgers of their own).
+    independent_ops = {
+        "cast_changes", "introductions", "world_facts", "remove_entities",
+        "inventory_ops", "artifact_ops", "remove_rooms", "remove_adjacent",
+        "crowd_ops", "courier_ops", "telling_ops", "offscreen_plan_ops",
+        "ratified_claims", "contradicted_claims",
+    }
+    # Op lists whose appliers walk evolving state sequentially. Two axes on
+    # purpose: containment and scales APPLY as end-state upserts (so they
+    # sit in end_state above) while still being part of what the
+    # sequential appliers READ -- which is an ownership question, asserted
+    # separately below.
+    sequential_ops = {"contact_ops", "substance_ops"}
+    sequential_read_set = sequential_ops | {"containment", "scales"}
+
+    # 1. One owner per channel -- no channel under two specialists.
+    seen = {}
+    for name, spec in SPECIALISTS.items():
+        for channel in spec["channels"]:
+            assert channel not in seen, (
+                f"{channel} owned by both {seen[channel]} and {name}")
+            seen[channel] = name
+
+    # 2. Every delegated channel is classified EXACTLY once. A new channel
+    #    failing here is the forcing function: decide which class it is in
+    #    -- and if it is sequential-stateful, put it with its family's
+    #    owner -- before shipping it.
+    classified = end_state | independent_ops | sequential_ops
+    for channel in _DELEGATED_CHANNELS:
+        assert channel in classified, (
+            f"unclassified delegated channel {channel!r}: decide whether "
+            "its application is end-state, independent ops, or "
+            "sequential-coupled before shipping it")
+        assert (channel in end_state) + (channel in independent_ops) + (
+            channel in sequential_ops) == 1, channel
+
+    # 3. The sequential appliers AND everything they read share ONE owner,
+    #    so within-beat chronology is one specialist's own list order.
+    family_owners = {_CHANNEL_SPECIALISTS[c] for c in sequential_read_set
+                     if c in _CHANNEL_SPECIALISTS}
+    assert family_owners == {"contact"}, family_owners
+
+    # 4. Shape agreement: the op classes are lists, the end states are not
+    #    (destruction is the one dict-or-null exception, asserted as such).
+    for channel in independent_ops | {"contact_ops", "substance_ops"}:
+        if channel in _DELEGATED_CHANNELS:
+            assert channel in _LIST_DELEGATED, channel
+    for channel in end_state - {"destruction"}:
+        assert channel not in _LIST_DELEGATED, channel

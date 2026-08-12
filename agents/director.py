@@ -3491,14 +3491,148 @@ def _stamp_dialogue_articulation(sc, sd, dialogue_log):
 _SETTLING_VERDICTS = frozenset({"encoded", "already_true"})
 
 
-def _acquit_addressed_events(out, omissions):
-    """Split detected omissions into (still owed a repair, acquitted).
+def _verify_already_true(om, sc):
+    """Deterministic standing-state check behind an `already_true` verdict.
+
+    Returns (ok, reason). ok=False means the acquittal is REFUSED: standing
+    state provably cannot carry ANY definite fact about this subject in this
+    category, so a specialist's "the change is already the standing state"
+    is resting on a ledger that does not support definite claims -- the
+    chat 70/71 corruption exactly (a garment marked `removed` while still
+    resident in three regions), where a specialist reading the ledger could
+    honestly answer `already_true` about a change standing state did NOT
+    properly carry.
+
+    WHAT THIS DELIBERATELY IS NOT: a proof that the change is already true.
+    The manifest's structure carries no DIRECTION -- whether the change puts
+    the garment on or takes it off, starts the contact or ends it, lives
+    only in the `change` prose, and prose matching is the boundary this
+    whole design exists to get away from (both end states are legitimate
+    no-op targets, so an undirected presence check is vacuous). So this is
+    a defect detector, scoped to what is deterministically decidable:
+
+    - attire: a subject-hit garment resident in a wearer's regions with
+      state 'removed' (removed means GONE -- `release_removed_garments` is
+      the canonical repair), or wearing/regions membership drift for a hit
+      garment when both representations are populated (`rederive_entry`'s
+      fork case). An incoherent wardrobe supports no definite claim.
+    - positions/stations: a subject-hit standing position whose value is
+      not a room in the scene -- the category error every spatial query
+      answers as `unknown`, which looks exactly like distance.
+    - inventory: a subject-hit body tracked in `contained` while carrying
+      its OWN positions entry that disagrees with its holder's -- a carried
+      body's position is derived from its carrier's, so two answers is a
+      corrupt ledger.
+    - contacts, conditions: no refusal is decidable (a relation ledger
+      cannot be incoherent about presence; either end state is a legitimate
+      no-op) -- trusted, now deliberately rather than by omission.
+
+    Anything this cannot decide returns ok=True and the acquittal proceeds
+    exactly as before. Fail open: an exception anywhere reads as ok=True.
+    """
+    try:
+        category = _normalize_omission_category(om.get("category"))
+        hits = _make_subject_hit(om.get("subject"),
+                                 list(om.get("_forms") or [])
+                                 + [om.get("target")])
+
+        if category == "attire":
+            for wearer, entry in (sc.get("attire") or {}).items():
+                if not isinstance(entry, dict):
+                    continue
+                wearer_hit = hits(wearer)
+                wearing = [str(n) for n in (entry.get("wearing") or [])
+                           if str(n or "").strip()]
+                resident = []      # (name, state) seated in regions
+                for region_entry in (entry.get("regions") or {}).values():
+                    if not isinstance(region_entry, dict):
+                        continue
+                    for garment in region_entry.get("garments") or []:
+                        if isinstance(garment, dict) \
+                                and str(garment.get("name") or "").strip():
+                            resident.append(
+                                (str(garment.get("name")),
+                                 str(garment.get("state") or "")))
+                for name, state in resident:
+                    if state.casefold() == "removed" \
+                            and (wearer_hit or hits(name)):
+                        return False, (
+                            f"standing attire for {wearer!r} still seats "
+                            f"{name!r} in regions marked 'removed' -- "
+                            "removed means gone from the body "
+                            "(attire.release_removed_garments is the "
+                            "canonical repair)")
+                if wearing and resident:
+                    for name, state in resident:
+                        if state.casefold() == "removed":
+                            continue
+                        if (wearer_hit or hits(name)) \
+                                and attire_model.resolve_garment(
+                                    name, wearing) is None:
+                            return False, (
+                                f"standing attire for {wearer!r} seats "
+                                f"{name!r} in regions but not in wearing "
+                                "-- the representations disagree")
+                    region_names = [n for n, s in resident
+                                    if s.casefold() != "removed"]
+                    for name in wearing:
+                        if (wearer_hit or hits(name)) \
+                                and attire_model.resolve_garment(
+                                    name, region_names) is None:
+                            return False, (
+                                f"standing attire for {wearer!r} lists "
+                                f"{name!r} in wearing but seats it in no "
+                                "region -- the representations disagree")
+            return True, None
+
+        if category in ("positions", "stations"):
+            rooms = sc.get("rooms") or {}
+            for key, value in (sc.get("positions") or {}).items():
+                if hits(key) and str(value or "") \
+                        and str(value) not in rooms:
+                    return False, (
+                        f"standing position for {key!r} is {value!r}, "
+                        "which is not a room in the scene -- a category "
+                        "error every spatial query answers as unknown")
+            return True, None
+
+        if category == "inventory":
+            contained = sc.get("contained") or {}
+            positions = sc.get("positions") or {}
+            for key, record in contained.items():
+                if not hits(key):
+                    continue
+                holder = record.get("in") if isinstance(record, dict) \
+                    else record
+                own = positions.get(key)
+                holder_pos = positions.get(str(holder or ""))
+                if own and holder_pos and str(own) != str(holder_pos):
+                    return False, (
+                        f"{key!r} is contained by {holder!r} yet carries "
+                        f"its own position {own!r} against the holder's "
+                        f"{holder_pos!r} -- a carried body's position is "
+                        "derived from its carrier's")
+            return True, None
+
+        return True, None
+    except Exception:
+        return True, None
+
+
+def _acquit_addressed_events(out, omissions, sc=None):
+    """Split detected omissions into (owed a repair, acquitted, refused).
 
     An omission is acquitted when it carries an event_id that the specialist
     OWNING that event answered with a settling verdict this beat. Ownership
     is implicit and cannot be forged: an id only reaches the index through
     the specialist that was handed it, by the same category filter that
     built its payload, and only if that call actually ran.
+
+    An `already_true` verdict is additionally checked against standing
+    state (`_verify_already_true`): a ledger that provably cannot carry any
+    definite fact about the subject earns no acquittal, and the refusal is
+    returned as a named defect -- the omission stays owed, so the repair
+    tier still sees the gap.
 
     Everything without an event_id -- signals, player claims, deep-audit
     findings, and every omission on the monolithic path, where no specialist
@@ -3508,13 +3642,25 @@ def _acquit_addressed_events(out, omissions):
     record = out.get("orchestration")
     index = (record or {}).get("events_addressed") or {}
     if not isinstance(index, dict) or not index:
-        return omissions, []
-    owed, acquitted = [], []
+        return omissions, [], []
+    owed, acquitted, refused = [], [], []
     for om in omissions:
         entry = index.get(om.get("event_id")) or index.get(
             str(om.get("event_id")))
         status = (entry or {}).get("status")
         if entry and status in _SETTLING_VERDICTS:
+            if status == "already_true":
+                ok, reason = _verify_already_true(om, sc or {})
+                if not ok:
+                    refused.append({
+                        "event_id": om.get("event_id"),
+                        "category": om.get("category"),
+                        "subject": om.get("subject"),
+                        "owner": entry.get("owner"),
+                        "reason": reason,
+                    })
+                    owed.append(om)
+                    continue
             acquitted.append({
                 "event_id": om.get("event_id"),
                 "category": om.get("category"),
@@ -3524,7 +3670,7 @@ def _acquit_addressed_events(out, omissions):
             })
         else:
             owed.append(om)
-    return owed, acquitted
+    return owed, acquitted, refused
 
 
 def _route_repair_omissions(omissions):
@@ -3866,9 +4012,24 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
     # discarded on a subject-text mismatch. The acquittal is bookkeeping,
     # not belief: the encoding still had to pass _evidence_present, and an
     # unaddressed event still buys its repair.
-    omissions, acquitted = _acquit_addressed_events(out, omissions)
+    omissions, acquitted, at_refused = _acquit_addressed_events(
+        out, omissions, sc)
     if acquitted:
         recon["acquitted"] = acquitted
+    # An `already_true` the standing scene provably cannot support is a
+    # NAMED defect, never a silence: the omission stays owed (the repair
+    # tier still sees the gap), and the ledger corruption itself -- the
+    # thing the specialist honestly misread -- is reported on the step and
+    # to the next beat's Director.
+    if at_refused:
+        recon["already_true_refused"] = at_refused
+        for refusal in at_refused:
+            note = (
+                f"already_true refused for event {refusal.get('event_id')} "
+                f"({refusal.get('owner')} specialist, subject "
+                f"{refusal.get('subject')!r}): {refusal.get('reason')}")
+            ctx.add_warning(note)
+            ctx.tell_director(note)
     if not omissions:
         return
 
@@ -5143,17 +5304,37 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
     # ---- Fan out: genuinely parallel, never streaming ------------------
     # Specialists produce structured output, not player-facing prose, so
     # they do not stream and there is nothing to interleave: each call runs
-    # under a COPY of the caller's context (the loops.py/narration.py
-    # precedent -- copy_context is what carries `cancel_event` into the
-    # worker, so a cancelled turn aborts in-flight specialists through the
-    # existing `_check_cancel` mechanism) with both sinks cleared. Results
-    # are collected per specialist and merged BELOW in canonical
-    # SPECIALISTS order, never completion order, so the same inputs produce
-    # the same merged diff on a rerun whatever order the network answered
-    # in. A failed call becomes that specialist's recorded error and never
-    # touches a sibling's completed work; Aborted is the one exception that
-    # propagates, because a cancelled turn has no beat to fail open into.
-    def _call_isolated(name, state):
+    # under a COPY of the caller's context with both streaming sinks
+    # cleared. THE COPY IS MADE IN THE PARENT, ONE PER JOB, and handed to
+    # the worker -- the narration.py precedent, whose comment is the whole
+    # law: ThreadPoolExecutor workers do NOT inherit the submitting
+    # thread's contextvars, so `contextvars.copy_context()` executed
+    # INSIDE the worker copies an EMPTY context. This function did exactly
+    # that for one release, and everything the copy exists to carry was
+    # silently None inside every multi-specialist fan-out: `cancel_event`
+    # (an aborted turn could not interrupt in-flight specialists),
+    # `call_ledger_sink` (five specialist calls per resolve, zero ledger
+    # entries -- measured on live variant v26648, one recorded call
+    # against five ran=True specialists), `current_warning_sink` (a repair
+    # ladder firing inside a specialist left no stored trace), and db's
+    # `active_frame_id` (a frame-scoped read inside the fan-out resolved
+    # to the PRESENT frame). The single-specialist path ran in the parent
+    # thread and worked, which is what kept the defect quiet. A fresh copy
+    # per job, never one shared -- a Context can only be entered by one
+    # thread at a time.
+    #
+    # With the parent context carried in, `current_step_key` inside a
+    # specialist call is the STAGE's own key, so its ledger entries and
+    # warnings persist on the stage variant that owns the fan-out; the
+    # entry's `role` (director_body, ...) keeps saying which specialist it
+    # was. Results are collected per specialist and merged BELOW in
+    # canonical SPECIALISTS order, never completion order, so the same
+    # inputs produce the same merged diff on a rerun whatever order the
+    # network answered in. A failed call becomes that specialist's
+    # recorded error and never touches a sibling's completed work; Aborted
+    # is the one exception that propagates, because a cancelled turn has
+    # no beat to fail open into.
+    def _call_isolated(name, state, context):
         def run():
             token_sink.set(None)
             generation_event_sink.set(None)
@@ -5166,7 +5347,7 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                 temperature=0.2,
                 max_tokens=None,   # the configured ceiling
             )
-        return contextvars.copy_context().run(run)
+        return context.run(run)
 
     jobs = [(name, state) for name, state in dispatch.items()
             if state.get("run")]
@@ -5183,15 +5364,19 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
     if len(jobs) == 1:
         name, state = jobs[0]
         try:
-            results[name] = _call_isolated(name, state)
+            results[name] = _call_isolated(name, state,
+                                           contextvars.copy_context())
         except Aborted:
             raise
         except Exception as exc:
             results[name] = exc
     elif jobs:
         with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+            # The comprehension runs on THIS thread, so every copy is of
+            # the parent's live context (see the fan-out comment above).
             futures = {
-                name: pool.submit(_call_isolated, name, state)
+                name: pool.submit(_call_isolated, name, state,
+                                  contextvars.copy_context())
                 for name, state in jobs
             }
         # The pool's __exit__ has joined every worker, so collection below
