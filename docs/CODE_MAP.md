@@ -15,7 +15,7 @@
 | `agents/director.py` | 7195 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/loops.py` | 1038 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
-| `agents/narration.py` | 1012 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
+| `agents/narration.py` | 1045 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/perception.py` | 4234 | Opening, action-onset, and outcome observer views. | `affect`, `agents`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/runtime.py` | 1038 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 115 | Step and active-variant persistence helpers. | `db` |
@@ -57,7 +57,7 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 5445 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 5457 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 2797 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
@@ -178,14 +178,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `narrator()` | 659 | 217 lines |
-| `_ordered_beat_events()` | 280 | 154 lines |
-| `narrator_extra()` | 877 | 136 lines |
-| `_visible_portal_states()` | 523 | 100 lines |
-| `_resolve_narration_person()` | 78 | 66 lines |
-| `_position_delta_payload()` | 467 | 54 lines |
-| `_generate_narration()` | 625 | 33 lines |
-| `_player_sees_character()` | 436 | 29 lines |
+| `narrator()` | 684 | 222 lines |
+| `_ordered_beat_events()` | 305 | 154 lines |
+| `narrator_extra()` | 907 | 139 lines |
+| `_visible_portal_states()` | 548 | 100 lines |
+| `_resolve_narration_person()` | 80 | 66 lines |
+| `_position_delta_payload()` | 492 | 54 lines |
+| `_generate_narration()` | 650 | 33 lines |
+| `_player_sees_character()` | 461 | 29 lines |
 
 ### `agents/perception.py`
 
@@ -680,10 +680,10 @@
 |---|---:|---:|
 | `specialist_prompt()` | 2036 | 17 lines |
 | `prose_author_prompt()` | 2121 | 15 lines |
-| `get_prompt()` | 5436 | 10 lines |
-| `presets()` | 5427 | 2 lines |
-| `active_preset()` | 5430 | 2 lines |
-| `nsfw_enabled()` | 5433 | 2 lines |
+| `get_prompt()` | 5448 | 10 lines |
+| `presets()` | 5439 | 2 lines |
+| `active_preset()` | 5442 | 2 lines |
+| `nsfw_enabled()` | 5445 | 2 lines |
 
 ### `providers.py`
 
