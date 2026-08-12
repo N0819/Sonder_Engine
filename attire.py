@@ -218,6 +218,59 @@ def region_of(garment):
     return best
 
 
+def span_is_a_guess(garment):
+    """True when the region tables do not recognise this garment at all.
+
+    `region_of` never fails -- it falls to `DEFAULT_REGION` -- and that is the
+    right behaviour, because a garment on the torso is recoverable and a
+    garment nowhere is not. What was missing is that the fallback was SILENT
+    (docs/UNBUILT.md §2.14): a qipao, a thawb, a sari the table has not learnt
+    lands on the torso alone, and nothing says so, so the wrong span is
+    discovered when something undresses oddly and the legs turn out to have
+    been bare for twenty beats.
+
+    Distinguishing "the table matched torso" from "the table matched nothing
+    and torso is the floor" is the whole trick, and it is exactly the state
+    `region_of` already computes and discards. Cheap: no model, no lookup
+    beyond the regex pass the placement already runs.
+    """
+    text = str(garment or "").casefold()
+    if not text.strip():
+        return False
+    if attaches_only(text):
+        return False   # ornaments are single-place by nature, not by guess
+    for _region, cues in _REGION_CUES:
+        for cue in cues:
+            if re.search(r"\b%ss?\b" % re.escape(cue), text):
+                return False
+    return True
+
+
+def guessed_spans(regions):
+    """Garments in this ledger whose coverage nothing actually knew.
+
+    Returns the garment names, once each. For the commit seam to hand to the
+    Director, which CAN say what a garment covers and is the only stage with
+    the fiction in front of it. Authored coverage is never re-guessed and so
+    never reported: setting it by hand is the escape hatch, and nagging about
+    a choice somebody already made is how a warning teaches people to stop
+    reading warnings.
+    """
+    out, seen = [], set()
+    for region in REGIONS:
+        for garment in ((regions or {}).get(region) or {}).get("garments") or []:
+            name = garment.get("name") or ""
+            key = name.casefold()
+            if not name or key in seen or garment.get("state") == "removed":
+                continue
+            if garment.get("placed") or garment.get("covered_zones"):
+                continue          # somebody said where this goes
+            if span_is_a_guess(name):
+                seen.add(key)
+                out.append(name)
+    return out
+
+
 # One region's worth of body description. Bounded because every one of these
 # is rendered into a prompt on every beat that uncovers it, and seven unbounded
 # fields on a card is an unbounded context; generous because the thing being
@@ -424,6 +477,14 @@ def normalize_regions(outfit):
                 out[region] = {"garments": garments, "beneath": beneath}
                 if beneath_zones:
                     out[region]["beneath_zones"] = beneath_zones
+                # A FACT ABOUT THE REGION, not about the garment that left.
+                # `beneath` surfaces only where something came off, and that
+                # used to be read off a `removed` garment still sitting in the
+                # region -- which is precisely the seat a removed garment no
+                # longer keeps (`release_removed_garments`). The body records
+                # that it was uncovered; the garment carries nothing.
+                if entry.get("uncovered"):
+                    out[region]["uncovered"] = True
     # The legacy list, folded in under whatever the authored regions did not
     # already say. Additive: an author who wrote regions is not overruled by
     # the flat list their card also carries.
@@ -1151,7 +1212,7 @@ _NO_CHANGE_NOTES = frozenset({
 })
 
 _DIFF_KNOWN_KEYS = ("wearing", "add", "remove", "replace", "state",
-                    "conditions", "coverage", "regions", "notes")
+                    "conditions", "coverage", "regions", "notes", "placement")
 
 
 def is_no_change_note(text):
@@ -1257,8 +1318,48 @@ def coerce_diff_shape(diff):
         if name in ("wearing", "add", "remove", "replace"):
             if value is None:
                 continue
-            out[name] = [str(s).strip() for s in _as_list(value)
-                         if str(s or "").strip()]
+            # WHERE A GARMENT IS WORN IS A FACT ABOUT THE WEARING, NOT ABOUT
+            # THE NAME. The region tables answer the ordinary case and cannot
+            # answer any other: underwear on the head, a belt across the
+            # chest, a flowerpot as a hat, a shirt worn as trousers, trousers
+            # pulled onto the arms. The variation is unbounded and no word
+            # list reaches the end of it, so the DECLARATION gets to say.
+            #
+            # Either spelling is accepted -- a bare name for the ordinary
+            # case, or {name, covers:[regions]} when the wearing is not what
+            # the name implies. The list itself stays strings, because every
+            # consumer downstream reads names; the placement rides beside it
+            # in `placement` and is applied where the tables would otherwise
+            # have guessed.
+            items, placed = [], {}
+            for entry in _as_list(value):
+                if isinstance(entry, dict):
+                    text = str(entry.get("name") or entry.get("garment")
+                               or "").strip()
+                    covers = [str(r or "").strip().casefold()
+                              for r in _as_list(entry.get("covers"))
+                              if str(r or "").strip().casefold() in REGIONS]
+                    if text and covers:
+                        placed[text] = covers
+                else:
+                    text = str(entry).strip()
+                if text:
+                    items.append(text)
+            out[name] = items
+            if placed:
+                out.setdefault("placement", {}).update(placed)
+            continue
+        if name == "placement":
+            # Declared directly, for a beat that moves a garment somewhere
+            # unusual without re-adding it.
+            if isinstance(value, dict):
+                for garment, covers in value.items():
+                    covers = [str(r or "").strip().casefold()
+                              for r in _as_list(covers)
+                              if str(r or "").strip().casefold() in REGIONS]
+                    if str(garment or "").strip() and covers:
+                        out.setdefault("placement", {})[
+                            str(garment).strip()] = covers
             continue
         if name == "regions":
             # Authored clothing by region -- the opening turn's shape. Passed
@@ -1595,6 +1696,38 @@ def coverage_removal_escalations(texts, coverage, regions):
     return out
 
 
+def worn_conditions_dropped(previous, reconciled):
+    """Conditions dropped because the garment stopped being on a body.
+
+    Same lesson as `removals_held`, pointed the other way: the drop is right
+    and the SILENCE would be the defect. A Director that wrote "hanging loose
+    from the other shoulder" and finds it gone next beat should be told the
+    garment left the body, so it can restate any lasting damage on the object
+    rather than assume the note was ignored.
+
+    Returns [(garment name, the condition that was dropped)].
+    """
+    was = {}
+    for entry in (previous or {}).values():
+        for garment in entry.get("garments") or []:
+            name = garment.get("name") or ""
+            if name and garment.get("condition"):
+                was.setdefault(name.casefold(),
+                               (name, garment["condition"]))
+    dropped, seen = [], set()
+    for entry in (reconciled or {}).values():
+        for garment in entry.get("garments") or []:
+            key = (garment.get("name") or "").casefold()
+            if (garment.get("state") != "removed" or key in seen
+                    or key not in was or garment.get("condition")):
+                continue
+            name, condition = was[key]
+            if displacement_language(condition):
+                seen.add(key)
+                dropped.append((name, condition))
+    return dropped
+
+
 def removals_held(previous, reconciled, wanted):
     """Removal proposals the ladder held short of `removed` this beat.
 
@@ -1705,6 +1838,29 @@ def advance(previous, proposed, decisive=False, process=False):
             condition = _clean(garment.get("condition"), CONDITION_LIMIT)
             if not condition and before:
                 condition = before.get("condition") or ""
+            # ...but a condition describing the garment's relationship to a
+            # BODY cannot outlive its leaving one. The structured twin of this
+            # is already cleared below, for the reason stated there; the prose
+            # saying the same thing was not, so the same fact was half tidied
+            # and half left behind.
+            #
+            # Measured live (chat 70, design note 17 §6): the jacket reached
+            # `removed`, was minted as a floor object -- and kept
+            # "peeled off one shoulder, one arm freed from sleeve, hanging
+            # loose from the other shoulder" from four beats earlier. Every
+            # reader of the ledger was then told a garment on the floor was
+            # hanging off her shoulder, so the Director removed it AGAIN a
+            # beat later and the narrator re-narrated the removal a beat after
+            # that. Three removals of one jacket, each correct given what it
+            # was shown.
+            #
+            # Only displacement prose is dropped, and only on `removed`:
+            # "wine-stained down the front" is a fact about the garment and
+            # survives anything, while "hanging open" is a fact about a body
+            # it is no longer on.
+            if state == "removed" and condition and displacement_language(
+                    condition):
+                condition = ""
             description = _clean(garment.get("description"), DESCRIPTION_LIMIT)
             if not description and before:
                 description = before.get("description") or ""
@@ -1717,6 +1873,16 @@ def advance(previous, proposed, decisive=False, process=False):
                                        if garment.get("attaches") is not None
                                        else (before or {}).get("attaches")),
                       "state": state, "condition": condition}
+            # SOMEBODY SAID WHERE THIS GOES. Not `covers` -- that is DERIVED
+            # by `_sync_spanning_garments` from the regions a garment occupies
+            # and blanked for single-region ones, so it cannot carry intent.
+            # This is the intent: the placement was declared rather than
+            # guessed from the name, and it survives every rebuild so the name
+            # table never gets to re-answer a question it was overruled on. A
+            # shirt worn as trousers does not drift back to the torso next
+            # beat because its name still says shirt.
+            if garment.get("placed") or (before or {}).get("placed"):
+                record["placed"] = True
             # `removed` clears the displacement record: a garment off the
             # body covers nothing anywhere, and a stale override must not
             # resurface half-displaced if the garment is ever re-worn.
@@ -1915,7 +2081,11 @@ def perceptible_region_surfaces(regions, beneath_visible=False):
                 parts.append(surface)
             else:
                 surface = "bare"
-                shed = any(
+                # The region's own record that it was uncovered, or -- for the
+                # editor, a restored archive, and every chat written before
+                # `release_removed_garments` existed -- a removed garment
+                # still sitting in it. See `describe` for the full note.
+                shed = bool(entry.get("uncovered")) or any(
                     isinstance(g, dict) and g.get("state") == "removed"
                     for g in (entry.get("garments") or [])
                 )
@@ -1939,7 +2109,7 @@ def perceptible_region_surfaces(regions, beneath_visible=False):
 
 
 def apply_flat_change(previous, wanted, decisive=False, conditions=None,
-                      process=False):
+                      process=False, placement=None):
     """Reconcile a flat "what they are wearing now" list against the regions.
 
     The Director speaks in whole garments -- add these, remove those -- because
@@ -2003,10 +2173,22 @@ def apply_flat_change(previous, wanted, decisive=False, conditions=None,
     for key, name in wanted_keys.items():
         if key in seen:
             continue
-        for region in regions_covered(name):
+        # DECLARED PLACEMENT BEATS THE NAME TABLE. `regions_covered` answers
+        # the ordinary case from a word list, and the unusual case has no
+        # bottom -- a shirt worn as trousers, trousers on the arms, a
+        # flowerpot as a hat. Whoever put it on says where; the table is only
+        # the default for when nobody bothered.
+        where = (placement or {}).get(name) or (placement or {}).get(key)
+        for region in (where or regions_covered(name)):
             entry = proposed.setdefault(region, {"garments": [], "beneath": ""})
-            entry["garments"].append({"name": name, "state": "worn",
-                                      "condition": marks.get(key, "")})
+            garment = {"name": name, "state": "worn",
+                       "condition": marks.get(key, "")}
+            if where:
+                # Marked so nothing downstream re-guesses it, and so
+                # `guessed_spans` knows this placement was chosen rather than
+                # fallen into.
+                garment["placed"] = True
+            entry["garments"].append(garment)
     return advance(previous, proposed, decisive, process=process)
 
 
@@ -2129,6 +2311,52 @@ def is_derived_state_note(note):
     if " displaced off the " in text:
         return True
     return any(text.endswith(" " + state) for state in ("loosened", "open"))
+
+
+def release_removed_garments(entry):
+    """Drop garments that have left the body out of a wearer's ledger.
+
+    REMOVED MEANS GENUINELY NOT PART OF THE CARD ANY MORE. A garment that
+    came off kept its seat in the wearer's regions under `state: "removed"`,
+    and every relation that seat carried -- the region it hung on, the
+    condition describing how it hung there -- was a relation to a body it had
+    left. It is an object in the world now; the region it vacated is simply
+    uncovered, free to be filled by any attire, makeshift or otherwise.
+
+    Measured live (chat 70, design note 17 §6): the jacket sat `removed`
+    across three of Hinami's regions, carrying "hanging loose from the other
+    shoulder" from four beats earlier, while the object itself lay on the
+    stone in a different room. Two records of one garment, disagreeing. The
+    Director removed it a second time; the narrator narrated it a third.
+
+    Called by the commit seam AFTER `_mint_shed_garments`, never before:
+    `newly_removed` reads the transition out of these very entries, so an
+    earlier prune would mean nothing ever reached the floor.
+
+    Putting it back on is an ordinary `add` -- a separate act, with its own
+    beats for returning to the room and picking it up -- and `add` accepts
+    any name, so the garment re-enters as `worn` like anything else would.
+    """
+    entry = entry if isinstance(entry, dict) else {}
+    regions = entry.get("regions")
+    if isinstance(regions, dict):
+        for region_entry in regions.values():
+            if not isinstance(region_entry, dict):
+                continue
+            garments = region_entry.get("garments")
+            if not isinstance(garments, list):
+                continue
+            kept = [g for g in garments
+                    if not (isinstance(g, dict)
+                            and g.get("state") == "removed")]
+            if len(kept) != len(garments):
+                # The region remembers being uncovered even though the garment
+                # that uncovered it is gone -- that is what lets `beneath`
+                # surface where something came off and stay quiet where
+                # nothing ever did. A fact about the body, kept on the body.
+                region_entry["uncovered"] = True
+            region_entry["garments"] = kept
+    return rederive_entry(entry)
 
 
 def rederive_entry(entry):
@@ -2303,8 +2531,24 @@ def compact_line(regions, beneath_visible=False, look=0):
             # for as long as that is true, not only on the beat it became true.
             # Putting something back on ends it, because the region then has a
             # worn garment and never reaches this branch.
-            shed = any(g.get("state") == "removed"
-                       for g in (entry.get("garments") or []))
+            #
+            # A FACT ABOUT THE REGION, not one read off a corpse. This used to
+            # look for a garment still sitting here under `state: "removed"`,
+            # and `removed` now means the garment is genuinely gone from the
+            # card -- an object in the world with no seat on the body it left.
+            # `uncovered` is the same standing fact recorded where it belongs:
+            # this region had something and no longer does. A region that was
+            # NEVER covered has no flag and still says `bare` and nothing more.
+            #
+            # EITHER signal, because this renders regions from anywhere: the
+            # commit path releases removed garments and sets the flag, but the
+            # attire editor, a restored archive and every chat saved before
+            # this change all hold regions where the garment is still sitting
+            # there under `state: "removed"`. Reading only the flag would have
+            # gone quiet on every one of them.
+            shed = bool(entry.get("uncovered")) or any(
+                g.get("state") == "removed"
+                for g in (entry.get("garments") or []))
             beneath = (_clean(entry.get("beneath"), BENEATH_LIMIT)
                        if (shed and beneath_visible) else "")
             parts.append("%s:%s%s" % (region, _safe(beneath) or BARE,

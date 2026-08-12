@@ -393,6 +393,64 @@ redesign; the conjunction needed to hit it (one garment in progress, another
 resolved off, same body, same beat) has not been observed live. Recorded in
 `docs/UNBUILT.md` rather than bundled here.
 
+## §6 — A removed garment is an object, not a fact about a body
+
+The fourth incident, and the one that explains why there were three. Chat 70:
+the jacket was resolved off, minted as a floor object — and kept its seat in
+Hinami's card, `state: "removed"`, filed under `torso`, `waist` and `arms`,
+carrying `"peeled off one shoulder, one arm freed from sleeve, hanging loose
+from the other shoulder"` written four beats earlier. The object lay on the
+stone in a different room.
+
+Two records of one garment, disagreeing, and every reader of the ledger was
+shown the wrong one. So the Director removed the same jacket a second time at
+t10 — "the loose jacket still dangling from Hinami's remaining shoulder" — and
+the narrator narrated the removal a third time at t11, while the Director's
+own resolved event that beat correctly said it was "already pooled on the dark
+stone". Three removals of one jacket, each of them right given what it was
+shown.
+
+**The rule, stated by the person who owns the fiction:** a piece of attire is
+entirely uncoupled from its wearer when removed and preserves no relation. It
+is just an object in the world. `removed` must mean it genuinely is not part
+of their active card any more. They can return and put it back on, of course,
+but that is another set of actions — and the region it vacated can be filled
+by any attire, makeshift or otherwise.
+
+**What the code already half-knew.** `advance()` cleared the *structured*
+displacement record on removal and said why in a comment — "a garment off the
+body covers nothing anywhere, and a stale override must not resurface
+half-displaced". The prose condition saying the identical thing was carried
+forward unconditionally, and the garment itself kept its seat. One fact,
+three representations, one of them tidied.
+
+**The shape of the fix.**
+
+1. `advance()` drops a condition that reads as displacement when the state is
+   `removed` — and only then. `"wine-stained down the front"` is true of the
+   cloth and survives anything; `"hanging open"` was only ever true of a body
+   wearing it. `worn_conditions_dropped` reports it, on the clamp's own
+   principle: the drop is right and the silence would be the defect.
+2. `release_removed_garments` prunes removed garments out of the wearer's
+   regions entirely, called by the commit seam AFTER `_mint_shed_garments` —
+   never before, because `newly_removed` reads the transition out of those
+   very entries and an earlier prune would mean nothing ever reached the floor.
+
+**The one relation that had to move rather than vanish.** `beneath` surfaces
+only where something came off, and that was read off the removed garment still
+sitting in the region. With the corpse gone, the signal had to become a fact
+about the *region* — `uncovered: true`, set by the release, preserved through
+`normalize_regions`. A region that was never covered has no flag and still
+says `bare` and nothing more. Both readers (`describe` and
+`perceptible_region_surfaces`) accept either that flag or a legacy `removed`
+garment, because the editor, restored archives and every chat written before
+this change all hold the old shape.
+
+**Not a defect, checked:** `worn_by` on a shed entity names its FORMER wearer
+and is load-bearing for `recover_shed_entity_changes`, which promotes an
+explicitly-shed entity back into the attire diff when a model creates the
+object but forgets the removal. `shed: true` disambiguates it.
+
 ## Left open (docs/UNBUILT.md)
 
 - Left/right asymmetry (one shoulder down) — no lateral axis in REGIONS.

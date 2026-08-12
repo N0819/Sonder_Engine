@@ -5798,7 +5798,51 @@ def validated_player_state_assertions(sc, raw, player_name, report=None):
         if report:
             report(f"discarded a malformed state assertion: {exc}")
         return {}
-    return {key: value for key, value in clean.items() if value}
+    clean = {key: value for key, value in clean.items() if value}
+
+    # A DECLARED PLACE EXISTS, and the failure-proofing is to MINT it rather
+    # than to refuse the position. Putting a body somewhere is the strongest
+    # possible assertion that the somewhere is there -- `prepare_scene_commit`
+    # already reasons exactly this way for a declared movement destination
+    # (commit.py:2134), and an asserted position is the same claim by a
+    # shorter route.
+    #
+    # Refusing it is the failure mode, not the fix: a position naming an
+    # unknown room merges cleanly, commits, and leaves the body standing
+    # nowhere -- no exception, no warning, a corrupt scene that persists, with
+    # no room for perception to describe and no adjacency for movement to
+    # walk. Dropping the position instead would just be the engine telling the
+    # player their alcove is not real, which is the second-guessing this whole
+    # channel exists to stop.
+    #
+    # The stub is deliberately minimal -- a name and an edge home. Mapping and
+    # the Director furnish it; what matters here is that the place is on the
+    # map and reachable, because an unreachable room is how an interior falls
+    # out of the world.
+    positions = clean.get("positions")
+    if isinstance(positions, dict) and positions:
+        rooms = dict((sc or {}).get("rooms") or {})
+        minted = dict(clean.get("rooms") or {})
+        for who, room in positions.items():
+            if not room or room in rooms or room in minted:
+                continue
+            origin = ((sc or {}).get("positions") or {}).get(who)
+            minted[room] = {
+                "name": str(room).replace("_", " ").title(),
+                "desc": "",
+                "adjacent": ([{"to": origin, "barrier": "open",
+                               "distance": "near"}]
+                             if origin and origin in rooms
+                             and origin != room else []),
+                "notes": "",
+            }
+            if report:
+                report(f"asserted position put {who!r} in {room!r}, which did "
+                       "not exist; minted it with a way back to "
+                       f"{origin!r}. Describe it if it matters.")
+        if minted:
+            clean["rooms"] = minted
+    return clean
 
 
 def preview_player_state_assertions(sc, assertions, ctx=None,

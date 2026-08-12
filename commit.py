@@ -1851,7 +1851,13 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
         _after = attire_model.apply_flat_change(
             _before, cur["wearing"], decisive=name in _decisive_names,
             conditions=_marks if isinstance(_marks, dict) else None,
-            process=name in _process_names)
+            process=name in _process_names,
+            # Where this beat says the garment went, when that is not where
+            # its name implies. The region tables cover the ordinary case and
+            # nothing beyond it, and the space beyond it has no bottom --
+            # underwear on the head, a belt across the chest, a shirt worn as
+            # trousers. Whoever put it on says where.
+            placement=d.get("placement"))
         _after, _coverage_notes = attire_model.apply_coverage_changes(
             _after, _coverage)
         if report:
@@ -1871,6 +1877,18 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                 ctx.add_warning(
                     f"attire: removal of {name}'s {_held_name!r} held at "
                     f"{_held_state!r} (beat reads as in progress)")
+            # A condition describing the garment ON a body is dropped when it
+            # leaves one (design note 17 §6), and said out loud for the same
+            # reason the clamp is: a stale "hanging off her shoulder" on a
+            # garment lying on the floor had the Director remove the same
+            # jacket twice and the narrator narrate it a third time.
+            for _gone_name, _gone_cond in attire_model.worn_conditions_dropped(
+                    _before, _after):
+                ctx.tell_director(
+                    f"attire: {name}'s {_gone_name!r} left the body, so its "
+                    f"condition {_gone_cond!r} was dropped — it described the "
+                    "garment's relationship to a body it is no longer on. "
+                    "Any lasting damage belongs on the shed object.")
             # Displacement or rung words written ONLY as condition prose move
             # nothing (design note 17 §4) -- the chat 70 jacket and chat 68
             # t7 defects. Detected, never executed: the feedback names the
@@ -1933,6 +1951,24 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
 
     _mint_shed_garments(
         sc, [s for s in _shed if s[1].casefold() not in _gained], diff)
+    # A REMOVED GARMENT IS AN OBJECT IN THE WORLD, NOT A FACT ABOUT A BODY.
+    # It kept a seat in its former wearer's regions -- `state: "removed"`,
+    # under `torso`/`waist`/`arms` -- and every relation that seat carried was
+    # a relation to a body it had left. The floor object above is the garment
+    # now; two records of one thing is how they disagree.
+    #
+    # Measured live (chat 70): the jacket sat `removed` across three of
+    # Hinami's regions while lying on the stone in another room, so the
+    # Director removed it a second time and the narrator narrated it a third.
+    #
+    # AFTER the mint, never before: `newly_removed` reads the transition out
+    # of these very entries, so pruning earlier would mean nothing ever
+    # reached the floor. Once the object exists, the seat is a duplicate --
+    # and the region is simply uncovered, free to be filled by any attire,
+    # makeshift or otherwise.
+    for _name, _entry in (sc.get("attire") or {}).items():
+        if isinstance(_entry, dict):
+            attire_model.release_removed_garments(_entry)
     return sc
 
 

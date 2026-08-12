@@ -1,5 +1,99 @@
 # Changelog
 
+## Unreleased — Development
+
+### Where a garment is worn is part of the wearing, not part of its name
+
+`region_of` reads a garment's name and answers where that KIND of thing is
+usually worn. Fine for ordinary dressing, structurally wrong for everything
+else: underwear on the head, a belt across the chest, a flowerpot as a hat, a
+shirt worn as trousers, trousers pulled onto the arms. There is a zone of
+infinite variation here and no single table could hope to account for it — so
+the table is demoted to a default and the DECLARATION decides.
+
+    add: ["travel shorts"]                                  → table default
+    add: [{name: "linen shirt", covers: ["legs","groin"]}]  → shirt as pants
+    placement: {"cotton trousers": ["arms"]}                → move what is worn
+
+Marked `placed` rather than recorded in `covers`, because `covers` is derived
+by the spanning sync from the regions a garment occupies and blanked for
+single-region ones — it cannot carry intent. The flag survives every rebuild,
+so a shirt worn as trousers does not drift back to the torso next beat because
+its name still says shirt. And `guessed_spans` now reports a garment the tables
+did not recognise that nobody placed either, closing the recorded gap where an
+unknown garment landed on the torso silently and the wrong span surfaced twenty
+beats later when something undressed oddly (`docs/UNBUILT.md` §2.14).
+
+### The undressing prompt was fighting the clamp inversion
+
+The clothing block opened with "UNDRESSING IS A SEQUENCE, NOT A SWITCH … give
+the act its middle beats" and only afterwards said `remove` is the Director's
+resolution that the engine honours. The headline is the sentence a model acts
+on, and it read as an instruction to stage — which is the defect this channel
+keeps producing: a garment half-off in the ledger while the narration puts it
+on the floor. Alpha 8.1 inverted the clamp so the engine honours a resolved
+removal; the prompt had not been inverted with it. The resolution now leads,
+and the middle states follow as what they are — for an act genuinely mid-flight,
+evidenced by the Director's own prose, "not a pacing instruction". The test
+pins the ordering.
+
+### A router alias is not a model
+
+`agent_models` points director, character and narrator at a Fireworks router,
+which dispatches to whatever backing model it picks per request — and
+`providers.py` read `usage` from each response while never reading the `model`
+field beside it. Substitution left no trace in any log, metric or stored turn,
+so every wall-clock and error-rate number in the corpus is a mixture over an
+unrecorded variable. It cost a real measurement: a latency investigation into
+the Director produced per-stage medians that were an artefact of which backing
+model happened to answer, and the conclusion inverted once that was known.
+
+The served model is now read from all four non-streaming paths and all four
+streaming ones — the streaming branch matters most, since it is the one the
+pipeline runs, and capturing only in the non-streaming path is how reasoning
+capture stayed dead for a release. A substitution warns once per
+`(role, alias, served)`, and the metrics line names the model that answered.
+
+### A removed garment is an object in the world
+
+Chat 70, turns 7–11: the jacket was resolved off and minted as a floor object
+— and kept its seat in Hinami's card, `state: "removed"`, filed under three of
+her regions, still carrying "peeled off one shoulder … hanging loose from the
+other shoulder" written four beats earlier. The object itself lay on the stone
+in a different room.
+
+Two records of one garment, disagreeing, and every reader was shown the wrong
+one. The Director removed the same jacket a second time; the narrator narrated
+the removal a third — while the Director's own resolved event that beat
+correctly said the jacket was "already pooled on the dark stone". Three
+removals of one jacket, each right given what it was shown.
+
+**`removed` now means genuinely gone from the card.** A garment that comes off
+is uncoupled from its wearer and preserves no relation to them: it is an
+object in the world, and the region it vacated is simply uncovered — free to
+be filled by any attire, makeshift or otherwise. Putting it back on is an
+ordinary `add`, and a separate set of actions.
+
+The code already half-knew this. `advance()` cleared the *structured*
+displacement record on removal and said why; the prose condition saying the
+identical thing rode along untouched, and the garment kept its seat. So:
+displacement prose is dropped when the garment leaves the body (a wine stain
+is true of the cloth and survives; "hanging open" was only ever true of a body
+wearing it), and `release_removed_garments` prunes the garment out of the
+wearer's regions — after the floor object is minted, never before, since the
+removal transition is read out of those very entries.
+
+One relation had to move rather than vanish: `beneath` surfaces only where
+something came off, and that was read off the removed garment still sitting in
+the region. It is now `uncovered` on the region — a fact about the body, kept
+on the body. Both readers still accept a legacy `removed` garment too, because
+the editor, restored archives and every existing chat hold the old shape.
+
+The wrong ROOM in that incident was downstream of the clamp defect fixed in
+8.1: the t7 removal never landed, so the jacket rode along on her body into
+the next room and was finally shed there. Chat 70's ledger will not
+retro-repair; a reroll lands it correctly.
+
 ## alpha 8.1 — What you say happened, happened
 
 ### Interpret is not a lesser authority than resolve
