@@ -2151,6 +2151,7 @@ function renderFullApiSettings(b) {
           el("div", {}, el("b", {}, "character_bg / character_mid / character_major"), " — generate what a character does and says, tiered by how central that character is to the scene. Quality shows up directly in dialogue, so keep major characters on a strong model even if you lighten background ones."),
           el("div", {}, el("b", {}, "narrator"), " — turns everything into the prose you actually read. This is the model whose writing style you'll notice most."),
           el("div", {}, el("b", {}, "mapping"), " — keeps track of world facts, lore, and location layout in the background. Rarely visible directly, safe to experiment with."),
+          el("div", {}, el("b", {}, "repair"), " — shape, never content. When a stage's output fails validation, this model is asked about the failed fields ALONE and its answer is spliced back at exactly those paths; everything else is byte-identical, so it cannot touch the beat. Its whole job is \u201cthis fragment is the wrong shape, fix the shape, keep every fact\u201d, which a fast cheap model does well \u2014 and every success here saves a full re-author of the response on the stage's own model (measured: 4.2s on the Director for one malformed field, 36.3s on a character decision review). Left unset it follows ", el("b", {}, "utility"), ".") ,
           el("div", {}, el("b", {}, "utility"), " — background helper tasks: the autobiographical memory summaries written between turns, notice wording, off-screen activity sketches, importer fills. Never player-facing prose, so speed matters more than polish — not worth spending a premium model on. The other exception to the Default fallback: left unset it follows the ", el("b", {}, "mapping"), " model, so background summarisation lands on the fast mechanical model you already picked rather than on your most expensive one."),
           el("div", { style: "margin-top:8px" }, el("b", {}, "embeddings"), " — turns each memory into a vector so a character can recall something relevant that was worded differently 300 turns ago. Cheap per call and it is what makes memory work by MEANING rather than by keyword; leave it unset and the engine falls back to a local hash that only matches shared words."),
           el("div", { class: "warn-note", style: "margin-top:4px" }, el("b", {}, "Changing this one has a consequence the others do not."), " A memory can only be compared against a vector from the same model, so everything already stored has to be re-read through the new one. Nothing is lost and nothing breaks — until it is rebuilt, older memories are found by keyword only. The engine offers to rebuild when you next open a story, or use the button below."))),
@@ -2197,6 +2198,7 @@ function renderFullApiSettings(b) {
       embeddings: -2, default: -1, director: 0,
       director_body: 1, director_social: 2, director_contact: 3,
       director_objects: 4, director_spatial: 5, director_offscreen: 6,
+      repair: 7,
     };
     const orderedRoles = [...S.boot.roles].sort(
       (a, b) => (ROLE_ORDER[a] ?? 50) - (ROLE_ORDER[b] ?? 50)

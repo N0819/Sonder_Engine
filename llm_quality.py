@@ -225,7 +225,7 @@ def _targeted_field_patch(step_key, parsed, errors, payload):
     decision-review retry on a character cost 36.3s the same way.
 
     The error already says exactly which path failed and why, so this asks
-    only about those fields, on the cheap `utility` model, and splices the
+    only about those fields, on the cheap `repair` model, and splices the
     answer back at the paths that failed and NOWHERE ELSE. Everything
     outside those paths is byte-identical by construction, which is what
     makes a model this small safe to use here: it cannot touch the beat.
@@ -247,7 +247,7 @@ def _targeted_field_patch(step_key, parsed, errors, payload):
         return None
     try:
         raw = chat_complete(
-            "utility",
+            "repair",
             _PATCH_SYSTEM,
             json.dumps({"invalid_fragments": fragments,
                         "validation_errors": messages}, ensure_ascii=False),
@@ -460,7 +460,7 @@ def complete_validated_json(
                     "llm second call: validation failed "
                     f"({len(report.errors or [])} errors; first: "
                     f"{str((report.errors or [''])[0])[:120]!r}); repaired by "
-                    f"a targeted field patch on the utility model "
+                    f"a targeted field patch on the repair model "
                     f"({time.monotonic() - _t0:.1f}s) -- no rebuild")
                 return _patched_report.output
             previous_parsed = _patched
