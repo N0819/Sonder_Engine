@@ -2665,6 +2665,17 @@ wardrobe, not the room graph, and on an ordinary beat only one or two run at
 all. Total prefill can fall below today's single 26k call rather than
 multiplying it.
 
+**The offscreen family's 0% is a placeholder, not a verdict.** Read the wrong
+way that number says "delete it"; it says the world outside the scene is
+declared and unbuilt. Crowds moving, couriers carrying news, plans advancing
+while nobody watches — plausibly as complex a task as the whole present
+Director, and the specialist most likely to become the LARGEST rather than the
+smallest. It is an argument for this architecture: a monolith cannot absorb an
+offscreen simulator without every ordinary beat paying for it, which is part of
+why the capability has stayed at zero. Pinned for development. Its gate reads
+scene contents today and will need revisiting the moment "somewhere else is
+happening" stops being visible from the current room.
+
 **Per-specialist models.** A narrow specialist may not need a frontier model.
 `agent_models` already keys configuration by role, so a lean fast model for a
 scoped structural task and a frontier model for the prose author is a
