@@ -110,6 +110,57 @@ gate will need revisiting the moment "somewhere else is happening" stops being
 readable from the current scene's contents, because at that point absence of a
 subject in THIS room stops meaning absence of the subject.
 
+## Offscreen is a different KIND of parallel
+
+The specialists above are parallel WITHIN a step: the turn fans out and waits
+for them, so their latency is `max(specialist)` and their size still matters.
+
+Offscreen is not that. The intent is that it runs alongside the main turn
+entirely — the player never waits for it and never notices it happened. That
+makes its size irrelevant to turn latency, which is what allows it to become
+the largest specialist without costing a beat anything, and it is why it does
+not belong inside the resolve step at all.
+
+**The design problem moves to writing, not to speed.** `commit.py` is the sole
+persistence boundary and a turn's mutations land in one outer transaction
+precisely so there is never a second writer. Offscreen mutating the world
+while a turn is also mutating it is exactly what that boundary exists to
+prevent — and offscreen output is not reconstructible the way autobiographical
+consolidation is (which is why consolidation is allowed to run after the write
+lock). It IS world state.
+
+**So it queues rather than writes.** Offscreen runs concurrently, produces a
+PROPOSAL, and the next turn's commit applies it inside the normal transaction
+through the guards that already exist. Latency is hidden, the single-writer
+rule is untouched, and a proposal that has gone stale (its subject moved, its
+room was destroyed) is refused by the same deterministic checks that refuse a
+stale diff today. The mapping stage's propose/ratify contract is the precedent.
+
+**Firewall.** Offscreen events reach a mind the way any other event does — by
+being perceived, or by arriving as news somebody carries. Never by appearing
+in a head because the simulator computed it. An offscreen simulator that can
+write into anyone's knowledge directly is a leak with a scheduler attached.
+
+**It will be large and expensive when it is done, and the architecture has to
+assume that from the start rather than discover it.** Consequences that follow
+and should not be retrofitted:
+
+- **Its cadence is its own.** A world does not need re-simulating every beat.
+  Whatever drives it — elapsed story time, rooms left behind, a plan's due
+  date — the trigger is not "a turn happened", or an expensive task runs
+  hundreds of times to report that a town is still standing.
+- **Cost has to be visible and bounded.** It is the one part of the engine
+  that spends money while the player is not waiting for it, which is exactly
+  the shape of a bill nobody notices. `_log_usage` already records per-role
+  spend; offscreen needs its own role so it is separable, and a ceiling.
+- **It must be interruptible and resumable.** A long simulation racing a
+  player who quits, branches or rerolls must be abandonable without leaving a
+  half-applied world — which the proposal/ratify shape above already gives,
+  since an abandoned proposal is simply never ratified.
+- **Failure is silence, never a broken turn.** If it dies, times out, or the
+  provider refuses, the story continues exactly as it does today. Nothing on
+  the player's path may depend on it having succeeded.
+
 ## What stays with the orchestrator
 
 The cross-channel judgments, which cannot be seen from inside one channel:
