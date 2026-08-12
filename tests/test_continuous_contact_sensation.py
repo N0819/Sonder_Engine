@@ -543,3 +543,39 @@ class TestACavityNamedByItsWallIsStillACavity:
                    target_interior="")
         out = spatial._clean_contact(raw, scene={})
         assert out["actor"] == "Hinami" and out["actor_part"] == "tongue"
+
+
+def test_mutual_penetration_survives_as_two_contacts():
+    """Both directions at once, which is an ordinary thing for bodies to do
+    and was being lost.
+
+    Measured live (chat 71, turns 20-30). `cock -> Hinami/vaginal canal`
+    stood from turn 20. At turn 29 the resolve added the inverted record
+    `Elyra "vaginal walls" -> Hinami "hand", interior` -- and at the next
+    checkpoint the cock contact was GONE, with no remove op naming it. Two
+    interior contacts between the same pair, one displacing the other.
+
+    Read correctly the two are not rivals: Hinami's hand is inside Elyra
+    while Elyra's cock is inside Hinami. Once the inverted record folds to
+    its true direction the pair no longer collides, and both stand -- which
+    is why the fold matters beyond the sentence it was fixing. Before it,
+    Elyra spent the beat registering nothing about being inside Hinami,
+    because the contact had been deleted.
+    """
+    import spatial
+
+    scene = {"contacts": [], "positions": {"Elyra Voss": "r", "Hinami": "r"}}
+    spatial.apply_contact_ops(scene, [
+        {"op": "add", "actor": "Elyra Voss", "actor_part": "cock",
+         "target": "Hinami", "target_interior": "vaginal canal",
+         "target_part": "", "manner": "rest", "relation": "interior"},
+        {"op": "add", "actor": "Elyra Voss", "actor_part": "vaginal walls",
+         "target": "Hinami", "target_part": "hand",
+         "target_interior": "vaginal canal", "manner": "clench",
+         "relation": "interior"},
+    ])
+    contacts = scene["contacts"]
+    assert len(contacts) == 2, contacts
+    directions = {(c["actor"], c["actor_part"]) for c in contacts}
+    assert ("Elyra Voss", "cock") in directions
+    assert ("Hinami", "hand") in directions
