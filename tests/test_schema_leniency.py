@@ -1132,3 +1132,31 @@ class TestBareStringEvidence:
     def test_an_empty_string_is_no_evidence_at_all(self):
         from schemas import RememberLine
         assert RememberLine(quote="x", evidence="  ").evidence == []
+
+
+def test_a_name_keyed_table_written_as_a_list_of_entries_is_keyed():
+    """The other shape `overlays`/`conditions` get written as. Observed live
+    at interpret: `state_assertions.overlays` came back a LIST, failed with
+    "value is not a valid dict", and bought a 4.2s temperature-0 repair for
+    a channel the body specialist replaced immediately afterwards."""
+    from schemas import StateDiff
+
+    keyed = StateDiff(**{"overlays": [
+        {"subject": "Hinami", "value": "flushed to the ears"}]}).overlays
+    assert keyed == {"Hinami": ["flushed to the ears"]}
+    assert StateDiff(**{"overlays": [
+        {"name": "Hinami", "entries": ["a", "b"]}]}).overlays == {
+            "Hinami": ["a", "b"]}
+
+
+def test_an_unclaimed_entry_is_rejected_rather_than_attributed():
+    """A list of bare strings names nobody. Nothing here may invent a
+    subject -- attaching an unclaimed mark to the wrong body is worse than
+    rejecting the shape and paying for the repair."""
+    import pytest
+    from pydantic import ValidationError
+
+    from schemas import StateDiff
+
+    with pytest.raises(ValidationError):
+        StateDiff(**{"overlays": ["a mark with no owner"]})

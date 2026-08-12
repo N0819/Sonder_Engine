@@ -106,6 +106,35 @@ def _coerce_list_valued_map(value):
     list; item-level typing (e.g. conditions' entries must be objects) still
     applies after the wrap, so a genuinely off-schema item still fails.
     """
+    if isinstance(value, (list, tuple)):
+        # The OTHER shape a name-keyed table gets written as: a list of
+        # entries that each name their own subject. Observed live at
+        # interpret -- `state_assertions.overlays` came back a list, failed
+        # with "value is not a valid dict", and cost a 4.2s temperature-0
+        # repair for a channel the body specialist then replaced anyway.
+        #
+        # Keyed only where the entry SAYS whose it is. A list of bare
+        # strings is left to fail: nothing here may invent a subject, and
+        # attaching an unclaimed mark to the wrong body is worse than
+        # rejecting the shape.
+        keyed = {}
+        for entry in value:
+            if not isinstance(entry, dict):
+                return value
+            subject = next((str(entry[k]).strip() for k in
+                            ("subject", "name", "who", "character", "target")
+                            if str(entry.get(k) or "").strip()), "")
+            if not subject:
+                return value
+            body = {k: v for k, v in entry.items()
+                    if k not in ("subject", "who", "character")}
+            # A single-valued entry ({subject, value}) is the item itself.
+            payload = body.get("value", body.get("entries", body))
+            if isinstance(payload, (list, tuple)):
+                keyed.setdefault(subject, []).extend(payload)
+            else:
+                keyed.setdefault(subject, []).append(payload)
+        return keyed or value
     if not isinstance(value, dict):
         return value
     out = {}

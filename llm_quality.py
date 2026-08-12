@@ -155,6 +155,124 @@ def strict_json_parse(text: str) -> dict:
 
     return value
 
+# --- The cheap rung: patch the fields that failed, not the whole beat -------
+
+_PATCH_SYSTEM = """You repair ONE malformed field at a time in a JSON object.
+
+You are given `invalid_fragments`: a map of field path -> the value that
+failed validation, and `validation_errors`: the exact validator message for
+each path. Return STRICT JSON: an object keyed by the SAME paths, whose
+values are the corrected values for those fields ONLY.
+
+Rules:
+- Preserve every fact the original fragment carries. You are fixing SHAPE,
+  not content: same names, same wording, same numbers.
+- Never invent a subject, a name, or a value that is not already in the
+  fragment. If a fragment cannot be repaired without inventing something,
+  omit that path from your answer entirely.
+- Return nothing but the JSON object. No prose, no explanation.
+"""
+
+
+def _error_paths(errors):
+    """The dotted field paths named by validator messages ("a.b: msg")."""
+    paths = []
+    for error in (errors or []):
+        text = str(error)
+        if ":" not in text:
+            continue
+        path = text.split(":", 1)[0].strip()
+        if path and " " not in path and path not in paths:
+            paths.append(path)
+    return paths
+
+
+def _dig(obj, path):
+    """(value, found) at a dotted path, list indices included."""
+    node = obj
+    for part in path.split("."):
+        if isinstance(node, dict) and part in node:
+            node = node[part]
+        elif isinstance(node, list) and part.isdigit() and \
+                int(part) < len(node):
+            node = node[int(part)]
+        else:
+            return None, False
+    return node, True
+
+
+def _place(obj, path, value):
+    """Set a dotted path in place. Only ever called for a path that dug."""
+    parts = path.split(".")
+    node = obj
+    for part in parts[:-1]:
+        node = node[int(part)] if isinstance(node, list) else node[part]
+    last = parts[-1]
+    if isinstance(node, list):
+        node[int(last)] = value
+    else:
+        node[last] = value
+
+
+def _targeted_field_patch(step_key, parsed, errors, payload):
+    """Fix the named fields with a small call, and splice deterministically.
+
+    The repair rung above this one rebuilds the COMPLETE response on the
+    stage's own model: the whole beat re-authored because one field arrived
+    in the wrong shape. Measured live: `state_assertions.overlays` came back
+    a list instead of a map and cost a 4.2s full round-trip on the Director's
+    model -- for a channel a specialist replaced immediately afterwards. A
+    decision-review retry on a character cost 36.3s the same way.
+
+    The error already says exactly which path failed and why, so this asks
+    only about those fields, on the cheap `utility` model, and splices the
+    answer back at the paths that failed and NOWHERE ELSE. Everything
+    outside those paths is byte-identical by construction, which is what
+    makes a model this small safe to use here: it cannot touch the beat.
+
+    Returns the patched object, or None to fall through to the full repair.
+    """
+    if not isinstance(parsed, dict) or not parsed:
+        return None
+    paths = _error_paths(errors)[:4]
+    fragments, messages = {}, []
+    for path in paths:
+        value, found = _dig(parsed, path)
+        if not found:
+            continue
+        fragments[path] = value
+        messages += [str(e) for e in (errors or [])
+                     if str(e).startswith(path + ":")]
+    if not fragments:
+        return None
+    try:
+        raw = chat_complete(
+            "utility",
+            _PATCH_SYSTEM,
+            json.dumps({"invalid_fragments": fragments,
+                        "validation_errors": messages}, ensure_ascii=False),
+            temperature=0.0,
+            max_tokens=1500,
+        )
+        patch = strict_json_parse(raw)
+    except Aborted:
+        raise
+    except Exception:
+        return None
+    if not isinstance(patch, dict) or not patch:
+        return None
+    out = json.loads(json.dumps(parsed))
+    touched = []
+    for path, value in patch.items():
+        # ONLY a path that actually failed. A patch naming anything else is
+        # rewriting a field nobody complained about, which is the one thing
+        # this rung must never do.
+        if path in fragments:
+            _place(out, path, value)
+            touched.append(path)
+    return out if touched else None
+
+
 def complete_validated_json(
     *,
     role: str,
@@ -324,6 +442,28 @@ def complete_validated_json(
                 ran_out_of_room = output_ran_out_of_room(raw)
                 previous_raw = raw
                 previous_parsed = parsed
+
+    # THE CHEAP RUNG FIRST. One malformed field does not need the whole beat
+    # re-authored on the stage's own model; the validator already said which
+    # path failed and why. Try a small `utility` call that returns only the
+    # corrected fields, spliced back at exactly those paths. Falls through
+    # untouched to the full rebuild below on any doubt.
+    if not provider_errored and repair_attempts > 0:
+        _t0 = time.monotonic()
+        _patched = _targeted_field_patch(
+            step_key, previous_parsed, report.errors, payload)
+        if _patched is not None:
+            _patched_report = validate_llm_output_strict(
+                step_key, _patched, source_payload=payload)
+            if _patched_report.valid:
+                note_step_warning(
+                    "llm second call: validation failed "
+                    f"({len(report.errors or [])} errors; first: "
+                    f"{str((report.errors or [''])[0])[:120]!r}); repaired by "
+                    f"a targeted field patch on the utility model "
+                    f"({time.monotonic() - _t0:.1f}s) -- no rebuild")
+                return _patched_report.output
+            previous_parsed = _patched
 
     # Skip same-provider repair when the primary provider itself errored --
     # repairing against a down provider just wastes attempts; go to fallbacks.
