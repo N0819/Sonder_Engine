@@ -932,12 +932,39 @@ def _render_presence_group(percepts):
     return out
 
 
+
+#: Articles and connectives a hand-authored `kind` may already carry. The
+#: renderer supplies its own count word, so "a", "an", "the" and a leading
+#: "and" would double up ("A and a long flexible tail...").
+_LEADING_CONNECTIVES = ("and a ", "and an ", "and the ", "and ",
+                        "a ", "an ", "the ")
+
+
+def _strip_leading_connective(kind):
+    text = " ".join(str(kind or "").split())
+    lowered = text.casefold()
+    for prefix in _LEADING_CONNECTIVES:
+        if lowered.startswith(prefix):
+            return text[len(prefix):]
+    return text
+
+
 def _render_body_part(p):
     """"Six tails emerge from the back of her waist" -- not "tail x6"."""
     count, kind = p.data["count"], p.data["part"]
     you = p.source_label == "you"
     word = _COUNT_NAMES.get(count, str(count))
-    subject = f"{word} {kind}" if count == 1 else f"{word} {kind}s"
+    # A CARD'S `kind` IS AUTHORED, so it arrives however a human wrote it.
+    # Measured live: "membranous bat-like wings" x2 rendered as "Two
+    # membranous bat-like wingss", and "and a long flexible tail ending in
+    # a spade" x1 as "A and a long flexible tail ...". The docstring's
+    # example assumes a bare singular noun ("tail" -> "Six tails"); real
+    # cards carry plurals and stray connectives, and a body's own anatomy
+    # reading as gibberish in its owner's perception view is the loudest
+    # possible way to look broken.
+    kind = _strip_leading_connective(kind)
+    plural = kind if kind.rstrip().endswith("s") else f"{kind}s"
+    subject = f"{word} {kind}" if count == 1 else f"{word} {plural}"
     verb = "emerges" if count == 1 else "emerge"
     aspect, at = p.data["aspect"], p.data["at"]
     whose = "your" if you else f"{p.source_label}'s"
