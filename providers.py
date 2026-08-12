@@ -893,6 +893,17 @@ ROLES = [
     "character_bg",
     "character_mid",
     "character_major",
+    # The orchestrated Director's specialists (design note 19). Scoped
+    # structural tasks that may not need a frontier model; when no model is
+    # configured for one, it inherits the director's (see ROLE_FALLBACKS),
+    # and either way its calls stay separable in _log_usage under its own
+    # role name.
+    "director_body",
+    "director_social",
+    "director_contact",
+    "director_objects",
+    "director_spatial",
+    "director_offscreen",
     "narrator",
     "mapping",
     "utility",
@@ -1194,9 +1205,28 @@ def provider(pid):
 def agent_models():
     return json.loads(get_setting("agent_models") or "{}")
 
+# A specialist role with no configured model inherits its parent role's model
+# before falling back to "default": the body specialist is a hand of the
+# Director, and routing it to a generic default the host never associated with
+# Director work would silently change what serves the most failure-prone stage.
+# The ROLE string handed to _log_usage stays the specialist's own either way,
+# which is what keeps per-specialist spend and served-model attribution
+# separable (design note 19, "How it gets judged").
+ROLE_FALLBACKS = {
+    "director_body": "director",
+    "director_social": "director",
+    "director_contact": "director",
+    "director_objects": "director",
+    "director_spatial": "director",
+    "director_offscreen": "director",
+}
+
+
 def resolve_role_candidates(role):
     models = agent_models()
-    primary = models.get(role) or models.get("default")
+    primary = (models.get(role)
+               or models.get(ROLE_FALLBACKS.get(role, ""))
+               or models.get("default"))
 
     if (
         not primary

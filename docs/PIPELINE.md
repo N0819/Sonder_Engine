@@ -420,6 +420,29 @@ relative arrangement, and physical constraint. A touched pose is a complete
 snapshot rather than a partial merge, so obsolete `beneath`/`pinned` fields do
 not survive a later rise. Pose changes have their own manifest/audit category.
 
+When the experimental `director_orchestration` setting is on (default off;
+design note 19), both Director stages stay ONE step each and fan out inside
+themselves. A deterministic, scene-state-keyed dispatch computes each
+specialist's per-beat channel SCOPE (dispatch is `bool(scope)`), the stage
+model runs with a lean instruction sheet (same role, step key, schema, and
+payload), and each dispatched specialist — `body`, `social`, `contact`,
+`objects`, `spatial`, `offscreen`, with sheets assembled per beat from its
+granted channels' chunks (`prompts.specialist_prompt`) — reads the finished
+beat and owns its channels. The specialist calls run in PARALLEL and never
+stream (structured output only; results merge in canonical order, never
+completion order; a failed call costs exactly its own channels; Aborted
+propagates). The SAME specialist definitions serve both stages: resolve's
+instances read the resolved prose and own `state_diff` channels;
+interpret's read the player's structured declaration (never the raw input)
+and own the same channels of `state_assertions` (contact under
+`contact_assertions`), merged BEFORE the deterministic validators. Assembly
+is ownership per granted channel; every deterministic seam above — the
+movement backstop above all — judges the merged result. Scope gates fail
+open per channel, a single backstop reports any channel that ships content
+outside every served scope through `tell_director`, and the dispatch/scope
+record (granted vs served vs produced) persists on the step under
+`orchestration`.
+
 ### `background_react`
 
 Unconditionally present in the plan but internally self-gating, with two paths chosen by the per-chat `background_config` (`scene.py`) key `scene_life`:

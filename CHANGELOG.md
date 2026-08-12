@@ -1,6 +1,77 @@
 # Changelog
 
-## Unreleased — Development
+## alpha 8.2 — The Director works in parts
+
+The Director was the engine's single most complex task and its most failure
+prone: one call reading an 18,700-token instruction sheet, the only stage that
+could make a turn uncommittable, and the origin of 84% of rerolls. Six op
+families in that sheet had never fired once in 2,243 stored beats and cost
+~1,870 tokens of instruction on every one of them.
+
+It now works in parts. Each Director stage keeps ONE pipeline step and fans
+out inside it: a prose author that owns the beat's account, and six
+specialists that own the `state_diff` channels — body, social, contact,
+objects, spatial, offscreen. **Off by default**, and the monolithic sheet is a
+byte-identical recomposition of the same segments, so switching it off is not
+a fallback, it is the same prompt.
+
+**The orchestrator measures how much of a job each specialist has.** Its
+output per specialist is a SCOPE, not a boolean: the channels with work this
+beat. Dispatch is `bool(scope)` and the sheet is assembled as core plus the
+chunks for exactly those channels — so "which specialists run" and "how much
+of a sheet loads" are one computation that cannot disagree with itself. A
+specialist that is not dispatched costs nothing at all: no prompt, no payload,
+no output surface, and no chance to emit the channel wrongly.
+
+Measured on a played 14-beat story with real models:
+
+- **largest single call 21,064 → 6,154 tokens**
+- six specialists running **six-wide in ~1s each**, fractions of a cent
+- one turn **206s → 115s** against the monolith on the same provider, and the
+  monolith needed a second full-input correction call where the orchestrated
+  path needed one
+- `director_interpret` fell from 27s to 4s
+
+**The gate fails open and reads scene state, never prose.** A specialist is
+skipped only when its subject provably does not exist — no crowds in the room,
+no couriers present. One backstop covers both levels: any channel that ships
+content outside every served scope reaches `tell_director`. A wrongly-skipped
+specialist is never silent.
+
+**Both Director stages dispatch, at their own time.** `director_interpret`
+cannot gate `director_resolve` — characters declare in between and bring
+channels into play nothing earlier could predict. The specialists are shared,
+so interpret keeps the equal authority alpha 8.1 gave it, scoped to player
+input.
+
+Splitting prose from structure was refused rather than deferred: prose↔diff
+reconciliation is the largest measured defect class in resolve's warnings, and
+blind concurrent peers make it structurally unfixable rather than merely
+error-prone. One prose author, structure owned against it.
+
+### What a mind is told about itself
+
+Three defects surfaced by playing the same views through three different
+narrator models — each failed differently, which is what made them visible.
+
+`_self_second_person` had rewritten a perceiver's own NAME into "you" since
+alpha 6.3, but a name is not the only handle the engine circulates. A player
+read about themselves in the third person as "the young smith's apprentice" —
+a label minted for observers who do not know them, adopted into the Director's
+omniscient account and carried all the way to their own prose. Self-reference
+now covers the minted label and one short definite form, guarded so a
+descriptor shared with another body is never claimed as self.
+
+A disambiguation index reached prose-facing text — "the person of unremarkable
+appearance (2)" — and one model printed it at the player verbatim. Distinct
+strangers now take ordinal language, which distinguishes by nothing the
+observer has not already got: they can see three bodies, and counting them
+adds no attribute, history or identity.
+
+And narration person was asked for and never verified. The backstop reuses the
+existing detector on the narrator's output; measured over 2,303 stored drafts
+it fires on 0.52%, all real. Its limit is stated where it lives: it would not
+have caught the first defect.
 
 ### Where a garment is worn is part of the wearing, not part of its name
 

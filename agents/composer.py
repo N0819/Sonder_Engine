@@ -173,6 +173,54 @@ def _label_from_words(words, cap):
     return "the " + " ".join(take).rstrip(".;:").lower()
 
 
+#: Ordinal words for the last-resort distinguisher below. Stops at twelve
+#: because past that the honest reading is "a crowd", and a numeral in the
+#: middle of a sentence is still prose rather than an engine device.
+_ORDINAL_WORDS = {
+    2: "second", 3: "third", 4: "fourth", 5: "fifth", 6: "sixth",
+    7: "seventh", 8: "eighth", 9: "ninth", 10: "tenth", 11: "eleventh",
+    12: "twelfth",
+}
+
+
+def _ordinal_word(n):
+    if n in _ORDINAL_WORDS:
+        return _ORDINAL_WORDS[n]
+    suffix = "th" if 10 <= (n % 100) <= 20 else \
+        {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def _ordinal_label(label, n):
+    """"the person of unremarkable appearance" (2) -> "the second person of
+    unremarkable appearance".
+
+    The last-resort distinguisher between bodies whose own appearances cannot
+    tell them apart. It was a bare index -- "the person of unremarkable
+    appearance (2)" -- which is an ENGINE device, and Layer B renders prose:
+    the string reached a player view verbatim and one narrator model copied it
+    onto the page ("The person of unremarkable appearance (2) speaks in a
+    flat, appraising voice"), while another paraphrased it away. Neither model
+    misbehaved; the view contained it.
+
+    An ordinal is the honest distinguisher because it distinguishes by NOTHING
+    the observer has not already got: they can see three bodies, and counting
+    them adds no attribute, no history and no identity. Position and posture
+    read better in one sentence and are rejected for two reasons -- they
+    change within the beat, so the same stranger would stop being the same
+    stranger across sentences, and they are separately admitted percepts, so
+    folding them into the referring expression would state them again in
+    sentences whose channel never carried them.
+    """
+    label = str(label or "").strip()
+    word = _ordinal_word(n)
+    if label.lower().startswith("the "):
+        return f"the {word} {label[4:]}"
+    if label.lower().startswith(("a ", "an ")):
+        return f"the {word} {label.split(' ', 1)[1]}"
+    return f"the {word} {label}"
+
+
 def assign_stranger_labels(bodies):
     """name -> distinguishing label, chosen jointly against the others present.
 
@@ -180,9 +228,9 @@ def assign_stranger_labels(bodies):
     the observer does NOT recognize. Starts from `_unknown_actor_label`'s
     short form; when two strangers collide on it, the colliding parties'
     labels are widened word by word from their own appearance summaries until
-    they differ ("the fox woman with six tails" instead of "the fox woman
-    (2)"). Only when the appearances genuinely cannot distinguish them does
-    the numeric suffix survive as the last resort.
+    they differ ("the fox woman with six tails" instead of "a second fox
+    woman"). Only when the appearances genuinely cannot distinguish them does
+    the ordinal distinguisher survive as the last resort (`_ordinal_label`).
     """
     labels = {}
     for name, appearance, aliases in bodies:
@@ -203,7 +251,7 @@ def assign_stranger_labels(bodies):
         for name, label in labels.items():
             if label in seen:
                 seen[label] += 1
-                labels[name] = f"{label} ({seen[label]})"
+                labels[name] = _ordinal_label(label, seen[label])
             else:
                 seen[label] = 1
     return labels

@@ -92,8 +92,14 @@ def authored_establish(author):
 #: once per perceiver, so it gets the fast non-thinking model. Neither
 #: `:thinking` variant is used -- reasoning is billed as output tokens, and
 #: measured wall-clock on this pipeline tracks output tokens almost exactly.
-ROLES = ("default", "director", "character_bg", "character_mid", "narrator",
-         "mapping", "utility", "backdrop_prompt", "ambience_prompt")
+#: SOURCED, NOT COPIED. This was a hardcoded tuple, and by the time anyone
+#: looked it had drifted past `character_major` and every Director specialist
+#: -- so a harness whose whole job is "seed every role on one model" was
+#: quietly seeding a subset, and any role it missed fell through to whatever
+#: `default` happened to be. Reading the real list means it cannot drift again.
+from providers import ROLES as _PROVIDER_ROLES
+
+ROLES = tuple(_PROVIDER_ROLES)
 MAIN_MODEL = "minimax/minimax-m3"
 PERCEPTION_MODEL = "mistral-code-agent-latest"
 EMBEDDING_MODEL = "perplexity/pplx-embed-v1-4b"
@@ -142,6 +148,24 @@ def seed_providers(db, main_model=MAIN_MODEL,
         ("nanogpt", "nanogpt", "https://nano-gpt.com/api/v1", nano_key))
     models = {role: {"provider": nano, "model": main_model} for role in ROLES}
     models["perception"] = {"provider": nano, "model": perception_model}
+
+    # A third provider, seeded only when its key is present, so a run can put
+    # the heavy roles somewhere with different decode economics. The measured
+    # reason: on a reasoning model this engine's wall clock is output tokens
+    # divided by decode rate -- resolve emitted 19,899 tokens in 347s -- so
+    # WHERE a role runs matters more than how big its prompt is.
+    fw_key = os.environ.get("FIREWORKS_API_KEY", "")
+    if fw_key:
+        db.qi("INSERT INTO providers(name,kind,base_url,api_key,enabled) "
+              "VALUES(?,?,?,?,1)",
+              ("fireworks", "generic",
+               "https://api.fireworks.ai/inference/v1/", fw_key))
+
+    cb_key = os.environ.get("CEREBRAS_API_KEY", "")
+    if cb_key:
+        db.qi("INSERT INTO providers(name,kind,base_url,api_key,enabled) "
+              "VALUES(?,?,?,?,1)",
+              ("cerebras", "generic", "https://api.cerebras.ai/v1", cb_key))
 
     router_key = os.environ.get("OPENROUTER_API_KEY", "")
     if router_key:
@@ -269,13 +293,36 @@ def main():
     ap.add_argument("--fast", action="store_true",
                     help="free, very fast, and TRAINS ON WHAT IT IS SENT; "
                          "only ever for this synthetic world")
+    ap.add_argument("--model", default="",
+                    help="the model every role runs on (default %s)"
+                         % MAIN_MODEL)
+    ap.add_argument("--role-effort", action="append", default=[],
+                    metavar="ROLE=LEVEL",
+                    help="reasoning effort for ONE role, repeatable. Measured "
+                         "2026-08-12: ~80-90% of director_resolve's output is "
+                         "thinking trace while the final answer is ~1.2k "
+                         "tokens, and wall clock is output/decode-rate -- so "
+                         "this is the largest untested lever on the Director. "
+                         "Whether less thinking costs resolution QUALITY is "
+                         "the open question; measure it, do not assume it.")
+    ap.add_argument("--orchestration", action="store_true",
+                    help="dispatch the Director's scoped specialists "
+                         "(default off, as in production)")
+    ap.add_argument("--role-model", action="append", default=[],
+                    metavar="ROLE=[PROVIDER:]MODEL",
+                    help="override ONE role, repeatable. The point of the "
+                         "specialist split is that a scoped task may not need "
+                         "a reasoning model: `--role-model "
+                         "director_social=some-lean-model` asks that question "
+                         "one role at a time, and the llm_call log answers it "
+                         "per role.")
     args = ap.parse_args()
 
     _require_scratch()
     import db as db_module
 
     db_module.init()
-    main_model = FAST_MAIN_MODEL if args.fast else MAIN_MODEL
+    main_model = args.model or (FAST_MAIN_MODEL if args.fast else MAIN_MODEL)
     perception_model = (FAST_PERCEPTION_MODEL if args.fast
                         else PERCEPTION_MODEL)
     if args.fast:
@@ -284,9 +331,60 @@ def main():
               % FAST_MAIN_MODEL, flush=True)
     models = seed_providers(db_module, main_model=main_model,
                             perception_model=perception_model)
+    # Per-role overrides, applied after the uniform seed so the baseline is
+    # always "one model everywhere" and each override is a single named
+    # departure from it -- which is what makes a per-role result attributable.
+    if args.role_model:
+        import json as _json
+        for pair in args.role_model:
+            role, _, model = pair.partition("=")
+            role, model = role.strip(), model.strip()
+            if not role or not model:
+                raise SystemExit("--role-model wants ROLE=MODEL, got %r" % pair)
+            if role not in models:
+                raise SystemExit(
+                    "unknown role %r; known: %s"
+                    % (role, ", ".join(sorted(models))))
+            # `ROLE=openrouter:x-ai/grok-4.20` moves the role to another
+            # PROVIDER as well as another model. The specialists are the
+            # roles worth doing this to: their sheets are 0.7-4.6k, so a
+            # metered model is cheap there in a way it is not for the prose
+            # author reading nine thousand tokens a beat.
+            prov_name, _, bare = model.rpartition(":")
+            if prov_name:
+                row = db_module.q("SELECT id FROM providers WHERE name=?",
+                                  (prov_name,), one=True)
+                if not row:
+                    raise SystemExit(
+                        "--role-model names provider %r, which this run did "
+                        "not seed (set its API key in the environment)"
+                        % prov_name)
+                models[role] = {"provider": row["id"], "model": bare}
+                print("  role override: %s -> %s on %s"
+                      % (role, bare, prov_name), flush=True)
+            else:
+                models[role] = {"provider": models[role]["provider"],
+                                "model": model}
+                print("  role override: %s -> %s" % (role, model), flush=True)
+        db_module.set_setting("agent_models", _json.dumps(models))
     print("models: %s | perception: %s | embeddings: %s" % (
         main_model, perception_model,
         (models.get("embeddings") or {}).get("model") or "off"), flush=True)
+    if args.role_effort:
+        import json as _json
+        efforts = {}
+        for pair in args.role_effort:
+            role, _, level = pair.partition("=")
+            role, level = role.strip(), level.strip()
+            if not role or not level:
+                raise SystemExit("--role-effort wants ROLE=LEVEL, got %r" % pair)
+            efforts[role] = level
+            print("  reasoning effort: %s -> %s" % (role, level), flush=True)
+        db_module.set_setting("reasoning_effort", _json.dumps(efforts))
+
+    if args.orchestration:
+        db_module.set_setting("director_orchestration", "1")
+        print("  director orchestration: ON", flush=True)
     author = QuestAuthor()
     author.capture_dir = args.capture
     install(author)

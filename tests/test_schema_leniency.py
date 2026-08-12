@@ -1047,3 +1047,88 @@ class TestAnItemModelMayNameItsOwnSubject:
             items: list[Bogus] = Field(default_factory=list)
 
         assert Holder(**{"items": {"Mara": {}}}).items[0].name == "Mara"
+
+
+class TestSingleItemUnderAListValuedChannel:
+    """`overlays` and `conditions` are name-keyed tables of LISTS, and a
+    model with exactly one entry to report writes it directly under the key.
+
+    Observed live (run 20, twice in 14 beats): interpret emitted
+    `state_assertions.overlays.village_well: <one value>` and the whole
+    otherwise-valid output failed with `value is not a valid list`, buying a
+    full temperature-0 repair round-trip (4.9s) for a shape that means the
+    same thing as the list of one. Same judgment as `mind_model_updates`
+    above: the singular and the list of one are unambiguous.
+    """
+
+    def test_a_single_overlay_value_becomes_a_list_of_one(self):
+        from schemas import StateDiff
+        sd = StateDiff(overlays={"village_well": "moss-slick stones"})
+        assert sd.overlays["village_well"] == ["moss-slick stones"]
+
+    def test_a_single_condition_object_becomes_a_list_of_one(self):
+        """The identical trap one channel over: conditions wants a LIST of
+        condition objects per name, and one condition arrived bare."""
+        from schemas import StateDiff
+        sd = StateDiff(conditions={"Mara": {"id": "bruised", "note": "arm"}})
+        assert sd.conditions["Mara"] == [{"id": "bruised", "note": "arm"}]
+
+    def test_a_real_list_and_an_explicit_null_keep_their_meaning(self):
+        from schemas import StateDiff
+        sd = StateDiff(overlays={"Mara": ["ash streak"], "well": None})
+        assert sd.overlays["Mara"] == ["ash streak"]
+        assert sd.overlays["well"] == []
+
+    def test_the_body_specialist_shares_the_coercion(self):
+        """The specialist declares the same channels 'in exactly the shapes
+        StateDiff declares for them, so assembly can move each channel into
+        the resolve diff without a second spelling of any coercion' -- which
+        must include this coercion, or the trap just moves into the
+        orchestrated call."""
+        from schemas import DirectorBodySpecialist
+        out = DirectorBodySpecialist(
+            overlays={"village_well": "moss-slick stones"},
+            conditions={"Mara": {"id": "bruised"}})
+        assert out.overlays["village_well"] == ["moss-slick stones"]
+        assert out.conditions["Mara"] == [{"id": "bruised"}]
+
+    def test_a_string_condition_item_still_fails(self):
+        """Wrapping supplies the missing LIST, never the missing OBJECT: a
+        bare string under `conditions` has no unambiguous field to land in,
+        and papering over it would hide a real disagreement (the
+        mind_model_updates rule above)."""
+        import pydantic
+        import pytest
+
+        from schemas import StateDiff
+        with pytest.raises(pydantic.ValidationError):
+            StateDiff(conditions={"Mara": "bleeding"})
+
+
+class TestBareStringEvidence:
+    """Evidence cited as one naked string instead of a list.
+
+    `_coerce_evidence_refs` accepted a LIST of bare strings and a dict, but
+    the naked string fell through to pydantic. Observed live (run 20, five
+    times in 14 beats): `remember_lines.0.evidence: value is not a valid
+    list` threw away an otherwise-valid character output and bought a
+    temperature-0 repair round for a shape whose meaning was never in doubt
+    -- the docstring on the coercer itself argues the string form carries
+    everything the object form does.
+    """
+
+    def test_a_bare_prose_string_lands_on_fact(self):
+        from schemas import RememberLine
+        line = RememberLine(quote="the shutter banged twice",
+                            evidence="the sound from the east corridor")
+        assert line.evidence[0].fact == "the sound from the east corridor"
+        assert line.evidence[0].event_id == ""
+
+    def test_a_bare_id_string_lands_on_event_id(self):
+        from schemas import RememberLine
+        line = RememberLine(quote="x", evidence="current")
+        assert line.evidence[0].event_id == "current"
+
+    def test_an_empty_string_is_no_evidence_at_all(self):
+        from schemas import RememberLine
+        assert RememberLine(quote="x", evidence="  ").evidence == []

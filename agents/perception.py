@@ -827,6 +827,7 @@ from .common import (
     _dedupe_view_sentences,
     _player_name_forms,
     self_name_forms,
+    self_reference_forms,
     _quote_body,
     _sentence_subjects,
     _ensure_environment,
@@ -3244,6 +3245,60 @@ def _composer_unknown_sources(name, known, roster):
     ]
 
 
+def _joint_stranger_labels(bodies):
+    """The label every body would get if nobody recognized anybody -- the
+    superset of the epithets this beat can put into circulation.
+
+    A per-observer display map deliberately leaves the observer OUT of its own
+    map, so it can never say what the rest of the room is calling that
+    observer. This assignment includes everyone, so `_composer_self_forms`
+    below can hand a mind the widened or ordinal-distinguished form of its own
+    epithet as well as the base one. It decides nothing about admission: it is
+    only ever read to rewrite a body's own epithet into "you"."""
+    return composer.assign_stranger_labels([
+        (b.get("name"), b.get("appearance"), b.get("aliases") or [])
+        for b in bodies or [] if b.get("name")
+    ])
+
+
+def _composer_self_forms(name, base_forms, body, joint_labels, display_map):
+    """One observer's complete self-reference forms: their names, plus the
+    epithets the engine minted FOR them (`common.self_reference_forms`).
+
+    Engine-supplied prose reaches a view written in the third person about
+    everyone in it, and `_self_second_person` turns the receiving mind's own
+    handles into "you". It only ever knew names, so a beat that referred to a
+    body by the descriptor OTHER minds use for it walked straight past --
+    which is how a player read "the sword at the apprentice's hip" in his own
+    view, about his own sword.
+
+    `display_map` is what this observer calls everyone ELSE, and is passed as
+    the collision guard: a form this observer is already using for another
+    body is never claimed as self-reference."""
+    forms = list(base_forms or [name])
+    if not body:
+        # No body record for this perceiver this beat (an observer in another
+        # room, an extra player who is not in the roster). Minting an epithet
+        # from nothing yields `_unknown_actor_label`'s universal fallback,
+        # which every appearance-less body shares -- and a form shared with a
+        # body outside this observer's display map is one the collision guard
+        # below cannot see. Decline instead.
+        return forms
+    epithets = self_reference_forms(
+        name,
+        (body or {}).get("appearance"),
+        (body or {}).get("aliases") or [],
+        labels=[(joint_labels or {}).get(name)],
+        avoid=list((display_map or {}).values()),
+    )
+    seen = {str(f).casefold() for f in forms}
+    for form in epithets:
+        if form.casefold() not in seen:
+            seen.add(form.casefold())
+            forms.append(form)
+    return forms
+
+
 def _composer_identity_space(ctx, p_name, p_appearance):
     """Every name this chat can leak -- not just the ones on stage tonight.
 
@@ -3767,6 +3822,10 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
         "appearance": p_visible, "aliases": [],
         "disguise_known_to": p_disguise_known,
     }
+    all_bodies = [b for b in co_present if b.get("name") != p_name]
+    all_bodies.append(actor_body)
+    bodies_by_name = {b["name"]: b for b in all_bodies if b.get("name")}
+    joint_labels = _joint_stranger_labels(all_bodies)
     clean_views, observations, ledger = {}, {}, {}
     for p in perceivers:
         pid = str(p["id"])
@@ -3791,6 +3850,9 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 gate=_authored_prose_gate(
                     ctx, "perception_act", name, known, identity_space),
                 extra_parts=cast_parts)
+            self_forms = _composer_self_forms(
+                name, self_forms_by_name.get(name),
+                bodies_by_name.get(name), joint_labels, display_map)
             rel = p.get("spatial_to_actor") or {}
             vis = p.get("visual_channel_to_actor", False)
             can_see = _in_plain_view(rel, vis)
@@ -3830,7 +3892,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                     percept = composer.act_percept(
                         sc, event, name, p_name, rel, display=display,
                         can_see=can_see,
-                        self_forms=self_forms_by_name.get(name) or [name],
+                        self_forms=self_forms,
                         order_key=idx, observer_id=pid, surface=surface)
                     if percept:
                         percepts.append(percept)
@@ -3924,6 +3986,8 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
             "aliases": cast_aliases.get(nm) or [],
             "disguise_known_to": known_to,
         })
+    bodies_by_name = {b["name"]: b for b in bodies if b.get("name")}
+    joint_labels = _joint_stranger_labels(bodies)
 
     # Visible-form structural changes this beat re-earn a full description.
     appearance_changed = set()
@@ -4016,6 +4080,9 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 gate=_authored_prose_gate(
                     ctx, "perception_outcome", name, known, identity_space),
                 extra_parts=cast_parts)
+            self_forms = _composer_self_forms(
+                name, self_forms_by_name.get(name),
+                bodies_by_name.get(name), joint_labels, display_map)
             spatial = p.get("spatial_to_sources") or {}
             visual = p.get("visual_channel_to_sources") or {}
             recognized, unknown = _composer_unknown_sources(
@@ -4082,7 +4149,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 percept = composer.act_percept(
                     sc, act.get("event") or {}, name, actor, rel,
                     display=display, can_see=True,
-                    self_forms=self_forms_by_name.get(name) or [name],
+                    self_forms=self_forms,
                     order_key=order, observer_id=pid, surface=surface)
                 if percept:
                     percepts.append(percept)

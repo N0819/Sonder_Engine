@@ -55,8 +55,10 @@ from .common import (
     _strip_player_echo,
     _check_narrator_fidelity,
     _check_player_person,
+    _check_narration_person_match,
     _check_pronoun_fidelity,
     _self_second_person,
+    self_reference_forms,
     _llm_resolve_player_room,
     _resolve_player_room,
 )
