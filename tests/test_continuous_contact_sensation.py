@@ -469,3 +469,77 @@ class TestMomentaryResidue:
 
         assert contact_is_momentary({"manner": "dripping fluid"})
         assert not contact_is_momentary({"manner": "press"})
+
+
+class TestACavityNamedByItsWallIsStillACavity:
+    """A vagina cannot be inside a vagina, and a mind must never be told it is.
+
+    Measured live (chat 71). The ledger stood:
+
+        actor "Elyra Voss" / "vaginal walls"  ->  target "Hinami",
+        target_part "hand", target_interior "vaginal canal",
+        relation interior, manner clench
+
+    Under this module's fixed direction -- the actor is the party whose part
+    goes in, the target encloses it -- that asserts Elyra's vaginal walls
+    entering Hinami's vaginal canal. It rendered into Elyra's OWN perception
+    view as "Your vaginal walls register Hinami's vaginal canal enclosing
+    them", a body part that appears nowhere in the record and a containment
+    that is anatomically impossible. The truth was the reverse: Hinami's hand
+    was inside her.
+
+    The inversion guard was correct and simply did not know the noun.
+    `_part_identity` keeps "vaginal walls" as the kind "vaginal wall" -- right
+    for a ledger, where two spellings are two rows, and wrong for the only
+    question the fold asks: does this part ENCLOSE?
+    """
+
+    RAW = {
+        "actor": "Elyra Voss", "actor_part": "vaginal walls",
+        "target": "Hinami", "target_part": "hand",
+        "target_interior": "vaginal canal",
+        "manner": "clench", "relation": "interior", "motion": "moving",
+    }
+
+    def test_the_roles_are_folded_to_the_true_direction(self):
+        import spatial
+
+        out = spatial._clean_contact(dict(self.RAW), scene={})
+        assert out["actor"] == "Hinami" and out["actor_part"] == "hand"
+        assert out["target"] == "Elyra Voss"
+        assert out["relation"] == "interior"
+
+    def test_neither_party_is_told_a_vagina_encloses_a_vagina(self):
+        import spatial
+
+        out = spatial._clean_contact(dict(self.RAW), scene={})
+        hers = spatial.contact_sensation(out, you="Elyra Voss", scene={})
+        theirs = spatial.contact_sensation(out, you="Hinami", scene={})
+        # The enclosed party feels the hand inside her, not her own anatomy
+        # entering someone else's identical anatomy.
+        assert "Hinami's hand within your vaginal canal" in hers
+        assert "your vaginal walls register" not in hers.casefold()
+        # And the entering party feels the enclosure.
+        assert "your hand registers" in theirs
+        assert "enclosing it" in theirs
+
+    def test_the_other_wall_and_canal_spellings_fold_too(self):
+        import spatial
+
+        for part in ("vaginal canal", "anal canal", "rectal wall",
+                     "throat wall"):
+            raw = dict(self.RAW, actor_part=part, target_interior="")
+            out = spatial._clean_contact(raw, scene={})
+            assert out["actor"] == "Hinami", part
+
+    def test_an_entering_part_is_never_folded(self):
+        """The guard must not reach a record already stated from the entering
+        side -- a tongue or a finger enters far more often than it encloses,
+        which is why neither is in the cavity vocabulary."""
+        import spatial
+
+        raw = dict(self.RAW, actor="Hinami", actor_part="tongue",
+                   target="Elyra Voss", target_part="outer labia",
+                   target_interior="")
+        out = spatial._clean_contact(raw, scene={})
+        assert out["actor"] == "Hinami" and out["actor_part"] == "tongue"
