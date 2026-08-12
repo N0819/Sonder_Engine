@@ -2,7 +2,9 @@
 
 import json
 import re
+import time
 
+from pipeline_context import note_step_warning
 from providers import (
     chat_complete,
     escalated_max_tokens,
@@ -266,6 +268,12 @@ def complete_validated_json(
                 ),
             })
 
+            # Instrumented, like every other rung of this ladder: a re-ask
+            # that SUCCEEDS is otherwise indistinguishable from a first
+            # draft in the stored step, which is how the invisible-second-
+            # call rate stayed unknowable (audit 2026-08-11: failure floor
+            # >=3.5% of character calls, true rate unmeasured).
+            _t0 = time.monotonic()
             try:
                 raw = chat_complete(
                     role,
@@ -283,7 +291,15 @@ def complete_validated_json(
                 raw = ""
                 provider_errored = True
                 last_provider_error = exc
+                note_step_warning(
+                    "llm second call: truncation re-ask at "
+                    f"{token_ceiling} tokens errored after "
+                    f"{time.monotonic() - _t0:.1f}s ({exc})")
             else:
+                note_step_warning(
+                    "llm second call: output truncated at the token "
+                    f"ceiling; re-asked once with {token_ceiling} tokens "
+                    f"({time.monotonic() - _t0:.1f}s)")
                 max_tokens = token_ceiling
                 try:
                     parsed = strict_json_parse(raw)
@@ -324,6 +340,8 @@ def complete_validated_json(
             ),
         }
 
+        _first_error = str((report.errors or [""])[0])[:120]
+        _t0 = time.monotonic()
         try:
             previous_raw = chat_complete(
                 role,
@@ -341,7 +359,14 @@ def complete_validated_json(
             raise
         except LLMError as exc:
             last_provider_error = exc
+            note_step_warning(
+                "llm second call: temperature-0 repair errored after "
+                f"{time.monotonic() - _t0:.1f}s ({exc})")
             break  # provider now failing; move on to fallback candidates
+        note_step_warning(
+            "llm second call: validation failed "
+            f"({len(report.errors or [])} errors; first: {_first_error!r}); "
+            f"temperature-0 repair ({time.monotonic() - _t0:.1f}s)")
 
         ran_out_of_room = output_ran_out_of_room(previous_raw)
 
@@ -380,6 +405,7 @@ def complete_validated_json(
             ),
         }
 
+        _t0 = time.monotonic()
         try:
             fallback_raw = chat_complete(
                 role,
@@ -398,7 +424,13 @@ def complete_validated_json(
             raise
         except LLMError as exc:
             last_provider_error = exc
+            note_step_warning(
+                f"llm second call: fallback candidate {candidate_offset} "
+                f"errored after {time.monotonic() - _t0:.1f}s ({exc})")
             continue  # this fallback provider errored; try the next candidate
+        note_step_warning(
+            f"llm second call: fallback candidate {candidate_offset} "
+            f"({time.monotonic() - _t0:.1f}s)")
 
         ran_out_of_room = output_ran_out_of_room(fallback_raw)
 

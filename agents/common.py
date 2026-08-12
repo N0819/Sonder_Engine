@@ -2713,6 +2713,33 @@ def _normalize_character_output(out):
         out["mind_model_updates"] = converted
     return out
 
+
+def declared_goal(result):
+    """The goal one character result declares, derived from the enacted want.
+
+    The output template no longer asks for `active_state.goal`: commit was
+    measured (401 recent-era calls, 2026-08-11 audit + re-measure) replacing
+    the emitted string with `wants[enacted].want` on 99.0% of calls, and the
+    two matched only 16.2% of the time -- the field was ~20 tokens/call of
+    decode-time cost carrying a worse copy of an answer the result already
+    contains. Every reader of the raw variant/result field derives it here
+    instead, with the legacy field as the fallback so pre-change stored
+    variants -- and any provider that still emits it -- read identically.
+    """
+    if not isinstance(result, dict):
+        return ""
+    active = result.get("active_state")
+    if not isinstance(active, dict):
+        return ""
+    wants = active.get("wants")
+    enacted = active.get("enacted_want")
+    if (isinstance(wants, list) and isinstance(enacted, int)
+            and 0 <= enacted < len(wants) and isinstance(wants[enacted], dict)):
+        want = str(wants[enacted].get("want") or "").strip()
+        if want:
+            return want
+    return str(active.get("goal") or "").strip()
+
 # Narration ABOUT an utterance, as opposed to the utterance. A player writes
 # their own beat in second person ("you gently take her by the wrist"), so a speech
 # text carrying `you`/`your` outside its quotes is prose the interpreter lifted

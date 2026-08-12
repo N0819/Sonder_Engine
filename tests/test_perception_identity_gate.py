@@ -388,7 +388,7 @@ def test_body_detail_floor_accepts_natural_rephrasing():
 
 def test_body_detail_floor_rejects_live_generic_inner_thigh_overlap():
     """Chat 68's second reroll: `inner` + `thighs` are positional language,
-    not evidence that any authored genital traits survived."""
+    not evidence that any authored anatomical detail survived."""
     import agents.perception as perception
 
     view = (

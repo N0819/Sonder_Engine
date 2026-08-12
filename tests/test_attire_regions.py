@@ -94,12 +94,13 @@ def test_junk_is_discarded_without_taking_the_outfit_with_it():
 
 # --- undressing takes time --------------------------------------------------
 
-def test_a_garment_moves_one_rung_per_beat():
-    """The whole point. Worn to removed in a single beat is what put a
-    character bare in the paragraph that said she was still dressed."""
+def test_a_garment_moves_one_rung_per_beat_while_in_progress():
+    """The clamp's surviving removal case (inverted, design note 17): while
+    this beat's own prose has the act in progress, worn-to-removed holds at
+    one rung -- a beat that BEGINS on a sash must not end bare."""
     before = attire.normalize_regions({"wearing": ["silk sash"]})
     proposed = {"waist": {"garments": [{"name": "silk sash", "state": "removed"}]}}
-    after = attire.advance(before, proposed)
+    after = attire.advance(before, proposed, process=True)
     assert after["waist"]["garments"][0]["state"] == "loosened"
 
 
@@ -108,7 +109,8 @@ def test_the_next_beat_carries_on_from_there():
     for expected in ("loosened", "open", "removed"):
         regions = attire.advance(
             regions,
-            {"waist": {"garments": [{"name": "silk sash", "state": "removed"}]}})
+            {"waist": {"garments": [{"name": "silk sash", "state": "removed"}]}},
+            process=True)
         assert regions["waist"]["garments"][0]["state"] == expected
 
 
@@ -247,34 +249,54 @@ class TestFlatChange:
     shape a model reliably produces. That phrasing means "gone", which is
     exactly the instant undress this module exists to stop."""
 
-    def test_a_removal_is_a_proposal_not_a_result(self):
+    def test_a_resolved_removal_lands(self):
+        """THE CLAMP IS INVERTED (design note 17, second incident): the
+        Director owns objective causality, and a resolved `remove` with no
+        in-progress prose is the resolution — holding it forked the ledger
+        from the fiction twice, each time because the completion vocabulary
+        missed one more way English says a garment came off."""
         before = attire.normalize_regions({"wearing": ["silk sash", "a robe"]})
         after = attire.apply_flat_change(before, ["a robe"])
+        assert after["waist"]["garments"][0]["state"] == "removed"
+        assert "silk sash" not in attire.flat_wearing(after)
+
+    def test_a_removal_mid_process_is_a_proposal_not_a_result(self):
+        """The defect the clamp was built against, now detected from the
+        prose that defines it: `process` says this beat's own words still
+        have the act in progress, so the removal is held one rung."""
+        before = attire.normalize_regions({"wearing": ["silk sash", "a robe"]})
+        after = attire.apply_flat_change(before, ["a robe"], process=True)
         sash = after["waist"]["garments"][0]
         assert sash["state"] == "loosened"
         # ...and it is therefore STILL BEING WORN. Dropping it from the list
         # the moment it was touched is how a half-undone robe became no robe.
         assert "silk sash" in attire.flat_wearing(after)
 
-    def test_three_beats_to_take_something_off(self):
+    def test_three_process_beats_to_work_something_off(self):
+        """A removal proposed every beat of a savoured act walks the ladder
+        one rung at a time for as long as the prose stays in progress."""
         regions = attire.normalize_regions({"wearing": ["silk sash"]})
         seen = []
         for _ in range(3):
-            regions = attire.apply_flat_change(regions, [])
+            regions = attire.apply_flat_change(regions, [], process=True)
             seen.append(regions["waist"]["garments"][0]["state"])
         assert seen == ["loosened", "open", "removed"]
         assert attire.flat_wearing(regions) == []
 
-    def test_a_decisive_player_gets_it_in_one(self):
+    def test_decisive_lifts_even_a_process_reading(self):
+        """"She stops fumbling and tears it off": the same beat can start as
+        process and end decisively, and the ending wins."""
         before = attire.normalize_regions({"wearing": ["silk sash"]})
-        after = attire.apply_flat_change(before, [], decisive=True)
+        after = attire.apply_flat_change(before, [], decisive=True,
+                                         process=True)
         assert after["waist"]["garments"][0]["state"] == "removed"
         assert attire.flat_wearing(after) == []
 
     def test_a_garment_still_listed_keeps_its_partial_state(self):
         """A beat that merely mentions the robe must not re-fasten it."""
         before = attire.apply_flat_change(
-            attire.normalize_regions({"wearing": ["a robe"]}), [])
+            attire.normalize_regions({"wearing": ["a robe"]}), [],
+            process=True)
         after = attire.apply_flat_change(before, ["a robe"])
         assert after["torso"]["garments"][0]["state"] == "loosened"
 
@@ -286,7 +308,8 @@ class TestFlatChange:
 
     def test_the_derived_notes_say_what_the_free_text_used_to(self):
         regions = attire.apply_flat_change(
-            attire.normalize_regions({"wearing": ["silk sash", "a robe"]}), [])
+            attire.normalize_regions({"wearing": ["silk sash", "a robe"]}), [],
+            process=True)
         notes = attire.flat_state(regions)
         assert any("sash loosened" in n for n in notes)
         assert any("robe loosened" in n for n in notes)
@@ -303,9 +326,9 @@ class TestAWholeOutfitWrite:
     director_establish sends. It used to skip reconciliation entirely, so it
     was the one way left to undress someone in a single beat."""
 
-    def test_replacing_the_whole_list_still_takes_time(self):
+    def test_replacing_the_whole_list_mid_process_still_takes_time(self):
         before = attire.normalize_regions({"wearing": ["silk sash", "a robe"]})
-        after = attire.apply_flat_change(before, ["a robe"])
+        after = attire.apply_flat_change(before, ["a robe"], process=True)
         assert after["waist"]["garments"][0]["state"] == "loosened"
 
     def test_an_opening_outfit_is_simply_worn(self):
@@ -339,7 +362,7 @@ class TestWhatHappensToAGarment:
     def test_state_and_condition_are_different_questions(self):
         """How far off the body, versus what has happened to it. A shirt can be
         soaked and still fully worn; a dry one can be hanging open."""
-        regions = attire.apply_flat_change(self._stained(), [])
+        regions = attire.apply_flat_change(self._stained(), [], process=True)
         assert attire.describe(regions) == [
             "torso: a linen shirt (loosened, wine-stained down the front)"]
 
@@ -381,9 +404,9 @@ class TestRemovedGarmentsBecomeThings:
 
     def test_the_beat_it_comes_off_is_reported_once(self):
         worn = attire.normalize_regions({"wearing": ["silk sash"]})
-        loosened = attire.apply_flat_change(worn, [])
+        loosened = attire.apply_flat_change(worn, [], process=True)
         assert attire.newly_removed(worn, loosened) == []
-        opened = attire.apply_flat_change(loosened, [])
+        opened = attire.apply_flat_change(loosened, [], process=True)
         off = attire.apply_flat_change(opened, [])
         assert attire.newly_removed(opened, off) == [("waist", "silk sash")]
         # ...and not again on every beat afterwards, or the room fills up with

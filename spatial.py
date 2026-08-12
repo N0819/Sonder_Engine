@@ -3375,9 +3375,9 @@ CONTACT_MANNERS = (
 #
 # The fluid verbs are here for the same reason kiss is: a spray or a gush is an
 # EVENT, and the matter it moved persists in the substance ledger, not in the
-# contact that delivered it. Measured live: a climax recorded `spray` stood as
+# contact that delivered it. Measured live: a release recorded `spray` stood as
 # a moving contact into the resting beat that followed and was still in the
-# saved scene, so the aftercare view reported gushing as current.
+# saved scene, so the later view reported it as still happening.
 CONTACT_MOMENTARY_MANNERS = (
     "kiss", "bite", "strike", "pinch", "squeeze", "flick", "lick", "trail",
     "slap", "tap", "stroke", "brush", "nudge", "poke", "punch", "kick",
@@ -3413,8 +3413,8 @@ _CONTACT_RESIDUE_VERB = ("is against", "are against")
 # Parts that end in `s` while naming one thing. Everything else ending in `s`
 # is taken as plural, which is right far more often than not for anatomy.
 # The intimate anatomy is here on live evidence, not completeness: a folded
-# envelopment rendered "Elyra's glans move within", and this story's ledger
-# names glans and penis on most beats it names anything.
+# envelopment rendered "Elyra's glans move within", and the measured story's
+# ledger names anatomical -s parts on most beats it names anything.
 _SINGULAR_S_PARTS = frozenset({"abs", "iris", "solar plexus", "biceps",
                                "triceps", "forceps", "glans", "penis",
                                "anus", "clitoris", "uterus"})
@@ -3665,10 +3665,10 @@ def _flip(contact):
 # (see contact_sensation/contact_phrase) -- so a record written from the
 # enclosing side must be FOLDED onto that direction at write time, in the one
 # place every contact passes through, rather than asking each reader to guess
-# which side encloses. Measured live: a penetration stood for eight beats as
-# `vagina -> cock, relation surface` and both parties were told "against"
-# about a body sheathed to the hilt; the mirror spelling `mouth -> glans,
-# engulfing, surface` stood two beats more.
+# which side encloses. Measured live: an interior contact stood for eight beats
+# as `cavity -> part, relation surface` and both parties were told "against"
+# about a body fully enclosed; the mirror spelling `mouth -> part, engulfing,
+# surface` stood two beats more.
 _ENVELOPMENT_MANNERS = frozenset({
     "engulf", "engulfs", "engulfed", "engulfing",
     "envelop", "envelops", "enveloped", "enveloping",
@@ -3691,9 +3691,9 @@ _ENCLOSING_PART_CAVITY = {
 # The cavities that cannot GRIP another body's part without enclosing it. A
 # mouth or lips press against skin all the time -- a kiss on a neck is a
 # surface fact -- so they fold only on an envelopment manner or an explicit
-# interior relation. The same live penetration that stood as `engulf, surface`
-# also stood a beat as `vagina -> cock, clench, surface`: a grasping manner,
-# an enclosing organ, and the wrong topology.
+# interior relation. The same live interior contact that stood as `engulf,
+# surface` also stood a beat as `cavity -> part, clench, surface`: a grasping
+# manner, an enclosing organ, and the wrong topology.
 _STRICT_CAVITY_KINDS = frozenset({"vagina", "pussy", "anus", "rectum",
                                   "throat"})
 _CAVITY_GRIP_MANNERS = frozenset({
@@ -3809,8 +3809,8 @@ def _clean_contact(raw, scene=None):
                 _part_identity(target_part)[0], target_part)
         if target_part.casefold() == target_interior.casefold():
             # The enclosing organ IS the enclosure; naming it again as the
-            # contact endpoint renders "within her vagina, maintaining
-            # contact at her vagina".
+            # contact endpoint renders "within the cavity, maintaining
+            # contact at the cavity".
             target_part = ""
 
     return {
@@ -4879,9 +4879,9 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
                     # from the other side must adopt the interior record's
                     # OWN direction -- grafting `interior` onto the reversed
                     # pair puts the enclosing organ inside the part it
-                    # encloses (measured: `vagina -> cock, surface` updated
-                    # in place by `cock -> vagina, interior` would have read
-                    # as a vagina moving within a cock).
+                    # encloses (measured: `cavity -> part, surface` updated
+                    # in place by `part -> cavity, interior` would have read
+                    # as the cavity moving within the part).
                     current.pop(mirror, None)
                     current[key] = contact
                     asserted.add(key)
@@ -5294,7 +5294,7 @@ def _same_pool(scene, a, b) -> bool:
     the narrower measured case -- a Director narrating one release emits it
     twice in a beat, once as `add` carrying the endpoint part and once as
     `deposit` without it, and `_substance_id` hashes the part slots, so a
-    single climax stood in the saved scene as two verbatim-identical rows
+    single release stood in the saved scene as two verbatim-identical rows
     differing only in an empty `target_part`. Every such pair is also one
     pool, so keeping both predicates would leave two answers to one question,
     free to drift.
@@ -5374,7 +5374,7 @@ def _stock_consumed_by(scene, record, current) -> list:
       it made was moved, and the same rule would otherwise empty it.
 
     Substance NAMES are deliberately never compared. The Director renamed one
-    material three times across turns 61/66/70 of the measured story ("cum",
+    material three times across turns 61/66/70 of the measured story ("fluid",
     "seed", "Elyra Voss seed"), so a name-matched rule would have fired on
     none of them.
 

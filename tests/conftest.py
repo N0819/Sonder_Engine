@@ -198,3 +198,32 @@ def sample_scene():
         "overlays": {},
         "attire": {},
     }
+
+
+@pytest.fixture(autouse=True)
+def _no_learned_rate_limit_between_tests():
+    """Reset the adaptive embedding pacer around every test.
+
+    `providers._EMBED_PACE` is process-global on purpose — it is one engine
+    learning one provider's ceiling, and it must outlive any single call. In a
+    test suite that makes it a leak with teeth: a test that scripts a 429 to
+    check the retry teaches the pacer a two-second interval, the pacer is
+    still holding it when the NEXT test runs, and every later test that
+    reaches a real `time.sleep` pays for a rate limit that was fictional.
+    Measured before this fixture existed: the full suite went from 65 seconds
+    to over ten minutes, sleeping, with nothing failing.
+
+    Reset on the way IN as well as out, so a test is protected from whatever
+    ran before it even if that test predates this file.
+    """
+    import providers
+    import memory
+    providers._EMBED_PACE.update({"interval": 0.0, "next_at": 0.0})
+    providers._COALESCE_QUEUE[:] = []
+    providers._COALESCE_INFLIGHT = False
+    for queued in memory._REPAIR_PENDING.values():
+        queued.clear()
+    yield
+    providers._EMBED_PACE.update({"interval": 0.0, "next_at": 0.0})
+    for queued in memory._REPAIR_PENDING.values():
+        queued.clear()

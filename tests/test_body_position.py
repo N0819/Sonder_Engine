@@ -1054,7 +1054,7 @@ class TestEnvelopmentFold:
 
     The ledger's interior direction is fixed: actor_part is the part that is
     INSIDE, and the target encloses it. Live (chat 69 "Horny Story. ⎇49"), a
-    penetration stood eight beats as `vagina -> shaft, engulf, relation
+    interior contact stood eight beats as `cavity -> part, engulf, relation
     surface` -- so both parties were told "against" about a body enclosed to
     the hilt -- and the mirror spelling `lips -> tip, seal, interior` read,
     under the fixed direction, as lips inside the thing they sealed around.
@@ -1272,8 +1272,8 @@ class TestMatterIsNotAContact:
 class TestCavityGripFolds:
     """A strict cavity gripping another body's part is enclosing it.
 
-    The same live penetration that stood as `engulf, surface` also stood a
-    beat as `vagina -> shaft, clench, relation surface`. A mouth presses
+    The same live interior contact that stood as `engulf, surface` also stood
+    a beat as `cavity -> part, clench, relation surface`. A mouth presses
     against skin all the time -- a kiss on a neck is a surface fact -- so the
     grip tier folds STRICT cavities only.
     """

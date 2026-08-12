@@ -142,7 +142,8 @@ def _validated_player_contact_assertions(sc, raw, player_name, report=None):
     A player may establish contact through their OWN completed conduct. When
     the other body is the actor, the assertion may only refine a contact that
     already stands between the same bodies through the same acting part; that
-    lets first-person body sense sharpen ``cock -> groin`` to ``cock -> cervix``
+    lets first-person body sense sharpen a coarse ``part -> region`` contact
+    into the exact ``part -> interior`` one it already stands in
     without turning "I feel her strike me" into authority over an NPC attack.
     """
     out = []
@@ -184,8 +185,8 @@ def _validated_player_contact_assertions(sc, raw, player_name, report=None):
                 standing = contact
                 break
 
-        # A player may name the touching sub-part ("head") while the ledger
-        # names its owning part ("cock"). When exactly one standing relation
+        # A player may name the touching sub-part ("fingertip") while the
+        # ledger names its owning part ("hand"). When exactly one standing relation
         # between the pair has the same physical manner kind, it is unambiguous;
         # bind back to the ledger's canonical part instead of minting a second
         # anatomical object beside it.

@@ -1297,6 +1297,58 @@ _FIDELITY_AMBIGUITY = {"full": 0.15, "degraded": 0.5, "fragment": 0.7,
 
 _MAX_OBSERVATION_ATOMS = 8
 
+# What an observation says when it has nothing to say: the advisory axes'
+# resting values, and the two identity fields that repeat what the payload
+# structure already states. Measured over the stored corpus (1,692
+# observations, turn id >= 1932): `intensity` sat at its 0.35 base in 99% of
+# rows, `suddenness` at 0.1 in 99%, `fidelity` at "rendered" in 99%,
+# `ambiguity` at 0.15 in 89%, `source_atom_id` read "current" in 100%, and
+# `perceiver_id` matched the perceiver already named by `observation_id` in
+# 100% -- six near-constant fields beside every percept, ~356 tokens of
+# wrapper per payload against ~188 tokens of text. The axes are advisory
+# context for the model's appraisal (docs/PIPELINE.md: no deterministic code
+# consumes the numbers), so a resting default carries no information and is
+# OMITTED: absent means the default, the same convention the character
+# payload uses everywhere else ("absent means cannot tell", never "none").
+# The 1-11% of non-default values keep their full signal, and the ids and
+# text -- the citation namespace `_ground_observation_citations` grounds
+# against, and the content itself -- are never trimmed. Observations stored
+# before this change carry the full shape and read identically.
+OBSERVATION_DEFAULTS = {
+    "source_atom_id": "current",
+    "fidelity": "rendered",
+    "intensity": 0.35,
+    "suddenness": 0.1,
+    "ambiguity": 0.15,
+    "directed_at_self": False,
+}
+
+
+def compact_observation(obs):
+    """Drop wrapper fields holding their resting default (OBSERVATION_DEFAULTS
+    above); `perceiver_id` is dropped when it repeats the perceiver already
+    named by `observation_id`. `observation_id`, `observed` and `channel`
+    always survive."""
+    if not isinstance(obs, dict):
+        return obs
+    oid = str(obs.get("observation_id") or "")
+    out = {}
+    for key, value in obs.items():
+        if key == "perceiver_id" and oid.startswith(f"current:{value}:"):
+            continue
+        default = OBSERVATION_DEFAULTS.get(key)
+        if default is not None:
+            if isinstance(default, float):
+                try:
+                    if abs(float(value) - default) < 1e-9:
+                        continue
+                except (TypeError, ValueError):
+                    pass
+            elif value == default or value is default:
+                continue
+        out[key] = value
+    return out
+
 
 def observations_from_render(pid, rendered):
     """Project one rendered view into structured observations.
@@ -1360,7 +1412,7 @@ def observations_from_render(pid, rendered):
         merged.pop(source)
     out = []
     for index, atom in enumerate(merged):
-        out.append({
+        out.append(compact_observation({
             "observation_id": f"current:{pid}:{index}",
             "perceiver_id": pid,
             "source_atom_id": "current",
@@ -1371,5 +1423,5 @@ def observations_from_render(pid, rendered):
             "suddenness": atom["suddenness"],
             "ambiguity": atom["ambiguity"],
             "directed_at_self": atom["directed_at_self"],
-        })
+        }))
     return out

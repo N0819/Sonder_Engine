@@ -1745,12 +1745,24 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
 
     att = sc.setdefault("attire", {})
     canonical_attire_key = _heal_attire_identity_keys(sc, ctx.cast)
-    # WHOSE clothes this beat tore off, not merely whether somebody's did.
+    # WHOSE clothes this beat tore off, not merely whether somebody's did —
+    # and whose undressing the prose leaves still IN PROGRESS. The two
+    # readings share one attribution ladder (attire._attributed_targets) and
+    # drive the inverted clamp: a resolved removal lands unless the body is
+    # in the process set, and `decisive` still lifts everything.
+    _attire_wardrobe = {
+        _name: attire_model.flat_wearing(attire_model.normalize_regions(_entry))
+        for _name, _entry in att.items() if isinstance(_entry, dict)}
     _decisive_names = attire_model.decisive_targets(
         getattr(ctx.turn, "player_input", "") or "",
         _beat_voices(ctx, res),
-        {_name: attire_model.flat_wearing(attire_model.normalize_regions(_entry))
-         for _name, _entry in att.items() if isinstance(_entry, dict)},
+        _attire_wardrobe,
+        player_name=_player_name_or_none(ctx),
+    )
+    _process_names = attire_model.process_targets(
+        getattr(ctx.turn, "player_input", "") or "",
+        _beat_voices(ctx, res),
+        _attire_wardrobe,
         player_name=_player_name_or_none(ctx),
     )
     _shed = []
@@ -1808,14 +1820,91 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
 
         _before = attire_model.normalize_regions(cur)
         _marks = d.get("conditions")
+        # THE STEAL GUARD (design note 17 §3): a coverage entry that empties
+        # every region a garment covers, named by a removal-directed decisive
+        # phrase in this beat's words, is the removal it plainly was — filed
+        # on the displacement axis. Escalated through the normal remove path
+        # so the ladder (lifted by the same decisive act) and the shed-object
+        # minting both apply. An ambiguous phrase keeps its displacement
+        # reading: wrongly holding a garment on the body is recoverable next
+        # beat, wrongly removing it is not.
+        _coverage = (d.get("coverage")
+                     if isinstance(d.get("coverage"), dict) else {})
+        if _coverage and name in _decisive_names:
+            _beat_texts = ([getattr(ctx.turn, "player_input", "") or ""]
+                           + list(_beat_voices(ctx, res)))
+            _coverage = dict(_coverage)
+            for _handle in attire_model.coverage_removal_escalations(
+                    _beat_texts, _coverage, _before):
+                _coverage.pop(_handle, None)
+                _canonical = attire_model.resolve_garment(
+                    _handle, cur["wearing"])
+                if _canonical in cur["wearing"]:
+                    cur["wearing"].remove(_canonical)
+                if report:
+                    ctx.tell_director(
+                        f"attire: read the coverage claim on {_handle!r} as "
+                        "the decisive removal this beat's words describe -- "
+                        "a garment taken off the body is `remove`, not a "
+                        "coverage change.")
+        _wanted_before = list(cur["wearing"])
         _after = attire_model.apply_flat_change(
             _before, cur["wearing"], decisive=name in _decisive_names,
-            conditions=_marks if isinstance(_marks, dict) else None)
+            conditions=_marks if isinstance(_marks, dict) else None,
+            process=name in _process_names)
         _after, _coverage_notes = attire_model.apply_coverage_changes(
-            _after, d.get("coverage"))
+            _after, _coverage)
         if report:
             for _coverage_note in _coverage_notes:
                 ctx.tell_director(_coverage_note)
+            # A removal the ladder held is said out loud (design note 17 §4):
+            # the fiction may already believe the garment off, and a silent
+            # clamp is how chat 68 stranded a tank top at `loosened` with no
+            # later beat ever re-proposing it.
+            for _held_name, _held_state in attire_model.removals_held(
+                    _before, _after, _wanted_before):
+                ctx.tell_director(
+                    f"attire: the removal of {name}'s {_held_name!r} was "
+                    f"held at {_held_state!r} because this beat's prose "
+                    "reads as still in progress. When the act completes, "
+                    "propose `remove` again with completed prose.")
+                ctx.add_warning(
+                    f"attire: removal of {name}'s {_held_name!r} held at "
+                    f"{_held_state!r} (beat reads as in progress)")
+            # Displacement or rung words written ONLY as condition prose move
+            # nothing (design note 17 §4) -- the chat 70 jacket and chat 68
+            # t7 defects. Detected, never executed: the feedback names the
+            # channel that does move state.
+            _cov_handles = {
+                (attire_model.resolve_garment(h, _wanted_before) or str(h))
+                .casefold() for h in _coverage}
+            for _handle, _text in ((_marks or {}).items()
+                                   if isinstance(_marks, dict) else []):
+                _resolved = (attire_model.resolve_garment(
+                    _handle, _wanted_before) or str(_handle)).casefold()
+                _rung_word = attire_model.rung_language(_text)
+                if _rung_word:
+                    ctx.tell_director(
+                        f"attire: the condition on {name}'s {_handle!r} "
+                        f"contains the ladder word {_rung_word!r}, which "
+                        "moves nothing there. The ladder moves through "
+                        "`remove`/a decisive act; a condition is what "
+                        "happened to the fabric.")
+                    ctx.add_warning(
+                        f"attire: rung word {_rung_word!r} written into "
+                        f"{name}'s condition prose")
+                if (attire_model.displacement_language(_text)
+                        and _resolved not in _cov_handles):
+                    ctx.tell_director(
+                        f"attire: the condition on {name}'s {_handle!r} "
+                        "describes a coverage change the ledger cannot read "
+                        "from prose. If the garment is displaced, also write "
+                        "attire." + str(name) + ".coverage = "
+                        "{" + repr(str(_handle)) + ": {<region>: [zones "
+                        "still covered] or [] for none}}.")
+                    ctx.add_warning(
+                        f"attire: displacement described only in prose for "
+                        f"{name}'s {_handle!r}; coverage unchanged")
         cur["regions"] = _after
         cur["wearing"] = attire_model.flat_wearing(_after)
         _notes = attire_model.flat_state(_after)
@@ -5372,8 +5461,15 @@ def prepare_memory_commit(ctx, *, scene=None):
                 for e in (own_result.get("memory_effects") or []))
             _goal_before = str(((st.get("active_state") or {}).get("goal"))
                                or "")
-            _goal_now = str((active_state.get("goal")
-                             if isinstance(active_state, dict) else "") or "")
+            # The RAW emitted goal was read here to ask "did the goal move off
+            # its snapshot" -- the third reader of that field the 2026-08-11
+            # audit missed. The template no longer asks for it, so derive the
+            # same text the psychology commit below will keep (the enacted
+            # want's), with the legacy field as fallback; both sides of the
+            # comparison (this and the `pending` snapshot) go through the one
+            # derivation, so "moved" keeps meaning what it meant.
+            from agents.common import declared_goal as _declared_goal
+            _goal_now = _declared_goal(own_result)
             _pending = (_led.get("pending")
                         if isinstance(_led.get("pending"), dict) else None)
             if _pending is not None and turn.idx > int(_pending.get("turn")
@@ -5960,9 +6056,22 @@ def prepare_memory_commit(ctx, *, scene=None):
                     ctx.add_warning(f"{cname}: interior leak -- {w}")
 
                 surface = new_affect.get("surface") or {}
+                # The goal slot IS the enacted want's text -- measured on 401
+                # recent-era calls: this branch took the want on 99.0% of
+                # them, and the emitted goal string it used to fall back on
+                # matched that want only 16.2% of the time, so the template
+                # stopped asking for it. The fallback chain ends at the
+                # PREVIOUS goal, never at empty: a beat with malformed wants
+                # is the 1% case, and blanking the slot there silently killed
+                # a standing aim -- goal routing, tenure and the unbidden
+                # ledger all read this slot, and "" is a decision the
+                # character never made. A legacy provider still emitting
+                # asv.goal keeps its say first.
                 enacted_goal = (wants[enacted]["want"]
                                 if (wants and enacted is not None
-                                    and 0 <= enacted < len(wants)) else asv.get("goal") or "")
+                                    and 0 <= enacted < len(wants))
+                                else asv.get("goal")
+                                or prev_as.get("goal") or "")
                 st["active_state"] = {
                     "mood": surface.get("label") or str(asv.get("mood") or ""),
                     "goal": str(enacted_goal or ""),

@@ -1010,13 +1010,19 @@ class TestDecisiveAttributionDoesNotUndressTheActor:
         assert hits == set()
 
     def test_the_clamp_is_what_this_controls(self):
-        """End to end: the flag is only worth anything because `advance` reads
-        it. Without it a garment moves one rung; with it, all the way off."""
+        """End to end: the flags are only worth anything because `advance`
+        reads them. A resolved removal lands by default (the inverted
+        clamp); `process` holds it one rung; `decisive` overrides even
+        that."""
         previous = {"torso": {"garments": [
             {"name": "linen shift", "state": "worn"}]}}
         proposed = {"torso": {"garments": [
             {"name": "linen shift", "state": "removed"}]}}
-        slow = attire.advance(previous, proposed, decisive=False)
-        fast = attire.advance(previous, proposed, decisive=True)
-        assert slow["torso"]["garments"][0]["state"] != "removed"
-        assert fast["torso"]["garments"][0]["state"] == "removed"
+        landed = attire.advance(previous, proposed, decisive=False)
+        held = attire.advance(previous, proposed, decisive=False,
+                              process=True)
+        lifted = attire.advance(previous, proposed, decisive=True,
+                                process=True)
+        assert landed["torso"]["garments"][0]["state"] == "removed"
+        assert held["torso"]["garments"][0]["state"] == "loosened"
+        assert lifted["torso"]["garments"][0]["state"] == "removed"

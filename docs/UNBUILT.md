@@ -3236,35 +3236,44 @@ owner's corpus snapshot, recent era n=404 calls. Verdict worth keeping: the
 stage does NOT have `director_resolve`'s 84%-discard profile — ~85-90% of its
 ~1,974 output tokens/call is genuine product, and the psychology division of
 labor (model authors appraisal, `psychology_runtime`/`affect` own persistence)
-is already right. The note holds the measurements; the actionable gaps:
+is already right. The note holds the measurements. The instrumentation, the
+stress/hedonic template shrink, the goal-slot derivation and the observation
+wrapper compaction landed 2026-08-11 (Design.md rows "The character contract
+asks only for what commit reads" and "A second model call says it happened");
+still open:
 
-- **Instrument the invisible second calls FIRST.** The repetition-correction
-  retry (`agents/character.py:3163-3171`) and `complete_validated_json`'s
-  repair/candidate-walking leave no stored trace; measured floor 14
-  retry-failures in 404 calls (>=3.5%), and the 1.25-1.50 live provider
-  calls/turn vs 1.01 stored results/turn gap suggests ~8-15s on affected
-  turns. One `_engine_notes` warning line when a retry or repair fires, then
-  re-measure. Any bounded-delta retry design waits on that number.
-- **Dice-class transcription: `active_state.stress`/`.hedonic` numbers.**
-  The template (`prompts.py:1746-1748`) asks for ten fields; commit reads two
-  (`hedonic.released` at `commit.py:5856`, `stress.coping_mode` at `:5901`)
-  and recomputes the rest wholesale (`:5885-5902`). Shrink the template to
-  those two; schema defaults already tolerate absence. ~0.5s/call, provably
-  nothing lost.
 - **`considered_responses`** — schema-documented viewer-only scratch
   (`schemas.py:2836-2843`), duplicates the consumed `response_candidates` in
-  137/404 calls. Drop from the required JSON after a cheap A/B for CoT value.
-  ~0.8s/call.
-- **`active_state.goal`** — overwritten by the enacted want's text in 402/404
-  recent calls (`commit.py:5913-5915`). Before dropping it from the template:
-  point `_recent_self_moves` (`agents/character.py:191-192`) at
-  `wants[enacted_want].want`, and make the malformed-wants fallback keep the
-  previous goal instead of going empty. ~0.3s/call.
+  137/404 calls (re-measured 130/401). Engine-unread is NOT the bar: a
+  freeform pre-list is plausibly chain-of-thought that seeds better
+  candidates, so the gate is a cheap `contract_bench`-style A/B on stored
+  payloads, not a grep. Drop it from the required JSON only if the A/B shows
+  no candidate-quality cost. ~0.8s/call.
+- **Read the second-call notes before designing a bounded-delta retry.**
+  Every retry/repair rung now writes one `_engine_notes` line naming its
+  path and duration. After a few sessions the deciding number is: fires of
+  `"decision review retry"` per 100 character calls, times the mean duration
+  those lines carry. Below ~5 fires/100 the full re-solve costs ~1-2s/turn
+  amortized and is not worth a design that risks coherence between a
+  regenerated sequence and a pinned appraisal; at ~15+/100 with ~30s
+  durations it is the largest remaining lever in the stage.
 - **NOT approved for cutting:** appraisal prose scratch
   (`goal_relevance`/`expectation`/`uncertainty`/`emotion`, ~130 tok/call) is
   engine-unread but sits upstream of numeric axes that are non-default in
   98-100% of emissions — a `contract_bench`-style A/B on stored payloads is
   the gate, not a grep.
+- **Payload reordering for a longer cached prefix — gated on the affinity
+  measurement.** The character payload opens with mostly-stable sheet-derived
+  fields but places volatile `active_state` seventh, ahead of stable
+  voice/senses/abilities/attire, so the cross-turn shared prefix breaks
+  ~1-2k tokens in where it could run ~4-5k. Moving the volatile `self`
+  fields after the stable block would lengthen the prefix implicit caching
+  can reuse — but unlike the `user` routing hint this changes what the model
+  reads in what order, which is a quality question needing its own argument.
+  Do not build until the cache-affinity hint has run for a few sessions and
+  `_log_usage`'s `cached_tokens` shows (a) hits landing at all, and (b) hits
+  consistently stopping near the system-prompt boundary rather than deeper —
+  only that pattern makes the reorder worth a quality A/B.
 
 ### 6.9 Extra body parts — [`../design_notes/11-extra-body-parts.md`](../design_notes/11-extra-body-parts.md)
 
@@ -3278,12 +3287,31 @@ the editor menus are built. Deliberately not built:
 - **Garments that cover a part itself** (a tail sock, a wing binder) — needs
   part-keyed coverage, i.e. the attire model learning slots outside its
   closed `REGIONS`. `through_clothing: false` covers the tucked case.
-- **Generator/fill prompts emitting `extra_parts`** — the generators still
-  write appendages into `visible.summary` prose; the import path tolerates
-  but does not extract them.
 - **An import warning for a part described twice** — a declared `kind` whose
   word also lives in `visible.summary` prose double-describes the body;
   `importers.character_import_warnings` does not yet flag it.
+
+### 6.10 Garment displacement — [`../design_notes/17-garment-displacement.md`](../design_notes/17-garment-displacement.md)
+
+Region-grain displacement (the third clothing axis) is built; deliberately
+left open:
+
+- **Left/right asymmetry** — "one shoulder down, the other up" has no
+  structural home: `REGIONS` carries no lateral axis anywhere (contacts and
+  injury share the same coarseness). Condition prose carries the asymmetry;
+  coverage stays conservative (covered until fully off the region). Adding
+  laterality would be a whole-body vocabulary change, not an attire one.
+- **Transparency** — the authored "sheer black silk robe" covers without
+  concealing, and the ledger has no axis for it: a covered region is a
+  concealed region to `region_visibility`. Today sheerness lives in the
+  garment's name/description prose only. A `conceals: full|sheer|net` axis
+  on the garment would be the shape, but it is a perception-grading change
+  and needs its own design pass.
+- **Retro-repair of stale displacement prose** — the corpus holds condition
+  strings that encode state from before the axis existed. Deliberately not
+  retro-executed (prose is not state); they heal when a beat next touches
+  the garment (the detectors fire and feed the Director the channel) or by
+  hand in the region editor, which now expresses displacement directly.
 ---
 
 ## 7. Experiments not yet run

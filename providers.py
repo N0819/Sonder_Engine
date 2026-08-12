@@ -1,7 +1,7 @@
 # providers.py
 """LLM providers, streaming, retries, cancellation, and embeddings."""
 
-import json, zlib, asyncio, threading, time, re, os
+import json, zlib, asyncio, threading, time, re, os, random
 import numpy as np
 import httpx
 import requests.exceptions as _req_exc
@@ -28,6 +28,7 @@ from typing import Optional, Callable, Any
 from dataclasses import dataclass
 
 from db import q, get_setting
+from logging_utils import logger as _logger
 
 token_sink = contextvars.ContextVar("token_sink", default=None)
 generation_event_sink = contextvars.ContextVar(
@@ -521,6 +522,62 @@ def prompt_cache_supported_for(prov):
     return kind == "anthropic" or kind in _CACHE_PASSTHROUGH_KINDS
 
 
+# ---- Cache routing affinity (the hint that makes implicit caching land) ----
+#
+# Fireworks-class hosts cache prompt prefixes automatically -- but ONLY within
+# one replica ("prompt caching only works within 1 replica", their prompt-
+# caching guide), and serverless routes requests across replicas unless the
+# client hints where to send them, via the standard OpenAI `user` field or an
+# `x-session-affinity` header. Without a hint, whether this engine's ~15,000-
+# token static role prompt is served from cache on any given call is routing
+# luck. The `user` body field is used because it is part of the OpenAI request
+# schema (so compatible hosts and aggregators tolerate it) and it survives
+# aggregation, where a bespoke header may be stripped.
+#
+# THE VALUE MUST CARRY NO CONTENT AND NO IDENTITY. It is sent to a third
+# party on every call, so it is exactly the kind of field that quietly
+# becomes a leak: never a character name, persona name, chat title, player
+# input, or anything derived from them. `sonder:<role>` is built from engine
+# constants only ("character_major", "narrator"...) -- do not "improve" it
+# into something descriptive.
+#
+# Role-only, deliberately, rather than chat+role:
+# - the sharing unit that matters here is the per-character prefix (the
+#   character system prompt is name-substituted 32 characters in, so
+#   cross-character sharing is nil either way), and one replica caches MANY
+#   prefixes -- pinning a role's whole traffic to one replica keeps every
+#   character's and every chat's prefix warm in one place;
+# - a single-host engine's per-role traffic is far below one replica's
+#   capacity (measured 1.01-1.11 character calls/turn; simultaneous same-role
+#   calls are the rare wave), so the coarse key costs no real parallelism;
+# - the role is already in scope at this layer, while a chat id would need
+#   plumbing through every caller -- including generator/importer callers
+#   that have no chat at all;
+# - the retry paths inherit it for free: the decision-review retry and the
+#   repair ladder call with the same role, so a second call lands on the
+#   replica that already holds the first call's prefix.
+#
+# FAIL CLOSED PER PROVIDER, same idiom as `prompt_cache_allow`: some
+# OpenAI-compatible hosts reject bodies with fields they do not expect, and a
+# host that 400s because we added a performance hint is a regression, not a
+# trade. `cache_affinity_allow` opts providers in by name or kind; unset
+# means no field is added anywhere and every request is byte-identical to
+# before.
+def cache_affinity_allowed(prov):
+    """`cache_affinity_allow` names this provider, by name or by kind."""
+    if prov is None:
+        return False
+    name, kind = cache_tokens(prov)
+    return bool({kind, name} & _setting_name_set("cache_affinity_allow"))
+
+
+def _apply_cache_affinity(body, prov, role):
+    """Attach the stable routing hint for providers opted into it."""
+    if role and cache_affinity_allowed(prov):
+        body["user"] = f"sonder:{role}"
+    return body
+
+
 def _prov_field(prov, key, default=None):
     """Read a provider field from either a sqlite3.Row (what provider() returns)
     or a plain dict (tests, synthetic callers). Row supports subscripting but
@@ -826,7 +883,13 @@ def escalated_max_tokens(requested):
 ROLES = [
     "default",
     "director",
-    "perception",
+    # NO "perception". Perception is deterministic -- every view is composed
+    # from the typed IR in `agents/composer.py` and `agents/perception.py`
+    # imports no model seam at all -- so a model chosen for that role would
+    # never be called. The STEP key survives in prompts.py and schemas.py so
+    # pre-change turns still validate and replay; a settings row is a
+    # different thing, and offering one sells a host a choice that does
+    # nothing and a cost they will not pay.
     "character_bg",
     "character_mid",
     "character_major",
@@ -1091,8 +1154,23 @@ class RetryConfig:
     retryable_status: frozenset = frozenset({429, 500, 502, 503, 504})
 
     def delay_for(self, attempt: int) -> float:
+        """Exponential backoff, JITTERED.
+
+        The engine fans out: a turn runs character steps in parallel, and one
+        upstream rate limit answers the whole wave at once. Without jitter
+        every member of that wave sleeps exactly 1s, then exactly 2s, and
+        collides with itself at each rung -- a synchronized retry storm made
+        out of the very requests the backoff exists to separate. Measured on
+        the live embeddings provider (2026-08-11): a burst of 12 took 4
+        rate limits, and 8 SEQUENTIAL requests at ~2.5/s took 3, so the
+        collisions are real at this engine's ordinary fan-out.
+
+        EQUAL jitter, not full: half the delay is fixed and half is random.
+        Full jitter can draw a delay near zero, which against a rate ceiling
+        is a retry that was never really a backoff at all.
+        """
         delay = min(self.base_delay * (2 ** attempt), self.max_delay)
-        return delay
+        return delay / 2 + random.uniform(0, delay / 2)
 
 DEFAULT_RETRY = RetryConfig()
 
@@ -1232,8 +1310,12 @@ def _strip_extended(body):
     # for 'none'/'low'), so the value must be stripped and the call retried, not
     # allowed to kill the turn. The assumption that an unknown key is ignored
     # held for most providers but not all.
+    # `user` is the cache-affinity routing hint (_apply_cache_affinity) --
+    # standard OpenAI schema, but it is added by an opt-in and it is purely a
+    # performance hint, so on the 400-retry it goes the way of the extended
+    # samplers rather than costing the turn on a host that rejects it.
     for k in ("top_k", "repetition_penalty", "min_p", "top_a",
-              "reasoning_effort", "reasoning"):
+              "reasoning_effort", "reasoning", "user"):
         body.pop(k, None)
     return body
 
@@ -1639,6 +1721,7 @@ def _chat_complete_once(
     }
     body.update(merged)
     _apply_provider_routing(body, prov)
+    _apply_cache_affinity(body, prov, role)
     _apply_reasoning_effort(body, prov, role)
 
     if json_mode:
@@ -1886,6 +1969,7 @@ async def _chat_complete_async_once(
     body = {"model": model, "temperature": t, "max_tokens": max_tokens, "messages": [_openai_system_message(system, prov, model), {"role": "user", "content": user}]}
     body.update(merged)
     _apply_provider_routing(body, prov)
+    _apply_cache_affinity(body, prov, role)
     _apply_reasoning_effort(body, prov, role)
     if json_mode:
         body["response_format"] = {"type": "json_object"}
@@ -2138,44 +2222,351 @@ def embedding_model_key() -> str:
     except Exception:
         return "cheap:crc32:256"
 
-def embed_texts_meta(texts) -> EmbeddingBatch:
+# ---- Embedding request pacing ----
+#
+# ADAPTIVE, and deliberately not a configured number. The ceiling belongs to
+# the provider and model, not to the engine: the live OpenRouter/Perplexity
+# embeddings route was measured on 2026-08-11 to refuse a burst of 4 and to
+# refuse 3 of 8 SEQUENTIAL requests sent at ~2.5/s, while a local embedder
+# does tens per second and must not be slowed by a number chosen for someone
+# else's provider. So the engine starts unpaced, learns the ceiling from the
+# provider's own 429s, and forgets it again once the pressure lifts.
+#
+# Why pacing rather than only retrying: the retry above already survives a
+# rate limit, but each 429 still costs a round trip and, past the retry
+# budget, strands whatever was being written on the crc32 fallback under its
+# own stamp -- permanent until somebody pays for a rebuild. Waiting 400ms is
+# cheaper than that on every axis, and nothing is watching this path.
+#
+# The whole state is process-local and resets on restart, which is correct: a
+# ceiling learned last week is not evidence about this week's provider.
+_EMBED_PACE_LOCK = threading.Lock()
+_EMBED_PACE = {"interval": 0.0, "next_at": 0.0}
+# First penalty. ~2 requests/second, just under the measured ceiling.
+_EMBED_PACE_FIRST = 0.5
+# Ceiling on the ceiling: past this the provider is not rate limiting, it is
+# broken, and the fallback is the right answer rather than a longer queue.
+_EMBED_PACE_MAX = 2.0
+# Below this, pacing is indistinguishable from not pacing -- drop it entirely
+# so a provider that had one bad minute does not pay for it all session.
+_EMBED_PACE_FLOOR = 0.05
+# Slow decay: a sawtooth that re-probes the ceiling every few calls would
+# spend a 429 to learn what it already knew.
+_EMBED_PACE_DECAY = 0.98
+# HOW FAR THE QUEUE MAY REACH, and the reason it needs a bound at all: each
+# waiter books the next free slot, so N callers book N intervals and the
+# horizon grows without limit. A rebuild pass or a wide fan-out could
+# therefore queue itself minutes into the future while every one of those
+# waiters sits in `time.sleep` -- which is not a slow engine, it is a hung
+# one, and it is exactly what the first version of this did to the test
+# suite (65s to over 10 minutes). Past this horizon the arrival rate is
+# simply higher than the ceiling can serve, and no amount of further waiting
+# fixes that: let the request go, and let the 429/retry/fallback ladder
+# below be the release valve it already is.
+_EMBED_PACE_MAX_WAIT = 3.0
+
+
+def _embed_pace_wait():
+    """Take a slot in the queue, then wait for it.
+
+    The slot is computed under the lock and slept OUTSIDE it, so N concurrent
+    callers get N spaced departure times and then wait in parallel. Holding
+    the lock across the sleep would serialize them into the same queue by
+    accident and make the wait quadratic.
+    """
+    with _EMBED_PACE_LOCK:
+        interval = _EMBED_PACE["interval"]
+        if interval <= 0:
+            return
+        now = time.monotonic()
+        slot = max(now, _EMBED_PACE["next_at"])
+        if slot - now > _EMBED_PACE_MAX_WAIT:
+            # The queue already reaches past the horizon. Go now and do not
+            # extend it further -- see _EMBED_PACE_MAX_WAIT.
+            return
+        _EMBED_PACE["next_at"] = slot + interval
+    delay = slot - time.monotonic()
+    if delay > 0:
+        time.sleep(delay)
+
+
+def _embed_pace_penalize():
+    """A rate limit is the provider telling us its ceiling. Believe it."""
+    with _EMBED_PACE_LOCK:
+        before = _EMBED_PACE["interval"]
+        _EMBED_PACE["interval"] = min(
+            max(before * 2, _EMBED_PACE_FIRST), _EMBED_PACE_MAX)
+        after = _EMBED_PACE["interval"]
+    if not before:
+        _logger.warning(
+            "embeddings: rate limited by the provider; pacing requests at "
+            "%.2fs apart from now on, easing off again once they stop. This "
+            "is a ceiling on the configured model, not on this engine.",
+            after)
+
+
+def _embed_pace_relax():
+    """Ease back toward unpaced after a clean call."""
+    with _EMBED_PACE_LOCK:
+        if _EMBED_PACE["interval"] <= 0:
+            return
+        eased = _EMBED_PACE["interval"] * _EMBED_PACE_DECAY
+        _EMBED_PACE["interval"] = 0.0 if eased < _EMBED_PACE_FLOOR else eased
+
+
+def _is_rate_limit(exc) -> bool:
+    return isinstance(exc, LLMError) and exc.status_code == 429
+
+
+def _embed_request(texts) -> EmbeddingBatch:
+    """One embeddings round trip. Raises; the retry loop above decides."""
+    prov, model, _ = resolve_role("embeddings")
+    base = prov["base_url"].rstrip("/")
+    r = _session().post(base + "/embeddings", headers=_headers(prov), json={"model": model, "input": texts}, timeout=REQUEST_TIMEOUT)
+    if r.status_code >= 400:
+        # The BODY carries the reason; `raise_for_status` discards it and
+        # leaves only "400 Client Error", which cannot tell a wrong key
+        # from a wrong model. Measured live: selecting a chat model for
+        # the embeddings role returns "Model inception/mercury-2 does not
+        # exist" -- the one sentence that explains why recall silently
+        # stopped improving. It reaches the settings panel from here.
+        #
+        # LLMError rather than RuntimeError so `_should_retry` can read the
+        # STATUS: a 429 or a 502 is worth asking again, and "that model does
+        # not exist" is worth asking again never. Its str() is the same
+        # sentence it always was, which is what the settings panel renders.
+        raise LLMError("%s %s: %s" % (r.status_code, base + "/embeddings",
+                                      (r.text or "").strip()[:300]),
+                       r.status_code,
+                       r.status_code in DEFAULT_RETRY.retryable_status)
+    r.raise_for_status()
+    data = r.json().get("data") or []
+    data = sorted(data, key=lambda item: item.get("index", 0))
+    if len(data) != len(texts):
+        raise RuntimeError("Embedding provider returned an unexpected vector count")
+    vectors = []
+    dimensions = None
+    for item in data:
+        vector = np.asarray(item["embedding"], dtype=np.float32)
+        if dimensions is None:
+            dimensions = len(vector)
+        elif len(vector) != dimensions:
+            raise RuntimeError("Embedding provider returned mixed dimensions")
+        norm = np.linalg.norm(vector)
+        if norm > 0:
+            vector = vector / norm
+        vectors.append(vector)
+    return EmbeddingBatch(vectors=vectors, model_key=f"{prov['kind']}:{prov['id']}:{model}", dimensions=dimensions or 0, fallback=False)
+
+
+# Rate limit on the line below, per distinct provider error. An outage lasting
+# a whole session must say so, and must not say so ten thousand times.
+_EMBED_FALLBACK_SAID: dict[str, float] = {}
+_EMBED_FALLBACK_QUIET = 60.0
+
+
+def _note_embedding_fallback(exc, texts):
+    """Say out loud that a vector was computed by the crc32 hash.
+
+    THE SILENCE WAS THE BUG. `embed_texts_meta` degrades on any error, and a
+    degraded WRITE is not transient -- the row keeps the fallback stamp until
+    somebody pays for a rebuild, and the first anyone hears of it is a story
+    offering to rebuild memories it wrote ninety seconds ago. Reported live,
+    2026-08-11: a quick start whose greeting seeds were stranded on the turn
+    that minted them, with nothing in any log to say which call had failed or
+    why. Degrading is the right behaviour; doing it quietly is not.
+
+    Not raised, because a memory is worth more than its vector and the bank
+    already records which model wrote each row -- the rebuild lane finds these
+    rows on its own. This is the trace that says where they came from.
+    """
+    if embedding_model_key() == "cheap:crc32:256":
+        return  # No provider configured: the hash IS the engine's embedding.
+    reason = str(exc or "")[:300]
+    now = time.time()
+    last = _EMBED_FALLBACK_SAID.get(reason, 0.0)
+    if now - last < _EMBED_FALLBACK_QUIET:
+        return
+    _EMBED_FALLBACK_SAID[reason] = now
+    _logger.warning(
+        "embeddings: fell back to the crc32 hash for %d text(s) -- the "
+        "configured provider (%s) failed: %s. Anything WRITTEN with these "
+        "vectors is stamped cheap:crc32:256 and reachable by keyword only "
+        "until it is rebuilt.",
+        len(texts), embedding_model_key(), reason,
+    )
+
+
+# ---- Coalescing concurrent embedding requests ----
+#
+# The ceiling that keeps refusing us counts REQUESTS, not tokens: the measured
+# OpenRouter/Perplexity route serves a bucket of ~3 refilling at 1-2/s and does
+# not care whether a request carries one text or forty. Meanwhile the engine
+# fans out -- parallel character steps each embed their own retrieval query --
+# so the one thing that reliably lowers the pressure is asking fewer times.
+#
+# SAFE BY CONSTRUCTION, and verified rather than assumed (2026-08-11): the same
+# document embedded alone and embedded inside a batch of three came back
+# BITWISE identical, at both first and last position. A text's vector does not
+# depend on its companions, so nothing here can move a ranking. The engine was
+# already betting on this in one direction -- writes go out batched while
+# queries go out one at a time, and recall would already be broken otherwise.
+#
+# NO ARTIFICIAL WINDOW. A timed "wait a few ms for companions" would tax every
+# solo call to help the crowded ones. Instead callers that arrive while a
+# request is in flight queue behind it, and the next request takes whoever
+# accumulated. Under no contention this is exactly the old behaviour with one
+# lock acquisition added; under contention it coalesces for free, and the
+# busier the fan-out the better it batches.
+_COALESCE_LOCK = threading.Lock()
+_COALESCE_QUEUE: list = []
+_COALESCE_INFLIGHT = False
+# Caps on one grouped request. A group larger than this splits rather than
+# growing a body the provider may reject outright.
+_COALESCE_MAX_TEXTS = 64
+_COALESCE_MAX_CHARS = 120_000
+# A follower whose leader never returns serves itself rather than hanging. The
+# leader always returns in practice -- `_embed_with_retry` degrades instead of
+# raising -- so this is a deadlock backstop, not a code path with a plan.
+_COALESCE_WAIT_CEILING = 600.0
+# Visible arithmetic for "did this help": callers vs the requests they cost.
+_EMBED_STATS = {"callers": 0, "groups": 0, "texts_in": 0, "texts_sent": 0}
+
+
+class _EmbedWaiter:
+    __slots__ = ("texts", "done", "result")
+
+    def __init__(self, texts):
+        self.texts = texts
+        self.done = threading.Event()
+        self.result = None
+
+
+def _take_embed_group_locked():
+    """The queued callers one request may serve. Caller holds the lock."""
+    group, n_texts, n_chars = [], 0, 0
+    while _COALESCE_QUEUE:
+        waiter = _COALESCE_QUEUE[0]
+        texts = len(waiter.texts)
+        chars = sum(len(t) for t in waiter.texts)
+        # `group and` -- a single caller bigger than the cap still goes, alone,
+        # because refusing it would strand it forever.
+        if group and (n_texts + texts > _COALESCE_MAX_TEXTS
+                      or n_chars + chars > _COALESCE_MAX_CHARS):
+            break
+        _COALESCE_QUEUE.pop(0)
+        group.append(waiter)
+        n_texts += texts
+        n_chars += chars
+    return group
+
+
+def _serve_embed_group(group, config):
+    """One request for the whole group, each caller handed back its own."""
+    order, position = [], {}
+    for waiter in group:
+        for text in waiter.texts:
+            if text not in position:
+                position[text] = len(order)
+                order.append(text)
+    got = _embed_with_retry(order, config)
+    _EMBED_STATS["groups"] += 1
+    _EMBED_STATS["texts_sent"] += len(order)
+    for waiter in group:
+        # Routed by position in BOTH outcomes, including the fallback, so a
+        # caller can never receive another caller's vector. The dedupe above
+        # means two callers asking for the same text share one vector, which
+        # is what "the vector does not depend on its companions" licenses.
+        waiter.result = EmbeddingBatch(
+            vectors=[got.vectors[position[t]] for t in waiter.texts],
+            model_key=got.model_key, dimensions=got.dimensions,
+            fallback=got.fallback, error=got.error)
+        waiter.done.set()
+
+
+def _coalesced_embed(texts, config) -> EmbeddingBatch:
+    global _COALESCE_INFLIGHT
+    waiter = _EmbedWaiter(texts)
+    with _COALESCE_LOCK:
+        _EMBED_STATS["callers"] += 1
+        _EMBED_STATS["texts_in"] += len(texts)
+        _COALESCE_QUEUE.append(waiter)
+        leader = not _COALESCE_INFLIGHT
+        if leader:
+            _COALESCE_INFLIGHT = True
+    if not leader:
+        if waiter.done.wait(_COALESCE_WAIT_CEILING):
+            return waiter.result
+        with _COALESCE_LOCK:
+            if waiter in _COALESCE_QUEUE:
+                _COALESCE_QUEUE.remove(waiter)
+        return waiter.result if waiter.done.is_set() else _embed_with_retry(texts, config)
+    try:
+        while True:
+            with _COALESCE_LOCK:
+                group = _take_embed_group_locked()
+                if not group:
+                    _COALESCE_INFLIGHT = False
+                    break
+            _serve_embed_group(group, config)
+    finally:
+        with _COALESCE_LOCK:
+            _COALESCE_INFLIGHT = False
+            # Never leave a queued caller without a leader: whoever is still
+            # waiting is woken to serve itself rather than sleep to the
+            # ceiling. Only reachable if `_serve_embed_group` raised, which it
+            # is not supposed to be able to do.
+            stranded, _COALESCE_QUEUE[:] = list(_COALESCE_QUEUE), []
+        for other in stranded:
+            other.done.set()
+    return waiter.result
+
+
+def _embed_with_retry(texts, config) -> EmbeddingBatch:
+    """Pace, ask, retry, and degrade. Never raises."""
+    attempt = 0
+    while True:
+        try:
+            _embed_pace_wait()
+            got = _embed_request(texts)
+            _embed_pace_relax()
+            return got
+        except Exception as exc:
+            if _is_rate_limit(exc):
+                _embed_pace_penalize()
+            if _should_retry(exc, attempt, config):
+                time.sleep(config.delay_for(attempt))
+                attempt += 1
+                continue
+            _note_embedding_fallback(exc, texts)
+            vectors = [cheap_embed(text) for text in texts]
+            return EmbeddingBatch(vectors=vectors, model_key="cheap:crc32:256",
+                                  dimensions=256, fallback=True, error=str(exc))
+
+
+def embed_texts_meta(texts, *, retry: Optional[RetryConfig] = DEFAULT_RETRY) -> EmbeddingBatch:
+    """Vectors for `texts`, with the model that made them.
+
+    RETRIED on the same terms as a chat call, because the consequence of a
+    lost embedding is worse than a lost completion: a completion that fails
+    is retried by the stage that wanted it, while an embedding that fails is
+    silently replaced by a hash and PERSISTED under its own stamp.
+
+    `retry=None` for a caller that is asking rather than writing -- the bank
+    status probe runs while somebody is waiting for a chat to open, and it
+    must report a degraded provider promptly instead of spending seven
+    seconds proving it.
+    """
     texts = [str(t or "") for t in texts]
     if not texts:
         return EmbeddingBatch(vectors=[], model_key=embedding_model_key(), dimensions=0)
-    try:
-        prov, model, _ = resolve_role("embeddings")
-        base = prov["base_url"].rstrip("/")
-        r = _session().post(base + "/embeddings", headers=_headers(prov), json={"model": model, "input": texts}, timeout=REQUEST_TIMEOUT)
-        if r.status_code >= 400:
-            # The BODY carries the reason; `raise_for_status` discards it and
-            # leaves only "400 Client Error", which cannot tell a wrong key
-            # from a wrong model. Measured live: selecting a chat model for
-            # the embeddings role returns "Model inception/mercury-2 does not
-            # exist" -- the one sentence that explains why recall silently
-            # stopped improving. It reaches the settings panel from here.
-            raise RuntimeError("%s %s: %s" % (r.status_code, base + "/embeddings",
-                                              (r.text or "").strip()[:300]))
-        r.raise_for_status()
-        data = r.json().get("data") or []
-        data = sorted(data, key=lambda item: item.get("index", 0))
-        if len(data) != len(texts):
-            raise RuntimeError("Embedding provider returned an unexpected vector count")
-        vectors = []
-        dimensions = None
-        for item in data:
-            vector = np.asarray(item["embedding"], dtype=np.float32)
-            if dimensions is None:
-                dimensions = len(vector)
-            elif len(vector) != dimensions:
-                raise RuntimeError("Embedding provider returned mixed dimensions")
-            norm = np.linalg.norm(vector)
-            if norm > 0:
-                vector = vector / norm
-            vectors.append(vector)
-        return EmbeddingBatch(vectors=vectors, model_key=f"{prov['kind']}:{prov['id']}:{model}", dimensions=dimensions or 0, fallback=False)
-    except Exception as exc:
-        vectors = [cheap_embed(text) for text in texts]
-        return EmbeddingBatch(vectors=vectors, model_key="cheap:crc32:256", dimensions=256, fallback=True, error=str(exc))
+    config = retry or RetryConfig(max_retries=0)
+    if retry is None:
+        # A MEASUREMENT, not traffic. The bank probe runs while a chat is
+        # opening; queueing it behind somebody else's turn would make it
+        # report on a moment that has passed.
+        return _embed_with_retry(texts, config)
+    return _coalesced_embed(texts, config)
 
 def embed_texts(texts):
     return embed_texts_meta(texts).vectors

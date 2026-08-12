@@ -663,9 +663,10 @@ legitimately perceive, learn, remember or infer.
 
 - **Multiple providers** — As many as you like, with presets for the major
   hosted services and for local servers, or any OpenAI-compatible endpoint.
-- **Per-role models** — A different model for the director, perception,
-  background characters, major characters, the narrator, utilities and
-  embeddings, so you spend where it matters.
+- **Per-role models** — A different model for the director, background
+  characters, major characters, the narrator, utilities and embeddings, so you
+  spend where it matters. Perception has no role to set: what a mind may
+  perceive is computed, not asked.
 - **Fallback models** — Backups tried when the first fails.
 - **Per-role reasoning effort** — Thinking off or dialled up separately per
   role.

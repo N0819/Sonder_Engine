@@ -6,7 +6,8 @@ import json, re, threading, time, math
 import numpy as np
 from collections import defaultdict
 from db import q, qi, wget, wset, transaction
-from providers import embed_texts, embed_texts_meta, chat_complete
+from providers import (embed_texts, embed_texts_meta, chat_complete,
+                       embedding_model_key)
 from prompts import get_prompt
 from dataclasses import dataclass, field, asdict
 from typing import Optional
@@ -961,6 +962,195 @@ def _embed_memory(data: dict):
     embedded = embed_texts_meta(docs)
     return embedded.vectors[0], embedded.vectors[1], embedded
 
+# ---- Finishing a write that failed ----
+#
+# A memory whose embedding call failed is stored anyway, stamped
+# `cheap:crc32:256`, and is then reachable by keyword only until somebody
+# accepts a rebuild. That is the right call at write time -- a memory is worth
+# more than its vector, and the turn must not wait -- but leaving it there
+# makes a provider's bad second permanent, and the cure on offer (walk the
+# whole bank) is wildly out of proportion to the four rows that actually
+# failed.
+#
+# So the engine finishes its own write instead. THIS IS NOT A REBUILD: it
+# re-embeds exactly the rows whose own write fell back, by id, and touches
+# nothing else -- not the historical corpus, not lore, not another chat. The
+# distinction matters because the two have different justifications. Walking
+# the bank is a migration a host should choose and pay for; re-doing a write
+# the engine failed seconds ago is the engine finishing its job.
+#
+# Measured provocation (2026-08-11): the configured OpenRouter/Perplexity
+# route serves a bucket of roughly 3 requests refilling at 1-2/s, and a turn
+# makes several embedding calls, so a beat can exhaust its whole retry budget
+# inside one depleted window -- live, chat 70 turn 6 lost all four of its
+# memories that way with every retry and pacing fix already running. Waiting
+# and trying again a moment later costs four requests and fixes it.
+_REPAIR_LOCK = threading.Lock()
+_REPAIR_PENDING: dict[str, set[int]] = {"memories": set(), "memory_summaries": set()}
+_REPAIR_THREAD = None
+# Long enough for a rate-limit window to refill, and far enough from the beat
+# that the repair is not competing with the next turn's own embedding calls.
+_REPAIR_DELAY = 30.0
+# A bound, so a provider that is down for an hour cannot accumulate an
+# unbounded backlog in memory. Past this the rows stay stranded and the
+# ordinary rebuild offer is the honest remedy -- which is exactly the
+# situation that offer was written for.
+_REPAIR_MAX_PENDING = 500
+# Waiting out a rate limit is the job, so the pass comes back -- backing off
+# each round, and stopping eventually, because a provider that has refused for
+# this long is not busy, it is gone.
+_REPAIR_MAX_DELAY = 300.0
+_REPAIR_MAX_ROUNDS = 12
+
+
+def note_failed_embedding_write(table: str, row_ids):
+    """Remember rows stored with a fallback vector, to finish later.
+
+    No-op when the crc32 hash IS the configured embedding: there is nothing
+    to finish, and scheduling a repair would mean re-hashing the same text
+    forever.
+    """
+    if not row_ids or table not in _REPAIR_PENDING:
+        return
+    if embedding_model_key() == "cheap:crc32:256":
+        return
+    with _REPAIR_LOCK:
+        pending = _REPAIR_PENDING[table]
+        if sum(len(v) for v in _REPAIR_PENDING.values()) >= _REPAIR_MAX_PENDING:
+            return
+        pending.update(int(r) for r in row_ids)
+    _ensure_repair_thread()
+
+
+def _ensure_repair_thread():
+    global _REPAIR_THREAD
+    with _REPAIR_LOCK:
+        if _REPAIR_THREAD is not None and _REPAIR_THREAD.is_alive():
+            return
+        _REPAIR_THREAD = threading.Thread(target=_repair_loop,
+                                          name="embedding-repair", daemon=True)
+        _REPAIR_THREAD.start()
+
+
+def _repair_loop():
+    """Keep trying until the rows are done or the rounds run out.
+
+    ONE PASS WAS NOT ENOUGH, and the first version of this made exactly that
+    mistake: a pass that found the provider still refusing returned, leaving
+    the rows queued with nothing scheduled to come back for them. That is the
+    opposite of what the queue is for -- a rate limit is a thing you WAIT OUT,
+    and the whole point of repairing off the turn path is that waiting is
+    free here. Nobody is watching this thread.
+
+    Backs off between rounds so a long outage is not a busy-wait, and gives up
+    after a bounded number of them: past that the provider is not rate
+    limiting, it is gone, and the ordinary rebuild offer is the honest remedy.
+    """
+    delay = _REPAIR_DELAY
+    for _ in range(_REPAIR_MAX_ROUNDS):
+        time.sleep(delay)
+        try:
+            repair_pending_embeddings()
+        except Exception as exc:  # noqa: BLE001 - never take a turn down
+            logger.warning("memory: embedding repair pass failed: %s", exc)
+            return
+        with _REPAIR_LOCK:
+            if not any(_REPAIR_PENDING.values()):
+                return
+        delay = min(delay * 2, _REPAIR_MAX_DELAY)
+
+
+def repair_pending_embeddings(batch=32):
+    """Re-embed the rows whose own write fell back. Returns what it fixed.
+
+    Split from the thread so a test can run it synchronously, and so the
+    decision to run one is separable from the decision to wait 30 seconds.
+    """
+    fixed = {"memories": 0, "memory_summaries": 0}
+    with _REPAIR_LOCK:
+        pending = {t: sorted(ids)[:batch] for t, ids in _REPAIR_PENDING.items()}
+    if not any(pending.values()):
+        return fixed
+    for table, ids in pending.items():
+        if not ids:
+            continue
+        holes = ",".join("?" * len(ids))
+        # Only rows STILL on the fallback: a rebuild, a restore or a later
+        # rewrite may have fixed them already, and re-embedding a good row
+        # spends a request to change nothing.
+        rows = q(f"SELECT * FROM {table} WHERE id IN ({holes}) "
+                 "AND embedding_model='cheap:crc32:256'", tuple(ids))
+        if rows:
+            if table == "memories":
+                mems = [_row_memory(r) for r in rows]
+                docs = []
+                for mem in mems:
+                    docs.append(_memory_document(mem))
+                    docs.append(_memory_cues(mem) or _memory_document(mem))
+                got = embed_texts_meta(docs)
+                if got.fallback:
+                    return fixed  # still degraded; leave everything queued
+                with transaction():
+                    for index, mem in enumerate(mems):
+                        qi("UPDATE memories SET embedding=?,cue_embedding=?,"
+                           "embedding_model=?,embedding_dim=? WHERE id=?",
+                           (_blob(got.vectors[index * 2]),
+                            _blob(got.vectors[index * 2 + 1]),
+                            got.model_key, got.dimensions, mem["id"]))
+                fixed["memories"] += len(rows)
+            else:
+                texts = [_summary_retrieval_text(
+                    r["summary"], _json_list(r["key_phrases"]),
+                    _json_list(r["unresolved_threads"])) for r in rows]
+                got = embed_texts_meta(texts)
+                if got.fallback:
+                    return fixed
+                with transaction():
+                    for index, row in enumerate(rows):
+                        qi("UPDATE memory_summaries SET embedding=?,"
+                           "embedding_model=?,embedding_dim=? WHERE id=?",
+                           (_blob(got.vectors[index]), got.model_key,
+                            got.dimensions, row["id"]))
+                fixed["memory_summaries"] += len(rows)
+        with _REPAIR_LOCK:
+            _REPAIR_PENDING[table].difference_update(ids)
+    if any(fixed.values()):
+        logger.info("memory: finished %d memory and %d summary embedding "
+                    "write(s) that had fallen back to the hash",
+                    fixed["memories"], fixed["memory_summaries"])
+    return fixed
+
+
+def queue_fallback_rows_for_repair(chat_id=None, limit=_REPAIR_MAX_PENDING):
+    """Adopt rows a PREVIOUS process wrote on the fallback.
+
+    The in-memory queue dies with the process, so a story whose memories were
+    stranded before a restart had nobody left to finish them -- it could only
+    be offered the rebuild. Called when a chat is opened, this picks those
+    rows back up so the repair happens quietly instead of as a question.
+
+    Scoped to `cheap:crc32:256` deliberately, and that stamp is the whole
+    discriminator: a row carrying the hash while a real provider is configured
+    is a write THIS ENGINE failed, which it may finish on its own. A row
+    carrying some other model's key is a host who changed embedding model, and
+    re-embedding that is a migration nobody asked this code to start.
+    """
+    if embedding_model_key() == "cheap:crc32:256":
+        return {"memories": 0, "memory_summaries": 0}
+    found = {}
+    for table in ("memories", "memory_summaries"):
+        where, args = ["embedding_model='cheap:crc32:256'"], []
+        if chat_id is not None:
+            where.append("chat_id=?")
+            args.append(chat_id)
+        rows = q(f"SELECT id FROM {table} WHERE {' AND '.join(where)} "
+                 "ORDER BY id DESC LIMIT ?", tuple(args) + (limit,)) or []
+        found[table] = len(rows)
+        if rows:
+            note_failed_embedding_write(table, [r["id"] for r in rows])
+    return found
+
+
 def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
     existing = None
     if data["event_key"]:
@@ -996,6 +1186,8 @@ def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
            (data["chat_id"], data["char_id"]) + values + (data["event_key"],))
     _replace_memory_fts(mid, data)
+    if getattr(embedded, "fallback", False):
+        note_failed_embedding_write("memories", [mid])
     return mid
 
 def add_memory(chat_id, char_id, turn_id, kind, provenance, salience, content, *,
@@ -2404,6 +2596,15 @@ def save_memory_summary(chat_id, char_id, summary, *, scope="autobiographical", 
         json.dumps(key_phrases, ensure_ascii=False), json.dumps(unresolved_threads, ensure_ascii=False),
         json.dumps(support, ensure_ascii=False),
         embedding, embedding_model, embedding_dim, time.time()))
+    if embedding_model == "cheap:crc32:256":
+        # Queued by identity rather than rowid: this statement UPSERTs on
+        # (chat, char, scope, end_turn_idx), so `qi`'s lastrowid is not
+        # reliably this row's id on the conflict path.
+        row = q("SELECT id FROM memory_summaries WHERE chat_id=? AND char_id=? "
+                "AND scope=? AND end_turn_idx=?",
+                (chat_id, char_id, scope, end_turn_idx), one=True)
+        if row:
+            note_failed_embedding_write("memory_summaries", [row["id"]])
 
 
 def _portable_memory_event_key(mem):
@@ -4215,7 +4416,10 @@ def _stamped_live_dimensions():
     vote would call a wholly broken corpus healthy.
     """
     try:
-        probe = embed_texts_meta([""])
+        # No retry: this is a MEASUREMENT, and it runs while a host is
+        # waiting. A degraded provider is an answer here, not a failure to
+        # work around -- the stamps below are the fallback that matters.
+        probe = embed_texts_meta([""], retry=None)
         if probe.dimensions and not probe.fallback:
             return int(probe.dimensions)
     except Exception:  # noqa: BLE001 - an unreachable provider is not an answer
@@ -4454,8 +4658,14 @@ def embedding_bank_status(chat_id=None, char_id=None):
     Read-only, and cheap: it is the question `_warn_stranded_embeddings`
     answers per retrieval, asked deliberately and for the whole bank so a host
     can see the split before deciding to spend on rebuilding it.
+
+    ASKED WITHOUT RETRIES. This runs on the chat-open path, where the host is
+    watching a story fail to appear, and `is_fallback` is a REPORTED state
+    rather than an error to survive -- the panel says "no embeddings provider
+    is answering" and says why. Spending the write path's retry budget here
+    would only make a degraded provider slow to admit to.
     """
-    live = embed_texts_meta(["status"])
+    live = embed_texts_meta(["status"], retry=None)
     where, args = ["1=1"], []
     if chat_id is not None:
         where.append("chat_id=?"); args.append(chat_id)
@@ -4471,7 +4681,17 @@ def embedding_bank_status(chat_id=None, char_id=None):
         stranded = q(
             f"SELECT COUNT(*) AS n FROM {table} WHERE {clause} AND {stale}",
             tuple(args) + (live.model_key, live.dimensions), one=True)["n"]
-        counts[table] = {"total": total, "stranded": stranded}
+        # Of those, the ones THIS ENGINE failed to write rather than the ones
+        # a model change stranded. The hash stamp separates them exactly: a
+        # crc32 row under a real provider is a call that fell back, which the
+        # repair queue finishes on its own, while another model's key is a
+        # migration a host chooses. Only the second is worth a question.
+        fallback_written = 0 if live.fallback else q(
+            f"SELECT COUNT(*) AS n FROM {table} WHERE {clause} "
+            "AND embedding_model='cheap:crc32:256'",
+            tuple(args), one=True)["n"]
+        counts[table] = {"total": total, "stranded": stranded,
+                         "fallback_written": fallback_written}
     # LORE, counted with the SAME predicate that repairs it. Without this the
     # bank could not see the one table it has a repair lane for, and
     # `start_rebuild_if_needed` summed a total lore never entered -- so a
