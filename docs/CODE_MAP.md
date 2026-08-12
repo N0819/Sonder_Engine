@@ -45,7 +45,7 @@
 | `importers.py` | 2715 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `logging_utils`, `memory`, `prompts`, `providers` |
 | `jobs.py` | 183 |  | `logging_utils` |
 | `living_world.py` | 608 |  | `logging_utils`, `mechanics` |
-| `llm_quality.py` | 505 | Strict JSON parsing, schema validation, and model-assisted repair. | `pipeline_context`, `providers`, `schemas` |
+| `llm_quality.py` | 645 | Strict JSON parsing, schema validation, and model-assisted repair. | `pipeline_context`, `providers`, `schemas` |
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `lore_structure.py` | 242 |  | — |
 | `mechanics.py` | 310 |  | `spatial`, `spatial_frames` |
@@ -62,7 +62,7 @@
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1436 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
-| `schemas.py` | 4527 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `schemas.py` | 4556 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 7933 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 1022 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
@@ -550,11 +550,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 158 | 348 lines |
+| `complete_validated_json()` | 276 | 370 lines |
+| `_targeted_field_patch()` | 217 | 57 lines |
 | `output_ran_out_of_room()` | 89 | 47 lines |
 | `_extract_balanced_object()` | 35 | 34 lines |
 | `strict_json_parse()` | 138 | 19 lines |
 | `_strip_fences()` | 71 | 16 lines |
+| `_dig()` | 190 | 12 lines |
+| `_error_paths()` | 177 | 11 lines |
 
 ### `logging_utils.py`
 
@@ -735,14 +738,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 3431 | 277 lines |
-| `_lenient_coerce()` | 547 | 159 lines |
-| `validate_llm_output_strict()` | 4401 | 127 lines |
-| `semantic_output_errors()` | 4208 | 113 lines |
-| `_coerce_evidence_refs()` | 2249 | 51 lines |
-| `_coerce_conditions()` | 3171 | 50 lines |
-| `_declared()` | 387 | 48 lines |
-| `_coerce_station_table()` | 49 | 41 lines |
+| `preprocess_llm_output()` | 3460 | 277 lines |
+| `_lenient_coerce()` | 576 | 159 lines |
+| `validate_llm_output_strict()` | 4430 | 127 lines |
+| `semantic_output_errors()` | 4237 | 113 lines |
+| `_coerce_list_valued_map()` | 92 | 57 lines |
+| `_coerce_evidence_refs()` | 2278 | 51 lines |
+| `_coerce_conditions()` | 3200 | 50 lines |
+| `_declared()` | 416 | 48 lines |
 
 ### `spatial.py`
 
