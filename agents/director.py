@@ -3351,7 +3351,73 @@ def _manifest_items(out):
             if value:
                 normalized[field] = value
         items.append(normalized)
+    items = _fold_derived_manifest_events(items)
     return items[:_RECONCILE_MAX_MANIFEST_ITEMS]
+
+
+#: Categories whose entry may be the ENGINE'S OWN consequence of an attire
+#: removal rather than a second change. A garment coming off is one event;
+#: the object on the floor is what `commit._mint_shed_garments` does about
+#: it, not a separate thing that happened.
+_DERIVED_OF_ATTIRE = frozenset({"entities", "inventory"})
+
+
+def _fold_derived_manifest_events(items):
+    """One real-world change is ONE numbered event.
+
+    The manifest may truthfully describe a single change twice -- "the sash
+    is removed" (attire) and "the sash is created on the floor" (entities)
+    are both true of one act. Numbered separately, they are routed to two
+    different owners, and each faithfully authors its own record of the
+    same garment. Measured live: five entity records for two garments, one
+    beat after the previous duplication was repaired.
+
+    So a derived entry folds into the attire event it follows from: one id,
+    one owner, both categories remembered. Deterministic and engine-side,
+    never a prompt rule -- the prompt half asks for one event per change,
+    but a manifest is model-authored and this is the floor under it.
+
+    Conservative by construction: only entities/inventory entries, only
+    where `attire.resolve_garment` says the subject names the same garment
+    as an attire entry in the SAME beat. Positions/stations/poses are
+    deliberately not in this family -- those are three different facts
+    about a body, not three descriptions of one.
+    """
+    from attire import resolve_garment
+
+    attire_items = [i for i in items if i["category"] == "attire"]
+    if not attire_items:
+        return items
+    folded = []
+    for item in items:
+        if item["category"] not in _DERIVED_OF_ATTIRE:
+            folded.append(item)
+            continue
+        handles = [str(item.get("subject") or ""),
+                   str(item.get("target") or "")]
+        handles = [h for h in handles if h.strip()]
+        parent = None
+        for candidate in attire_items:
+            names = [str(candidate.get("subject") or ""),
+                     str(candidate.get("change") or "")]
+            if any(resolve_garment(h, [names[0]]) for h in handles if h):
+                parent = candidate
+                break
+            # The attire entry often names the WEARER as subject and the
+            # garment inside `change` ("utility sash removed"), which is
+            # the shape the live beat produced.
+            if any(h and h.casefold() in names[1].casefold() for h in handles):
+                parent = candidate
+                break
+        if parent is None:
+            folded.append(item)
+            continue
+        also = parent.setdefault("also_described_as", [])
+        if item["category"] not in also:
+            also.append(item["category"])
+    for index, item in enumerate(folded):
+        item["event_id"] = index + 1
+    return folded
 
 def _player_claim_findings(out, sd, interp, cast, sc):
     """Tier 0 player-authority coverage: every asserted scope='effect'
@@ -5188,6 +5254,30 @@ def _specialist_payload(name, ctx, sc, view, extras):
         rid: str((room or {}).get("name") or rid)
         for rid, room in (sc.get("rooms") or {}).items()
     }
+    # WORN GARMENTS, NAMEABLE BY EVERY HAND. Identity only -- the name and
+    # whose body it is on -- never the wardrobe's state, coverage or
+    # condition, which stay the body specialist's.
+    #
+    # A worn garment exists only inside sc.attire, so a specialist that
+    # needed to name one could not: the contact specialist's live note says
+    # it could not encode dampness on the shorts because "objects not in
+    # entity_names", and the objects specialist minted `hinami_shorts` for
+    # the same reason and said so. A hand that cannot name a thing invents
+    # one, and the invention becomes a second record of a garment that
+    # already existed.
+    #
+    # This widens who can be NAMED, not what is KNOWN -- the same category
+    # as `rooms` and `entity_names`, which every relevant specialist
+    # already carries. It is not another specialist's ledger: no state
+    # crosses, and the firewall's subject is minds, which this does not
+    # touch.
+    worn_index = [
+        {"name": str(garment), "worn_by": str(who)}
+        for who, entry in (sc.get("attire") or {}).items()
+        if isinstance(entry, dict)
+        for garment in (entry.get("wearing") or [])
+        if str(garment).strip()
+    ]
     if name == "body":
         payload.update({
             "attire": scene_compact_attire(sc),
@@ -5218,6 +5308,7 @@ def _specialist_payload(name, ctx, sc, view, extras):
                 eid: str((e or {}).get("name") or eid)
                 for eid, e in (sc.get("entities") or {}).items()
             },
+            "worn_garments": worn_index,
         })
         if extras.get("body_parts"):
             payload["body_parts"] = extras["body_parts"]
@@ -5230,6 +5321,7 @@ def _specialist_payload(name, ctx, sc, view, extras):
             "entities": sc.get("entities") or {},
             "rooms": rooms_index,
             "notices": extras.get("notices") or [],
+            "worn_garments": worn_index,
         })
         if extras.get("proposal"):
             payload["mapping_scene_proposal"] = extras["proposal"]

@@ -1637,6 +1637,235 @@ def interpret_attire_notes(diff, worn, entry=None, prose=None):
     return diff
 
 
+def _fold_duplicate_shed_garments(sc, diff=None, ctx=None):
+    """Collapse several records of ONE shed garment into one. Idempotent.
+
+    Adopt-or-mint stops new duplicates; it does not reach the ones already
+    standing, because it only runs on a garment removed THIS beat. A scene
+    that accumulated them keeps them forever otherwise -- chat 71 carried
+    five records for two garments, minted across two stages and the commit
+    seam, and every later beat would read all five.
+
+    Conservative: same owner, all clothing, all shed, and
+    `attire.resolve_garment` agreeing the names are the same garment. The
+    survivor is the one that knows where it is (a positioned record is the
+    thing on the floor); the others' condition and description are kept if
+    the survivor has none. Two genuinely identical garments shed by one
+    body in one scene would fold -- accepted deliberately, because the
+    alternative is a permanent contradiction that compounds, and every fold
+    is reported rather than silent.
+    """
+    from attire import resolve_garment
+
+    if not isinstance(sc, dict):
+        return
+    entities = sc.get("entities")
+    if not isinstance(entities, dict):
+        return
+    positions = sc.get("positions") or {}
+    projected = diff.get("entities") if isinstance(diff, dict) else None
+
+    groups = []
+    for eid, entity in entities.items():
+        state = entity.get("state") if isinstance(entity, dict) else None
+        if not isinstance(state, dict) or not state.get("clothing") \
+                or not state.get("shed"):
+            continue
+        owner = str(state.get("worn_by") or "").strip().casefold()
+        name = str(entity.get("name") or "").strip()
+        if not name:
+            continue
+        for group in groups:
+            # An UNOWNED record joins an owned one: the model's own records
+            # routinely carry no worn_by while the commit seam's mint does,
+            # which is exactly the live shape (travel_shorts beside
+            # travel_shorts_hinami). Two records naming DIFFERENT owners
+            # never fold -- those are two bodies' garments.
+            if group["owner"] and owner and group["owner"] != owner:
+                continue
+            if (resolve_garment(name, [group["name"]])
+                    or resolve_garment(group["name"], [name])):
+                group["ids"].append(eid)
+                group["owner"] = group["owner"] or owner
+                break
+        else:
+            groups.append({"owner": owner, "name": name, "ids": [eid]})
+
+    for group in groups:
+        if len(group["ids"]) < 2:
+            continue
+        keep = next((i for i in group["ids"] if positions.get(i)),
+                    group["ids"][0])
+        survivor = entities[keep]
+        for eid in group["ids"]:
+            if eid == keep:
+                continue
+            loser = entities.get(eid) or {}
+            lost_state = loser.get("state") or {}
+            s_state = survivor.setdefault("state", {})
+            if lost_state.get("condition") and not s_state.get("condition"):
+                s_state["condition"] = lost_state["condition"]
+            if loser.get("description") and not survivor.get("description"):
+                survivor["description"] = loser["description"]
+            for alias in [loser.get("name")] + list(loser.get("aliases") or []):
+                aliases = survivor.setdefault("aliases", [])
+                if alias and isinstance(aliases, list) and alias not in aliases:
+                    aliases.append(str(alias))
+            entities.pop(eid, None)
+            positions.pop(eid, None)
+            if isinstance(projected, dict):
+                projected.pop(eid, None)
+        note = (
+            f"objective state: {len(group['ids'])} entity records described "
+            f"one shed garment ({group['name']!r}); they were folded into "
+            f"{keep!r}. A garment that comes off is one object in the world.")
+        if ctx is not None:
+            ctx.tell_director(note)
+            ctx.add_warning(note)
+
+
+def _fold_worn_garment_entities(sc, diff, ctx=None):
+    """WHILE IT IS WORN, THE ATTIRE LEDGER OWNS THE GARMENT.
+
+    The mirror of adopt-or-mint. A specialist that needs to name a worn
+    garment -- to wet it, to touch it -- cannot find one in `entities`,
+    because a worn garment lives only in `sc.attire`. Measured live: the
+    objects specialist minted `hinami_shorts` with `worn_by: Hinami` and
+    `condition: damp` for exactly that reason, and its own note admitted
+    it ("Created entity ... as it was not present in the provided
+    entities"). That record then stood beside the attire ledger claiming
+    the shorts were still worn while the ledger correctly had the body
+    bare.
+
+    So an entity claiming to be worn by a body whose attire ledger already
+    carries that garment is folded away: its condition, the one thing it
+    knows that the ledger might not, is written onto the garment in the
+    ledger, and the duplicate record is dropped. Reported through
+    tell_director every time -- the Director asked for a referent it did
+    not have, and next beat it should know the answer was "the ledger has
+    it".
+
+    Layer 2 (the referent index) removes the pressure that creates these.
+    This is the floor that holds whether or not a model cooperates.
+    """
+    from attire import resolve_garment
+
+    if not isinstance(sc, dict):
+        return
+    entities = sc.get("entities")
+    if not isinstance(entities, dict):
+        return
+    attire = sc.get("attire") or {}
+    projected = diff.get("entities") if isinstance(diff, dict) else None
+    for eid in list(entities):
+        entity = entities.get(eid)
+        if not _is_clothing_entity(entity):
+            continue
+        state = entity.get("state") or {}
+        owner = str(state.get("worn_by") or "").strip()
+        if not owner or state.get("shed"):
+            continue          # shed records are the floor object; leave them
+        entry = attire.get(owner)
+        if not isinstance(entry, dict):
+            continue
+        worn = [str(n) for n in (entry.get("wearing") or []) if str(n).strip()]
+        name = str(entity.get("name") or "").strip()
+        if not name or not worn:
+            continue
+        match = resolve_garment(name, worn)
+        if not match:
+            continue
+        condition = str(state.get("condition") or "").strip()
+        if condition:
+            _set_worn_garment_condition(entry, match, condition)
+        entities.pop(eid, None)
+        if isinstance(projected, dict):
+            projected.pop(eid, None)
+        (sc.get("positions") or {}).pop(eid, None)
+        note = (
+            f"objective state: an entity record {eid!r} claimed to be "
+            f"{owner}'s worn {name!r}; while a garment is WORN the attire "
+            f"ledger owns it, so the record was folded into "
+            f"attire.{owner}'s {match!r}"
+            + (f" (condition {condition!r} kept)" if condition else "")
+            + ". Name a worn garment from the attire ledger rather than "
+              "creating an object for it.")
+        if ctx is not None:
+            ctx.tell_director(note)
+            ctx.add_warning(note)
+
+
+def _set_worn_garment_condition(entry, garment_name, condition):
+    """Put a condition on the named garment inside one attire entry."""
+    for region in (entry.get("regions") or {}).values():
+        if not isinstance(region, dict):
+            continue
+        for garment in (region.get("garments") or []):
+            if isinstance(garment, dict) and \
+                    str(garment.get("name") or "") == garment_name:
+                garment["condition"] = condition
+
+
+def _is_clothing_entity(entity):
+    state = entity.get("state") if isinstance(entity, dict) else None
+    return isinstance(state, dict) and bool(state.get("clothing"))
+
+
+def _adopt_shed_record(entities, projected, owner, garment):
+    """The id of an EXISTING record for this garment, or None to mint.
+
+    Deliberately conservative: only clothing-flagged records, only those
+    either unowned or owned by this same body, and only where
+    `attire.resolve_garment` -- the engine's one garment-naming authority,
+    already tuned against live wardrobes -- says the names are the same
+    garment. Two records that both match fold to the first in scan order,
+    which is deterministic because `entities` preserves insertion order.
+
+    A wrong adoption is reported and visible; a wrong duplicate is silent
+    and permanent, and compounds every beat. That asymmetry is why this
+    resolves rather than requiring an exact key match.
+    """
+    from attire import resolve_garment
+
+    name = str(garment)
+    candidates = []
+    for eid, entity in entities.items():
+        if not _is_clothing_entity(entity):
+            continue
+        state = entity.get("state") or {}
+        worn_by = str(state.get("worn_by") or "").strip()
+        if worn_by and worn_by.casefold() != str(owner).casefold():
+            continue
+        handles = [str(entity.get("name") or "")]
+        handles += [str(a) for a in (entity.get("aliases") or [])]
+        handles = [h for h in handles if h.strip()]
+        if not handles:
+            continue
+        if resolve_garment(name, handles) or any(
+                resolve_garment(h, [name]) for h in handles):
+            candidates.append(eid)
+    return candidates[0] if candidates else None
+
+
+def _stamp_shed(entity, garment, owner, condition):
+    """Make an adopted record say what a minted one would have said."""
+    if not isinstance(entity, dict):
+        return
+    state = entity.setdefault("state", {})
+    state["clothing"] = True
+    state["shed"] = True
+    state.setdefault("worn_by", str(owner))
+    if condition:
+        state["condition"] = condition
+    if not str(entity.get("name") or "").strip():
+        entity["name"] = str(garment)
+    entity.setdefault("kind", "object")
+    entity.setdefault("portable", True)
+    aliases = entity.setdefault("aliases", [])
+    if isinstance(aliases, list) and str(garment) not in aliases:
+        aliases.append(str(garment))
+
+
 def _mint_shed_garments(sc, shed, diff=None):
     """A garment that has come off becomes a thing in the room.
 
@@ -1665,6 +1894,23 @@ def _mint_shed_garments(sc, shed, diff=None):
         key = "%s_%s" % (key, re.sub(r"[^a-z0-9]+", "_",
                                      str(owner).casefold()).strip("_"))[:60]
         if key in entities:
+            continue
+        # ADOPT BEFORE MINTING. The private "<garment>_<owner>" key above is
+        # the only thing this seam ever checked, so a record the MODEL wrote
+        # for the same garment -- under any other id -- was a sibling, not a
+        # collision. Measured live (chat 71, one beat after the jacket
+        # repair): five entity records for two garments, one of them still
+        # carrying worn_by with no shed flag while the attire ledger
+        # correctly showed the body bare. The garment is the same thing in
+        # the fiction; it gets one record.
+        adopted = _adopt_shed_record(entities, projected, owner, garment)
+        if adopted:
+            _stamp_shed(entities[adopted], garment, owner, condition)
+            if projected is not None and adopted in projected:
+                _stamp_shed(projected[adopted], garment, owner, condition)
+            where = positions.get(owner)
+            if where and not positions.get(adopted):
+                positions[adopted] = where
             continue
         entities[key] = {
             "name": str(garment),
@@ -1949,8 +2195,12 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
             _shed.append((name, _garment,
                           attire_model.condition_of(_after, _garment)))
 
+    _fold_worn_garment_entities(sc, diff, ctx)
     _mint_shed_garments(
         sc, [s for s in _shed if s[1].casefold() not in _gained], diff)
+    # Heals scenes that accumulated duplicates BEFORE adopt-or-mint
+    # existed, and is idempotent, so it costs nothing on a clean scene.
+    _fold_duplicate_shed_garments(sc, diff, ctx)
     # A REMOVED GARMENT IS AN OBJECT IN THE WORLD, NOT A FACT ABOUT A BODY.
     # It kept a seat in its former wearer's regions -- `state: "removed"`,
     # under `torso`/`waist`/`arms` -- and every relation that seat carried was
