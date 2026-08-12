@@ -100,6 +100,60 @@ Unchanged, and pinned by test. No specialist runs, so the addressed-event index
 is empty and every omission falls through exactly as before. The manifest still
 carries ids, which are simply unused there.
 
+## Breadth: every observable change reaches a hand (added same day)
+
+Numbering exposed the next layer. On the first live beat under it, two of six
+events came back `not_mine` from the body specialist — *"slight quiver
+throughout body"* and *"heavy heated breathing"* — and bought a 49.2s repair
+call that asked the same specialist the same question again. It was right to
+decline: those had no channel. The gap was upstream.
+
+Two rules now govern the manifest, and they replace the old "persistent
+changes only" framing:
+
+**Always the closest matching category, never an omission.** An imperfect
+category still reaches the hand that owns the ledger; an omitted change
+reaches nobody and silently never happened. Visible physiology is `overlays`
+where it marks the surface and `conditions` where it impairs; what a body can
+still do is `vitals`.
+
+**The only thing that stays off the manifest is a thought.** What a mind
+privately felt, wanted, feared, decided or realised is not a change to the
+world. Everything a body did or a world underwent that another present mind
+could have observed belongs on the list, however small or brief. Attempts
+remain excluded on their own grounds: an act that did not complete changed
+nothing.
+
+Structurally, the category vocabulary was narrower than the channel set, and
+the difference was silent. `overlays` and `vitals` were owned by the body
+specialist and reachable by no category at all — the same defect that killed
+`contacts`/`substances`/`poses`/`stations` in 8.2, just not yet hit. Three
+tests now hold the two sides level: every delegated channel must be reachable
+by some category or listed as unreachable by design with a reason; every
+category must route to a channel some specialist owns; every alias must
+normalize onto a routed category. Adding a channel now costs a decision
+rather than producing a silence.
+
+## The omitted-thought ledger
+
+`thoughts_omitted: [{subject, thought}]` on the resolve. **It commits
+nothing.** No channel reads it, no specialist is handed it, no mind perceives
+it, and it is never rendered to a player.
+
+Its whole job is to make an honestly interior beat distinguishable from a beat
+that lost its changes. Those two look identical from the outside — prose
+asserting something, a diff carrying nothing — and the seams that watch for
+the second were spending calls on the first. The deep audit receives it as
+`declared_interior` and is told that a declared thought is not an omission,
+with the one guard that matters: a thought that CAUSED an observable act does
+not shield the act.
+
+What it deliberately does NOT quiet is the tripwire. A successful roll or an
+asserted effect-claim is proof the world moved, and no amount of declared
+interiority accounts for an empty manifest there — that case is exactly what
+the tripwire exists for, and the ledger is recorded beside it rather than
+excusing it.
+
 ## Residuals
 
 Two of the original three are closed; the record of how is part of the design.

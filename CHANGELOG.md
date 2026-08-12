@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+**Every observable change reaches a hand, and thoughts say they were left
+out.** The manifest's rule is now closest-matching category, never an
+omission — an imperfect category still reaches the specialist that owns the
+ledger, while an omitted change reaches nobody and silently never happened.
+Visible physiology routes to `overlays` or `conditions`, capacity to
+`vitals`. The only thing that stays off the manifest is a thought. Behind it,
+the category vocabulary was narrower than the channel set and the difference
+was silent: `overlays` and `vitals` were owned by the body specialist and
+reachable by no category, the same defect that killed
+contacts/substances/poses/stations in 8.2. Three tests now hold the two sides
+level, so adding a delegated channel costs a decision rather than producing a
+silence. Alongside it, `thoughts_omitted` on the resolve — a ledger that
+COMMITS NOTHING, reaches no channel and no mind, and exists only so an
+honestly interior beat stops looking like a beat that lost its changes. The
+deep audit is told a declared thought is not an omission; the tripwire is
+deliberately not quieted by it, because a successful roll is proof the world
+moved.
+
 **The beat's changes are numbered, and the numbers round-trip** (design note
 21). The resolve lists `changes_asserted` in the order the changes happened;
 the engine — never the model — numbers them 1..N; each specialist's manifest

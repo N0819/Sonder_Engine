@@ -1950,6 +1950,22 @@ class StateDiff(LenientModel):
 DirectorInterpret.update_forward_refs()
 
 
+class OmittedThought(LenientModel):
+    """One inner event the resolve deliberately kept OUT of the manifest.
+
+    THIS LEDGER NEVER COMMITS. Nothing here reaches objective state, no
+    channel reads it, and no specialist is handed it -- a thought is not a
+    change to the world and has no ledger to carry it. Its only job is to
+    say so out loud, so the seams that watch for a beat which narrated
+    something and encoded nothing can tell "this beat was interior" from
+    "this beat lost its changes". Before it existed, those two looked
+    identical, and the honest interior beat tripped the same alarm as the
+    broken physical one.
+    """
+    subject: str = ""   # whose interior it was
+    thought: str = ""   # one short phrase; never rendered to a player
+
+
 class AssertedChange(LenientModel):
     """One entry of director_resolve's own changes-asserted manifest: a
     persistent physical change its resolved_event asserts as completed,
@@ -1986,6 +2002,11 @@ class DirectorResolve(LenientModel):
     dialogue_log: list[DialogueLogEntry] = Field(default_factory=list)
     state_diff: StateDiff = Field(default_factory=StateDiff)
     changes_asserted: list[AssertedChange] = Field(default_factory=list)
+    # The manifest's counterpart: what the beat deliberately did NOT list,
+    # because it was interior. Never committed, never perceived, never
+    # handed to a specialist -- it exists so an honestly interior beat
+    # stops reading like a beat that lost its changes (schemas.OmittedThought).
+    thoughts_omitted: list[OmittedThought] = Field(default_factory=list)
     # DECLARED BUT NO LONGER REQUESTED. The resolve prompt used to ask the
     # model for both of these and neither answer was ever read: the engine
     # rolls the dice itself from the interpret flow's DiceSpec under a

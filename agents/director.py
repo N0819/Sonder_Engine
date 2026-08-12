@@ -3029,6 +3029,31 @@ _OMISSION_CATEGORY_ALIASES = {
     "cast": "cast_changes", "arrival": "cast_changes",
     "departure": "cast_changes",
     "vehicle": "transit", "portal": "transit", "link": "transit",
+    # --- The rest of the delegated channel families -------------------
+    # Every family a specialist owns needs a category that REACHES it. A
+    # category with no route is a change that lands nowhere: no specialist
+    # is handed it, so nobody can encode it, so it is detected as an
+    # omission on every beat that contains it and buys a repair call that
+    # asks a mind which was never given the event. Measured twice --
+    # contacts/substances/poses/stations were dead this way since 8.2, and
+    # `overlays`/`vitals` were dead the same way while body OWNED them.
+    # The floor is now a test (test_every_delegated_family_is_reachable):
+    # a new delegated channel must be reachable by some category or the
+    # suite fails.
+    "overlay": "overlays", "mark": "overlays", "marking": "overlays",
+    "appearance": "overlays", "physiology": "overlays",
+    "expression": "overlays", "breathing": "overlays",
+    "arousal": "overlays", "reaction": "overlays",
+    "vital": "vitals", "reserves": "vitals", "stamina": "vitals",
+    "injury": "vitals", "wound": "vitals",
+    "contained": "containment", "container": "containment",
+    "enclosure": "containment",
+    "scale": "scales", "size": "scales",
+    "destroyed": "destruction", "destruction": "destruction",
+    "artifact": "artifacts", "artifact_ops": "artifacts",
+    "notice": "artifacts", "claim": "artifacts",
+    "introduction": "introductions", "name_exchange": "introductions",
+    "world_fact": "world_facts", "fact": "world_facts",
 }
 
 def _normalize_omission_category(category):
@@ -3393,6 +3418,14 @@ def _deep_audit_omissions(ctx, out, sd, scene_slice, dlog_compact,
                 "state_diff": sd,
                 "prior_scene": scene_slice,
                 "cast_names": tracked_names,
+                # What the resolve declared it left out ON PURPOSE, because
+                # it was interior. The audit's whole job is to find what the
+                # prose asserted and the diff does not carry, and a thought
+                # is precisely that shape while being precisely not a defect
+                # -- so it is handed the declaration rather than left to
+                # rediscover each interior moment as a missing encoding.
+                # Commits nothing; the audit reads it and nothing else does.
+                "declared_interior": recon.get("thoughts_omitted") or [],
             },
             temperature=0.0, max_tokens=8000,
         )
@@ -3978,6 +4011,22 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
     provably_physical = any(
         str(d.get("outcome") or "") == "success" for d in (dice or [])
     ) or any(str(c.get("scope") or "") == "effect" for c in claims)
+    # The omitted-thought ledger, which COMMITS NOTHING. It cannot excuse a
+    # beat that provably did something physical -- a successful roll or an
+    # asserted effect-claim moved the world, and no amount of interiority
+    # accounts for an empty manifest there, which is exactly what the
+    # tripwire is for. What it does account for is the quiet case: no
+    # physical proof, nothing encoded, and the resolve saying plainly that
+    # what happened was interior. Recorded either way, so the drawer shows
+    # what the beat declared it left out.
+    thoughts = [t for t in _dict_list(out.get("thoughts_omitted"))
+                if str(t.get("thought") or "").strip()]
+    if thoughts:
+        recon["thoughts_omitted"] = [
+            {"subject": str(t.get("subject") or "").strip(),
+             "thought": str(t.get("thought") or "").strip()}
+            for t in thoughts
+        ]
     if provably_physical and not manifest and not _diff_is_substantive(sd):
         recon["tripwire"] = True
 
@@ -4593,6 +4642,18 @@ _CATEGORY_CHANNELS = {
     "pose": "poses",
     "poses": "poses",
     "stations": "stations",
+    # The remaining delegated families. A category that reaches no channel
+    # is a change nobody is handed and nobody can encode, so it is detected
+    # as an omission every beat and buys a repair from a mind that never
+    # saw it -- measured live at 49.2s for two such events in one beat.
+    "overlays": "overlays",
+    "vitals": "vitals",
+    "containment": "containment",
+    "scales": "scales",
+    "destruction": "destruction",
+    "artifacts": "artifact_ops",
+    "introductions": "introductions",
+    "world_facts": "world_facts",
 }
 
 #: channel -> the specialist that owns it (derived, so the two cannot

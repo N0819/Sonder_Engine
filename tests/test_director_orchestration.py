@@ -2451,3 +2451,138 @@ def test_diff_application_is_order_independent_by_construction():
             assert channel in _LIST_DELEGATED, channel
     for channel in end_state - {"destruction"}:
         assert channel not in _LIST_DELEGATED, channel
+
+
+# ---------------------------------------------------------------------------
+# Every delegated family must be REACHABLE by a category.
+# ---------------------------------------------------------------------------
+
+#: Channels a category deliberately cannot name, with the reason. Removal
+#: channels are reached through the family they remove from (an object
+#: destroyed is 'entities'/'destruction'; a sealed passage is 'adjacency');
+#: `following_ops` is engine-projected and no model authors it.
+_UNREACHABLE_BY_DESIGN = {
+    "remove_entities": "reached as 'entities'",
+    "remove_rooms": "reached as 'rooms'",
+    "remove_adjacent": "reached as 'adjacency'",
+    "following_ops": "engine-projected, never model-authored",
+    "crowd_ops": "offscreen ops surface, not a manifest category",
+    "courier_ops": "offscreen ops surface, not a manifest category",
+    "telling_ops": "offscreen ops surface, not a manifest category",
+    "offscreen_plan_ops": "offscreen ops surface, not a manifest category",
+    # Adjudications of a CARRIED claim, not changes the beat's prose
+    # asserts: they answer "was this hearsay true?", which the manifest --
+    # an enumeration of what this beat changed -- has nothing to say about.
+    # They reach their owner through the claim lane, never the manifest.
+    "ratified_claims": "claim adjudication, not a beat change",
+    "contradicted_claims": "claim adjudication, not a beat change",
+}
+
+
+def test_every_delegated_family_is_reachable_by_a_category():
+    """A channel no category can name is a change that lands NOWHERE: no
+    specialist is handed it, so nobody can encode it, so the seam detects an
+    omission on every beat containing it and buys a repair from a mind that
+    never saw the event.
+
+    Measured twice. contacts/substances/poses/stations were dead this way
+    from 8.2 (the category map was keyed on raw spellings while every reader
+    looked up the normalized form). `overlays` and `vitals` were dead the
+    same way while the body specialist OWNED them -- which is what a live
+    beat's 'slight quiver' and 'heavy heated breathing' fell through, at
+    49.2s of repair for two events nobody could have encoded.
+
+    Adding a delegated channel now costs a decision here: give it a
+    category, or say in _UNREACHABLE_BY_DESIGN why it needs none.
+    """
+    reachable = set(director._CATEGORY_CHANNELS.values())
+    for name, spec in director.SPECIALISTS.items():
+        for channel in spec["channels"]:
+            assert channel in reachable or channel in _UNREACHABLE_BY_DESIGN, (
+                f"{name} owns {channel!r}, but no manifest category reaches "
+                f"it -- a change categorized there would be handed to no "
+                f"specialist and repaired by a mind that never saw it. Add a "
+                f"category to _CATEGORY_CHANNELS or record why it needs none."
+            )
+
+
+def test_every_category_route_lands_on_a_real_owned_channel():
+    """The other direction: a category mapping to a channel no specialist
+    owns routes an event to nobody just as silently."""
+    owners = {c for s in director.SPECIALISTS.values() for c in s["channels"]}
+    for category, channel in director._CATEGORY_CHANNELS.items():
+        assert channel in owners, (
+            f"category {category!r} routes to {channel!r}, which no "
+            f"specialist owns")
+
+
+def test_every_alias_normalizes_onto_a_routed_category():
+    """An alias is the Director's own vocabulary. One that normalizes to a
+    category with no route is the same silent drop, arriving through a
+    spelling instead of a channel."""
+    core_owned = {"time", "transit", "other"}
+    for alias, normalized in director._OMISSION_CATEGORY_ALIASES.items():
+        assert (normalized in director._CATEGORY_CHANNELS
+                or normalized in core_owned), (
+            f"alias {alias!r} normalizes to {normalized!r}, which reaches "
+            f"neither a specialist channel nor a core-owned category")
+
+
+# ---------------------------------------------------------------------------
+# The omitted-thought ledger: says what was left out, commits nothing.
+# ---------------------------------------------------------------------------
+
+def _interior_resolve_output():
+    return {
+        "resolved_event": "Mara says nothing, and decides she will not go.",
+        "summary": "She decides.",
+        "changes_asserted": [],
+        "thoughts_omitted": [
+            {"subject": "Mara", "thought": "resolves not to go"},
+            {"subject": "Mara", "thought": ""},          # blank: dropped
+        ],
+        "state_diff": {},
+    }
+
+
+def test_the_thought_ledger_is_recorded_and_commits_nothing(temp_db,
+                                                            monkeypatch):
+    """A thought is not a change to the world. The ledger exists so an
+    honestly interior beat stops reading like a beat that lost its changes
+    -- it reaches no channel, no specialist and no committed state."""
+    calls = []
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls, {
+                            "director_resolve": _interior_resolve_output()}))
+    ctx = _make_ctx(temp_db, interp=_speech_interp())
+    out = director.director_resolve(ctx, nonce=0)
+    recon = out["reconciliation"]
+    assert recon["thoughts_omitted"] == [
+        {"subject": "Mara", "thought": "resolves not to go"}]
+    # Nothing it says reaches objective state. The diff is normalized to
+    # its declared channels, so the check is that every one is EMPTY --
+    # no thought became a condition, an overlay, or anything else.
+    assert not any((out.get("state_diff") or {}).values())
+    # And it is not a change, so it is never an event anyone must answer.
+    assert recon["manifest"] == []
+    assert "resolve_repair" not in _steps(calls)
+
+
+def test_the_thought_ledger_cannot_excuse_a_physical_beat(temp_db,
+                                                          monkeypatch):
+    """It quiets a subroutine when nothing is wrong -- not when something
+    is. A successful roll or an asserted effect-claim moved the world, and
+    no amount of declared interiority accounts for an empty manifest there.
+    That case is exactly what the tripwire exists for."""
+    out_data = _interior_resolve_output()
+    calls = []
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls, {"director_resolve": out_data}))
+    interp = _action_interp()
+    interp["flow"]["authority_claims"] = [
+        {"claim_id": "c0", "scope": "effect", "predicate": "the latch gives"}]
+    ctx = _make_ctx(temp_db, interp=interp)
+    out = director.director_resolve(ctx, nonce=0)
+    recon = out["reconciliation"]
+    assert recon["thoughts_omitted"]        # recorded
+    assert recon["tripwire"] is True        # and still caught
