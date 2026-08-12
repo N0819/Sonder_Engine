@@ -1970,7 +1970,7 @@ def _chat_complete_once(
         )
     _capture_reasoning(parsed["choices"][0].get("message"))
     _capture_choice_finish(parsed)
-    content = parsed["choices"][0]["message"]["content"]
+    content = _message_content(parsed, prov["name"], model)
     # Some models (nemotron:thinking observed) honour response_format=json_object
     # by returning a syntactically-valid SKELETON with every string value set to
     # the literal "..." -- which parses and validates fine, so "..." reaches the
@@ -1985,10 +1985,39 @@ def _chat_complete_once(
             parsed = alt.json()
             _capture_reasoning(parsed["choices"][0].get("message"))
             _capture_choice_finish(parsed)
-            content = parsed["choices"][0]["message"]["content"]
+            content = _message_content(parsed, prov["name"], model)
     _log_usage(role, model, _t0, parsed.get("usage"),
                    served=parsed.get("model"))
     return content
+
+def _message_content(parsed, prov_name, model):
+    """The answer, or a retryable failure that says what actually happened.
+
+    A reasoning model can return a message carrying `reasoning` and NO
+    `content` key at all -- it spent its whole budget thinking and never
+    wrote the answer. Read as parsed["..."]["content"], that raised
+    KeyError('content'), whose str() is the bare word 'content', and it
+    surfaced live as "all providers failed (last provider error:
+    'content')" on a specialist call. A missing answer is an ordinary,
+    retryable outcome; it should never look like a parser bug.
+    """
+    message = ((parsed.get("choices") or [{}])[0] or {}).get("message") or {}
+    content = message.get("content")
+    if content:
+        return content
+    reasoning = str(message.get("reasoning") or "").strip()
+    if reasoning:
+        raise LLMError(
+            f"{prov_name}: {model} returned reasoning but no answer "
+            f"({len(reasoning)} chars of trace, content empty) -- the "
+            f"thinking budget consumed the reply", None, True)
+    if content == "":
+        raise LLMError(f"{prov_name}: {model} returned empty content",
+                       None, True)
+    raise LLMError(
+        f"{prov_name}: response message carried no content "
+        f"({str(message)[:200]})", None, True)
+
 
 async def chat_complete_async(
     role,
@@ -2162,7 +2191,7 @@ async def _chat_complete_async_once(
                    served=parsed.get("model"))
         _capture_reasoning((parsed.get("choices") or [{}])[0].get("message"))
         _capture_choice_finish(parsed)
-        return parsed["choices"][0]["message"]["content"]
+        return _message_content(parsed, prov["name"], model)
 
 async def _sse_openai_async(url, headers, body, sink, client, role=None, model=None):
     body["stream"] = True
