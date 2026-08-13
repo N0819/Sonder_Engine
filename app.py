@@ -20,7 +20,7 @@ from providers import (
     max_output_tokens, _coerce_max_output_tokens,
     reasoning_efforts, _coerce_reasoning_effort, REASONING_EFFORTS,
     MAX_OUTPUT_TOKENS_DEFAULT, MAX_OUTPUT_TOKENS_MIN, MAX_OUTPUT_TOKENS_MAX,
-    DEFAULT_BASES, ROLES, SAMPLER_KEYS, DEFAULT_SAMPLERS, Aborted,
+    DEFAULT_BASES, ROLES, ROLE_FALLBACKS, SAMPLER_KEYS, DEFAULT_SAMPLERS, Aborted,
 )
 from pipeline_context import PipelineContext, ChatData, TurnData
 from checkpoints import (ensure_checkpoint, restore_checkpoint, snapshot_state,
@@ -945,6 +945,14 @@ def bootstrap():
         "providers": [_provider_public(r["id"]) for r in q("SELECT id FROM providers")],
         "provider_presets": DEFAULT_BASES,
         "roles": ROLES,
+        # Which role an UNSET role actually inherits. Eight of them do not
+        # inherit `default`: the six Director specialists follow `director`,
+        # `utility` follows `mapping`, `repair` follows `utility`. The panel
+        # labelled every blank row "follow default", which is wrong for
+        # exactly the rows a host is most likely to leave blank on purpose --
+        # someone who sets `director` to a writing model and leaves the
+        # specialists alone gets six specialists on the writing model.
+        "role_fallbacks": dict(ROLE_FALLBACKS),
         "sampler_keys": list(SAMPLER_KEYS),
         "default_samplers": DEFAULT_SAMPLERS,
         "lore_categories": LORE_CATEGORIES,
